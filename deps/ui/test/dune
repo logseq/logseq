@@ -3,7 +3,7 @@
  (modules test_main test_check stub_dom fake_worker test_drive
          test_drive_sidebar test_lui_apply edit_model_test edit_view_test
          edit_view_web_test edit_flow_test editor_bench editor_probe views_drive
-         shared_ui_regression_test ui_dom_web_regression_test)
+         shared_ui_regression_test ui_dom_web_regression_test theme_web_test)
  (module_systems commonjs)
  (libraries logseq_ui_web_services logseq_ui logseq_subs logseq_ui_scenarios melange.js)
  (preprocess

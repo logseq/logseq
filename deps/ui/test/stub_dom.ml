@@ -322,7 +322,11 @@ and install_fields el r =
 
 and style_obj () =
   let d = Js.Json.object_ (Js.Dict.empty ()) in
-  set_field d "setProperty" (fun _k _v -> ());
+  let props = Js.Json.object_ (Js.Dict.empty ()) in
+  (* record custom-property writes under __props so tests can assert
+     what the platform applied (theme snapshots land here) *)
+  set_field d "__props" props;
+  set_field d "setProperty" (fun k v -> set_field props k v);
   set_field d "removeProperty" (fun _k -> "");
   set_field d "getPropertyValue" (fun _k -> "");
   d

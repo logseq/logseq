@@ -1,7 +1,8 @@
 (library
  (name ui_task_scenarios)
  (wrapped false)
- (modules ui_task_scenarios ui_services_scenarios helper_scenarios)
+ (modules ui_task_scenarios ui_services_scenarios ui_theme_scenarios
+         helper_scenarios)
  (modes byte native melange)
  (libraries logseq_ui_contracts logseq_ui_shared))
 

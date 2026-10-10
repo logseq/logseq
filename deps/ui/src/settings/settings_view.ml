@@ -32,6 +32,9 @@ let last_theme_mode = ref ""
    transitions (user toggle or system-follow), not on boot apply.
    Ordering is semantic: dataset -> plugin hook -> classes. *)
 let apply_theme_dom effective =
+  (* shared tokens land first — the snapshot is mode-stamped and the
+     host installs it before the dataset/classes flip below *)
+  Ui_theme.apply effective;
   Ui_services.theme_apply_dataset effective;
   if effective <> !last_theme_mode then (
     let first_apply = !last_theme_mode = "" in

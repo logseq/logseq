@@ -1,6 +1,11 @@
 let check label condition = if not condition then failwith label
 let invalid f = try f (); false with Invalid_argument _ -> true
 
+(* last theme snapshot the fake host received — Ui_theme_scenarios
+   asserts on it (module refs are file-order stable: run() always
+   installs before the theme scenarios execute) *)
+let last_theme_snapshot : Ui_services.theme_snapshot option ref = ref None
+
 let run () =
   check "storage access before installation fails"
     (invalid (fun () -> ignore (Ui_services.storage_get "wide-mode")));
@@ -66,6 +71,7 @@ let run () =
               else (
                 Hashtbl.replace classes "white-theme" ();
                 Hashtbl.replace classes "light-theme" ()))
+        ; apply_snapshot = (fun s -> last_theme_snapshot := Some s)
         }
     ; nav =
         { hash = (fun () -> !hash_ref)

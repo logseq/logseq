@@ -307,6 +307,20 @@ let theme_set_pref v = local_storage_set "theme" (storage_quote v)
 
 let theme_apply_dataset effective = document_set_data "theme" effective
 
+(* Theme snapshot delivery — serialized through the same host-request
+   channel as ui-state/app-icons; FIFO ordering means the host installs
+   the kit slots + vars before the ui-state mode flip that follows
+   apply_dataset/apply_classes. *)
+let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
+  let assoc kvs = `Assoc (List.map (fun (k, v) -> k, `String v) kvs) in
+  request_host "theme-snapshot"
+    (Yojson.Safe.to_string
+       (`Assoc
+         [ "mode", `String snap.mode
+         ; "vars", assoc snap.vars
+         ; "kit", assoc snap.kit
+         ]))
+
 let theme_apply_classes effective =
   if effective = "dark" then begin
     root_add_class "dark";
@@ -443,6 +457,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; set_theme_pref = theme_set_pref
         ; apply_dataset = theme_apply_dataset
         ; apply_classes = theme_apply_classes
+        ; apply_snapshot = theme_apply_snapshot
         }
     ; nav =
         { hash = location_hash

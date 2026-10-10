@@ -79,6 +79,7 @@ let close_msg a _b _c _d =
 let set_theme_mode a _b _c _d =
   (match arg_string a with
    | Some mode ->
+       if mode = "dark" || mode = "light" then Ui_theme.apply mode;
        Ui_services.theme_apply_dataset mode;
        Ui_services.storage_set "ui/theme" ("\"" ^ mode ^ "\"")
    | None -> ());
@@ -113,9 +114,13 @@ let set_state_from_store a b _c _d =
        in
        Ui_services.storage_set "system-theme?"
          (if enabled then "true" else "false");
-       if enabled then
-         Ui_services.theme_apply_dataset
-           (if Ui_services.theme_prefers_dark () then "dark" else "light")
+       if enabled then begin
+         let mode =
+           if Ui_services.theme_prefers_dark () then "dark" else "light"
+         in
+         Ui_theme.apply mode;
+         Ui_services.theme_apply_dataset mode
+       end
    | _ -> ());
   resolved_nil
 
