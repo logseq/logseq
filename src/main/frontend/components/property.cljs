@@ -23,6 +23,7 @@
             [frontend.util :as util]
             [frontend.util.entity :as entity]
             [logseq.api.block :as api-block]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -38,6 +39,21 @@
   (and (entity/internal-page? page)
        (:block/parent page)))
 
+(defn- <property-named
+  "The property whose title is `property-name` up to case, or nil. A name
+  lookup returns the oldest page of any kind with that name, so with a tag
+  \"Foo\" older than the property \"Foo\", typing \"foo\" found the tag and
+  created a second property titled \"Foo\" (db-test #1351)."
+  [repo property-name]
+  (if (and (string? property-name) (not (string/blank? property-name)))
+    (p/let [properties (db-async/<get-all-properties)
+            lc (common-util/page-name-sanity-lc property-name)
+            match (some #(when (= lc (some-> (:block/title %) common-util/page-name-sanity-lc)) %)
+                        properties)]
+      (when-let [ident (:db/ident match)]
+        (db-async/<get-block repo ident {:children? false})))
+    (p/resolved nil)))
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -45,7 +61,10 @@
           id-or-name (or block-uuid id-or-name*)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (entity/class? entity) class-schema?)
-          property (db-async/<get-block repo id-or-name {:children? false})
+          found (db-async/<get-block repo id-or-name {:children? false})
+          named (when-not (or block-uuid (entity/property? found))
+                  (<property-named repo id-or-name))
+          property (or named found)
           property? (entity/property? property)
           property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
