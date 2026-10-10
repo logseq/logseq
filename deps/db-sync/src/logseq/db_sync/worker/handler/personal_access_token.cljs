@@ -103,7 +103,7 @@
           ;; whose initial sync is still in progress (graph_ready_for_use = 0);
           ;; the semantic API itself gates reads on readiness.
           (p/let [db (aget env "DB")
-                  accessible? (index/<user-has-access-to-graph? db user-id graph-id)
+                  accessible? (index/<user-has-access-to-graph? db graph-id user-id)
                   graph-e2ee? (index/<graph-e2ee? db graph-id)]
             (if-not (and accessible? (false? graph-e2ee?))
               (http/forbidden)

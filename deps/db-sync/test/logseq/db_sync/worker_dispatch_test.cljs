@@ -494,7 +494,7 @@
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
                                common/now-ms (fn [] now)
                                index/<user-has-access-to-graph?
-                               (fn [_ _ graph-id] (p/resolved (= "graph-1" graph-id)))
+                               (fn [_ graph-id _] (p/resolved (= "graph-1" graph-id)))
                                index/<graph-e2ee? (fn [_ _ _] (p/resolved false))]
                  (p/let [invalid-permission (dispatch/handle-worker-fetch
                                              (request {:graph-id "graph-1" :permission "admin"}) env)
