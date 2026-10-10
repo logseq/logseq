@@ -25,7 +25,15 @@ type ui_request =
   ; ur_reject : unit -> unit
   }
 
-type layer = Named of string | Confirm | Prompt | Ui_request
+(* pdf docinfo payload — rendered `key::` / `value` run pairs plus the
+   flat text Copy all writes to the clipboard (cljs docinfo-display:
+   `<strong>k::</strong>  <i>json</i>` rows; innerText joined by \n) *)
+type docinfo =
+  { di_rows : (string * string) list
+  ; di_text : string
+  }
+
+type layer = Named of string | Confirm | Prompt | Ui_request | Docinfo
 
 type t =
   { order : layer list (* bottom..top *)
@@ -33,9 +41,12 @@ type t =
   ; confirm : confirm option
   ; prompt : prompt option
   ; ui_request : ui_request option
+  ; docinfo : docinfo option
   }
 
-let initial = { order = []; dialogs = []; confirm = None; prompt = None; ui_request = None }
+let initial =
+  { order = []; dialogs = []; confirm = None; prompt = None
+  ; ui_request = None; docinfo = None }
 
 include State_cell.Make (struct
   type nonrec t = t
@@ -49,7 +60,8 @@ let sync_layers (d : t) =
       | Named name -> List.mem name d.dialogs
       | Confirm -> Option.is_some d.confirm
       | Prompt -> Option.is_some d.prompt
-      | Ui_request -> Option.is_some d.ui_request) d.order }
+      | Ui_request -> Option.is_some d.ui_request
+      | Docinfo -> Option.is_some d.docinfo) d.order }
 
 let push_layer layer order = List.filter (( <> ) layer) order @ [ layer ]
 
@@ -60,6 +72,7 @@ let focus_returns : (layer * Ui_services.el option) list ref = ref []
 let has_layer (d : t) =
   d.dialogs <> [] || Option.is_some d.confirm
   || Option.is_some d.prompt || Option.is_some d.ui_request
+  || Option.is_some d.docinfo
 
 let set f =
   let before = value () in
@@ -100,6 +113,7 @@ let close_top () =
       | Prompt :: _ -> { d with prompt = None }
       | Confirm :: _ -> { d with confirm = None }
       | Ui_request :: _ -> { d with ui_request = None }
+      | Docinfo :: _ -> { d with docinfo = None }
       | Named name :: _ -> { d with dialogs = List.filter (( <> ) name) d.dialogs }
       | [] -> d)
 
@@ -144,6 +158,14 @@ let submit_prompt v =
 
 let close_prompt () = set (fun d -> { d with prompt = None })
 
+(* pdf_toolbar opens the docinfo modal once get_metadata resolves — the
+   metadata json is flattened to run pairs there so the layer carries
+   ready-to-render text. *)
+let open_docinfo di =
+  set (fun d -> { d with docinfo = Some di; order = push_layer Docinfo d.order })
+
+let close_docinfo () = set (fun d -> { d with docinfo = None })
+
 let detail_field (ev : Ui_services.ev) key =
   Option.value (ev.Ui_services.detail key) ~default:""
 
@@ -160,7 +182,7 @@ let focusable_sel =
 let top_content () =
   match
     Ui_services.dom_query_all
-      ".ui__dialog-content,.ui__alert-dialog-content,.lui-dialog"
+      ".ui__alert-dialog-content,.lui-dialog"
   with
   | [] -> None
   | els -> Some (List.nth els (List.length els - 1))

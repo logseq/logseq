@@ -848,7 +848,7 @@ and render_settings (t : t) : unit =
     | Some target ->
         if
           (not (Web_dom.el_contains box target))
-          && D.el_closest target ".ui__dialog-content" = None
+          && D.el_closest target ".lui-dialog,.ui__alert-dialog-content" = None
         then close_settings t
     | None -> ()
   in
@@ -866,8 +866,21 @@ and toggle_settings (t : t) : unit =
   | Some _ -> close_settings t
   | None -> render_settings t
 
-(* cljs docinfo-display inside a shui modal — same overlay/content
-   classes dialogs_view emits *)
+(* cljs docinfo-display — the modal rides the shared dialogs layer
+   (Dialogs_state.open_docinfo → dialogs_view `dialog` kind) so no
+   imperative DOM lives here; the metadata json is flattened to
+   `key::`/`value` run pairs plus the text Copy all writes. *)
+and docinfo_of_json (info : Js.Json.t) : Dialogs_state.docinfo =
+  let rows =
+    match Js.Json.decodeObject info with
+    | Some d ->
+        Js.Dict.entries d |> Array.to_list
+        |> List.map (fun (k, v) -> (k ^ "::", "  " ^ Js.Json.stringify v))
+    | None -> []
+  in
+  { Dialogs_state.di_rows = rows
+  ; di_text = String.concat "\n" (List.map (fun (k, v) -> k ^ v) rows) }
+
 and open_docinfo (t : t) : unit =
   close_settings t;
   ignore
@@ -877,79 +890,11 @@ and open_docinfo (t : t) : unit =
        | Some o -> o
        | None -> Js.Json.null
      in
-     show_docinfo_modal t info;
+     Dialogs_state.open_docinfo (docinfo_of_json info);
      Js.Promise.resolve ()
     |> Js.Promise.catch (fun e ->
            Ui_services.log_error ("pdf metadata", e);
            Js.Promise.resolve ()))
-
-and show_docinfo_modal (t : t) (info : Js.Json.t) : unit =
-  let ov = Web_dom.create_element "div" in
-  Web_dom.el_set_class ov
-    "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
-     justify-center items-center";
-  let content = Web_dom.create_element "div" in
-  Web_dom.el_set_class content
-    "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
-     max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background \
-     p-6 shadow-lg ui__dialog-zoom-in";
-  Web_dom.el_set_attr content "data-state" "open";
-  Web_dom.el_set_attr content "role" "dialog";
-  Web_dom.el_style_set_property content "transform" "translate(-50%, -50%)";
-  let main = Web_dom.create_element "div" in
-  Web_dom.el_set_class main "ui__dialog-main-content";
-  let docinfo = Web_dom.create_element "div" in
-  Web_dom.el_set_attr docinfo "id" "pdf-docinfo";
-  Web_dom.el_set_class docinfo "extensions__pdf-doc-info";
-  let inner_text = Web_dom.create_element "div" in
-  Web_dom.el_set_class inner_text "inner-text";
-  (match Js.Json.decodeObject info with
-   | Some d ->
-       Js.Dict.entries d
-       |> Array.iter (fun (k, v) ->
-              let p = Web_dom.create_element "p" in
-              let st = Web_dom.create_element "strong" in
-              Web_dom.el_set_text_content st (k ^ "::");
-              Web_dom.el_append_child p st;
-              let it = Web_dom.create_element "i" in
-              Web_dom.el_set_text_content it (Js.Json.stringify v);
-              Web_dom.el_append_child p it;
-              Web_dom.el_append_child inner_text p)
-   | None -> ());
-  Web_dom.el_append_child docinfo inner_text;
-  let foot = Web_dom.create_element "div" in
-  Web_dom.el_set_class foot "flex items-center justify-center pt-2 pb--2";
-  let copy = Web_dom.create_element "button" in
-  Web_dom.el_set_class copy
-    "ui__button inline-flex cursor-pointer items-center \
-     justify-center whitespace-nowrap rounded-md text-sm gap-1 \
-     font-medium ring-offset-background transition-colors \
-     focus-visible:outline-none focus-visible:ring-2 \
-     focus-visible:ring-ring focus-visible:ring-offset-2 \
-     disabled:pointer-events-none disabled:opacity-50 select-none \
-     bg-primary/90 hover:bg-primary/100 active:opacity-90 \
-     text-primary-foreground hover:text-primary-foreground as-solid \
-     h-7 rounded px-3 py-1";
-  Web_dom.el_set_attr copy "type" "button";
-  Web_dom.el_set_text_content copy (I18n.t "ui/copy-all");
-  let close_all () = Web_dom.el_remove ov in
-  Web_dom.el_on copy "click" (fun _ ->
-      Ui_services.clipboard_copy (Web_dom.el_inner_text inner_text);
-      Toast.success (I18n.t "notification/copied");
-      close_all ());
-  Web_dom.el_append_child foot copy;
-  Web_dom.el_append_child docinfo foot;
-  Web_dom.el_append_child main docinfo;
-  Web_dom.el_append_child content main;
-  Web_dom.el_append_child ov content;
-  Web_dom.el_on ov "click" (fun e ->
-      match D.ev_target e with
-          | Some target
-        when Web_dom.el_contains ov target
-             && not (Web_dom.el_contains content target) ->
-          close_all ()
-      | _ -> ());
-  Web_dom.el_append_child t.header ov
 
 (* ---------- toolbar row ---------- *)
 

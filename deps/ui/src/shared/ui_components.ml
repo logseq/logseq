@@ -903,10 +903,7 @@ let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
        ~padding_vertical:8 ~padding_horizontal:16
        ~on_press:(fun _ -> on_press ()) [])
 
-(* cljs .ui__button.ls-btn-primary — lx-accent-09 fill + opacity hover.
-   (The .ui__dialog-content / .ui__alert-dialog-content scoped override
-   that switched this to bg-primary/90 only matches the pdf imperative
-   modal — it stays in the stylesheet.) *)
+(* cljs .ui__button.ls-btn-primary — lx-accent-09 fill + opacity hover. *)
 let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
     ~on_press =
   with_props
