@@ -510,6 +510,83 @@ let copy_button uuid =
          Ui_task.resolve ()))
   | None -> ()
 
+(* -- file-page editor (#/file/<path>) --
+
+   Same vendored CM5 as code blocks, mounted without the block wiring:
+   change/blur just report the doc to the caller (file_view saves via
+   the file transact), Esc persists instead of exiting an edit state
+   that does not exist here. *)
+
+external to_textarea : t -> unit = "toTextArea" [@@mel.send]
+
+let file_instance : t option ref = ref None
+
+let unmount_file () =
+  match !file_instance with
+  | Some c ->
+      to_textarea c;
+      file_instance := None
+  | None -> ()
+
+let mount_file ~on_change textarea =
+  (* a previous file editor's wrapper is inert once its route unmounted —
+     but release the doc before rebinding so it can't double-save *)
+  unmount_file ();
+  let lang =
+    normalize_lang
+      (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
+  in
+  let mode = cm_mode lang in
+  let extra_keys =
+    Js.Dict.fromList [ ("Esc", fun c -> on_change (get_value c)) ]
+  in
+  let opts =
+    Js.Dict.fromList
+      [ ("theme", Js.Json.string (theme_name ()))
+      ; ("autoCloseBrackets", Js.Json.boolean true)
+      ; ("lineNumbers", Js.Json.boolean true)
+      ; ("matchBrackets", Js.Json.boolean (lisp_like mode))
+      ; ("styleActiveLine", Js.Json.boolean true)
+      ; ("mode", Js.Json.string mode)
+      ; ("tabIndex", Js.Json.number (-1.)) ]
+  in
+  let opts_json = Js.Json.object_ opts in
+  (* extraKeys values are cm callbacks, not json — set via js_set *)
+  Web_dom.js_set opts_json "extraKeys" extra_keys;
+  let c = from_textarea (cm ()) textarea opts_json in
+  file_instance := Some c;
+  on_event c "change" (fun c -> on_change (get_value c));
+  on_event c "blur" (fun c -> on_change (get_value c));
+  save c;
+  refresh c;
+  match mode_file lang with
+  | Some file ->
+      ignore
+        (ensure_mode file
+         |> Js.Promise.then_ (fun () ->
+                (match !file_instance with
+                 | Some c' when c' == c ->
+                     set_option c "mode" (Js.Json.string mode)
+                 | _ -> ());
+                Js.Promise.resolve ()))
+  | None -> ()
+
+let mount_file_async ~on_change el =
+  ignore
+    (ensure_core ()
+     |> Js.Promise.then_ (fun () ->
+            if D.el_is_connected el then mount_file ~on_change el;
+            Js.Promise.resolve ()))
+
+(* file_view calls this after the flush that mounts its textarea;
+   native has no CodeMirror so its twin is a no-op *)
+let attach_file_editor ~on_change () =
+  match
+    D.el_query D.document_el ".ls-file-page .code-editor textarea"
+  with
+  | Some el -> mount_file_async ~on_change el
+  | None -> ()
+
 let installed = ref false
 
 let install () =

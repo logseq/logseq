@@ -3,7 +3,9 @@
    "Edit custom.css" links land here).
 
    Content loads via thread-api/get-file-content; edits write back
-   through the raw file/path transact (debounced like cljs set-file-content). *)
+   through the raw file/path transact (debounced like cljs
+   set-file-content). The editor surface is the same vendored
+   CodeMirror 5 the code blocks use (mount_file — no block wiring). *)
 
 open Lui_elements
 open Promise_ext
@@ -26,10 +28,17 @@ let save repo path content =
        ; Wire.Nil
        ; Wire.Nil ])
 
+(* util/get-file-ext: text after the last dot *)
+let file_ext path =
+  match String.rindex_opt path '.' with
+  | Some i -> String.sub path (i + 1) (String.length path - i - 1)
+  | None -> ""
+
 let view ~path (ms : Model.t Signal.signal) : t =
   let content_st = Signal.state ms.Signal.owner "" in
   let loaded_st = Signal.state ms.Signal.owner false in
   let debounced = Ui_services.timers_debounce 500 in
+  let on_edit s = debounced (fun () -> save (Runtime.repo ()) path s) in
   ignore
     (let* w =
        Runtime.invoke2 "thread-api/get-file-content"
@@ -40,24 +49,40 @@ let view ~path (ms : Model.t Signal.signal) : t =
       | Wire.String s -> Runtime.signal_set content_st s
       | _ -> ());
      Runtime.signal_set loaded_st true;
+     (* flush is deferred (scheduled, not synchronous): the textarea
+        mounts on the next tick, so query it after that tick and hand
+        it to CodeMirror once the lazy core chunk lands *)
+     Ui_services.timers_later ~ms:0 (fun () ->
+         Code_mirror.attach_file_editor ~on_change:on_edit ());
      Js.Promise.resolve ());
   let editor () =
+    let ext = file_ext path in
     (* textarea ~text is an initial-value prop: mount once the async
-       load lands so the fetched content seeds it. The reactive gate
-       depends only on loaded_st — per-keystroke content_st writes
-       don't remount (caret preserved) *)
+       load lands so the fetched content seeds it (and fromTextArea
+       then reads it into the CM doc) *)
     reactive
       (fun (loaded : bool) ->
-        textarea ~key:"fe" ~style_class:"code-editor" ~grow:1.
-          ~text:
-            (if loaded then Signal.get (Signal.value content_st) else "")
-          ~on_input:(fun ev ->
-            match ev with
-            | Lui_protocol.TextChanged (_, s) ->
-                Signal.set content_st s;
-                debounced (fun () -> save (Runtime.repo ()) path s)
-            | _ -> ())
-          [])
+        if loaded then
+          (* cljs extensions__code > code-lang + code-editor > textarea *)
+          box ~key:"ec" ~style_class:"extensions__code flex flex-1"
+            ~grow:1.
+            [ text ~key:"cl"
+                ~value:(String.lowercase_ascii ext)
+                ~style_class:"extensions__code-lang" []
+            ; box ~key:"ce"
+                ~style_class:"code-editor flex flex-1 flex-row w-full"
+                ~grow:1.
+                [ textarea ~key:"fe" ~style_class:"ls-file-textarea"
+                    ~grow:1.
+                    ~data_attrs:[ ("data-lang", ext) ]
+                    ~text:(Signal.get (Signal.value content_st))
+                    ~on_input:(fun ev ->
+                      match ev with
+                      | Lui_protocol.TextChanged (_, s) -> on_edit s
+                      | _ -> ())
+                    [] ]
+            ]
+        else box ~key:"ec" ~grow:1. [])
       (Signal.value loaded_st)
   in
   column ~key:"file" ~style_class:"ls-file-page page" ~padding:16 ~grow:1.
