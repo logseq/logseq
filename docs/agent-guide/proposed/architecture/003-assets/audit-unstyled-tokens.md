@@ -262,3 +262,63 @@ Also deleted:
 Gates after the purge: `dune build js_app test gpui/drive_test.exe`
 clean, `test_main.js` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds.
+
+## CSS purge — B3 pickers (2026-10-10, branch `devin/004-b3-pickers`)
+
+Batch B3 of `2026-10-11-004-css-to-lui-api.md`: calendar/date/time/repeat
+pickers + icon/emoji/color pickers. Emitters: `editor_commands.ml`,
+`icon_picker.ml`. Rebased over `refactor/lui` first — the web-parity
+datepicker repeat-column + calendar fixes landed in
+`web-parity.ml`+`cal_body`-adjacent rules at `lui-overlay.css:4112+`
+(`.ls-cal-hd`/`.ls-cal-grid`/`.ls-cal-day`/`.ls-repeat-col`) which
+belong to a different emitter and were left untouched.
+
+`resources/css/lui-overlay.css`: **62 rules deleted (~350 net lines)**:
+
+- `.ui__calendar` display rule, `.ui__calendar-cell`, the whole
+  `.ui__calendar-day` chain (+hover/+[data-selected]/+[data-today])
+  → td contract attrs kept (`data-focused`/`data-today` — shui.css
+  `[role=gridcell][data-*]>button` still paints them); day buttons are
+  `~variant:`ghost` with `~selected` + reactive
+  background/foreground (selected > today > default).
+- `.ls-editor-date-picker` root + all descendants (cal-head,
+  cal-selects, month-select, year-input, cal-nav, cal-nav-btn,
+  table[role=grid] + td, ls-cal-outside, ls-date-nlp,
+  ls-date-month-menu, ls-repeat-choice-menu, ls-date-month-option,
+  ls-cal-prop, ls-property-date-picker-in-picker, ls-time-picker,
+  ls-time-input) → kinds + typed props; raw number/time inputs keep
+  `Logseq_el` and take box styles via a `style` data_attr (number/time
+  have no LUI input kind).
+- `.ls-repeat-panel`, `.ls-repeat-head`, `.ls-repeat-checkbox`
+  (+[data-checked]), `.ls-repeat-frequency`, `.ls-repeat-label`,
+  `.ls-repeat-frequency-input`, `.ls-repeat-select` (+hover),
+  `.ls-repeat-next`/`.ls-repeat-when`, `.ls-repeat-is` →
+  column/row/checkbox-button with reactive background/foreground; the
+  checkbox's `border-color` rides a reactive `style` attr (no
+  `border_color_signal` channel).
+- `.cp__emoji-icon-picker` root + `.hd`/`.bd`/`.ft`/`.pane-section`/
+  `.its`/`.icons-row`/button/hover/`hd strong` rules →
+  `container_relative_frame` + `with_props` Position/Inset; preset
+  color reactive `~foreground` on the section column.
+- `.color-picker` base, `.ls-emoji-preview`, `.ls-emoji-cell`,
+  `.ls-ep-section-title` (light), `.ls-ep-col`, `.ls-ep-tabs`,
+  `.all-pane`, `.ls-ep-btn` → item cells are 36px ghost buttons;
+  `ls-emoji-preview`/`ls-emoji-cell` classes kept (regression-test
+  locator); outline buttons take 28px typed chrome.
+- Shared `.ls-property-date-picker,.ls-editor-date-picker` rules
+  narrowed to `.ls-property-date-picker` only — also emitted by
+  `properties_value.ml` (out of scope).
+
+Added: `.ls-time-now:hover` text-color rule (no `HoverForeground`
+channel exists).
+
+Kept (leftovers, next passes or out of scope): `.dark
+.cp__emoji-icon-picker .hd strong`, `.ui__dropdown-menu-content
+.cp__emoji-icon-picker` (context-specific margins), `.color-picker >
+strong`(+hover), `.dark .ls-ep-section-title`, `.panel-wrap
+.ls-date-format`, and the `:4112+` `.ls-cal-*`/`.ls-repeat-col`
+web-parity rules (different emitter).
+
+Gates: `dune build js_app test gpui/drive_test.exe` clean,
+`test_main.js` 2009 checks 0 failures, `dune runtest` 725 checks 0
+failures, `npm run css:build` succeeds.
