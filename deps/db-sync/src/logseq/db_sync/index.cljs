@@ -81,7 +81,6 @@
        "permission TEXT not null,"
        "created_at INTEGER not null,"
        "expires_at INTEGER not null,"
-       "last_used_at INTEGER,"
        "check (permission in ('read', 'write', 'both'))"
        ")"))
 (def ^:private personal-access-tokens-user-index-sql
@@ -381,7 +380,7 @@
   (p/let [result (common/<d1-all
                          db
                          (str "select p.id, p.graph_id, g.graph_name, p.token_prefix, p.permission, "
-                              "p.created_at, p.expires_at, p.last_used_at "
+                              "p.created_at, p.expires_at "
                               "from personal_access_tokens p "
                               "left join graphs g on g.graph_id = p.graph_id "
                               "where p.user_id = ? order by p.created_at desc")
@@ -394,8 +393,7 @@
              :token-prefix (aget row "token_prefix")
              :permission (aget row "permission")
              :created-at (aget row "created_at")
-             :expires-at (aget row "expires_at")
-             :last-used-at (aget row "last_used_at")})
+             :expires-at (aget row "expires_at")})
           rows)))
 
 (defn <personal-access-token-delete!
@@ -409,7 +407,7 @@
   (p/let [result (common/<d1-all
                          db
                          (str "select id, user_id, graph_id, token_prefix, permission, "
-                              "created_at, expires_at, last_used_at "
+                              "created_at, expires_at "
                               "from personal_access_tokens where token_hash = ?")
                          token-hash)
           row (first (common/get-sql-rows result))]
@@ -420,8 +418,7 @@
        :token-prefix (aget row "token_prefix")
        :permission (aget row "permission")
        :created-at (aget row "created_at")
-       :expires-at (aget row "expires_at")
-       :last-used-at (aget row "last_used_at")})))
+       :expires-at (aget row "expires_at")})))
 
 (defn <index-upsert!
   ([db graph-id graph-name user-id schema-version graph-e2ee?]

@@ -1289,10 +1289,18 @@
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
+(def ^:private pat-one-year-ms (* 365 24 60 60 1000))
+
+(defn- local-date-str
+  [^js date]
+  (let [pad (fn [n] (.padStart (str n) 2 "0"))]
+    (str (.getFullYear date) "-"
+         (pad (inc (.getMonth date))) "-"
+         (pad (.getDate date)))))
+
 (defn- default-pat-expiration-date
   []
-  (let [date (js/Date. (+ (.now js/Date) (* 365 24 60 60 1000)))]
-    (subs (.toISOString date) 0 10)))
+  (local-date-str (js/Date. (+ (.now js/Date) pat-one-year-ms))))
 
 (defn- pat-expiration-ms
   [date]
@@ -1335,21 +1343,24 @@
         permission-items [{:value "read" :label (pat-permission-label "read")}
                           {:value "write" :label (pat-permission-label "write")}
                           {:value "both" :label (pat-permission-label "both")}]
+        expires-at (pat-expiration-ms expiration)
+        form-valid? (and (some? selected-graph)
+                         expires-at
+                         (> expires-at (.now js/Date)))
         create! (fn []
-                  (let [expires-at (pat-expiration-ms expiration)]
-                    (when (and selected-graph expires-at (> expires-at (.now js/Date)))
-                      (set-pending! true)
-                      (-> (rtc-handler/<create-personal-access-token!
-                           {:graph-id selected-graph
-                            :permission permission
-                            :expires-at expires-at})
-                          (p/then on-created!)
-                          (p/catch (fn [error]
-                                     (notification/show!
-                                      (t :sync.personal-access-token/request-error)
-                                      :error)
-                                     (log/error :db-sync/pat-create-failed {:error error})))
-                          (p/finally #(set-pending! false))))))]
+                  (when form-valid?
+                    (set-pending! true)
+                    (-> (rtc-handler/<create-personal-access-token!
+                         {:graph-id selected-graph
+                          :permission permission
+                          :expires-at expires-at})
+                        (p/then on-created!)
+                        (p/catch (fn [error]
+                                   (notification/show!
+                                    (t :sync.personal-access-token/request-error)
+                                    :error)
+                                   (log/error :db-sync/pat-create-failed {:error error})))
+                        (p/finally #(set-pending! false)))))]
     (hooks/use-effect!
      (fn []
        (when (and (nil? selected-graph) (seq graph-items))
@@ -1371,12 +1382,13 @@
          (shui/input
           {:type "date"
            :value expiration
-           :min (subs (.toISOString (js/Date.)) 0 10)
+           :min (local-date-str (js/Date.))
+           :max (local-date-str (js/Date. (+ (.now js/Date) pat-one-year-ms)))
            :on-change #(set-expiration! (util/evalue %))})]]
        [:p.text-sm.opacity-70 (t :sync.personal-access-token/no-graphs)])
      (shui/button
       {:class "self-start"
-       :disabled (or pending? (empty? graph-items))
+       :disabled (or pending? (empty? graph-items) (not form-valid?))
        :on-click create!}
       (ui/icon "key" {:size 16})
       (t :sync.personal-access-token/create))]))

@@ -485,7 +485,13 @@
                env #js {"DB" #js {}}
                request (fn [body]
                          (pat-management-request
-                          "POST" "/api/v1/personal-access-tokens" body))]
+                          "POST" "/api/v1/personal-access-tokens" body))
+               malformed-request (js/Request.
+                                  "http://localhost/api/v1/personal-access-tokens"
+                                  #js {:method "POST"
+                                       :headers #js {"authorization" "Bearer login-token"
+                                                      "content-type" "application/json"}
+                                       :body "{"})]
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
                                common/now-ms (fn [] now)
                                index/<semantic-graph-get
@@ -498,11 +504,19 @@
                                   (request {:graph-id "graph-1"
                                             :permission "read"
                                             :expires-at now}) env)
+                         beyond-cap (dispatch/handle-worker-fetch
+                                     (request {:graph-id "graph-1"
+                                               :permission "read"
+                                               :expires-at (+ now pat-year-ms 1)}) env)
+                         malformed-body (dispatch/handle-worker-fetch
+                                         malformed-request env)
                          inaccessible (dispatch/handle-worker-fetch
                                        (request {:graph-id "graph-2"
                                                  :permission "read"}) env)]
                    (is (= 400 (.-status invalid-permission)))
                    (is (= 400 (.-status expired)))
+                   (is (= 400 (.-status beyond-cap)))
+                   (is (= 400 (.-status malformed-body)))
                    (is (= 403 (.-status inaccessible)))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
@@ -560,8 +574,7 @@
                             :token-prefix "logseq_pat_abcd"
                             :permission "read"
                             :created-at 10
-                            :expires-at 20
-                            :last-used-at nil}]
+                            :expires-at 20}]
                           (:tokens list-body)))
                    (is (not (string/includes? (js/JSON.stringify (clj->js list-body)) "must-not-leak")))
                    (is (= 204 (.-status delete-response)))
@@ -581,8 +594,7 @@
    "token_prefix" "logseq_pat_scope"
    "permission" permission
    "created_at" 10
-   "expires_at" expires-at
-   "last_used_at" nil})
+   "expires_at" expires-at})
 
 (defn- with-pat-query-results [permission expires-at]
   (fn [_ sql & _args]

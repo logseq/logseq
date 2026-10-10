@@ -23,7 +23,7 @@
   (let [groups (some-> claims (aget "cognito:groups"))]
     (cond
       (array? groups) (set (array-seq groups))
-      (string? groups) (->> (string/split groups #"[ ,]+")
+      (string? groups) (->> (string/split groups #"[\[\]\s,\"]+")
                             (remove string/blank?)
                             set)
       :else #{})))
@@ -33,19 +33,17 @@
   (let [claim-groups (claims-groups claims)]
     (if (seq claim-groups)
       (p/resolved (boolean (seq (set/intersection rtc-groups claim-groups))))
-      (p/let [token (auth/token-from-request request)
-              response (js/fetch user-info-url
-                                 #js {:method "POST"
-                                      :headers #js {"authorization" (str "Bearer " token)
-                                                    "content-type" "application/json"}
-                                      :body "{}"})
-              _ (when-not (.-ok response)
-                  (throw (ex-info "user info request failed"
-                                  {:status (.-status response)})))
-              user-info (.json response)
-              user-groups (claims-groups
-                           #js {"cognito:groups" (aget user-info "UserGroups")})]
-        (boolean (seq (set/intersection rtc-groups user-groups)))))))
+      (-> (p/let [token (auth/token-from-request request)
+                  response (js/fetch user-info-url
+                                     #js {:method "POST"
+                                          :headers #js {"authorization" (str "Bearer " token)
+                                                        "content-type" "application/json"}
+                                          :body "{}"})
+                  user-info (when (.-ok response) (.json response))
+                  user-groups (claims-groups
+                               #js {"cognito:groups" (some-> user-info (aget "UserGroups"))})]
+            (boolean (seq (set/intersection rtc-groups user-groups))))
+          (p/catch (fn [_] false))))))
 
 (defn- random-hex
   [size]
@@ -73,8 +71,10 @@
 
 (defn- <create!
   [request env user-id]
-  (p/let [raw-body (common/read-json request)
-          body (when raw-body (js->clj raw-body :keywordize-keys true))]
+  (p/let [raw-body (-> (common/read-json request)
+                       (p/catch (fn [_] ::invalid)))
+          body (when (and raw-body (not= ::invalid raw-body))
+                 (js->clj raw-body :keywordize-keys true))]
     (if-not (map? body)
       (http/bad-request "invalid body")
       (let [graph-id (:graph-id body)
@@ -90,7 +90,9 @@
           (not (contains? permissions permission))
           (http/bad-request "invalid permission")
 
-          (or (not (number? expires-at)) (<= expires-at now))
+          (or (not (number? expires-at))
+              (<= expires-at now)
+              (> expires-at (+ now one-year-ms)))
           (http/bad-request "invalid expiration")
 
           :else
@@ -118,8 +120,7 @@
                                        :graph-id graph-id
                                        :permission permission
                                        :created-at now
-                                       :expires-at expires-at
-                                       :last-used-at nil}
+                                       :expires-at expires-at}
                                       201))))))))))
 
 (defn- <handle-authenticated

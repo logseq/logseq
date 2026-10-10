@@ -41,9 +41,10 @@ admin endpoints. Those paths keep their existing authentication contracts.
    - `read` -> `logseq/read`
    - `write` -> `logseq/write`
    - `both` -> `logseq/read logseq/write`
-6. Store `created_at`, `expires_at`, and optional `last_used_at` timestamps in
-   milliseconds. A missing expiration is invalid. The create API defaults
-   `expires_at` to 365 days after creation when the caller omits it.
+6. Store `created_at` and `expires_at` timestamps in milliseconds. A missing
+   expiration is invalid. The create API defaults `expires_at` to 365 days
+   after creation when the caller omits it and rejects an expiration more
+   than 365 days in the future.
 7. Reject tokens whose expiration is not in the future. Expired tokens are not
    accepted even if their rows have not yet been deleted.
 
@@ -55,7 +56,7 @@ Add a Cloudflare D1 migration for a `personal_access_tokens` table with:
 - `user_id` and `graph_id` ownership columns;
 - unique `token_hash` and non-secret `token_prefix` columns;
 - checked `permission` with `read`, `write`, and `both` values;
-- `created_at`, `expires_at`, and nullable `last_used_at` timestamps.
+- `created_at` and `expires_at` timestamps.
 
 Index token lookup by `token_hash`, user listing by `(user_id, created_at)`, and
 graph cleanup by `graph_id`. Graph deletion deletes its PAT rows explicitly.
