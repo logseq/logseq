@@ -624,14 +624,14 @@
            (react/createElement
             "span" props'
             (when checked?
-              (react/createElement IconCheck #js {:className "h-4 w-4"}))))
+              (react/createElement IconCheck #js {:className "h-4 w-4 pointer-events-none"}))))
          (do
            (set-prop! props' "render" (react/createElement "button"))
            (set-prop! props' "nativeButton" true)
            (react/createElement
             CheckboxRootPart props'
-            (react/createElement CheckboxIndicatorPart nil
-                                 (react/createElement IconCheck #js {:className "h-4 w-4"})))))))))
+            (react/createElement CheckboxIndicatorPart #js {:className "pointer-events-none"}
+                                 (react/createElement IconCheck #js {:className "h-4 w-4 pointer-events-none"})))))))))
 
 (def Switch
   (react/forwardRef
