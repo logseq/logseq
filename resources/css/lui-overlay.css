@@ -376,33 +376,6 @@
 
 /* ---- menu links (cljs common.css) ------------------------------------ */
 
-.menu-links-wrapper {
-  padding: 0.5rem 0;
-  border-radius: 0.375rem;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  overflow-y: auto;
-  border: 1px solid var(--lui-c-border);
-  background: hsl(var(--popover));
-  min-width: 12rem;
-  max-height: calc(100vh - 100px);
-}
-
-/* inside an LUI menu content node the wrapper is the flat
-   div[data-keep-selection] — no second card (content.css parity) */
-.ls-context-menu-content .menu-links-wrapper,
-.ui__dropdown-menu-content .menu-links-wrapper,
-.ui__dropdown-menu-sub-content .menu-links-wrapper,
-div[data-keep-selection].menu-links-wrapper {
-  padding: 0;
-  border-style: none;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
-  min-width: 0;
-  max-height: none;
-}
-
 .menu-link {
   color: hsl(var(--popover-foreground) / 0.75);
   user-select: none;
@@ -471,11 +444,6 @@ div[data-keep-selection].menu-links-wrapper {
   min-width: 0;
 }
 
-#ui__ac .menu-link strong,
-.menu-links-wrapper strong {
-  font-weight: 400;
-}
-
 /* trailing shortcut text inside context-menu rows */
 .ls-cm-sc {
   margin-left: auto;
@@ -539,11 +507,6 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 0.7;
   margin-right: 1px;
   color: inherit;
-}
-
-.cp__commands-slash .ui__icon.ls-icon-queryCode {
-  position: relative;
-  left: 1px;
 }
 
 .cp__commands-slash .menu-link.chosen .ui__icon,
@@ -732,8 +695,7 @@ div[data-keep-selection].menu-links-wrapper {
   width: fit-content;
 }
 
-.cp__select-main .item-results-wrap,
-.cp__select-main .search-results-wrap > div:first-child {
+.cp__select-main .item-results-wrap {
   overflow-x: hidden;
   overflow-y: auto;
   max-height: calc(
@@ -1186,11 +1148,6 @@ div[data-keep-selection].menu-links-wrapper {
   top: 50%;
 }
 
-.ls-icon-sm {
-  width: 1rem;
-  height: 1rem;
-}
-
 /* cljs shui button :size :sm is h-7 rounded px-3 py-1 (28px, keeps the
    text-sm base size) — the kind's data-size=sm rule lands a larger
    iOS-style 36px, so restore the cljs geometry */
@@ -1237,8 +1194,7 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
-.ls-prompt-input,
-.ls-login-input {
+.ls-prompt-input {
   display: block;
   width: 100%;
   margin: 0.5rem 0 1rem;
@@ -1789,18 +1745,6 @@ div[data-keep-selection].menu-links-wrapper {
   box-shadow: 0 0 0 2px hsl(var(--ring));
 }
 
-.ls-property-choices-sub-pane .choices-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ls-property-type-sub-pane,
-.ls-property-ui-position-sub-pane,
-.ls-property-default-value-pane {
-  padding: 0.25rem;
-}
-
 /* select-item chips inside value popups / view filters */
 .select-item {
   display: inline-flex;
@@ -1821,14 +1765,6 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.25rem;
 }
 
-.ls-property-input {
-  display: flex;
-  flex: 1;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-}
-
 /* cljs value.css: the set/add-property picker caps the key column and
    scrolls the result list inside it */
 
@@ -1843,10 +1779,6 @@ div[data-keep-selection].menu-links-wrapper {
   flex-direction: row;
   align-items: center;
   gap: 0.25rem;
-}
-
-.property-select {
-  flex: 1;
 }
 
 /* icon/color rows inside property popups */
@@ -2059,12 +1991,6 @@ div[data-keep-selection].menu-links-wrapper {
   align-items: flex-start;
   justify-content: space-between;
   font-size: 0.875rem;
-}
-
-.shortcut-row .sh {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
 }
 
 .keyboard-shortcut {
@@ -2388,16 +2314,6 @@ select.form-select {
 /* cljs shui button default size is h-10 */
 .cp__user-login .ui__button {
   height: 2.5rem;
-}
-
-/* cljs login.css: destructive auth alert — bg-red-300 light,
-   red-800/90 + red-200 text dark; the Alert base classes
-   (rounded-lg border p-4) land via tailwind */
-
-.dark .cp__user-login .ui__alert {
-  border-color: oklch(44.4% 0.177 26.899);
-  background: color-mix(in oklab, oklch(44.4% 0.177 26.899) 90%, transparent);
-  color: oklch(88.5% 0.062 18.334);
 }
 
 /* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
@@ -3029,15 +2945,6 @@ select.form-select {
   gap: 0.25rem;
 }
 
-.ls-icon-dim {
-  opacity: 0.4;
-}
-
-.property-select {
-  display: flex;
-  flex: 1;
-}
-
 .ls-property-date-picker {
   display: flex;
   flex-direction: row;
@@ -3177,8 +3084,7 @@ select.form-select {
   cursor: pointer;
 }
 
-.ls-sort-order svg,
-.ls-sort-order .ls-icon-sm {
+.ls-sort-order svg {
   width: 0.75rem;
   height: 0.75rem;
   opacity: 0.5;
