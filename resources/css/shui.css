@@ -64,7 +64,6 @@ html {
 
 
     div[data-radix-popper-content-wrapper] div[role=menu],
-    .menu-links-wrapper,
     .menu-links-outer,
     .absolute-modal[data-modal-name] {
       background-color: var(--lx-popover-bg, var(--lx-gray-01, hsl(var(--popover))));

@@ -17,18 +17,6 @@ const accent = {
   '10': 'var(--lx-accent-10, hsl(var(--accent)/.8))',
   '11': 'var(--lx-accent-11, hsl(var(--accent)/.9))',
   '12': 'var(--lx-accent-12, --rx-gray-12)',
-  '01-alpha': 'var(--lx-accent-01-alpha)',
-  '02-alpha': 'var(--lx-accent-02-alpha)',
-  '03-alpha': 'var(--lx-accent-03-alpha)',
-  '04-alpha': 'var(--lx-accent-04-alpha)',
-  '05-alpha': 'var(--lx-accent-05-alpha)',
-  '06-alpha': 'var(--lx-accent-06-alpha)',
-  '07-alpha': 'var(--lx-accent-07-alpha)',
-  '08-alpha': 'var(--lx-accent-08-alpha)',
-  '09-alpha': 'var(--lx-accent-09-alpha)',
-  '10-alpha': 'var(--lx-accent-10-alpha)',
-  '11-alpha': 'var(--lx-accent-11-alpha)',
-  '12-alpha': 'var(--lx-accent-12-alpha)',
 }
 
 const gray = {
@@ -45,18 +33,6 @@ const gray = {
   '10': 'var(--lx-gray-10, var(--rx-gray-10))',
   '11': 'var(--lx-gray-11, var(--rx-gray-11))',
   '12': 'var(--lx-gray-12, var(--rx-gray-12))',
-  '01-alpha': 'var(--lx-gray-01-alpha, var(--rx-gray-01-alpha))',
-  '02-alpha': 'var(--lx-gray-02-alpha, var(--rx-gray-02-alpha))',
-  '03-alpha': 'var(--lx-gray-03-alpha, var(--rx-gray-03-alpha))',
-  '04-alpha': 'var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))',
-  '05-alpha': 'var(--lx-gray-05-alpha, var(--rx-gray-05-alpha))',
-  '06-alpha': 'var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))',
-  '07-alpha': 'var(--lx-gray-07-alpha, var(--rx-gray-07-alpha))',
-  '08-alpha': 'var(--lx-gray-08-alpha, var(--rx-gray-08-alpha))',
-  '09-alpha': 'var(--lx-gray-09-alpha, var(--rx-gray-09-alpha))',
-  '10-alpha': 'var(--lx-gray-10-alpha, var(--rx-gray-10-alpha))',
-  '11-alpha': 'var(--lx-gray-11-alpha, var(--rx-gray-11-alpha))',
-  '12-alpha': 'var(--lx-gray-12-alpha, var(--rx-gray-12-alpha))',
 }
 
 function exposeColorsToCssVars ({ addBase, theme }) {
@@ -110,7 +86,6 @@ function mapCssVarColorToTailwind (color, baseColor = {}) {
     const rxVarName = `--rx-${color}-${rxStepName}`
     colors[twStep] = baseColor[twStep] || `var(${rxVarName})`
     colors[`rx-${rxStepName}`] = `var(${rxVarName})`
-    colors[`rx-${rxStepName}-alpha`] = `var(${rxVarName}-alpha)`
   })
 
   return colors

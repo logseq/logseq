@@ -592,3 +592,64 @@ Gates: `dune build js_app test gpui/drive_test.exe` clean,
 `test_main.js` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds. Plugins dashboard + settings General/
 Editor sections + appearance popup spot-checked light+dark vs prod.
+
+### B7 tokens + dead regs (2026-10-10, branch `devin/004-b7-tokens`)
+
+Batch B7 of plan `2026-10-11-004-css-to-lui-api.md`: pure deletion of
+snapshot-DUPLICATE theme vars, tailwind-only alpha utilities, and the
+remaining DEAD overlay selectors per `review-css-theme-api.md` +
+`review-css-overlay-api.md`. Every candidate was verified against the
+`Ui_theme` snapshot emitters / live consumers before removal.
+
+- `resources/css/theme/vars-classic.css` (-79): deleted the whole
+  `:root` block (common_ls 19 + highlight_ls 7 + block-bullet
+  fallback), the `.light-theme` `--color-level-1..6` block, and all
+  common_ls/mode_ls lines inside the two `[data-color=logseq]` blocks
+  (~69 var defs, 45 unique names — every one emitted by
+  `ui_theme.ml`'s `common_ls`/`highlight_ls`/`mode_ls`/`level_vars`
+  families). Kept: the 37 accent-bound `--ls-*` names per mode block
+  that the snapshot binds only via `--lx-* -> var(--ls-*)` refs. A
+  header comment records the move.
+- `resources/css/theme/colors.css` (-255): removed all
+  `--lx-accent-*-alpha` (10 names) and `--lx-gray-*-alpha` (7 names)
+  defs across the 15 non-logseq `[data-color]` palettes. Kept:
+  `--lx-accent-{04,08}-alpha` (consumed by `lui-core.css`/`shui.css`),
+  `--lx-gray-{03..07}-alpha` (consumed by deps/ui tree.ml /
+  ui_components.ml / overlay / shui), the `.theme-*` re-binding
+  machinery, and `--ls-selection-background-color` `var(--rx-*-04-alpha)`
+  refs (their `--rx-*-alpha` defs stay in radix.css).
+- `resources/css/theme/radix.css` (-18): `--rx-gray-*-alpha` defs for
+  the 9 steps not used as var() fallbacks, in both light+dark blocks.
+  Kept `--rx-gray-{03,06,07}-alpha` (deps/ui var() fallbacks).
+- `tailwind.config.js` (-25): 24 `accent-*-alpha`/`gray-*-alpha`
+  utility entries + the `rx-*-alpha` generator line in
+  `mapCssVarColorToTailwind`. Zero `*-alpha` utility usage existed
+  repo-wide. (The underlying `--lx-*-alpha` vars that still have var()
+  consumers stay defined.)
+- `resources/css/lui-overlay.css` (-97): `.menu-links-wrapper` base +
+  scoped `div[data-keep-selection]` variant, `#ui__ac .menu-link
+  strong, .menu-links-wrapper strong`, `.ls-icon-queryCode`,
+  `.ls-icon-sm`, `.ls-login-input`, `.choices-list`,
+  `.ls-property-{type,ui-position,default-value}-pane`,
+  `.ls-property-input`, `.property-select` x2, `.shortcut-row .sh`,
+  `.dark .cp__user-login .ui__alert`, `.ls-icon-dim`, plus two
+  group-selector prunes (`.search-results-wrap`,
+  `.ls-sort-order .ls-icon-sm`). ~15 rules, all emitter-verified dead.
+- `resources/css/shui.css` (-1): `.menu-links-wrapper` selector out of
+  the non-logseq popover-background rule.
+- gpui regs (`deps/ui/gpui/host/src/logseq_ext.rs`): none removed —
+  the `menu-links-wrapper` registration already went out with B4; all
+  84 remaining registrations verified against live emitters
+  (incl. dynamic `block-drag-over-*`, `ls-dialog-*`, `mode-*`).
+
+Kept items: `.cp__select` var block (its
+`--palettle-*-height` vars still feed live `.cp__select-main` rules);
+`.lui-button.ui__button[data-size="sm"]` (the renderer's own
+`~size:`sm rule is h-9/px-3/text-xs — the overlay rule restores the
+cljs h-7/px-3/text-sm geometry, so it is not redundant); all sibling
+selectors in pruned group rules.
+
+Gates: `dune build js_app test` clean, `test_main.js` 2009 checks
+0 failures, `npm run css:build` succeeds, `vite build` (deps/ui +
+db-worker browser) clean, app spot-checked light+dark — body bg and
+every deleted var resolve inline via the snapshot.
