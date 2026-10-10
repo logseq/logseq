@@ -741,7 +741,7 @@ let main_content (ms : Model.t Signal.signal) =
             CSS only matches 'true' — dead attr, dropped *)
          scroll ~key:"main-content"
            ~accessibility_identifier:"main-content-container"
-           ~orientation:`vertical ~grow:1. ~cross:`center
+           ~orientation:`vertical ~grow:1.
            ~style_class:"scrollbar-spacing relative"
            ~data_attrs_signal:
              (Signal.map
