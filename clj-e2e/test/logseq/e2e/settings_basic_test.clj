@@ -48,4 +48,4 @@
     (ls-api-call! :editor.createJournalPage "2026-01-15")
     (page/goto-page "2026-01-15")
     (is (= "2026-01-15" (page/get-page-name))
-        "A journal created after reload must use the persisted title format."))))
+        "A journal created after reload must use the persisted title format.")))
