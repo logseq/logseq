@@ -4893,26 +4893,107 @@ html[data-theme=light] {
   letter-spacing: 0.5px;
 }
 
-/* file route (cljs .file > CodeMirror): a mono text surface that fills the
-   content column — font isn't a LUI prop, so it rides the overlay */
-.ls-file-page .lui-textarea {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace);
-  font-size: 13px;
+/* file page (#/file/<path>) — cljs file.cljs mounts CodeMirror inside
+   .extensions__code; the lang badge is absolutely pinned top-right
+   (extensions/code.css) so the wrapper needs position:relative, and the
+   title matches master's h1.title sizing */
+.ls-file-page .extensions__code {
+  position: relative;
+}
+.ls-file-page .extensions__code-lang {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: fit-content;
+  padding: 4px 6px;
+  line-height: 1em;
+  font-size: 0.875rem;
+  opacity: 0.8;
+  z-index: 1;
+  background: var(--ls-secondary-background-color);
+}
+.ls-file-page .page-title {
+  font-size: var(--ls-page-title-size, 32px);
+  font-weight: 500;
+  line-height: 1.38;
+  margin: 0.2em 0;
 }
 
-/* the file editor fills the column below its title (cljs CodeMirror does
-   the same); the route host wraps pages in a plain box, so stretch via
-   viewport math rather than grow. The surface is solarized like prod's
-   cm-s-lsradix (#fdf6e3 light / #002b36 dark) */
-.ls-file-page .lui-textarea {
-  field-sizing: initial;
-  height: calc(100dvh - 136px);
-  border-radius: 4px;
-  background: #fdf6e3;
-  color: #657b83;
+/* date picker (cljs ui/datepicker): month grid inside the value popover —
+   selected day = accent fill, adjacent-month cells dim; can't be
+   expressed via typed props */
+.ls-cal {
+  padding: 4px;
 }
-.dark .ls-file-page .lui-textarea {
-  background: #002b36;
-  color: #839496;
+.ls-cal-hd {
+  justify-content: space-between;
+}
+.ls-cal-fields {
+  gap: 6px;
+  justify-content: center;
+}
+.ls-cal-field {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ls-primary-text-color);
+  border: 1px solid var(--ls-border-color);
+  border-radius: 6px;
+  padding: 3px 10px;
+  background: var(--ls-secondary-background-color);
+}
+.ls-cal-grid .lui-row {
+  gap: 0;
+}
+.ls-cal-day.lui-button {
+  width: 36px;
+  min-width: 36px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+.ls-cal-day[data-dim="1"] {
+  color: var(--ls-secondary-text-color);
+  opacity: 0.45;
+}
+.ls-cal-day[data-sel="1"] {
+  background: var(--lx-accent-09, var(--ls-link-text-color));
+  color: #fff;
+}
+.ls-cal-day[data-sel="1"]:hover {
+  background: var(--lx-accent-09, var(--ls-link-text-color));
+  color: #fff;
+}
+
+/* menu labels must size to content and only shrink into ellipsis when
+   the row truly overflows — the kind's flex:1 1 0% basis-0 truncates
+   "Go to #tag" beside its shortcut chips */
+.lui-menu-item > .lui-menu-item-label {
+  flex: 0 1 auto !important;
+}
+
+/* menu_item always mounts icon/check slots (18px each) even when the
+   item has no icon and is unchecked — cljs dropdown-menu-item renders
+   only label+children, so hide the empty slots or they squeeze the
+   label into ellipsis (e.g. tag menu "Go to #…" items) */
+.lui-menu-item > .lui-menu-item-icon:empty,
+.lui-menu-item > .lui-menu-item-check:empty {
+  display: none;
+}
+
+/* cljs datepicker renders light chrome even under dark theme (the
+   popover is a fixed white card) — pin the calendar popover to the
+   light palette so day text/dim/chips don't follow dark vars */
+.lui-popover:has(.ls-cal) {
+  --ls-primary-text-color: #1f2937;
+  --ls-secondary-text-color: #9ca3af;
+  --ls-secondary-background-color: #f3f4f6;
+  --ls-border-color: #e5e7eb;
+  background: #fff;
+  color: #1f2937;
+}
+.ls-cal-day {
+  color: var(--ls-primary-text-color);
 }

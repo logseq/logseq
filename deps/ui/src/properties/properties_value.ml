@@ -522,6 +522,109 @@ let checkbox_view ctx row : t =
       | _ -> ())
     []
 
+let month_full =
+  [| "January"; "February"; "March"; "April"; "May"; "June"; "July"
+   ; "August"; "September"; "October"; "November"; "December" |]
+
+(* cljs datetime picker (ui/datepicker): month grid anchored under the
+   value — ‹/› shift the viewed month, adjacent-month cells stay dim,
+   the selected day is accent-filled, the input below commits free
+   text like before *)
+let date_picker_pop sched ~buffer ~selected ~on_pick ~on_submit
+    ~on_clear ~on_dismiss : t =
+  let ty, tm, _ =
+    match selected with
+    | Some (y, m, _) -> y, m, 0
+    | None -> ymd_of_ms (Ui_services.time_now ())
+  in
+  let view = Signal.state sched (ty, tm) in
+  let day_cell ~dim ~sel (y, m, d) : t =
+    button ~variant:`ghost ~size:`sm ~style_class:"ls-cal-day"
+      ~text:(string_of_int d)
+      ~on_press:(fun _ -> on_pick y m d)
+      ~data_attrs:
+        ([ ("data-sel", if sel then "1" else "0")
+         ; ("data-dim", if dim then "1" else "0") ])
+      []
+  in
+  let grid =
+    reactive
+      (fun ((vy, vm) : int * int) ->
+        let first_wday =
+          (Dates.fields (Dates.make ~year:vy ~month:vm ~day:1 ())).wday
+        in
+        let dim = Dates.days_in_month ~y:vy ~m:vm in
+        let py, pm = (if vm = 1 then vy - 1, 12 else vy, vm - 1) in
+        let ny, nm = (if vm = 12 then vy + 1, 1 else vy, vm + 1) in
+        let pdim = Dates.days_in_month ~y:py ~m:pm in
+        let cell i : t =
+          let di = i - first_wday + 1 in
+          if di < 1 then day_cell ~dim:true ~sel:false (py, pm, pdim + di)
+          else if di > dim then
+            day_cell ~dim:true ~sel:false (ny, nm, di - dim)
+          else
+            let sel =
+              (match selected with
+               | Some (sy, sm, sd) -> sy = vy && sm = vm && sd = di
+               | None -> false)
+            in
+            day_cell ~dim:false ~sel (vy, vm, di)
+        in
+        column ~key:"cal-grid" ~style_class:"ls-cal-grid"
+          (List.init 6 (fun r ->
+               row ~key:("r" ^ string_of_int r)
+                 (List.init 7 (fun c -> cell (r * 7 + c))))))
+      (Signal.value view)
+  in
+  popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
+    ~anchor_offset:4.0 ~min_width:300
+    ~on_dismiss:(fun _ -> on_dismiss ())
+    [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8
+        [ row ~key:"cal-hd" ~cross:`center ~style_class:"ls-cal-hd"
+            [ button ~variant:`ghost ~size:`icon ~icon:`chevron_left
+                ~label:"Previous month"
+                ~on_press:(fun _ ->
+                  Signal.set view
+                    (let vy, vm = Signal.get (Signal.value view) in
+                     if vm = 1 then vy - 1, 12 else vy, vm - 1))
+                []
+            ; row ~key:"cal-ttl" ~cross:`center ~gap:6
+                ~style_class:"ls-cal-fields"
+                [ text ~key:"cal-mn" ~style_class:"ls-cal-field"
+                    ~value:(reactive
+                              (fun ((_, vm) : int * int) ->
+                                month_full.(vm - 1))
+                              (Signal.value view))
+                    []
+                ; text ~key:"cal-yr" ~style_class:"ls-cal-field"
+                    ~value:(reactive
+                              (fun ((vy, _) : int * int) ->
+                                string_of_int vy)
+                              (Signal.value view))
+                    [] ]
+            ; button ~variant:`ghost ~size:`icon ~icon:`chevron_right
+                ~label:"Next month"
+                ~on_press:(fun _ ->
+                  Signal.set view
+                    (let vy, vm = Signal.get (Signal.value view) in
+                     if vm = 12 then vy + 1, 1 else vy, vm + 1))
+                []
+            ; button ~variant:`ghost ~size:`icon ~icon:`trash
+                ~label:(I18n.t "ui/delete")
+                ~on_press:(fun _ -> on_clear ())
+                [] ]
+        ; grid
+        ; text_field ~autofocus:true
+            ~placeholder:"e.g. Next week"
+            ~text:""
+            ~on_input:(fun ev ->
+              match ev with
+              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
+              | _ -> ())
+            ~on_submit:(fun _ -> on_submit ())
+            [] ]
+    ]
+
 let date_view ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -572,22 +675,24 @@ let date_view ctx row : t =
             ~label:(I18n.t "ui/edit")
             ~on_press:(fun _ -> Runtime.signal_set open_ true) [])
      ; if_ ~test:(Signal.value open_)
-         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-            ~anchor_offset:4.0 ~min_width:220
-            ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-            [ text_field ~autofocus:true
-                ~text:(Runtime.signal_get buffer)
-                ~on_input:(fun ev ->
-                  match ev with
-                  | Lui_protocol.TextChanged (_, t) ->
-                      Signal.set buffer t
-                  | _ -> ())
-                ~on_submit:(fun _ ->
-                  commit_date_text ctx ident ~is_datetime
-                    (Runtime.signal_get buffer);
-                  Runtime.signal_set open_ false)
-                []
-            ])
+         (date_picker_pop sched ~buffer
+            ~selected:(ymd_of_datetime_value value)
+            ~on_pick:(fun y m d ->
+              set_date ctx ident (y * 10000 + m * 100 + d);
+              Runtime.signal_set open_ false)
+            ~on_submit:(fun () ->
+              commit_date_text ctx ident ~is_datetime
+                (Runtime.signal_get buffer);
+              Runtime.signal_set open_ false)
+            ~on_clear:(fun () ->
+              ignore
+                (let* _ =
+                   D.remove_block_property ~block_uuid:ctx.block_uuid
+                     ~ident
+                 in
+                 Js.Promise.resolve ());
+              Runtime.signal_set open_ false)
+            ~on_dismiss:(fun () -> Runtime.signal_set open_ false))
      ])
     context parent
 

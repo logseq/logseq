@@ -1925,7 +1925,10 @@ let open_cm_edit t ~ax ~atop ~abot ~block_id =
 let tag_entries ~title ~priv =
   [ Ci_item
       ( "Go to #" ^ title
-      , Some ("mod+click", [ "\u{2318}"; "Click" ])
+      , Some
+          ( "mod+click"
+          , [ (if Ui_services.env_is_mac () then "\u{2318}" else "Ctrl")
+            ; "Click" ] )
       , "go-to-tag" )
   ; Ci_item
       ( U.t "sidebar.right/open"
