@@ -242,6 +242,8 @@ external sel_add_range : Js.Json.t -> range_t -> unit = "addRange"
 
 external sel_range_count : Js.Json.t -> int = "rangeCount" [@@mel.get]
 
+external sel_is_collapsed : Js.Json.t -> bool = "isCollapsed" [@@mel.get]
+
 external sel_anchor_node : Js.Json.t -> Js.Json.t = "anchorNode"
   [@@mel.get]
 
@@ -515,18 +517,22 @@ let select_range_el el lo hi : bool =
     sel_add_range s rng;
     true)
   else if lo = hi then (
-    (* a collapsed caret stands in for "no selection" — drop the DOM
-       selection only when it currently lives inside a .block-editor,
-       so routine publishes never wipe an unrelated page selection
-       (find-in-page matches, PDF highlights) *)
+    (* Preserve the native input's collapsed insertion selection, including
+       during IME preview. Only clear an ended rendered text selection;
+       unrelated page selections remain untouched. *)
     let s = w_get_selection () in
-    (if sel_range_count s > 0 then
+    (if sel_range_count s > 0 && not (sel_is_collapsed s) then
        let a = sel_anchor_node s in
        if not (js_nullish a) then
          let ael = if j_node_type a = 3 then j_parent_element a else a in
          if not (js_nullish ael)
          && not (js_nullish (j_closest ael ".block-editor"))
-         then sel_remove_all s);
+         then (
+           sel_remove_all s;
+           match Web_dom.active_element () with
+           | Some active when active == el_json el && not st.composing ->
+               Web_dom.el_set_selection_range active 0 0
+           | _ -> ()));
     true)
   else false
 

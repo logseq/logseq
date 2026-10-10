@@ -69,6 +69,43 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     const target = await logseq.api.append_block_in_page(name, title, {});
     return {target, ...(await fixture(['prefix [[' + target.uuid + ']] suffix']))};
   };
+  const assertNativeInsertion = phase => {
+    const selection = window.getSelection();
+    assert(document.activeElement === input() && selection.rangeCount > 0
+      && selection.isCollapsed, {phase, active: document.activeElement?.id,
+        ranges: selection.rangeCount, collapsed: selection.isCollapsed});
+  };
+  await test('Regression: consecutive input retains the native insertion selection', async () => {
+    await fixture(['base']); key('End');
+    for (const character of 'abcdef') {
+      insert(character); await pause(20); assertNativeInsertion(character);
+    }
+    assert(text() === 'baseabcdef', {value: text()});
+  });
+  await test('Regression: composition preview retains the native insertion selection', async () => {
+    await fixture(['base']); key('End');
+    composition('start');
+    try {
+      composition('update', 'ni'); await pause(20);
+      assertNativeInsertion('composition preview');
+    } finally { composition('end', '你'); }
+    await pause(20); assertNativeInsertion('composition commit');
+    insert('x'); await pause(20); assertNativeInsertion('continued input');
+    assert(text() === 'base你x', {value: text()});
+  });
+  await test('Regression: collapsing a painted selection restores native insertion', async () => {
+    await fixture(['base']); await select(0, 4);
+    const range = document.createRange();
+    range.selectNodeContents([...surface().querySelectorAll('.ed-r')]
+      .find(run => run.textContent === 'base'));
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+    assert(!window.getSelection().isCollapsed
+      && window.getSelection().getRangeAt(0).cloneContents().textContent === 'base',
+      {selected: window.getSelection().getRangeAt(0).cloneContents().textContent});
+    key('ArrowRight'); await pause(20); assertNativeInsertion('selection collapsed');
+    insert('x'); await pause(20); assertNativeInsertion('continued input');
+    assert(text() === 'basex', {value: text()});
+  });
   await test('Regression: block references display only the first line', async () => {
     const {target, blocks} = await blockReferenceFixture('first line\nsecond line');
     key('Home', {metaKey: true});
