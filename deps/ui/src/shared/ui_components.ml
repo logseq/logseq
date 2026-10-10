@@ -65,7 +65,7 @@ let cmdk_palette ~key ~sidebar children =
     [ P.Position, sv "relative"; P.UserSelect, sv "none" ]
     (column ~key ~style_class:"cp__cmdk" ~cross:`stretch ~grow:1.
        ~corner_radius:(if sidebar then 0 else 8)
-       ~foreground:"var(--ls-primary-text-color, var(--rx-gray-12))"
+       ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
        ~data_attrs:[ "data-keep-selection", "true" ]
        children)
 
@@ -232,11 +232,11 @@ let cmdk_item_header ~key children =
 let cmdk_item_main ~key children =
   row ~key ~style_class:"cmdk-item-main" ~cross:`start ~gap:12 children
 
-(* 20x20 rounded icon chip (prod [cmdk-item] measures 20px); the glyph
+(* 16x20 rounded icon chip; the glyph
    color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
-    ~width:20 ~height:20 ~corner_radius:4
+    ~width:16 ~height:20 ~corner_radius:4
     ~background:
       "var(--lx-gray-05, var(--ls-tertiary-background-color, \
        hsl(var(--muted))))"
@@ -752,7 +752,7 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
     ~on_press () : t =
   with_props
     [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
-    (list_item ~key ~on_press
+    (list_item ~key ~on_press ~selected_signal:selected
        ~min_height:0 ~padding_vertical:0 ~padding_horizontal:0
        (* cljs li: <i> thumbnail 87x60 on top, <strong> label centered
           below — column keeps the label under the image instead of

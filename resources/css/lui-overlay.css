@@ -4844,3 +4844,12 @@ html[data-theme=light] {
   background: hsl(var(--muted));
   color: inherit;
 }
+
+/* theme option cards keep the list-item selected prop (tests + a11y)
+   but the kit's data-selected accent fill is not in the cljs li spec —
+   selection shows through the thumbnail's inset ring only */
+.cp__theme-modes-options .lui-list-item[data-selected] {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
