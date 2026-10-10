@@ -3,6 +3,7 @@
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
             ["react" :as react-core]
+            ["react-dom" :as react-dom]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
@@ -2238,13 +2239,26 @@
           child-uuids))
 
 (defn- near-block-viewport?
+  "Synchronous check, run before paint: the subtree reaches into the viewport
+   or lies within the margin above it. Subtrees below the fold are left to the
+   observer, so a page's first frame renders only the rows on screen."
   [^js el]
   (when el
     (let [rect (.getBoundingClientRect el)
           viewport-height (or (.-innerHeight js/window)
                               (some-> js/document .-documentElement .-clientHeight))]
-      (and (< (.-top rect) (+ viewport-height lazy-children-margin))
+      (and (< (.-top rect) viewport-height)
            (> (.-bottom rect) (- lazy-children-margin))))))
+
+(defn- lazy-children-observer-root
+  "The scroll container holding `el`, as the IntersectionObserver root. With
+   the implicit root the margin only grows the window's box, while the scroll
+   container still clips rows below its fold, so they would mount only once
+   visible."
+  [^js el]
+  (when-let [^js root (util/app-scroll-container-node el)]
+    (when (and (not (identical? root el)) (.contains root el))
+      root)))
 
 (hsx/defc lazy-block-children
   "Mounts a block's children rows only once the subtree approaches the viewport.
@@ -2278,7 +2292,8 @@
                            (fn [^js entries]
                              (when (some #(.-isIntersecting %) (array-seq entries))
                                (set-near! true)))
-                           #js {:rootMargin (str lazy-children-margin "px 0px")})]
+                           #js {:root (lazy-children-observer-root el)
+                                :rootMargin (str lazy-children-margin "px 0px")})]
              (.observe observer el)
              #(.disconnect observer))
 
@@ -2327,12 +2342,17 @@
                        (update :block-level inc))]
          [lazy-block-children config' block child-uuids collapsed? render-children])])))
 
+(defn- library-visible-uuids
+  "The Library's rows: nil while the children or their blocks load, as
+   `use-children` reads, not an empty list."
+  [child-uuids blocks]
+  (when (and (some? child-uuids) (some? blocks))
+    (entity/library-outline-child-uuids blocks)))
+
 (hsx/defc library-child-uuids
   [child-uuids then]
   (let [blocks (db-hooks/use-blocks (vec child-uuids))]
-    (then (if (nil? blocks)
-            []
-            (entity/library-outline-child-uuids blocks)))))
+    (then (library-visible-uuids child-uuids blocks))))
 
 (defn with-library-child-uuids
   "Library shows nested pages only; other pages keep every child."
@@ -5149,13 +5169,230 @@
        (fn [visible-uuids]
          (render-loaded-block-row config block visible-uuids virtualizable-block-list opts))))))
 
+;; First paint of a page's rows. Opening a page renders, before its first
+;; paint, only the rows that reach into the viewport: every flat row list of
+;; the page outliner that mounts while the page's first-paint session is open
+;; starts with 1 row, and passes run in the frame before the paint grow the
+;; lists that end above the bottom of the viewport. The rows below the fold,
+;; the tail of each list, mount in the task after the paint. The rows stay
+;; direct children of their .blocks-list-wrap, as the editor's sibling walks
+;; expect (`get-node-prev-sibling` in frontend.handler.editor), and a key,
+;; pointer or wheel event before the tails mount mounts them first, so no
+;; handler sees a partial list.
+
+(def ^:private first-paint-initial-rows 1)
+
+(def ^:private first-paint-max-passes 32)
+
+(def ^:private first-paint-input-events ["keydown" "pointerdown" "wheel"])
+
+(defn- defer-rows-below-fold?
+  "Whether a page outliner that opens now may defer its rows below the fold:
+   the standalone page route only, and not when the open must reach a row that
+   can lie below the fold (a block anchor, a restored scroll position), nor in
+   the rtc tests, which render every row."
+  [config {:keys [anchor saved-scroll-top rtc-test?]}]
+  (boolean
+   (and (:current-page? config)
+        (:virtualize? config)
+        (not anchor)
+        (not (and (number? saved-scroll-top) (pos? saved-scroll-top)))
+        (not rtc-test?))))
+
+(defn- first-paint-session
+  []
+  #js {:open true
+       :lists (js/Set.)
+       :scheduled false
+       :frame nil
+       :timer nil
+       :listener nil})
+
+(defn- first-paint-session-open?
+  [^js session]
+  (boolean (and session (.-open session))))
+
+(defn- release-first-paint-session!
+  "Cancels the scheduled passes and stops listening for input."
+  [^js session]
+  (set! (.-scheduled session) false)
+  (when-let [frame (.-frame session)]
+    (set! (.-frame session) nil)
+    (js/cancelAnimationFrame frame))
+  (when-let [timer (.-timer session)]
+    (set! (.-timer session) nil)
+    (js/clearTimeout timer))
+  (when-let [listener (.-listener session)]
+    (set! (.-listener session) nil)
+    (doseq [event first-paint-input-events]
+      (.removeEventListener js/window event listener #js {:capture true}))))
+
+(defn- close-first-paint-session!
+  "Mounts every deferred tail and ends the session: lists that mount later
+   render all their rows at once."
+  [^js session]
+  (when (first-paint-session-open? session)
+    (set! (.-open session) false)
+    (release-first-paint-session! session)
+    (let [lists (js/Array.from (.-lists session))]
+      (.clear (.-lists session))
+      (doseq [^js entry lists]
+        ((.-setLimit entry) nil)))))
+
+(defn- rows-to-render
+  "The number of rows a list renders in the next pass before the first paint,
+   given the box (`top`, `bottom`) of the `limit` rows it renders of its
+   `blocks-count`: nil once they reach the bottom of the viewport or are all
+   of its rows, else enough rows to fill the viewport at their average height,
+   but at most max(2, limit) more per pass, so that a list whose first rows
+   are short does not render many rows past the fold at once."
+  [limit blocks-count top bottom viewport-bottom]
+  (when (and (< limit blocks-count) (< bottom viewport-bottom))
+    (let [average (max 1 (/ (- bottom top) (max 1 limit)))
+          wanted (js/Math.ceil (/ (- viewport-bottom bottom) average))]
+      (min blocks-count
+           (+ limit (max 1 (min wanted (max 2 limit))))))))
+
+(defn- first-paint-list-wrap
+  [^js entry]
+  (some-> (.-wrap entry) .-current))
+
+(defn- lists-to-grow
+  "The lists whose rendered rows end above the bottom of the viewport while
+   some of their rows are deferred, less those holding another such list: the
+   next row on screen belongs to the innermost one, and its ancestors' next
+   rows come after it."
+  [entries viewport-bottom]
+  (let [open-ended (filterv
+                    (fn [^js entry]
+                      (when-let [wrap (first-paint-list-wrap entry)]
+                        (and (< (.-limit entry) (.-count entry))
+                             (< (.-bottom (.getBoundingClientRect wrap))
+                                viewport-bottom))))
+                    entries)]
+    (filterv
+     (fn [^js entry]
+       (let [wrap (first-paint-list-wrap entry)]
+         (not-any? (fn [^js other]
+                     (and (not (identical? entry other))
+                          (.contains wrap (first-paint-list-wrap other))))
+                   open-ended)))
+     open-ended)))
+
+(defn- flush-sync!
+  [f]
+  (react-dom/flushSync f))
+
+(defn- first-paint-viewport-bottom
+  []
+  (or (.-innerHeight js/window)
+      (some-> js/document .-documentElement .-clientHeight)))
+
+(defn- fill-viewport!
+  "Grows the lists that end above the bottom of the viewport, 1 synchronous
+   render per pass, until the rows on screen are all mounted."
+  [^js session]
+  (loop [pass 0]
+    (when (and (first-paint-session-open? session)
+               (< pass first-paint-max-passes))
+      (let [viewport-bottom (first-paint-viewport-bottom)
+            growth (into []
+                         (keep (fn [^js entry]
+                                 (let [rect (.getBoundingClientRect
+                                             (first-paint-list-wrap entry))]
+                                   (when-let [n (rows-to-render (.-limit entry)
+                                                                (.-count entry)
+                                                                (.-top rect)
+                                                                (.-bottom rect)
+                                                                viewport-bottom)]
+                                     [entry n]))))
+                         (lists-to-grow (vec (js/Array.from (.-lists session)))
+                                        viewport-bottom))]
+        (when (seq growth)
+          (flush-sync! #(doseq [[^js entry n] growth]
+                          ((.-setLimit entry) n)))
+          (recur (inc pass)))))))
+
+(defn- schedule-first-paint!
+  "Once the page's rows are in: fill the viewport in a microtask of the same
+   task, so the rows on screen render before the frame's deadline as they did
+   when every row rendered at once; check again in the next frame before its
+   paint (requestAnimationFrame callbacks run before the paint), then mount
+   the tails in a task after it."
+  [^js session]
+  (when (and (first-paint-session-open? session)
+             (not (.-scheduled session)))
+    (if (exists? js/requestAnimationFrame)
+      (do
+        (set! (.-scheduled session) true)
+        (js/queueMicrotask #(when (.-scheduled session)
+                              (fill-viewport! session)))
+        (set! (.-frame session)
+              (js/requestAnimationFrame
+               (fn []
+                 (set! (.-frame session) nil)
+                 (fill-viewport! session)
+                 (when (first-paint-session-open? session)
+                   (set! (.-timer session)
+                         (js/setTimeout #(close-first-paint-session! session) 0)))))))
+      (close-first-paint-session! session))))
+
+(defn- listen-first-paint-input!
+  "Mounts the tails before any key, pointer or wheel handler runs. A capture
+   listener on window runs before the app's own listeners on window, document
+   and the React root."
+  [^js session]
+  (let [listener (fn [_e]
+                   (flush-sync! #(close-first-paint-session! session)))]
+    (set! (.-listener session) listener)
+    (doseq [event first-paint-input-events]
+      (.addEventListener js/window event listener #js {:capture true :passive true}))))
+
+(defn- use-first-paint-limit
+  "The number of rows a flat list renders, nil for all of them. A list of the
+   page outliner that mounts while its page's first-paint session is open
+   starts with `first-paint-initial-rows` rows and registers with the session,
+   which grows it before the paint and mounts the rest after."
+  [config blocks-count *wrap]
+  (let [^js session (::first-paint config)
+        [limit set-limit!] (hooks/use-state
+                            #(when (and (:virtualize? config)
+                                        (first-paint-session-open? session))
+                               first-paint-initial-rows))
+        entry (hooks/use-memo
+               #(when (some? limit)
+                  #js {:wrap *wrap
+                       :setLimit set-limit!
+                       :limit limit
+                       :count blocks-count})
+               [])]
+    (hooks/use-layout-effect!
+     (fn []
+       (when entry
+         (set! (.-limit entry) limit)
+         (set! (.-count entry) blocks-count))))
+    (hooks/use-layout-effect!
+     (fn []
+       (when entry
+         (if (first-paint-session-open? session)
+           (do
+             (.add (.-lists session) entry)
+             #(.delete (.-lists session) entry))
+           ;; the session closed between this list's render and its commit
+           (set-limit! nil))))
+     [])
+    limit))
+
 (hsx/defc plain-block-list
   [config block-uuids]
   (let [block-uuids (vec block-uuids)
-        blocks-count (count block-uuids)]
+        blocks-count (count block-uuids)
+        *wrap (hooks/use-ref nil)
+        limit (use-first-paint-limit config blocks-count *wrap)]
     (when (seq block-uuids)
       [:div.blocks-list-wrap
-       {:data-level (or (:level config) 0)}
+       {:ref *wrap
+        :data-level (or (:level config) 0)}
        (map-indexed
         (fn [idx block-uuid]
           ^{:key (str (:container-id config) "-" block-uuid)}
@@ -5164,12 +5401,47 @@
            block-uuid
            {:top? (zero? idx)
             :bottom? (= (dec blocks-count) idx)}])
-        block-uuids)])))
+        (cond->> block-uuids
+          limit (take limit)))])))
+
+(defn- first-paint-step
+  "What a page's first-paint session does once the list has `block-uuids`:
+   nil while they load (`use-children` reads nil until its slot is ready),
+   so it waits; an empty page's rows are known too, and its session ends
+   after the first frame as any other's, removing its input listeners."
+  [block-uuids virtualized?]
+  (cond
+    (nil? block-uuids) :wait
+    virtualized? :close
+    :else :schedule))
 
 (hsx/defc page-root-virtual-list
   [config block-uuids]
   (let [{:keys [virtualized? virtual-opts *virtualized-ref *block-uuids-ref]}
-        (use-virtual-list-opts config block-uuids)]
+        (use-virtual-list-opts config block-uuids)
+        first-paint (hooks/use-memo
+                     #(when (defer-rows-below-fold?
+                             config
+                             {:anchor (get-in (state/get-route-match) [:query-params :anchor])
+                              :saved-scroll-top (state/get-saved-scroll-position)
+                              :rtc-test? (util/rtc-test-without-virtualization?)})
+                        (first-paint-session))
+                     [])
+        loaded? (some? block-uuids)]
+    (hooks/use-layout-effect!
+     (fn []
+       (when first-paint
+         (listen-first-paint-input! first-paint)
+         #(release-first-paint-session! first-paint)))
+     [])
+    (hooks/use-layout-effect!
+     (fn []
+       (when first-paint
+         (case (first-paint-step block-uuids virtualized?)
+           :close (close-first-paint-session! first-paint)
+           :schedule (schedule-first-paint! first-paint)
+           :wait nil)))
+     [loaded? virtualized?])
     (hooks/use-effect!
      (fn []
        (when (and virtualized?
@@ -5191,7 +5463,9 @@
         {:data-level (or (:level config) 0)
          :data-virtuoso-scroller true}
         (ui/virtualized-list virtual-opts)]
-       (plain-block-list config block-uuids))]))
+       (plain-block-list (cond-> config
+                           first-paint (assoc ::first-paint first-paint))
+                         block-uuids))]))
 
 
 (defn- block-row-uuid
