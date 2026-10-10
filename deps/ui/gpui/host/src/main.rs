@@ -15,6 +15,7 @@ use std::time::Instant;
 
 mod editor;
 mod logseq_ext;
+mod logseq_theme;
 mod menu;
 mod perf;
 
@@ -46,6 +47,7 @@ fn init_theme(cx: &mut gpui_kit::gpui::App) {
         .expect("embedded Inter fonts must register");
     // Initial OCaml patches can change the theme during the first draw.
     gpui_kit::init(cx);
+    logseq_theme::apply(cx);
     gpui_kit::component::theme::Theme::update(cx, |theme| {
         theme.font_family = "Inter".into();
     });
@@ -639,6 +641,23 @@ mod tests {
         Styled, Window,
     };
     use std::{cell::Cell, rc::Rc};
+
+    #[gpui_kit::test]
+    fn startup_uses_logseq_palette_and_inter(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::component::theme::{Theme, ThemeMode};
+        cx.update(|app| {
+            super::init_theme(app);
+            for (mode, expected_name) in [
+                (ThemeMode::Light, "Logseq Light"),
+                (ThemeMode::Dark, "Logseq Dark"),
+            ] {
+                Theme::change(mode, None, app);
+                let theme = Theme::global(app);
+                assert_eq!(theme.theme_name().as_ref(), expected_name);
+                assert_eq!(theme.font_family.as_ref(), "Inter");
+            }
+        });
+    }
 
     struct RenderCounter(Rc<Cell<usize>>);
 

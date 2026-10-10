@@ -1241,7 +1241,7 @@ let drag_reset () =
 let arm_drag (ev : Ui_services.ev) =
   match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
-      match el.Ui_services.attr "blockid" with
+      match el.Ui_services.attr "data-blockid" with
       | Some u ->
           drag_phase :=
             Some (Drag_armed (u, ev.Ui_services.x, ev.Ui_services.y))
@@ -1257,7 +1257,7 @@ let update_drag_target ev src =
   let tgt =
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
-        match el.Ui_services.attr "blockid" with
+        match el.Ui_services.attr "data-blockid" with
         | Some t when t <> src && not (A.is_descendant t src) ->
             let left, top, w, _h = el.Ui_services.rect () in
             let move_to =
@@ -1470,14 +1470,25 @@ let editing_clipboard_target uuid target =
       | None -> false)
   | None -> false
 
+(* copy/cut whose real DOM Range sits on the rendered .ed-r runs — the
+   event targets the selection's container inside .block-editor rather
+   than the conduit input; only one editing surface exists at a time *)
+let editing_block_target target =
+  match target with
+  | Some el -> Option.is_some (closest ".block-editor" (Some el))
+  | None -> false
+
 let on_copy ev =
   if S.ready () then
     match S.editing () with
     | Some e
-      when editing_clipboard_target e.S.uuid (ev.Ui_services.target) -> (
+      when editing_clipboard_target e.S.uuid (ev.Ui_services.target)
+           || editing_block_target (ev.Ui_services.target) -> (
         (* cljs copy-current-block-ref: a collapsed selection inside an
            editing block copies [[uuid]]; a non-collapsed selection
-           copies the selected buffer text *)
+           copies the selected buffer text — the source slice, not the
+           browser's DOM serialization (which would leak .ed-pad ZWSPs
+           and pill display labels) *)
         let lo, hi = A.sel_span e.S.uuid in
         ev.Ui_services.clipboard_set "text/plain"
           (if lo = hi then "[[" ^ e.S.uuid ^ "]]"
@@ -1491,7 +1502,8 @@ let on_cut ev =
   if S.ready () then
     match S.editing () with
     | Some e
-      when editing_clipboard_target e.S.uuid (ev.Ui_services.target) -> (
+      when editing_clipboard_target e.S.uuid (ev.Ui_services.target)
+           || editing_block_target (ev.Ui_services.target) -> (
         let lo, hi = A.sel_span e.S.uuid in
         if lo <> hi then (
           ev.Ui_services.clipboard_set "text/plain"

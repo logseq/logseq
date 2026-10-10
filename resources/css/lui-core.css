@@ -2707,13 +2707,27 @@ a.page-title {
   background: var(--ls-secondary-background-color);
 }
 
-/* shared-OCaml rich-text editor — rendered by edit_view.ml; text runs
-   stay selectable-free, the overlay paints selection and caret, and the
-   .ed-input sink collects key/IME input invisibly */
+/* shared-OCaml rich-text editor — rendered by edit_view.ml; the overlay
+   paints selection and caret, the .ed-input sink collects key/IME input
+   invisibly, and line content stays user-select:text (with an invisible
+   native selection) so the browser's context menu sees a real selected
+   range */
 
 .block-editor {
   position: relative;
   user-select: none;
+}
+
+/* the browser only offers Copy/Look Up in its context menu when the
+   hit point lands inside a real DOM selection over selectable text —
+   user-select:none suppresses that entirely, so the line content opts
+   back in while .ed-sel keeps painting the visible selection */
+.block-editor .ed-line {
+  user-select: text;
+}
+
+.block-editor ::selection {
+  background: transparent;
 }
 
 .ed-line {
@@ -2854,6 +2868,11 @@ a.page-title {
 
 .ed-caret {
   background: var(--ls-caret-color, var(--ls-primary-text-color));
+  /* text is z-index:1 over the overlay so .ed-sel paints under the
+     glyphs — but the caret must stay visible, including inside
+     backgrounded pills (.ed-hl/.ed-code) that would hide it */
+  position: relative;
+  z-index: 2;
   animation: ed-caret-blink 1s step-end infinite;
 }
 

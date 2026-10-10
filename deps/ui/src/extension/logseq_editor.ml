@@ -237,6 +237,11 @@ external sel_remove_all : Js.Json.t -> unit = "removeAllRanges"
 external sel_add_range : Js.Json.t -> range_t -> unit = "addRange"
   [@@mel.send]
 
+external sel_range_count : Js.Json.t -> int = "rangeCount" [@@mel.get]
+
+external sel_anchor_node : Js.Json.t -> Js.Json.t = "anchorNode"
+  [@@mel.get]
+
 external caret_from_point : float -> float -> Js.Json.t =
   "caretRangeFromPoint" [@@mel.scope "document"]
 
@@ -489,10 +494,24 @@ let select_range_el el lo hi : bool =
               true)))
     | _ -> false
   in
-  if place ~start:true lo && place ~start:false hi then (
+  if lo < hi && place ~start:true lo && place ~start:false hi then (
     let s = w_get_selection () in
     sel_remove_all s;
     sel_add_range s rng;
+    true)
+  else if lo = hi then (
+    (* a collapsed caret stands in for "no selection" — drop the DOM
+       selection only when it currently lives inside a .block-editor,
+       so routine publishes never wipe an unrelated page selection
+       (find-in-page matches, PDF highlights) *)
+    let s = w_get_selection () in
+    (if sel_range_count s > 0 then
+       let a = sel_anchor_node s in
+       if not (js_nullish a) then
+         let ael = if j_node_type a = 3 then j_parent_element a else a in
+         if not (js_nullish ael)
+         && not (js_nullish (j_closest ael ".block-editor"))
+         then sel_remove_all s);
     true)
   else false
 

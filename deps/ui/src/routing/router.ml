@@ -120,7 +120,10 @@ let fetch_blocks (p : Model.page) =
           blocks
     | _ -> blocks
   in
-  Js.Promise.resolve { p with Model.page_blocks = blocks }
+  Js.Promise.resolve
+    { p with
+      Model.page_blocks = Model.merge_blocks p.Model.page_blocks blocks
+    }
 let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
   match p.Model.page_db_id with
   | Some id ->
@@ -610,7 +613,11 @@ let load_block_zoom uuid =
                            b.Model.block_tag_uuids
                        ; page_tag_db_ids =
                            b.Model.block_tag_db_ids
-                       ; page_blocks = bs
+                       ; page_blocks =
+                           (match (Runtime.model ()).Model.route_page with
+                            | Some old ->
+                                Model.merge_blocks old.Model.page_blocks bs
+                            | None -> bs)
                        ; page_linked_refs = []
                        ; page_parents
                        ; page_db_collapsable =

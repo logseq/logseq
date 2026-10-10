@@ -284,6 +284,17 @@ pub fn register(shared: &Shared) {
 /// stylesheet for all of these — this table is gpui-only.
 fn register_class_styles() {
     use lui_gpui::style::register_class_style as class;
+    // Page-title cosmetics (lui-core.css): 36px title scale and radius —
+    // cosmetic tokens that typed props don't cover. Layout for this
+    // region (column centering, bottom gap) rides typed props in the
+    // views (chrome.ml), so no cp__content-wrap/cp__main-content entries.
+    class(
+        "ls-page-title-container",
+        "font-size:var(--ls-page-title-size);font-weight:500;\
+         color:var(--ls-title-text-color, foreground)",
+        "",
+    );
+    class("ls-page-title", "border-radius:4px", "");
     class("cp__overlays", "position:absolute;inset:0", "pointer-events-none");
     class("cp__overlay-layer", "position:absolute;inset:0", "pointer-events-none");
     class(
@@ -542,10 +553,14 @@ fn register_class_styles() {
     // + .cp__content-wrap) — without the max-width + auto inline margins
     // the page column bleeds full-width and the -20px .ls-page-blocks
     // gutter clips text at the window edge.
+    // No margin-inline:auto here — the parent row already centers via
+    // justify-center (native/chrome.ml main-content-row ~main:`center);
+    // an auto left margin absorbs all free space and anchors the column
+    // to the right edge under taffy.
     class(
         "cp__sidebar-main-content",
         "width:100%;max-width:var(--ls-main-content-max-width,960px);\
-         margin-left:auto;margin-right:auto;flex-grow:1",
+         flex-grow:1",
         "",
     );
     // .cp__content-wrap { margin:0 auto; width:100%; padding-bottom:6rem }

@@ -174,11 +174,12 @@ export default defineConfig(({ mode }) => {
         output: {
           intro: metadataIntro,
           chunkFileNames: "chunks/[name]-[hash].js",
-          // Force ~256KB chunks regardless of import shape: mobile
-          // Safari workers overflow their small stack compiling one
-          // multi-MB file (RangeError before the first statement).
+          // Single-file worker: fine-grained chunking split the module
+          // graph into ~77 files ~37 levels deep, which resolved as a
+          // serial network waterfall at boot — slower startup than the
+          // multi-MB parse it was guarding against on mobile Safari.
           advancedChunks: {
-            groups: [{ name: "w", test: /[\s\S]*/, maxSize: 262144 }],
+            groups: [{ name: "w", test: /[\s\S]*/ }],
           },
         },
       },

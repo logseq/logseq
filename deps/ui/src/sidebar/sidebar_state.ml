@@ -555,7 +555,10 @@ let navigate_to_page target =
    the collapse/embed/view shaping that would touch editor state *)
 let fetch_blocks (p : Model.page) =
   let* blocks = Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p in
-  Js.Promise.resolve { p with Model.page_blocks = blocks }
+  Js.Promise.resolve
+    { p with
+      Model.page_blocks = Model.merge_blocks p.Model.page_blocks blocks
+    }
 let open_dialog name = Ui_services.dom_open_dialog name
 
 let open_cards () = Ui_services.dom_dispatch "ls:open-cards"
