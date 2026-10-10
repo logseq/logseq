@@ -741,7 +741,7 @@ let main_content (ms : Model.t Signal.signal) =
             CSS only matches 'true' — dead attr, dropped *)
          scroll ~key:"main-content"
            ~accessibility_identifier:"main-content-container"
-           ~orientation:`vertical ~grow:1.
+           ~orientation:`vertical ~grow:1. ~cross:`center
            ~style_class:"scrollbar-spacing relative"
            ~data_attrs_signal:
              (Signal.map
@@ -790,8 +790,14 @@ let main_content (ms : Model.t Signal.signal) =
                         match m.route with
                         | Model.Journals | Model.Home ->
                             "cp__content-wrap cp__content-wrap--flush"
-                        | _ -> "cp__content-wrap mx-auto pb-24")
-                      (box ~key:"content-wrap" [ Page.region ms ])
+                        | _ -> "cp__content-wrap mx-auto")
+                      (box ~key:"content-wrap"
+                         [ Page.region ms
+                         ; (* pb-24 scroll breathing room as a typed
+                              spacer — keeps the gpui/backend-agnostic
+                              bottom gap without a stylesheet rule *)
+                           box ~key:"cw-pad" ~height:96 []
+                         ])
                   ]
            ]
        ])

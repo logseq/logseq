@@ -15,6 +15,7 @@ use std::time::Instant;
 
 mod editor;
 mod logseq_ext;
+mod logseq_theme;
 mod menu;
 
 use gpui_kit::component::Root;
@@ -542,6 +543,10 @@ fn main() {
         // window draw, so the registry and widgets must already exist.
         gpui_kit::init(cx);
         eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
+        // Install the Logseq classic palette as the light/dark themes
+        // before the font preset; views emitting `--ls-*` colors resolve
+        // against these slots instead of the generic gpui defaults.
+        logseq_theme::apply(cx);
         gpui_kit::component::theme::Theme::update(cx, |theme| {
             theme.font_family = "Inter".into();
         });
