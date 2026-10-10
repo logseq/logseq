@@ -89,13 +89,11 @@
                               (swap! order conj :db-restoring-false)
                               (is (= formatter (state/get-date-formatter))
                                   "Settings must see the persisted format before the UI leaves restoring.")))]
-            (handler/restore-and-setup! repo))
-          (p/then
-           (fn []
-             (is (= formatter (state/get-date-formatter)))
-             (is (= [:restore-graph :get-date-formatter :db-restoring-false :watch-for-date]
-                    @order)
-                 "Startup restore must load the date formatter after the graph and before journals/settings render.")))
+            (p/let [_ (handler/restore-and-setup! repo)]
+              (is (= formatter (state/get-date-formatter)))
+              (is (= [:restore-graph :get-date-formatter :db-restoring-false :watch-for-date]
+                     @order)
+                  "Startup restore must load the date formatter after the graph and before journals/settings render.")))
           (p/catch
            (fn [error]
              (is false (str error))))
