@@ -17,6 +17,7 @@
    handle. *)
 
 open Lui_elements
+module P = Lui_protocol
 module I = I18n
 module S = Properties_state
 
@@ -29,10 +30,11 @@ let icon_el ?(size = 18.) ?(cls = "") (ty, id) : t =
   | "emoji" -> Logseq_emoji.el ~name:id ()
   | _ -> Icons.icon ~size ~cls id
 
-(* cljs ui__button base + variant/size classes (shui/button) *)
+(* cljs ui__button base + variant classes (shui/button); the small
+   28px outline-button chrome rides the typed props *)
 let btn_base = "ui__button"
 
-let btn_outline_sm = btn_base ^ " as-outline ls-ep-btn"
+let btn_outline_sm = btn_base ^ " as-outline"
 
 (* ---------- tabler icon names ---------- *)
 
@@ -192,21 +194,37 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
 
   let item_btn (it : item) : t =
+    (* ls-emoji-cell is the regression test's icon-button locator; the
+       .its/.icons-row button chrome moved to the typed props *)
+    let cell ?font_size ~cls ~key ~label ~tooltip ~on_press child : t =
+      Ui_components.with_props
+        ([ ( P.HoverBackground
+           , P.StringValue
+               "var(--lx-gray-03, var(--ls-menu-hover-color, \
+                  hsl(var(--muted))))" )
+         ]
+         @ (match font_size with
+            | Some fz -> [ P.FontSize, P.StringValue fz ]
+            | None -> []))
+        (button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
+           ~padding:0 ~corner_radius:9999 ~label ~tooltip ~on_press
+           [ child ])
+    in
     match it with
     | Emoji_item (id, name) ->
-        button ~key:("e-" ^ id) ~style_class:"ls-emoji-preview"
-          ~label:name ~tooltip:name ~on_press:(fun _ -> choose (Emoji id))
-          [ Logseq_emoji.el ~name:id () ]
+        cell ~font_size:"1.5rem" ~cls:"ls-emoji-preview" ~key:("e-" ^ id)
+          ~label:name ~tooltip:name
+          ~on_press:(fun _ -> choose (Emoji id))
+          (Logseq_emoji.el ~name:id ())
     | Tabler_item (display, kebab) ->
-        button ~key:("t-" ^ icon_id display) ~style_class:"ls-emoji-cell"
-          ~label:display
+        cell ~cls:"ls-emoji-cell" ~key:("t-" ^ icon_id display) ~label:display
           ~tooltip:(icon_id display)
           ~on_press:(fun _ ->
             choose (Tabler (icon_id display, (get ()).preset)))
           (* cljs ui/icon called with the display name: the ls-icon class
              keeps the spaces verbatim, the svg uses the kebab name *)
-          [ icon ~name:(Icons.name_ref kebab) ~point_size:24
-              ~style_class:("ui__icon ti ls-icon-" ^ display) [] ]
+          (icon ~name:(Icons.name_ref kebab) ~point_size:24
+             ~style_class:("ui__icon ti ls-icon-" ^ display) [])
   in
 
   let rec chunks n xs =
@@ -223,21 +241,26 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
 
   let pane_section ~virtual_list label (items : t list) : t =
-    column ~style_class:"pane-section"
-      ~foreground:(reactive (fun (s : pstate) ->
-          Option.value s.preset ~default:"inherit") sv)
-      (box ~style_class:"hd"
-         [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
-             [] ]
-       ::
-       (if virtual_list then
-          [ column ~gap:0
-              (List.map
-                 (fun row_items ->
-                   row ~gap:4 ~style_class:"its icons-row" row_items)
-                 (chunks 9 items)) ]
-        else
-          [ box ~style_class:"its" items ]))
+    Ui_components.with_props [ P.Overflow, P.StringValue "auto" ]
+      (column ~grow:1.
+         ~foreground:(reactive (fun (s : pstate) ->
+             Option.value s.preset ~default:"inherit") sv)
+         ~data_attrs:[ ("style", "padding-left: 0.5rem") ]
+         (box ~style_class:"hd"
+            [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
+                ~font_size:"0.75rem" ~font_weight:500
+                ~foreground:"var(--lx-gray-07, var(--muted-foreground))"
+                [] ]
+          ::
+          (if virtual_list then
+             [ column ~gap:0
+                 (List.map
+                    (fun row_items ->
+                      row ~gap:4 ~padding_vertical:4 row_items)
+                    (chunks 9 items)) ]
+           else
+             [ row ~gap:4 ~padding_vertical:4
+                 ~data_attrs:[ ("style", "flex-wrap: wrap") ] items ])))
   in
 
   let used_item_btns () : t list =
@@ -290,7 +313,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     Ui_components.color_swatch ~key:(match c with
                                      | Some c -> "p-" ^ c
                                      | None -> "p-none")
-      ~size:18 ~style_class:"as-outline ls-ep-btn it"
+      ~size:18 ~style_class:"as-outline it"
       ~background:(match c with Some c -> c | None -> "transparent")
       ~label:(match c with
         | Some color -> I.tf "icon/color-value" [ color ]
@@ -308,8 +331,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       match s.tab with
       | Tab_all ->
           let used = used_item_btns () in
-          column ~style_class:"ls-ep-col"
-            [ column ~style_class:"all-pane"
+          column ~gap:4 ~grow:1.
+            [ column ~data_attrs:[ ("style", "padding-bottom: 2.5rem") ]
                 ((if used = [] then []
                   else
                     [ pane_section ~virtual_list:false
@@ -334,8 +357,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             |> List.filter (fun (t, _, _) -> t = "emoji")
             |> List.map (fun (_, id, name) -> item_btn (Emoji_item (id, name)))
           in
-          column ~style_class:"ls-ep-col"
-            [ column ~style_class:"ls-ep-col"
+          column ~gap:4 ~grow:1.
+            [ column ~gap:4 ~grow:1.
                 ((if used = [] then []
                   else
                     [ pane_section ~virtual_list:false
@@ -347,7 +370,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          (fun (id, n) -> item_btn (Emoji_item (id, n)))
                          (Emoji_mart.all_emojis ())) ]) ]
       | Tab_icon ->
-          column ~style_class:"ls-ep-col"
+          column ~gap:4 ~grow:1.
             [ pane_section ~virtual_list:true
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
@@ -363,7 +386,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         List.map (fun (id, name) -> Emoji_item (id, name)) s.emoji_results
         @ icons
       in
-      column ~style_class:"ls-ep-col search-result"
+      column ~gap:4 ~grow:1.
         (if items = [] then []
          else
            [ pane_section ~virtual_list:true
@@ -378,9 +401,24 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       ; (Tab_icon, I.t "icon/tab-icons") ]
   in
 
-  (column ~style_class:"cp__emoji-icon-picker"
-     ~data_attrs:[ ("data-keep-selection", "true") ]
-     [ box ~key:"hd" ~style_class:"hd"
+  (Ui_components.with_props
+     [ P.Position, P.StringValue "relative"
+     ; P.Overflow, P.StringValue "hidden" ]
+     (column ~style_class:"cp__emoji-icon-picker"
+        ~width:380 ~max_height:408
+        ~data_attrs:
+          [ ("data-keep-selection", "true")
+          ; ("style", "max-width: calc(100vw - 16px)") ]
+        [ Ui_components.with_props
+            [ P.Position, P.StringValue "absolute"
+            ; P.InsetTop, P.FloatValue 38.
+            ; P.InsetLeft, P.FloatValue 0. ]
+            (box ~key:"hd" ~container_relative_frame:`horizontal
+               ~background:"hsl(var(--popover))"
+               ~data_attrs:
+                 [ ( "style"
+                   , "box-sizing: border-box; padding: 0.625rem 0.75rem \
+                      0.25rem" ) ]
          [ reactive
              ~equal:(fun (a : pstate) b ->
                 a.tab = b.tab && a.reset = b.reset)
@@ -409,18 +447,35 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                               [ Icons.icon ~size:14. "x" ]))
                     ]
                   ())
-             sv ]
+             sv ])
      ; Ui_parts.class_signal sv
          (fun s -> "bd " ^ tab_name s.tab)
-         (scroll ~key:"bd" ~orientation:`vertical
+         (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
+            ~data_attrs:
+              [ ( "style"
+                , "padding: 96px 0.25rem 0.25rem; box-sizing: \
+                   border-box" ) ]
             [ box
                 [ reactive
                     ~equal:(fun (a : pstate) b ->
                        a.q = b.q && a.tab = b.tab
                        && a.emoji_results = b.emoji_results)
                     content_view sv ] ])
-     ; row ~key:"ft" ~style_class:"ft"
-         ([ toggle_group ~key:"tabs" ~gap:0 ~style_class:"ls-ep-tabs"
+     ; Ui_components.with_props
+         [ P.Position, P.StringValue "absolute"
+         ; P.InsetTop, P.FloatValue (-1.)
+         ; P.InsetLeft, P.FloatValue 0. ]
+         (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
+            ~container_relative_frame:`horizontal
+            ~background:
+              "var(--lx-gray-02, var(--ls-secondary-background-color, \
+                hsl(var(--popover))))"
+            ~data_attrs:
+              [ ( "style"
+                , "box-sizing: border-box; border-top: 1px solid \
+                   var(--lx-gray-05, var(--ls-border-color, \
+                   hsl(var(--border))))" ) ]
+            ([ toggle_group ~key:"tabs" ~gap:8 ~grow:1. ~cross:`center
               (List.map
                  (fun (t, label) ->
                    Ui_components.chip_toggle ~key:("tab-" ^ tab_name t)
@@ -434,12 +489,18 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
           [ if_
               ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
               (box ~key:"pal"
-                 [ button ~style_class:(btn_outline_sm ^ " color-picker")
-                     ~label:(I.t "icon/select-color") ~icon:(`app "palette")
+                 [ Ui_components.with_props
+                     [ P.Position, P.StringValue "relative"
+                     ; P.Overflow, P.StringValue "hidden" ]
+                     (button ~style_class:(btn_outline_sm ^ " color-picker")
+                        ~height:28 ~width:24 ~padding_vertical:4
+                        ~padding_horizontal:12 ~corner_radius:4
+                        ~label:(I.t "icon/select-color") ~icon:(`app "palette")
                      ~foreground:(reactive (fun s ->
                        Option.value s.preset ~default:"inherit") sv)
-                     ~on_press:(fun _ ->
-                       update (fun s -> { s with pal_open = not s.pal_open })) []
+                        ~on_press:(fun _ ->
+                          update (fun s -> { s with pal_open = not s.pal_open }))
+                        [])
                  ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
                      (popover ~key:"pal-pop" ~anchor:`below
                         ~anchor_alignment:`start ~anchor_offset:4.
@@ -450,13 +511,14 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ]) ]
           @
           (if del then
-             [ button ~key:"del" ~style_class:btn_outline_sm
+             [ button ~key:"del" ~style_class:btn_outline_sm ~height:28
+                 ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
                  ~data_attrs:[ ("data-action", "del") ]
                  ~tooltip:(I.t "ui/delete")
                  ~label:(I.t "ui/delete")
                  ~on_press:(fun _ -> choose Remove)
                  [ icon_el ~size:17. ("tabler-icon", "trash") ] ]
-           else [])) ])
+           else []))) ]))
     context parent
 ;;
 

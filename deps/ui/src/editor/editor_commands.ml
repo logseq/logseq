@@ -15,16 +15,21 @@
    [run_editor_cmd], [on_command]) keep their imperative signatures —
    callers open the popup exactly as before; only the view layer is
    declarative. The pre-LUI DOM contract is kept verbatim:
-   .ls-editor-date-picker / .ui__calendar-cell / .ui__calendar-day /
-   .ls-cal-outside classes, role=grid/gridcell/menu/menuitem
-   attributes, and the [role=checkbox] repeat panel. *)
+   .ls-editor-date-picker / .ui__calendar-cell / .ui__calendar-day
+   classes, role=grid/gridcell/menu/menuitem
+   attributes, and the [aria-checked]/[data-checked] repeat checkbox. *)
 
 open Promise_ext
 open Lui_elements
+module P = Lui_protocol
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
 module W = Wire
+
+let sv v = P.StringValue v
+let iv v = P.IntValue v
+let fv v = P.FloatValue v
 
 (* ---------- event detail ---------- *)
 
@@ -235,43 +240,77 @@ let commit_cal p =
   | Link_form _ -> ()
 
 (* one td[role=gridcell] > button.ui__calendar-day; the focused day
-   carries tabindex=0/data-selected/data-focused, today carries
-   data-today. The table kind emits table/tr/td plus role=grid/row/
-   gridcell itself — the attrs here are the app contract on top *)
+   carries tabindex=0/data-focused on the cell and ~selected on the
+   button, today carries data-today. The table kind emits
+   table/tr/td plus role=grid/row/gridcell itself — the attrs here
+   are the app contract on top; shui.css keeps the web paint via the
+   td[data-*] rules while the typed props carry it for gpui. *)
 let rec cal_cell today p d =
   let focused = d = p.cd in
   let is_today =
     p.cy * 10000 + p.cm * 100 + d = today
   in
   table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" p.cy p.cm d)
-    ~style_class:"ui__calendar-cell"
+    ~style_class:"ui__calendar-cell" ~height:40 ~padding:0
+    ~text_alignment:`center
     ~data_attrs:
       ((if focused
         then [ ("data-focused", "true"); ("aria-selected", "true") ]
         else [])
        @ if is_today then [ ("data-today", "true") ] else [])
-    [ button ~style_class:"ui__calendar-day"
-        ~text:(string_of_int d)
-        ~label:(string_of_int d)
-        ~autofocus:focused
-        ~data_attrs:
-          ([ ("tabindex", if focused then "0" else "-1") ]
-           @ (if focused then [ ("data-selected", "true") ] else [])
-           @ if is_today then [ ("data-today", "true") ] else [])
-        ~on_press:(fun _ -> pick_day p.cy p.cm d)
-        [] ]
+    [ Ui_components.with_props
+        [ P.FontSize, sv "0.875rem"
+        ; ( P.HoverBackground
+          , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+                hsl(var(--muted))))" ) ]
+        (button ~style_class:"ui__calendar-day" ~variant:`ghost
+           ~width:36 ~height:36 ~padding:0 ~corner_radius:6
+           ~selected:focused
+           ~background:
+             (if focused
+              then
+                "var(--lx-accent-09, var(--ls-link-text-color, \
+                  hsl(var(--primary, #0f7b6c))))"
+              else if is_today
+              then "var(--lx-accent-04, hsl(var(--accent, 196 100% 90%)))"
+              else "transparent")
+           ~foreground:
+             (if focused
+              then "#fff"
+              else if is_today
+              then "var(--lx-accent-11, hsl(var(--accent-foreground, 196 \
+                100% 15%)))"
+              else "inherit")
+           ~text:(string_of_int d)
+           ~label:(string_of_int d)
+           ~autofocus:focused
+           ~data_attrs:
+             ([ ("tabindex", if focused then "0" else "-1") ]
+              @ if is_today then [ ("data-today", "true") ] else [])
+           ~on_press:(fun _ -> pick_day p.cy p.cm d)
+           []) ]
 
 (* dimmed prev/next-month day (cljs DayPicker showOutsideDays); y/m is
    the neighboring month it belongs to *)
 and out_cell y m d =
   table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" y m d)
-    ~style_class:"ui__calendar-cell"
-    [ button ~style_class:"ui__calendar-day ls-cal-outside"
-        ~text:(string_of_int d)
-        ~label:(string_of_int d)
-        ~data_attrs:[ ("tabindex", "-1") ]
-        ~on_press:(fun _ -> pick_day y m d)
-        [] ]
+    ~style_class:"ui__calendar-cell" ~height:40 ~padding:0
+    ~text_alignment:`center
+    [ Ui_components.with_props
+        [ P.FontSize, sv "0.875rem"
+        ; P.Opacity, fv 0.55
+        ; ( P.HoverBackground
+          , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+                hsl(var(--muted))))" ) ]
+        (button ~style_class:"ui__calendar-day" ~variant:`ghost
+           ~width:36 ~height:36 ~padding:0 ~corner_radius:6
+           ~foreground:
+             "var(--lx-gray-07, var(--ls-secondary-text-color, #999))"
+           ~text:(string_of_int d)
+           ~label:(string_of_int d)
+           ~data_attrs:[ ("tabindex", "-1") ]
+           ~on_press:(fun _ -> pick_day y m d)
+           []) ]
 
 (* the day grid — remounts whole on a cy/cm/cd change, which is what
    re-fires the focused day's autofocus *)
@@ -290,7 +329,9 @@ and cal_table (p : popup) : t =
     if p.cm = 12 then (p.cy + 1, 1) else (p.cy, p.cm + 1)
   in
   let rows = (lead + days + 6) / 7 in
-  table ~key:"grid"
+  (* .lui-table already carries w-full/table-fixed/border-collapse; the
+     fixed 276px grid width is the cljs datepicker contract *)
+  table ~key:"grid" ~width:276
     (List.init rows (fun r ->
        table_row ~key:(string_of_int r)
          (List.init 7 (fun c ->
@@ -549,24 +590,37 @@ let commit_time v =
 (* select widget: a ghost button whose label is the current choice;
    pressing it anchors a [role=menu] under the button *)
 let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
-  button ~style_class:"ls-repeat-select"
-    ~label
-    ~data_attrs:[ ("data-sel", sel) ]
-    ~on_press:(fun _ ->
-      open_choice_menu
-        (Printf.sprintf "[data-sel='%s']" sel)
-        (List.map
-           (fun (id, label) -> (label, fun () -> on_pick id label))
-           (options_of ())))
-    [ text
-        ~value:(reactive
-                  (fun po ->
-                    match rpt_of po with
-                    | Some r -> label_of r
-                    | None -> "")
-                  ps)
-        []
-    ; Icons.icon "chevron-down" ]
+  Ui_components.with_props
+    [ P.FontSize, sv "0.875rem"
+    ; P.Cursor, sv "pointer"
+    ; P.WhiteSpace, sv "nowrap"
+    ; P.Overflow, sv "hidden"
+    ; P.TextOverflow, sv "ellipsis"
+    ; ( P.HoverBackground
+      , sv "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
+    (button ~variant:`ghost ~cross:`center ~main:`space_between
+       ~grow:1. ~min_width:0 ~height:32 ~padding_horizontal:8
+       ~border_width:1
+       ~border_color:
+         "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
+       ~corner_radius:6
+       ~label
+       ~data_attrs:[ ("data-sel", sel) ]
+       ~on_press:(fun _ ->
+         open_choice_menu
+           (Printf.sprintf "[data-sel='%s']" sel)
+           (List.map
+              (fun (id, label) -> (label, fun () -> on_pick id label))
+              (options_of ())))
+       [ text
+           ~value:(reactive
+                     (fun po ->
+                       match rpt_of po with
+                       | Some r -> label_of r
+                       | None -> "")
+                     ps)
+           []
+       ; Icons.icon "chevron-down" ])
 
 (* the raw-input bridge — LUI input only emits text/color kinds and
    carries no blur/value-attr plumbing, so number/time inputs ride
@@ -577,6 +631,12 @@ let freq_input ps : t =
     ~attrs_signal_v:
       (Logseq_el.attrs_signal ps (fun po ->
            [ ("type", "number"); ("min", "1"); ("step", "1")
+           ; ( "style"
+             , "height: 2rem; width: 3.5rem; flex: none; padding: 0 \
+                0.5rem; border: 1px solid var(--lx-popover-border, \
+                var(--ls-border-color, #e5e5e5)); border-radius: \
+                0.375rem; background: transparent; font-size: 0.875rem; \
+                color: inherit" )
            ; ( "value"
              , match rpt_of po with
                | Some r -> string_of_int r.freq
@@ -599,6 +659,11 @@ let year_input ps : t =
     ~attrs_signal_v:
       (Logseq_el.attrs_signal ps (fun po ->
            [ ("type", "number"); ("min", "1"); ("max", "9999")
+           ; ( "style"
+             , "height: 2rem; width: 3.25rem; padding: 0 0.5rem; border: \
+                1px solid var(--lx-popover-border, var(--ls-border-color, \
+                #e5e5e5)); border-radius: 0.375rem; background: \
+                transparent; font-size: 0.875rem; color: inherit" )
            ; ( "value"
              , match po with Some q -> string_of_int q.cy | None -> "" )
            ]))
@@ -616,6 +681,12 @@ let time_input ps : t =
     ~attrs_signal_v:
       (Logseq_el.attrs_signal ps (fun po ->
            [ ("type", "time")
+           ; ( "style"
+             , "height: 2rem; padding: 0 0.5rem; border: 1px solid \
+                var(--lx-popover-border, var(--ls-border-color, \
+                #e5e5e5)); border-radius: 0.375rem; background: \
+                transparent; font-size: 0.875rem; color: inherit; \
+                color-scheme: light dark" )
            ; ( "value"
              , match po with
                | Some q -> Printf.sprintf "%02d:%02d" q.hour q.tmin
@@ -628,31 +699,52 @@ let time_input ps : t =
     []
 
 let time_row ps : t =
-  box ~key:"time" ~style_class:"ls-time-picker"
+  row ~key:"time" ~cross:`center ~gap:8
+    ~data_attrs:[ ("style", "margin-top: 8px") ]
     [ time_input ps
-    ; button ~key:"now" ~style_class:"ls-time-now"
-        ~text:(I18n.t "ui/use-current-time")
-        ~on_press:(fun _ ->
-          let now = Dates.fields (Dates.date_now ()) in
-          update_p (fun q ->
-              { q with hour = now.Dates.hours; tmin = now.Dates.minutes });
-          with_p commit_cal)
-        [] ]
+    ; Ui_components.with_props
+        [ P.FontSize, sv "0.8125rem" ]
+        (button ~key:"now" ~style_class:"ls-time-now" ~variant:`ghost
+           ~padding_horizontal:4 ~padding_vertical:0
+           ~foreground:
+             "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
+           ~data_attrs:[ ("style", "--accent: 0 0% 0% / 0") ]
+           ~text:(I18n.t "ui/use-current-time")
+           ~on_press:(fun _ ->
+             let now = Dates.fields (Dates.date_now ()) in
+             update_p (fun q ->
+                 { q with hour = now.Dates.hours; tmin = now.Dates.minutes });
+             with_p commit_cal)
+           []) ]
 
 let menu_view (m : popup_menu) : t =
-  box ~key:"menu" ~style_class:m.mclass
-    ~data_attrs:
-      [ ("role", "menu")
-      ; ( "style"
-        , Printf.sprintf "position:absolute;left:%.0fpx;top:%.0fpx"
-            m.mx m.my ) ]
-    (List.mapi
-       (fun i (label, pick) ->
-         menu_item ~key:(string_of_int i)
-           ~style_class:"ls-date-month-option"
-           ~data_attrs:[ ("role", "menuitem") ]
-           ~text:label ~on_press:(fun _ -> pick ()) [])
-       m.mitems)
+  Ui_components.with_props
+    [ P.Position, sv "absolute"
+    ; P.InsetLeft, fv m.mx
+    ; P.InsetTop, fv m.my
+    ; P.ZIndex, iv 901
+    ; P.Overflow, sv "auto"
+    ; P.Shadow, sv "0 4px 12px rgb(0 0 0 / 0.15)" ]
+    (box ~key:"menu" ~style_class:m.mclass ~max_height:256
+       ~background:
+         "var(--lx-popover-bg, var(--ls-primary-background-color, #fff))"
+       ~border_width:1
+       ~border_color:
+         "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
+       ~corner_radius:6
+       ~data_attrs:[ ("role", "menu") ]
+       (List.mapi
+          (fun i (label, pick) ->
+            Ui_components.with_props
+              [ P.FontSize, sv "0.875rem"
+              ; P.WhiteSpace, sv "nowrap"
+              ; ( P.HoverBackground
+                , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+                      #f2f2f2))" ) ]
+              (menu_item ~key:(string_of_int i)
+                 ~padding_vertical:6 ~padding_horizontal:12
+                 ~text:label ~on_press:(fun _ -> pick ()) []))
+          m.mitems))
 
 let repeat_panel ps : t =
   let opt3 f po =
@@ -691,97 +783,170 @@ let repeat_panel ps : t =
                   "logseq.property.repeat/checked-property" (W.Int id) ])
     | _ -> ()
   in
-  box ~key:"rpt" ~style_class:"ls-repeat-panel"
-    [ box ~key:"head" ~style_class:"ls-repeat-head"
-        [ button ~key:"cb" ~style_class:"jtrigger ls-repeat-checkbox"
-            ~label:(I18n.t "property.built-in/repeat-repeated")
-            ~data_attrs:(reactive
-                           (fun po ->
-                             [ ("role", "checkbox")
-                             ; ( "aria-checked"
-                               , string_of_bool
-                                   (match rpt_of po with
-                                    | Some r -> r.repeated
-                                    | None -> false) ) ]
-                             @ (match rpt_of po with
+  Ui_components.with_props [ P.FontSize, sv "0.875rem" ]
+    (column ~key:"rpt" ~gap:16 ~width:256
+       ~data_attrs:
+         [ ( "style"
+           , "box-sizing: border-box; padding-left: 8px; border-left: 1px \
+              solid var(--lx-popover-border, var(--ls-border-color, \
+              #e5e5e5))" ) ]
+       [ row ~key:"head" ~cross:`center ~gap:4
+           ~data_attrs:[ ("style", "margin-bottom: 4px") ]
+           [ Ui_components.with_props
+               [ P.FontSize, sv "0.75rem"; P.LineHeight, sv "1" ]
+               (* no [role="checkbox"]: the web focus layer strips [role]
+                  from non-tab buttons; [aria-checked] + [data-checked]
+                  carry the state *)
+               (button ~key:"cb" ~variant:`ghost
+                  ~width:16 ~min_width:16 ~height:16 ~padding:0
+                  ~corner_radius:3 ~border_width:1
+                  ~background:
+                    (reactive
+                       (fun po ->
+                         match rpt_of po with
+                         | Some { repeated = true; _ } ->
+                             "var(--lx-accent-09, \
+                              var(--ls-link-text-color, \
+                              hsl(var(--primary, #0f7b6c))))"
+                         | _ -> "transparent")
+                       ps)
+                  ~foreground:
+                    (reactive
+                       (fun po ->
+                         match rpt_of po with
+                         | Some { repeated = true; _ } -> "#fff"
+                         | _ -> "inherit")
+                       ps)
+                  ~label:(I18n.t "property.built-in/repeat-repeated")
+                  ~data_attrs:
+                    (reactive
+                       (fun po ->
+                         [ ( "style"
+                           , "cursor: pointer; --accent: 0 0% 0% / 0; "
+                             ^ (match rpt_of po with
                                 | Some { repeated = true; _ } ->
-                                    [ ("data-checked", "true") ]
-                                | _ -> []))
-                           ps)
-            ~on_press:(fun _ -> toggle_repeated ())
-            [ text
-                ~value:(reactive
-                          (fun po ->
-                            match rpt_of po with
-                            | Some { repeated = true; _ } -> "✓"
-                            | _ -> "")
-                          ps)
-                [] ]
-        ; text ~key:"rt" ~value:(I18n.t "property.repeat/task") [] ]
-    ; box ~key:"freq" ~style_class:"ls-repeat-frequency"
-        [ label ~key:"fl" ~style_class:"ls-repeat-label"
-            ~value:(I18n.t "property.repeat/every") []
-        ; freq_input ps
-        ; repeat_sel (fun r -> choice_label_of r.unit_choices r.unit_id)
-            (fun () ->
-              match cur_rpt () with
-              | Some r ->
-                  List.map (fun (id, _i, l) -> (id, l)) r.unit_choices
-              | None -> [])
-            on_unit "unit" "property.built-in/repeat-recur-unit" ]
-    ; box ~key:"next" ~style_class:"ls-repeat-next"
-        [ text ~key:"nl" ~style_class:"ls-repeat-label"
-            ~value:(I18n.t "property.repeat/next-date") []
-        ; repeat_sel (fun r -> choice_label_of r.rtype_choices r.rtype_id)
-            (fun () ->
-              match cur_rpt () with
-              | Some r ->
-                  List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices
-              | None -> [])
-            on_rtype "rtype" "property.built-in/repeat-repeat-type" ]
-    ; box ~key:"when" ~style_class:"ls-repeat-when"
-        [ text ~key:"wl" ~style_class:"ls-repeat-label"
-            ~value:(I18n.t "property.repeat/when") []
-        ; repeat_sel
-            (fun r ->
-              match
-                List.find_map
-                  (fun (id, l, _d) -> if id = r.when_id then Some l else None)
-                  r.when_choices
-              with
-              | Some l -> l
-              | None -> "")
-            (fun () ->
-              match cur_rpt () with
-              | Some r ->
-                  List.map (fun (id, l, _d) -> (id, l)) r.when_choices
-              | None -> [])
-            on_when "when" "property.repeat/when"
-        ; box ~key:"is" ~style_class:"ls-repeat-is"
-            [ text ~key:"il" ~style_class:"ls-repeat-label"
-                ~value:(I18n.t "property.repeat/is-label") []
-            ; text ~key:"dl"
-                ~value:(reactive (opt3 done_label_of) ps) [] ] ] ]
+                                    "border-color: transparent"
+                                | _ ->
+                                    "border-color: \
+                                     var(--lx-popover-border, \
+                                     var(--ls-border-color, #888))") )
+                         ; ( "aria-checked"
+                           , string_of_bool
+                               (match rpt_of po with
+                                | Some r -> r.repeated
+                                | None -> false) ) ]
+                         @ (match rpt_of po with
+                            | Some { repeated = true; _ } ->
+                                [ ("data-checked", "true") ]
+                            | _ -> []))
+                       ps)
+                  ~on_press:(fun _ -> toggle_repeated ())
+                  [ text
+                      ~value:(reactive
+                                (fun po ->
+                                  match rpt_of po with
+                                  | Some { repeated = true; _ } -> "✓"
+                                  | _ -> "")
+                                ps)
+                      [] ])
+           ; text ~key:"rt" ~value:(I18n.t "property.repeat/task") [] ]
+       ; row ~key:"freq" ~cross:`center ~gap:8
+           [ label ~key:"fl"
+               ~foreground:
+                 "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
+               ~value:(I18n.t "property.repeat/every") []
+           ; freq_input ps
+           ; repeat_sel (fun r -> choice_label_of r.unit_choices r.unit_id)
+               (fun () ->
+                 match cur_rpt () with
+                 | Some r ->
+                     List.map (fun (id, _i, l) -> (id, l)) r.unit_choices
+                 | None -> [])
+               on_unit "unit" "property.built-in/repeat-recur-unit" ]
+       ; column ~key:"next" ~gap:8
+           [ text ~key:"nl"
+               ~foreground:
+                 "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
+               ~value:(I18n.t "property.repeat/next-date") []
+           ; repeat_sel (fun r -> choice_label_of r.rtype_choices r.rtype_id)
+               (fun () ->
+                 match cur_rpt () with
+                 | Some r ->
+                     List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices
+                 | None -> [])
+               on_rtype "rtype" "property.repeat/repeat-type" ]
+       ; column ~key:"when" ~gap:8
+           [ text ~key:"wl"
+               ~foreground:
+                 "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
+               ~value:(I18n.t "property.repeat/when") []
+           ; repeat_sel
+               (fun r ->
+                 match
+                   List.find_map
+                     (fun (id, l, _d) -> if id = r.when_id then Some l else None)
+                     r.when_choices
+                 with
+                 | Some l -> l
+                 | None -> "")
+               (fun () ->
+                 match cur_rpt () with
+                 | Some r ->
+                     List.map (fun (id, l, _d) -> (id, l)) r.when_choices
+                 | None -> [])
+               on_when "when" "property.repeat/when"
+           ; row ~key:"is" ~gap:4
+               [ text ~key:"il"
+                   ~foreground:
+                     "var(--lx-gray-09, var(--ls-secondary-text-color, \
+                       #777))"
+                   ~value:(I18n.t "property.repeat/is-label") []
+               ; text ~key:"dl"
+                   ~value:(reactive (opt3 done_label_of) ps) [] ] ] ])
+
+(* bordered 32px ghost button — the prev/next month nav chrome (old
+   .ls-cal-nav-btn); the hover paint is the variant's accent *)
+let nav_btn ~key ~label ~on_press children : t =
+  Ui_components.with_props
+    [ ( P.HoverBackground
+      , sv "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
+    (button ~key ~variant:`ghost ~height:32 ~width:36 ~padding:0
+       ~border_width:1
+       ~border_color:
+         "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
+       ~corner_radius:6 ~label ~on_press children)
 
 let cal_head ps : t =
-  box ~key:"head" ~style_class:"ls-cal-head"
-    [ box ~key:"selects" ~style_class:"ls-cal-selects"
-        [ button ~key:"msel" ~style_class:"ls-date-month-select"
-            ~text:(reactive
-                     (fun po ->
-                       match po with
-                       | Some q -> (month_names ()).(q.cm - 1)
-                       | None -> "")
-                     ps)
-            ~on_press:(fun _ -> toggle_month_menu ())
-            []
+  row ~key:"head" ~cross:`center ~main:`space_between
+    ~data_attrs:[ ("style", "margin-bottom: 0.75rem") ]
+    [ row ~key:"selects" ~cross:`center ~gap:4
+        [ Ui_components.with_props
+            [ P.FontSize, sv "0.875rem"
+            ; P.FontWeight, P.IntValue 500
+            ; P.WhiteSpace, sv "nowrap" ]
+            (button ~key:"msel" ~style_class:"ls-date-month-select"
+               ~variant:`ghost ~main:`start ~height:32 ~min_width:96
+               ~padding_horizontal:12 ~border_width:1
+               ~border_color:
+                 "var(--lx-popover-border, var(--ls-border-color, \
+                   #e5e5e5))"
+               ~corner_radius:6
+               ~data_attrs:[ ("style", "--accent: 0 0% 0% / 0") ]
+               ~text:(reactive
+                        (fun po ->
+                          match po with
+                          | Some q -> (month_names ()).(q.cm - 1)
+                          | None -> "")
+                        ps)
+               ~on_press:(fun _ -> toggle_month_menu ())
+               [])
         ; year_input ps ]
-    ; box ~key:"nav" ~style_class:"ls-cal-nav"
-        [ button ~key:"prev" ~style_class:"ls-cal-nav-btn"
+    ; row ~key:"nav" ~cross:`center ~gap:4
+        [ nav_btn ~key:"prev"
             ~label:(I18n.t "editor.date-picker/previous-month")
             ~on_press:(fun _ -> nav_month (-1))
             [ Icons.icon "chevron-left" ]
-        ; button ~key:"next" ~style_class:"ls-cal-nav-btn"
+        ; nav_btn ~key:"next"
             ~label:(I18n.t "editor.date-picker/next-month")
             ~on_press:(fun _ -> nav_month 1)
             [ Icons.icon "chevron-right" ] ] ]
@@ -813,36 +978,63 @@ let rpt_open po =
   match po with Some { rpt = Some _; _ } -> true | _ -> false
 
 let cal_body ps (p : popup) : t =
-  box ~key:"cal"
-    ~style_class:
-      ("ls-editor-date-picker"
-       ^ (match p.kind with Cal_prop _ -> " ls-cal-prop" | _ -> ""))
-    ~accessibility_identifier:"date-time-picker"
-    [ box ~key:"wrap" ~style_class:"ls-property-date-picker"
-        [ box ~key:"left"
-            [ box ~key:"cal-box" ~style_class:"ui__calendar"
-                [ cal_head ps
-                ; reactive ~equal:cal_eq
-                    (fun po ->
-                      match po with
-                      | Some q -> cal_table q
-                      | None -> Logseq_el.nothing)
-                    ps ]
-            ; (match p.kind with
-               | Cal_prop _ -> time_row ps
-               | _ -> Logseq_el.nothing)
-            ; input ~key:"nlp" ~style_class:"ls-date-nlp"
-                ~placeholder:(I18n.t "ui/date-natural-language-placeholder")
-                ~data_attrs:[ ("tabindex", "-1") ]
-                ~on_submit:(fun _ -> nlp_commit ())
-                [] ]
-        ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
-    ; reactive ~equal:menu_eq
-        (fun po ->
-          match po with
-          | Some { menu = Some m; _ } -> menu_view m
-          | _ -> Logseq_el.nothing)
-        ps ]
+  Ui_components.with_props
+    [ P.Shadow, sv "0 8px 24px rgb(0 0 0 / 0.18)" ]
+    (column ~key:"cal"
+       ~style_class:
+         ("ls-editor-date-picker"
+          ^ (match p.kind with Cal_prop _ -> " ls-cal-prop" | _ -> ""))
+       ~accessibility_identifier:"date-time-picker"
+       ~padding:12
+       ~background:
+         "var(--lx-popover-bg, var(--ls-primary-background-color, #fff))"
+       ~border_width:1
+       ~border_color:
+         "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
+       ~corner_radius:8
+       ?width:(match p.kind with Cal_prop _ -> None | _ -> Some 300)
+       ~data_attrs:
+         [ ( "style"
+           , "box-sizing: border-box; "
+             ^ (match p.kind with
+                | Cal_prop _ -> "max-width: calc(100vw - 16px)"
+                | _ -> "max-width: calc(100vw - 32px)") ) ]
+       [ row ~key:"wrap" ~cross:`start ~gap:8
+           ~style_class:"ls-property-date-picker"
+           [ column ~key:"left"
+               [ column ~key:"cal-box" ~style_class:"ui__calendar"
+                   ~min_width:0
+                   ~data_attrs:[ ("style", "max-width: 100%") ]
+                   [ cal_head ps
+                   ; reactive ~equal:cal_eq
+                       (fun po ->
+                         match po with
+                         | Some q -> cal_table q
+                         | None -> Logseq_el.nothing)
+                       ps ]
+               ; (match p.kind with
+                  | Cal_prop _ -> time_row ps
+                  | _ -> Logseq_el.nothing)
+               ; input ~key:"nlp" ~style_class:"ls-date-nlp"
+                   ~height:32 ~padding_horizontal:8 ~padding_vertical:0
+                   ~border_width:1
+                   ~border_color:
+                     "var(--lx-popover-border, var(--ls-border-color, \
+                       #e5e5e5))"
+                   ~corner_radius:6
+                   ~data_attrs:
+                     [ ("tabindex", "-1")
+                     ; ("style", "margin-top: 0.5rem") ]
+                   ~placeholder:(I18n.t "ui/date-natural-language-placeholder")
+                   ~on_submit:(fun _ -> nlp_commit ())
+                   [] ]
+           ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
+       ; reactive ~equal:menu_eq
+           (fun po ->
+             match po with
+             | Some { menu = Some m; _ } -> menu_view m
+             | _ -> Logseq_el.nothing)
+           ps ])
 
 (* cljs link form: popover-content (w-72 + p-1.5) wrapping a
    p-2/gap-2 column — one column at 15px inset (7+8) reproduces the
