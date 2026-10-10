@@ -526,12 +526,301 @@ let month_full =
   [| "January"; "February"; "March"; "April"; "May"; "June"; "July"
    ; "August"; "September"; "October"; "November"; "December" |]
 
+(* ---------- repeat column (cljs repeat-setting) ----------
+
+   The right column of the date popover: persisted as hidden
+   logseq.property.repeat/* properties on the block — repeated? bool,
+   recur-frequency int, recur-unit / repeat-type / checked-property
+   refs to closed-value or property entities, temporal-property ref
+   to this date property's entity while repeating is on. *)
+type rep_choice = { c_id : int; c_title : string; c_ident : string }
+
+type rep =
+  { repeated : bool
+  ; freq : int
+  ; unit_id : int
+  ; type_id : int
+  ; when_id : int
+  ; prop_dbid : int
+  ; units : rep_choice list
+  ; types : rep_choice list
+  ; whens : rep_choice list
+  ; done_title : string
+  }
+
+let choice_of_w w =
+  let open D in
+  let id = entity_id_of w in
+  let title = entity_title_of w in
+  let ident =
+    match getf w "db/ident" with
+    | Some kw ->
+        (match W.as_keyword kw with
+         | Some k -> k
+         | None -> Option.value (W.as_string kw) ~default:"")
+    | None -> ""
+  in
+  match id, title with
+  | Some i, Some t -> Some { c_id = i; c_title = t; c_ident = ident }
+  | Some i, None -> Some { c_id = i; c_title = ident; c_ident = ident }
+  | _ -> None
+
+let builtin_prop_p ident =
+  String.length ident > 7 && String.sub ident 0 7 = "logseq."
+
+let rep_set ctx ~ident ~value =
+  D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value |> ignore;
+  S.refresh_all ()
+
+let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
+  let arr_p =
+    Js.Promise.all
+      [| D.entity_by_uuid ctx.block_uuid
+       ; D.closed_values (W.Keyword "logseq.property.repeat/recur-unit")
+       ; D.closed_values (W.Keyword "logseq.property.repeat/repeat-type")
+       ; D.closed_values (W.Keyword "logseq.property/status")
+       ; D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+       ; D.entity
+           (W.List [ W.Keyword "db/ident"
+                   ; W.Keyword "logseq.property/status" ])
+       ; D.all_properties (D.uuid_ref ctx.block_uuid) |]
+  in
+  ignore
+    (let* arr = arr_p in
+     let blk = arr.(0) in
+     let units_all = List.filter_map choice_of_w (W.elems arr.(1)) in
+     let units =
+       (* :date props drop the sub-day units (cljs removes
+          minute/hour unless one is already picked) *)
+       if is_datetime then units_all
+       else
+         List.filter
+           (fun c ->
+             c.c_ident <> "logseq.property.repeat/recur-unit.minute"
+             && c.c_ident <> "logseq.property.repeat/recur-unit.hour")
+           units_all
+     in
+     let types = List.filter_map choice_of_w (W.elems arr.(2)) in
+     let status_choices = List.filter_map choice_of_w (W.elems arr.(3)) in
+     let prop_dbid = Option.value (D.entity_id_of arr.(4)) ~default:0 in
+     let status_id = Option.value (D.entity_id_of arr.(5)) ~default:0 in
+     (* "When" options: the status property plus every non-built-in
+        property carrying at least two closed values *)
+     let whens =
+       List.filter_map
+         (fun pe ->
+           match choice_of_w pe with
+           | None -> None
+           | Some c ->
+               let n_closed =
+                 match D.getf pe "property/closed-values" with
+                 | Some cv -> List.length (W.elems cv)
+                 | None -> 0
+               in
+               if c.c_ident = "logseq.property/status"
+                  || (n_closed >= 2 && not (builtin_prop_p c.c_ident))
+               then Some c
+               else None)
+         (W.elems arr.(6))
+     in
+     let whens =
+       if List.exists (fun c -> c.c_id = status_id) whens then whens
+       else
+         (match choice_of_w arr.(5) with
+          | Some c -> c :: whens
+          | None -> whens)
+     in
+     let ref_id key =
+       match D.getf blk key with
+       | Some w -> Option.value (D.entity_id_of w) ~default:0
+       | None -> 0
+     in
+     let find_ident suffix cs =
+       match List.find_opt (fun c -> c.c_ident = suffix) cs with
+       | Some c -> c.c_id
+       | None -> ( match cs with c :: _ -> c.c_id | [] -> 0 )
+     in
+     let freq =
+       match D.getf blk "logseq.property.repeat/recur-frequency" with
+       | Some w -> (
+           match w with
+           | W.Float f -> int_of_float f
+           | _ -> Option.value (W.as_int w) ~default:1)
+       | None -> 1
+     in
+     let status_ws = W.elems arr.(3) in
+     let done_title =
+       (match
+          List.find_opt
+            (fun c ->
+              match D.getf c "logseq.property/choice-checkbox-state" with
+              | Some w -> Option.value (W.as_bool w) ~default:false
+              | None -> false)
+            status_ws
+        with
+       | Some c -> Option.value (D.entity_title_of c) ~default:"Done"
+       | None ->
+           (match
+              List.find_opt
+                (fun c ->
+                  let n = String.length c.c_ident in
+                  n >= 5 && String.sub c.c_ident (n - 5) 5 = ".done")
+                status_choices
+            with
+           | Some c -> c.c_title
+           | None -> "Done"))
+     in
+     k
+       { repeated =
+           (match D.getf blk "logseq.property.repeat/repeated?" with
+            | Some w -> Option.value (W.as_bool w) ~default:false
+            | None -> false)
+       ; freq
+       ; unit_id =
+           (let u = ref_id "logseq.property.repeat/recur-unit" in
+            if u <> 0 then u
+            else find_ident "logseq.property.repeat/recur-unit.day" units)
+       ; type_id = ref_id "logseq.property.repeat/repeat-type"
+       ; when_id =
+           (let w_ = ref_id "logseq.property.repeat/checked-property" in
+            if w_ <> 0 then w_ else status_id)
+       ; prop_dbid
+       ; units
+       ; types
+       ; whens
+       ; done_title };
+     Js.Promise.resolve ())
+
+(* compact select: trigger + anchored menu popover (same structure as
+   the settings language select) *)
+let rep_select ~key ~value ~options ~on_pick : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let open_ = Signal.state sched false in
+  box ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1.0
+    [ select ~key:"s" ~text:value ~container_relative_frame:`horizontal
+        ~style_class:"ls-select-trigger ls-rep-trigger"
+        ~on_press:(fun _ ->
+          Runtime.signal_set open_ (not (Runtime.signal_get open_)))
+        []
+    ; if_ ~test:(Signal.value open_)
+        (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
+           ~anchor_offset:2.0
+           ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
+           [ column ~key:"opts" ~style_class:"ls-rep-menu"
+               (List.mapi
+                  (fun i (id, label) ->
+                    menu_item ~key:("o" ^ string_of_int i)
+                      ~style_class:"ui__dropdown-menu-item"
+                      ~data_attrs:[ ("role", "menuitem") ] ~text:label
+                      ~on_press:(fun _ ->
+                        on_pick id;
+                        Runtime.signal_set open_ false)
+                      [])
+                  options) ]) ]
+    context parent
+
+let title_of_id cs id =
+  match List.find_opt (fun c -> c.c_id = id) cs with
+  | Some c -> c.c_title
+  | None -> ( match cs with c :: _ -> c.c_title | [] -> "" )
+
+(* w-64 p-4 gap-4 column (cljs repeat-setting); renders once the
+   repeat data resolves like prod's async use-effect *)
+let repeat_column ctx ~is_datetime ~rep : t =
+  reactive
+    (fun (r : rep option) ->
+      match r with
+      | None -> box ~key:"rep-x" []
+      | Some r ->
+          column ~key:"rep" ~style_class:"ls-repeat-col" ~gap:16
+            ~padding:16 ~width:256
+            [ row ~key:"rpt" ~cross:`center ~gap:4
+                [ checkbox ~key:"cb" ~checked:r.repeated ~width:16
+                    ~style_class:"ls-rep-cb"
+                    ~on_toggle:(fun _ev ->
+                      let on = not r.repeated in
+                      Signal.set rep (Some { r with repeated = on });
+                      rep_set ctx
+                        ~ident:"logseq.property.repeat/repeated?"
+                        ~value:(W.Bool on);
+                      if on then
+                        rep_set ctx
+                          ~ident:"logseq.property.repeat/temporal-property"
+                          ~value:(W.Int r.prop_dbid)
+                      else
+                        (D.remove_block_property
+                           ~block_uuid:ctx.block_uuid
+                           ~ident:"logseq.property.repeat/temporal-property"
+                         |> ignore;
+                         S.refresh_all ()))
+                    []
+                ; text ~key:"lb" ~style_class:"ls-rep-lbl"
+                    ~value:
+                      (I18n.t
+                         (if is_datetime then "property.repeat/datetime"
+                          else "property.repeat/date"))
+                    [] ]
+            ; row ~key:"evr" ~cross:`center ~gap:8
+                [ text ~key:"evl" ~style_class:"ls-rep-muted"
+                    ~value:(I18n.t "property.repeat/every") []
+                ; text_field ~key:"evi" ~width:56 ~height:32
+                    ~style_class:"ls-rep-num"
+                    ~text:(string_of_int r.freq)
+                    ~on_input:(fun ev ->
+                      match ev with
+                      | Lui_protocol.TextChanged (_, t) -> (
+                          match int_of_string_opt (String.trim t) with
+                          | Some n when n > 0 ->
+                              rep_set ctx
+                                ~ident:"logseq.property.repeat/recur-frequency"
+                                ~value:(W.Int n)
+                          | _ -> ())
+                      | _ -> ())
+                    []
+                ; rep_select ~key:"un" ~value:(title_of_id r.units r.unit_id)
+                    ~options:
+                      (List.map (fun c -> c.c_id, c.c_title) r.units)
+                    ~on_pick:(fun id ->
+                      rep_set ctx ~ident:"logseq.property.repeat/recur-unit"
+                        ~value:(W.Int id)) ]
+            ; column ~key:"nxt" ~gap:4
+                [ text ~key:"nxl" ~style_class:"ls-rep-muted"
+                    ~value:(I18n.t "property.repeat/next-date") []
+                ; rep_select ~key:"nxs"
+                    ~value:
+                      (if r.type_id = 0 then I18n.t "ui/empty"
+                       else title_of_id r.types r.type_id)
+                    ~options:
+                      (List.map (fun c -> c.c_id, c.c_title) r.types)
+                    ~on_pick:(fun id ->
+                      rep_set ctx ~ident:"logseq.property.repeat/repeat-type"
+                        ~value:(W.Int id)) ]
+            ; column ~key:"whn" ~gap:8
+                [ text ~key:"whl" ~style_class:"ls-rep-muted"
+                    ~value:(I18n.t "property.repeat/when") []
+                ; rep_select ~key:"whs"
+                    ~value:(title_of_id r.whens r.when_id)
+                    ~options:
+                      (List.map (fun c -> c.c_id, c.c_title) r.whens)
+                    ~on_pick:(fun id ->
+                      rep_set ctx
+                        ~ident:"logseq.property.repeat/checked-property"
+                        ~value:(W.Int id)) ]
+            ; row ~key:"is" ~gap:4
+                [ text ~key:"isl" ~style_class:"ls-rep-muted"
+                    ~value:(I18n.t "property.repeat/is-label") []
+                ; text ~key:"isv" ~value:r.done_title [] ] ])
+    (Signal.value rep)
+
 (* cljs datetime picker (ui/datepicker): month grid anchored under the
    value — ‹/› shift the viewed month, adjacent-month cells stay dim,
    the selected day is accent-filled, the input below commits free
    text like before *)
-let date_picker_pop sched ~buffer ~selected ~on_pick ~on_submit
-    ~on_clear ~on_dismiss : t =
+let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
+    ~on_pick ~on_submit ~on_clear ~on_dismiss : t =
+  let rep : rep option Signal.state = Signal.state sched None in
+  fetch_repeat ctx ~ident ~is_datetime (fun r -> Runtime.signal_set rep (Some r));
   let ty, tm, _ =
     match selected with
     | Some (y, m, _) -> y, m, 0
@@ -577,18 +866,13 @@ let date_picker_pop sched ~buffer ~selected ~on_pick ~on_submit
       (Signal.value view)
   in
   popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:4.0 ~min_width:300
+    ~anchor_offset:4.0 ~min_width:556
     ~on_dismiss:(fun _ -> on_dismiss ())
-    [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8
+    [ row ~key:"dp-row" ~cross:`start
+        ~style_class:"ls-property-date-picker"
+        [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8
         [ row ~key:"cal-hd" ~cross:`center ~style_class:"ls-cal-hd"
-            [ button ~variant:`ghost ~size:`icon ~icon:`chevron_left
-                ~label:"Previous month"
-                ~on_press:(fun _ ->
-                  Signal.set view
-                    (let vy, vm = Signal.get (Signal.value view) in
-                     if vm = 1 then vy - 1, 12 else vy, vm - 1))
-                []
-            ; row ~key:"cal-ttl" ~cross:`center ~gap:6
+            [ row ~key:"cal-ttl" ~cross:`center ~gap:6
                 ~style_class:"ls-cal-fields"
                 [ text ~key:"cal-mn" ~style_class:"ls-cal-field"
                     ~value:(reactive
@@ -602,6 +886,13 @@ let date_picker_pop sched ~buffer ~selected ~on_pick ~on_submit
                                 string_of_int vy)
                               (Signal.value view))
                     [] ]
+            ; button ~variant:`ghost ~size:`icon ~icon:`chevron_left
+                ~label:"Previous month"
+                ~on_press:(fun _ ->
+                  Signal.set view
+                    (let vy, vm = Signal.get (Signal.value view) in
+                     if vm = 1 then vy - 1, 12 else vy, vm - 1))
+                []
             ; button ~variant:`ghost ~size:`icon ~icon:`chevron_right
                 ~label:"Next month"
                 ~on_press:(fun _ ->
@@ -623,6 +914,7 @@ let date_picker_pop sched ~buffer ~selected ~on_pick ~on_submit
               | _ -> ())
             ~on_submit:(fun _ -> on_submit ())
             [] ]
+        ; repeat_column ctx ~is_datetime ~rep ]
     ]
 
 let date_view ctx row : t =
@@ -675,7 +967,7 @@ let date_view ctx row : t =
             ~label:(I18n.t "ui/edit")
             ~on_press:(fun _ -> Runtime.signal_set open_ true) [])
      ; if_ ~test:(Signal.value open_)
-         (date_picker_pop sched ~buffer
+         (date_picker_pop sched ctx ~ident ~is_datetime ~buffer
             ~selected:(ymd_of_datetime_value value)
             ~on_pick:(fun y m d ->
               set_date ctx ident (y * 10000 + m * 100 + d);

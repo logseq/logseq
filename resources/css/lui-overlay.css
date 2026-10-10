@@ -4997,3 +4997,44 @@ html[data-theme=light] {
 .ls-cal-day {
   color: var(--ls-primary-text-color);
 }
+
+/* datepicker repeat column (cljs repeat-setting: w-64 p-4 gap-4
+   text-sm, muted labels, h-8 controls) */
+.ls-repeat-col {
+  font-size: 0.875rem;
+  min-width: 256px;
+}
+.ls-rep-muted {
+  color: var(--ls-secondary-text-color, #6b7280);
+}
+.ls-rep-cb {
+  min-width: 16px;
+}
+.ls-rep-num.lui-text-field input,
+.ls-rep-num input {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.875rem;
+}
+.ls-rep-trigger {
+  height: 32px;
+  width: 100%;
+  font-size: 0.875rem;
+}
+.ls-rep-wrap {
+  min-width: 0;
+}
+.ls-rep-menu {
+  padding: 4px;
+}
+
+.ls-repeat-col .ls-rep-muted {
+  white-space: nowrap;
+  flex: none;
+}
+.ls-rep-trigger .lui-select-value,
+.ls-rep-trigger > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
