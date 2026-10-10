@@ -147,7 +147,8 @@ let run_views ~registry ~profile ~finish =
   let key_handler = ref (fun (_ : Ui_services.ev) -> ()) in
   let key_event key =
     { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
-      alt = false; composing = false; key = Some key; buttons = 0; button = 0;
+      alt = false; composing = false; key = Some key; key_char = None;
+      buttons = 0; button = 0;
       repeat = false; movement_x = 0.; movement_y = 0.; default_prevented = false;
       target = None; touches = []; detail = (fun _ -> None);
       detail_json = (fun _ -> None); clipboard_get = (fun _ -> "");

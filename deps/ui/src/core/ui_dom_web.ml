@@ -404,19 +404,25 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
             (num t "clientX", num t "clientY"))
     | None -> []
   in
+  let key =
+    match j_field e "key" with
+    | Some v -> (
+        match Js.Json.classify v with
+        | Js.Json.JSONString s -> Some s
+        | _ -> None)
+    | None -> None
+  in
   { Ui_services.x = num e "clientX"
   ; y = num e "clientY"
   ; shift = j_bool e "shiftKey"
   ; meta = j_bool e "metaKey"
   ; ctrl = j_bool e "ctrlKey"
   ; composing = j_bool e "isComposing"
-  ; key =
-      (match j_field e "key" with
-       | Some v -> (
-           match Js.Json.classify v with
-           | Js.Json.JSONString s -> Some s
-           | _ -> None)
-       | None -> None)
+  ; key
+  ; key_char =
+      (match key with
+       | Some s when String.length s = 1 -> Some s
+       | _ -> None)
   ; target =
       (match j_field e "target" with
        | Some t -> el_opt t
