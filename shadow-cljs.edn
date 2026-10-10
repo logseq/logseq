@@ -25,6 +25,10 @@
 
         :output-dir       "./static/js"
         :asset-path       "/static/js"
+        ;; the released index.html sits beside js/, and the code editor
+        ;; module is fetched from there on first use (lazy-editor), not
+        ;; loaded by a <script> tag on every open
+        :release          {:asset-path "./js"}
         :compiler-options {:infer-externs      :auto
                            :output-feature-set :es-next-in
                            :source-map true
