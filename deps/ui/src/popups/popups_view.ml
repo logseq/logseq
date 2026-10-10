@@ -13,6 +13,7 @@ open Lui_elements
 
 module S = Popups_state
 module U = I18n
+module P = Lui_protocol
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -103,7 +104,9 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
 (* cljs node-render icon slot: the h-5 wrap is always present for
    non-db-tag popups, empty when the node has no icon *)
 let node_icon_slot ~key (it : S.ac_item) : t =
-  box ~key ~style_class:"ls-ac-node-icon"
+  row ~key ~style_class:"ls-ac-node-icon" ~cross:`center ~height:20
+    ~opacity:0.5
+    ~data_attrs:[ ("style", "margin-right:0.25rem;flex-shrink:0") ]
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
          [ box ~key:"cp" ~style_class:"icon-cp-container"
@@ -129,23 +132,31 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
     | Some a -> a.S.query
     | None -> ""
   in
-  column ~key:"node" ~style_class:"ls-ac-node"
+  column ~key:"node" ~style_class:"ls-ac-node" ~min_width:0
     ((* cljs node-render mounts the .text-xs.opacity-70.mb-1 breadcrumb
         div whenever the entity qualifies (Some _ here; "" renders the
         empty div — its content height plus mb-1 is what pushes tag
         items to 36px) *)
       (match it.S.ai_breadcrumb with
        | Some "" ->
-           [ box ~key:"bc" ~style_class:"ls-ac-bc" [] ]
+           [ box ~key:"bc" ~style_class:"ls-ac-bc" ~min_width:0
+               ~opacity:0.7
+               ~data_attrs:
+                 [ ("style", "margin-bottom:0.25rem;margin-left:3px") ]
+               [] ]
        | Some bc ->
-           [ box ~key:"bc" ~style_class:"ls-ac-bc"
-               [ text ~key:"b"
+           [ box ~key:"bc" ~style_class:"ls-ac-bc" ~min_width:0
+               ~opacity:0.7
+               ~data_attrs:
+                 [ ("style", "margin-bottom:0.25rem;margin-left:3px") ]
+               [ text ~key:"b" ~font_size:"0.75rem"
                    ~style_class:
                      "breadcrumb block-parents \
                       breadcrumb--search-result"
                    ~value:bc [] ] ]
        | None -> [])
-    @ [ row ~key:"row" ~style_class:"ls-ac-node-row"
+    @ [ row ~key:"row" ~style_class:"ls-ac-node-row" ~cross:`start
+          ~min_width:0
           ((if db_tag then [] else [ node_icon_slot ~key:"ic" it ])
           @ [ node_title_el ~key:"ti" ~query it ]) ])
 ;;
@@ -163,7 +174,8 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
   box ~key:"lbl"
     ((match it.S.ai_icon with
       | Some ic ->
-          [ text ~key:"ic" ~style_class:"ls-ac-ic"
+          [ row ~key:"ic" ~style_class:"ls-ac-ic" ~cross:`center ~gap:4
+              ~min_width:0
               [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
@@ -185,22 +197,22 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
   in
   box ~key ~style_class:"menu-link-wrap"
     [ (* cljs/e2e contract: a.menu-link[#ac-<idx>].chosen — a real
-         anchor (menu_item kind emits a non-anchor node); .chosen and
-         the click ride the dom event/style-class channel *)
-      Logseq_el.el ~key:"lnk" ~tag:"a"
+         anchor (menu_item kind emits a non-anchor node); the recipe
+         paints .menu-link chrome inline and flips .chosen + the
+         selected background off the shared view signal *)
+      Menu_item.menu_link ~key:"lnk"
         ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
-        ~style_class_signal:
-          (Logseq_el.class_signal pair (fun (it, v) ->
-               "menu-link"
-               ^ (match v.S.ac with
-                   | Some ac when ac.S.chosen = it.S.ai_idx -> " chosen"
-                   | _ -> "")))
-        ~attrs:[ ("tabindex", "0") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _payload ->
-          if name = "click" then
-            S.apply_index st (Signal.get item_sig).S.ai_idx)
-        [ box ~key:"flex1"
+        ~on_click:(fun () ->
+          S.apply_index st (Signal.get item_sig).S.ai_idx)
+        ~chosen_bg:Menu_item.ac_chosen_bg
+        ~chosen_signal:
+          (Signal.map
+             (fun (it, v) ->
+               match v.S.ac with
+               | Some ac -> ac.S.chosen = it.S.ai_idx
+               | None -> false)
+             pair)
+        [ box ~key:"flex1" ~grow:1. ~min_width:0
             [ reactive
                 ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
                   let ai, av = a and bi, bv = b in
@@ -234,7 +246,12 @@ let ac_empty_placeholder (v : S.view) : t =
     | Some { kind = S.Tag_search; _ } -> U.t "editor/search-for-tag"
     | _ -> U.t "editor/block-search"
   in
-  text ~key:"ac-empty" ~style_class:"ls-ac-empty" ~value:label []
+  text ~key:"ac-empty" ~style_class:"ls-ac-empty"
+    ~padding_vertical:8 ~padding_horizontal:16 ~font_size:"0.875rem"
+    ~foreground:
+      "var(--lx-gray-10, var(--ls-secondary-text-color, \
+         var(--muted-foreground)))"
+    ~value:label []
 ;;
 
 (* cljs ui/auto-complete groups slash items by :group — each group is a
@@ -324,6 +341,24 @@ let ac_inner (st : S.t) : t =
   in
   scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
+    ~data_attrs:
+      [ ("style", "position:relative;-webkit-overflow-scrolling:touch") ]
+    ~data_attrs_signal:
+      (Logseq_el.own context
+         (Signal.map
+            (fun (v : S.view) ->
+              match v.S.ac with
+              | Some a ->
+                  (* the popup-ref scoped max-heights — slash popup
+                     flipped to top-side clamps tighter *)
+                  [ ( "style"
+                    , "max-height:min(calc(var(--available-height, "
+                      ^ (match a.S.kind, a.S.flip with
+                         | S.Slash, Some _ -> "460px) - 60px), 460px"
+                         | _ -> "480px) - 20px), 480px")
+                      ^ ")" ) ]
+              | None -> [])
+            (Signal.value (st.S.vs))))
     [ column ~key:"ac-col"
         [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
             ~mount:(fun u_sig ->
@@ -334,7 +369,9 @@ let ac_inner (st : S.t) : t =
           | AGroup g ->
               box ~key:("grp" ^ g.g_key)
                 (text ~key:"ghdr"
-                   ~style_class:"ui__ac-group-name"
+                   ~style_class:"ui__ac-group-name" ~padding:8
+                   ~font_size:"0.75rem" ~font_weight:500
+                   ~foreground:"hsl(var(--popover-foreground) / 0.2)"
                    ~value:(Option.value ~default:"" g.g_hdr)
                    []
                  :: List.map row g.g_items)) ] ]
@@ -417,9 +454,20 @@ let ac_popover (st : S.t) : t =
                           ; ("role", "dialog")
                           ; ("data-state", "open")
                           ; ( "data-editor-popup-ref"
-                            , S.popup_ref_of_kind a.S.kind ) ]
+                            , S.popup_ref_of_kind a.S.kind )
+                          ; ( "style"
+                            , (match a.S.kind with
+                               | S.Slash -> "width:288px"
+                               | _ ->
+                                   "width:512px;max-width:calc(100vw \
+                                    - 16px)")
+                              ^
+                              (match a.S.flip with
+                               | Some _ -> ";position:relative;top:-18px"
+                               | None -> "") ) ]
                       | None -> [])
                     vs))
+            ~padding:6
             [ ac_inner st
             ; (* cljs page-search-aux: mod+enter hint under the tag list *)
               if_
@@ -433,7 +481,13 @@ let ac_popover (st : S.t) : t =
                               && String.lowercase_ascii a.S.query <> "page"
                           | None -> false)
                         vs))
-                (text ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
+                (Ui_components.with_props
+                   [ P.FontSize, Ui_components.sv "0.875rem"
+                   ; P.LineHeight, Ui_components.sv "20px" ]
+                   (row ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
+                      ~cross:`center ~gap:8 ~opacity:0.5
+                      ~data_attrs:
+                        [ ("style", "margin:8px 0;padding:0 0.25rem") ]
                    [ (* shui/shortcut "mod+enter" → combo glow container
                         inside a span *)
                      text ~key:"scw"
@@ -446,7 +500,7 @@ let ac_popover (st : S.t) : t =
                            ; kbd ~key:"k1" ~style_class:"shui-shortcut-key"
                                ~value:(Ui_services.literal_text "\xe2\x8f\x8e") [] ] ]
                    ; text ~key:"ht"
-                       ~value:(U.t "editor/display-tag-inline-hint") [] ])
+                       ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ])
      ])
     context parent
@@ -504,8 +558,10 @@ let cm_color_row (st : S.t) : t =
           [ text ~key:"t" ~value:"-" ~font_size:"10px" ~line_height:"1"
               [] ] ]
   in
-  box ~key:"colors" ~style_class:"ls-cm-colors" ~padding_vertical:4
+  row ~key:"colors" ~style_class:"ls-cm-colors" ~main:`space_between
+    ~cross:`center ~padding_vertical:4 ~padding_horizontal:8
     [ row ~key:"colors-row" ~style_class:"ls-cm-colors-row" ~gap:4
+        ~data_attrs:[ ("style", "margin-top:0.5rem") ]
         (List.map swatch S.colors @ [ remove ]) ]
 ;;
 
@@ -513,11 +569,13 @@ let cm_color_row (st : S.t) : t =
    live in lui-overlay.css (to-heading-button). The cljs menu-heading
    literal-comma class quirk is dropped — it is unreachable CSS *)
 let cm_heading_btn (st : S.t) key title value icn : t =
-  button ~key ~variant:`ghost ~size:`icon
-    ~style_class:"ls-cm-heading-btn"
-    ~label:title
-    ~on_press:(fun _ -> run_cm_heading st value)
-    [ icn ]
+  Ui_components.with_props
+    [ P.Cursor, Ui_components.sv "pointer" ]
+    (button ~key ~variant:`ghost ~size:`icon ~width:30 ~height:30
+       ~style_class:"ls-cm-heading-btn"
+       ~label:title
+       ~on_press:(fun _ -> run_cm_heading st value)
+       [ icn ])
 ;;
 
 (* ui.cljs menu-heading: h-1..h-6 font icons, h-auto/heading-off ext icons *)
@@ -529,8 +587,14 @@ let cm_heading_row (st : S.t) : t =
           (icon ~key:"ic" ~name:(Icons.name_ref ("h-" ^ n)) ~style_class:"ui__icon"
              []))
   in
-  box ~key:"headings" ~style_class:"ls-cm-headings"
+  row ~key:"headings" ~style_class:"ls-cm-headings"
+    ~main:`space_between ~cross:`center
+    ~data_attrs:
+      [ ( "style"
+        , "padding:0.25rem 0.5rem 0.5rem" ) ]
     [ row ~key:"headings-row" ~style_class:"ls-cm-headings-row"
+        ~main:`space_between ~cross:`center ~grow:1.
+        ~data_attrs:[ ("style", "margin-left:0.5rem;margin-right:0.5rem") ]
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
               (icon ~key:"ic" ~name:(Icons.name_ref "h-auto")
@@ -564,7 +628,8 @@ let cm_shortcut_el (binding, caps) : t =
            sep @ [ kbd_el i cap ])
          caps)
   in
-  text ~key:"sc" ~style_class:"ls-cm-sc"
+  text ~key:"sc" ~style_class:"ls-cm-sc" ~grow:1.
+    ~data_attrs:[ ("style", "padding-left:0.5rem") ]
     [ text ~key:"sc-wrap"
         [ box ~key:"sc-box"
             ~style_class:
@@ -600,8 +665,10 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:[ ("role", "menuitem") ]
             ~text:label
-            [ icon ~key:"chev" ~name:`chevron_right
-                ~style_class:"ls-menu-chevron" [] ]
+            [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
+                ~style_class:"ls-menu-chevron"
+                ~data_attrs:
+                  [ ("style", "margin-left:auto;flex-shrink:0") ] [] ]
       | S.Ci_item (label, scut, cmd) ->
           menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]
@@ -632,12 +699,16 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
    popovers layer above their parent popup automatically *)
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
-  popover ~key:"cm-sub" ~at:(x, y) ~role:`menu
-    ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
-    ~style_class:"ui__dropdown-menu-sub-content"
-    ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
-    ~on_dismiss:(fun _ -> close_cm st)
-    [ box ~key:"w" (List.map (cm_sub_item_el st) items) ]
+  Ui_components.with_props [ Ui_components.sub_card_shadow ]
+    (popover ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
+       ~padding:4 ~background:"hsl(var(--popover))"
+       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~corner_radius:6
+       ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
+       ~style_class:"ui__dropdown-menu-sub-content"
+       ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
+       ~on_dismiss:(fun _ -> close_cm st)
+       [ box ~key:"w" (List.map (cm_sub_item_el st) items) ])
 ;;
 
 (* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
@@ -683,8 +754,17 @@ let cm_popover (st : S.t) : t =
             (if m.S.tag <> None then " ls-tag-menu" else "")
             ^ (if m.S.flip then " ls-anchor-top" else "")
         | _ -> ""))
-     (popover ~key:"cm" ~role:`menu
-        ~at_signal:
+     (Ui_components.with_props [ Ui_components.card_shadow ]
+        (Ui_parts.int_prop_signal P.WidthValue vs
+           (fun (v : S.view) ->
+             match v.S.cm with
+             | Some m when m.S.tag <> None -> 240
+             | _ -> 280)
+           (popover ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
+              ~background:"hsl(var(--popover))"
+              ~border_color:"var(--lui-c-border)" ~border_width:1
+              ~corner_radius:6
+              ~at_signal:
           (Logseq_el.own context
              (Signal.map
                 (fun (v : S.view) ->
@@ -715,23 +795,24 @@ let cm_popover (st : S.t) : t =
                         Ui_services.dom_viewport_height () -. m.S.cy -. 5.
                   | None -> 0.)
                 vs))
-        ~data_attrs:[ ("data-keep-selection", "") ]
-        ~on_dismiss:(fun _ -> close_cm st)
-        [ box ~key:"cm-wrap"
+              ~data_attrs:[ ("data-keep-selection", "") ]
+              ~on_dismiss:(fun _ -> close_cm st)
+              [ box ~key:"cm-wrap"
             [ keyed ~source:entries_sig
                 ~key:(fun ((i, _) : int * S.cm_item) -> i)
                 ~cmp:Stdlib.compare
                 ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
-        ; (* popover children must be standard kinds — the empty branch's
-             display:contents anchor has to sit inside a box *)
-          box ~key:"cm-sub-wrap"
-            [ reactive
-                (fun sub ->
-                  match sub with
-                  | Some (_, x, y, items) -> cm_sub_el st x y items
-                  | None -> Logseq_el.nothing)
-                (Logseq_el.own context (cm_sub_state st)) ]
-        ]))
+            ; (* popover children must be standard kinds — the empty
+                 branch's display:contents anchor has to sit inside a
+                 box *)
+              box ~key:"cm-sub-wrap"
+                [ reactive
+                    (fun sub ->
+                      match sub with
+                      | Some (_, x, y, items) -> cm_sub_el st x y items
+                      | None -> Logseq_el.nothing)
+                    (Logseq_el.own context (cm_sub_state st)) ]
+              ]))))
     context parent
 ;;
 
@@ -848,12 +929,23 @@ let pv_popover (st : S.t) (p : S.pv) : t =
   (* same hover-reveal contract as the page title: actions only show
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
-  (popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
-    ~available_height:(Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
-    ~style_class:"ui__popover-content ls-preview-popup"
-    ~on_dismiss:(fun _ -> S.close_pv st)
+  (Ui_components.with_props [ Ui_components.card_shadow ]
+     (popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
+        ~padding:6 ~background:"hsl(var(--popover))"
+        ~border_color:"var(--lui-c-border)" ~border_width:1
+        ~corner_radius:6
+        ~available_height:
+          (Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
+        ~style_class:"ui__popover-content ls-preview-popup"
+        ~data_attrs:[ ("style", "padding-left:1.5rem") ]
+        ~on_dismiss:(fun _ -> S.close_pv st)
     [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
-        ~data_attrs:[ ("tabindex", "-1") ]
+        ~min_width:200 ~padding:8
+        ~data_attrs:
+          [ ("tabindex", "-1")
+          ; ( "style"
+            , "margin-left:-1.25rem;padding-left:1.75rem;\
+               padding-bottom:64px;text-align:left;font-weight:500" ) ]
         [ box ~key:"pvp" ~style_class:"page"
             [ box ~key:"pvt"
                 ~style_class:"ls-page-title content title"
@@ -879,6 +971,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                     ]
                 ]
             ; box ~key:"pvb" ~style_class:"ls-page-blocks"
+                ~data_attrs:[ ("style", "margin-top:1rem") ]
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
                     (List.map
@@ -897,8 +990,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                        ])
                 ]
             ]
-        ]
-    ])
+        ]]))
     context parent
 
 let pv_dyn (st : S.t) : t =

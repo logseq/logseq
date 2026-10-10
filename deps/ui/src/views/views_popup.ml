@@ -154,20 +154,30 @@ let placement_style pl =
   | false, true -> "transform:translateX(-100%)"
   | false, false -> ""
 
-(* a caller-anchored popover positioned by the placement signal *)
-let anchored_popover ~key ~id ~place ~cls ~on_dismiss children : t =
-  popover ~key ~role:`menu ~accessibility_identifier:id
-    ~at_signal:
-      (map (fun (pl : placement) -> (pl.px, pl.py))
-         (Signal.value (place)))
-    ~data_attrs_signal:
-      (map
-         (fun (pl : placement) ->
-           (if placement_style pl = "" then []
-            else [ ("style", placement_style pl) ])
-           @ [ ("data-keep-selection", ""); ("tabindex", "-1") ])
-         (Signal.value (place)))
-    ~style_class:cls ~on_dismiss children
+(* a caller-anchored popover positioned by the placement signal.
+   [card] paints the .ui__dropdown-menu-content card chrome as props
+   (menu surfaces); select/custom popups keep caller-driven classes. *)
+let anchored_popover ~key ~id ~place ~cls ~card ~on_dismiss children : t =
+  Ui_components.with_props
+    (if card then [ Ui_components.card_shadow ] else [])
+    (popover ~key ~role:`menu ~accessibility_identifier:id
+       ~at_signal:
+         (map (fun (pl : placement) -> (pl.px, pl.py))
+            (Signal.value (place)))
+       ?background:(if card then Some "hsl(var(--popover))" else None)
+       ?border_color:(if card then Some "var(--lui-c-border)" else None)
+       ?border_width:(if card then Some 1 else None)
+       ?corner_radius:(if card then Some 6 else None)
+       ?min_width:(if card then Some 128 else None)
+       ?padding:(if card then Some 4 else None)
+       ~data_attrs_signal:
+         (map
+            (fun (pl : placement) ->
+              (if placement_style pl = "" then []
+               else [ ("style", placement_style pl) ])
+              @ [ ("data-keep-selection", ""); ("tabindex", "-1") ])
+            (Signal.value (place)))
+       ~style_class:cls ~on_dismiss children)
 
 (* ---------- menus ---------- *)
 
@@ -327,17 +337,21 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
              [ icon ~key:"chev" ~name:`chevron_right []
              ; if_
                  ~test:(map (fun st -> st.msub = fidx) msig)
-                 (popover ~key:(sub_rid pid fidx)
-                    ~accessibility_identifier:(sub_rid pid fidx)
-                    ~anchor:`right ~anchor_alignment:`start
-                    ~anchor_offset:(-4.) ~role:`menu
-                    ~style_class:(cls ^ "ui__dropdown-menu-sub-content")
-                    ~data_attrs:
-                      [ ("data-keep-selection", ""); ("tabindex", "-1") ]
-                    ~on_dismiss:(fun _ -> upd (fun st -> { st with msub = -1 }))
-                    [ menu_level ~pid ~cls
-                        ~register:(fun h -> Hashtbl.replace sub_keys fidx h)
-                        children ]) ])
+                 (Ui_components.with_props [ Ui_components.sub_card_shadow ]
+                    (popover ~key:(sub_rid pid fidx)
+                       ~accessibility_identifier:(sub_rid pid fidx)
+                       ~anchor:`right ~anchor_alignment:`start
+                       ~anchor_offset:(-4.) ~role:`menu ~min_width:128
+                       ~padding:4 ~background:"hsl(var(--popover))"
+                       ~border_color:"var(--lui-c-border)" ~border_width:1
+                       ~corner_radius:6
+                       ~style_class:(cls ^ "ui__dropdown-menu-sub-content")
+                       ~data_attrs:
+                         [ ("data-keep-selection", ""); ("tabindex", "-1") ]
+                       ~on_dismiss:(fun _ -> upd (fun st -> { st with msub = -1 }))
+                       [ menu_level ~pid ~cls
+                           ~register:(fun h -> Hashtbl.replace sub_keys fidx h)
+                           children ])) ])
   in
   box ~key:(Printf.sprintf "vp%d-items" pid) (List.map view_of entries)
     context parent
@@ -352,7 +366,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
          let place = placement_state context.Lui_ui.ui_scheduler anchor
              ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id)
-           ~id:(Printf.sprintf "vp-menu-%d" id) ~place
+           ~id:(Printf.sprintf "vp-menu-%d" id) ~place ~card:true
            ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
            ~on_dismiss:(fun _ -> close_entry id)
            [ menu_level ~pid:id ~cls:cls_prefix
@@ -416,16 +430,25 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let row i (it : select_item) picked sel =
       Logseq_el.el ~key:("acw-" ^ string_of_int i)
         ~attrs:[ ("class", "menu-link-wrap") ]
-        [ Logseq_el.el ~tag:"a" ~id:("ac-" ^ string_of_int i)
-            ~attrs:
-              [ ("class", if i = picked then "menu-link chosen" else "menu-link")
-              ; ("tabindex", "0") ]
-            ~events:"click" ~on_dom_event:(fun _ _ -> choose it)
+        [ Menu_item.menu_link ~key:("lnk-" ^ string_of_int i)
+            ~id:("ac-" ^ string_of_int i)
+            ~on_click:(fun () -> choose it) ~chosen:(i = picked)
+            ~transition:false ~plain_bg:true
             [ Logseq_el.el ~tag:"span"
+                ~attrs:[ ("style", "flex:1;min-width:0") ]
                 [ Logseq_el.el
-                    ~attrs:[ ("class", "select-item-row") ]
+                    ~attrs:
+                      [ ("class", "select-item-row")
+                      ; ( "style"
+                        , "display:flex;flex-direction:row;\
+                           justify-content:space-between;align-items:center;\
+                           width:100%" ) ]
                     [ Logseq_el.el
-                        ~attrs:[ ("class", "select-item-left") ]
+                        ~attrs:
+                          [ ("class", "select-item-left")
+                          ; ( "style"
+                            , "display:flex;flex-direction:row;\
+                               align-items:center;gap:0.25rem;min-width:0" ) ]
                         ((if multiple then
                             [ Logseq_el.el ~tag:"input"
                                 ~attrs:
@@ -466,29 +489,45 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             combined ]
     in
     let select_col =
-      column ~key:("vpsel-" ^ string_of_int id)
-        ~style_class:"cp__select cp__select-main"
-        ([ Logseq_el.el ~attrs:[ ("class", "input-wrap") ]
-             [ input ~key:("vpsel-i" ^ string_of_int id)
-                 ~style_class:"cp__select-input" ~placeholder ~autofocus:true
-                 ~on_input:(function
-                   | Lui_protocol.TextChanged (_, v) ->
-                       Signal.set query v;
-                       Signal.set chosen 0
-                   | _ -> ())
-                 [] ]
-         ; Logseq_el.el ~attrs:[ ("class", "item-results-wrap") ] [ results ] ]
-         @
-         if multiple then
-           [ Logseq_el.el ~attrs:[ ("class", "cp__select-apply") ]
-               [ button ~key:("vpsel-a" ^ string_of_int id)
-                   ~style_class:"ui__button ls-btn-outline" ~text:I.apply
-                   ~on_press:(fun _ ->
-                     close_all ();
-                     on_apply (Signal.get_state sel_values))
-                   [] ]
-           ]
-         else [])
+      Ui_components.with_props
+        [ Lui_protocol.MaxHeightViewport, Ui_components.fv 0.75 ]
+        (column ~key:("vpsel-" ^ string_of_int id)
+           ~style_class:"cp__select cp__select-main"
+           ~data_attrs:[ ("style", "width:fit-content") ]
+           ([ Logseq_el.el ~attrs:[ ("class", "input-wrap"); ("style", "display:flex") ]
+                [ Ui_components.with_props
+                    [ Lui_protocol.FontSize, Ui_components.sv "16px"
+                    ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+                    (input ~key:("vpsel-i" ^ string_of_int id)
+                       ~style_class:"cp__select-input" ~placeholder
+                       ~autofocus:true ~padding:16
+                       ~background:"transparent" ~border_width:0
+                       ~foreground:"var(--ls-secondary-text-color)"
+                       ~on_input:(function
+                         | Lui_protocol.TextChanged (_, v) ->
+                             Signal.set query v;
+                             Signal.set chosen 0
+                         | _ -> ())
+                       []) ]
+            ; Logseq_el.el
+                ~attrs:
+                  [ ("class", "item-results-wrap")
+                  ; ( "style"
+                    , "overflow-x:hidden;overflow-y:auto;\
+                       max-height:calc(75vh - 64px)" ) ]
+                [ results ] ]
+            @
+            if multiple then
+              [ Logseq_el.el
+                  ~attrs:[ ("class", "cp__select-apply"); ("style", "padding:1rem") ]
+                  [ button ~key:("vpsel-a" ^ string_of_int id)
+                      ~style_class:"ui__button ls-btn-outline" ~text:I.apply
+                      ~on_press:(fun _ ->
+                        close_all ();
+                        on_apply (Signal.get_state sel_values))
+                      [] ]
+              ]
+            else []))
     in
     let wrap =
       if wrap_cls = "" then select_col
@@ -500,7 +539,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            @ [ select_col ])
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id)
-      ~id:("vpsel-p" ^ string_of_int id) ~place ~cls:wrap_cls
+      ~id:("vpsel-p" ^ string_of_int id) ~place ~card:false ~cls:wrap_cls
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
   in
@@ -559,7 +598,7 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
          let place = placement_state context.Lui_ui.ui_scheduler anchor
              ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
-           ~id:(Printf.sprintf "vp-c-%d" id) ~place ~cls
+           ~id:(Printf.sprintf "vp-c-%d" id) ~place ~cls ~card:true
            ~on_dismiss:(fun _ -> close_entry id)
            [ content ] context parent))
 

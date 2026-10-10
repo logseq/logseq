@@ -341,11 +341,10 @@ let filter_value_phase inst ~anchor (c : V.column) =
                } ])
           (V.get inst).V.filters_or
       in
-      let row it =
+      let row i it =
         D.el ~style_class:"menu-link-wrap"
-          [ D.el ~tag:"a" ~style_class:"menu-link"
-              ~attrs:[ ("tabindex", "0") ]
-              ~events:"click" ~on_dom_event:(fun _ _ -> pick it)
+          [ Menu_item.menu_link ~key:("lnk-" ^ string_of_int i) ~id:""
+              ~on_click:(fun () -> pick it) ~transition:false ~plain_bg:true
               [ D.el ~tag:"span" ~style_class:"menu-item-label"
                   ~text:it.P.si_label [] ]
           ]
@@ -374,28 +373,43 @@ let filter_value_phase inst ~anchor (c : V.column) =
           let query = Signal.state sched "" in
           let qsig = (Signal.value (query)) in
           (D.el ~style_class:"ls-vf-col"
-             (column ~style_class:"cp__select cp__select-main"
-                [ D.el ~style_class:"input-wrap"
-                    [ input ~style_class:"cp__select-input"
-                        ~data_attrs:[ ("type", "text") ]
-                        ~placeholder:c.V.c_name ~autofocus:true
-                        ~on_input:(function
-                          | L.TextChanged (_, v) -> Signal.set query v
-                          | _ -> ())
-                        [] ]
-                ; D.el ~style_class:"item-results-wrap"
-                    [ D.el ~style_class:"cp__select-results"
-                        [ reactive
-                            (fun q ->
-                              D.fragment
-                                (List.map row
-                                   (List.filter
-                                      (fun it ->
-                                        Fuzzy.score q it.P.si_label > 0.)
-                                      items)))
-                            qsig ]
-                    ]
-                ]
+             (Ui_components.with_props
+                [ L.MaxHeightViewport, Ui_components.fv 0.75 ]
+                (column ~style_class:"cp__select cp__select-main"
+                   ~data_attrs:[ ("style", "width:100%") ]
+                   [ D.el ~style_class:"input-wrap"
+                       ~attrs:[ ("style", "display:flex") ]
+                       [ Ui_components.with_props
+                           [ L.FontSize, Ui_components.sv "16px"
+                           ; L.FocusShadow, Ui_components.sv "none" ]
+                           (input ~style_class:"cp__select-input"
+                              ~data_attrs:
+                                [ ("type", "text")
+                                ; ("style", "padding:4px 8px;height:32px") ]
+                              ~placeholder:c.V.c_name ~autofocus:true
+                              ~background:"transparent" ~border_width:0
+                              ~foreground:"var(--ls-secondary-text-color)"
+                              ~on_input:(function
+                                | L.TextChanged (_, v) -> Signal.set query v
+                                | _ -> ())
+                              []) ]
+                   ; D.el ~style_class:"item-results-wrap"
+                       ~attrs:
+                         [ ( "style"
+                           , "overflow-x:hidden;overflow-y:auto;\
+                              max-height:calc(75vh - 64px)" ) ]
+                       [ D.el ~style_class:"cp__select-results"
+                           [ reactive
+                               (fun q ->
+                                 D.fragment
+                                   (List.mapi row
+                                      (List.filter
+                                         (fun it ->
+                                           Fuzzy.score q it.P.si_label > 0.)
+                                         items)))
+                               qsig ]
+                       ]
+                   ])
              :: ops))
             context parent))
 

@@ -534,13 +534,18 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
         load_views inst ~on_done:(fun () -> refresh inst))
   in
   Logseq_el.el ~style_class:"block-title-wrap p-2"
-    [ input ~style_class:"cp__select-input w-full !p-1.5"
-        ~data_attrs:[ ("type", "text") ]
-        ~text:v.Wr.vtitle ~autofocus:true ~submit_on_enter:true
-        ~on_input:(function
-          | Lui_protocol.TextChanged (_, s) -> value := s
-          | _ -> ())
-        ~on_submit:(fun _ -> commit ()) [] ]
+    [ Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "16px"
+        ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+        (input ~style_class:"cp__select-input w-full !p-1.5"
+           ~data_attrs:[ ("type", "text") ]
+           ~text:v.Wr.vtitle ~autofocus:true ~submit_on_enter:true
+           ~background:"transparent" ~border_width:0
+           ~foreground:"var(--ls-secondary-text-color)"
+           ~on_input:(function
+             | Lui_protocol.TextChanged (_, s) -> value := s
+             | _ -> ())
+           ~on_submit:(fun _ -> commit ()) []) ]
 
 let export_edn inst =
   let s =

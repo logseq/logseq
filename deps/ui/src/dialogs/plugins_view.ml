@@ -283,8 +283,20 @@ let installed_card (pl : Js.Json.t) =
             [ box ~key:"ctl-l" ~style_class:"l"
                 [ box ~key:"de" 
                     [ icon ~key:"g" ~name:`settings []
-                    ; list ~key:"m" ~style:`plain
-                        ~style_class:"menu-list"
+                    ; Ui_components.with_props
+                        [ Lui_protocol.Shadow
+                          , Ui_components.sv
+                              "0 4px 6px -1px rgb(0 0 0 / 0.1)" ]
+                        (list ~key:"m" ~style:`plain
+                           ~style_class:"menu-list" ~min_width:144
+                           ~padding_vertical:4
+                           ~background:"hsl(var(--popover))"
+                           ~border_color:"var(--lui-c-border)"
+                           ~border_width:1 ~corner_radius:6
+                           ~data_attrs:
+                             [ ( "style"
+                               , "position:absolute;right:0;top:100%;\
+                                  z-index:20;margin:0;list-style:none" ) ]
                         [ menu_li ~key:"open-settings"
                             (t "plugin/open-settings") (fun () ->
                               open_settings_pid := Some pid;
@@ -307,7 +319,7 @@ let installed_card (pl : Js.Json.t) =
                                 ~on_confirm:(fun () ->
                                   unregister_plugin pid)
                                 ())
-                        ]
+                        ])
                     ]
                 ]
             ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center

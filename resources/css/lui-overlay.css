@@ -171,10 +171,6 @@
   --lui-pop-dx: -0.5rem;
 }
 
-.ui__dropdown-menu-sub-content {
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-}
 
 /* ---- menu chrome ---------------------------------------------------- */
 
@@ -185,44 +181,6 @@
 
 /* editor popups (slash / [[ / # / datepicker / input) — cljs
    data-editor-popup-ref base: p-1.5 w-72 */
-.ui__popover-content[data-editor-popup-ref],
-.ui__dropdown-menu-content[data-editor-popup-ref] {
-  padding: 0.375rem;
-  width: 18rem;
-}
-
-.ui__popover-content[data-editor-popup-ref="page-search"],
-.ui__popover-content[data-editor-popup-ref="block-search"],
-.ui__popover-content[data-editor-popup-ref="page-search-hashtag"] {
-  width: 32rem;
-  max-width: calc(100vw - 16px);
-}
-
-.ui__popover-content[data-editor-popup-ref="datepicker"] {
-  width: auto;
-}
-
-/* prod keeps the p-1.5 w-72 popover-content and nests .cp__commands-
-   slash inside it — ours carries the class on the popover itself, so
-   the base padding/width already produces prod's outer 288/inner 274 */
-
-.ui__popover-content[data-editor-popup-ref="commands"] #ui__ac-inner,
-.ui__popover-content[data-editor-popup-ref="page-search"] #ui__ac-inner,
-.ui__popover-content[data-editor-popup-ref="block-search"] #ui__ac-inner,
-.ui__popover-content[data-editor-popup-ref="page-search-hashtag"]
-  #ui__ac-inner {
-  max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
-}
-
-.ui__popover-content[data-editor-popup-ref="commands"][data-side="top"]
-  #ui__ac-inner {
-  max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
-}
-
-.ui__popover-content[data-editor-popup-ref][data-side="top"] {
-  position: relative;
-  top: -18px;
-}
 
 /* menu item (dropdown + context + sub-trigger + select rows) */
 .ui__dropdown-menu-item,
@@ -314,25 +272,6 @@
 }
 
 /* select item row inside cp__select results */
-.select-item-row {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.select-item-left {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.cp__select-apply {
-  padding: 1rem;
-}
 
 /* confirm dialog head/footer (views_popup show_dialog) */
 .ls-dialog-head {
@@ -376,41 +315,7 @@
 
 /* ---- menu links (cljs common.css) ------------------------------------ */
 
-.menu-links-wrapper {
-  padding: 0.5rem 0;
-  border-radius: 0.375rem;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  overflow-y: auto;
-  border: 1px solid var(--lui-c-border);
-  background: hsl(var(--popover));
-  min-width: 12rem;
-  max-height: calc(100vh - 100px);
-}
 
-/* inside an LUI menu content node the wrapper is the flat
-   div[data-keep-selection] — no second card (content.css parity) */
-.ls-context-menu-content .menu-links-wrapper,
-.ui__dropdown-menu-content .menu-links-wrapper,
-.ui__dropdown-menu-sub-content .menu-links-wrapper,
-div[data-keep-selection].menu-links-wrapper {
-  padding: 0;
-  border-style: none;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
-  min-width: 0;
-  max-height: none;
-}
-
-.menu-link {
-  color: hsl(var(--popover-foreground) / 0.75);
-  user-select: none;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  padding: 0.375rem 0.5rem;
-  transition: opacity 0.15s;
-}
 
 .menu-link:hover {
   color: hsl(var(--popover-foreground));
@@ -434,105 +339,9 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* autocomplet node result rows (page/block/tag refs) */
-.ls-ac-node {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.ls-ac-node-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.ls-ac-node-icon {
-  display: flex;
-  align-items: center;
-  height: 1.25rem;
-  margin-right: 0.25rem;
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-
-.ls-ac-bc {
-  font-size: 0.75rem;
-  opacity: 0.7;
-  margin-bottom: 0.25rem;
-  margin-left: 3px;
-  min-width: 0;
-}
-
-.ls-ac-ic {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-#ui__ac .menu-link strong,
-.menu-links-wrapper strong {
-  font-weight: 400;
-}
-
-/* trailing shortcut text inside context-menu rows */
-.ls-cm-sc {
-  margin-left: auto;
-  padding-left: 0.5rem;
-}
-
-/* sub-menu trigger chevron */
-.ls-menu-chevron {
-  margin-left: auto;
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
 
 /* ---- autocomplete (#ui__ac) ------------------------------------------ */
 
-#ui__ac-inner {
-  overflow-x: hidden;
-  overflow-y: auto;
-  position: relative;
-  -webkit-overflow-scrolling: touch;
-}
-
-#ui__ac-inner .menu-link {
-  border-radius: 0.25rem;
-}
-
-#ui__ac-inner .menu-link-wrap > a,
-.menu-link-wrap > a.menu-link {
-  display: flex;
-  justify-content: space-between;
-}
-
-.menu-link-wrap > a.menu-link > span:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-#ui__ac-inner .menu-link:hover,
-#ui__ac-inner .menu-link.chosen,
-#ui__ac-inner .menu-link[data-selected] {
-  background: var(--lx-gray-04,
-      var(--ls-menu-hover-color, hsl(var(--secondary))));
-}
-
-.ui__ac-group-name {
-  padding: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: hsl(var(--popover-foreground) / 0.2);
-}
-
-.ls-ac-empty {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  color: var(--lx-gray-10, var(--ls-secondary-text-color, var(--muted-foreground)));
-}
 
 /* slash command rows: dimmed icons, command mode icon offset */
 .cp__commands-slash .ui__icon {
@@ -552,54 +361,12 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* tag-search inline hint (mod+enter creates a tag page) */
-.ls-tag-search-hint {
-  margin: 8px 0;
-  padding: 0 0.25rem;
-  opacity: 0.5;
-  font-size: 0.875rem;
-  line-height: 20px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-}
 
 /* page-ref hover preview — cljs page.css: .ls-preview-popup pl-6;
    .tippy-wrapper p-2, &.as-page -ml-5 pl-7 */
-.ls-preview-popup {
-  padding: 0.375rem;
-  padding-left: 1.5rem;
-}
-
-.ls-preview-popup .tippy-wrapper {
-  min-width: 200px;
-  padding: 0.5rem;
-}
-
-.ls-preview-popup .tippy-wrapper.as-page {
-  margin-left: -1.25rem;
-  padding-left: 1.75rem;
-  /* the 600px width the tippy wrapper had inline (width is a typed prop);
-     the rest of its inline style moves here */
-  text-align: left;
-  font-weight: 500;
-  padding-bottom: 64px;
-}
-
-.ls-preview-popup .ls-page-blocks {
-  margin-top: 1rem;
-}
 
 /* ---- context menu rows ----------------------------------------------- */
 
-.ls-context-menu-content {
-  width: 280px;
-}
-
-/* block-tag popup is w-60 (240px) in cljs (was an inline width) */
-.ls-context-menu-content.ls-tag-menu {
-  width: 240px;
-}
 
 .ls-context-menu-content [role="separator"] {
   opacity: 0.8;
@@ -609,44 +376,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* color swatch row + heading row inside the block context menu */
-.ls-cm-colors,
-.ls-cm-headings {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-}
-
-.ls-cm-headings {
-  padding-top: 0.25rem;
-  padding-bottom: 0.5rem;
-}
-
-.ls-cm-headings-row {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  flex: 1;
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
-}
-
-.ls-cm-colors-row {
-  margin-top: 0.5rem;
-}
-
-.ls-cm-swatch,
-.ls-cm-heading-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-}
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
@@ -721,65 +450,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- cp__select (command-palette-style pickers) ----------------------- */
 
-.cp__select {
-  --palettle-input-height: 64px;
-  --palettle-container-height: 75vh;
-}
-
-.cp__select-main {
-  max-height: var(--palettle-container-height);
-  flex-direction: column;
-  width: fit-content;
-}
-
-.cp__select-main .item-results-wrap,
-.cp__select-main .search-results-wrap > div:first-child {
-  overflow-x: hidden;
-  overflow-y: auto;
-  max-height: calc(
-    var(--palettle-container-height) - var(--palettle-input-height));
-}
-
-.cp__select-main .input-wrap {
-  display: flex;
-}
-
-.cp__select-input {
-  padding: 16px;
-  font-size: 16px;
-  outline: none;
-  background: transparent;
-  border-style: none;
-  color: var(--ls-secondary-text-color);
-}
-
-.cp__select-input:focus {
-  box-shadow: none;
-}
-
-/* cljs dropdown selects (view filter/sort pickers) use a compact input —
-   4px 8px, 32px row — not the command-palette's 16px padding */
-.ui__dropdown-menu-content .cp__select-input {
-  padding: 4px 8px;
-  height: 32px;
-}
-
-.ui__dropdown-menu-content .cp__select-main {
-  width: 100%;
-}
-
-.cp__select-results .menu-link {
-  display: flex;
-  justify-content: space-between;
-  transition: none;
-  border-style: none;
-  background: none;
-}
-
-.cp__select-results .menu-link > span:first-child {
-  flex: 1;
-  min-width: 0;
-}
 
 .cp__select-main .menu-link.chosen,
 .cp__select-main .menu-link.chosen p,
@@ -2330,21 +2000,6 @@ select.form-select {
   gap: 0.25rem;
 }
 
-.cp__plugins-item-card .menu-list {
-  margin: 0;
-  padding: 0.25rem 0;
-  list-style: none;
-  position: absolute;
-  right: 0;
-  top: 100%;
-  z-index: 20;
-  min-width: 9rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: hsl(var(--popover));
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-}
-
 .control-tabs {
   padding-bottom: 0.75rem;
   display: flex;
@@ -2594,9 +2249,6 @@ select.form-select {
 }
 
 /* graphs page + misc menu lists */
-.menu-list .ui__dropdown-menu-item {
-  width: 100%;
-}
 
 /* appearance popup (toolbar dots → Appearance) */
 .appearance-popup {
