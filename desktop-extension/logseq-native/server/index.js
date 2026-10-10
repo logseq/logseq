@@ -31,15 +31,8 @@ if (!loopbackHosts.has(parsedEndpoint.hostname) || parsedEndpoint.pathname !== "
 async function start() {
   const logseqClient = new Client({
     name: "Logseq Desktop transport",
-    version: "0.1.5"
-  }, { capabilities: { elicitation: { form: {} } } });
-  let downstreamServer;
-  logseqClient.setRequestHandler("elicitation/create", (request, context) => {
-    if (!downstreamServer?.getClientCapabilities()?.elicitation?.form) {
-      throw new Error("This client does not support per-query approval forms; nothing was run.");
-    }
-    return downstreamServer.elicitInput(request.params, { signal: context.signal });
-  });
+    version: "0.1.6"
+  }, { capabilities: {} });
   const logseqTransport = new StreamableHTTPClientTransport(parsedEndpoint, {
     requestInit: {
       headers: { Authorization: `Bearer ${token}` }
@@ -70,10 +63,9 @@ async function start() {
 
   handle = serveStdio(() => {
     const server = new Server(
-      { name: "Logseq Local MCP", version: "0.1.5" },
+      { name: "Logseq Local MCP", version: "0.1.6" },
       { capabilities: { tools: {} } }
     );
-    downstreamServer = server;
     server.setRequestHandler("tools/list", request =>
       logseqClient.listTools(request.params ?? {}));
     server.setRequestHandler("tools/call", (request, context) =>

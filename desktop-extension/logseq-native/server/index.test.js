@@ -3,14 +3,11 @@ const { readFileSync } = require("node:fs");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-test("the stdio bridge forwards exact approval forms and decisions, failing closed", async () => {
+test("the stdio bridge does not claim client elicitation and preserves query arguments/cancellation", async () => {
   const handlers = new Map();
   const downstreamHandlers = new Map();
-  const forwarded = [];
   const toolCalls = [];
   let clientOptions;
-  let capabilities = { elicitation: { form: {} } };
-  let decision = { action: "accept", content: { approve: true } };
   let ready;
   const started = new Promise(resolve => { ready = resolve; });
   class Client {
@@ -22,11 +19,6 @@ test("the stdio bridge forwards exact approval forms and decisions, failing clos
   }
   class Server {
     setRequestHandler(method, handler) { downstreamHandlers.set(method, handler); }
-    getClientCapabilities() { return capabilities; }
-    async elicitInput(params, options) {
-      forwarded.push({ params, options });
-      return decision;
-    }
   }
   const modules = {
     "@modelcontextprotocol/client": { Client, StreamableHTTPClientTransport: class {} },
@@ -44,20 +36,11 @@ test("the stdio bridge forwards exact approval forms and decisions, failing clos
     }
   });
   await started;
-  assert.ok(clientOptions.capabilities.elicitation.form);
-  const approve = handlers.get("elicitation/create");
-  const params = { mode: "form", message: "Exact query and inputs", requestedSchema: { type: "object" } };
+  assert.equal(clientOptions.capabilities.elicitation, undefined);
+  assert.equal(handlers.has("elicitation/create"), false);
   const signal = new AbortController().signal;
-  assert.equal(await approve({ params }, { signal }), decision);
-  assert.equal(forwarded[0].params, params);
-  assert.equal(forwarded[0].options.signal, signal);
   const toolParams = { name: "datascriptQuery", arguments: { query: "exact query" } };
   await downstreamHandlers.get("tools/call")({ params: toolParams }, { signal });
   assert.equal(toolCalls[0].params, toolParams);
   assert.equal(toolCalls[0].options.signal, signal);
-  decision = { action: "decline" };
-  assert.equal(await approve({ params }, { signal }), decision);
-  capabilities = {};
-  assert.throws(() => approve({ params }, { signal }), /does not support per-query approval/);
-  assert.equal(forwarded.length, 2);
 });

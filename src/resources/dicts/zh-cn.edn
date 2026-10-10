@@ -1,4 +1,8 @@
 {
+ :mcp.query/approval-title "Logseq 只读查询"
+ :mcp.query/approval-message "是否仅批准运行一次此查询？不会更改任何图谱数据。"
+ :mcp.query/approve-once "批准一次"
+ :mcp.query/approval-detail "问题：{1}\n已检查的工具：{2}\n专用工具无法高效回答的原因：{3}\n读取范围：{4}；不会更改数据。\n预计结果大小：{5}\n输出上限：1000 行和 65536 个 UTF-8 字节；结果可能被截断。\n完整查询：\n{6}\n完整输入：\n{7}\n仅当专用工具无法回答此问题，或回答需要显著增加扫描开销时批准。批准仅适用于此次调用；失败或修改后的查询必须重新获得批准。"
  :account/already-logged-in-as "您当前已登录为 {1}"
  :account/auth-error-already-authenticated "您已登录。"
  :account/auth-error-code-delivery-failed "验证码发送失败，请稍后重试。"

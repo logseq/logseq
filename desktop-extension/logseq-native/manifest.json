@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "logseq-native",
   "display_name": "Logseq Local MCP",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Connect Claude Desktop to the native MCP server in a running local Logseq app.",
   "author": {
     "name": "Logseq local development"

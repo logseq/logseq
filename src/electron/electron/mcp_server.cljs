@@ -7,6 +7,7 @@
             [camel-snake-kebab.core :as csk]
             [cljs.reader :as reader]
             [clojure.string :as string]
+            [electron.i18n :refer [t]]
             [electron.logger :as logger]
             [electron.mcp-compat :as mcp-compat]
             [electron.mcp-transport :as mcp-transport]
@@ -160,6 +161,30 @@
             (envelope selected true)))
         (envelope selected (boolean remaining))))))
 
+(defn show-query-approval-dialog [options]
+  (let [^js electron (js/require "electron")
+        ^js browser-window (.-BrowserWindow electron)
+        parent (or (.getFocusedWindow browser-window) (aget (.getAllWindows browser-window) 0))]
+    (if parent
+      (.showMessageBox (.-dialog electron) parent options)
+      (p/rejected (js/Error. "A Logseq desktop window is required to approve this query; nothing was run.")))))
+
+(defn request-query-approval [^js server params extra]
+  (let [capabilities (.getClientCapabilities server)]
+    (if (some-> capabilities (aget "elicitation") (aget "form"))
+      (.elicitInput server params #js {:relatedRequestId (.-requestId extra) :signal (.-signal extra)})
+      (p/let [result (show-query-approval-dialog
+                     #js {:type "question"
+                          :title (t :mcp.query/approval-title)
+                          :message (t :mcp.query/approval-message)
+                          :detail (aget params "message")
+                          :buttons #js [(t :mcp.query/approve-once) (t :ui/cancel)]
+                          :defaultId 1 :cancelId 1 :noLink true
+                          :signal (.-signal extra)})]
+        #js {:action (if (= 0 (aget result "response")) "accept" "decline")
+             :content #js {:approve (= 0 (aget result "response"))}
+             :approvalSource "logseq-dialog"}))))
+
 (defn call-datascript-query [api-fn ^js server args extra]
   (let [query (aget args "query")
         inputs (or (aget args "inputs") #js [])
@@ -170,34 +195,26 @@
                               #js {:id request-id :time (.toISOString (js/Date.))
                                    :event event :query query :inputs inputs :details details})))
         signal (.-signal extra)]
-    (-> (p/let [_ (audit "requested" args)
-                capabilities (.getClientCapabilities server)]
-          (if-not (some-> capabilities (aget "elicitation") (aget "form"))
-            (do (audit "blocked" "Client does not support form elicitation")
-                (mcp-error-response "datascriptQuery requires explicit per-query user approval through MCP form elicitation. This client does not support it; nothing was run."))
-            (p/let [approval (.elicitInput
+    (-> (p/let [_ (audit "requested" args)]
+        (p/let [approval (request-query-approval
                              server
                              #js {:mode "form"
-                                  :message (str "Approve one last-resort read-only datascriptQuery?\n"
-                                                "Question: " (aget args "question") "\n"
-                                                "Tools checked: " (js/JSON.stringify (aget args "checked_tools")) "\n"
-                                                "Why dedicated tools cannot answer economically: " (aget args "reason") "\n"
-                                                "Reads: " (aget args "reads") "; changes nothing.\n"
-                                                "Expected result size: " (aget args "expected_size") "\n"
-                                                "Hard output limits: 1000 rows and 65536 UTF-8 bytes; results may be truncated.\n"
-                                                "Exact query:\n" query "\n"
-                                                "Exact inputs:\n" (js/JSON.stringify inputs) "\n"
-                                                "Approve only if no dedicated tool can answer this question, or answering it would require a significantly more expensive scan. Approval applies to this invocation only; failures and revisions require fresh approval.")
+                    :message (t :mcp.query/approval-detail
+                          (aget args "question")
+                          (js/JSON.stringify (aget args "checked_tools"))
+                          (aget args "reason") (aget args "reads")
+                          (aget args "expected_size") query (js/JSON.stringify inputs))
                                   :requestedSchema #js {:type "object"
                                                         :properties #js {:approve #js {:type "boolean"
-                                                                                     :title "Approve this exact query once"
+                                             :title (t :mcp.query/approve-once)
                                                                                      :default false}}
                                                         :required #js ["approve"]}}
-                             #js {:relatedRequestId (.-requestId extra) :signal signal})
+                             extra)
                     approved? (and (= "accept" (.-action approval))
                                    (true? (and (.-content approval) (aget approval "content" "approve")))
                                    (not (some-> signal .-aborted)))
-                    _ (audit "approval" #js {:action (.-action approval) :approved approved?})]
+                    _ (audit "approval" #js {:action (.-action approval) :approved approved?
+                                             :source (or (aget approval "approvalSource") "mcp-form")})]
               (if (or (not approved?) (some-> signal .-aborted))
                 (mcp-error-response "Query not approved or request cancelled; nothing was run.")
                 (p/let [result (api-fn "logseq.DB.datascriptQuery" (into [query] (array-seq inputs)))]
@@ -206,7 +223,7 @@
                         (mcp-error-response (subs (str "API Error: " error) 0 (min 4096 (count (str "API Error: " error))))))
                     (let [bounded (bounded-query-result query result)]
                       (audit "completed" #js {:row_count (.-row_count bounded) :truncated (.-truncated bounded)})
-                      (mcp-success-response bounded))))))))
+                      (mcp-success-response bounded)))))))
         (p/catch (fn [error]
                    (audit "failed" (.-message error))
                    (mcp-error-response (str "datascriptQuery failed; no retry was made. Fresh approval is required: "
@@ -214,7 +231,7 @@
 
 (def datascript-query-config
   #js {:title "Datascript Query"
-       :description "Last resort only: first check dedicated tools. Use for any read-only graph question they cannot answer, or when a targeted query significantly reduces graph scanning or token cost. Not limited to any example or attribute set. Before EVERY invocation show the exact query and inputs, question, tools checked, why they cannot do the job, what is read (nothing changes), and expected result size, then obtain explicit user approval. The host requires a fresh approval form and logs every request and decision. No silent retries: any failed, revised, or test query needs new approval. Passes unchanged to logseq.DB.datascriptQuery; pull, aggregates, rules, and inputs are not blocked or rewritten. Returns result, row_count, truncated, and host limits (1000 rows, 65536 UTF-8 bytes). Caps bound returned output, not DB execution time. Writes must use verified dedicated tools."
+      :description "Last resort only: first check dedicated tools. Use for any read-only graph question they cannot answer, or when a targeted query significantly reduces graph scanning or token cost. Not limited to any example or attribute set. Before EVERY invocation show the exact query and inputs, question, tools checked, why they cannot do the job, what is read (nothing changes), and expected result size. The host requires fresh explicit approval: an MCP form when supported, otherwise an approval dialog in Logseq Desktop (Cancel is the default). Chat approval alone does not bypass this confirmation. Every request and decision is logged. No silent retries: failed, revised or test queries need new approval. Passes unchanged to logseq.DB.datascriptQuery; pull, aggregates, rules and inputs are not blocked or rewritten. Returns result, row_count, truncated, and host limits (1000 rows, 65536 UTF-8 bytes). Caps bound returned output, not DB execution time. Writes must use verified dedicated tools."
        :annotations #js {:readOnlyHint true :destructiveHint false :openWorldHint false}
        :inputSchema #js {:query (-> (z/string) (.min 1))
                          :inputs (-> (z/array (z/any)) .optional)

@@ -75,6 +75,44 @@
           (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))
 
+(deftest datascript-query-without-elicitation-requires-desktop-approval
+  (async done
+    (let [calls (atom [])
+          dialogs (atom [])
+          decision (atom 0)
+          controller (js/AbortController.)
+          args #js {:query "[:find ?title :in $ ?title :where [?e :block/title ?title]]"
+                    :inputs #js ["Exact input"] :question "Graph audit"
+                    :checked_tools #js ["listPages"] :reason "Avoid a full graph scan"
+                    :reads "Titles only" :expected_size "One row"}
+          extra #js {:requestId 23 :signal (.-signal controller)}
+          server #js {:getClientCapabilities (fn [] #js {})}
+          api (recording-api calls #js [#js ["Exact input"]])]
+      (-> (p/with-redefs [mcp-server/show-query-approval-dialog
+                          (fn [options]
+                            (swap! dialogs conj options)
+                            (js/Promise.resolve #js {:response @decision}))]
+            (p/let [approved (mcp-server/call-datascript-query api server args extra)
+                    again (mcp-server/call-datascript-query api server args extra)
+                    _ (reset! decision 1)
+                    declined (mcp-server/call-datascript-query api server args extra)
+                    _ (reset! decision 0)
+                    _ (.abort controller)
+                    cancelled (mcp-server/call-datascript-query api server args extra)]
+              (is (not (aget approved "isError")))
+              (is (not (aget again "isError")))
+              (is (true? (aget declined "isError")))
+              (is (true? (aget cancelled "isError")))
+              (is (= 4 (count @dialogs)))
+              (is (= 2 (count @calls)))
+              (is (= 1 (aget (first @dialogs) "defaultId")))
+              (is (= 1 (aget (first @dialogs) "cancelId")))
+              (is (identical? (.-signal extra) (aget (first @dialogs) "signal")))
+              (doseq [value [(.-query args) "Exact input" "Graph audit" "listPages" "Avoid a full graph scan" "Titles only" "One row"]]
+                (is (string/includes? (aget (first @dialogs) "detail") value)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
 (deftest datascript-query-failures-never-retry
   (async done
     (let [calls (atom [])
