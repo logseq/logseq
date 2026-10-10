@@ -17,6 +17,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.page :as page]
+            [frontend.persist-db :as persist-db]
             [frontend.persist-db.browser :as db-browser]
             [frontend.rfx :as rfx]
             [frontend.routes :as routes]
@@ -50,18 +51,38 @@
       (string/replace "logseq____&quot;" "\"")
       (string/replace "logseq____&apos;" "'")))
 
+(defn- <published-db-transit-str
+  []
+  (let [db-url (.-logseq_db_url js/window)
+        data (.-logseq_db js/window)]
+    (cond
+      (and (string? db-url) (not (string/blank? db-url)))
+      (p/let [response (js/fetch db-url)]
+        (when-not (.-ok response)
+          (throw (ex-info "Failed to load published graph"
+                          {:url db-url
+                           :status (.-status response)})))
+        (.text response))
+
+      (some? data)
+      (p/resolved (unescape-html data))
+
+      :else
+      (p/resolved nil))))
+
 (defn restore-from-transit-str!
   []
   ;; Client sets repo name (and graph type) based on what was written in app state
-  (when-let [data js/window.logseq_db]
-    (let [repo (-> (state/get-state) :config keys first)]
-      (state/set-current-repo! repo)
-      (p/let [_ (repo-handler/restore-and-setup-repo! repo)
-              _ (let [db-transit-str (unescape-html data)]
-                  (state/<invoke-db-worker :thread-api/reset-db repo db-transit-str))
-              _ (repo-handler/restore-and-setup-repo! repo)]
-        (state/set-db-restoring! false)
-        (ui-handler/re-render-root!)))))
+  (when-let [repo (-> (state/get-state) :config keys first)]
+    (state/set-current-repo! repo)
+    (p/let [db-transit-str (<published-db-transit-str)
+            _ (when db-transit-str
+                (p/do!
+                 (persist-db/<open-and-fetch-schema repo {})
+                 (state/<invoke-db-worker :thread-api/reset-db repo db-transit-str)
+                 (repo-handler/restore-and-setup-repo! repo)))]
+      (state/set-db-restoring! false)
+      (ui-handler/re-render-root!))))
 
 (defn- apply-published-state!
   [data]
