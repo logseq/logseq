@@ -812,6 +812,20 @@ let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
        ~border_color:"var(--lui-c-border)" ~border_width:1
        ~corner_radius:6 ~style_class:cls children)
 
+(* Card shadows as with_props binds for ~at-anchored popups (point-
+   anchored surfaces can't use the ~anchor recipes above): [card_shadow]
+   is the .ui__popover-content/.ui__dropdown-menu-content shadow,
+   [sub_card_shadow] the deeper .ui__dropdown-menu-sub-content variant. *)
+let card_shadow =
+  ( P.Shadow
+  , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+  )
+
+let sub_card_shadow =
+  ( P.Shadow
+  , sv "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / \
+        0.1)" )
+
 (* Floating dialog close — the .ui__dialog-close spec (absolute
    top-right, 16px ghost icon, hover/focus opacity) as props. Mounts
    inside .lui-dialog-body; the fixed-positioned .lui-dialog section is

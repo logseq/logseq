@@ -468,3 +468,69 @@ web-parity rules (different emitter).
 Gates: `dune build js_app test gpui/drive_test.exe` clean,
 `test_main.js` 2009 checks 0 failures, `dune runtest` 725 checks 0
 failures, `npm run css:build` succeeds.
+
+## B4 menu chrome + autocomplete (2026-10-10, branch `devin/004-b4-menus`)
+
+Batch B4 of `2026-10-11-004-css-to-lui-api.md`: migrated the
+`lui-overlay.css` menu/autocomplete block into LUI typed props and
+inline-style attrs on the emitters (`menu_item.ml`, `popups_view.ml`,
+`views_popup.ml`, `views_head.ml`, `views_view.ml`,
+`plugins_view.ml`, `ui_components.ml`).
+
+Deleted **348 lines** (~70 rules): `[data-editor-popup-ref]` base +
+per-ref width/side rules, `#ui__ac-inner` + `.menu-link` base +
+`#ui__ac-inner .menu-link{,:hover,.chosen,[data-selected]}` +
+`.menu-link-wrap`/`strong`, `ls-ac-*` (node/row/icon/bc/ic/empty),
+`ls-tag-search-hint`, `ls-preview-popup` + `.tippy-wrapper` +
+`.as-page` + `.ls-page-blocks`, `ls-context-menu-content` widths +
+`ls-cm-*` rows (colors/headings/swatch/btn/sc/chevron),
+`ui__dropdown-menu-sub-content` deeper shadow, `cp__select` vars +
+`cp__select-main`/`input-wrap`/`cp__select-input`(+`:focus`)/
+dropdown-scoped overrides/`cp__select-results`/`item-results-wrap`/
+`cp__select-apply`/`select-item-*`, `menu-links-wrapper` (dead), and
+`.cp__plugins-item-card .menu-list` + `.menu-list
+.ui__dropdown-menu-item`.
+
+Emission changes:
+
+- Card chrome → `with_props` binds on the popover kinds: `card_shadow`
+  + `sub_card_shadow` pairs added to `Ui_components`; per-emitter
+  `~background`/`~border_color`/`~border_width`/`~corner_radius`/
+  `~padding`/`~min_width` and `int_prop_signal P.WidthValue` for the
+  tag-vs-standard context-menu width.
+- `menu-link`/`chosen` → `Menu_item.menu_link` recipe for the
+  imperative `<a>` anchors (extension nodes take no typed props):
+  inline `style` carries the row chrome, `chosen_signal` flips
+  `.chosen` + re-emits `attrs` (ac rows), static `~chosen` for
+  cp__select rows; `~plain_bg`/`~transition:false` variants cover the
+  select rows. `ac_chosen_bg` paints `lx-gray-04`/`--ls-menu-hover-color`
+  inline so the CSS `.chosen` rule could go.
+- `ls-ac-*` row structure → `row`/`column`/`text` typed props
+  (opacity, min-width, gap); margins/flex-shrink stay as data-attr
+  styles.
+- `cp__select*` → `menu_link` rows + `with_props` on the input
+  (`FontSize`, `FocusShadow`) and `MaxHeightViewport` on the column;
+  inline styles keep `width:fit-content`/`100%`, compact padding, and
+  the results-wrap overflow.
+- `menu-list` (plugins card) → `list` kind + card props + absolute
+  positioning style pair.
+- gpui: dead `menu-links-wrapper` + `menu-link-wrap` regs removed;
+  `menu-link`/`chosen` regs kept (extension anchors still emit them).
+- `views_popup.ml` menu_level kept `popover` + typed props; the
+  `dropdown_menu ~at` adoption is a leftover (placement translate
+  transforms + MCustom children don't fit the anchor contract yet).
+- `~gap` is not a `menu_item` prop (native test failure) — item gap
+  stays in the shared `.ui__dropdown-menu-item` rule.
+
+Kept (hooks/other-batch emitters): base `.ui__popover-content` card
+rule (page_menu/properties/sidebars/settings/icon_picker emitters),
+`data-side`/`--lui-pop-dx`/sub-content[data-side] placement hooks,
+`.menu-link:hover` + theme-scoped `.cp__select-main .menu-link.chosen`
+variants (class still toggles), separator margin rules,
+`.menu-separator`, `.hide-scrollbar`, `.cp__commands-slash .ui__icon*`
+descendant hooks, `menu-link`/`chosen` gpui regs.
+
+Gates: `dune build js_app test gpui/drive_test.exe` clean,
+`test_main` 2009 checks 0 failures, `dune runtest` green,
+`npm run css:build` succeeds; menu + autocomplete spot-checked
+light/dark.

@@ -71,3 +71,58 @@ let dots_menu ~key ?(menu_cls = "") items : t =
            (List.mapi item items))
     ]
     ctx parent
+
+(* `.menu-link` chrome for the imperative <a> anchors the e2e contract
+   requires (extension nodes admit no typed props — the inline style
+   attr is their only paint channel). [chosen_signal] toggles the
+   .chosen class (e2e + gpui reg); [chosen_bg] additionally paints the
+   selected background inline — pass it only where no theme-scoped
+   .chosen CSS rule is kept (autocomplete rows). [plain_bg] neutralizes
+   the inherited .menu-link:hover background (cp__select rows paint
+   selection through the class rules instead). *)
+let menu_link_base_style =
+  "color:hsl(var(--popover-foreground) / 0.75);user-select:none;\
+   font-size:0.875rem;line-height:1.25rem;padding:0.375rem 0.5rem;\
+   display:flex;justify-content:space-between;border-radius:0.25rem"
+
+let ac_chosen_bg =
+  "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))"
+
+let menu_link ~key ~id ~on_click ?(transition = true) ?(plain_bg = false)
+    ?(chosen = false) ?chosen_bg ?chosen_signal children : t =
+  let style_of c =
+    menu_link_base_style
+    ^ (if transition then ";transition:opacity 0.15s" else
+       ";transition:none")
+    ^ (if plain_bg then ";background:none" else "")
+    ^
+    (match chosen_bg with
+     | Some bg when c -> ";background:" ^ bg
+     | _ -> "")
+  in
+  Logseq_el.el ~key ~tag:"a" ~id
+    ~style_class:
+      (match chosen_signal with
+       | Some _ -> ""
+       | None -> "menu-link" ^ if chosen then " chosen" else "")
+    ?style_class_signal:
+      (Option.map
+         (fun s ->
+            Logseq_el.class_signal s (fun c ->
+                "menu-link" ^ if c then " chosen" else ""))
+         chosen_signal)
+    ~attrs:
+      (match chosen_signal with
+       | Some _ -> []
+       | None -> [ ("tabindex", "0"); ("style", style_of chosen) ])
+    ?attrs_signal_v:
+      (Option.map
+         (fun s ->
+            Logseq_el.attrs_signal s (fun c ->
+                [ ("tabindex", "0"); ("style", style_of c) ]))
+         chosen_signal)
+    ~events:"click"
+    ~on_dom_event:(fun name _payload ->
+      if name = "click" then on_click ())
+    children
+
