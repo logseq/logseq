@@ -174,7 +174,10 @@ let column_size (c : V.column) =
   | _ -> 180
 
 let inner_cell children =
-  row ~cross:`center ~padding_horizontal:8 children
+  (* .ls-table-cell > div: height:100% has no prop channel *)
+  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+    (row ~cross:`center ~padding_horizontal:8 ~min_width:0
+       ~data_attrs:[ ("style", "height:100%") ] children)
 
 let created_column : V.column =
   builtin_column "block/created-at" I.created_at "datetime" ()
@@ -362,7 +365,9 @@ let select_cell inst ~row_uuid ~blk : t =
   row ~cross:`center
     [ (* cljs label.jtrigger[data-table-row-select] — e2e clicks it
          through row.locator("[data-table-row-select]") *)
-      row ~cross:`center ~main:`center ~width:32 ~height:32
+      Ui_components.with_props [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+      (row ~cross:`center ~main:`center ~width:32 ~height:32
+        ~min_width:0 ~grow:1.
         ~style_class:"jtrigger"
         ~data_attrs:[ ("data-table-row-select", "true") ]
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
@@ -374,7 +379,7 @@ let select_cell inst ~row_uuid ~blk : t =
                     V.selected =
                       (if on then V.Sset.add row_uuid s.V.selected
                        else V.Sset.remove row_uuid s.V.selected)
-                  })) ]
+                  })) ])
     ]
 
 let open_row_sidebar row_uuid =
@@ -410,7 +415,9 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
          rendered now *)
       let ghost icon_name title_ =
         button ~variant:`ghost ~size:`icon ~icon:(icon_of icon_name)
-          ~style_class:"bg-gray-01 text-muted-foreground" ~label:title_
+          ~foreground:"muted-foreground"
+          ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
+          ~label:title_
           ~on_press:(fun _ -> open_row_sidebar row_uuid) []
       in
       inner_cell
@@ -464,7 +471,9 @@ let prop_cell ~blk (c : V.column) : t =
               [ (let tuuid =
                    Option.value (Wr.ref_uuid x) ~default:""
                  in
-                 box ~style_class:"select-item block-tag"
+                 row ~cross:`center ~gap:4 ~padding_vertical:2
+                   ~padding_horizontal:6 ~corner_radius:6
+                   ~style_class:"select-item block-tag"
                    ~data_attrs:
                      ([ ("data-tag-title", t_) ]
                       @ if tuuid <> "" then [ ("data-tag-uuid", tuuid) ]
@@ -491,17 +500,20 @@ let prop_cell ~blk (c : V.column) : t =
              items)
       in
       inner_cell
-        [ box ~style_class:"property-value-inner"
-            [ row ~cross:`center ~grow:1. ~gap:4
-                ~style_class:"jtrigger multi-values" item_els ] ]
+        [ box ~style_class:"property-value-inner" ~min_width:0
+            [ Ui_components.with_props
+                [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                (row ~cross:`center ~grow:1. ~gap:4 ~min_width:0
+                   ~style_class:"jtrigger multi-values" item_els) ] ]
   | W.Bool b when c.V.c_type = "checkbox" ->
       inner_cell [ checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
   (* the cljs `title` tooltip and tabindex have no component props *)
-  box ~style_class:"ls-table-cell" ~width:(column_size c)
-    ~min_width:(column_size c)
+  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+  (box ~style_class:"ls-table-cell" ~width:(column_size c)
+    ~min_width:(column_size c) ~height:32
     [ (match c.V.c_id with
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
@@ -526,7 +538,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view pctx row ]
-           | None -> prop_cell ~blk c)) ]
+           | None -> prop_cell ~blk c)) ])
 
 (* ---------- header ---------- *)
 
@@ -685,15 +697,17 @@ let header_cell_id inst (c : V.column) =
 
 let header_cell inst (c : V.column) : t =
   if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
-  let cls =
-    "ls-table-header-cell"
-    ^ if c.V.c_id = "select" then " !border-0" else ""
-  in
+  let fg = "var(--muted-foreground, var(--ls-secondary-text-color))" in
   match c.V.c_id with
   | "select" ->
-      box ~style_class:cls ~width:(column_size c)
-        ~min_width:(column_size c)
-        [ header_select_cell inst ]
+      Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
+        ; Lui_protocol.FontWeight, Ui_components.iv 500 ]
+        (box ~style_class:"ls-table-header-cell" ~width:(column_size c)
+           ~min_width:(column_size c) ~foreground:fg
+           ~data_attrs:[ ("style", "border-right:0") ]
+           [ header_select_cell inst ])
   | _ ->
       let menu () =
         match c.V.c_prop with
@@ -712,10 +726,25 @@ let header_cell inst (c : V.column) : t =
               | None -> ()
       in
       Ui_parts.pressable ~on_press:(fun _ -> menu ())
-        (box ~style_class:cls ~accessibility_identifier:(header_cell_id inst c)
-           ~width:(column_size c) ~min_width:(column_size c)
-           [ header_button inst c
-           ; box ~style_class:"ls-table-resize-handle" [] ])
+        (Ui_components.with_props
+           [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+           ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
+           ; Lui_protocol.FontWeight, Ui_components.iv 500
+           ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+           ; Lui_protocol.Position, Ui_components.sv "relative" ]
+           (box ~style_class:"ls-table-header-cell"
+              ~accessibility_identifier:(header_cell_id inst c)
+              ~width:(column_size c) ~min_width:(column_size c)
+              ~foreground:fg
+              ~data_attrs:
+                [ ("style", "border-right:1px solid hsl(var(--border))") ]
+              [ Ui_components.with_props
+                  [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+                  (header_button inst c)
+              ; (* resize-handle stays a hook — the opacity 0/.7/1 state
+                   ladder can't ride props (inline opacity beats :where
+                   hover/pressed) *)
+                box ~style_class:"ls-table-resize-handle" [] ]))
 
 (* ---------- action bar ---------- *)
 
@@ -951,32 +980,53 @@ let table_row_keydown inst ~row_uuid name payload =
    the row is a dom div carrying the raw attrs (same channel the
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
+ fun ctx parent ->
   let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
+  (* the keydown DOM carrier keeps the raw node; layout + the selected
+     background ride props on the inner row, which still emits the
+     "selected" class for table_row_keydown's add/remove_class *)
+  let sel_sig =
+    Logseq_el.own ctx
+      (Signal.map
+         (fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
+         (sig_of inst))
+  in
   Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
-    ~id:("ls-block-" ^ row_uuid)
-    ~style_class_signal:
-      (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->
-           "ls-table-row ls-block"
-           ^ if V.Sset.mem row_uuid s.V.selected then " selected" else ""))
-    ~attrs:
-      [ ("data-blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
     ~events:"keydown"
     ~on_dom_event:(table_row_keydown inst ~row_uuid)
-    [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
-         holds the unpinned ones — each cell wrapped in .h-full *)
-      row ~style_class:"sticky-columns"
-        (List.map cell_wrap pinned)
-    ; row
-        (List.map cell_wrap free
-         @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
-            | Some _ ->
-                [ box
-                    [ box ~style_class:"ls-table-cell"
-                        [ row ~cross:`center ~grow:1. [] ] ] ]
-            | None -> [])) ]
+    [ Ui_parts.class_signal sel_sig
+        (fun sel ->
+          "ls-table-row ls-block" ^ if sel then " selected" else "")
+        (Ui_parts.prop_signal Lui_protocol.BackgroundValue sel_sig
+           (fun sel ->
+             if sel then "hsl(var(--muted))" else "transparent")
+           (Ui_components.with_props
+              [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+              (row ~cross:`stretch ~height:33 ~min_height:33
+                 ~max_height:33
+                 ~accessibility_identifier:("ls-block-" ^ row_uuid)
+                 ~data_attrs:
+                   [ ("data-blockid", row_uuid); ("data-id", row_uuid)
+                   ; ("tabindex", "0")
+                   ; ( "style"
+                     , "border-bottom:1px solid hsl(var(--border));\
+                        transition:background-color 150ms" ) ]
+                 [ (* cljs: .sticky-columns holds pinned cells, sibling
+                      row holds the unpinned ones *)
+                   row ~style_class:"sticky-columns"
+                     (List.map cell_wrap pinned)
+                 ; row
+                     (List.map cell_wrap free
+                      @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
+                         | Some _ ->
+                             [ box
+                                 [ box ~style_class:"ls-table-cell"
+                                     [ row ~cross:`center ~grow:1. [] ] ] ]
+                         | None -> [])) ]))) ]
+    ctx parent
 
 (* rows keyed under a parent — Virt_list for >=64 rows, keyed
    reconciliation below that. The uuid set comes from the body snapshot
@@ -1031,7 +1081,16 @@ let table_header inst cols : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  row ~style_class:"ls-table-header"
+  (* per-side borders, fit-content width and will-change ride the
+     style channel *)
+  row ~style_class:"ls-table-header" ~cross:`center
+    ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
+    ~data_attrs:
+      [ ( "style"
+        , "width:fit-content;min-width:100%;border-top:1px solid \
+           hsl(var(--border));border-bottom:1px solid \
+           hsl(var(--border));will-change:transform;\
+           transform:translate3d(0,0,0)" ) ]
     [ row ~style_class:"sticky-columns"
         (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
     ; row
@@ -1074,12 +1133,17 @@ let add_row_footer inst : t =
     | V.KAllPages | V.KQuery _ | V.KLinkedRefs | V.KUnlinkedRefs -> false
   in
   if has_add_object then
-    box ~style_class:"ls-table-footer"
+    (* .ls-table-footer: absolute bottom strip; width:100% has no prop *)
+    Ui_components.with_props
+      [ Lui_protocol.Position, Ui_components.sv "absolute"
+      ; Lui_protocol.InsetLeft, Ui_components.fv 0.
+      ; Lui_protocol.InsetBottom, Ui_components.fv 8. ]
+      (box ~data_attrs:[ ("style", "width:100%") ]
       [ Ui_parts.pressable
           ~on_press:(fun _ -> (V.ops ()).V.o_add_object inst)
           (row ~gap:4 ~cross:`center ~padding_horizontal:8
              ~padding_vertical:4 ~foreground:"muted-foreground" ~grow:1.
-             [ icon_el "plus"; text ~value:I.new_ [] ]) ]
+             [ icon_el "plus"; text ~value:I.new_ [] ]) ])
   else spacer ~key:"no-footer" []
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
@@ -1087,9 +1151,15 @@ let add_row_footer inst : t =
 let table_el inst (s : V.vstate) : t =
   let cols = visible_columns s in
   box ~style_class:"ls-table"
-    [ scroll ~orientation:`horizontal
+    [ (* .ls-table-rows font sweep migrated to props *)
+      Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+        (scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
-        [ box ~style_class:"relative"
+        [ Ui_components.with_props
+            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            (box ~style_class:"relative"
             [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
                  the header inside the same relative box — overlay carries
                  the placement (style_class utility tokens are pruned) *)
@@ -1106,7 +1176,7 @@ let table_el inst (s : V.vstate) : t =
                         ~data_attrs:
                           [ ("data-testid", "virtuoso-item-list") ]
                         [ row_stream inst cols (all_row_uuids s) ] ] ]
-            ; add_row_footer inst ] ] ]
+            ; add_row_footer inst ]) ]) ]
 
 (* cljs renders a full inner view-table per group — its own column
    header row plus the group's rows *)
@@ -1115,18 +1185,23 @@ let grouped_table inst ~rows : t =
   let s = V.get inst in
   let cols = visible_columns s in
   box ~style_class:"ls-table"
-    [ scroll ~orientation:`horizontal
+    [ Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+        (scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
-        [ box ~style_class:"relative"
+        [ Ui_components.with_props
+            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            (box ~style_class:"relative"
             [ overlay
                 [ table_header inst cols
                 ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ row_stream inst cols rows ]
-            ]
+            ])
         ]
-    ]
+    )]
     ctx parent
 
 (* ---------- list + gallery ---------- *)
@@ -1397,7 +1472,7 @@ let render_table inst s : t =
         [ table_el inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
-  column ~gap:8 ~style_class:"ls-view-body"
+  column ~gap:8 ~min_width:0 ~style_class:"ls-view-body"
     ((* cljs filters-row renders nil with no filters — mounting the
         empty box would still eat the column gap *)
      (if s.V.filters = [] then [] else [ filters ])

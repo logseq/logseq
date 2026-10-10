@@ -262,3 +262,72 @@ Also deleted:
 Gates after the purge: `dune build js_app test gpui/drive_test.exe`
 clean, `test_main.js` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds.
+
+## Batch B2 — views head + table (lui-overlay.css)
+
+Migrated `views_head.ml` + `views_table.ml` and deleted **52 rules**
+(~380 lines) from `resources/css/lui-overlay.css`:
+
+- Dead markup: `.menu-links-wrapper` + the four scoped variants +
+  `strong` (no emitters left; gpui registration removed the same commit).
+- View head/tabs: `.views`, `.views button`, `.ls-count`,
+  `.ls-view-tab`, `.ls-dim`, `.ls-view-head`, `.ls-view-head-left`,
+  `.ls-query-count` → `~gap`/`~cross`/`~main`/`~height`/FontSize/
+  `float_prop_signal Opacity` on the emitters.
+- Sort popup: `.ls-view-order-setting`, `.ls-drag-row`, `.ls-col-name`,
+  `.ls-sort-right`, `.ls-sort-order` (base), `.ls-sort-x` + `:hover`,
+  `.ls-sort-delete` + `:hover`, `.ls-xs` → typed props on `button`
+  kinds; `.ls-sort-order svg`/`.ti`, `.ls-sort-x svg`,
+  `.ls-sort-delete svg` icon-size hooks kept as hooks.
+- Filter popup + chips: `.ls-vf-col`, `.ls-op-btn`, `.ls-vf-chip`,
+  `.ls-vf-chip-prop/-op/-val/-x`, `.ls-view-filter-value-item`,
+  `.filters-row`, `.ls-vf-chips` → `row`/`column`/`box`/`button` kinds;
+  per-side borders + flex-wrap/ellipsis/nowrap ride the
+  `("style", ...)` data-attrs merge channel; chip `disabled` via
+  `DisabledOpacity`.
+- Filters dialog: `.ls-filters` box chrome, `.ls-filters-header`,
+  `.ls-filters-icon`, `.ls-filters-title`, `.ls-filters-label`,
+  `.cp__filters-input-panel` (base), `.cp__filters-input`,
+  `.ls-ref-btn` (base; `:hover` border-color hook kept) →
+  `column`/`row`/`box`/`heading`/`button ~on_press_detail` (shift-click
+  via `modifiers` bit 2).
+- Table: `.ls-table-header`, `.ls-table-header-cell` + `> .ui__button`,
+  `.ls-table-row.ls-block`, `.ls-table-row.ls-block.selected`,
+  `.ls-table-footer`, `.ls-table-cell`, `.ls-table-rows .ls-table-cell`,
+  `.ls-table-cell > div`, both font sweeps
+  (`.ls-table-rows .ls-table-row*`, `.ls-table-header-cell*`) →
+  props on cell/header/row emitters; row selected bg via
+  `prop_signal BackgroundValue` (the `selected` class is still emitted
+  for `table_row_keydown`'s add/remove_class contract); `.ls-view-body`
+  dropped from the shared `min-width:0` selector group (its `mt-1`
+  margin rule kept).
+- One leftover emitted decl deliberately dropped: `.ls-table-header`'s
+  `opacity:0.5` (cljs header is not translucent).
+
+Kept as stylesheet hooks (no prop channel or shared with later
+batches): `.ls-icon-btn` (cards_view/plugins_view emit),
+`.ls-view-body` margin, `.ls-view-head`, `.ls-view-tab`,
+`ls-vf-chip`/`filters-row` (class markers now), `.ls-op-label` +
+`.ls-vf-logic` (base+hover opacity pairs — inline `~opacity` would win
+over the zero-specificity `:where(:hover)` channel),
+`.ls-table-resize-handle` (0/.7/1 opacity ladder, same reason),
+`.sticky-columns` (no `sticky` Position value),
+`.ls-table-rows > .relative` (`pb-38px` + virtual-list wrappers),
+`.ls-table-row div/span/a` nowrap sweep, `.table-block-title` +
+`ls-title-ghosts` hover-reveal, `.ls-table-row [data-table-row-select]`
+checkbox `:has` rules, `div[data-index]`/`[data-viewport-type]`
+virtual-list hooks, `.view-actions`/`.ls-add-view` transition,
+`.ls-icon-color-wrap` em-emoji, `.select-item`/`.jtrigger`/
+`.property-value-inner` (views_popup/properties_area still emit),
+`.menu-link*`/`.chosen`/`cp__select*` (B3/B4 scope), `.ls-foldable-*`
+animations, `.ls-filters .cp__filters` + `:empty` margins,
+`.cp__filters-input-panel:focus-within`, `.ls-filters-refs` + `:empty`,
+`.ls-ref-btn:hover`, `.ls-sort-order .ti/svg`, `.ls-sort-x svg`,
+`.ls-sort-delete svg`.
+
+Gates after the batch: `dune build js_app test gpui/drive_test.exe`
+clean, `test_main.js` 2009 checks 0 failures, `dune runtest` green
+(725 checks), `npm run css:build` succeeds. One gpui class registration
+removed (`menu-links-wrapper`); `selected`, `menu-link-wrap`,
+`menu-link`, `chosen` registrations kept — their emitters land in later
+batches.

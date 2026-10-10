@@ -30,8 +30,9 @@ let icon_el = Views_table.icon_el
 let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
   let mk label =
     button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
-      ?label ~style_class:("ls-icon-btn" ^ extra)
-      ~height:28 ~min_height:28 ~padding_horizontal:4
+      ?label ~style_class:extra
+      ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
+      ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
       ~on_press:(fun _ -> on_click ()) []
   in
   mk (if title_ = "" then None else Some title_)
@@ -84,12 +85,16 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   in
   (* data-view-tab-id is a DOM marker with no component prop —
      accessibility_identifier carries the stable anchor *)
-  Ui_parts.class_signal current_sig
-    (fun cur ->
-      (* cljs view-tab-button is text-sm (14px), not the LUI button
-         size-sm default 16px *)
-      "ls-view-tab !text-sm !px-1" ^ if cur then "" else " ls-dim")
+  (* cljs view-tab-button is text-sm (14px), not the LUI button
+     size-sm default 16px; .ls-dim (opacity-75 when not current) is the
+     opacity signal *)
+  Ui_parts.float_prop_signal Lui_protocol.Opacity current_sig
+    (fun cur -> if cur then 1. else 0.75)
+    (Ui_components.with_props [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
     (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
+       ~style_class:"ls-view-tab"
+       ~height:24 ~min_height:24
+       ~padding_horizontal:4 ~padding_vertical:2
        ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
          let v = Signal.get v_sig in
@@ -139,7 +144,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      | V.KLinkedRefs | V.KUnlinkedRefs -> false
                      | _ -> true)
                    isig))
-           (box ~style_class:"ls-icon-color-wrap"
+           (row ~cross:`center ~style_class:"ls-icon-color-wrap"
               [ icon ~point_size:16
                   ~style_class:("ls-icon-" ^ view_type_icon v0)
                   ~name_signal:
@@ -165,7 +170,8 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      && inst.V.kind <> V.KUnlinkedRefs
                      && count_of s > 0)
                    isig))
-           (text ~style_class:"ls-count text-muted-foreground"
+           (text ~font_size:"0.75rem"
+              ~foreground:"hsl(var(--muted-foreground), var(--ls-secondary-text-color))"
               ~value_signal:
                 (Logseq_el.own ctx
                    (Signal.map
@@ -175,7 +181,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                         then Printf.sprintf "%d/%d" n s.V.refs_total
                         else string_of_int n)
                       isig))
-              []) ])
+              []) ]))
     ctx parent
 
 (* .views > tabs + .ls-add-view — the button rides the same
@@ -183,7 +189,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
    Signal.state + ~opacity, no hover primitive) *)
 let tabs_el inst ~op : t =
  fun ctx parent ->
-  row ~style_class:"views"
+  row ~style_class:"views" ~cross:`center ~gap:4 ~min_width:0
     [ Lui_elements.keyed
         ~source:
           (Logseq_el.own ctx
@@ -194,7 +200,7 @@ let tabs_el inst ~op : t =
     ; Ui_parts.float_prop_signal Lui_protocol.Opacity op Fun.id
         (button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
            ~style_class:"ls-add-view"
-           ~height:28 ~min_height:28 ~padding_horizontal:4
+           ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
            ~data_attrs:[ ("style", "margin-left: -4px") ]
            ~foreground:
              "var(--ls-secondary-text-color, var(--muted-foreground))"
@@ -238,30 +244,49 @@ let sorting_popup inst anchor =
             (* verbatim rows — the sort controls are buttons inside the
                menuitem slot, so they ride the Logseq_el escape channel *)
             [ P.MCustom
-                (D.el ~style_class:"ls-view-order-setting"
-                   [ D.el ~style_class:"ls-drag-row"
+                (row ~cross:`center ~main:`space_between ~gap:8
+                   ~padding_horizontal:8
+                   [ row ~cross:`center ~gap:4
                        [ D.el ~tag:"i"
                            ~attrs:[ ("class", "ti ti-grip-vertical") ] []
-                       ; D.el ~style_class:"ls-col-name"
-                           ~text:(c.V.c_name ^ ":") [] ]
-                   ; D.el ~style_class:"ls-sort-right"
+                       ; text ~value:(c.V.c_name ^ ":")
+                           ~white_space:"nowrap"
+                           ~foreground:
+                             "var(--ls-secondary-text-color, \
+                              var(--muted-foreground))"
+                           [] ]
+                   ; row ~cross:`center ~gap:8
                        [ (* cljs shui/select trigger: order-button
-                            !px-2 !py-0 !h-8 — one click flips asc/desc *)
-                         D.el ~tag:"button" ~style_class:"ls-sort-order"
-                           ~events:"click"
-                           ~on_dom_event:(fun _ _ ->
-                             set_asc so (not so.V.s_asc))
-                           [ D.el ~tag:"span"
-                               ~text:
-                                 (if so.V.s_asc then I.ascending
-                                  else I.descending)
-                               []
-                           ; icon_el "chevron-down" ]
-                       ; D.el ~tag:"button" ~style_class:"ls-sort-x"
-                           ~attrs:[ ("aria-label", I.delete_sort) ]
-                           ~events:"click"
-                           ~on_dom_event:(fun _ _ -> remove_sort so)
-                           [ icon_el "x" ] ]
+                            !px-2 !py-0 !h-8 — one click flips asc/desc;
+                            ls-sort-order stays a hook for the .ti/svg
+                            icon-size rules *)
+                         Ui_components.with_props
+                           [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                           ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+                           (button ~variant:`ghost ~height:32
+                              ~padding_horizontal:8
+                              ~style_class:"ls-sort-order"
+                              ~border_width:1
+                              ~border_color:"var(--ls-border-color)"
+                              ~corner_radius:6 ~background:"transparent"
+                              ~foreground:"var(--ls-primary-text-color)"
+                              ~on_press:(fun _ ->
+                                set_asc so (not so.V.s_asc))
+                              [ text
+                                  ~value:
+                                    (if so.V.s_asc then I.ascending
+                                     else I.descending)
+                                  []
+                              ; icon_el "chevron-down" ])
+                       ; button ~variant:`ghost ~size:`sm ~height:32
+                           ~padding_horizontal:4 ~corner_radius:4
+                           ~style_class:"ls-sort-x"
+                           ~foreground:
+                             "var(--ls-secondary-text-color, \
+                              var(--muted-foreground))"
+                           ~label:I.delete_sort
+                           ~icon:(Views_table.icon_of "x")
+                           ~on_press:(fun _ -> remove_sort so) [] ]
                    ]) ])
       s.V.sorting
   in
@@ -269,17 +294,25 @@ let sorting_popup inst anchor =
     (P.show_menu ~anchor ~align_end:true
        (items
         @ [ P.MCustom
-              ((* cljs: ghost button, muted, pl-3, trash icon + label *)
-               D.el ~tag:"button" ~style_class:"ls-sort-delete"
-                 ~events:"click"
-                 ~on_dom_event:(fun _ _ ->
-                   V.update inst (fun s -> { s with V.sorting = [] });
-                   V.persist_sorting inst;
-                   P.close_all ();
-                   refresh inst)
-                 [ icon_el "trash"
-                 ; D.el ~tag:"span" ~style_class:"menu-item-label"
-                     ~text:I.delete_sort [] ]) ] ))
+              ((* cljs: ghost button, muted, pl-3, trash icon + label —
+                  the asymmetric padding has no prop channel *)
+               Ui_components.with_props
+                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+                 (button ~variant:`ghost ~grow:1. ~main:`start
+                    ~corner_radius:4 ~style_class:"ls-sort-delete"
+                    ~foreground:
+                      "var(--ls-secondary-text-color, \
+                       var(--muted-foreground))"
+                    ~data_attrs:
+                      [ ( "style"
+                        , "padding:0.375rem 0.5rem 0.375rem 0.75rem" ) ]
+                    ~icon:(Views_table.icon_of "trash") ~text:I.delete_sort
+                    ~on_press:(fun _ ->
+                      V.update inst (fun s -> { s with V.sorting = [] });
+                      V.persist_sorting inst;
+                      P.close_all ();
+                      refresh inst)
+                    [])) ] ))
 
 (* ---------- filter popup ---------- *)
 
@@ -355,15 +388,20 @@ let filter_value_phase inst ~anchor (c : V.column) =
         else
           List.map
             (fun (label, op) ->
-              D.el ~tag:"button" ~style_class:"ls-op-btn" ~events:"click"
-                ~on_dom_event:(fun _ _ ->
+              button ~variant:`ghost ~main:`start
+                ~padding_vertical:4 ~padding_horizontal:8
+                ~on_press:(fun _ ->
                   P.close_all ();
                   set_filters inst
                     ((V.get inst).V.filters
                      @ [ { V.c_prop = ident; c_op = op
                          ; c_val = Some (W.Keyword "empty") } ])
                     (V.get inst).V.filters_or)
-                [ D.el ~tag:"span" ~style_class:"ls-op-label" ~text:label [] ])
+                [ (* ls-op-label stays a hook — the .75->1 opacity
+                     pair has no prop channel (an inline base opacity
+                     always beats the zero-specificity hover channel) *)
+                  text ~value:label ~font_size:"0.875rem"
+                    ~style_class:"ls-op-label" [] ])
             [ (I.is_empty, "is"); (I.is_not_empty, "is-not") ]
       in
       P.show_custom ~anchor ~align_end:true
@@ -373,7 +411,9 @@ let filter_value_phase inst ~anchor (c : V.column) =
           let sched = context.Lui_ui.ui_scheduler in
           let query = Signal.state sched "" in
           let qsig = (Signal.value (query)) in
-          (D.el ~style_class:"ls-vf-col"
+          (Ui_components.with_props
+             [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+             (column ~gap:4
              (column ~style_class:"cp__select cp__select-main"
                 [ D.el ~style_class:"input-wrap"
                     [ input ~style_class:"cp__select-input"
@@ -396,7 +436,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
                             qsig ]
                     ]
                 ]
-             :: ops))
+             :: ops)))
             context parent))
 
 let filter_popup inst anchor =
@@ -549,8 +589,8 @@ and mk_group_sort inst ident label =
 let more_actions_el inst : t =
   button ~variant:`ghost ~size:`sm ~icon:`ellipsis
     ~label:(I.t "ui/show-more")
-    ~style_class:"ls-icon-btn"
-    ~height:28 ~min_height:28 ~padding_horizontal:4
+    ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
+    ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
 
@@ -561,8 +601,8 @@ let more_actions_el inst : t =
 let display_type_el inst : t =
  fun ctx parent ->
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  button ~variant:`ghost ~size:`sm ~style_class:"ls-icon-btn"
-    ~height:28 ~min_height:28 ~padding_horizontal:4
+  button ~variant:`ghost ~size:`sm
+    ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
     ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
     ~accessibility_identifier:wrap_id
     ~label:(I.t "property.built-in/view-type")
@@ -684,12 +724,25 @@ let filter_chip inst idx (f : V.filter_clause) : t =
     "vchip-op-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int idx
   in
   row ~cross:`center ~style_class:"ls-vf-chip"
-    [ button ~style_class:"ls-vf-chip-prop ls-xs" ~text:prop_title
-        ~disabled:true []
-    ; button ~style_class:"ls-vf-chip-op ls-xs"
-        ~accessibility_identifier:op_btn_id
-        ~text:(I.operator_text f.V.c_op)
-        ~on_press:(fun _ ->
+      ~border_width:1 ~border_color:"var(--lui-c-border)"
+      ~corner_radius:4 ~min_width:0
+      ~data_attrs:[ ("style", "max-width:100%") ]
+    [ (* per-side borders ride the data_attrs style channel *)
+      Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.DisabledOpacity, Ui_components.fv 0.8 ]
+        (button ~text:prop_title ~disabled:true ~padding_horizontal:8
+           ~data_attrs:
+             [ ("style", "border-right:1px solid var(--lui-c-border)") ]
+           [])
+    ; Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+        (button ~padding_horizontal:8
+           ~data_attrs:
+             [ ("style", "border-right:1px solid var(--lui-c-border)") ]
+           ~accessibility_identifier:op_btn_id
+           ~text:(I.operator_text f.V.c_op)
+           ~on_press:(fun _ ->
             match Ui_services.dom_by_id op_btn_id with
             | None -> ()
             | Some anchor ->
@@ -726,13 +779,18 @@ let filter_chip inst idx (f : V.filter_clause) : t =
                                     V.persist_filters inst;
                                     refresh inst ))
                             ops))))
-        []
-    ; box ~style_class:"ls-vf-chip-val"
-        [ box 
-            [ box ~style_class:"ls-view-filter-value-item"
-                [ text ~value:(filter_value_label inst f) [] ] ] ]
+        [])
+    ; (* chip-val + view-filter-value-item collapse to one clip box —
+         overflow/ellipsis/white-space have no container-kind prop *)
+      box ~min_width:0 ~padding_horizontal:8
+        ~data_attrs:
+          [ ( "style"
+            , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
+               white-space:nowrap;border-right:1px solid var(--lui-c-border)" ) ]
+        [ text ~value:(filter_value_label inst f) [] ]
     ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
-        ~style_class:"ls-vf-chip-x"
+        ~padding_horizontal:4
+        ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
         ~on_press:(fun _ ->
           V.update inst (fun s ->
               { s with
@@ -759,25 +817,35 @@ let filters_row inst : t =
          let chips =
            List.mapi (fun i f -> filter_chip inst i f) s.V.filters
          in
-         row ~style_class:"filters-row"
-           [ row ~style_class:"ls-vf-chips" chips
+         row ~style_class:"filters-row" ~cross:`center
+             ~main:`space_between ~gap:16 ~padding_vertical:8 ~min_width:0
+             ~data_attrs:[ ("style", "flex-wrap:wrap;max-width:100%") ]
+           [ row ~cross:`center ~gap:8 ~min_width:0
+               ~data_attrs:[ ("style", "flex-wrap:wrap;max-width:100%") ] chips
            ; (if List.length s.V.filters > 1 then
-                select ~style_class:"ls-vf-logic"
-                  ~text:(if s.V.filters_or then I.match_any else I.match_all)
-                  [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
-                      ~on_press:(fun _ ->
-                        V.update inst (fun s ->
-                            { s with V.filters_or = false });
-                        V.persist_filters inst;
-                        refresh inst)
-                      []
-                  ; menu_item ~text:I.match_any ~selected:s.V.filters_or
-                      ~on_press:(fun _ ->
-                        V.update inst (fun s ->
-                            { s with V.filters_or = true });
-                        V.persist_filters inst;
-                        refresh inst)
-                      [] ]
+                (* ls-vf-logic keeps its class for the .75->1 opacity
+                   hooks; the box chrome migrated to props *)
+                Ui_components.with_props
+                  [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+                  (select ~style_class:"ls-vf-logic"
+                     ~height:24 ~padding_horizontal:8
+                     ~background:"transparent" ~border_width:1
+                     ~border_color:"var(--lui-c-border)"
+                     ~text:(if s.V.filters_or then I.match_any else I.match_all)
+                     [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
+                         ~on_press:(fun _ ->
+                           V.update inst (fun s ->
+                               { s with V.filters_or = false });
+                           V.persist_filters inst;
+                           refresh inst)
+                         []
+                     ; menu_item ~text:I.match_any ~selected:s.V.filters_or
+                         ~on_press:(fun _ ->
+                           V.update inst (fun s ->
+                               { s with V.filters_or = true });
+                           V.persist_filters inst;
+                           refresh inst)
+                         [] ])
               else spacer ~key:"no-logic" [])
            ])
      (sig_of inst))
@@ -852,37 +920,52 @@ let ref_filter_dialog inst anchor =
           (Signal.value (gen))
       in
       let ref_button title count_opt =
-        D.el ~tag:"button" ~style_class:"ls-ref-btn" ~events:"click"
-          ~on_dom_event:(fun _ payload ->
-            (* cljs ref-button: add? = ref in neither filter; include? =
-               new click -> not shift, existing -> its current column so
-               delete-property-value targets the right property *)
-            let s = V.get inst in
-            let lcr = lc title in
-            let included =
-              List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
-            in
-            let excluded =
-              List.exists (fun (n, _) -> n = lcr) s.V.ref_excludes
-            in
-            let not_in_filters = (not included) && not excluded in
-            save_ref_filter inst ~title
-              ~incl:
-                (if not_in_filters then
-                   not (Json_payload.bool payload "shiftKey")
-                 else included)
-              ~add:not_in_filters
-              ~on_done:(fun () ->
-                Signal.set gen (Signal.get_state gen + 1)))
-          ([ D.el ~tag:"span" ~text:title [] ]
-           @
-           match count_opt with
-           | Some n -> [ D.el ~tag:"sup" ~text:(" " ^ string_of_int n) [] ]
-           | None -> [])
+        Ui_components.with_props
+          [ Lui_protocol.FontSize, Ui_components.sv "0.75rem" ]
+          ((* ls-ref-btn keeps its class for the :hover border-color
+              hook *)
+           button ~variant:`ghost ~border_width:1 ~corner_radius:6
+             ~padding_vertical:2 ~padding_horizontal:8
+             ~background:"transparent" ~style_class:"ls-ref-btn"
+             ~border_color:"var(--ls-border-color, hsl(var(--border)))"
+             ~on_press_detail:(fun ev ->
+               (* cljs ref-button: add? = ref in neither filter; include?
+                  = new click -> not shift, existing -> its current
+                  column so delete-property-value targets the right
+                  property *)
+               match ev with
+               | Lui_protocol.PressDetail (_, d) ->
+                 let s = V.get inst in
+                 let lcr = lc title in
+                 let included =
+                   List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
+                 in
+                 let excluded =
+                   List.exists (fun (n, _) -> n = lcr) s.V.ref_excludes
+                 in
+                 let not_in_filters = (not included) && not excluded in
+                 save_ref_filter inst ~title
+                   ~incl:
+                     (if not_in_filters then
+                        not (d.Lui_protocol.modifiers land 2 <> 0)
+                      else included)
+                   ~add:not_in_filters
+                   ~on_done:(fun () ->
+                     Signal.set gen (Signal.get_state gen + 1))
+               | _ -> ())
+             ([ text ~value:title [] ]
+              @
+              match count_opt with
+              | Some n ->
+                [ text ~as_:`Sup ~value:(" " ^ string_of_int n) [] ]
+              | None -> []))
       in
       let chip_row label xs =
-        D.el ~style_class:"flex flex-row flex-wrap items-center"
-          (D.el ~style_class:"ls-filters-label" ~text:label []
+        (* flex-wrap has no prop — rides the style channel *)
+        row ~cross:`center
+          ~data_attrs:[ ("style", "flex-wrap:wrap") ]
+          (text ~value:label ~font_weight:500 ~padding_vertical:4
+             ~data_attrs:[ ("style", "margin-right:0.25rem") ] []
            :: List.map (fun (_, title) -> ref_button title None) xs)
       in
       let chip_rows =
@@ -921,39 +1004,60 @@ let ref_filter_dialog inst anchor =
             in
             if refs = [] then D.nothing
             else
-              D.el ~style_class:"flex gap-2 flex-wrap items-center"
-                ~attrs:[ ("style", "width:500px;max-width:500px") ]
+              row ~cross:`center ~gap:8 ~width:500 ~max_width:500
+                ~data_attrs:[ ("style", "flex-wrap:wrap") ]
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
           combined
       in
-      (D.el ~style_class:"ls-filters filters"
-         [ D.el ~style_class:"ls-filters-header"
-             [ D.el ~style_class:"ls-filters-icon"
+      (column ~style_class:"ls-filters filters"
+         ~min_width:320 ~max_width:500
+         [ row ~cross:`start ~gap:16
+             ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
+             [ row ~cross:`center ~main:`center
+                 ~width:40 ~height:40 ~min_width:40 ~corner_radius:9999
+                 ~background:
+                   "var(--ls-tertiary-background-color, \
+                    rgba(0, 0, 0, 0.06))"
+                 ~foreground:
+                   "var(--ls-secondary-text-color, \
+                    var(--muted-foreground))"
                  [ icon ~name:(Views_table.icon_of "filter") ~point_size:20
                      ~style_class:"ls-icon-filter" [] ]
-             ; D.el
-                 [ D.el ~tag:"h3" ~style_class:"ls-filters-title"
-                     ~text:(I.t "reference.filter/title") []
-                 ; D.el ~tag:"span" ~style_class:"text-xs"
-                     ~text:(I.t "reference.filter/directions") [] ]
+             ; column
+                 [ heading ~level:3 ~font_size:"1.125rem"
+                     ~line_height:"1.5rem" ~font_weight:500
+                     ~value:(I.t "reference.filter/title") []
+                 ; text ~font_size:"0.75rem"
+                     ~value:(I.t "reference.filter/directions") [] ]
              ]
-         ; D.el ~style_class:"cp__filters" [ chip_rows ]
-         ; D.el ~style_class:"cp__filters-input-panel"
+         ; (* cp__filters keeps its class — the .ls-filters .cp__filters
+              margin and :empty rules are leftover hooks *)
+           column ~style_class:"cp__filters" [ chip_rows ]
+         ; row ~cross:`center ~gap:8 ~padding_vertical:4
+             ~padding_horizontal:8 ~corner_radius:6
+             ~style_class:"cp__filters-input-panel"
+             ~foreground:
+               "var(--ls-secondary-text-color, var(--muted-foreground))"
              [ icon ~name:(Views_table.icon_of "search")
                  ~style_class:"ls-icon-search" []
-             ; input ~style_class:"cp__filters-input w-full bg-transparent"
-                 ~data_attrs:
-                   [ ("type", "text")
-                   ; ("id", input_id)
-                   ; ( "placeholder"
-                     , I.t "reference.filter/search-placeholder" ) ]
-                 ~autofocus:true
-                 ~on_input:(function
-                   | L.TextChanged (_, v) ->
-                       deb (fun () -> Signal.set query v)
-                   | _ -> ())
-                 [] ]
-         ; D.el ~style_class:"ls-filters-refs" [ ref_rows ] ])
+             ; Ui_components.with_props
+                 [ Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+                 (input ~style_class:"cp__filters-input"
+                    ~grow:1. ~background:"transparent" ~border_width:0
+                    ~data_attrs:
+                      [ ("type", "text")
+                      ; ("id", input_id)
+                      ; ( "placeholder"
+                        , I.t "reference.filter/search-placeholder" ) ]
+                    ~autofocus:true
+                    ~on_input:(function
+                      | L.TextChanged (_, v) ->
+                          deb (fun () -> Signal.set query v)
+                      | _ -> ())
+                    []) ]
+         ; (* ls-filters-refs keeps its class — margin-top + :empty
+              hooks *)
+           box ~style_class:"ls-filters-refs" [ ref_rows ] ])
         context parent)
 
 let refs_filter_btn inst : t =
@@ -961,10 +1065,11 @@ let refs_filter_btn inst : t =
   Ui_parts.class_signal
     (Logseq_el.own ctx
        (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
-    (fun c -> "ls-icon-btn" ^ c)
+    (fun c -> c)
     (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
        ~icon:(Views_table.icon_of "filter-cog")
-       ~height:28 ~min_height:28 ~padding_horizontal:4
+       ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
+       ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
        ~on_press:(fun _ ->
          match
@@ -985,7 +1090,8 @@ let refs_filter_btn inst : t =
 let render_head inst : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
-    row ~style_class:"ls-view-head" ~gap:8
+    row ~style_class:"ls-view-head" ~gap:8 ~cross:`center
+      ~main:`space_between ~height:28 ~min_width:0 ~grow:1.
       [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
           ~key:(fun (v : Wr.view_ent) -> v.Wr.vu) ~cmp:String.compare
           ~mount:(fun vs ->
@@ -1028,17 +1134,21 @@ let render_head inst : t =
            else 0.75)
          (Signal.value (hover)) popup_open)
   in
-  row
+  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+    (row
     ~on_pointer_enter:(fun _ -> Signal.set hover true; Runtime.flush ())
     ~on_pointer_leave:(fun _ ->
       Signal.set hover false;
       Runtime.flush ())
     ~style_class:
       "ls-view-head"
-    [ row ~style_class:"ls-view-head-left"
+    ~cross:`center ~main:`space_between ~gap:4
+    ~height:28 ~min_width:0 ~grow:1.
+    [ row ~style_class:"ls-view-head-left" ~cross:`center ~gap:8
         [ (match inst.V.kind with
            | V.KQuery _ ->
-               text ~style_class:"ls-query-count"
+               text ~font_size:"0.875rem" ~font_weight:500
+                 ~data_attrs:[ ("style", "opacity:0.5") ]
                  ~value_signal:
                    (Logseq_el.own ctx
                       (Signal.map
@@ -1062,8 +1172,11 @@ let render_head inst : t =
                        (sig_of inst)))
                (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
                   ~icon:(Views_table.icon_of "arrows-up-down")
-                  ~style_class:"ls-icon-btn"
                   ~height:28 ~min_height:28 ~padding_horizontal:4
+                  ~padding_vertical:2
+                  ~foreground:
+                    "var(--ls-secondary-text-color, \
+                     var(--muted-foreground))"
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1076,8 +1189,10 @@ let render_head inst : t =
                   [])
            ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
-               ~style_class:"ls-icon-btn"
                ~height:28 ~min_height:28 ~padding_horizontal:4
+               ~padding_vertical:2
+               ~foreground:
+                 "var(--ls-secondary-text-color, var(--muted-foreground))"
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->
@@ -1094,5 +1209,5 @@ let render_head inst : t =
          @ (if has_add_object then
               [ ghost_btn "plus" ~title_:I.new_node
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
-            else [])) ]
+            else [])) ])
     ctx parent

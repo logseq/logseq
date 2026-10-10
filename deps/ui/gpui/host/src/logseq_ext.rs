@@ -607,11 +607,6 @@ fn register_class_styles() {
     class("block-highlight", "background:var(--ls-block-highlight-color)", "");
 
     // ---- autocomplete menu rows (lui-overlay.css .menu-link*) ----
-    class(
-        "menu-links-wrapper",
-        "display:flex;flex-direction:column;padding:4px",
-        "",
-    );
     class("menu-link-wrap", "display:block", "");
     class(
         "menu-link",
