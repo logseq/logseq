@@ -831,13 +831,24 @@ mod tests {
         });
         cx.run_until_parked();
         let settings_layer = shared.borrow().store.nodes.values().find(|node|
-            node.string_prop(Property::StyleClass).is_some_and(|classes|
-                classes.split_whitespace().any(|class| class == "ls-dialog-layer"))
+            node.identity.kind() == Some(lui_core::NodeKind::Dialog)
+                && node.string_prop(Property::StyleClass).is_some_and(|classes|
+                    classes.split_whitespace().any(|class| class == "ls-dialog-settings"))
         ).expect("the native menu must mount the settings layer").id;
+        let image = shared.borrow().store.nodes.values().find(|node|
+            node.identity.kind() == Some(lui_core::NodeKind::Image)
+        ).expect("settings must mount its theme preview images").id;
         cx.update(|window, app| {
+            assert_ne!(unsafe { bridge::lui_ocaml_load(image) }, 0,
+                "the native image load entry point must have an OCaml callback");
+            pump_tick(&shared, window, app);
             assert_ne!(unsafe { bridge::lui_ocaml_dismiss(settings_layer) }, 0);
             pump_tick(&shared, window, app);
         });
+        assert!(shared.borrow().store.node(settings_layer).is_none(),
+            "dismissing settings must remove its dialog");
+        assert!(shared.borrow().last_errors.is_empty(),
+            "settings must open and close without rejecting patches");
 
         let search = shared.borrow().store.nodes.values().find(|node|
             node.string_prop(Property::AccessibilityIdentifier) == Some("search-button")

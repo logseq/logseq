@@ -10,12 +10,9 @@ flume = "0.12"
 # `log` facade backend — gpui/wgpu diagnostics (device pick, surface,
 # present errors) are invisible without one; RUST_LOG=off silences it.
 env_logger = "0.11"
-# Sibling checkout convention: ../lui path dep.
-# the logseq and lui repos live side by side. Override at build time with
-# LUI_GPUI_CRATE_DIR / LUI_CORE_CRATE_DIR via build.rs path substitution if
-# your layout differs.
-lui-gpui = { path = "../../../../../lui/platform/gpui/crates/lui-gpui" }
-lui-core = { path = "../../../../../lui/platform/gpui/crates/lui-core" }
+# Keep the Rust backend on the same LUI revision as the OCaml dependency pin.
+lui-gpui = { git = "https://github.com/logseq/lui.git", rev = "908580b873762141e65aca4346c2773c0f0e3261" }
+lui-core = { git = "https://github.com/logseq/lui.git", rev = "908580b873762141e65aca4346c2773c0f0e3261" }
 # tree-sitter-languages powers the logseq-codemirror editor highlight.
 gpui-kit = { version = "0.7", features = ["tree-sitter-languages"] }
 serde = { version = "1", features = ["derive"] }

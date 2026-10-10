@@ -266,6 +266,10 @@ LUI_EXPORT int32_t lui_ocaml_radio_changed(int64_t node) {
   return dispatch_long("lui_ocaml_radio_changed", node);
 }
 
+LUI_EXPORT int32_t lui_ocaml_load(int64_t node) {
+  return dispatch_long("lui_ocaml_load", node);
+}
+
 LUI_EXPORT int32_t lui_ocaml_slider_changed(int64_t node,
                                             double fraction) {
   int result = 0;
