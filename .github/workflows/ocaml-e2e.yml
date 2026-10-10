@@ -1,0 +1,263 @@
+name: OCaml E2E
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ocaml-e2e/**'
+      - '.github/workflows/ocaml-e2e.yml'
+      - src/**
+      - deps/**
+      - packages/**
+  pull_request:
+    branches: [master]
+    paths:
+      - 'ocaml-e2e/**'
+      - '.github/workflows/ocaml-e2e.yml'
+      - src/**
+      - deps/**
+      - packages/**
+
+env:
+  CLOJURE_VERSION: '1.12.4.1618'
+  JAVA_VERSION: '21'
+  NODE_VERSION: '24'
+  OCAML_VERSION: '5.5.1'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+
+      - name: Clojure cache
+        uses: actions/cache@v4
+        id: clojure-deps
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
+        run: clojure -A:cljs -P
+
+      - name: Shadow-cljs cache
+        uses: actions/cache@v4
+        with:
+          path: .shadow-cljs
+          # ensure update cache every time
+          key: ${{ runner.os }}-shadow-cljs-${{ github.sha }}
+          # will match most recent upload
+          restore-keys: |
+            ${{ runner.os }}-shadow-cljs-
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: Fetch OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
+
+      # NOTE: require the app to be build with DEV-RELEASE flag
+      - name: Prepare E2E test build
+        run: |
+          pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm db-worker:build
+
+      # rtc tests run against a local db-sync node-adapter, not the real backend
+      - name: Build db-sync node adapter
+        run: pnpm --dir deps/db-sync build:node-adapter
+
+      - name: Build ocaml-e2e tests
+        working-directory: ocaml-e2e
+        run: opam exec -- dune build
+
+      - name: Upload E2E test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-build
+          path: static/
+          retention-days: 1
+
+      - name: Upload compiled e2e tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocaml-e2e-build
+          path: ocaml-e2e/_build/default/test/test_node/
+          retention-days: 1
+
+      - name: Upload db-sync node adapter
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist/
+          retention-days: 1
+
+  test:
+    name: Test ${{ matrix.shard }}
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: editor
+            filters: editor_basic
+          - shard: commands-outliner
+            filters: commands_basic outliner_basic undo_redo
+          - shard: rtc
+            filters: rtc
+            extra: --include-slow --rtc-concurrency 4
+          - shard: graph-properties
+            filters: >-
+              graph property tag reference cmdk
+              bidirectional left_sidebar right_sidebar
+          - shard: remaining
+            filters: >-
+              view plugins export flashcards import library query
+              multi_tabs assets
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Download E2E test build
+        uses: actions/download-artifact@v4
+        with:
+          name: static-build
+          path: static
+
+      - name: Download compiled e2e tests
+        uses: actions/download-artifact@v4
+        with:
+          name: ocaml-e2e-build
+          path: ocaml-e2e/_build/default/test/test_node
+
+      - name: Download db-sync node adapter
+        if: matrix.shard == 'rtc'
+        uses: actions/download-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist
+
+      # deps/db-sync is a standalone pnpm package (own lockfile), not a
+      # workspace member — the rtc shard's local server needs its deps
+      - name: Install db-sync deps
+        if: matrix.shard == 'rtc'
+        working-directory: deps/db-sync
+        run: pnpm install --ignore-workspace --frozen-lockfile
+
+      - name: Serve app build
+        run: |
+          python3 -m http.server 3002 -d static/ &
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:3002/ && exit 0 || sleep 1
+          done
+          echo "app server failed to start" && exit 1
+
+      - name: Run e2e tests
+        working-directory: ocaml-e2e
+        env:
+          E2E_FILTERS: ${{ matrix.filters }}
+          E2E_EXTRA: ${{ matrix.extra }}
+        run: |
+          read -r -a filters <<< "$E2E_FILTERS"
+          node parallel-runner.mjs $E2E_EXTRA "${filters[@]}"
+
+      - name: Collect test logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.shard }}
+          path: ocaml-e2e/.parallel-logs/
+          retention-days: 1
+
+  success:
+    name: Mark success
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Mark success
+        if: ${{ success() }}
+        run: echo "E2E OK" > e2e-success.txt
+
+      - name: Upload success artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-success
+          path: e2e-success.txt

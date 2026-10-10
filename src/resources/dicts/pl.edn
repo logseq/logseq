@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Eksportuje do pliku .transit w celu wysłania do nas do debugowania. Wszelkie wrażliwe dane zostaną usunięte z wyeksportowanego pliku."
  :export/debug-transit-file "Eksportuj plik debug transit"
  :export/edn-desc "Eksportuje do czytelnego i edytowalnego pliku .edn. Nie polegaj na tym jako głównej kopii zapasowej."
- :export/error-unexpected "Podczas eksportu doszło do nieoczekiwanego błędu. Szczegóły znajdziesz w konsoli JavaScript."
  :export/exporting "Eksportowanie"
  :export/finalizing "Finalizowanie"
  :export/format-text "Tekst"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Separator"
  :sidebar.right/toggle "Przełącz prawy panel"
 
- :storage/invalid-data-writing "Nieprawidłowy zapis danych."
  :storage/sqlitedb-error "Błąd SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Błąd importu SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Błąd zapisu bazy danych SQLiteDB: {1}"

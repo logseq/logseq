@@ -635,7 +635,6 @@
  :export/debug-transit-desc "Експортує у файл .transit для надсилання нам для налагодження. Будь-які конфіденційні дані будуть видалені з експортованого файлу."
  :export/debug-transit-file "Експортувати файл debug transit"
  :export/edn-desc "Експортує у читабельний та редагований файл .edn. Не покладайтеся на це як на основну резервну копію."
- :export/error-unexpected "Під час експорту сталася непередбачена помилка. Деталі див. у консолі JavaScript."
  :export/exporting "Експортування"
  :export/finalizing "Завершення"
  :export/format-text "Текст"
@@ -1814,7 +1813,6 @@
  :sidebar.right/resize-handle "Обробник зміни розміру правої бічної панелі"
  :sidebar.right/toggle "Перемкнути праву панель"
 
- :storage/invalid-data-writing "Помилка запису некоректних даних у базу даних!"
  :storage/sqlitedb-error "Помилка SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Помилка імпорту SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Помилка збереження SQLiteDB: {1}"

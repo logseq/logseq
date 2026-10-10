@@ -43,7 +43,7 @@
         ;; existing tables before deciding this is a fatal error.
         (try
           (common/sql-exec (.-sql self) "select 1 from kvs limit 1")
-          (common/sql-exec (.-sql self) "select 1 from tx_log limit 1")
+          (common/sql-exec (.-sql self) "select t, tx, outliner_op, tx_id from tx_log limit 1")
           (common/sql-exec (.-sql self) "select 1 from sync_meta limit 1")
           (catch :default _
             (throw e)))))
@@ -329,6 +329,20 @@
                  missing-uuid (conj missing-uuid))))
       (-> result distinct vec))))
 
+(defn- retryable-tx-error?
+  [error]
+  (loop [current-error error]
+    (if current-error
+      (let [data (ex-data current-error)]
+        ;; Data errors need repair, not repeated uploads. Preserve unknown
+        ;; failures in the outbox because storage can fail after any write.
+        (if (or (:error data)
+                (contains? data :errors)
+                (= :db-sync/empty-delete-tx (:type data)))
+          false
+          (recur (ex-cause current-error))))
+      true)))
+
 (def ^:private delete-outliner-ops
   #{:delete-blocks
     :delete-page})
@@ -477,11 +491,13 @@
     (import-snapshot-rows! sql "kvs" rows)))
 
 (defn- apply-client-tx-meta
-  [request-context outliner-op]
+  [request-context {:keys [outliner-op tx-id]}]
   (cond-> (merge {:op :apply-client-tx}
                  (request-context->tx-meta request-context))
     outliner-op
     (assoc :outliner-op outliner-op)
+    tx-id
+    (assoc :tx-id tx-id)
     (= outliner-op :db-migrate)
     (assoc :db-migrate? true
            :skip-validate-db? true)))
@@ -489,7 +505,7 @@
 (defn- apply-large-tx-entry!
   [self conn tx-data {:keys [tx-id outliner-op]} request-context]
   (let [db-before @conn
-        tx-meta (apply-client-tx-meta request-context outliner-op)
+        tx-meta (apply-client-tx-meta request-context {:outliner-op outliner-op :tx-id tx-id})
         sql (when self (.-sql ^js self))
         prev-checksum (when sql (storage/get-checksum sql))
         logical-tx-data (volatile! [])
@@ -505,34 +521,30 @@
         (d/listen! conn ::large-logical-tx-checksum
                    (fn [{:keys [tx-data]}]
                      (vswap! logical-tx-data into tx-data))))
-      ((if sql
-         #(storage/with-sql-transaction! sql %)
-         (fn [f] (f)))
-       (fn []
-         (try
-           (reduce-ordered-tx-chunks
-            db-before
-            (fn [_ chunk]
-              (vswap! chunk-count inc)
-              (ldb/transact! conn
-                             chunk
-                             (cond-> tx-meta
-                               sql
-                               (assoc :db-sync/skip-checksum-update? true)))
-              nil)
-            nil
-            tx-data)
-           (when sql
-             (storage/set-checksum!
-              sql
-              (sync-checksum/update-checksum
-               prev-checksum
-               {:db-before db-before
-                :db-after @conn
-                :tx-data @logical-tx-data})))
-           (finally
-             (when sql
-               (d/unlisten! conn ::large-logical-tx-checksum))))))
+      (try
+        (reduce-ordered-tx-chunks
+         db-before
+         (fn [_ chunk]
+           (vswap! chunk-count inc)
+           (ldb/transact! conn
+                          chunk
+                          (cond-> tx-meta
+                            sql
+                            (assoc :db-sync/skip-checksum-update? true)))
+           nil)
+         nil
+         tx-data)
+        (when sql
+          (storage/set-checksum!
+           sql
+           (sync-checksum/update-checksum
+            prev-checksum
+            {:db-before db-before
+             :db-after @conn
+             :tx-data @logical-tx-data})))
+        (finally
+          (when sql
+            (d/unlisten! conn ::large-logical-tx-checksum))))
       (log/info :db-sync/apply-large-tx-entry-done
                 {:graph-id (:graph-id request-context)
                  :tx-id tx-id
@@ -547,12 +559,15 @@
                    :outliner-op outliner-op
                    :tx-count (count tx-data)
                    :chunk-count @chunk-count})
-        (reset! conn db-before)
         (throw error)))))
 
 (defn- sanitize-tx-entry
   [db {:keys [tx outliner-op] :as tx-entry}]
-  (let [input-tx-data (protocol/transit->tx tx)
+  (let [input-tx-data (try
+                        (protocol/transit->tx tx)
+                        (catch :default error
+                          (throw (ex-info "Invalid transaction payload"
+                                          {:error :db-sync/invalid-field} error))))
         tx-data (tx-sanitize/sanitize-tx db
                                          input-tx-data
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
@@ -564,41 +579,56 @@
      :tx-data tx-data
      :tx-entry tx-entry}))
 
+(defn- confirm-empty-tx!
+  [sql {:keys [tx-id outliner-op]}]
+  (when tx-id
+    (let [new-t (inc (storage/get-t sql))]
+      (storage/append-tx! sql new-t (protocol/tx->transit []) (common/now-ms) outliner-op tx-id)
+      (storage/set-t! sql new-t)
+      true)))
+
 (defn- apply-tx-entry!
   ([conn tx-entry]
    (apply-tx-entry! nil conn tx-entry nil))
   ([self conn {:keys [outliner-op] :as tx-entry} request-context]
-   (let [sanitized (sanitize-tx-entry @conn tx-entry)
-         input-tx-data (:input-tx-data sanitized)
-         tx-data (:tx-data sanitized)
-         sanitized-entry (:tx-entry sanitized)]
-     (if (seq tx-data)
-       (try
-         (if (and (not= outliner-op :db-migrate)
-                  (large-tx? tx-data))
-           (apply-large-tx-entry! self conn tx-data sanitized-entry request-context)
+   (let [db-before @conn
+         sql (when self (.-sql ^js self))
+         apply-entry (fn []
+                       (let [{:keys [input-tx-data tx-data]} (sanitize-tx-entry db-before tx-entry)
+                             t-before (when sql (storage/get-t sql))
+                             applied? (if (seq tx-data)
+                                        (if (and (not= outliner-op :db-migrate)
+                                                 (large-tx? tx-data))
+                                          (apply-large-tx-entry! self conn tx-data tx-entry request-context)
+                                          (do
+                                            (ldb/transact! conn tx-data (apply-client-tx-meta request-context tx-entry))
+                                            true))
+                                        (if (and (contains? delete-outliner-ops outliner-op)
+                                                 (empty? input-tx-data))
+                                          (throw (ex-info "delete tx input is empty"
+                                                          {:type :db-sync/empty-delete-tx
+                                                           :outliner-op outliner-op}))
+                                          false))]
+                         ;; A successful no-op also needs a durable confirmation after a lost response.
+                         (if (and sql (= t-before (storage/get-t sql)))
+                           (boolean (confirm-empty-tx! sql tx-entry))
+                           applied?)))]
+     (try
+       (if sql
+         (storage/with-sql-transaction! sql apply-entry)
+         (apply-entry))
+       (catch :default e
+         (reset! conn db-before)
+         ;; Rebase/fix txs are inferred from history and can become stale after remote deletes.
+         (if (and (contains? #{:rebase :fix} outliner-op)
+                  (= :entity-id/missing (:error (ex-data e))))
            (do
-             (ldb/transact! conn tx-data (apply-client-tx-meta request-context outliner-op))
-             true))
-         (catch :default e
-           ;; Rebase/fix txs are inferred from local history and can become stale
-           ;; when concurrent remote edits remove referenced entities before upload.
-           ;; Treat stale :entity-id/missing rebases/fixes as no-op so sync can continue.
-           (if (and (contains? #{:rebase :fix} outliner-op)
-                    (= :entity-id/missing (:error (ex-data e))))
-             (do
-               (log/warn :db-sync/drop-stale-rebase-tx
-                         {:outliner-op outliner-op
-                          :tx-data tx-data
-                          :error (str e)})
-               false)
-             (throw e))))
-       (if (and (contains? delete-outliner-ops outliner-op)
-                (empty? input-tx-data))
-         (throw (ex-info "delete tx input is empty"
-                         {:type :db-sync/empty-delete-tx
-                          :outliner-op outliner-op}))
-         false)))))
+             (log/warn :db-sync/drop-stale-rebase-tx
+                       {:outliner-op outliner-op :tx (:tx tx-entry) :error (str e)})
+             (if sql
+               (boolean (storage/with-sql-transaction! sql #(confirm-empty-tx! sql tx-entry)))
+               false))
+           (throw e)))))))
 
 (defn- apply-tx! [^js self tx-entries request-context]
   (let [sql (.-sql self)]
@@ -673,6 +703,7 @@
                  (ws/broadcast! self sender {:type "changed" :t new-t}))
                (cond-> {:type "tx/reject"
                         :reason "db transact failed"
+                        :retryable (retryable-tx-error? e)
                         :error-detail (str e)
                         :t new-t}
                  (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)

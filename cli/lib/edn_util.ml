@@ -1,11 +1,17 @@
 let any = Melange_edn_melange.any
 let keyword_t value = Melange_edn_melange.keyword value
 
+(* Melange strings carry UTF-8 bytes as chars when text arrives via
+   byte-level sources (binary payloads, \\u escape decodes). Normalize
+   through Ustring so every string-like value is unicode for display
+   and comparison. *)
+let normalize_text value = Ustring.(of_string value |> to_string)
+
 let keyword_to_string
     (value : Melange_edn_melange.keyword Melange_edn_melange.t) =
   match value with
   | Melange_edn_melange.Keyword value ->
-      Melange_edn_melange.keyword_to_string value
+      normalize_text (Melange_edn_melange.keyword_to_string value)
 
 let keyword_any value = any (keyword_t value)
 let list_t values = Melange_edn_melange.list values
@@ -42,7 +48,9 @@ let map_vec fields = any (map_t_vec fields)
 let map_t_rev_vec fields = map_t_vec (Vec.rev fields)
 let map_rev_vec fields = any (map_t_rev_vec fields)
 let vec_of_array = Rrbvec.of_array
-let keyword_text value = Melange_edn_melange.keyword_to_string value
+
+let keyword_text value =
+  normalize_text (Melange_edn_melange.keyword_to_string value)
 
 let int64_to_int_opt value =
   let int_value = Int64.to_int value in
@@ -75,7 +83,8 @@ let as_string value =
     (raw_string value)
 
 let as_symbol = function
-  | Melange_edn_melange.Any (Melange_edn_melange.Symbol value) -> Some value
+  | Melange_edn_melange.Any (Melange_edn_melange.Symbol value) ->
+      Some (normalize_text value)
   | _ -> None
 
 let as_keyword = function
@@ -148,6 +157,13 @@ let as_seq value =
   | Some values, _, _ | _, Some values, _ | _, _, Some values -> Some values
   | _ -> None
 
+(* :find coll results arrive as rows of single-element tuples;
+   unwrap one level to reach the value itself. *)
+let unwrap_row value =
+  match as_seq value with
+  | Some items when Vec.length items = 1 -> Vec.peek_front items
+  | _ -> value
+
 let as_string_like value =
   match (as_string value, as_keyword value, as_uuid value) with
   | Some value, _, _ | _, Some value, _ | _, _, Some value -> Some value
@@ -187,3 +203,28 @@ let remove key raw =
       map_vec
         (fields |> Vec.filter (fun (field, _) -> not (key_matches key field)))
   | None -> raw
+
+(* Decode UTF-8 byte-chars in every text leaf of an EDN value.
+   transit/bytes payloads are binary — left untouched. *)
+let normalize_strings value =
+  let module E = Melange_edn_melange in
+  let rec norm (E.Any v : E.any) : E.any =
+    match v with
+    | E.String s -> E.any (E.string (normalize_text s))
+    | E.Symbol s -> E.any (E.symbol (normalize_text s))
+    | E.Keyword kv ->
+        E.any (E.keyword (normalize_text (E.keyword_to_string kv)))
+    | E.List items -> E.any (E.list (List.map norm (Array.to_list items)))
+    | E.Vector items -> E.any (E.vector (List.map norm (Array.to_list items)))
+    | E.Set items -> E.any (E.set (List.map norm (Array.to_list items)))
+    | E.Map fields ->
+        E.any
+          (E.map
+             (List.map (fun (k, v') -> (norm k, norm v')) (Array.to_list fields)))
+    | E.Tagged ("transit/bytes", _) -> E.Any v
+    | E.Tagged (tag, item) -> E.any (E.tagged (normalize_text tag) (norm item))
+    | _ -> E.Any v
+  in
+  norm value
+
+let of_edn_string text = normalize_strings (Melange_edn_melange.of_edn_string text)

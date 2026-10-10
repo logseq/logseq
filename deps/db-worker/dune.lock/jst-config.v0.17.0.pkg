@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_assert dune dune-configurator)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/jst-config/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=2cf345e33bed0ee4c325667e77dfc5bee8f12afd56318b7c9acf81ec875ecf6e)))

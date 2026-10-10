@@ -1,0 +1,19 @@
+(version 5.4.2)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml dune-compiledb dune-configurator conf-sqlite3)))
+
+(source
+ (fetch
+  (url
+   https://github.com/mmottl/sqlite3-ocaml/releases/download/5.4.2/sqlite3-5.4.2.tbz)
+  (checksum
+   sha512=92835354d7343ee8c26e574e555b1e83b936f2ccf41e53a64f4b29edb53d38254dd7e570e95ee0b11bf808ad16d78a4b3ba393fc48d0ff2ed51f0e86913fbc07)))

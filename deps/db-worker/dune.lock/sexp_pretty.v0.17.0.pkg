@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_base sexplib dune re)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/sexp_pretty/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=48caa552235e331f349a70580e756cea0d8335d9cccc46f3fe47142e04bad2f8)))

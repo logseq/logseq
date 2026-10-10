@@ -128,7 +128,7 @@
                               :in $ ?ref-id
                               :where [?e :logseq.property/asset ?ref-id]]
                             ref-id)]
-    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))
+    (let [highlights (some->> data (map first) (map #(:logseq.property.pdf/hl-value %)) (vec))
           extra {:page (:logseq.property.asset/last-visit-page block)}]
       {:highlights highlights
        :extra (when (some #(not (nil? (% extra))) [:page]) extra)})))

@@ -3922,7 +3922,13 @@
         (root-block? config block)
         (and (or (entity/class? block) (entity/property? block))
              (:page-title? config)))
-    temp-collapsed?
+    ;; A list-view row mounts a whole page tree; without a collapsed
+    ;; default every visible row cascades [:children] + per-child
+    ;; [:block] loads on scroll. Default collapsed unless the user
+    ;; explicitly expanded this block.
+    (if (and (:list-view? config) (nil? temp-collapsed?))
+      true
+      temp-collapsed?)
 
     :else
     (if (some? temp-collapsed?)
@@ -4487,7 +4493,9 @@
 (defn- same-block-revision?
   [previous-block next-block]
   (and (= (:block/uuid previous-block) (:block/uuid next-block))
-       (= (:block/tx-id previous-block) (:block/tx-id next-block))))
+       (= (:block/tx-id previous-block) (:block/tx-id next-block))
+       (= (:block.temp/order-list-index previous-block)
+          (:block.temp/order-list-index next-block))))
 
 (hsx/defc block-container-inner
   [container-state repo config* block opts]

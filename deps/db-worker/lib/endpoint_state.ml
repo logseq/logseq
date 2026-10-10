@@ -1,0 +1,223 @@
+(* Repo-less state endpoints (playbook group a, worker-state side):
+   sync-app-state, set-context, update-thread-atom, ui-request
+   resolution, mobile-logs, db-sync config. *)
+
+open Db_worker_effect
+
+let pure' v = pure v
+
+let ok_map ok = Wire.Map [ (Wire.keyword "ok", Wire.Bool ok) ]
+
+(* :thread-api/sync-app-state [new-state] — merge into *state; log
+   an error when the map explicitly carries :git/current-repo nil. *)
+let () =
+  Dispatcher.register "thread-api/sync-app-state" (fun args ->
+      (match args with
+       | (Wire.Map _ as m) :: _ ->
+           Worker_state.merge_state m;
+           (match Wire.get "git/current-repo" m with
+            | Some Wire.Nil ->
+                Worker_log.error
+                  "sync-app-state: :git/current-repo is nil" []
+            | _ -> ())
+       | _ -> ());
+      pure' Wire.nil)
+
+(* :thread-api/set-context [context] — merge into :worker/context. *)
+let () =
+  Dispatcher.register "thread-api/set-context" (fun args ->
+      (match args with
+       | t :: _ -> (
+           Worker_state.merge_context t;
+           (* cljs OUTLINER-PERF-LOGGING is a goog-define baked into dev/e2e
+              app builds; its runtime mirror here is the :dev? flag the
+              frontend ships in the worker context (DEV-RELEASE). *)
+           match Cljs_map.get t "dev?" with
+           | Some (Wire.Bool true) -> Sync_state.outliner_perf_logging := true
+           | _ -> ())
+       | [] -> ());
+      pure' Wire.nil)
+
+(* :thread-api/set-ui-state [path value] — persist_db/browser.cljs
+   def-thread-api is a main-thread endpoint (state/set-state!), but the
+   name is also remoteInvoke'd at the worker from
+   db-core/set-import-ui-state!; registering it here applies the same
+   set-state! semantics to the worker's app-state mirror. *)
+let () =
+  Dispatcher.register "thread-api/set-ui-state" (fun args ->
+      (match args with
+       | path :: value :: _ -> Worker_state.set_state_at_path path value
+       | _ -> ());
+      pure' Wire.nil)
+
+(* :thread-api/update-thread-atom [atom-key new-value] *)
+let () =
+  Dispatcher.register "thread-api/update-thread-atom" (fun args ->
+      match args with
+      | key_t :: v :: _ -> (
+          (* cljs (assert (and (keyword? atom-key) (identical?
+             "thread-atom" (namespace atom-key)))) *)
+          match key_t with
+          | Wire.Keyword s
+            when String.length s > 12
+                 && String.sub s 0 12 = "thread-atom/" -> (
+              let key = Ds_wire.wire_key key_t in
+              (* cljs (when-let [a (get @*state atom-key)] ...) — an
+                 unregistered atom key is a no-op, not an error. *)
+              match Worker_state.thread_atom key with
+              | Some _ ->
+                  Worker_state.update_thread_atom key v;
+                  pure' Wire.nil
+              | None -> pure' Wire.nil)
+          | _ -> assert false)
+      | _ -> invalid_arg "update-thread-atom expects (atom-key value)")
+
+(* :thread-api/resolve-ui-request [request-id result] *)
+let () =
+  Dispatcher.register "thread-api/resolve-ui-request" (fun args ->
+      match args with
+      | id_t :: result :: _ ->
+          let id = Ds_wire.wire_key id_t in
+          (match Worker_state.ui_request_take id with
+           | Some (resolver, _) ->
+               Db_worker_effect.wakeup resolver (Ok result);
+               pure' (ok_map true)
+           | None ->
+               pure'
+                 (Wire.Map
+                    [
+                      (Wire.keyword "ok", Wire.Bool false);
+                      (Wire.keyword "reason", Wire.keyword "request-not-found");
+                      (Wire.keyword "request-id", id_t);
+                    ]))
+      | _ -> invalid_arg "resolve-ui-request expects (request-id result)")
+
+(* :thread-api/reject-ui-request [request-id error] — reject with
+   normalized {:code :ui-request-rejected :request-id :action :data}. *)
+let () =
+  Dispatcher.register "thread-api/reject-ui-request" (fun args ->
+      match args with
+      | id_t :: error :: _ ->
+          let id = Ds_wire.wire_key id_t in
+          (match Worker_state.ui_request_take id with
+           | Some (resolver, action) ->
+               (* cljs reject-request! uses the stored request's :action *)
+               let err =
+                 Wire.Map
+                   [
+                     (Wire.keyword "code", Wire.keyword "ui-request-rejected");
+                     (Wire.keyword "request-id", id_t);
+                     (Wire.keyword "action", action);
+                     (Wire.keyword "data", error);
+                   ]
+               in
+               Db_worker_effect.wakeup resolver (Error err);
+               pure' (ok_map true)
+           | None ->
+               pure'
+                 (Wire.Map
+                    [
+                      (Wire.keyword "ok", Wire.Bool false);
+                      (Wire.keyword "reason", Wire.keyword "request-not-found");
+                      (Wire.keyword "request-id", id_t);
+                    ]))
+      | _ -> invalid_arg "reject-ui-request expects (request-id error)")
+
+(* :thread-api/cancel-ui-requests [context] — reject all in-flight. *)
+let cancel_ui_requests context =
+  let ids = Worker_state.ui_request_ids () in
+  List.iter
+    (fun id ->
+      match Worker_state.ui_request_take id with
+      | Some (resolver, action) ->
+          Db_worker_effect.wakeup resolver
+            (Error
+               (Wire.Map
+                  [
+                    (Wire.keyword "code", Wire.keyword "ui-request-cancelled");
+                    (Wire.keyword "request-id", Wire.String id);
+                    (Wire.keyword "action", action);
+                    (Wire.keyword "context", context);
+                  ]))
+      | None -> ())
+    ids;
+  List.length ids
+
+let () =
+  Dispatcher.register "thread-api/cancel-ui-requests" (fun args ->
+      let context = match args with t :: _ -> t | [] -> Wire.Nil in
+      let n = cancel_ui_requests context in
+      pure'
+        (Wire.Map [ (Wire.keyword "ok", Wire.Bool true); (Wire.keyword "cancelled", Wire.Int n) ]))
+
+(* :thread-api/mobile-logs [] — returns @*log wholesale (the ring
+   itself enforces the >1000 → 800 trim). *)
+let () =
+  Dispatcher.register "thread-api/mobile-logs" (fun _ ->
+      let level_str = function
+        | Worker_log.Trace -> "trace"
+        | Worker_log.Debug -> "debug"
+        | Worker_log.Info -> "info"
+        | Worker_log.Warn -> "warn"
+        | Worker_log.Error -> "error"
+      in
+      let entries = Worker_log.entries () in
+      pure'
+        (Wire.Array
+           (List.map
+              (fun (e : Worker_log.entry) ->
+                 Wire.Map
+                   [
+                     (Wire.keyword "level", Wire.keyword (level_str e.level));
+                     (Wire.keyword "message", Wire.String e.message);
+                     ( Wire.keyword "data",
+                       Wire.Map
+                         (List.map (fun (k, v) -> (Wire.String k, Wire.String v)) e.fields) );
+                     (Wire.keyword "time-ms", Wire.Float (Time.epoch_ms_to_float e.time_ms));
+                   ])
+              entries)))
+
+(* :thread-api/get|set-db-sync-config — registered once in
+   endpoint_sync.ml (sanitized via Sync_state.non_auth_db_sync_config). *)
+
+(* :thread-api/undo-redo-* — undo_redo.ml state machine *)
+(* cljs keys the undo/redo stacks by repo where nil is a valid map
+   key — the UI calls these endpoints with (get-current-repo), which is
+   nil before any graph opens. "" is not a valid graph name, so it
+   stands in for the cljs nil key. *)
+let repo_arg_u args =
+  match List.nth_opt args 0 with
+  | Some (Wire.String s) -> s
+  | Some Wire.Nil | None -> ""
+  | _ -> "" (* cljs: conn lookup misses on any non-string arg *)
+
+let () =
+  Dispatcher.register "thread-api/undo-redo-set-pending-editor-info"
+    (fun args ->
+       let repo = repo_arg_u args in
+       Undo_redo.set_pending_editor_info repo (List.nth_opt args 1);
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-record-editor-info"
+    (fun args ->
+       let repo = repo_arg_u args in
+       (match List.nth_opt args 1 with
+        | Some info -> Undo_redo.record_editor_info repo info
+        | None -> ());
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-record-ui-state"
+    (fun args ->
+       let repo = repo_arg_u args in
+       (match List.nth_opt args 1 with
+        | Some s -> Undo_redo.record_ui_state repo s
+        | None -> ());
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-undo" (fun args ->
+      Db_worker_effect.pure (Undo_redo.undo (repo_arg_u args)));
+  Dispatcher.register "thread-api/undo-redo-redo" (fun args ->
+      Db_worker_effect.pure (Undo_redo.redo (repo_arg_u args)));
+  Dispatcher.register "thread-api/undo-redo-clear-history" (fun args ->
+      Undo_redo.clear_history (repo_arg_u args);
+      Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-get-debug-state" (fun args ->
+      Db_worker_effect.pure
+        (Undo_redo.get_debug_state (repo_arg_u args)))

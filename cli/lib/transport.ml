@@ -26,7 +26,7 @@ let strip_prefix prefix value =
   else value
 
 let transit_keyword_name keyword = strip_prefix ":" keyword
-let value_of_transit = T.to_edn
+let value_of_transit value = Edn_util.normalize_strings (T.to_edn value)
 let transit_json_of_value value = T.to_string (T.of_edn value)
 let value_of_transit_string text = T.of_string text |> value_of_transit
 let edn_of_value value = value
@@ -423,7 +423,7 @@ let read_input ~format ~path =
       match format with
       | "edn" ->
           let content = read_file_text path in
-          Ok (E.of_edn_string content |> value_of_edn)
+          Ok (Edn_util.of_edn_string content |> value_of_edn)
       | "db" | "sqlite" -> Ok (Edn_util.bytes (read_file_binary path))
       | _ -> Error (unsupported_input_format format)
     in

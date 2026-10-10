@@ -1,0 +1,15 @@
+(version dev)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms
+  (ocaml melange)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/rcmerci/humanize.git#747879af704dff4dd1897bc0f9a53a361071371c)))
+
+(dev)

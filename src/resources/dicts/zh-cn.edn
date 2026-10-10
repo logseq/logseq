@@ -636,7 +636,6 @@
  :export/debug-transit-desc "导出为 .transit 文件以供调试。导出文件中的敏感数据将被移除。"
  :export/debug-transit-file "导出调试 transit 文件"
  :export/edn-desc "导出为可读、可编辑的 .edn 文件。不要将此作为主要备份。"
- :export/error-unexpected "导出期间发生意外错误。详情请查看 JavaScript 控制台。"
  :export/exporting "正在导出"
  :export/finalizing "正在完成"
  :export/format-text "文本"
@@ -1824,7 +1823,6 @@
  :sidebar.right/resize-handle "调整右侧边栏大小"
  :sidebar.right/toggle "切换右侧边栏"
 
- :storage/invalid-data-writing "无效数据写入。"
  :storage/sqlitedb-error "SQLiteDB 错误：{1}"
  :storage/sqlitedb-import-error "SQLiteDB 导入错误：{1}"
  :storage/sqlitedb-save-error "SQLiteDB 保存错误：{1}"

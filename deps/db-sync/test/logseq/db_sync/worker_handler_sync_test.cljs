@@ -39,6 +39,7 @@
   [f]
   (let [db (new sqlite ":memory:" nil)
         sql #js {:_db db
+                 :transaction (fn [f] ((.transaction db f)))
                  :exec (fn [sql-str & args]
                          (let [stmt (.prepare db sql-str)]
                            (if (select-sql? sql-str)
@@ -56,6 +57,7 @@
 (defn- with-memory-sql-async [f]
   (let [db (new sqlite ":memory:" nil)
         sql #js {:_db db
+                 :transaction (fn [f] ((.transaction db f)))
                  :exec (fn [sql-str & args]
                          (let [stmt (.prepare db sql-str)]
                            (if (select-sql? sql-str)
@@ -64,6 +66,146 @@
                  :close (fn [] (.close db))}]
     (-> (f sql)
         (p/finally #(.close sql)))))
+
+(deftest rejected-entry-rolls-back-graph-and-journal-test
+  (doseq [[failure-sql meta-key] [["insert into kvs" nil] ["insert into tx_log" nil]
+                                ["insert into sync_meta" "t"] ["insert into sync_meta" "checksum"]]]
+    (testing (str "failure after " failure-sql " leaves only the accepted prefix")
+      (with-memory-sql
+        (fn [sql]
+          (let [conn (storage/open-conn sql)
+                self #js {:sql sql :conn conn :schema-ready true}
+                first-uuid (random-uuid)
+                failed-uuid (random-uuid)
+                first-id (random-uuid)
+                failed-id (random-uuid)
+                entry (fn [id u title]
+                        {:tx-id id :outliner-op :save-block
+                         :tx (protocol/tx->transit [{:block/uuid u :block/title title}])})
+                accepted (entry first-id first-uuid "accepted user content")
+                rejected (entry failed-id failed-uuid "retryable user content")
+                original-exec (.-exec sql)
+                armed? (atom false)
+                _ (d/listen! conn ::arm-failure (fn [_] (reset! armed? true)))
+                _ (set! (.-exec sql)
+                        (fn [query & args]
+                          (let [result (.apply original-exec sql (to-array (cons query args)))]
+                            (when (and @armed? (string/includes? query failure-sql)
+                                       (or (nil? meta-key) (= meta-key (first args))))
+                              (throw (js/Error. "Injected storage failure after write")))
+                            result)))
+                response (try
+                           (with-redefs [ws/broadcast! (fn [& _] nil)]
+                             (sync-handler/handle-tx-batch! self nil [accepted rejected] 0))
+                           (finally
+                             (set! (.-exec sql) original-exec)
+                             (d/unlisten! conn ::arm-failure)))]
+            (is (= "tx/reject" (:type response)))
+            (is (true? (:retryable response)))
+            (is (= [first-id] (:success-tx-ids response)))
+            (is (= failed-id (:failed-tx-id response)))
+            (is (= 1 (:t response)))
+            (is (nil? (d/entity @conn [:block/uuid failed-uuid])))
+            (is (nil? (d/entity @(storage/open-conn sql) [:block/uuid failed-uuid])))
+            (is (= 1 (count (storage/fetch-tx-since sql 0))))
+            (is (= (storage/get-checksum sql) (sync-checksum/recompute-checksum @conn)))
+            (let [retry (with-redefs [ws/broadcast! (fn [& _] nil)]
+                          (sync-handler/handle-tx-batch! self nil [rejected] 1))]
+              (is (= "tx/batch/ok" (:type retry)))
+              (is (= "retryable user content"
+                     (:block/title (d/entity @(storage/open-conn sql) [:block/uuid failed-uuid])))))))))))
+
+(deftest missing-entity-and-invalid-data-rejections-are-not-retryable-test
+  (with-memory-sql
+    (fn [sql]
+      (let [conn (storage/open-conn sql)
+            self #js {:sql sql :conn conn :schema-ready true}]
+        (doseq [entry [{:tx-id (random-uuid) :outliner-op :save-block :tx "not valid Transit"}
+                      {:tx-id (random-uuid) :outliner-op :save-block
+                       :tx (protocol/tx->transit
+                            [[:db/add [:block/uuid (random-uuid)] :block/title "missing edit"]])}
+                      {:tx-id (random-uuid) :outliner-op :delete-blocks
+                       :tx (protocol/tx->transit [])}]]
+          (let [response (sync-handler/handle-tx-batch! self nil [entry] 0)]
+            (is (= "tx/reject" (:type response)))
+            (is (false? (:retryable response)))
+            (is (= 0 (:t response)))))))))
+
+(deftest rejection-after-commit-is-retryable-and-valid-test
+  (with-memory-sql
+    (fn [sql]
+      (let [conn (storage/open-conn sql)
+            self #js {:sql sql :conn conn :schema-ready true}
+            block-uuid (random-uuid)
+            entry {:tx-id (random-uuid) :outliner-op :save-block
+                   :tx (protocol/tx->transit [{:block/uuid block-uuid
+                                             :block/title "committed before response failed"}])}
+            reads (atom 0)
+            response (with-redefs [ws/broadcast! (fn [& _] nil)
+                                  sync-handler/current-checksum
+                                  (fn [_]
+                                    (if (= 1 (swap! reads inc))
+                                      (throw (js/Error. "Injected checksum read failure"))
+                                      (storage/get-checksum sql)))]
+                       (sync-handler/handle-tx-batch! self nil [entry] 0))]
+        (is (= "tx/reject" (:type response)))
+        (is (true? (:retryable response)))
+        (is (some? (ws/coerce-ws-server-message response)))
+        (is (= 1 (:t response)))
+        (is (= "committed before response failed"
+               (:block/title (d/entity @(storage/open-conn sql) [:block/uuid block-uuid]))))))))
+
+(deftest journal-retains-client-tx-id-after-reopening-test
+  (with-memory-sql
+    (fn [sql]
+      (let [conn (storage/open-conn sql)
+            self #js {:sql sql :conn conn :schema-ready true}
+            tx-id (random-uuid)
+            entry {:tx-id tx-id :outliner-op :save-block
+                   :tx (protocol/tx->transit [{:block/uuid (random-uuid) :block/title "user content"}])}]
+        (with-redefs [ws/broadcast! (fn [& _] nil)]
+          (is (= "tx/batch/ok" (:type (sync-handler/handle-tx-batch! self nil [entry] 0)))))
+        (set! (.-conn self) (storage/open-conn sql))
+        (let [response (sync-handler/pull-response self 0)]
+          (is (= tx-id (get-in response [:txs 0 :tx-id])))
+          (is (some? (ws/coerce-ws-server-message response))))))))
+
+(deftest accepted-no-op-is-confirmed-by-journal-test
+  (with-memory-sql
+    (fn [sql]
+      (let [conn (storage/open-conn sql)
+            self #js {:sql sql :conn conn :schema-ready true}
+            tx-id (random-uuid)
+            entry {:tx-id tx-id :outliner-op :delete-blocks
+                   :tx (protocol/tx->transit [[:db/retractEntity [:block/uuid (random-uuid)]]])}
+            response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                       (sync-handler/handle-tx-batch! self nil [entry] 0))]
+        (is (= "tx/batch/ok" (:type response)))
+        (is (= 1 (:t response)))
+        (is (= [{:t 1 :tx (protocol/tx->transit []) :outliner-op :delete-blocks :tx-id tx-id}]
+               (:txs (sync-handler/pull-response self 0))))))))
+
+(deftest failed-journal-migration-does-not-mark-schema-ready-test
+  (with-memory-sql
+    (fn [sql]
+      (common/sql-exec sql "create table kvs (addr INTEGER primary key, content TEXT, addresses JSON)")
+      (common/sql-exec sql "create table sync_meta (key TEXT primary key, value TEXT)")
+      (common/sql-exec sql "create table tx_log (t INTEGER primary key, tx TEXT not null, created_at INTEGER, outliner_op TEXT)")
+      (let [self #js {:sql sql :schema-ready false}
+            original-exec (.-exec sql)
+            injected-error (js/Error. "Injected migration write failure")]
+        (set! (.-exec sql) (fn [query & args]
+                            (if (= query "alter table tx_log add column tx_id TEXT")
+                              (throw injected-error)
+                              (.apply original-exec sql (to-array (cons query args))))))
+        (let [result (try (sync-handler/t-now self)
+                          :ok
+                          (catch :default error error))]
+          (is (identical? injected-error result))
+          (is (not (true? (.-schema-ready self)))))
+        (set! (.-exec sql) original-exec)
+        (is (= 0 (sync-handler/t-now self)))
+        (is (true? (.-schema-ready self)))))))
 
 (defn- semantic-json-request [path method body]
   (js/Request. (str "http://localhost" path)
@@ -1624,7 +1766,7 @@
                    (is (= 7 (:t body)))
                    (is (= "checksum-ok" (:checksum body)))
                    (is (contains? probe-set "select 1 from kvs limit 1"))
-                   (is (contains? probe-set "select 1 from tx_log limit 1"))
+                   (is (contains? probe-set "select t, tx, outliner_op, tx_id from tx_log limit 1"))
                    (is (contains? probe-set "select 1 from sync_meta limit 1"))))
                (p/then (fn []
                          (done)))
@@ -1962,6 +2104,8 @@
           (is (> @tx-report-count 1))
           (is (= (+ t-before @tx-report-count) (:t response)))
           (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
+          (is (every? #(= (:tx-id tx-entry) (:tx-id %))
+                      (storage/fetch-tx-since sql t-before)))
           (is (= block-count
                   (block-title-prefix-count @conn "large-op-block-"))))))))
 
@@ -2486,9 +2630,9 @@
                                                    (swap! changed-messages conj payload))]
                        (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
         (is (= "tx/batch/ok" (:type response)))
-        (is (= t-before (:t response)))
+        (is (= (inc t-before) (:t response)))
         (is (= checksum-before (:checksum response)))
-        (is (empty? @changed-messages))))))
+        (is (= [(inc t-before)] (mapv :t @changed-messages)))))))
 
 (deftest tx-batch-rejects-empty-delete-input-test
   (testing "an originally empty delete remains invalid"
@@ -2533,10 +2677,10 @@
                      (sync-handler/handle-tx-batch! self nil [stale-delete-entry later-failed-entry] t-before))]
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
-      (is (= t-before (:t response)))
+      (is (= (inc t-before) (:t response)))
       (is (= later-failed-tx-id (:failed-tx-id response)))
       (is (= [stale-delete-tx-id] (:success-tx-ids response)))
-      (is (empty? @changed-messages)))))
+      (is (= [(inc t-before)] (mapv :t @changed-messages))))))
 
 (deftest tx-batch-ignores-empty-rebase-entry-test
   (testing "empty rebase entry is a no-op: no t increment, no tx-log append, no changed broadcast"
@@ -2667,11 +2811,12 @@
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
-      (is (= t-before (:t response)))
+      (is (= (inc t-before) (:t response)))
       (is (nil? (:failed-tx-id response)))
       (is (= checksum-before (storage/get-checksum sql)))
-      (is (empty? (storage/fetch-tx-since sql t-before)))
-      (is (empty? @changed-messages)))))
+      (is (= [{:t (inc t-before) :tx (protocol/tx->transit []) :outliner-op :rebase :tx-id tx-id}]
+             (storage/fetch-tx-since sql t-before)))
+      (is (= [(inc t-before)] (mapv :t @changed-messages))))))
 
 (deftest tx-batch-ignores-stale-fix-with-missing-lookup-entity-test
   (testing "stale fix lookup refs to missing entities are treated as no-op"

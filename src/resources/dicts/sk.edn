@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exportuje do súboru .transit na odoslanie nám na ladenie. Citlivé údaje budú z exportovaného súboru odstránené."
  :export/debug-transit-file "Exportovať ladiaci transit súbor"
  :export/edn-desc "Exportuje do čitateľného a editovateľného súboru .edn. Nespoliehajte sa naň ako na primárnu zálohu."
- :export/error-unexpected "Počas exportu došlo k neočakávanej chybe. Podrobnosti nájdete v konzole JavaScript."
  :export/exporting "Exportovanie"
  :export/finalizing "Dokončovanie"
  :export/format-text "Text"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Nástroj na zmenu veľkosti pravého bočného panelu"
  :sidebar.right/toggle "Prepnúť pravý panel"
 
- :storage/invalid-data-writing "Neplatný zápis dat."
  :storage/sqlitedb-error "Chyba SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Chyba importu SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Chyba pri ukladaní SQLiteDB: {1}"

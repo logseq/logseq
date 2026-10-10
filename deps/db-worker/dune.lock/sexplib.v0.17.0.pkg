@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml parsexp sexplib0 dune num)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/sexplib/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=da863b42b81235fdcf45eb32c04fb8bde22ff446a779cfb6f989730a35103160)))

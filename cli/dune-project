@@ -17,6 +17,25 @@
 
 (documentation https://url/to/documentation)
 
+(pin
+ (url "git+https://github.com/logseq/melange-edn.git#main")
+ (package (name melange-edn-core) (version 0.5.0)))
+(pin
+ (url "git+https://github.com/logseq/melange-edn.git#main")
+ (package (name melange-edn-melange) (version 0.5.0)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git#main")
+ (package (name melange-transit-core) (version 0.1.2)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git#main")
+ (package (name melange-transit-melange) (version 0.1.2)))
+(pin
+ (url "git+https://github.com/rcmerci/humanize.git#main")
+ (package (name humanize)))
+(pin
+ (url "git+https://github.com/logseq/rrbvec.git#main")
+ (package (name rrbvec)))
+
 (package
  (name logseq-cli)
  (synopsis "A short synopsis")

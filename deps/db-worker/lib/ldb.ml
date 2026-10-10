@@ -1,0 +1,1167 @@
+(* Read-side domain helpers — faithful ports of logseq.db and
+   logseq.db.frontend.entity-util / db.common.initial-data used by the
+   group-(b) query endpoints. Each fn cites its cljs source. *)
+
+open Datascript
+
+(* ---------- entity access ---------- *)
+
+(* Test instrumentation: number of entity lookups — mirrors the cljs
+   view_test `with-redefs d/entity` counter. *)
+let entity_lookups = ref 0
+
+(* Test instrumentation: Ident (keyword) lookups only — mirrors the cljs
+   db_test `(when (keyword? eid) (swap! attr-lookups inc))` counter. *)
+let attr_lookups = ref 0
+
+(* Test instrumentation: datoms pulled by get-latest-journals' avet
+   scan — mirrors the cljs db_core_test `wrap-scan` counter that counts
+   realized :block/journal-day datoms. *)
+let journal_day_scans = ref 0
+
+let counted_entity db (r : entity_ref) : entity option =
+  incr entity_lookups;
+  (match r with
+   | Ident _ -> incr attr_lookups
+   | _ -> ());
+  entity db r
+
+let ent_of_id db (id : entity_id) : entity option =
+  counted_entity db (Entity_id id)
+
+let ent_of_ref db (r : entity_ref) : entity option = counted_entity db r
+
+(* cljs entity-attr on a :_reverse attr scans the forward attr's datoms
+   (db/-search) — it never requires :db/index. Use the AVET index when
+   the forward attr is avet-accessible (ref-typed attrs always are):
+   Aevt ~a ~v resolves to a whole-attr prefix scan plus an in-DB value
+   filter, so every _-attr read costs O(#forward datoms). Aevt is kept
+   only as the non-indexed fallback. *)
+let reverse_attr_values (db : db) (id : entity_id) (a : attr) : value list =
+  let fwd = reverse_ref a in
+  let index =
+    if Schema.schema_attr_is_avet_accessible (schema db) fwd then Avet
+    else Aevt
+  in
+  datoms db index ~a:fwd ~v:(Ref id) ()
+  |> Seq.map (fun (d : datom) -> Ref d.e)
+  |> List.of_seq
+  |> List.sort Util.compare_value
+
+(* cljs (get entity attr) over forward and :_reverse attrs. Uses
+   entity_attr_raw: entity_attr would materialize every ref value into a
+   full tx_entity (a whole-entity scan per ref) only for the caller to
+   unwrap :db/id back to a Ref — the raw tx_value already carries it. *)
+let values (e : entity) (a : attr) : value list =
+  if is_reverse_ref a then reverse_attr_values e.db e.id a
+  else
+    match Entity.entity_attr_raw e a with
+    | Some (One_value v) -> [ v ]
+    | Some (Many_values vs) -> vs
+    | _ -> []
+
+let value (e : entity) (a : attr) : value option =
+  match values e a with v :: _ -> Some v | [] -> None
+
+let truthy = function
+  | Some Nil | None -> false
+  | Some (Bool b) -> b
+  | Some _ -> true
+
+let ref_ids (e : entity) (a : attr) : entity_id list =
+  List.filter_map (function Ref id -> Some id | _ -> None) (values e a)
+
+let ref_ent (e : entity) (a : attr) : entity option =
+  match ref_ids e a with
+  | id :: _ -> ent_of_id e.db id
+  | [] -> None
+
+let ref_ents (e : entity) (a : attr) : entity list =
+  List.filter_map (fun id -> ent_of_id e.db id) (ref_ids e a)
+
+let string_value (e : entity) (a : attr) : string option =
+  match value e a with Some (String s) -> Some s | _ -> None
+
+(* cljs untyped get: epoch-ms values read back as the platform's numeric
+   rep (Int/Float) or as Instant — Instant doubles as the int64 scalar
+   rep for values exceeding int32 *)
+let int64_value (e : entity) (a : attr) : int64 option =
+  match value e a with
+  | Some (Int64 n) -> Some n
+  | Some (Float f) -> Some (Int64.of_float f)
+  | Some (Instant ms) -> Some ms
+  | _ -> None
+
+let int_value (e : entity) (a : attr) : int option =
+  Option.map Int64.to_int (int64_value e a)
+
+let ident_of (e : entity) : string option =
+  match value e "db/ident" with Some (Keyword s) -> Some s | _ -> None
+
+(* cljs (get-in (d/schema db) [attr :db/valueType]) OR the attr
+   entity's own :db/valueType (db properties carry schema on their
+   ident entity). *)
+let ref_attr (db : db) (a : attr) : bool =
+  match Schema.schema_attr_by_name (schema db) a with
+  | Some sa when sa.value_type = Some RefType -> true
+  | _ ->
+      (match counted_entity db (Ident a) with
+       | Some e -> value e "db/valueType" = Some (Keyword "db.type/ref")
+       | None -> false)
+
+let many_attr (db : db) (a : attr) : bool =
+  match Schema.schema_attr_by_name (schema db) a with
+  | Some sa -> sa.cardinality = Many
+  | None ->
+      (match counted_entity db (Ident a) with
+       | Some e -> value e "db/cardinality" = Some (Keyword "db.cardinality/many")
+       | None -> false)
+
+(* cljs db/is-attr? :db/unique — static schema OR the attr entity's own
+   :db/unique. *)
+let unique_attr (db : db) (a : attr) : bool =
+  match Schema.schema_attr_by_name (schema db) a with
+  | Some sa -> sa.unique <> None
+  | None ->
+      (match counted_entity db (Ident a) with
+       | Some e -> value e "db/unique" <> None
+       | None -> false)
+
+(* ---------- entity-util predicates ---------- *)
+
+(* entity-util/has-tag? *)
+let has_tag (e : entity) (tag_ident : string) : bool =
+  List.exists
+    (fun v ->
+      match v with
+      | Ref id ->
+          (match ent_of_id e.db id with
+           | Some t -> ident_of t = Some tag_ident
+           | None -> false)
+      | Keyword s -> s = tag_ident
+      | _ -> false)
+    (values e "block/tags")
+
+let internal_page (e : entity) = has_tag e "logseq.class/Page"
+let is_class (e : entity) = has_tag e "logseq.class/Tag"
+let is_property (e : entity) = has_tag e "logseq.class/Property"
+let is_journal (e : entity) = has_tag e "logseq.class/Journal"
+let closed_value (e : entity) = Option.is_some (value e "block/closed-value-property")
+let asset (e : entity) = Option.is_some (value e "logseq.property.asset/type")
+
+let is_page (e : entity) =
+  internal_page e || is_journal e || is_class e || is_property e
+
+(* entity-util/some-parent — first Some (f parent) walking the
+   :block/parent chain, closest parent first; stops on a parentless
+   entity or a cycle. *)
+let some_parent (e : entity) (f : entity -> 'a option) : 'a option =
+  let rec loop (parent : entity option) seen =
+    match parent with
+    | Some p when not (List.mem p.id seen) -> (
+        match f p with
+        | Some _ as r -> r
+        | None -> loop (ref_ent p "block/parent") (p.id :: seen))
+    | _ -> None
+  in
+  loop (ref_ent e "block/parent") []
+
+(* entity-util/hidden? — own flags or any ancestor's, cycle-safe. *)
+let hidden (page : entity) : bool =
+  truthy (value page "logseq.property/hide?")
+  || truthy (value page "logseq.property/deleted-at")
+  || Option.is_some
+       (some_parent page (fun parent ->
+            if
+              truthy (value parent "logseq.property/hide?")
+              || truthy (value parent "logseq.property/deleted-at")
+            then Some ()
+            else None))
+
+(* entity-util/recycled? *)
+let recycled (e : entity) : bool =
+  truthy (value e "logseq.property/deleted-at")
+  || Option.is_some
+       (some_parent e (fun parent ->
+            if truthy (value parent "logseq.property/deleted-at") then Some ()
+            else None))
+
+let built_in (e : entity) = truthy (value e "logseq.property/built-in?")
+
+(* ---------- page name helpers (common-util) ---------- *)
+
+(* common-util/remove-boundary-slashes *)
+let remove_boundary_slashes s =
+  let s = if String.length s > 0 && s.[0] = '/' then String.sub s 1 (String.length s - 1) else s in
+  let n = String.length s in
+  if n > 0 && s.[n - 1] = '/' then String.sub s 0 (n - 1) else s
+
+(* common-util/page-name-sanity: boundary slashes + NFC. *)
+let page_name_sanity s = Unicode.nfc (remove_boundary_slashes s)
+let page_name_sanity_lc s = page_name_sanity (Unicode.lowercase s)
+
+(* ---------- initial-data helpers ---------- *)
+
+(* entity-util/get-pages-by-name *)
+let pages_by_name db page_name : datom list =
+  List.of_seq
+    (datoms db Avet ~a:"block/name" ~v:(String (page_name_sanity_lc page_name)) ())
+
+(* initial-data/get-first-page-by-name — oldest page id. *)
+let first_page_by_name db page_name : entity_id option =
+  pages_by_name db page_name
+  |> List.map (fun d -> d.e)
+  |> List.sort compare
+  |> fun l -> List.nth_opt l 0
+
+(* initial-data/get-first-page-by-title — oldest page? id for :block/title. *)
+let first_page_by_title db page_name : entity_id option =
+  datoms db Avet ~a:"block/title" ~v:(String page_name) ()
+  |> List.of_seq
+  |> List.filter_map (fun d ->
+         match ent_of_id db d.e with
+         | Some e when is_page e -> Some d.e
+         | _ -> None)
+  |> List.sort compare
+  |> fun l -> List.nth_opt l 0
+
+(* cljs parse-uuid accepts the canonical 8-4-4-4-12 hex form. *)
+let is_uuid_string s =
+  let hex c =
+    (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+  in
+  let check i =
+    match i with
+    | 8 | 13 | 18 | 23 -> s.[i] = '-'
+    | _ -> hex s.[i]
+  in
+  let rec loop i = i >= 36 || (check i && loop (i + 1)) in
+  String.length s = 36 && loop 0
+
+(* ---------- journal titles (date-time-util/int->journal-title) ----------
+
+   Formats a :block/journal-day int (yyyymmdd) with a strftime-ish
+   pattern. Tokens: yyyy yy MMMM MMM MM dd do EEEE EEE E; unknown text
+   passes through as literals. *)
+
+let journal_title_of_day (day : int) (fmt : string) : string =
+  (* cljs tf/unparse over the full token set (yyyy yy MMMM MMM MM dd do EEEE
+     EEE E + literals); Date_time_util.formatter_of_date is the port. *)
+  Date_time_util.formatter_of_date fmt
+    (day / 10000, day / 100 mod 100, day mod 100)
+
+let journal_title_format db : string =
+  match counted_entity db (Ident "logseq.class/Journal") with
+  | Some j ->
+      (match value j "logseq.property.journal/title-format" with
+       | Some (String s) -> s
+       | _ -> "MMM do, yyyy")
+  | None -> "MMM do, yyyy"
+
+(* entity-plus/lookup-kv-then-entity :block/raw-title — journal pages
+   get their formatted journal title; everything else falls back to
+   :block/title. *)
+let raw_title db (e : entity) : value option =
+  if is_journal e then
+    (* cljs get-journal-title — int->journal-title returns nil for a
+       journal without :block/journal-day (callers then fall back to
+       :block/title/:block/name themselves). *)
+    match int_value e "block/journal-day" with
+    | Some day -> Some (String (journal_title_of_day day (journal_title_format db)))
+    | None -> None
+  else
+    value e "block/title"
+
+(* ldb/get-page — eid | uuid | page name (case-insensitive). *)
+let get_page db (ref_v : value) : entity option =
+  match ref_v with
+  | Int64 id -> ent_of_id db (Datascript.Util.int64_to_int_exn "entity id" id)
+  | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
+  | String s ->
+      if is_uuid_string s then
+        counted_entity db (Lookup_ref ("block/uuid", Uuid s))
+      else
+        (match first_page_by_name db s with
+         | Some id -> ent_of_id db id
+         | None -> None)
+  | _ -> None
+
+(* ldb/get-case-page — uuid or exact :block/title. *)
+let get_case_page db (ref_v : value) : entity option =
+  match ref_v with
+  | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
+  | String s ->
+      if is_uuid_string s then
+        counted_entity db (Lookup_ref ("block/uuid", Uuid s))
+      else
+        (match first_page_by_title db s with
+         | Some id -> ent_of_id db id
+         | None -> None)
+  | _ -> None
+
+(* ldb/get-journal-page-by-day *)
+let get_journal_page_by_day db (journal_day : int) : entity option =
+  match
+    Seq.uncons (datoms db Avet ~a:"block/journal-day" ~v:(Int64 (Int64.of_int journal_day)) ())
+  with
+  | Some (d, _) -> ent_of_id db d.e
+  | None -> None
+
+(* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. Ties
+   break on :block/uuid: equal orders (fractional-key collisions between
+   concurrent clients) must render in the same sibling order on every
+   conn — the input sequence is conn-local eid order, which differs
+   between the owner's replayed display conn and remote clients' server
+   conns and silently diverges the rendered order until the duplicate
+   fix lands. *)
+let sort_by_order (ents : entity list) : entity list =
+  let order_of (e : entity) =
+    match value e "block/order" with Some (String s) -> Some s | _ -> None
+  in
+  let uuid_of (e : entity) =
+    match value e "block/uuid" with
+    | Some (Uuid u) | Some (String u) -> u
+    | _ -> ""
+  in
+  List.stable_sort
+    (fun a b ->
+       match (order_of a, order_of b) with
+       | None, None -> String.compare (uuid_of a) (uuid_of b)
+       | None, Some _ -> -1
+       | Some _, None -> 1
+       | Some x, Some y ->
+           let c = String.compare x y in
+           if c <> 0 then c else String.compare (uuid_of a) (uuid_of b))
+    ents
+
+
+(* entity-plus/lookup-kv-then-entity :block/_parent — raw children minus
+   property-created and closed-value children. The unfiltered cljs variant
+   :block/_raw-parent is a plain :block/_parent reverse lookup here. *)
+let parent_children (e : entity) : entity list =
+  ref_ents e "block/_parent"
+  |> List.filter (fun c ->
+      not (Option.is_some (value c "logseq.property/created-from-property")
+           || Option.is_some (value c "block/closed-value-property")))
+
+(* ldb/get-children — sorted :block/_parent (no nested). *)
+let get_children (parent : entity) : entity list =
+  sort_by_order (parent_children parent)
+
+(* get-block-children-or-property-children (db.cljs) *)
+let block_children_or_property_children (block : entity) (parent : entity) : entity list =
+  let from_property = ref_ids block "logseq.property/created-from-property" in
+  let closed_property = ref_ent block "block/closed-value-property" in
+  match closed_property, from_property with
+  | Some cp, _ -> sort_by_order (ref_ents cp "block/_closed-value-property")
+  | None, prop_id :: _ ->
+      sort_by_order
+        (List.filter
+           (fun e -> List.mem prop_id (ref_ids e "logseq.property/created-from-property"))
+           (ref_ents parent "block/_parent"))
+  | None, [] -> sort_by_order (parent_children parent)
+
+(* get-ordinary-sibling — sibling by :block/order among :block/parent
+   children, skipping property-created and closed-value children.
+
+   Folds the parent's :block/parent datom candidates and keeps the best
+   order on the requested side — O(siblings) bounded seeks, like cljs.
+   Same-order ties pick the smallest e.
+
+   Order is the first eavt datom (the live position): raw-datom replay
+   can leave a second :block/order datom on an entity, and the
+   cardinality-one entity_attr would surface the larger stale value.
+   All reads stay at datom level — entity_attr/parent_children would
+   materialize every child's full attr set. *)
+
+(* Datom-level helpers shared by the get-down/get-sibling paths. *)
+let live_order db e =
+  match Seq.uncons (datoms db Eavt ~e ~a:"block/order" ()) with
+  | Some (od, _) -> (match od.v with String s -> Some s | _ -> None)
+  | None -> None
+
+let non_ordinary_child db e =
+  Option.is_some
+    (Seq.uncons
+       (datoms db Eavt ~e ~a:"logseq.property/created-from-property" ()))
+  || Option.is_some
+       (Seq.uncons (datoms db Eavt ~e ~a:"block/closed-value-property" ()))
+
+let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option =
+  let db = block.db in
+  match Seq.uncons (datoms db Eavt ~e:block.id ~a:"block/parent" ()) with
+  | Some ({ v = Ref parent_id; _ }, _) ->
+      let block_order = live_order db block.id in
+      Seq.fold_left
+        (fun best (d : datom) ->
+          let child = d.e in
+          match live_order db child with
+          | Some o -> (
+              let eligible =
+                (* cljs compares child-order against nil too — a block
+                   without order has every ordered child to its right. *)
+                match dir, block_order with
+                | `Left, Some bo -> String.compare o bo < 0
+                | `Right, Some bo -> String.compare o bo > 0
+                | `Left, None -> false
+                | `Right, None -> true
+              in
+              if (not eligible) || non_ordinary_child db child then best
+              else
+                match best with
+                | None -> Some (child, o)
+                | Some (be, bo) -> (
+                    let closer =
+                      match dir with
+                      | `Left -> String.compare o bo > 0
+                      | `Right -> String.compare o bo < 0
+                    in
+                    if closer || (o = bo && child < be) then Some (child, o)
+                    else best))
+          | _ -> best)
+        None
+        (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
+      |> (function
+           | Some (e, _) -> ent_of_id db e
+           | None -> None)
+  | _ -> None
+
+(* get-left/right-sibling-for-property-children *)
+let sibling_for_property_children (block : entity) (parent : entity)
+    (dir : [ `Left | `Right ]) : entity option =
+  let children = block_children_or_property_children block parent in
+  let children = match dir with `Left -> List.rev children | `Right -> children in
+  let found =
+    match value block "block/order" with
+    | Some (String block_order) ->
+        List.find_opt
+          (fun child ->
+            match value child "block/order" with
+            | Some (String child_order) ->
+                (match dir with
+                 | `Left -> String.compare child_order block_order < 0
+                 | `Right -> String.compare child_order block_order > 0)
+            | _ -> false)
+          children
+    | _ -> None
+  in
+  (match found with
+   | Some child when child.id <> block.id -> Some child
+   | _ -> None)
+
+(* ldb/get-left-sibling, get-right-sibling *)
+let get_left_sibling (block : entity) : entity option =
+  match ref_ent block "block/parent" with
+  | None -> None
+  | Some parent ->
+      if closed_value block || Option.is_some (value block "logseq.property/created-from-property")
+      then sibling_for_property_children block parent `Left
+      else ordinary_sibling block `Left
+
+let get_right_sibling (block : entity) : entity option =
+  match ref_ent block "block/parent" with
+  | None -> None
+  | Some parent ->
+      if closed_value block || Option.is_some (value block "logseq.property/created-from-property")
+      then sibling_for_property_children block parent `Right
+      else ordinary_sibling block `Right
+
+(* ldb/get-down — filtered :block/_parent, first by :block/order.
+   Datom-level min over the same exclusions parent_children applies —
+   sort_by_order would materialize every child's full attr set. *)
+let get_down (block : entity) : entity option =
+  let db = block.db in
+  (* cljs sort-by-order puts nil orders first, stable — an unordered
+     ordinary child (first in e order) wins over every ordered one. *)
+  let unordered, ordered =
+    Seq.fold_left
+      (fun (unord, ord) (d : datom) ->
+        let c = d.e in
+        if non_ordinary_child db c then (unord, ord)
+        else
+          match live_order db c with
+          | None -> (match unord with Some _ -> (unord, ord) | None -> (Some c, ord))
+          | Some o -> (
+              match ord with
+              | Some (be, bo)
+                when String.compare o bo < 0 || (o = bo && c < be) ->
+                  (unord, Some (c, o))
+              | Some _ -> (unord, ord)
+              | None -> (unord, Some (c, o))))
+      (None, None)
+      (datoms db Avet ~a:"block/parent" ~v:(Ref block.id) ())
+  in
+  (match unordered, ordered with
+   | Some c, _ -> ent_of_id db c
+   | None, Some (c, _) -> ent_of_id db c
+   | None, None -> None)
+
+let ref_v_to_ref = function
+  | Int64 id -> Entity_id (Datascript.Util.int64_to_int_exn "entity id" id)
+  | Ref id -> Entity_id id
+  | Keyword s -> Ident s
+  | Uuid u -> Lookup_ref ("block/uuid", Uuid u)
+  | v -> Lookup_ref ("block/uuid", v)
+
+(* ldb/has-children? — cljs (:block/_parent e) is the filtered reverse
+   lookup (minus property-created and closed-value children). *)
+let has_children db (ref_v : value) : bool =
+  match counted_entity db (ref_v_to_ref ref_v) with
+  | Some e -> parent_children e <> []
+  | None -> false
+
+(* ldb/get-key-value — :kv/value of the kv entity named by ident. *)
+let get_key_value db (key_ident : string) : value option =
+  match counted_entity db (Ident key_ident) with
+  | Some e -> value e "kv/value"
+  | None -> None
+
+let get_graph_rtc_uuid db = get_key_value db "logseq.kv/graph-uuid"
+let get_graph_local_uuid db = get_key_value db "logseq.kv/local-graph-uuid"
+let get_graph_schema_version db = get_key_value db "logseq.kv/schema-version"
+let get_graph_rtc_e2ee db = get_key_value db "logseq.kv/graph-rtc-e2ee?"
+
+(* ldb/page-exists? — pages titled `page-name` with one of `tags`.
+   Classes/Property tags are case-sensitive (:block/title); others go
+   through :block/name. *)
+(* entity-plus/db-based-graph? *)
+let db_based_graph (db : db) : bool =
+  match counted_entity db (Ident "logseq.kv/db-type") with
+  | Some e -> value e "kv/value" = Some (String "db")
+  | None -> false
+
+(* db-db/get-built-in-page — lookup by deterministic :builtin-block-uuid. *)
+let get_built_in_page db (title : string) : entity option =
+  let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
+  counted_entity db (Lookup_ref ("block/uuid", Uuid u))
+
+(* common-initial-data/get-block-full-children-ids — transitive children,
+   like the cljs (parent ?p ?c) recursive rule. Direct :block/parent
+   descent with a visited set instead of a per-call rules parse + datalog
+   eval; visited guards parent cycles. *)
+let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
+  let child_ids (eid : entity_id) : entity_id list =
+    List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref eid) ())
+    |> List.map (fun (d : datom) -> d.e)
+  in
+  let visited = Hashtbl.create 16 in
+  let rec descendants (eid : entity_id) : entity_id list =
+    List.concat_map
+      (fun cid ->
+        if Hashtbl.mem visited cid then []
+        else begin
+          Hashtbl.add visited cid ();
+          cid :: descendants cid
+        end)
+      (child_ids eid)
+  in
+  descendants block_eid
+
+let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_id list =
+  let tag_set = tag_idents in
+  let only_class_tags =
+    tag_set <> []
+    && List.for_all
+         (fun t -> t = "logseq.class/Tag" || t = "logseq.class/Property")
+         tag_set
+  in
+  let attr = if only_class_tags then "block/title" else "block/name" in
+  let name_v = if only_class_tags then page_name else page_name_sanity_lc page_name in
+  let candidate_ids =
+    datoms db Avet ~a:attr ~v:(String name_v) ()
+    |> List.of_seq
+    |> List.map (fun d -> d.e)
+  in
+  match tag_set with
+  | [] ->
+      (* cljs binds [?tag-ident ...] to the empty collection — the query
+         yields no candidates without a tag check. *)
+      []
+  | _ ->
+      List.filter
+        (fun eid ->
+          match ent_of_id db eid with
+          | None -> false
+          | Some e ->
+              List.exists
+                (fun tid ->
+                  match ent_of_id db tid with
+                  | Some t -> (match ident_of t with Some i -> List.mem i tag_set | None -> false)
+                  | None -> false)
+                (ref_ids e "block/tags"))
+        candidate_ids
+
+let page_exists db (page_name : string) (tag_idents : string list) : bool =
+  page_exists_ids db page_name tag_idents <> []
+
+(* initial-data/get-latest-journals — journal-day desc, not recycled. *)
+(* ldb/get-latest-journals — journal entities ordered by journal-day
+   descending, LAZILY like cljs: callers `Seq.take n` to bound the work
+   to the requested page size. *)
+let get_latest_journals db : entity Seq.t =
+  let today =
+    Int64.of_int (Date_time_util.date_to_int (Date_time_util.time_ms ()))
+  in
+  let seen = Hashtbl.create 31 in
+  (* cljs take-while over the rseek seq, counting each pulled datom *)
+  let rec take_while_journals (s : datom Seq.t) : datom Seq.t = fun () ->
+    match s () with
+    | Seq.Cons (d, rest) when d.a = "block/journal-day" ->
+        incr journal_day_scans;
+        Seq.Cons (d, take_while_journals rest)
+    | _ -> Seq.Nil
+  in
+  rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int64 today) ()
+  |> take_while_journals
+  |> Seq.filter_map (fun (d : datom) ->
+         match d.v with
+         | Int64 day when day <= today -> (
+             match ent_of_id db d.e with
+             | Some e
+               when is_journal e && not (recycled e)
+                    && not (Hashtbl.mem seen e.id) ->
+                 Hashtbl.replace seen e.id ();
+                 Some e
+             | _ -> None)
+         | _ -> None)
+
+(* db-class/internal-tags — built-in classes hidden on a node and in
+   all-pages views. *)
+let internal_tag_ident (ident : string) : bool =
+  List.mem ident
+    [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
+      "logseq.class/Root"; "logseq.class/Asset" ]
+
+let hidden_or_internal_tag (e : entity) : bool =
+  hidden e || (match ident_of e with Some i -> internal_tag_ident i | None -> false)
+
+(* ldb/get-all-pages — :block/name entities that are not hidden or an
+   internal tag. *)
+let get_all_pages db : entity list =
+  List.of_seq (datoms db Avet ~a:"block/name" ())
+  |> List.filter_map (fun (d : datom) ->
+         match ent_of_id db d.e with
+         | Some e when not (hidden_or_internal_tag e) -> Some e
+         | _ -> None)
+
+(* ldb/get-page-blocks — pull [*] for every :block/page datom of the
+   page. *)
+let get_page_blocks db (page_id : entity_id) : pulled_entity list =
+  List.of_seq (datoms db Avet ~a:"block/page" ~v:(Ref page_id) ())
+  |> List.map (fun (d : datom) -> Entity_id d.e)
+  |> pull_many_string db "[*]"
+  |> List.filter_map (fun x -> x)
+
+(* ldb/collapsed-and-has-children? *)
+let collapsed_and_has_children db (block : entity) : bool =
+  truthy (value block "block/collapsed?") && has_children db (Ref block.id)
+
+(* ldb/get-block-last-direct-child-id — last filtered :block/_parent
+   child by :block/order; not-collapsed? skips blocks that are
+   collapsed w/ children. *)
+let get_block_last_direct_child_id db ?(not_collapsed = false)
+    (block_id : entity_id) : entity_id option =
+  match ent_of_id db block_id with
+  | None -> None
+  | Some block ->
+      if not_collapsed && collapsed_and_has_children db block then None
+      else
+        (* max live :block/order among the parent's eligible children —
+           datom-level scan: parent_children would materialize every
+           child's full attr set. cljs sort-by puts nil orders first, so
+           an unordered child is only ever last when no ordered child
+           exists — then the last child in e order wins. *)
+        Seq.fold_left
+          (fun (ord, unord) (d : datom) ->
+            let c = d.e in
+            if non_ordinary_child db c then (ord, unord)
+            else
+              match live_order db c with
+              | None -> (ord, Some c)
+              | Some o -> (
+                  match ord with
+                  | Some (be, bo)
+                    when String.compare o bo > 0 || (o = bo && c > be) ->
+                      (Some (c, o), unord)
+                  | Some _ -> (ord, unord)
+                  | None -> (Some (c, o), unord)))
+          (None, None)
+          (datoms db Avet ~a:"block/parent" ~v:(Ref block_id) ())
+        |> (function
+            | Some (c, _), _ -> Some c
+            | None, Some c -> Some c
+            | None, None -> None)
+
+(* ldb/get-block-and-children — preorder list of entity and its
+   descendants. include-property-block? also walks each child's
+   :logseq.property/query target (children list is _raw-parent). *)
+let get_block_and_children db ?(include_property_block : bool option) (block_uuid : string)
+    : entity list =
+  let include_property_block = Option.value include_property_block ~default:false in
+  let rec aux (e : entity) : entity list =
+    let children =
+      if include_property_block then begin
+        let raw = ref_ents e "block/_parent" in
+        let extras =
+          List.filter_map (fun c -> ref_ent c "logseq.property/query") raw
+        in
+        sort_by_order (raw @ extras)
+      end else
+        sort_by_order (parent_children e)
+    in
+    e :: List.concat_map aux children
+  in
+  match counted_entity db (Lookup_ref ("block/uuid", Uuid block_uuid)) with
+  | Some e -> aux e
+  | None -> []
+
+(* ldb/get-pages — :block/title falling back to :block/name for every
+   :block/name entity. Upstream removes hidden? on the returned title
+   strings, which is a no-op; titles are kept as-is here too. *)
+let get_pages db : value list =
+  List.of_seq
+    (datoms db Aevt ~a:"block/name" ())
+  |> List.filter_map (fun (d : datom) ->
+         match ent_of_id db d.e with
+         | Some e -> Some (match value e "block/title" with Some t -> t | None -> d.v)
+         | None -> Some d.v)
+
+(* ---------- bidirectional properties ---------- *)
+
+(* db-property/user-property-namespace? *)
+let user_property_namespace (ns : string) : bool =
+  let sub = ".property" in
+  let n = String.length ns and m = String.length sub in
+  let rec found i =
+    i + m <= n && (String.sub ns i m = sub || found (i + 1))
+  in
+  n >= m && found 0
+
+(* db-property/plugin-property? *)
+let plugin_property (a : attr) : bool =
+  match Schema.split_namespaced_attr a with
+  | Some ns, _ ->
+      let p = "plugin.property." in
+      String.length ns >= String.length p
+      && String.sub ns 0 (String.length p) = p
+  | _ -> false
+
+(* db-property/property-value-content *)
+let property_value_content (e : entity) : string option =
+  match string_value e "block/title" with
+  | Some s -> Some s
+  | None -> string_value e "logseq.property/value"
+
+type bidirectional_group =
+  { title : string
+  ; class_ : entity
+  ; entities : entity list
+  }
+
+(* ldb/get-bidirectional-properties — ref properties on user/plugin
+   namespaces that carry :logseq.property/classes, grouped by tag
+   class. *)
+let get_bidirectional_properties db (target_id : entity_id)
+    : bidirectional_group list =
+  let created_from_property =
+    match ent_of_id db target_id with
+    | Some e -> Option.is_some (value e "logseq.property/created-from-property")
+    | None -> false
+  in
+  if created_from_property then []
+  else begin
+    let attrs =
+      q_string db
+        "[:find [?a ...] :where
+          [?property :db/ident ?a]
+          [?property :db/valueType :db.type/ref]
+          [?property :logseq.property/classes ?class]]"
+      |> List.filter_map (function
+           | [ Result_attr a ] -> Some a
+           | [ Result_value (Keyword a) ] -> Some a
+           | _ -> None)
+      |> List.filter (fun a ->
+             match Schema.split_namespaced_attr a with
+             | Some ns, _ when user_property_namespace ns || plugin_property a ->
+                 (match counted_entity db (Ident a) with
+                  | Some p ->
+                      value p "db/valueType" = Some (Keyword "db.type/ref")
+                      && ref_ids p "logseq.property/classes" <> []
+                  | None -> false)
+             | _ -> false)
+    in
+    let referrers =
+      List.concat_map
+        (fun a ->
+          List.of_seq (datoms db Avet ~a ~v:(Ref target_id) ())
+          |> List.filter_map (fun (d : datom) -> ent_of_id db d.e))
+        attrs
+    in
+    let class_entities =
+      List.concat_map
+        (fun (e : entity) ->
+          if
+            e.id = target_id || recycled e || is_class e || is_property e
+          then []
+          else
+            List.filter_map
+              (fun (t : entity) ->
+                if is_class t && not (built_in t) && not (recycled t)
+                then Some (t.id, e)
+                else None)
+              (ref_ents e "block/tags"))
+        referrers
+    in
+    let groups =
+      List.fold_left
+        (fun acc (cid, e) ->
+          match List.assoc_opt cid acc with
+          | Some es when List.exists (fun (x : entity) -> x.id = e.id) es -> acc
+          | Some es -> (cid, e :: es) :: List.remove_assoc cid acc
+          | None -> (cid, [ e ]) :: acc)
+        [] class_entities
+    in
+    let created_at (e : entity) =
+      (* epoch-ms reads back numeric (Int/Float); Instant only for
+         legacy ~t-decoded data *)
+      match value e "block/created-at" with
+      | Some (Int64 n) -> Some n
+      | Some (Float f) -> Some (Int64.of_float f)
+      | Some (Instant ms) -> Some ms
+      | _ -> None
+    in
+    let cmp_created_at a b =
+      match created_at a, created_at b with
+      | None, None -> 0
+      | None, Some _ -> -1
+      | Some _, None -> 1
+      | Some x, Some y -> Int64.compare x y
+    in
+    List.filter_map
+      (fun (cid, ents) ->
+        match ent_of_id db cid with
+        | None -> None
+        | Some class_ ->
+            if value class_ "logseq.property.class/enable-bidirectional?"
+               = Some (Bool true)
+            then begin
+              let custom_title =
+                match value class_
+                        "logseq.property.class/bidirectional-property-title" with
+                | Some (String s) -> Some s
+                | Some (Ref id) ->
+                    (match ent_of_id db id with
+                     | Some v -> property_value_content v
+                     | None -> None)
+                | _ -> None
+              in
+              let title =
+                match custom_title with
+                | Some s when String.length (Unicode.trim s) > 0 -> s
+                | _ ->
+                    Plural.plural
+                      (Option.value
+                         (string_value class_ "block/title")
+                         ~default:"")
+              in
+              Some
+                { title
+                ; class_
+                ; entities = List.sort cmp_created_at ents
+                }
+            end
+            else None)
+      groups
+    |> List.sort (fun g1 g2 -> cmp_created_at g1.class_ g2.class_)
+  end
+
+(* ldb/get-block-parents — walk :block/parent up to [depth] (default
+   100), collecting parents farthest-first (cljs conj on list). *)
+let get_block_parents db ?(depth : int option) (block_uuid : string) : entity list =
+  let depth = Option.value depth ~default:100 in
+  let rec loop uuid parents d =
+    if d > depth then parents
+    else
+      match counted_entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
+      | None -> parents
+      | Some e ->
+          (match ref_ent e "block/parent" with
+           | Some parent ->
+               (match value parent "block/uuid" with
+                | Some (Uuid u) -> loop u (parent :: parents) (d + 1)
+                | _ -> parent :: parents)
+           | None -> parents)
+  in
+  loop block_uuid [] 1
+
+(* ldb/get-alias-source-page — first :block/_alias entity. *)
+let get_alias_source_page db (page_id : entity_id) : entity option =
+  match ent_of_id db page_id with
+  | None -> None
+  | Some e ->
+      (match ref_ents e "block/_alias" with
+       | src :: _ -> Some src
+       | [] -> None)
+
+(* db-property/public-built-in-property? *)
+let public_built_in_property (e : entity) =
+  truthy (value e "logseq.property/public?")
+
+(* db-db/private-built-in-page? *)
+let private_built_in_page (e : entity) : bool =
+  if is_property e then not (public_built_in_property e)
+  else if is_class e || internal_page e then false
+  else true
+
+(* common-initial-data/get-block-children-ids — all descendant ids
+   via :block/_parent (include-collapsed-children? default true,
+   pages always expand). *)
+let get_block_children_ids db ?(include_collapsed_children : bool option)
+    (block_eid : entity_id) : entity_id list =
+  let include_collapsed = Option.value include_collapsed_children ~default:true in
+  match ent_of_id db block_eid with
+  | None -> []
+  | Some _ ->
+      let seen = Hashtbl.create 64 in
+      let expand ids =
+        List.concat_map
+          (fun eid ->
+            match ent_of_id db eid with
+            | Some e when include_collapsed || not (truthy (value e "block/collapsed?")) || is_page e ->
+                ref_ids e "block/_parent"
+            | _ -> [])
+          ids
+      in
+      let rec loop ids =
+        let fresh = List.filter (fun id -> not (Hashtbl.mem seen id)) (expand ids) in
+        if fresh <> [] then begin
+          List.iter (fun id -> Hashtbl.replace seen id ()) fresh;
+          loop fresh
+        end
+      in
+      loop [ block_eid ];
+      Hashtbl.fold (fun id () acc -> id :: acc) seen []
+
+(* ldb/get-library-page — built-in "Library" page *)
+let get_library_page db : entity option = get_built_in_page db "Library"
+
+(* ---------- entity-util predicates (cont.) ---------- *)
+
+let uuid_value (e : entity) (a : attr) : string option =
+  match value e a with Some (Uuid u) -> Some u | _ -> None
+
+(* entity-util/object? — has any :block/tags *)
+let is_object (e : entity) : bool = values e "block/tags" <> []
+
+(* common-config/library-page-name / quick-add-page-name *)
+let library_page_name = "Library"
+let quick_add_page_name = "Quick add"
+
+(* sqlite-create-graph/built-in-pages-names *)
+let built_in_pages_names = [ library_page_name; quick_add_page_name; "Contents" ]
+
+(* db-db/library? — built-in page titled "Library" *)
+let is_library (e : entity) : bool =
+  built_in e && string_value e "block/title" = Some library_page_name
+
+(* db-db/inline-tag? — "#[[uuid]]" occurs in the raw title *)
+let inline_tag (raw_title : string) (tag_uuid : string) : bool =
+  Ns_util.str_contains raw_title ("#" ^ Page_ref.to_page_ref tag_uuid)
+
+(* ---------- page / orphan helpers ---------- *)
+
+(* ldb/page-empty? — no raw :block/_parent children *)
+let page_empty (db : db) (page_id : entity_id) : bool =
+  match counted_entity db (Entity_id page_id) with
+  | None -> false
+  | Some page -> ref_ents page "block/_parent" = []
+
+(* ldb/get-first-child — first raw :block/_parent child by :block/order.
+   Min live order among the raw (unfiltered) children at datom level —
+   ref_ents + sort_by_order would materialize every child. *)
+let get_first_child db (id : entity_id) : entity option =
+  match counted_entity db (Entity_id id) with
+  | Some e ->
+      (* same nil-first rule as get_down, over the raw unfiltered
+         children *)
+      Seq.fold_left
+        (fun (unord, ord) (d : datom) ->
+          let c = d.e in
+          match Seq.uncons (datoms db Eavt ~e:c ~a:"block/order" ()) with
+          | Some ({ v = String o; _ }, _) -> (
+              match ord with
+              | Some (be, bo)
+                when String.compare o bo < 0 || (o = bo && c < be) ->
+                  (unord, Some (c, o))
+              | Some _ -> (unord, ord)
+              | None -> (unord, Some (c, o)))
+          | _ -> (match unord with Some _ -> (unord, ord) | None -> (Some c, ord)))
+        (None, None)
+        (datoms db Avet ~a:"block/parent" ~v:(Ref e.id) ())
+      |> (function
+           | Some c, _ -> counted_entity db (Entity_id c)
+           | None, Some (c, _) -> counted_entity db (Entity_id c)
+           | None, None -> None)
+  | None -> None
+
+(* ldb/get-orphaned-pages — pages with no refs left, empty or containing a
+   lone placeholder block, not built-in/property/journal-named/hidden. *)
+let get_orphaned_pages db
+    ?(empty_ref_f = fun (page : entity) -> ref_ids page "block/_refs" = [])
+    ?(built_in_pages_names = built_in_pages_names) (pages : string list)
+    : entity list =
+  let built_in_lower = List.map Unicode.lowercase built_in_pages_names in
+  List.filter_map
+    (fun page_name ->
+      match get_page db (String page_name) with
+      | Some page when not (hidden page) ->
+          let name' = Option.value (string_value page "block/name") ~default:"" in
+          if
+            empty_ref_f page
+            && (page_empty db page.id
+                ||
+                (match get_first_child db page.id with
+                 | Some first_child ->
+                     List.length (ref_ids page "block/_page") = 1
+                     &&
+                     (match string_value first_child "block/title" with
+                      | Some t -> List.mem (Unicode.trim t) [ ""; "-"; "*" ]
+                      | None -> false)
+                 | None -> false))
+            && not (List.mem name' built_in_lower)
+            && not (is_property page)
+            && not (Ns_util.str_contains name' "/" && not (is_journal page))
+            && not (Option.is_some (value page "block/properties"))
+          then Some page
+          else None
+      | _ -> None)
+    pages
+
+(* ---------- block ordering ---------- *)
+
+(* ldb/block-order-path — :block/order chain root-first, from the page's
+   top-level down to [block]; None when unreachable from the page. *)
+let block_order_path (page_id : entity_id) (block : entity) : string option list option =
+  let rec aux (b : entity) (path : string option list) : string option list option =
+    if
+      Option.is_some (value b "logseq.property/created-from-property")
+      || Option.is_some (value b "block/closed-value-property")
+    then None
+    else
+      match ref_ent b "block/parent" with
+      | None -> None
+      | Some parent ->
+          let path = string_value b "block/order" :: path in
+          if parent.id = page_id then Some (List.rev path) else aux parent path
+  in
+  aux block []
+
+let compare_order_paths (p1 : string option list) (p2 : string option list) : int =
+  List.compare Stdlib.compare p1 p2
+
+(* ldb/sort-page-random-blocks — possibly non-consecutive blocks of one page,
+   sorted by preorder path. cljs asserts all blocks share one :block/page. *)
+let sort_page_random_blocks _db (blocks : entity list) : entity list =
+  let page_id =
+    match blocks with
+    | b :: _ -> (
+        match ref_ent b "block/page" with
+        | Some p -> p.id
+        | None -> invalid_arg "sort_page_random_blocks: block has no :block/page")
+    | [] -> 0
+  in
+  List.iter
+    (fun (b : entity) ->
+      match ref_ent b "block/page" with
+      | Some p when p.id = page_id -> ()
+      | _ ->
+          invalid_arg
+            "sort_page_random_blocks: blocks must be in a same page")
+    blocks;
+  let sorted =
+    blocks
+    |> List.filter_map (fun b ->
+        Option.map (fun p -> (p, b)) (block_order_path page_id b))
+    |> List.stable_sort (fun (p1, _) (p2, _) -> compare_order_paths p1 p2)
+    |> List.map snd
+  in
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun (b : entity) ->
+      if Hashtbl.mem seen b.id then false
+      else begin
+        Hashtbl.add seen b.id ();
+        true
+      end)
+    sorted
+
+(* ldb/last-child-block? — child (or its chain) is the right-most sibling.
+   Child may be collapsed. *)
+let rec last_child_block db (parent_id : entity_id) (child_id : entity_id) : bool =
+  match counted_entity db (Entity_id child_id) with
+  | None -> false
+  | Some child ->
+      if parent_id = child_id then true
+      else
+        (match get_right_sibling child with
+         | Some _ -> false
+         | None ->
+             (match ref_ent child "block/parent" with
+              | Some p -> last_child_block db parent_id p.id
+              | None -> false))
+
+(* ldb/consecutive-block? — block-1 and block-2 are adjacent in page order:
+   same page and one is the left sibling of, or last-descendant-left of,
+   the other. *)
+let consecutive_block db (b1 : entity) (b2 : entity) : bool =
+  let same_page (x : entity) (y : entity) =
+    match ref_ent x "block/page", ref_ent y "block/page" with
+    | Some p, Some q -> p.id = q.id
+    | None, None -> true
+    | _ -> false
+  in
+  let aux (x : entity) (y : entity) =
+    same_page x y
+    &&
+    (match get_left_sibling y with
+     | Some ls -> ls.id = x.id
+     | None -> false)
+    || (match get_left_sibling y with
+        | Some prev_sibling -> last_child_block db prev_sibling.id x.id
+        | None -> false)
+  in
+  (aux b1 b2) || (aux b2 b1)
+
+(* ldb/get-non-consecutive-blocks — each block whose right neighbor in the
+   given order isn't consecutive with it. *)
+let get_non_consecutive_blocks db (blocks : entity list) : entity list =
+  let arr = Array.of_list blocks in
+  let n = Array.length arr in
+  List.init (n - 1) (fun i -> i)
+  |> List.filter_map (fun i ->
+      if not (consecutive_block db arr.(i) arr.(i + 1)) then Some arr.(i)
+      else None)
+
+(* db/get-page-parents — walk :block/parent chain to the root. *)
+let get_page_parents (node : entity) : entity list =
+  let rec loop (current : entity option) (parents : entity list) =
+    match current with
+    | Some p when not (List.exists (fun e -> e.id = p.id) parents) ->
+        loop (ref_ent p "block/parent") (parents @ [ p ])
+    | _ -> parents
+  in
+  loop (ref_ent node "block/parent") []
+
+(* db/build-favorite-tx — tx for a favorite block in the favorite page. *)
+let build_favorite_tx (favorite_uuid : string) : (attr * value) list =
+  [ ("block/link", Vector [ Keyword "block/uuid"; Uuid favorite_uuid ])
+  ; ("block/title", String "") ]
+
+(* db/get-all-properties — all entities tagged logseq.class/Property. *)
+let get_all_properties (db : db) : entity list =
+  match counted_entity db (Ident "logseq.class/Property") with
+  | None -> []
+  | Some class_ent ->
+      datoms db Avet ~a:"block/tags" ~v:(Ref class_ent.id) ()
+      |> Seq.filter_map (fun d -> ent_of_id db d.e)
+      |> List.of_seq

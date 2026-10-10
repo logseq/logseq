@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exporteert naar een .transit-bestand om naar ons te sturen voor foutopsporing. Gevoelige gegevens worden verwijderd uit het geëxporteerde bestand."
  :export/debug-transit-file "Debug-transitbestand exporteren"
  :export/edn-desc "Exporteert naar een leesbaar en bewerkbaar .edn-bestand. Gebruik dit niet als primaire back-up."
- :export/error-unexpected "Er is een onverwachte fout opgetreden bij het exporteren. Zie de JavaScript-console voor details."
  :export/exporting "Exporteren"
  :export/finalizing "Afronden"
  :export/format-text "Tekst"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Scheidingslijn"
  :sidebar.right/toggle "Rechter zijbalk in-/uitschakelen"
 
- :storage/invalid-data-writing "Ongeldige gegevensschrijving."
  :storage/sqlitedb-error "SQLiteDB-fout: {1}"
  :storage/sqlitedb-import-error "SQLiteDB-importfout: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-opslagfout: {1}"

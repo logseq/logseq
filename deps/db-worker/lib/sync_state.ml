@@ -1,0 +1,402 @@
+(* frontend.worker.state atoms used by the sync layer.
+   Worker_state already covers datascript conns, single sqlite conn per repo,
+   app-state and thread atoms; this module mirrors the remaining sync-specific
+   atoms: *db-sync-client, client-ops sqlite conns, repo->pending-local-tx-count
+   is in Worker_state. *)
+
+(* cljs frontend.worker.sync client state — ensure-client-state! *)
+type reconnect_state =
+  { mutable attempt : int
+  ; mutable timer : Timers.timer option
+  }
+
+module SSet = Set.Make (String)
+
+(* in-flight upload batch tracked for response timeout reporting *)
+type upload_request =
+  { tx_ids : string list
+  ; outliner_ops : string list
+  ; large_upload_progress : Wire.t list
+  ; t_before : int option
+  ; tx_datas : (string * Wire.t) list
+  ; mutable sent_at : Time.monotonic_ms
+  ; mutable timer : Timers.timer option
+  }
+
+(* ws endpoint — a real ws or a fake driver installed by tests (the cljs
+   fake-websocket driver equivalent). *)
+type fake_ws_state =
+  { mutable fake_ready_state : int
+  ; fake_on_send : string -> unit
+  ; fake_on_close : unit -> unit
+  }
+
+type ws_endpoint =
+  | Real_ws of Web_socket.t
+  | Fake_ws of fake_ws_state
+
+let fake_ws ~ready_state ~on_send ~on_close () : ws_endpoint =
+  Fake_ws { fake_ready_state = ready_state
+          ; fake_on_send = on_send
+          ; fake_on_close = on_close }
+
+let set_fake_ws_ready_state (e : ws_endpoint) (state : int) : unit =
+  match e with
+  | Fake_ws f -> f.fake_ready_state <- state
+  | Real_ws _ -> ()
+
+let ws_endpoint_ready_state (e : ws_endpoint) : int =
+  match e with
+  | Real_ws ws -> Web_socket.ready_state ws
+  | Fake_ws f -> f.fake_ready_state
+
+let ws_endpoint_send (e : ws_endpoint) (payload : string)
+    : unit Db_worker_effect.t =
+  match e with
+  | Real_ws ws -> Web_socket.send ws payload
+  | Fake_ws f -> f.fake_on_send payload; Db_worker_effect.pure ()
+
+let ws_endpoint_close (e : ws_endpoint) : unit Db_worker_effect.t =
+  match e with
+  | Real_ws ws -> Web_socket.close ws
+  | Fake_ws f ->
+      f.fake_ready_state <- 3;
+      f.fake_on_close ();
+      Db_worker_effect.pure ()
+
+let same_ws_endpoint (a : ws_endpoint) (b : ws_endpoint) : bool =
+  match a, b with
+  | Real_ws x, Real_ws y -> x == y
+  | Fake_ws x, Fake_ws y -> x == y
+  | _ -> false
+
+type client =
+  { repo : string
+  ; mutable ws : ws_endpoint option
+  ; mutable graph_id : string option
+  ; send_queue : unit Db_worker_effect.t ref
+  ; receive_queue : unit Db_worker_effect.t ref
+  ; asset_queue : unit Db_worker_effect.t ref
+  ; pending_pull_since : int option ref
+  ; inflight : string list ref
+  ; upload_request : upload_request option ref
+  ; last_sync_error : Wire.t option ref
+  ; reconnect : reconnect_state ref
+  ; stale_kill_timer : Timers.timer option ref
+  ; last_ws_message_ts : Time.monotonic_ms ref
+  ; online_users : Wire.t list ref
+  ; ws_state : string ref (* "inactive" | "connecting" | "open" | "closed" | "stopped" *)
+  ; conn_gen : int ref (* connection generation — bumped on stop/connect;
+                          ws event handlers ignore events from an older
+                          generation (cljs detach-ws-handlers! before close) *)
+  }
+
+let new_client repo : client =
+  { repo
+  ; ws = None
+  ; graph_id = None
+  ; send_queue = ref (Db_worker_effect.pure ())
+  ; receive_queue = ref (Db_worker_effect.pure ())
+  ; asset_queue = ref (Db_worker_effect.pure ())
+  ; pending_pull_since = ref None
+  ; inflight = ref []
+  ; upload_request = ref None
+  ; last_sync_error = ref None
+  ; reconnect = ref { attempt = 0; timer = None }
+  ; stale_kill_timer = ref None
+  ; last_ws_message_ts = ref (Time.monotonic_now ())
+  ; online_users = ref []
+  ; ws_state = ref "closed"
+  ; conn_gen = ref 0
+  }
+
+(* worker-state/*db-sync-client — a single active client *)
+let db_sync_client : client option ref = ref None
+
+(* cljs queue semantics: promise-chained atoms. Every queue catches the
+   previous tail so one failed task doesn't stall later enqueues; the
+   receive/send queues additionally catch+log each task's own error. *)
+let enqueue (queue : unit Db_worker_effect.t ref) (task : unit -> unit Db_worker_effect.t) : unit =
+  queue :=
+    Db_worker_effect.bind
+      (Db_worker_effect.catch !queue (fun _ -> Db_worker_effect.pure ()))
+      (fun () -> task ())
+
+let enqueue_catching queue task ~on_error =
+  queue :=
+    Db_worker_effect.catch
+      (Db_worker_effect.bind
+         (Db_worker_effect.catch !queue (fun _ -> Db_worker_effect.pure ()))
+         (fun () -> task ()))
+      on_error
+
+(* worker-state/get-sqlite-conn [repo :client-ops] — separate sqlite db holding
+   the client_ops tables. cljs db_core opens it at create-or-open-db; here it
+   is opened lazily beside the graph db file. *)
+let client_ops_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
+
+let db_dir = Root_dir.worker_db_dir
+
+let sanitize_repo_name repo =
+  String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo
+
+(* cljs resolve-db-path "client-ops-/db.sqlite": <repo dir>/client-ops-/db.sqlite *)
+let client_ops_path repo =
+  let repo_dir =
+    match Graph_dir.repo_to_encoded_graph_dir_name repo with
+    | Some dir -> Filename.concat (db_dir ()) dir
+    | None -> db_dir ()
+  in
+  Filename.concat (Filename.concat repo_dir "client-ops-") "db.sqlite"
+
+let client_ops_conn repo : Sqlite.db =
+  match Hashtbl.find_opt client_ops_conns repo with
+  | Some db -> db
+  | None ->
+      let path =
+        if Sqlite.pooled_runtime () then "client-ops-/db.sqlite"
+        else client_ops_path repo
+      in
+      if not (Sqlite.pooled_runtime ()) then
+        ignore (File_sys.mkdir_p (Filename.dirname path));
+      let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
+      Hashtbl.replace client_ops_conns repo db;
+      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens;
+         synchronous=NORMAL skips per-commit fsyncs — WAL checkpoints
+         still fsync, matching cljs sql.js's in-memory durability. *)
+      (try
+         Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
+         db
+       with exn ->
+         (* drop before close: a close failure must not leave the
+            closed handle cached for the next client_ops_conn *)
+         Hashtbl.remove client_ops_conns repo;
+         let error =
+           try
+             Sqlite.close db;
+             exn
+           with close_exn ->
+             Pending_closes.note repo db;
+             Failure
+               (Printf.sprintf "Client ops initialization failed: %s; close failed: %s"
+                  (Printexc.to_string exn) (Printexc.to_string close_exn))
+         in
+         raise error)
+
+let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
+
+let close_client_ops_conn repo =
+  match Hashtbl.find_opt client_ops_conns repo with
+  | Some db ->
+      Hashtbl.remove client_ops_conns repo;
+      (try Sqlite.close db
+       with exn ->
+         Pending_closes.note repo db;
+         raise exn)
+  | None -> ()
+
+(* cljs get-client-ops-conn returns the open conn (if any) without
+   creating one — used by recompute-checksum-diagnostics. *)
+let client_ops_conn_opt repo : Sqlite.db option =
+  Hashtbl.find_opt client_ops_conns repo
+
+(* worker-state/get-id-token — :auth/id-token in app state *)
+let id_token () : string option =
+  match Worker_state.state_get "auth/id-token" with
+  | Some (Wire.String s) -> Some s
+  | _ -> None
+
+(* worker-state/non-auth-db-sync-config — db-sync-config minus auth keys *)
+let non_auth_db_sync_config (config : Wire.t) : Wire.t =
+  let drop = [ "auth-token"; "oauth-token-url"; "oauth-domain"; "oauth-client-id" ] in
+  match config with
+  | Wire.Map kvs ->
+      Wire.Map
+        (List.filter
+           (fun (k, _) ->
+              match k with
+              | Wire.Keyword k | Wire.String k -> not (List.mem k drop)
+              | _ -> true)
+           kvs)
+  | t -> t
+
+let current_repo () : string option =
+  match Worker_state.state_get "git/current-repo" with
+  | Some (Wire.String r) -> Some r
+  | _ -> None
+
+let set_current_repo repo =
+  Worker_state.merge_state (Wire.Map [ (Wire.Keyword "git/current-repo", Wire.String repo) ])
+
+(* worker-state/online? — node checks navigator.onLine; browser worker uses
+   the online-event thread atom. *)
+let online () : bool =
+  match Runtime_env.kind () with
+  | Runtime_env.Native -> true
+  | _ ->
+      (match Worker_state.thread_atom "thread-atom/online-event" with
+       | Some (Wire.Bool false) -> false
+       | _ -> true)
+
+(* common-util/distinct-by *)
+let distinct_by f xs =
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun x ->
+       let k = f x in
+       if Hashtbl.mem seen k then false
+       else (Hashtbl.replace seen k (); true))
+    xs
+
+(* common-util/uuid-string? *)
+(* cljs exactly-uuid-pattern = re-pattern "(?i)^uuid$" *)
+let uuid_re = Regexp.compile ~caseless:true "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+
+let uuid_string s = Regexp.test uuid_re s
+
+let time_ms () = Time.epoch_ms_to_float (Time.now ())
+
+(* worker-util/dev-or-test? — goog.DEBUG || node-test in cljs; a settable
+   flag here, defaulting to off like production builds *)
+let dev_or_test : bool ref = ref false
+
+(* transaction.cljs OUTLINER-PERF-LOGGING — a goog-define enabled only in
+   e2e app builds. The runtime signal for the same "e2e build" here is the
+   :dev? flag the app sends in its transact context (DEV-RELEASE). *)
+let outliner_perf_logging : bool ref = ref false
+
+(* Set while pending ops are forward-replayed onto the display conn after a
+   server-state rebind. Gates client-ops persistence (handle-local-tx!) and
+   checksum updates: replayed reports must neither re-queue nor advance the
+   stored checksum past confirmed state. *)
+let pending_replay : bool ref = ref false
+
+(* RTC graph server conn: storage-backed, confirmed state only. The
+   registered Worker_state.datascript_conn on a remote graph is the
+   display projection (server state + pending ops replayed forward). *)
+let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
+
+(* last display db before the latest server-state rebind — the
+   pre-delete local view the upload-time rebase climbs ancestor chains
+   on (a remotely deleted target's parent refs survive there) *)
+let rebase_base_dbs : (string, Datascript.db) Hashtbl.t = Hashtbl.create 7
+
+let set_rebase_base_db repo (db : Datascript.db) : unit =
+  Hashtbl.replace rebase_base_dbs repo db
+
+let rebase_base_db repo : Datascript.db option =
+  Hashtbl.find_opt rebase_base_dbs repo
+
+(* uuid -> parent-uuid ledger captured as each remote retractEntity
+   lands: a deleted entity's direct parent as of the pre-apply view.
+   The upload-time rebase climbs this chain when the stashed base db is
+   too stale to contain the ancestor — the ledger only ever grows, so
+   deletions spanning multiple remote batches never lose links *)
+let remote_deleted_parents : (string, (string, string) Hashtbl.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let add_remote_deleted_parent repo ~(uuid : string) ~(parent_uuid : string)
+    : unit =
+  (match Hashtbl.find_opt remote_deleted_parents repo with
+   | Some m -> Hashtbl.replace m uuid parent_uuid
+   | None ->
+       let m = Hashtbl.create 7 in
+       Hashtbl.replace m uuid parent_uuid;
+       Hashtbl.replace remote_deleted_parents repo m)
+
+let remote_deleted_parent repo (uuid : string) : string option =
+  match Hashtbl.find_opt remote_deleted_parents repo with
+  | Some m -> Hashtbl.find_opt m uuid
+  | None -> None
+
+(* uuids a remote delete/fix entry retracted, as of the latest applied
+   remote-tx batch. A verbatim confirm that re-adds one of them would
+   resurrect an entity the server deleted — confirms must skip those
+   items the same way the pull path already does. *)
+let remote_deleted_uuids : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_deleted repo : SSet.t =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+(* journal-derived delete ledger: subjects of confirmed retractEntity
+   items. Not a pull/confirm gate — unapply reads it to keep remotely
+   deleted entities absent and the phantom sweep honest *)
+let add_remote_deleted repo (u : string) : unit =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> Hashtbl.replace remote_deleted_uuids repo (SSet.add u s)
+  | None -> Hashtbl.replace remote_deleted_uuids repo (SSet.singleton u)
+
+(* (subject, attr, value) keys a confirmed write asserted on the server
+   conn — remote-tx applies and own confirms record them. Unapplying a
+   pending row must not retract one of these: re-asserting an identical
+   (e,a,v) is a datascript no-op, so the live datom keeps its
+   unconfirmed stamp even though confirmed state shares it, and a blind
+   reversed retract would strip confirmed state down to a shell. *)
+let remote_asserted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_asserted repo : SSet.t =
+  match Hashtbl.find_opt remote_asserted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_asserted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_asserted_keys repo keys
+
+(* (subject, attr, value) keys a confirmed write RETRACTED — needed for
+   the mirror-image case: a pending row's reversed add restores a
+   pre-op value only while confirmed state still holds it. When a
+   remote tx retracted the same (e,a,v), restoring it resurrects a
+   value the server explicitly dropped. Cardinality-one attrs also
+   gate on remote_asserted carrying a different live value *)
+let remote_retracted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+(* accumulate-only: uuids ever written at e-position by an applied
+   confirmed tx. remote_asserted/retracted keys come and go as values
+   are re-asserted and rescinded — this set answers a different
+   question ("did confirmed state ever reach this entity") for the
+   unapply phantom sweep, which must never retractEntity a
+   server-known uuid just because its datoms kept an unconfirmed stamp
+   across a no-op re-assert *)
+let remote_touched_entities : (string, SSet.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let remote_touched repo : SSet.t =
+  match Hashtbl.find_opt remote_touched_entities repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let add_remote_touched repo (u : string) : unit =
+  Hashtbl.replace remote_touched_entities repo
+    (SSet.add u (remote_touched repo))
+
+let remote_retracted repo : SSet.t =
+  match Hashtbl.find_opt remote_retracted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_retracted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_retracted_keys repo keys
+
+let server_conn repo = Hashtbl.find_opt server_conns repo
+let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
+let drop_server_conn repo =
+  match Hashtbl.find_opt server_conns repo with
+  | None -> ()
+  | Some conn ->
+      Hashtbl.remove server_conns repo;
+      Hashtbl.remove remote_deleted_uuids repo;
+      Hashtbl.remove remote_deleted_parents repo;
+      Hashtbl.remove rebase_base_dbs repo;
+      Db_tx.release_flags conn
+
+(* Writes of confirmed state (remote txs, acked local txs, sync
+   bookkeeping) go to the server conn; falls back to the display conn on
+   local graphs and pre-split download opens. *)
+let confirmed_conn repo =
+  match server_conn repo with
+  | Some c -> Some c
+  | None -> Worker_state.datascript_conn repo

@@ -177,16 +177,6 @@ $ typos -w
 
 To configure it e.g. for dealing with false positives, see `typos.toml`.
 
-### Separate Worker from Frontend
-
-The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Likewise the frontend should never depend on worker namespaces. Run this linter to ensure worker and frontend namespaces don't require each other:
-
-```
-$ bb lint:worker-and-frontend-separate
-Valid worker namespaces!
-Valid frontend namespaces!
-```
-
 ## Testing
 
 We have unit, performance and end to end tests.
@@ -195,7 +185,7 @@ We have unit, performance and end to end tests.
 
 Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features.
 
-To run end to end tests, see [clj-e2e tests](/clj-e2e/README.md).
+To run end to end tests, see the `ocaml-e2e/` suite (`cd ocaml-e2e && opam exec -- dune build && node parallel-runner.mjs`; serve the built app on :3002 first).
 
 ### Unit Testing
 

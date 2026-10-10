@@ -163,25 +163,11 @@
   dev:run-test-namespaces
   logseq.tasks.dev/run-test-namespaces
 
-  dev:test-no-worker
-  logseq.tasks.dev/test-no-worker
-
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
   dev:lint-test-deps
   logseq.tasks.dev.lint-test-deps/run
-
-  dev:e2e-basic-test
-  logseq.tasks.dev/e2e-basic-test
-
-  dev:e2e-rtc-extra-test
-  {:doc "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
-   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test")}
-
-  dev:e2e-rtc-extra-part2-test
-  {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
-   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
 
   dev:db-sync-test
   {:doc "Run db-sync server unit tests"
@@ -196,9 +182,9 @@
   logseq.tasks.dev/gen-malli-kondo-config
 
   dev:db-worker-node
-  {:doc "Compile and start db-worker-node (pass-through args forwarded to node)"
+  {:doc "Build the OCaml db-worker bundle and start db-worker-node (pass-through args forwarded to node)"
    :task (do
-           (shell "clojure" "-M:cljs" "compile" "db-worker-node")
+           (shell "pnpm" "db-worker:build")
            (apply shell "node" "./static/db-worker-node.js" *command-line-args*))}
 
   dev:cli-e2e
@@ -227,9 +213,6 @@
 
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
-
-  lint:worker-and-frontend-separate
-  logseq.tasks.dev.lint/worker-and-frontend-separate
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch

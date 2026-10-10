@@ -1,0 +1,15 @@
+{
+  "name": "logseq-db-worker",
+  "private": true,
+  "description": "npm dependencies for running melange-emitted node tests (see test/dune).",
+  "dependencies": {
+    "transit-js": "^0.8.874"
+  },
+  "devDependencies": {
+    "vite": "^8.0.10"
+  },
+  "scripts": {
+    "check:schema-version": "node scripts/check-schema-version.cjs",
+    "build": "node scripts/check-schema-version.cjs && dune build js_api bin/main.exe && vite build --mode node && vite build --mode browser"
+  }
+}

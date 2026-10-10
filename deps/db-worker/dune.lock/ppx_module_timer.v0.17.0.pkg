@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_base stdio time_now dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_module_timer/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=fcc39a8623f7c4e1bb40ce6ed5e9af596938f88f5718f01417ed39b11fc5e264)))

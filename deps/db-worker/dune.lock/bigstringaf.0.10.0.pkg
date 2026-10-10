@@ -1,0 +1,18 @@
+(version 0.10.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune dune-configurator ocaml)))
+
+(source
+ (fetch
+  (url https://github.com/inhabitedtype/bigstringaf/archive/0.10.0.tar.gz)
+  (checksum
+   sha512=b51c756925d7016ffd7eac49e69393a1897391ca2685a8c30c7b6e3917b4d66c9400b49e8986d0f03329197b95ad52e096ff83dea5e03571cb5bc3d9a5170602)))

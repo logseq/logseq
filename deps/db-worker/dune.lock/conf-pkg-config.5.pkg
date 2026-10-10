@@ -1,0 +1,122 @@
+(version 5)
+
+(build
+ (choice
+  ((((arch x86_64)
+     (os linux))
+    ((arch arm64)
+     (os linux)))
+   ((action
+     (progn
+      (run pkg-config --help)
+      (run
+       sh
+       ./write-config.sh
+       %{pkg-self:name}
+       -v
+       command:list
+       EOL
+       pkg-config
+       EOL)))))
+  ((((arch x86_64)
+     (os macos))
+    ((arch arm64)
+     (os macos)))
+   ((action
+     (progn
+      (when
+       (not
+        (= %{os_distribution} homebrew))
+       (run pkg-config --help))
+      (when
+       (= %{os_distribution} homebrew)
+       (run pkgconf --version))
+      (run
+       sh
+       ./write-config.sh
+       %{pkg-self:name}
+       -v
+       command:list
+       EOL
+       (when
+        (catch_undefined_var
+         (not
+          (= %{os_distribution} homebrew))
+         false)
+        pkg-config)
+       (when
+        (catch_undefined_var
+         (= %{os_distribution} homebrew)
+         false)
+        pkgconf)
+       EOL)))))))
+
+(depexts
+ ((pkg-config)
+  (or_absorb_undefined_var
+   (= %{os_family} debian)
+   (= %{os_family} ubuntu)))
+ ((pkgconf)
+  (= %{os_distribution} arch))
+ ((pkgconf-pkg-config)
+  (= %{os_family} fedora))
+ ((pkgconfig)
+  (and_absorb_undefined_var
+   (= %{os_distribution} centos)
+   (<= %{os_version} 7)))
+ ((pkgconf-pkg-config)
+  (= %{os_distribution} mageia))
+ ((pkgconfig)
+  (and_absorb_undefined_var
+   (= %{os_distribution} rhel)
+   (<= %{os_version} 7)))
+ ((pkgconfig)
+  (and_absorb_undefined_var
+   (= %{os_distribution} ol)
+   (<= %{os_version} 7)))
+ ((pkgconf)
+  (= %{os_distribution} alpine))
+ ((pkg-config)
+  (= %{os_distribution} nixos))
+ ((pkgconf)
+  (and_absorb_undefined_var
+   (= %{os} macos)
+   (= %{os_distribution} homebrew)))
+ ((pkgconfig)
+  (and_absorb_undefined_var
+   (= %{os} macos)
+   (= %{os_distribution} macports)))
+ ((pkgconf)
+  (= %{os} freebsd))
+ ((pkgconf-pkg-config)
+  (and_absorb_undefined_var
+   (= %{os_distribution} rhel)
+   (>= %{os_version} 8)))
+ ((pkgconf-pkg-config)
+  (and_absorb_undefined_var
+   (= %{os_distribution} centos)
+   (>= %{os_version} 8)))
+ ((pkgconf-pkg-config)
+  (and_absorb_undefined_var
+   (= %{os_distribution} ol)
+   (>= %{os_version} 8)))
+ ((system:pkgconf)
+  (and_absorb_undefined_var
+   (= %{os} win32)
+   (= %{os_distribution} cygwinports)))
+ ((pkgconf)
+  (= %{os_distribution} cygwin)))
+
+(extra_sources
+ (install-shim.sh
+  (fetch
+   (url
+    https://raw.githubusercontent.com/dra27/mingw-w64-shims/refs/tags/1.0.1/install-shim.sh)
+   (checksum
+    sha512=0b76a529454b00027b5768fa6ead1b8dda6bc3adab55f4288a702f4cc5d7b280be938cced6841b1556e8cf98f56ecc95b7b22006859d7a91f0ef852aea74e88c)))
+ (write-config.sh
+  (fetch
+   (url
+    https://raw.githubusercontent.com/dra27/mingw-w64-shims/refs/tags/1.0.1/write-config.sh)
+   (checksum
+    sha512=00c4e7c605e46c8fb4d24c40da0a9317e31e3ec723a7aac59546b1cfb180024cc76dbd27c2aca8d223047ad4b0a4bcd047443fc64a6e218a21931aaa672c3e71))))

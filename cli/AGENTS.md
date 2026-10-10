@@ -8,3 +8,4 @@
 - Do not keep temporary tests added during refactoring, and do not keep test cases that assert internal implementation details.
 - Before adding a new external JavaScript function, first check whether a corresponding implementation already exists in `melange.js` or `melange.node`. Avoid adding new externals whenever possible.
 - MUST not disable compiler warnings
+- Avoid O(n²) `List` patterns such as `List.concat` and repeated `List.append` on large sequences; when the project already depends on the `rrbvec` package, use `Rrbvec` vectors instead.

@@ -1,0 +1,28 @@
+(version 3.18.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune
+   ocaml
+   ocamlfind
+   cmdliner
+   dune-build-info
+   menhir
+   merlin-extend
+   fix
+   cppo
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/reasonml/reason/releases/download/3.18.0/reason-3.18.0.tbz)
+  (checksum
+   sha512=b43e9245c79c3aaef494ba55027187f86884fbcff87aca77743b5c3d81ef7d5156f34c650c3cfb40719cf7ca87750c591fe338b21f82d4feed7092e47cb6880d)))

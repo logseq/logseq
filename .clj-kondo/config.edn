@@ -50,8 +50,7 @@
                              frontend.pubsub]}
 
   :consistent-alias
-  {:aliases {"/electron/utils" js-utils
-             "path" node-path
+  {:aliases {"path" node-path
              borkdude.rewrite-edn rewrite
              cljs-time.coerce tc
              cljs-time.core t
@@ -127,11 +126,6 @@
              frontend.util.thingatpt thingatpt
              frontend.util.url url-util
              frontend.util.ref ref
-             frontend.worker-common.util worker-util
-             frontend.worker.shared-service shared-service
-             frontend.worker.handler.page worker-page
-             frontend.worker.pipeline worker-pipeline
-             frontend.worker.state worker-state
              lambdaisland.glogi log
              logseq.api.db-based db-based-api
              logseq.cli.common.graph cli-common-graph
@@ -214,7 +208,6 @@
            frontend.test.helper/deftest-async clojure.test/deftest
            logseq.graph-parser.test.helper/deftest-async clojure.test/deftest
            logseq.publishing.test.helper/deftest-async clojure.test/deftest
-           frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
            logseq.common.defkeywords/defkeyword cljs.spec.alpha/def
            frontend.common.thread-api/defkeyword cljs.spec.alpha/def}

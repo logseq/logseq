@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Eksporterer til en .transit-fil for feilsøking. Sensitive data vil bli fjernet fra den eksporterte filen."
  :export/debug-transit-file "Eksporter debug transit-fil"
  :export/edn-desc "Eksporterer til en lesbar og redigerbar .edn-fil. Ikke bruk dette som primær sikkerhetskopi."
- :export/error-unexpected "Det oppstod en uventet feil under eksport. Se JavaScript-konsollen for detaljer."
  :export/exporting "Eksporterer"
  :export/finalizing "Fullfører"
  :export/format-text "Tekst"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Skillelinje"
  :sidebar.right/toggle "Slå av/på høyre sidepanel"
 
- :storage/invalid-data-writing "Ugyldig dataskriving."
  :storage/sqlitedb-error "SQLiteDB-feil: {1}"
  :storage/sqlitedb-import-error "SQLiteDB import feil: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-lagringsfeil: {1}"

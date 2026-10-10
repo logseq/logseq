@@ -1,0 +1,15 @@
+(version v0.17.1)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base typerep dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_typerep_conv/archive/refs/tags/v0.17.1.tar.gz)
+  (checksum
+   sha512=8184722762d1e848b16f5409ecf478d0e60fadac590fba1d9355bd7efa09c25e4b87cdc0d117a77386b8da6fcf2bf13c7cf6150f3090686e354a2354ad52e1c5)))
