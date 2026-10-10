@@ -199,6 +199,37 @@ let prompt_body (p : Dialogs_state.prompt) : t =
   in
   node ctx parent
 
+(* pdf docinfo modal (cljs docinfo-display): `<strong>key::</strong>
+   <i>json</i>` run pairs inside #pdf-docinfo; the footer Copy all
+   writes the flattened text and closes. The card rides a `dialog`
+   kind — scrim, centering, focus trap and Escape/outside dismiss all
+   come from the platform. *)
+let docinfo_view (di : Dialogs_state.docinfo) : t =
+  dialog ~key:"dlg-pdf-docinfo" ~padding:24
+    ~style_class:"ls-dialog-pdf-docinfo"
+    ~on_dismiss:(fun _ -> Dialogs_state.close_docinfo ())
+    [ column ~key:"di-m" ~grow:1. ~min_height:0
+        [ scroll ~key:"di-s" ~style_class:"ui__dialog-main-content"
+            ~orientation:`vertical ~grow:1. ~min_height:0
+            [ column ~key:"di-b" ~style_class:"extensions__pdf-doc-info"
+                ~accessibility_identifier:"pdf-docinfo" ~gap:8
+                [ column ~key:"di-it" ~style_class:"inner-text" ~gap:0
+                    (List.mapi
+                       (fun i (k, v) ->
+                         box ~key:("di-r" ^ string_of_int i)
+                           [ text ~key:"k" ~as_:`Strong ~value:k []
+                           ; text ~key:"v" ~as_:`I ~value:v [] ])
+                       di.di_rows)
+                ; row ~key:"di-f" ~main:`center ~cross:`center
+                    [ Ui_components.dialog_btn_primary ~key:"di-copy"
+                        ~size:`sm ~variant:`primary
+                        ~text:(I18n.t "ui/copy-all")
+                        ~on_press:(fun _ ->
+                          Ui_services.clipboard_copy di.di_text;
+                          Toast.success (I18n.t "notification/copied");
+                          Dialogs_state.close_docinfo ()) ] ] ] ]
+    ; dialog_close ~key:"di-close" Dialogs_state.close_docinfo ]
+
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   Dialogs_state.ensure ctx;
@@ -213,6 +244,7 @@ let render (ms : Model.t Signal.signal) : t =
         | Dialogs_state.Confirm -> Dialogs_state.close_confirm ()
         | Dialogs_state.Prompt -> Dialogs_state.close_prompt ()
         | Dialogs_state.Ui_request -> Dialogs_state.close_top ()
+        | Dialogs_state.Docinfo -> Dialogs_state.close_docinfo ()
       in
       (match layer with
       | Dialogs_state.Named name -> dialog_view name ms
@@ -226,6 +258,11 @@ let render (ms : Model.t Signal.signal) : t =
                     ~on_dismiss:(fun _ -> Dialogs_state.close_prompt ())
                     [ prompt_body p
                     ; dialog_close ~key:"prmt-close" Dialogs_state.close_prompt ]
+              | None -> Logseq_el.nothing) ds
+      | Dialogs_state.Docinfo ->
+          reactive ~equal:(fun a b -> a.Dialogs_state.docinfo == b.Dialogs_state.docinfo)
+            (fun d -> match d.Dialogs_state.docinfo with
+              | Some di -> docinfo_view di
               | None -> Logseq_el.nothing) ds
       | Dialogs_state.Confirm | Dialogs_state.Ui_request ->
           let view = match layer with

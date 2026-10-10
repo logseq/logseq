@@ -162,50 +162,11 @@ pub fn register(shared: &Shared) {
         "border-radius:6px; overflow:hidden",
         "",
     );
-    // resources/css/lui-overlay.css — modal scrim + dialog surface.
-    // The web scrims are `color-mix(bg 90%/80%, transparent)`;
-    // `--lui-c-*` vars have no gpui counterpart, so both layers resolve
-    // through the `--ls-*` semantic table (theme-aware) with the same
-    // alpha via the `/opacity` suffix.
-    lui_gpui::style::register_class_style(
-        "ui__dialog-overlay",
-        "background:var(--ls-primary-background-color)/90",
-        "",
-    );
-    lui_gpui::style::register_class_style(
-        "ui__alert-dialog-overlay",
-        "background:var(--ls-primary-background-color)/80",
-        "",
-    );
-    lui_gpui::style::register_class_style(
-        "ui__dialog-content",
-        "background:var(--ls-primary-background-color); \
-         border:1px solid var(--ls-border-color); border-radius:8px; \
-         padding:24px; width:100%; max-width:672px; \
-         max-height:80dvh; overflow:hidden; \
-         position:relative",
-        "",
-    );
-    lui_gpui::style::register_class_style(
-        "ui__alert-dialog-content",
-        "background:var(--ls-primary-background-color); \
-         border:1px solid var(--ls-border-color); border-radius:8px; \
-         padding:24px; width:100%; max-width:512px; \
-         max-height:80dvh; overflow:hidden; \
-         position:relative",
-        "",
-    );
-    // .ui__dialog-content.ls-dialog-settings { max-width: 64rem }
+    // .lui-dialog.ls-dialog-settings { max-width: 64rem }
     lui_gpui::style::register_class_style(
         "ls-dialog-settings",
         "max-width:1024px",
         "",
-    );
-    // .ui__dialog-main-content { min-height:0; overflow-y:auto }
-    lui_gpui::style::register_class_style(
-        "ui__dialog-main-content",
-        "min-height:0",
-        "w-full overflow-y-auto",
     );
     // .cp__theme-modes-options { display:flex; gap:12px } — the theme
     // mode tiles lay out horizontally, not as a stacked list.
@@ -297,30 +258,6 @@ fn register_class_styles() {
          justify-content:center;align-items:center",
         "pointer-events-none",
     );
-    class(
-        "ui__dialog-overlay",
-        "position:absolute;inset:0;display:flex;flex-direction:column;\
-         justify-content:center;align-items:center",
-        "pointer-events-auto",
-    );
-    class(
-        "ui__alert-dialog-overlay",
-        "position:absolute;inset:0;display:flex;flex-direction:column;\
-         justify-content:center;align-items:center",
-        "pointer-events-auto",
-    );
-    class(
-        "ui__dialog-content",
-        "position:absolute;width:100%;max-width:42rem;padding:24px;\
-         border:1px solid border;border-radius:8px;\
-         background:background;color:foreground",
-        "pointer-events-auto",
-    );
-    class(
-        "ui__alert-dialog-content",
-        "position:absolute;width:100%;max-width:32rem",
-        "pointer-events-auto",
-    );
     // cljs dialog-confirm chrome (lui-overlay.css ~:1550): header/title/
     // main-content/footer rules the web twin carries. The gpui title is
     // an icon+heading row, so it joins flex here instead of block.
@@ -348,7 +285,6 @@ fn register_class_styles() {
     // the inline style sets position:fixed + left/top + z-index (el attrs
     // win over class declarations, so only the paint rules live here).
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
-    class("ui__dialog-main-content", "width:100%", "");
     class("ls-font-sample", "font-size:14px;line-height:20px;font-weight:600", "");
     class("ls-font-name", "font-size:11.2px;line-height:16px", "");
     // ---- body-mounted popup chrome (resources/css/lui-overlay.css

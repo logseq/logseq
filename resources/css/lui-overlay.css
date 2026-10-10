@@ -827,96 +827,6 @@ div[data-keep-selection].menu-links-wrapper {
   }
 }
 
-@keyframes lui-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-.ui__dialog-overlay {
-  position: fixed;
-  inset: 0;
-  /* cljs shui.css maps the overlay's z-50 utility to z-999 */
-  z-index: 999;
-  display: grid;
-  place-items: center;
-  overflow-y: auto;
-  /* --lui-c-background is already a full hsl() color (the :root alias
-     above) — mixing it directly keeps the scrim at cljs's
-     bg-background/90 */
-  background: color-mix(in oklab, var(--lui-c-background) 90%, transparent);
-  animation: lui-fade-in 150ms ease-out;
-}
-
-.ui__alert-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: color-mix(in oklab, var(--lui-c-background) 80%, transparent);
-  backdrop-filter: blur(4px);
-  animation: lui-fade-in 150ms ease-out;
-}
-
-.ui__dialog-content {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 999;
-  outline: none;
-  margin: 0;
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  box-sizing: border-box;
-  max-width: 42rem;
-  /* master: max-h-[80vh] + overflow-y-auto — tall dialog content scrolls
-     inside the dialog instead of growing the dialog past the viewport */
-  max-height: 80vh;
-  overflow-y: auto;
-  padding: 1.5rem;
-  border: 1px solid var(--lui-c-border);
-  border-radius: 0.5rem;
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
-     --ls-primary-text-color here would warm every label */
-  color: inherit;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  transform: translate(-50%, -50%)
-    scale(calc(1 - var(--nested-dialogs, 0) * 0.03));
-  animation: ui-dialog-zoom-in 200ms ease-out;
-}
-
-@media (min-width: 1024px) {
-  .ui__dialog-content {
-    max-width: 48rem;
-  }
-}
-
-.ui__alert-dialog-content {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 999;
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 32rem;
-  padding: 1.5rem;
-  border: 1px solid var(--lui-c-border);
-  border-radius: 0.5rem;
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
-     --ls-primary-text-color here would warm every label */
-  color: inherit;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  transform: translate(-50%, -50%);
-  animation: ui-dialog-zoom-in 200ms ease-out;
-}
-
 .ui__alert-dialog-header {
   display: flex;
   flex-direction: column;
@@ -999,19 +909,6 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 0.9;
 }
 
-/* cljs shui/button default variant is bg-primary/90 (-> /100 hover),
-   not the lx-accent-09 tint */
-.ui__dialog-content .ui__button.ls-btn-primary,
-.ui__alert-dialog-content .ui__button.ls-btn-primary {
-  background: hsl(var(--primary, 200 97% 37%) / 0.9);
-}
-
-.ui__dialog-content .ui__button.ls-btn-primary:hover,
-.ui__alert-dialog-content .ui__button.ls-btn-primary:hover {
-  background: hsl(var(--primary, 200 97% 37%) / 1);
-  opacity: 1;
-}
-
 /* leading icon inside a menu item — cljs uses gap-1 (4px) between
    icon and label inside .ui__dropdown-menu-item */
 .ls-menu-item-icon {
@@ -1048,11 +945,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
    dialog open */
-
-.ui__dialog-main-content {
-  min-height: 0;
-  overflow-y: auto;
-}
 
 /* dialog kind chrome: the kit .lui-dialog centers the card but owns no
    padding/gap/width — cljs ui__dialog-content was gap 1rem, padding
@@ -1127,16 +1019,6 @@ div[data-keep-selection].menu-links-wrapper {
   white-space: nowrap;
 }
 
-.ui__dialog-content[data-base-ui-inert],
-.ui__alert-dialog-content[data-base-ui-inert] {
-  pointer-events: none;
-}
-
-.ui__dialog-content[data-base-ui-inert] *,
-.ui__alert-dialog-content[data-base-ui-inert] * {
-  pointer-events: none;
-}
-
 /* LUI dialog bodies stack their content in one column */
 
 /* per-name dialog sizing (was inline utilities on the content node) */
@@ -1175,15 +1057,6 @@ div[data-keep-selection].menu-links-wrapper {
 .lui-dialog.ls-dialog-new-graph,
 .lui-dialog.ls-dialog-add-graph {
   max-width: 500px;
-}
-
-/* cljs marks the settings overlay data-align="top", but its dialog-content
-   still resolves to top:50% + translate(-50%,-50%): the tailwind top-[50%]
-   utility on cljs's dialog-content element beats shui.css's
-   [data-align=top] top-20 rule. LUI's dialog-content carries no utility
-   class, so restore the same effective centering here. */
-.ui__dialog-overlay[data-align="top"] .ui__dialog-content {
-  top: 50%;
 }
 
 .ls-icon-sm {
@@ -1395,12 +1268,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ls-dialog-layer,
-  .ui__dialog-overlay,
-  .ui__alert-dialog-overlay,
-  .ui__dialog-content,
-  .ui__alert-dialog-content,
-  .ui__alert-dialog-content {
+  .ls-dialog-layer {
     animation: none;
     transition: none;
   }
@@ -2379,12 +2247,6 @@ select.form-select {
   min-height: 24px;
 }
 
-/* cljs shui input is h-10 px-3 py-2 everywhere it appears in dialogs */
-.ui__dialog-content .ui__input {
-  height: 2.5rem;
-  padding: 0.5rem 0.75rem;
-}
-
 /* cljs shui button default size is h-10 */
 .cp__user-login .ui__button {
   height: 2.5rem;
@@ -2460,7 +2322,6 @@ select.form-select {
 /* generic muted/secondary text inside overlays */
 
 /* skeleton/loading blocks inside popup bodies */
-.ui__dialog-content .flex.flex-col,
 .ui__popover-content .flex.flex-col {
   min-width: 0;
 }
