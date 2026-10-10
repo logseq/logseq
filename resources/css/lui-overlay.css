@@ -731,8 +731,14 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
+/* cljs cmdk dialog: :align :top → items-start + content top-20, so the
+   box hugs the modal instead of stretching to the viewport. */
 .lui-dialog.ls-dialog-cmdk {
   overflow: hidden;
+  top: 5rem;
+  bottom: auto;
+  height: auto;
+  max-height: calc(100dvh - 6rem);
 }
 
 .cp__cmdk__modal {
