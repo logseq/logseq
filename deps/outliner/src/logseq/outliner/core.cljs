@@ -1608,17 +1608,20 @@
                                                               :indent? true}))))))
           (if parent-original
             (let [blocks' (take-while (fn [b]
-                                        (not= (:db/id (:block/parent b))
-                                              (:db/id (:block/parent parent))))
+                                        (= (:db/id (:block/parent b))
+                                           (:db/id parent)))
                                       top-level-blocks)]
               (move-blocks conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
                                                                      :sibling? true
                                                                      :indent? false})))
 
             (when parent
+              ;; only the selected blocks under the first one's parent go out
+              ;; 1 level; a selected block already above that level (a
+              ;; selection over 2 levels) stays, never goes deeper
               (let [blocks' (take-while (fn [b]
-                                          (not= (:db/id (:block/parent b))
-                                                (:db/id (:block/parent parent))))
+                                          (= (:db/id (:block/parent b))
+                                             (:db/id parent)))
                                         top-level-blocks)
                     result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
                 (if logical-outdenting?
