@@ -5175,6 +5175,7 @@ dependencies = [
 [[package]]
 name = "lui-core"
 version = "0.1.0"
+source = "git+https://github.com/logseq/lui.git?rev=908580b873762141e65aca4346c2773c0f0e3261#908580b873762141e65aca4346c2773c0f0e3261"
 dependencies = [
  "serde_json",
 ]
@@ -5182,6 +5183,7 @@ dependencies = [
 [[package]]
 name = "lui-gpui"
 version = "0.1.0"
+source = "git+https://github.com/logseq/lui.git?rev=908580b873762141e65aca4346c2773c0f0e3261#908580b873762141e65aca4346c2773c0f0e3261"
 dependencies = [
  "anyhow",
  "gpui-kit",

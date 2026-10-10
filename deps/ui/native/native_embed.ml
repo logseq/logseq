@@ -488,6 +488,7 @@ let dispatch_lui (event : Lui_protocol.event) : string =
       out)
 
 let appear node = dispatch_lui (Lui_protocol.Appear node)
+let load node = dispatch_lui (Lui_protocol.Load node)
 
 let press node = dispatch_lui (Lui_protocol.Press node)
 let press_ex node modifiers =
@@ -686,6 +687,7 @@ let resync _ =
 let () =
   Callback.register "lui_ocaml_init" initialize;
   Callback.register "lui_ocaml_appear" appear;
+  Callback.register "lui_ocaml_load" load;
   Callback.register "lui_ocaml_press" press;
   Callback.register "lui_ocaml_press_ex" press_ex;
   Callback.register "lui_ocaml_long_press" long_press;
