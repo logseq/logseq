@@ -808,7 +808,7 @@ let on_normal_key ev =
           match S.anchor () with
           | Some u when selected () ->
               ev.Ui_services.prevent_default ();
-              A.enter_edit u 0
+              A.enter_edit ~scope:(S.selection_scope ()) u 0
           | _ -> ()))
   | "Escape" ->
       (* cljs: first Escape closes the action-bar popover, the next one
@@ -1514,7 +1514,7 @@ let on_copy ev =
            else String.sub e.S.buffer lo (hi - lo));
         ev.Ui_services.prevent_default ())
     | Some _ -> ()
-    | None -> A.copy_selection ev
+    | None -> if not (is_editable_target ev.Ui_services.target) then A.copy_selection ev
 
 let on_cut ev =
   if Ui_services.env_publishing () then () else begin
@@ -1532,7 +1532,7 @@ let on_cut ev =
             (A.live_buffer e.S.uuid));
         ev.Ui_services.prevent_default ())
     | Some _ -> ()
-    | None -> A.cut_selection ev
+    | None -> if not (is_editable_target ev.Ui_services.target) then A.cut_selection ev
 
   end
 

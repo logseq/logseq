@@ -47,7 +47,8 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     await wait(() => document.querySelector('#block-content-' + blocks[0].uuid));
     document.querySelector('#block-content-' + blocks[0].uuid).scrollIntoView({block: 'start'});
     document.querySelector('#block-content-' + blocks[0].uuid).click();
-    await wait(() => input() && document.activeElement === input() && document.querySelector('.ed-caret'));
+    try { await wait(() => input() && document.activeElement === input() && document.querySelector('.ed-caret')); }
+    catch (error) { throw new Error(JSON.stringify({fixture: blocks[0].uuid, input: input()?.id, active: document.activeElement?.id, caret: !!document.querySelector('.ed-caret')})); }
     await pause(30);
     return {page, blocks};
   };
@@ -866,6 +867,199 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     target.dispatchEvent(event);
     return event;
   };
+  await test('Review follow-up: autosave preserves whitespace until exit', async () => {
+    const {blocks} = await fixture(['base']);
+    key('a', {metaKey: true}); insert('  value  '); await pause(650);
+    const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+    assert(saved === '  value  ' && text() === '  value  ', {saved, value: text()});
+    key('Escape'); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === 'value', {phase: 'exit'});
+  });
+  await test('Review follow-up: opening and switching ordinary blocks trim at the boundary', async () => {
+    const {blocks} = await fixture(['base', 'other']);
+    key('a', {metaKey: true}); insert('  first  '); await pause(650);
+    document.getElementById('block-content-' + blocks[1].uuid).click();
+    await wait(() => input()?.id.endsWith(blocks[1].uuid)); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === 'first', {phase: 'switch'});
+    key('Escape'); await pause(450);
+    await logseq.api.update_block(blocks[0].uuid, '  externally spaced  ');
+    await pause(450); document.getElementById('block-content-' + blocks[0].uuid).click();
+    await wait(() => input()?.id.endsWith(blocks[0].uuid));
+    assert(text() === 'externally spaced', {phase: 'open', value: text()});
+  });
+  for (const navigate of [false, true]) {
+    await test('Review follow-up: trim when leaving through ' + (navigate ? 'navigation' : 'blur'), async () => {
+      const {blocks} = await fixture(['base']);
+      key('a', {metaKey: true}); insert('  boundary  '); await pause(650);
+      if (navigate) location.hash = '#/all-pages';
+      else document.getElementById('head').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+      await pause(650);
+      const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+      assert(saved === 'boundary' && !input(), {saved, editing: input()?.id});
+    });
+  }
+  await test('Review follow-up: heading autosave retains trailing whitespace', async () => {
+    const {blocks} = await fixture(['base']);
+    key('a', {metaKey: true}); insert('## heading  '); await pause(650);
+    const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+    assert(saved === 'heading  ', {saved});
+    key('Escape'); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === 'heading', {phase: 'exit'});
+  });
+  await test('Review follow-up: splitting trims the block that leaves editing', async () => {
+    const {blocks} = await fixture(['base']);
+    key('a', {metaKey: true}); insert('  split boundary  '); key('End'); key('Enter');
+    await pause(650);
+    const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+    assert(saved === 'split boundary' && !input()?.id.endsWith(blocks[0].uuid)
+      && text() === '', {saved, editing: input()?.id, value: text()});
+  });
+  for (const exit of [false, true]) {
+    await test('Review follow-up: newer save wins delayed reference parsing' + (exit ? ' on exit' : ''), async () => {
+      const {blocks} = await fixture(['base']);
+      const original = Worker.prototype.postMessage;
+      let held, released = false;
+      Worker.prototype.postMessage = function(message, ...rest) {
+        if (!held && message.argumentList?.[0]?.value === 'thread-api/get-case-page') {
+          held = {worker: this, message, rest}; return;
+        }
+        return Reflect.apply(original, this, [message, ...rest]);
+      };
+      try {
+        key('a', {metaKey: true}); insert('old [[Save order ' + crypto.randomUUID() + ']]');
+        await wait(() => held);
+        key('a', {metaKey: true}); insert('newer');
+        if (exit) key('Escape');
+        await pause(650);
+        released = true; Reflect.apply(original, held.worker, [held.message, ...held.rest]);
+        await pause(800);
+        const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+        assert(saved === 'newer', {saved, exit, live: text()});
+      } finally {
+        Worker.prototype.postMessage = original;
+        if (held && !released) Reflect.apply(original, held.worker, [held.message, ...held.rest]);
+      }
+    });
+  }
+  await test('Review follow-up: code source survives save, exit and remount verbatim', async () => {
+    const {page, blocks} = await fixture(['']);
+    document.dispatchEvent(new CustomEvent('ls:editor-command', {detail: {command: 'code-block', from: 0, to: 0}}));
+    await wait(() => document.querySelector('.CodeMirror')?.CodeMirror);
+    const cm = document.querySelector('.CodeMirror').CodeMirror;
+    const source = '  #literal [[not a page]]\n';
+    cm.focus(); cm.setValue(source); await pause(650);
+    const saved = await logseq.api.get_block(blocks[0].uuid);
+    assert(saved.content === source, {phase: 'autosave', saved, widget: cm.getValue()});
+    cm.getOption('extraKeys').Esc(cm); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === source, {phase: 'exit'});
+    await fixture(['temporary route']); location.hash = '#/page/' + page.uuid;
+    await wait(() => document.querySelector('.CodeMirror')?.CodeMirror);
+    const reopened = document.querySelector('.CodeMirror').CodeMirror;
+    reopened.focus(); await pause(100);
+    assert(reopened.getValue() === source, {phase: 'reopen', value: reopened.getValue()});
+    reopened.getOption('extraKeys').Esc(reopened); await pause(450);
+  });
+  await test('Review follow-up: math source preserves whitespace and literal references', async () => {
+    const {blocks} = await fixture(['']);
+    document.dispatchEvent(new CustomEvent('ls:editor-command', {detail: {command: 'math-block', from: 0, to: 0}}));
+    await pause(450); key('a', {metaKey: true}); insert('  #literal [[not a page]]\n'); await pause(650);
+    const source = '  #literal [[not a page]]\n';
+    const saved = await logseq.api.get_block(blocks[0].uuid);
+    assert(saved.content === source, {phase: 'autosave', saved, value: text()});
+    key('Escape'); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === source, {phase: 'exit'});
+  });
+  await test('Review follow-up: search input owns copy and cut with block selection', async () => {
+    const {blocks} = await fixture(['must remain']); key('Escape'); await pause(100);
+    document.querySelector('[aria-label="Search"]').click();
+    await wait(() => document.querySelector('.cp__cmdk-search-input'));
+    const field = document.querySelector('.cp__cmdk-search-input');
+    field.value = 'query'; field.focus(); field.select();
+    const prevented = [];
+    for (const type of ['copy', 'cut']) {
+      const data = new DataTransfer();
+      const event = new ClipboardEvent(type, {clipboardData: data, bubbles: true, cancelable: true});
+      field.dispatchEvent(event); prevented.push(event.defaultPrevented);
+    }
+    await pause(650);
+    document.querySelector('[aria-label="Search"]').click();
+    await wait(() => !document.querySelector('.cp__cmdk-search-input'));
+    await wait(() => document.activeElement === document.querySelector('[aria-label="Search"]'));
+    assert(prevented.every(v => !v) && (await logseq.api.get_block(blocks[0].uuid))?.content === 'must remain', {prevented});
+  });
+  await test('Review follow-up: plain external paste resolves fresh tags and page references', async () => {
+    const {page} = await fixture(['target']); key('Escape'); await pause(100);
+    const tag = 'paste-tag-' + crypto.randomUUID();
+    const ref = 'Paste page ' + crypto.randomUUID();
+    paste(document.body, 'hello #' + tag + ' [[' + ref + ']]'); await pause(800);
+    const tree = await logseq.api.get_page_blocks_tree(page.uuid);
+    assert(tree.length === 2 && tree[1].content.startsWith('hello #')
+      && tree[1].tags?.some(t => t.name === tag)
+      && tree[1].refs?.some(r => r.name === ref.toLowerCase()), {tree});
+    assert(await logseq.api.get_page(tag), {tag});
+    assert(await logseq.api.get_page(ref), {ref});
+  });
+  await test('Review follow-up: delayed structured paste preserves a later editing session', async () => {
+    const {page, blocks} = await fixture(['target', 'other']);
+    const original = Worker.prototype.postMessage;
+    let held, released = false;
+    Worker.prototype.postMessage = function(message, ...rest) {
+      if (!held && message.argumentList?.[0]?.value === 'thread-api/paste-extract-blocks') {
+        held = {worker: this, message, rest}; return;
+      }
+      return Reflect.apply(original, this, [message, ...rest]);
+    };
+    try {
+      paste(input(), '- pasted one\n- pasted two'); await wait(() => held);
+      document.getElementById('block-content-' + blocks[1].uuid).click();
+      await wait(() => input()?.id.endsWith(blocks[1].uuid)); key('End'); insert(' AFTER');
+      released = true; Reflect.apply(original, held.worker, [held.message, ...held.rest]);
+      await pause(800);
+      assert(input()?.id.endsWith(blocks[1].uuid) && text() === 'other AFTER', {input: input()?.id, value: text()});
+      const tree = await logseq.api.get_page_blocks_tree(page.uuid);
+      assert(tree.length === 4, {tree});
+    } finally {
+      Worker.prototype.postMessage = original;
+      if (held && !released) Reflect.apply(original, held.worker, [held.message, ...held.rest]);
+    }
+  });
+  await test('Review follow-up: Enter reopens the selected sidebar occurrence', async () => {
+    const {page, blocks} = await fixture(['shared occurrence']); key('Escape'); await pause(100);
+    await logseq.api.open_in_right_sidebar(page.uuid);
+    const selector = '[data-cid="sidebar"] #block-content-' + blocks[0].uuid;
+    await wait(() => document.querySelector(selector));
+    document.querySelector(selector).click(); await wait(() => input()?.closest('[data-cid]')?.dataset.cid === 'sidebar');
+    key('Escape'); await pause(100); key('Enter'); await pause(300);
+    assert(input()?.closest('[data-cid]')?.dataset.cid === 'sidebar', {scope: input()?.closest('[data-cid]')?.dataset.cid});
+  });
+  await test('Review follow-up: vertical navigation does bounded fragment discovery', async () => {
+    await fixture([Array.from({length: 500}, (_, i) => 'Line ' + i + ' **bold** and `code` https://example.com').join('\n')]);
+    key('Home', {metaKey: true}); await pause(30);
+    const original = Element.prototype.querySelectorAll;
+    let visits = 0, queries = 0;
+    Element.prototype.querySelectorAll = function(selector) {
+      const result = Reflect.apply(original, this, [selector]);
+      if (selector === '.ed-r') { visits += result.length; queries++; }
+      return result;
+    };
+    try {
+      key('ArrowDown', {shiftKey: true}); await pause(30);
+      const fragments = Reflect.apply(original, surface(), ['.ed-r']).length;
+      assert(visits <= fragments * 12, {visits, queries, fragments});
+      assert(input().__lsEd.caret_off > 0, {offset: input().__lsEd.caret_off});
+      return {visits, queries, fragments};
+    } finally { Element.prototype.querySelectorAll = original; }
+  });
+  await test('Review follow-up: unmatched bracket input stays within the long-text budget', async () => {
+    await fixture([('item [unfinished\n').repeat(2000)]); key('End', {metaKey: true});
+    const samples = [];
+    for (let i = 0; i < 10; i++) {
+      await new Promise(requestAnimationFrame);
+      const start = performance.now(); insert('x'); samples.push(performance.now() - start);
+    }
+    const median = [...samples].sort((a, b) => a - b)[4];
+    assert(median < 20, {median, samples}); return {median, samples};
+  });
   await test('Review: rejected exit preserves input received during saving', async () => {
     const {blocks} = await fixture(['base']); key('End'); insert('before');
     const original = Worker.prototype.postMessage;

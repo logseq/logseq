@@ -8,8 +8,7 @@
    <textarea id=edit-block-<uuid> data-lang>; the host is
    display:contents so the .CodeMirror wrapper fromTextArea inserts
    keeps the flex slot it had as a direct .code-editor child.
-   Code_mirror.mount_async binds the vendored CM5 (deduped against the
-   document scan in code_mirror.ml by uuid/bound).
+   Code_mirror.mount_async binds the vendored CM5 and owns its lifecycle.
 
    source-role "query" — interior
    <pre class=CodeMirror-line contenteditable role=textbox
@@ -71,6 +70,14 @@ let emit_cm st name ?value ?key () =
   in
   st.emit "cm-event" fields
 
+(* Properties arrive independently; mount once both role and UUID exist.
+   The asynchronous core load observes the completed property batch. *)
+let mount_block st =
+  match st.line with
+  | Some textarea when st.role = "block" && st.uuid <> "" ->
+      Code_mirror.mount_async ~read_only:st.read_only st.uuid textarea
+  | _ -> ()
+
 let build_block el st =
   (* display:contents keeps the textarea + .CodeMirror wrapper in the
      .code-editor row's flex layout exactly where the old direct child
@@ -86,8 +93,7 @@ let build_block el st =
   if st.read_only then D.el_set_attr textarea "readonly" "";
   D.el_append_child (element_to_json el) textarea;
   st.line <- Some textarea;
-  if st.uuid <> "" then
-    Code_mirror.mount_async ~read_only:st.read_only st.uuid textarea
+  mount_block st
 
 let build_query el st =
   let line =
@@ -137,7 +143,9 @@ let set_property el prop value =
   | "uuid", StringValue v -> (
       st.uuid <- v;
       match (st.line, st.role) with
-      | Some line, "block" -> D.el_set_id line ("edit-block-" ^ v)
+      | Some line, "block" ->
+          D.el_set_id line ("edit-block-" ^ v);
+          mount_block st
       | _ -> ())
   | "lang", StringValue v -> (
       st.lang <- v;

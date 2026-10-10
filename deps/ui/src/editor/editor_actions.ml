@@ -402,6 +402,7 @@ let model_title uuid =
 let display_title uuid = S.title_for uuid (model_title uuid)
 
 let commit_result uuid buf =
+  Ops.invalidate_autosave uuid;
   let opts =
     match !Ops.pending_save with
     | Some (u, _) when u = uuid -> !Ops.pending_save_opts
@@ -432,7 +433,7 @@ let commit_result uuid buf =
 
 let commit uuid buf = ignore (commit_result uuid buf)
 
-let save_if_dirty uuid = commit uuid (live_buffer uuid)
+let save_if_dirty uuid = commit uuid (Ops.trim_title uuid (live_buffer uuid))
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -475,7 +476,7 @@ let rec enter_edit ?scope uuid caret =
      open property-value editor first *)
   !(S.close_property_editor) ();
   (match S.editing () with
-  | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
+  | Some e when e.uuid <> uuid || e.scope <> scope -> save_if_dirty e.uuid
   | _ -> ());
   match S.find uuid with
       | Some _b ->
@@ -483,7 +484,7 @@ let rec enter_edit ?scope uuid caret =
              (cljs id-ref->title-ref) *)
           let restore = S.editing () in
           let p =
-            (let* buffer = Ops.title_for_edit (String.trim (display_title uuid)) in
+            (let* buffer = Ops.title_on_entry uuid (display_title uuid) in
             if context = (Runtime.repo (), Runtime.route ()) then (
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
@@ -521,7 +522,7 @@ let rec exit_edit ~select =
     | Some e ->
         last_edit_uuid := Some e.uuid;
         cancel_pending_focus ();
-        let buf = live_buffer e.uuid in
+        let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
         let finish_exit () =
           match S.editing () with
           (* same session + same buffer text: safe to exit. Physical
@@ -569,7 +570,7 @@ let flush_edit () =
     | None -> ()
   | Some e ->
       cancel_pending_focus ();
-      let buf = live_buffer e.uuid in
+      let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
@@ -789,8 +790,9 @@ let split_at_cursor uuid =
         let above = not focused_root && String.trim prefix = ""
                     && String.trim suffix <> "" in
         let before =
-          if above then (if selection_end <> pos then suffix else buf)
-          else prefix in
+          Ops.trim_title uuid
+            (if above then (if selection_end <> pos then suffix else buf)
+             else prefix) in
         let after = if above then "" else suffix in
         let new_uuid = Ui_services.env_random_uuid () in
         let library = library_context () in
@@ -865,7 +867,7 @@ let split_at_cursor uuid =
 let insert_sibling_after uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
-      let buf = live_buffer uuid in
+      let buf = Ops.trim_title uuid (live_buffer uuid) in
       let new_uuid = Ui_services.env_random_uuid () in
       let library = library_context () in
       let sibling =
@@ -1680,10 +1682,23 @@ let paste_source_text ~text ~html =
 
 (* cljs edit-last-block-after-inserted! — after a paste, editing moves to
    the last inserted block so sequential pastes append in order *)
-let edit_last_inserted resp =
+let edit_last_inserted ?scope resp =
   match Ops.last_inserted_uuid resp with
-  | Some u -> enter_edit u (String.length (model_title u))
+  | Some u -> enter_edit ?scope u (String.length (model_title u))
   | None -> ()
+
+let paste_focus () =
+  let context = Runtime.repo (), Runtime.route () in
+  let editing = S.editing () in
+  let selection = S.history_cursor () in
+  let scope = match editing with Some e -> e.S.scope | None -> S.selection_scope () in
+  fun resp ->
+    if context = (Runtime.repo (), Runtime.route ())
+       && (match editing, S.editing () with
+           | Some before, Some current -> before.S.epoch == current.S.epoch
+           | None, None -> S.history_cursor () = selection
+           | _ -> false)
+    then edit_last_inserted ~scope resp
 
 let paste_history_opts target_uuid =
   let scope = match S.editing () with
@@ -1704,6 +1719,7 @@ let paste_trees trees target_uuid ~replace_empty =
    places after [uuid] (cljs keep-uuid? + :outliner-real-op
    :paste-text under :outliner-op :paste) *)
 let paste_markdown_blocks uuid text ~replace_empty ~sibling =
+  let focus = paste_focus () in
   let opts = paste_history_opts uuid in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
@@ -1734,43 +1750,40 @@ let paste_markdown_blocks uuid text ~replace_empty ~sibling =
         if replace_empty then Ops.resync_open_editor ()
         else Js.Promise.resolve ()
       in
-      edit_last_inserted resp;
+      focus resp;
       Js.Promise.resolve ())
   | _ -> Js.Promise.resolve ()
 
 let paste_lines lines =
   let library = library_context () in
-  let blocks =
-    List.map
-      (fun l -> Ops.block_map ~title:l ~page:library (Ui_services.env_random_uuid ()))
-      lines
-  in
-  match selected_uuids () with
+  let target = match selected_uuids () with
   | [] -> (
       (* nothing selected: append at page end *)
       match (Runtime.model ()).Model.route_page with
       | Some p -> (
           match p.Model.page_uuid with
-          | None -> ()
+          | None -> None
           | Some pu -> (
               match List.rev (S.page_blocks ()) with
               | last :: _ -> (
                   match last.Model.block_uuid with
-                  | Some u ->
-                      ignore
-                        (Ops.apply_and_refresh
-                           [ Ops.insert_blocks blocks u ~sibling:true ])
-                  | None -> ())
-              | [] ->
-                  ignore
-                    (Ops.apply_and_refresh
-                       [ Ops.insert_blocks blocks pu ~sibling:false ])))
-      | None -> ())
+                  | Some u -> Some (u, true)
+                  | None -> None)
+              | [] -> Some (pu, false)))
+      | None -> None)
   | sel ->
-      let last = List.nth sel (List.length sel - 1) in
+      Some (List.nth sel (List.length sel - 1), true) in
+  match target with
+  | None -> ()
+  | Some (uuid, sibling) ->
+      let context = Runtime.repo (), Runtime.route () in
       ignore
-        (Ops.apply_and_refresh
-           [ Ops.insert_blocks blocks last ~sibling:true ])
+        (let* blocks = Js.Promise.all (Array.of_list
+           (List.map (fun title -> Ops.block_map_parsed ~page:library
+               (Ui_services.env_random_uuid ()) (String.trim title)) lines)) in
+         if context = (Runtime.repo (), Runtime.route ()) then
+           Ops.apply_and_refresh [ Ops.insert_blocks (Array.to_list blocks) uuid ~sibling ]
+         else Js.Promise.resolve ())
 
 (* splice external clipboard text into the live model at the selection,
    repainting the surface and scheduling the debounced save like a
@@ -1803,6 +1816,7 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
           in
+          let focus = paste_focus () in
           ignore
             (let* resp = paste_trees trees e.uuid ~replace_empty in
             (* replace-empty swaps the editing block's entity
@@ -1814,7 +1828,7 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
               (if replace_empty then Ops.resync_open_editor ()
                else Js.Promise.resolve ())
             in
-            edit_last_inserted resp;
+            focus resp;
             Js.Promise.resolve ())
       | None -> ())
   | Some e, _ ->
@@ -1899,13 +1913,14 @@ let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
           ev.Ui_services.prevent_default ();
           match selected_uuids () with
           | _ :: _ as sel ->
+              let focus = paste_focus () in
               ignore
                 (let* resp =
                   paste_trees trees
                     (List.nth sel (List.length sel - 1))
                     ~replace_empty:false
                 in
-                edit_last_inserted resp;
+                focus resp;
                 Js.Promise.resolve ())
           | [] -> ())
       | _ ->
@@ -2239,7 +2254,7 @@ let arrow_edge uuid up =
           if up then
             ignore
               (let* buffer =
-                 Ops.title_for_edit (String.trim (display_title nu))
+                 Ops.title_on_entry nu (display_title nu)
                in
                enter_edit ~scope nu (String.length buffer);
                Js.Promise.resolve ())

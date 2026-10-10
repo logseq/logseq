@@ -1,8 +1,8 @@
 (* CodeMirror 5 bindings + lifecycle for code-fence blocks — port of
    frontend.extensions.code. A real CodeMirror mounts on the textarea
    inside each .code-editor (emitted by Render.code_block) via the shared
-   document mutation scan; instances are keyed by block uuid and pruned
-   when their wrapper leaves the DOM.
+   extension adapter; instances are keyed by block uuid and released
+   when their extension unmounts.
 
    Interop is OCaml-only: the vendored npm codemirror@5 package and all
    its mode/addon modules are pulled in through [@@mel.module] externals
@@ -111,9 +111,6 @@ external find_mode_by_ext : cm_module -> string -> Js.Json.t option
 external mode_infos : cm_module -> Js.Json.t array = "modeInfo"
   [@@mel.get]
 
-external next_sibling : D.el -> D.el option = "nextElementSibling"
-  [@@mel.get] [@@mel.return nullable]
-
 external window_obj : Js.Json.t = "window"
   [@@mel.scope "globalThis"]
 
@@ -196,14 +193,6 @@ let instance uuid =
       Hashtbl.remove instances uuid;
       None
   | None -> None
-
-let prune () =
-  let dead = ref [] in
-  Hashtbl.iter
-    (fun uuid c ->
-      if not (D.el_is_connected (get_wrapper c)) then dead := uuid :: !dead)
-    instances;
-  List.iter (Hashtbl.remove instances) !dead
 
 (* the CodeMirror doc value for a block — installed as the live_buffer
    provider so blur/exit commits read the CM surface, not the hidden
@@ -370,18 +359,6 @@ let make_options ~uuid ~lang ~mode ~read_only =
     Js.Dict.set opts "viewportMargin" (Js.Json.number Float.infinity);
   Js.Json.object_ opts
 
-(* fromTextArea leaves the textarea in place (hidden) and inserts the
-   .CodeMirror wrapper right after it *)
-let bound el =
-  match next_sibling el with
-  | Some sib -> D.el_class_contains sib "CodeMirror"
-  | None -> false
-
-let uuid_of_el el =
-  match D.el_closest el ".ls-block" with
-  | Some block -> D.el_get_attr block "data-blockid"
-  | None -> None
-
 let mount ?(read_only = false) uuid textarea =
   let lang =
     normalize_lang
@@ -417,28 +394,6 @@ let mount ?(read_only = false) uuid textarea =
                 Js.Promise.resolve ()))
   | None -> ()
 
-(* scan fires before the core chunk exists — queue the mount behind it,
-   deduped by uuid so a second scan pass can't mount twice *)
-let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
-
-let mount_async ?(read_only = false) uuid el =
-  if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
-    Hashtbl.replace pending_mounts uuid ();
-    ignore
-      (ensure_core ()
-       |> Js.Promise.then_ (fun () ->
-              Hashtbl.remove pending_mounts uuid;
-              if instance uuid = None && D.el_is_connected el then
-                mount ~read_only uuid el;
-              Js.Promise.resolve ()))
-  end
-
-(* the logseq-codemirror adapter drops a block-role instance eagerly on
-   node removal instead of waiting for the next prune pass *)
-let unmount uuid =
-  Hashtbl.remove pending_mounts uuid;
-  Hashtbl.remove instances uuid
-
 (* live read-only toggle for the extension's read-only prop *)
 let set_read_only uuid flag =
   match instance uuid with
@@ -461,7 +416,7 @@ let sync_titles (_st : S.t) =
 let watch : unit Signal.signal option ref = ref None
 
 (* S.state throws until the first block row mounts the editor state —
-   subscribe lazily from the mutation scan instead of at install *)
+   subscribe lazily from the explicit mount instead of at install *)
 let ensure_watch () =
   match !watch with
   | Some _ -> ()
@@ -469,22 +424,28 @@ let ensure_watch () =
       if S.ready () then
         watch := Some (Signal.map sync_titles (S.signal ()))
 
-let scan roots =
+(* Lazy mounts are deduplicated until the core chunk arrives. *)
+let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
+
+let mount_async ?(read_only = false) uuid el =
   ensure_watch ();
-  prune ();
-  D.for_each_touched roots ".code-editor textarea" (fun el ->
-      (* the selector also matches the hidden textarea inside a mounted
-         .CodeMirror — skip it or fromTextArea would nest editors *)
-      if
-        (not (bound el))
-        && D.el_closest el ".CodeMirror" = None
-      then
-        match uuid_of_el el with
-        | Some uuid -> mount_async uuid el
-        | None -> ())
+  if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
+    Hashtbl.replace pending_mounts uuid ();
+    ignore
+      (ensure_core ()
+       |> Js.Promise.then_ (fun () ->
+              Hashtbl.remove pending_mounts uuid;
+              if instance uuid = None && D.el_is_connected el then
+                mount ~read_only uuid el;
+              Js.Promise.resolve ()))
+  end
+
+(* The adapter releases its block-role instance on node removal. *)
+let unmount uuid =
+  Hashtbl.remove pending_mounts uuid;
+  Hashtbl.remove instances uuid
 
 (* -- language picker (.code-block-actions .select-language) -- *)
-
 let picker : D.el option ref = ref None
 
 let close_picker () =
@@ -588,6 +549,5 @@ let install () =
         with
         | Some _, None -> close_picker ()
         | _ -> ())
-      true;
-    D.register_doc_scan ~sync:true scan
+      true
   end

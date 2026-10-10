@@ -91,7 +91,29 @@ let markdown_heading_level s =
   else None
 
 let strip_markdown_heading s lvl =
-  String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
+  let rec start i =
+    if i < String.length s
+       && List.mem s.[i] [ ' '; '\t'; '\n'; '\r'; '\012' ]
+    then start (i + 1)
+    else i
+  in
+  let i = start 0 in
+  let after = i + lvl + 1 in
+  String.sub s 0 i ^ String.sub s after (String.length s - after)
+
+let source_block uuid =
+  match S.find uuid with
+  | Some b -> List.mem b.Model.block_display_type [ Some "code"; Some "math" ]
+  | None -> false
+
+(* Prose is trimmed at editing boundaries, never during autosave. *)
+let trim_title uuid title = if source_block uuid then title else String.trim title
+
+(* Only in-flight autosaves occupy this table. Explicit saves and newer
+   input invalidate their preparation before it can submit stale text. *)
+let autosave_revisions : (string, int) Hashtbl.t = Hashtbl.create 4
+let autosave_revision = ref 0
+let invalidate_autosave uuid = Hashtbl.remove autosave_revisions uuid
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -101,16 +123,21 @@ let strip_markdown_heading s lvl =
    bare {name,title,fresh-uuid} map upserts nothing, minting a partial
    duplicate entity that fails tx validation *)
 let block_map_parsed ?(page = false) uuid title =
-  let dt =
-    match S.find uuid with
-    | Some b -> b.Model.block_display_type
-    | None -> None
-  in
+  invalidate_autosave uuid;
+  if source_block uuid then
+    Js.Promise.resolve
+      (* An explicit empty ref set marks source as parsed; omitted refs
+         ask the worker to extract page references from the title. *)
+      (Wire.Map
+         [ str "block/uuid" (Wire.Uuid uuid)
+         ; str "block/title" (Wire.String title)
+         ; str "block/refs" (Wire.List []) ])
+  else
   let title, heading =
     match markdown_heading_level title with
-    | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+    | Some lvl ->
         (strip_markdown_heading title lvl, Some lvl)
-    | _ -> (String.trim title, None)
+    | _ -> (title, None)
   in
   let* p = Title_refs.parse title in
   Js.Promise.resolve
@@ -138,15 +165,10 @@ let save_block_parsed uuid title =
    paint this so the post-edit DOM already shows the normalized text
    (markdown heading stripped) instead of the raw buffer *)
 let normalized_title uuid title =
-  let dt =
-    match S.find uuid with
-    | Some b -> b.Model.block_display_type
-    | None -> None
-  in
   match markdown_heading_level title with
-  | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+  | Some lvl when not (source_block uuid) ->
       strip_markdown_heading title lvl
-  | _ -> String.trim title
+  | _ -> title
 
 let insert_blocks ?(bottom = false) ?(replace_empty_target = false)
     blocks target_uuid ~sibling =
@@ -1326,6 +1348,8 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
 
 
 let schedule_save uuid title =
+  invalidate_autosave uuid;
+  let context = Runtime.repo (), Runtime.route () in
   let before =
     match !pending_save with
     | Some (u, _) when u = uuid ->
@@ -1338,24 +1362,41 @@ let schedule_save uuid title =
   pending_save := Some (uuid, title);
   pending_save_opts := opts;
   let rec save_when_ready () =
-    if !S.structure_pending then
+    if context <> (Runtime.repo (), Runtime.route ()) then
+      cancel_pending_save ()
+    else if !S.structure_pending then
       pending_save_ready := Some save_when_ready
     else (
         pending_save := None;
+        let parsed = save_block_parsed uuid title in
+        incr autosave_revision;
+        let revision = !autosave_revision in
+        Hashtbl.replace autosave_revisions uuid revision;
+        let current () = Hashtbl.find_opt autosave_revisions uuid = Some revision in
+        let save =
+          let* sop = parsed in
+          if not (current ()) then Js.Promise.resolve ()
+          else if context <> (Runtime.repo (), Runtime.route ()) then (
+            Hashtbl.remove autosave_revisions uuid;
+            Js.Promise.resolve ())
+          else (
+            let* _ = apply_result ~flush_save:false ~opts [ sop ] in
+            if current () then (
+              Hashtbl.remove autosave_revisions uuid;
+              if context = (Runtime.repo (), Runtime.route ()) then (
+                (* Advance the clean base only for the submitted revision. *)
+                S.override_title uuid (normalized_title uuid title);
+                S.set_silent (fun st ->
+                    match st.S.editing with
+                    | Some e when e.S.uuid = uuid && e.S.buffer = title ->
+                        { st with S.editing = Some { e with S.base = title } }
+                    | _ -> st)));
+            Js.Promise.resolve ())
+        in
         ignore
-          (let* _ = apply_parsed ~opts ~rest:[] [ (uuid, title) ] in
-          (* committed — display override mirrors what commit does so
-             resync_open_editor compares against the committed title
-             while the store catches up, and base advances so the undo
-             resync gate sees the buffer as clean *)
-          S.override_title uuid (normalized_title uuid title);
-          S.set_silent (fun st ->
-              match st.S.editing with
-              | Some e when e.S.uuid = uuid && e.S.buffer = title ->
-                  { st with
-                    S.editing = Some { e with S.base = title } }
-              | _ -> st);
-          Js.Promise.resolve ()))
+          (save |> Js.Promise.catch (fun _error ->
+               if current () then Hashtbl.remove autosave_revisions uuid;
+               save)))
   in
   save_timer := Ui_services.timers_timeout save_when_ready 400
 
@@ -1430,6 +1471,10 @@ let title_for_edit (title : string) : string Js.Promise.t =
           Buffer.add_substring b title !cursor (n - !cursor);
           Js.Promise.resolve (Buffer.contents b))
 
+let title_on_entry uuid title =
+  let title = trim_title uuid title in
+  if source_block uuid then Js.Promise.resolve title else title_for_edit title
+
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply +
    splice the response delta *)
 let apply_parsed_and_refresh ?opts ~rest pairs =
@@ -1461,8 +1506,11 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
              display override while the store catches up, and reading the
              raw block_title here would clobber text the worker already
              persisted *)
-          let title = String.trim (S.title_for e.uuid b.Model.block_title) in
-          let* title = title_for_edit title in
+          let title = S.title_for e.uuid b.Model.block_title in
+          let* title =
+            if source_block e.uuid then Js.Promise.resolve title
+            else title_for_edit title
+          in
           (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
                     opened with and the stored title moved since. undo/redo

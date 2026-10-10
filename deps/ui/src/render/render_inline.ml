@@ -34,6 +34,18 @@ let find_sub s i pat =
     in
     go i
 
+(* A left-to-right parse can reuse both a found delimiter and a failed
+   suffix search. Each parse owns its cache, including nested labels. *)
+let substring_finder s =
+  let searches = Hashtbl.create 4 in
+  fun i pat ->
+    match Hashtbl.find_opt searches pat with
+    | Some (start, found) when i >= start && (found = -1 || i <= found) -> found
+    | _ ->
+        let found = find_sub s i pat in
+        Hashtbl.replace searches pat (i, found);
+        found
+
 (* .bracket's opacity:0.3 in lui-core.css is stylesheet chrome — the
    muted-foreground token carries the same soft look to native backends *)
 let bracket s = text ~style_class:"bracket" ~foreground:"muted-foreground" ~value:s []
@@ -1232,6 +1244,7 @@ type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
    parsed; added to refs of any resolved ref's children. *)
 
 let rec parse ?(refs = []) ?(self = "") s =
+  let find = substring_finder s in
   let els = ref [] in
   let buf = Buffer.create 64 in
   let push e = els := e :: !els in
@@ -1246,7 +1259,7 @@ let rec parse ?(refs = []) ?(self = "") s =
       flush ();
       ())
     else
-      match try_match ~refs ~self s i with
+      match try_match ~find ~refs ~self s i with
       | Some (e, len, _) ->
           flush ();
           push e;
@@ -1258,9 +1271,9 @@ let rec parse ?(refs = []) ?(self = "") s =
   go 0;
   List.rev !els
 
-and try_match ~refs ~self s i : (t * int * run_spec) option =
+and try_match ~find ~refs ~self s i : (t * int * run_spec) option =
   match s.[i] with
-  | '[' -> try_bracket ~refs ~self s i
+  | '[' -> try_bracket ~find ~refs ~self s i
   | '#' -> try_hash ~refs ~self s i
   | '(' -> try_paren s i
   | '!' -> try_image s i
@@ -1281,9 +1294,9 @@ and try_match ~refs ~self s i : (t * int * run_spec) option =
   | _ -> None
 
 (* [[page]] / [label](url) *)
-and try_bracket ~refs ~self s i =
+and try_bracket ~find ~refs ~self s i =
   if Str_util.starts_at s i "[[" then
-    match find_sub s (i + 2) "]]" with
+    match find (i + 2) "]]" with
     | j when j > i + 2 ->
         let inner = sub s (i + 2) (j - i - 2) in
         Some
@@ -1293,9 +1306,9 @@ and try_bracket ~refs ~self s i =
     | _ -> None
   else if Str_util.starts_at s i "[:" then try_hiccup ~refs ~self s i
   else
-    match find_sub s (i + 1) "](" with
+    match find (i + 1) "](" with
     | j when j > i + 1 -> (
-        match find_sub s (j + 2) ")" with
+        match find (j + 2) ")" with
         | k when k > j + 2 ->
             let label = sub s (i + 1) (j - i - 1) in
             let url = sub s (j + 2) (k - j - 2) in
@@ -1757,11 +1770,12 @@ and try_emoji s i =
    cljs) instead of span.lui-text children, which Playwright :text-is
    requires *)
 and plain_text ?(refs = []) ?(self = "") s =
+  let find = substring_finder s in
   let n = String.length s in
   let rec go i =
     if i >= n then Some s
     else
-      match try_match ~refs ~self s i with
+      match try_match ~find ~refs ~self s i with
       | Some _ -> None
       | None -> go (i + 1)
   in
@@ -1787,11 +1801,12 @@ and try_url s i =
    dropped). Ref resolution is irrelevant to source splitting, so
    refs/self stay empty. Gaps between tokens are literal plain text. *)
 let match_tokens s : span_tok list =
+  let find = substring_finder s in
   let n = String.length s in
   let rec go i acc =
     if i >= n then List.rev acc
     else
-      match try_match ~refs:[] ~self:"" s i with
+      match try_match ~find ~refs:[] ~self:"" s i with
       | Some (_, len, tok_spec) ->
           go (i + len) ({ tok_start = i; tok_stop = i + len; tok_spec } :: acc)
       | None -> go (i + 1) acc

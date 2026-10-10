@@ -185,8 +185,11 @@ external qsa_json : W.Element.t -> string -> Js.Json.t =
 external arr_from : Js.Json.t -> Js.Json.t array = "from"
   [@@mel.scope "Array"]
 
-external arr_index_of : Js.Json.t array -> Js.Json.t -> int = "indexOf"
-  [@@mel.send]
+type run_index
+external make_run_index : unit -> run_index = "WeakMap" [@@mel.new]
+external index_set : run_index -> Js.Json.t -> int -> unit = "set" [@@mel.send]
+external index_get : run_index -> Js.Json.t -> int Js.Undefined.t = "get" [@@mel.send]
+external j_is_connected : Js.Json.t -> bool = "isConnected" [@@mel.get]
 
 external el_rect : W.Element.t -> domrect = "getBoundingClientRect"
   [@@mel.send]
@@ -299,6 +302,7 @@ type ed_state =
   ; mutable on_dblclick : (Js.Json.t -> unit) option
   ; mutable drag_off : int
   ; mutable input_rect : Edit_input.rect option
+  ; mutable run_snapshot : (Js.Json.t array * run_index) option
   }
 
 external state_get : W.Element.t -> ed_state Js.Undefined.t = "__lsEd"
@@ -314,7 +318,7 @@ let state_of el =
       { block_id = ""; runs = [||]; caret_off = 0; composing = false
       ; on_mousedown = None; dragging = false; on_mousemove = None
       ; on_mouseup = None; on_dblclick = None; drag_off = -1
-      ; input_rect = None
+      ; input_rect = None; run_snapshot = None
       }
 
 (* block-id -> input element; commands resolve through this *)
@@ -332,10 +336,20 @@ let container_of el : W.Element.t option =
 
 (* .ed-r elements in document order — the i-th entry zips with
    st.runs.(i) *)
-let run_els el =
-  match container_of el with
-  | Some c -> arr_from (qsa_json c ".ed-r")
-  | None -> [||]
+let run_snapshot el =
+  let st = state_of el in
+  match st.run_snapshot with
+  | Some ((els, _) as snapshot) when Array.for_all j_is_connected els -> snapshot
+  | _ ->
+      let els = match container_of el with
+        | Some c -> arr_from (qsa_json c ".ed-r")
+        | None -> [||] in
+      let index = make_run_index () in
+      Array.iteri (fun i node -> index_set index node i) els;
+      st.run_snapshot <- Some (els, index);
+      els, index
+
+let run_els el = fst (run_snapshot el)
 
 let parse_runs (s : string) : run_span array =
   s
@@ -519,7 +533,7 @@ let select_range_el el lo hi : bool =
 (* px -> model unit offset: caretRangeFromPoint hits a text node inside
    an .ed-r element (frag lo + DOM offset) or an element boundary (the
    frag before the hit index ends there). Pads hit their [e]. *)
-let offset_at_el el ~x ~y : int option =
+let offset_at_el ?index el ~x ~y : int option =
   let st = state_of el in
   let r = caret_from_point x y in
   if js_nullish r then None
@@ -546,8 +560,8 @@ let offset_at_el el ~x ~y : int option =
     let rel = j_closest frag_el ".ed-r" in
     if js_nullish rel then None
     else
-      let els = run_els el in
-      let idx = arr_index_of els rel in
+      let index = match index with Some index -> index | None -> snd (run_snapshot el) in
+      let idx = Option.value (Js.Undefined.toOption (index_get index rel)) ~default:(-1) in
       if idx < 0 || idx >= Array.length st.runs then None
       else
         let a, _b, tag = st.runs.(idx) in
@@ -558,6 +572,7 @@ let offset_at_el el ~x ~y : int option =
 (* visual lines as [lo, hi) unit ranges: group every .ed-r element's
    client rects by row top, then hit-test each row's left/right edge *)
 let line_ranges_el el : (int * int) list =
+  let els, index = run_snapshot el in
   (* collect every run rect, then cluster by row: a pad's line box can
      sit a couple px off the text run's, so exact-top grouping splits
      one visual row into a text row and a pad-only row — the pad row
@@ -570,7 +585,7 @@ let line_ranges_el el : (int * int) list =
       for i = 0 to rl_len rl - 1 do
         rects := rl_at rl i :: !rects
       done)
-    (run_els el);
+    els;
   let sorted =
     List.sort
       (fun a b -> Float.compare (rect_top a) (rect_top b))
@@ -605,13 +620,13 @@ let line_ranges_el el : (int * int) list =
         | [] -> 0.
       in
       match
-        ( offset_at_el el ~x:(left +. 0.5) ~y:mid
-        , offset_at_el el ~x:(right -. 0.5) ~y:mid )
+        ( offset_at_el ~index el ~x:(left +. 0.5) ~y:mid
+        , offset_at_el ~index el ~x:(right -. 0.5) ~y:mid )
       with
       | Some lo, Some hi -> Some (lo, hi)
       | _ -> None)
   in
-  let st = state_of el and els = run_els el in
+  let st = state_of el in
   let is_separator off =
     Array.exists (fun (i, (a, b, tag)) ->
       if a <= off && off < b && tag <> "a" && i < Array.length els then
@@ -885,7 +900,9 @@ let set_property el name v =
       set_attr el "id" ("edit-block-" ^ s)
   | "caret", IntValue n ->
       st.caret_off <- n
-  | "runs", StringValue s -> st.runs <- parse_runs s
+  | "runs", StringValue s ->
+      st.runs <- parse_runs s;
+      st.run_snapshot <- None
   | _ -> ()
 
 let remove_property el name =

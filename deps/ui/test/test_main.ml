@@ -1155,12 +1155,12 @@ let test_outliner_ops2 () =
      block_map_parsed — Title_refs resolves entities through the worker) *)
   let saved_model = !model_stub in
   set_page None;
-  eqs "normalized_title strips heading" "hello [[P]]"
+  eqs "normalized_title strips heading without trimming" "  hello [[P]]"
     (Outliner_ops.normalized_title "u" "  ## hello [[P]]");
   let codeblk =
     { (block "cb" "x") with Model.block_display_type = Some "code" } in
   set_page (Some (page [ codeblk ]));
-  eqs "normalized_title code" "## raw"
+  eqs "normalized_title code preserves source" " ## raw"
     (Outliner_ops.normalized_title "cb" " ## raw");
   model_stub := saved_model;
   check "delete_blocks op"
