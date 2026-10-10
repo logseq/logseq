@@ -553,3 +553,38 @@ Required prop shape (LUI capability task, not a logseq-side hack):
 custom: it is imperative `Web_dom.create_element` DOM outside the
 LUI element tree — needs a view-tree entry point before the `dialog`
 kind can adopt it.
+
+## Task 5 leftovers (editor chrome batch)
+
+Blocked items per `review-editor-kit.md`, recorded for the LUI
+capability list:
+
+- **Accordion animation for foldables** — `.ls-foldable-title` /
+  `.ls-collapsed` height+opacity transitions need an accordion kind (or
+  animated disclosure) before the foldable family can adopt; CSS rules
+  kept.
+- **Tabs per-tab menu/overflow** — view tabs' per-tab context menu and
+  tab overflow need a per-tab menu slot on the `tabs` kind; the `+`
+  add-view button already rides a plain trigger.
+- **Badge kind** — no badge/count kind; `ls-count` text hooks kept.
+- **Segmented control** — no segmented kind (toggle_group covers
+  settings' pill filters but the editor's bordered-pill sort/segment
+  controls remain custom).
+- **Menu/confirm e2e contract** — menu and confirm-dialog adoption is
+  gated on the e2e contract task from the menus batch.
+
+**Hover-reveal primitive (G7)** — not built. Where the earlier class
+port dropped cljs's hover-lit reveal to popup-open-only
+(`views_head.ml`), the `Signal.state` + `~opacity` +
+`float_prop_signal` bridge from `properties_area.ml` now drives the
+reveal: head hover and popup-open states OR into `signal_of_bools` and
+both `.view-actions` and `.ls-add-view` consume the same derivation.
+The `transition: opacity` rules are decoration and stay in
+`lui-overlay.css`.
+
+**Toolbar surface channel** — `toolbar` and the `action_toolbar`
+composite admit no background/border/opacity props; `flat_toolbar`
+flattens the card chrome via the data-attrs style pair and
+`action_bar_capsule` supplies the floating-bar spec. Workable today,
+but a proper surface/variant prop on the toolbar kind would retire the
+style-pair trick.

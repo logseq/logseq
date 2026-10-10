@@ -17,8 +17,14 @@ let dom = Logseq_el.el
 
 (* --- shared pieces ------------------------------------------------ *)
 
+(* crumbs navigate in-app like the old ~url links *)
+let nav_crumb hash _ : unit =
+  Ui_services.nav_set_hash (Runtime.nav_hash hash)
+
 (* block zoom: .breadcrumb lists ancestor block titles (root first),
-   each linking to its own zoom route — cljs breadcrumb parity *)
+   each linking to its own zoom route — kit breadcrumb_trail (ghost
+   caption buttons on .lui-breadcrumb) replacing the link row; the
+   per-segment 28ch ellipsis is kit gap G4 (plan leftovers) *)
 let zoom_breadcrumbs (page : Model.page) : t list =
   (* cljs page-inner omits the breadcrumb node entirely when there's
      nothing to show — an empty placeholder div would still consume a
@@ -26,13 +32,17 @@ let zoom_breadcrumbs (page : Model.page) : t list =
   match page.page_parents with
   | [] -> []
   | parents ->
-      [ row ~key:"bc" ~style_class:"breadcrumb"
-          (List.map
-             (fun (p : Model.block) ->
-               link ~style_class:"breadcrumb-item"
-                 ~url:("#/block/" ^ Option.value p.block_uuid ~default:"")
-                 ~target:`self_ ~text:p.block_title [])
-             parents)
+      [ box ~key:"bc" ~style_class:"breadcrumb" ~min_width:0
+          [ Lui_element_combine.breadcrumb_trail ~key:"bct"
+              ~items:
+                (List.map
+                   (fun (p : Model.block) ->
+                     ( p.block_title
+                     , nav_crumb
+                         ("#/block/"
+                         ^ Option.value p.block_uuid ~default:"") ))
+                   parents)
+              () ]
       ]
 
 let breadcrumbs (page : Model.page) : t list =
@@ -41,20 +51,19 @@ let breadcrumbs (page : Model.page) : t list =
      have no parent chain (pre-split legacy) fall back to splitting. *)
   match page.Model.page_parents with
   | _ :: _ ->
-      let rec trail = function
-        | [] -> []
-        | (p : Model.block) :: rest ->
-            link ~key:("bc-" ^ p.block_title)
-              ~style_class:"breadcrumb-item"
-              ~url:("#/page/" ^ p.block_title)
-              ~target:`self_ ~text:p.block_title []
-            :: text ~key:("bcsep-" ^ p.block_title) ~value:" / " []
-            :: trail rest
-      in
-      [ row ~key:"bc" ~style_class:"breadcrumb"
-          (trail page.page_parents
-           @ [ text ~key:"bc-leaf" ~style_class:"breadcrumb-item"
-                 ~value:page.page_title [] ]) ]
+      [ box ~key:"bc" ~style_class:"breadcrumb" ~min_width:0
+          [ Lui_element_combine.breadcrumb_trail ~key:"bct"
+              ~items:
+                (List.map
+                   (fun (p : Model.block) ->
+                     (p.block_title, nav_crumb ("#/page/" ^ p.block_title)))
+                   page.page_parents
+                 @ [ ( page.page_title
+                     , nav_crumb
+                         ("#/page/"
+                         ^ Option.value page.Model.page_uuid
+                             ~default:page.page_title) ) ])
+              () ] ]
   | [] ->
       (match String.split_on_char '/' page.page_title with
   | [] | [ _ ] -> []
@@ -62,22 +71,16 @@ let breadcrumbs (page : Model.page) : t list =
       let rec crumbs acc prefix = function
         | [] -> List.rev acc
         | last :: [] ->
-            text ~key:("bc-" ^ prefix)
-              ~style_class:"breadcrumb-item"
-              ~value:last []
+            (* leaf = the current page itself *)
+            (last, nav_crumb ("#/page/" ^ page.page_title))
             :: acc |> List.rev
         | part :: rest ->
             let here = if prefix = "" then part else prefix ^ "/" ^ part in
-            let item =
-              link ~key:("bc-" ^ here)
-                ~style_class:"breadcrumb-item"
-                ~url:("#/page/" ^ here)
-                ~target:`self_ ~text:part []
-            in
-            let sep = text ~key:("bcsep-" ^ here) ~value:" / " [] in
-            crumbs (sep :: item :: acc) here rest
+            crumbs ((part, nav_crumb ("#/page/" ^ here)) :: acc) here rest
       in
-      [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ])
+      [ box ~key:"bc" ~style_class:"breadcrumb" ~min_width:0
+          [ Lui_element_combine.breadcrumb_trail ~key:"bct"
+              ~items:(crumbs [] "" parts) () ] ])
 
 (* cljs page-inner block? = (some? (:block/page page)): the route
    entity is a contained block (e.g. a #Tag object living on another
@@ -98,30 +101,28 @@ let is_block_route (page : Model.page) : bool =
 (* cljs block-breadcrumb/breadcrumb on a block page:
    .breadcrumb.block-parents.breadcrumb--block-page.my-2 with
    .breadcrumb__segment > .breadcrumb__label ancestors (root first)
-   joined by "/" separators, each navigating to #/page/<uuid> *)
+   joined by "/" separators, each navigating to #/page/<uuid>.
+   Kit breadcrumb_trail now emits the items — ghost caption buttons
+   with on_press navigation; .block-parents stays on the wrapper so
+   the nowrap/overflow-clip container behavior survives while the
+   28ch per-segment ellipsis is kit gap G4 (plan leftovers). my-2's
+   8px vertical margins moved to ~padding_vertical. *)
 let block_page_breadcrumb (page : Model.page) : t list =
-  let rec segs = function
-    | [] -> []
-    | (p : Model.block) :: [] -> [ segment p ]
-    | p :: rest -> segment p :: separator p :: segs rest
-  and separator (p : Model.block) =
-    text ~key:("bcsep-" ^ Option.value p.block_uuid ~default:"")
-      ~style_class:"opacity-50 px-1" ~value:"/" []
-  and segment (p : Model.block) =
-    let uuid = Option.value p.block_uuid ~default:"" in
-    row ~key:("bcseg-" ^ uuid) ~gap:0 ~cross:`center
-      ~style_class:"breadcrumb__segment"
-      [ link ~style_class:"breadcrumb__label"
-          ~url:("#/page/" ^ uuid)
-          ~target:`self_ ~text:p.block_title [] ]
-  in
   match page.page_parents with
   | [] -> []
   | parents ->
-      [ row ~key:"bc" ~gap:0 ~cross:`center
-          ~style_class:
-            "breadcrumb block-parents breadcrumb--block-page my-2"
-          (segs parents) ]
+      [ box ~key:"bc" ~min_width:0 ~padding_vertical:8
+          ~style_class:"breadcrumb block-parents breadcrumb--block-page"
+          [ Lui_element_combine.breadcrumb_trail ~key:"bct"
+              ~items:
+                (List.map
+                   (fun (p : Model.block) ->
+                     ( p.block_title
+                     , nav_crumb
+                         ("#/page/"
+                         ^ Option.value p.block_uuid ~default:"") ))
+                   parents)
+              () ] ]
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
