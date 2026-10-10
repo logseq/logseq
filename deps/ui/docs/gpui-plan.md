@@ -37,8 +37,15 @@ Rust + gpui-kit 渲染，功能验收对齐 Electron/web 现有能力。
    - `native/native_embed.ml`：`host_code 6 → Lui_protocol.GPUIHost`。
 4. **组件化迁移（架构主轴，见 M2*）**：视图源码从 `dom ~tag ~classes`
    DOM 拼法迁到 `Lui_elements` 组件 kind 拼法（`column ~gap ~p …`）。
-   layout/样式走 kind 的类型化 props，`style_class` 保留但语义降级为
-   web 专属微调通道 —— Apple/GPUI 忽略 css class，不需要适配。
+   layout/样式走 kind 的类型化 props。Visual design has a single
+   shared definition: `Ui_theme` (design-token snapshot) +
+   `Ui_components` recipes emit typed props through LUI, and platform
+   adapters only translate props. GPUI consumes ONLY natively-expressible
+   typed props — no CSS parsing, no `var()`/`calc()` resolution, no
+   selector machinery (product direction). `style_class` keeps only
+   app-semantic hook classes for e2e/imperative selectors; decoration
+   with no prop channel stays adapter-side as `logseq_ext.rs`
+   hook-class registrations (gpui) or `lui-overlay.css` rules (web).
    `logseq-<tag>` DOM 扩展整体删除；extension 只留给平台特有件
    （editor surface、split/dock、gpui-table 等）。
    - `dom.rs` 收缩为迁移期骨架渲染器（不再追求 class 精度），迁移完成
@@ -76,7 +83,7 @@ host → OCaml：
   input/select、i/svg→icon、kbd→kbd、li/ul→list/list_item、pre/code→
   text(mono)、h2→heading、p/small→paragraph/text、img→image/file_image。
   布局类（flex/gap-/p-/w-/h-/min-/max-）翻成 typed props；`style_class`
-  原样保留供 web parity；`~events:"click"`→`~on_press`；`~html`、
+  只保留 hook 类（e2e/命令式选择子），非样式通道；`~events:"click"`→`~on_press`；`~html`、
   inline `style` attr、`~attrs` JSON 逃逸舱删除；`#ref`/`data-ref`→
   `~accessibility_identifier`。keydown/pointer/hover 等 DOM 特有事件
   无组件等价物 —— 逐个决定：删、用 kind 事件近似、或走平台 extension。
@@ -130,13 +137,15 @@ M1 (A) 先行解锁 B–E 并行；C 依赖 B 的解析器接口。
 
 ## 风险
 
-- **style-class 覆盖度**：已解决 —— 组件化后 native 不解析 class；
-  web 端 class 原样透传（melange kind 渲染器已支持 style_class），
+- **style-class 覆盖度**：已解决 —— GPUI consumes only typed props and
+  never parses class strings; web 端 class 原样透传（melange kind
+  渲染器已支持 style_class）作为 hook/adapter 装饰通道，
   parity 由 CSS 侧保证，host 零适配。
 - **measure-node 回路**：dom-op 是同步通道但 rect 异步回 —— Rust
   端 prepaint 后回填 bounds，沿用已有 Rc<Cell>+notify 模式。
 - **CodeMirror/pdf/plugins**：富宿主嵌入最重 —— M6 逐项定策略
   （gpui-component Editor / 内嵌 WebView / 降级只读）。
 - **性能**：virtual list 依赖 visible_range 协议已在 wire 层，
-  渲染粒度已是 per-node entity —— 主要风险是 tailwind 解析热路径，
+  渲染粒度已是 per-node entity —— `tailwind.rs` is not a
+  component-decoration mechanism; 主要风险是其热路径，
   class 字符串缓存 key 即可。

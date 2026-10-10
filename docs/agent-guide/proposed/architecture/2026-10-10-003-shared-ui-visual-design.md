@@ -251,14 +251,40 @@ Shell parity does not establish editor or property-control parity.
 
 Files: `deps/ui/docs/component-migration.md`, `deps/ui/docs/gpui-plan.md`, `deps/ui/docs/architecture.md`, `deps/ui/src/shared/ui_parts.ml`, affected CSS, and `deps/ui/gpui/host/src/logseq_ext.rs`.
 
-1. Replace the native-default decoration policy with shared visual ownership.
-2. Remove unused registrations and utility bundles after their consumers migrate.
-3. Keep specialized widget registration separate from generic appearance.
-4. Check selector callers before deleting class names.
-5. Extend `deps/ui/scripts/check-shared-boundaries.sh` only if an actual regression requires a narrow rule; do not impose a blanket CSS/Rust-style ban.
-6. Record family-specific evidence and intentional backend differences.
+1. Replace the native-default decoration policy with shared visual ownership. *(done — `component-migration.md`, `gpui-plan.md`, `architecture.md` now describe the `Ui_theme` token snapshot + `Ui_components` recipes → typed props model; adapters only translate props, and decoration with no native channel stays adapter-side in `lui-overlay.css`/`logseq_ext.rs` hook classes)*
+2. Remove unused registrations and utility bundles after their consumers migrate. *(done — dead-registration audit of all 87 classes registered in `logseq_ext.rs`: every registration still has a live emitter or a CSS-side consumer, including dynamic families `ls-dialog-*`, `mode-*`, `block-drag-over-*`; `menu-links-wrapper` kept for its `lui-overlay.css` consumer. Zero removals)*
+3. Keep specialized widget registration separate from generic appearance. *(done — `ui__dialog-*`, `cp__theme-modes-*`, `ed-*`, `block-drag-*` widget chrome registrations stay; no generic appearance remains in `register_class_styles` beyond hook classes)*
+4. Check selector callers before deleting class names. *(done — unstyled-emitted-token audit: 162 tokens have neither a CSS rule nor a gpui registration; 65 e2e/test hooks, 12 imperative selector hooks, 5 dynamic-prefix-family members, 75 dead candidates, 5 extraction artifacts — classification in `003-assets/audit-unstyled-tokens.md`; no code deleted)*
+5. Extend `deps/ui/scripts/check-shared-boundaries.sh` only if an actual regression requires a narrow rule; do not impose a blanket CSS/Rust-style ban. *(done — no regression demanded a rule; script unchanged)*
+6. Record family-specific evidence and intentional backend differences. *(done — see "Family evidence" below)*
 
 Exit: migrated components have no independently maintained Web and GPUI design values.
+
+### Family evidence
+
+Per-family deleted-rule totals (web CSS lines / `logseq_ext.rs` registrations removed during T1–T5):
+
+| family | deleted CSS rules | deleted `logseq_ext.rs` registrations |
+| --- | --- | --- |
+| cmdk (T1) | 559 lines | 45 |
+| settings (T2) | ~600 lines | — |
+| menus/overlays (T3) | ~445 lines | — |
+| editor chrome (T4) | ~181 lines | — |
+| sidebar + split machinery (T5) | ~330 LOC | — |
+
+Intentional backend differences that remain adapter-side on gpui
+(natively inexpressible, no typed-prop channel): `letter-spacing`,
+`user-select`, keyframe animations, `var()` fallback chains
+(`hsl(var(--popover))`, `var(--ls-*)` twins), `dvh` viewport sizing,
+programmatic menu anchoring (pre-#175), `::selection` colors,
+tooltip-arrow `rotate` transform, descendant-hover rules
+(`.cp__cmdk-hint-label`, `.prop-edit-ico`), media-query breakpoints
+(640/768 px), `calc()` micro-layout, `::first-letter`,
+`-webkit-line-clamp`, `text-align`, `resize`, `transform` (switch
+knob, `.ls-icon-mini`), `grid-template-columns` (fit-content 260px),
+calendar/date-picker family, file_picker backend, blur channel.
+Web-side equivalents live in `resources/css/lui-overlay.css`; gpui-side
+ones in `logseq_ext.rs` hook-class registrations.
 
 ## Verification commands
 

@@ -1,11 +1,31 @@
 # deps/ui component-kind migration spec
 
 Goal: all view code uses `Lui_elements` component kinds + typed props.
-The `dom`/`logseq-<tag>` DOM extension layer is deleted wholesale. Web
-keeps pixel-level parity via `style_class`; Apple/GPUI ignore classes
-and render native components from kind + typed props. Extensions only
-survive for genuinely platform-specific pieces (editor surface,
-split/dock, gpui-table, pdf/media).
+The `dom`/`logseq-<tag>` DOM extension layer is deleted wholesale.
+Extensions only survive for genuinely platform-specific pieces (editor
+surface, split/dock, gpui-table, pdf/media).
+
+## Shared visual ownership
+
+Component appearance is owned by the shared layer, not by per-platform
+stylesheets: `Ui_theme` resolves the active design-token snapshot
+(canvas/panel/foreground/accent/selected/border/ring + typography,
+spacing, radius, density) and `Ui_components` recipes (result row,
+section header, badge, dialog, menu item, …) emit typed props through
+LUI. Platform adapters only translate those props — they do not own a
+second copy of the design.
+
+- Web: typed props land as real styles; `~style_class` keeps only
+  app-semantic hook classes (`ui__*`, `cp__*`, `ls-*`) that e2e tests,
+  imperative queries, or SDK callers select on.
+- GPUI: consumes ONLY natively-expressible typed props — no CSS
+  parsing, no `var()`/`calc()` resolution, no selector machinery.
+  Decoration that has no prop channel stays adapter-side as
+  `gpui/host/src/logseq_ext.rs` hook-class registrations.
+- Web-only decoration with no prop channel (`::selection`, keyframe
+  animations, font stacks, `transform`, breakpoints, `dvh` units,
+  descendant-hover rules) stays adapter-side in
+  `resources/css/lui-overlay.css` behind the same hook classes.
 
 ## tag → kind mapping
 
@@ -36,7 +56,8 @@ split/dock, gpui-table, pdf/media).
 
 Layout/structure goes through typed props as the sole channel;
 `~style_class` keeps only app semantic classes (ui__toast, cp__* —
-classes that have real rules in the stylesheet). Utility classes
+whether or not a stylesheet rule references them; rule-less hooks are
+kept for e2e/imperative selectors). Utility classes
 (flex/gap-2/p-3/w-full/text-sm…) are deleted during migration, not
 preserved — the web backend applies typed props as real styles
 (gap/padding/width/flex/align land on the DOM style), and native
@@ -50,7 +71,7 @@ layouts from the same props:
 | `w-N h-N min-w-*/max-w-*` | `~width`/`~height`/`~min_width`/`~max_width` etc. (int pt) |
 | `items-*` | `~cross` (`items-center`→`` `center ``) |
 | `justify-*` | `~main` (`justify-between`→`` `space_between ``) |
-| pure decoration (color/radius/font-size…) | delete — native uses theme defaults; if web must keep the look it goes into a semantic stylesheet class |
+| pure decoration (color/radius/font-size…) | resolve through `Ui_theme` tokens and emit via recipe typed props; only natively-inexpressible leftovers keep an adapter-side rule (`lui-overlay.css` / `logseq_ext.rs` hook class) |
 
 Values are integer pt. When unsure, skip the translation and keep the
 style_class only.

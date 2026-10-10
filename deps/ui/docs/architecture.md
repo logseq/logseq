@@ -59,6 +59,30 @@ copied from `resources/index.html` when it changes.
   `val signal : t Signal.signal` + `val set`/`val update` helpers built on
   `Runtime.signal_set`. Own it entirely — do not add fields to `Model.t`.
 
+## Shared visual ownership
+
+Component appearance has exactly one definition in the shared layer:
+`Ui_theme` resolves the active design-token snapshot (canvas/panel/
+foreground/accent/selected/border/ring + typography, spacing, radius,
+density) and `Ui_components` recipes (result row, section header,
+badge, dialog, menu item, …) emit typed props through LUI. Platform
+adapters only translate those props — they own no second copy of the
+design.
+
+- GPUI consumes ONLY natively-expressible typed props — no CSS parsing,
+  no `var()`/`calc()` resolution. Decoration that cannot be expressed
+  natively stays adapter-side as `gpui/host/src/logseq_ext.rs`
+  hook-class registrations.
+- Web keeps adapter-side leftovers in `resources/css/lui-overlay.css`
+  behind the same semantic hook classes (`ui__*`, `cp__*`, `ls-*`):
+  keyframe animations, `::selection`/`::first-letter`, `transform`,
+  media-query breakpoints, `dvh` units, `var()` fallback chains,
+  `calc()` micro-layout, descendant-hover rules, `backdrop-filter`,
+  `-webkit-line-clamp`, `grid-template-columns`.
+- `~style_class` is not a styling channel — it carries app-semantic
+  hook classes for e2e tests, imperative DOM queries, and adapter-side
+  decoration only.
+
 ## DOM building — the `logseq-*` extension family
 
 `Logseq_el.el` is the escape hatch (raw elements with attrs + DOM events):
