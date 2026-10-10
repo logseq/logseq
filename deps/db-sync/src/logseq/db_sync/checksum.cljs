@@ -1,6 +1,7 @@
 (ns logseq.db-sync.checksum
   (:require [clojure.set :as set]
             [datascript.core :as d]
+            [datascript.db :refer [Datom]]
             [logseq.db :as ldb]))
 
 (def ^:private fnv-offset 2166136261)
@@ -114,11 +115,31 @@
       (conj (lookup-ref db-after [:block/uuid uuid-value])))))
 
 (defn- normalize-checksum-value
-  [db attr value]
+  "value, with a parent or page entity id replaced by its uuid, read by
+  uuid-of (an eid -> uuid function)."
+  [uuid-of attr value]
   (case attr
-    :block/parent (get-block-uuid db value)
-    :block/page (get-block-uuid db value)
+    :block/parent (uuid-of value)
+    :block/page (uuid-of value)
     value))
+
+(defn- block-uuid-reader
+  "An eid -> :block/uuid function over a map filled by 1 walk of the
+  :block/uuid index, for a full recompute, which asks the uuid of every
+  block's parent and page. Keeps the first datom per entity, the one
+  get-block-uuid reads (the index orders an entity's values alike)."
+  [db]
+  (let [uuids (js/Map.)]
+    (reduce (fn [_ datom]
+              (let [e (:e datom)]
+                (when-not (.has uuids e)
+                  (.set uuids e (:v datom)))))
+            nil
+            (d/datoms db :avet :block/uuid))
+    (fn [eid]
+      (let [block-uuid (.get uuids eid)]
+        (when-not (undefined? block-uuid)
+          block-uuid)))))
 
 (defn- entity-values
   [db eid e2ee?]
@@ -151,6 +172,31 @@
         (.set page-tag-eids-cache db eids)
         eids)))
 
+(defn- entity-datoms
+  "The :eavt datoms of eid, in 1 index read: the checks and tuples below are
+  answered from them, where separate lookups per attribute made index seeks
+  most of the time of a full recompute."
+  [db eid]
+  (when eid
+    (vec (d/datoms db :eavt eid))))
+
+(defn- first-datom
+  "The first datom of attr in datoms (1 entity's :eavt datoms, sorted by
+  attribute), as (first (d/datoms db :eavt eid attr)) gives it."
+  [datoms attr]
+  (some (fn [datom] (when (= attr (:a datom)) datom)) datoms))
+
+(defn- eligible-datoms?
+  "checksum-eligible-entity? of the entity whose :eavt datoms are datoms."
+  [tag-eids datoms]
+  (and (uuid? (:v (first-datom datoms :block/uuid)))
+       (not (:v (first-datom datoms :logseq.property/built-in?)))
+       (or (boolean (some #(and (= :block/tags (:a %))
+                                (contains? tag-eids (:v %)))
+                          datoms))
+           (some? (first-datom datoms :block/page))
+           (some? (first-datom datoms :block/name)))))
+
 (defn- checksum-eligible-entity?
   "A non-built-in entity with a uuid that is a page (ldb/page?) or has
   :block/page or :block/name. Read from datoms rather than through an
@@ -160,24 +206,25 @@
   ([db eid]
    (checksum-eligible-entity? db (page-tag-eids db) eid))
   ([db tag-eids eid]
-   (and (uuid? (:v (first (d/datoms db :eavt eid :block/uuid))))
-        (not (:v (first (d/datoms db :eavt eid :logseq.property/built-in?))))
-        (or (boolean (some #(contains? tag-eids (:v %))
-                           (d/datoms db :eavt eid :block/tags)))
-            (some? (first (d/datoms db :eavt eid :block/page)))
-            (some? (first (d/datoms db :eavt eid :block/name)))))))
+   (eligible-datoms? tag-eids (entity-datoms db eid))))
 
-(defn- entity-checksum-tuples
-  [db eid e2ee?]
-  (when-let [entity-uuid (get-block-uuid db eid)]
+(defn- datoms-checksum-tuples
+  "entity-checksum-tuples of the entity whose :eavt datoms are datoms, with
+  parent and page uuids read by uuid-of."
+  [uuid-of datoms e2ee?]
+  (when-let [entity-uuid (:v (first-datom datoms :block/uuid))]
     (let [attrs (relevant-attrs e2ee?)]
-      (->> (d/datoms db :eavt eid)
+      (->> datoms
            (keep (fn [{:keys [a v]}]
                    (when (contains? attrs a)
                      [entity-uuid
                       a
-                      (normalize-checksum-value db a v)])))
+                      (normalize-checksum-value uuid-of a v)])))
            set))))
+
+(defn- entity-checksum-tuples
+  [db eid e2ee?]
+  (datoms-checksum-tuples #(get-block-uuid db %) (entity-datoms db eid) e2ee?))
 
 (defn- tuple-digest
   [[entity-uuid attr value]]
@@ -198,13 +245,136 @@
   [(add-step sum-fnv fnv)
    (add-step sum-djb djb)])
 
-(defn- db-checksum-tuples
+(defn- fold-code!
+  "hash-code on the [fnv djb] pair held in st, a 2-slot array, in place."
+  [^js st code]
+  (aset st 0 (fnv-step (aget st 0) code))
+  (aset st 1 (djb-step (aget st 1) code))
+  st)
+
+(defn- fold-string!
+  "digest-string on the [fnv djb] pair held in st, in place."
+  [^js st ^string s]
+  (let [n (.-length s)]
+    (loop [idx 0
+           fnv (aget st 0)
+           djb (aget st 1)]
+      (if (< idx n)
+        (let [code (.charCodeAt s idx)]
+          (recur (inc idx) (fnv-step fnv code) (djb-step djb code)))
+        (do (aset st 0 fnv)
+            (aset st 1 djb)
+            st)))))
+
+(defn- value-string
+  [value]
+  (if (string? value) value (str value)))
+
+(defn- add-entity-digests!
+  "Adds the tuple-digest of each checksum tuple of 1 eligible entity to the
+  sums in acc (a 2-slot array), without building the tuples: the digest of
+  every tuple starts with the entity uuid and a separator, folded once here.
+  relevant holds the entity's datoms of checksum attributes, no attribute
+  twice (a repeat goes through the tuple set, which dedupes)."
+  [^js acc ^js st uuid-of entity-uuid ^js relevant]
+  (fold-code! (fold-string! (doto st (aset 0 fnv-offset) (aset 1 djb-offset))
+                            (value-string entity-uuid))
+              field-separator)
+  (let [prefix-fnv (aget st 0)
+        prefix-djb (aget st 1)]
+    (dotimes [i (.-length relevant)]
+      (let [^Datom datom (aget relevant i)
+            ^Keyword attr (.-a datom)
+            value (normalize-checksum-value uuid-of attr (.-v datom))]
+        (aset st 0 prefix-fnv)
+        (aset st 1 prefix-djb)
+        ;; (str attr) is ":" followed by the keyword's fqn
+        (fold-string! (fold-code! st 58) (.-fqn attr))
+        (fold-code! st field-separator)
+        (when (some? value)
+          (fold-string! st (value-string value)))
+        (aset acc 0 (add-step (aget acc 0) (aget st 0)))
+        (aset acc 1 (add-step (aget acc 1) (aget st 1)))))))
+
+(deftype ^:private EntityWalk [;; the entity whose datoms are being read
+                               ^:mutable e
+                               ^:mutable uuid-count
+                               ^:mutable entity-uuid
+                               ^:mutable built-in-seen?
+                               ^:mutable built-in?
+                               ^:mutable page-tag?
+                               ^:mutable page?
+                               ^:mutable name?
+                               ^:mutable repeated-attr?
+                               ;; its datoms of checksum attributes
+                               relevant])
+
+(defn- walk-reset!
+  [^EntityWalk w e]
+  (set! (.-e w) e)
+  (set! (.-uuid-count w) 0)
+  (set! (.-entity-uuid w) nil)
+  (set! (.-built-in-seen? w) false)
+  (set! (.-built-in? w) false)
+  (set! (.-page-tag? w) false)
+  (set! (.-page? w) false)
+  (set! (.-name? w) false)
+  (set! (.-repeated-attr? w) false)
+  (set! (.. w -relevant -length) 0))
+
+(defn- recompute-state
+  "The checksum state of db from 1 walk of its :eavt index, an entity's
+  datoms being adjacent there: each entity's eligibility
+  (checksum-eligible-entity?) and tuples are read from its datoms as the walk
+  passes them, parent and page uuids from a map. An entity counts once per
+  :block/uuid datom, as when the recompute walked the :block/uuid index."
   [db e2ee?]
-  (let [tag-eids (page-tag-eids db)]
-    (->> (d/datoms db :avet :block/uuid)
-         (mapcat (fn [{:keys [e]}]
-                   (when (checksum-eligible-entity? db tag-eids e)
-                     (entity-checksum-tuples db e e2ee?)))))))
+  (let [tag-eids (page-tag-eids db)
+        uuid-of (block-uuid-reader db)
+        attrs (relevant-attrs e2ee?)
+        acc #js [0 0]
+        st #js [0 0]
+        w (EntityWalk. nil 0 nil false false false false false false #js [])
+        flush! (fn []
+                 (when (and (uuid? (.-entity-uuid w))
+                            (not (.-built-in? w))
+                            (or (.-page-tag? w) (.-page? w) (.-name? w)))
+                   (dotimes [_ (.-uuid-count w)]
+                     (if (.-repeated-attr? w)
+                       (doseq [tuple (datoms-checksum-tuples uuid-of (vec (.-relevant w)) e2ee?)]
+                         (let [[fnv djb] (tuple-digest tuple)]
+                           (aset acc 0 (add-step (aget acc 0) fnv))
+                           (aset acc 1 (add-step (aget acc 1) djb))))
+                       (add-entity-digests! acc st uuid-of (.-entity-uuid w) (.-relevant w))))))]
+    (reduce (fn [_ ^Datom datom]
+              (let [e (.-e datom)
+                    attr (.-a datom)]
+                (when-not (== e (.-e w))
+                  (flush!)
+                  (walk-reset! w e))
+                (case attr
+                  :block/uuid (do (when (zero? (.-uuid-count w))
+                                    (set! (.-entity-uuid w) (.-v datom)))
+                                  (set! (.-uuid-count w) (inc (.-uuid-count w))))
+                  :logseq.property/built-in? (when-not (.-built-in-seen? w)
+                                               (set! (.-built-in-seen? w) true)
+                                               (set! (.-built-in? w) (boolean (.-v datom))))
+                  :block/tags (when (contains? tag-eids (.-v datom))
+                                (set! (.-page-tag? w) true))
+                  :block/page (set! (.-page? w) true)
+                  :block/name (set! (.-name? w) true)
+                  nil)
+                (when (contains? attrs attr)
+                  (let [relevant (.-relevant w)
+                        n (.-length relevant)]
+                    (when (and (pos? n) (= attr (.-a ^Datom (aget relevant (dec n)))))
+                      (set! (.-repeated-attr? w) true))
+                    (.push relevant datom)))
+                nil))
+            nil
+            (d/datoms db :eavt))
+    (flush!)
+    [(aget acc 0) (aget acc 1)]))
 
 (defn- tx-item-eids
   [db-before db-after tx-item]
@@ -395,13 +565,7 @@
 
 (defn recompute-checksum
   [db]
-  (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
-        tuples (db-checksum-tuples db e2ee?)]
-    (->> tuples
-         (reduce (fn [checksum-state tuple]
-                   (add-digest checksum-state (tuple-digest tuple)))
-                 [0 0])
-         state->checksum)))
+  (state->checksum (recompute-state db (ldb/get-graph-rtc-e2ee? db))))
 
 (defn recompute-checksum-diagnostics
   [db]

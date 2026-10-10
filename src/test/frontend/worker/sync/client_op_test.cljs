@@ -60,6 +60,23 @@
         (is (= "checksum-1" (client-op/get-local-checksum repo)))
         (is (= 41 (client-op/get-local-checksum-covered-tx repo)))))))
 
+(deftest checksum-and-covered-tx-written-in-1-transaction-test
+  (testing "the per-commit checksum write is 1 sqlite transaction, not 2 autocommits"
+    (let [repo "repo-checksum-1-tx"]
+      (with-client-ops-db
+        repo
+        (fn [^js db]
+          (client-op/update-local-checksum repo "checksum-0" 1)
+          (let [calls (atom 0)
+                transaction (.-transaction db)]
+            (set! (.-transaction db) (fn [f]
+                                       (swap! calls inc)
+                                       (.call transaction db f)))
+            (client-op/update-local-checksum repo "checksum-1" 42)
+            (is (= 1 @calls))
+            (is (= "checksum-1" (client-op/get-local-checksum repo)))
+            (is (= 42 (client-op/get-local-checksum-covered-tx repo)))))))))
+
 (deftest sqlite-asset-ops-coalescing-test
   (let [repo "repo-asset"
         asset-uuid (random-uuid)]

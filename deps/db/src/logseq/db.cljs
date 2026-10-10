@@ -211,10 +211,16 @@
                       (remove (fn [m] (or ;; db/id
                                        (integer? m)
                                        (empty? m)))))
-         tx-data (if-not (string? repo-or-conn)
+         ;; An undo or redo that replays a transaction's recorded datoms
+         ;; (local graphs) holds the whole change, in the order DataScript
+         ;; applied it: nothing is added, and `distinct` must not drop an op
+         ;; that repeats after its opposite.
+         expand-deletes? (and (not (string? repo-or-conn))
+                              (not (:undo-redo/replay-tx-datoms? tx-meta)))
+         tx-data (if expand-deletes?
                    (delete-blocks/expand-delete-blocks-tx @repo-or-conn tx-data tx-meta)
                    tx-data)
-         delete-blocks-tx (when-not (string? repo-or-conn)
+         delete-blocks-tx (when expand-deletes?
                             (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
