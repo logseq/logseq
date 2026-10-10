@@ -88,7 +88,15 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
     ; P.BorderWidth, iv 0
     ; P.FocusShadow, sv "none"
     ]
-    (input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
+    ((* .lui-input ships h-10 + :focus-visible ring-2 that no typed prop
+        reaches (the channel lands on --lui-focus-shadow, consumed only
+        by a zero-specificity :where rule the kind rule beats). The
+        documented escape hatch is the data-attrs style pair — merged
+        per declaration, so it composes with the emitted style attr. *)
+     input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
+       ~data_attrs:
+         [ ("style", "box-shadow: none; outline: none; height: auto; \
+                      min-height: 0") ]
        ~min_width:256 ~padding:12 ~background:"transparent"
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
@@ -96,12 +104,13 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
        ?placeholder ~text ~on_input [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; the
-   56px bottom pad scrolls the last row clear of the hints bar. *)
+   56px bottom pad scrolls the last row clear of the hints bar (a
+   trailing spacer — scroll has no bottom-only padding prop). *)
 let cmdk_scroller ~key children =
   with_props
     [ P.MinHeightViewport, fv 0.65; P.MaxHeightViewport, fv 0.65 ]
     (scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
-       children)
+       (children @ [ spacer ~key:"scrollpad" ~height:56 ~width:1 [] ]))
 
 (* -- cmdk groups ----------------------------------------------------- *)
 
@@ -207,10 +216,14 @@ let cmdk_item_header ~key children =
     ]
     (row ~key ~style_class:"breadcrumb cmdk-item-header" ~cross:`center
        ~gap:8 ~min_width:0
+       ~data_attrs:
+         [ (* WhiteSpace/TextOverflow are text-kind props — on a row the
+              only channel is the documented data-attrs style pair. *)
+           ("style", "white-space: nowrap; text-overflow: ellipsis") ]
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
           var(--muted-foreground)))"
-       (spacer ~key:"i" ~width:24 ~height:1 [] :: children))
+       (spacer ~key:"i" ~width:32 ~height:1 [] :: children))
 
 let cmdk_item_main ~key children =
   row ~key ~style_class:"cmdk-item-main" ~cross:`start ~gap:12 children
@@ -227,7 +240,7 @@ let cmdk_icon_chip ~key children =
 
 let cmdk_item_body ~key children =
   column ~key ~style_class:"cmdk-item-body" ~grow:1. ~min_width:0
-    ~cross:`start children
+    ~cross:`stretch children
 
 let cmdk_main_text ~key children =
   with_props [ P.FontWeight, iv 500; P.Overflow, sv "hidden" ]
@@ -238,15 +251,18 @@ let cmdk_main_text ~key children =
           var(--lui-c-foreground)))"
        children)
 
-(* Inline info suffix — real <span>/<mark> children so the run stays
-   one line (no .lui-stack display:inline hack). *)
+(* Inline info suffix — a gap-0 row (NOT a text/span: keyed children
+   under a text element render as block-level .lui-stack divs and wrap
+   to their own line). Small gray text like the deleted
+   .cp__cmdk-item-info rule. *)
 let cmdk_info_text ~key children =
-  text ~key ~as_:`Span ~style_class:"cp__cmdk-item-info"
-    ~font_size:"var(--lx-text-header)"
-    ~foreground:
-      "var(--lx-gray-11, var(--ls-secondary-text-color, \
-       var(--muted-foreground)))"
-    children
+  with_props [ P.FontSize, sv "var(--lx-text-header)" ]
+    (row ~key ~style_class:"cp__cmdk-item-info" ~cross:`center ~gap:0
+       ~min_width:0
+       ~foreground:
+         "var(--lx-gray-11, var(--ls-secondary-text-color, \
+          var(--muted-foreground)))"
+       children)
 
 let cmdk_badge ~key ~value : t =
   text ~key ~as_:`Span ~style_class:"cp__cmdk-current-page-badge"
@@ -269,31 +285,39 @@ let cmdk_badge ~key ~value : t =
    border/bg, glow shadow) lives on a centered row wrapper. [boxed]
    mirrors .shui-key-boxed; [glow] mirrors .shui-shortcut-glow.
    [min_slot] is the 20px floor combo/separate keys get; standalone
-   keycaps (tooltips) stay content-sized. *)
+   keycaps (tooltips) stay content-sized.
+   Boxed keys keep the kbd unclassed: .shui-shortcut-separate
+   kbd.shui-shortcut-key in shui.css would paint a second chrome box
+   inside the wrapper. Unboxed keys (combo/tooltip) keep the class so
+   the surviving stylesheet supplies their padding/height exactly. *)
 let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
   let binds =
     (if boxed then
        [ ( P.BackgroundValue
          , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
-       ; P.BorderWidth, iv 1
-       ; ( P.BorderColorValue
-         , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ; P.CornerRadius, iv 4
        ]
+       @
+       (* glow replaces the 1px border (.shui-shortcut-*.shui-shortcut-glow
+          kbd{box-shadow:…;border:none}) *)
+       if glow then
+         [ ( P.Shadow
+           , sv
+               "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
+                var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
+         ]
+       else
+         [ P.BorderWidth, iv 1
+         ; ( P.BorderColorValue
+           , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+         ]
      else [])
-    @
-    if glow then
-      [ ( P.Shadow
-        , sv
-            "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
-             var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
-      ]
-    else []
   in
   with_props binds
-    (row ~key ~main:`center ~cross:`center ~height:20
+    (row ~key ~main:`center ~cross:`center
+       ?height:(if boxed then Some 20 else None)
        ?min_width:(if min_slot > 0 then Some min_slot else None)
-       ~padding_horizontal:4
+       ?padding_horizontal:(if boxed then Some 4 else None)
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ with_props
            [ P.FontSize, sv "var(--lx-text-header)"
@@ -302,7 +326,9 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
            ; P.LetterSpacing, fv (-0.5)
            ; P.WhiteSpace, sv "nowrap"
            ]
-           (kbd ~style_class:"shui-shortcut-key" ~value []) ])
+           (kbd
+              ~style_class:(if boxed then "" else "shui-shortcut-key")
+              ~value []) ])
 
 (* 1px divider between combo keys (width 0 + no paint inside hints —
    combo just isn't used there). *)
@@ -311,29 +337,38 @@ let keycap_separator ~key : t =
     ~background:"var(--lx-gray-07-alpha, var(--rx-gray-07-alpha))"
     []
 
+(* Combo: one boxed+glowing container wrapping all keys. Glow replaces
+   the border like .shui-shortcut-combo.shui-shortcut-glow (border:none);
+   the surviving stylesheet still paints the same chrome, so the typed
+   props below carry identical values for gpui, not a second paint. *)
 let shortcut_combo ~key ~glow children : t =
   with_props
-    (if glow then
-       [ ( P.Shadow
+    ([ ( P.BackgroundValue
+       , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+     ; P.CornerRadius, iv 4
+     ]
+     @
+     if glow then
+       [ P.BorderWidth, iv 0
+       ; ( P.Shadow
          , sv
              "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
               var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
        ]
-     else [])
+     else
+       [ P.BorderWidth, iv 1
+       ; ( P.BorderColorValue
+         , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+       ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
        ~gap:0 children)
 
-let shortcut_separate ~key ~glow children : t =
-  with_props
-    (if glow then
-       [ ( P.Shadow
-         , sv
-             "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
-              var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
-       ]
-     else [])
-    (row ~key ~style_class:"shui-shortcut-separate" ~cross:`center
-       ~gap:4 children)
+(* Separate: transparent container; the glow lives on each boxed key,
+   matching .shui-shortcut-separate.shui-shortcut-glow kbd (no container
+   shadow in the original CSS). *)
+let shortcut_separate ~key ~glow:_ children : t =
+  row ~key ~style_class:"shui-shortcut-separate" ~cross:`center ~gap:4
+    children
 
 let shortcut_chord ~key children : t =
   row ~key ~style_class:"shui-shortcut-chord" ~cross:`center ~gap:8
@@ -377,7 +412,7 @@ let cmdk_hints_bar ~key children =
            hsl(var(--border))))" )
     ]
     (row ~key ~style_class:"hints" ~main:`space_between ~cross:`center
-       ~gap:8 ~min_height:45 ~padding_vertical:8 ~padding_horizontal:6
+       ~gap:8 ~min_height:45 ~padding_vertical:8 ~padding_horizontal:12
        ~background:
          "var(--lx-gray-03, var(--ls-tertiary-background-color, \
           hsl(var(--muted))))"

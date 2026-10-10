@@ -390,11 +390,13 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
          && int_prop_eq n "font-weight" 500
          && str_prop_eq n "overflow" "hidden"
      | None -> false);
-  h.H.check "info suffix is an inline span in header type"
+  h.H.check "info suffix is an inline row in header type"
     (match by_class h "cp__cmdk-item-info" with
      | Some n ->
-         n.M.kind = "text"
-         && str_prop_eq n "as" "span"
+         (* a gap-0 row, not a span: keyed children under a text element
+            render as block-level .lui-stack divs and wrap *)
+         n.M.kind = "row"
+         && int_prop_eq n "gap" 0
          && str_prop_eq n "font-size" "var(--lx-text-header)"
          && prop_contains n "foreground" "--lx-gray-11"
      | None -> false);
@@ -406,17 +408,20 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
          && float_prop_eq n "letter-spacing" (-0.5)
          && str_prop_eq n "white-space" "nowrap"
      | None -> false);
-  h.H.check "keycap wrappers size the 20px slot"
-    (match cmdk_kbd h with
-     | Some n -> (
-         match
-           Option.bind n.M.parent (fun pid ->
-               List.find_opt (fun p -> p.M.id = pid) (H.nodes h))
-         with
-         | Some p ->
-             int_prop_eq p "height" 20 && int_prop_eq p "min-width" 20
-         | None -> false)
-     | None -> false);
+  h.H.check "boxed keycap wrappers size the 20px slot"
+    (let parent_of id =
+       List.find_opt (fun p -> p.M.id = id) (H.nodes h)
+     in
+     List.exists
+       (fun n ->
+         n.M.kind = "kbd" && in_palette h n
+         && (match
+               Option.bind n.M.parent (fun pid -> parent_of pid)
+             with
+             | Some p ->
+                 int_prop_eq p "height" 20 && int_prop_eq p "min-width" 20
+             | None -> false))
+       (H.nodes h));
   (* -- group bottom hairline (skipped on the last group) -- *)
   let hairlines =
     List.filter
