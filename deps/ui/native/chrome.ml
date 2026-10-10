@@ -215,13 +215,13 @@ let right_sidebar (ms : Model.t Signal.signal) =
 let left_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__sidebar-left-layout self-stretch"
+      "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~min_height:0
-       ~style_class:"cp__sidebar-left-layout self-stretch"
+       ~style_class:"cp__sidebar-left-layout"
        [ row ~key:"ls-dock" ~grow:1. ~min_height:0
-           ~style_class:"items-stretch"
+          
            [ column ~key:"ls-inner" ~grow:1. ~min_height:0
                (* web: --left-sidebar-bg-color = --lx-gray-02 (the
                   near-white mauve-02 tone, one step above the page);
@@ -275,7 +275,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__sidebar-main-layout flex-1 min-h-0 flex"
+      "flex-1 flex"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1. ~min_height:0
@@ -427,7 +427,7 @@ let help_menu_popup () : t =
     ~anchor:`above ~anchor_alignment:`end_
     ~on_dismiss:(fun _ -> close ())
     [ column ~key:"help-menu-inner" ~style_class:"cp__sidebar-help-menu-popup"
-    [ column ~key:"hm-wrap" ~style_class:"list-wrap"
+    [ column ~key:"hm-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
@@ -517,7 +517,7 @@ let shell (ms : Model.t Signal.signal) : t =
          as a floating content-sized panel *)
       "theme-container-inner ls-hl-colored h-full"
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
-      ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
+     )
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ (* invisible logseq-dom carrier: gives the gpui host a stable
          extension ancestor to forward document events through *)
@@ -526,11 +526,11 @@ let shell (ms : Model.t Signal.signal) : t =
          left-container grows inside the first pane (web: #app-container
          is display:flex row) *)
       row ~key:"app" ~accessibility_identifier:"app-container"
-        ~style_class:"h-full min-h-0"
+        ~style_class:"h-full"
         [ right_split ms st
             (column ~key:"left-container"
                ~accessibility_identifier:"left-container"
-               ~style_class:"flex-1 min-w-0 h-full overflow-hidden"
+               ~style_class:"flex-1 h-full overflow-hidden"
                (topbar ms @ [ hidden_chrome ms; main_content ms st ]))
             (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"

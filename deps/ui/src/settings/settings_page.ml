@@ -165,10 +165,10 @@ let color_label = function
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
-  box ~key ~style_class:"ls-swatch-cell"
+  box ~key
     ~opacity:(if active then 1. else 0.5)
     [ button ~key:(key ^ "-b") ~variant:`ghost
-        ~style_class:(C.btn_cls ~variant:`Text () ^ " ls-swatch")
+        ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
         ~selected:active ~autofocus:(modal && active)
@@ -177,7 +177,7 @@ let accent_swatch ~key ~modal ~current color =
         ~width:20 ~height:20 ~corner_radius:999 ~padding:0
         ~on_press:(fun _ -> S.set_accent color)
         [ box ~key:(key ^ "-s")
-            ~style_class:(if none then "ls-swatch-none" else "ls-swatch-dot")
+           
             ~opacity:(if none || active then 1. else 0.)
             ~width:(if none then 12 else 8) ~height:(if none then 2 else 8)
             ~corner_radius:9999
@@ -292,7 +292,7 @@ let date_format_row ctx =
              ~width:200 ~height:29 ~corner_radius:4
              ~padding_horizontal:8
              ~background:"var(--lx-gray-03)"
-             ~style_class:"ls-select-trigger form-select is-small ls-date-format"
+             ~style_class:"form-select is-small ls-date-format"
              ~text:(date_option_text current)
              ~on_press:(fun _ ->
                Signal.set mst (not (Runtime.signal_get mst));

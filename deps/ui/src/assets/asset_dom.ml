@@ -661,7 +661,7 @@ let file_block uuid (b : Model.block) : t =
         []
     else
       (* cljs web: a.asset-ref[href=src][download=file-name] *)
-      Logseq_el.el ~key:("afl-" ^ uuid) ~tag:"a" ~style_class:"asset-ref"
+      Logseq_el.el ~key:("afl-" ^ uuid) ~tag:"a"
         ~text:file
         ~attrs_signal_v:
           (Logseq_el.attrs_signal url (fun u ->

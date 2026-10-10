@@ -112,7 +112,7 @@ let block_page_breadcrumb (page : Model.page) : t list =
   | [] -> []
   | parents ->
       [ box ~key:"bc" ~min_width:0 ~padding_vertical:8
-          ~style_class:"breadcrumb block-parents breadcrumb--block-page"
+          ~style_class:"breadcrumb block-parents"
           [ Lui_element_combine.breadcrumb_trail ~key:"bct"
               ~items:
                 (List.map
@@ -423,12 +423,12 @@ let page_plugin_slots ctx (page : Model.page) : t list =
           Js.Json.null;
         Plugin_host.inject_toolbar_ui ()));
   box ~key:"lsp-slot" ~accessibility_identifier:slot
-    ~style_class:"pl-injected-ui-item-pagebar" []
+    []
   :: List.map
        (fun it ->
          box ~key:("pb-" ^ Plugin_host.item_slot it)
            ~accessibility_identifier:(Plugin_host.item_slot it)
-           ~style_class:"pl-injected-ui-item-pagebar" [])
+           [])
        (Plugin_host.ui_items_of_type "pagebar")
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
@@ -548,7 +548,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                           Ui_parts.class_signal
                             (Signal.value caret_hover)
                             (fun hover ->
-                              (if hover then "control-show cursor-pointer"
+                              (if hover then "cursor-pointer"
                                else "control-hide")
                               ^ " rotating-arrow"
                               ^
@@ -646,7 +646,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       ]
     ; (* cljs plugin slot extension point after the title block *)
       row ~key:"pt-slot"
-        [ box ~key:"pt-slot-i" ~style_class:"lsp-hook-ui-slot"
+        [ box ~key:"pt-slot-i"
             ~accessibility_identifier:
               ("slot__"
                ^ (match page.page_uuid with

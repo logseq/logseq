@@ -268,7 +268,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
             (fun c ->
-              if caret_shown c then "control-show" else "control-hide")
+              if caret_shown c then "" else "control-hide")
             (box ~key:("ctrlspan-" ^ uuid)
                (* control-hide is a stylesheet display:none — the opacity
                   signal carries the same hide to style-less backends *)

@@ -264,7 +264,7 @@ let body (_ms : Model.t Signal.signal) : t =
         ~style_class:"panel-wrap mb-8"
         [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
             [ column ~key:"collab-users" ~gap:4
-                ~style_class:"ls-collab-users"
+               
                 [ keyed
                     ~source:members_src
                     ~key:(fun (m : member) -> m.m_uuid)
@@ -281,7 +281,7 @@ let body (_ms : Model.t Signal.signal) : t =
                         m ~refresh)
                 ]
             ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
-                [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
+                [ box ~key:"collab-inv"
                     [ input ~key:"collab-in" ~style_class:"ui__input"
                         ~text_signal:(Signal.value email_st)
                         ~placeholder:(T.t "collaboration/email-address")

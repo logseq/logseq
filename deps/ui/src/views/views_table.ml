@@ -1218,7 +1218,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                             while the title is hovered or the group is
                             collapsed — control-hide otherwise *)
                           Ui_parts.class_signal collapsed_sig
-                           (fun c -> if c then "control-show" else "control-hide")
+                           (fun c -> if c then "" else "control-hide")
                            (box ~key:"ctrlh"
                               [ Ui_parts.class_signal collapsed_sig
                                   (fun c ->
@@ -1298,7 +1298,7 @@ let render_list inst s : t =
       (* cljs grouped list: .flex.flex-col.border-t.pt-2.gap-2 wrapper +
          .group-list-view; each group body sits in div.-ml-2 (list rows
          hang 8px left of the group title) *)
-      column ~gap:8 ~style_class:"border-t pt-2 group-list-view"
+      column ~gap:8 ~style_class:"border-t pt-2"
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1311,7 +1311,7 @@ let render_list inst s : t =
       (* cljs renders each partition as a foldable whose title carries
          the page-ref link (caret + page name); the groups wrapper draws
          master's .border-t.pt-2.gap-2 above the partition list *)
-      column ~gap:8 ~style_class:"border-t pt-2 group-list-view"
+      column ~gap:8 ~style_class:"border-t pt-2"
         (List.concat
            (List.mapi
               (fun i g ->

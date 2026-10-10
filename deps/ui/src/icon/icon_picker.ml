@@ -411,9 +411,9 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ())
              sv ]
      ; Ui_parts.class_signal sv
-         (fun s -> "bd bd-scroll " ^ tab_name s.tab)
+         (fun s -> "bd " ^ tab_name s.tab)
          (scroll ~key:"bd" ~orientation:`vertical
-            [ box ~style_class:"content-pane"
+            [ box
                 [ reactive
                     ~equal:(fun (a : pstate) b ->
                        a.q = b.q && a.tab = b.tab

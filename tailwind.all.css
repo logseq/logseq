@@ -3,7 +3,6 @@
 @import "tailwindcss" source(none);
 
 @import "./resources/css/theme/radix.css";
-@import "./resources/css/theme/radix-hsl.css";
 @import "./resources/css/theme/vars-classic.css";
 @import "./resources/css/theme/colors.css";
 @import "./resources/css/theme/index.css";  /* Tailwind base imported here */

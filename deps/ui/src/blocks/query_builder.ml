@@ -96,7 +96,7 @@ let open_filter_picker ~anchor value_uuid =
 let block_el uuid (_b : Model.block) : Lui_elements.t =
   Lui_elements.box ~key:("qwrap-" ^ uuid) ~style_class:"cp__query-builder"
     [ Lui_elements.box ~key:("qfilter-" ^ uuid)
-        ~style_class:"cp__query-builder-filter"
+       
         [ (* TODO(component): the button kind renders ~text inside its
              .lui-button-label span — Playwright's button:text('filter')
              locator only matches when the button itself is the smallest
