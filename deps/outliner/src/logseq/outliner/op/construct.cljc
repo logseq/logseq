@@ -90,7 +90,13 @@
    (sanitize-ref-value db nil v))
   ([db tx-data v]
    (cond
-     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
+     ;; A vector can be either a lookup ref or a collection of entity refs.
+     ;; Only unique attributes identify lookup refs; class keyword vectors are collections too.
+     (and (vector? v)
+          (= 2 (count v))
+          (keyword? (first v))
+          (get-in db [:schema (first v) :db/unique]))
+     (stable-entity-ref-with-tx-data db tx-data v)
      (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
      :else (stable-entity-ref-with-tx-data db tx-data v))))
 
