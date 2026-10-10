@@ -17,10 +17,14 @@ let toast_icon (k : string) : icon =
   | "error" -> `x_circle
   | _ -> `info
 
-(* tabler ti-* classes dropped: the icon kind renders its own svg on web;
-   the font class would double-render behind the mask *)
-let toast_icon_class (k : string) : string =
-  "ui__toast-status-icon " ^ k
+(* status-icon colors, from the dropped .ui__toast-status-icon.<kind>
+   rules *)
+let toast_icon_color (k : string) : string =
+  match k with
+  | "success" -> "var(--rx-green-09-alpha, var(--lx-green-09, hsl(142 71% 45%)))"
+  | "warning" -> "var(--rx-yellow-10-alpha, var(--lx-yellow-10, hsl(45 93% 40%)))"
+  | "error" -> "var(--rx-red-10-alpha, var(--lx-red-10, hsl(359 82% 48%)))"
+  | _ -> "var(--rx-blue-09-alpha, var(--lx-blue-09, hsl(208 93% 48%)))"
 
 let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
@@ -29,23 +33,28 @@ let toast_item (t : Model.toast) : t =
        ~duration:(if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000)
        ~label:t.toast_text
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
-       ~style_class:("ui__toast " ^ kind)
-       ~accessibility_identifier:("toast-" ^ string_of_int t.toast_id)
-       [ overlay ~key:"ti-content" ~grow:1. ~style_class:"ui__toast-content"
+       ~style_class:kind
+       [ overlay ~key:"ti-content" ~grow:1.
            [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
                ~padding_vertical:20 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
-                   ~style_class:(toast_icon_class kind) []
-               ; text ~key:"ti-desc" ~grow:1.
-                   ~style_class:"ui__toast-description"
-                   ~value:t.toast_text []
+                   ~foreground:(toast_icon_color kind) []
+               ; Ui_components.with_props
+                   [ Lui_protocol.FontSize, Lui_protocol.StringValue "0.875rem"
+                   ; Lui_protocol.LineHeight, Lui_protocol.StringValue "1.25rem"
+                   ; Lui_protocol.Opacity, Lui_protocol.FloatValue 0.9 ]
+                   (text ~key:"ti-desc" ~grow:1.
+                      ~foreground:"var(--ls-primary-text-color)"
+                      ~value:t.toast_text [])
                ; spacer ~width:20 []
                ]
            ; align `top_trailing
                (button ~key:"ti-close" ~variant:`ghost ~size:`icon
-                   ~width:32 ~height:32
-                   ~style_class:"ui__toast-close"
+                   ~width:32 ~height:32 ~corner_radius:6
+                   ~foreground:
+                     "color-mix(in oklab, var(--lui-c-foreground) 50%, \
+                      transparent)"
                    ~label:(I18n.t "ui/close")
                    ~on_press:(fun _ -> Toast.dismiss t.toast_id)
                    ~icon:`x [])

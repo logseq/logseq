@@ -258,16 +258,15 @@ let dfmt_menu_state ctx =
       s
 
 let dfmt_menu ~key mst options current =
-  dropdown_menu ~key:("dfmt-m-" ^ key)
+  Ui_components.menu_card ~key:("dfmt-m-" ^ key)
     ~anchor:`below ~anchor_alignment:`start
-    ~style_class:"ui__dropdown-menu-content ui__select-content"
+    ~cls:"ls-select-content"
     ~on_dismiss:(fun _ -> V.lang_menu_close mst)
     (List.mapi
        (fun i fmt ->
          menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
            ~text:(date_option_text fmt)
            ~selected:(fmt = current)
-           ~style_class:"ui__dropdown-menu-item"
            ~on_press:(fun _ ->
              if String.trim fmt <> "" then (
                S.set_date_format fmt;
@@ -292,7 +291,7 @@ let date_format_row ctx =
                 ~width:200 ~height:29 ~corner_radius:4
                 ~padding_horizontal:8
                 ~background:"var(--lx-gray-03)"
-                ~style_class:"ui__select-trigger form-select is-small ls-date-format"
+                ~style_class:"ls-select-trigger form-select is-small ls-date-format"
                 ~text:(date_option_text current)
                 ~on_press:(fun _ ->
                   Signal.set mst (not (Runtime.signal_get mst));

@@ -111,42 +111,36 @@ let view (r : Dialogs_state.ui_request) : t =
     then (I18n.e2ee_set_password_title, " encryption-password")
     else (I18n.e2ee_enter_password_title, "")
   in
-  box ~key:"e2ee-ov"
-    ~style_class:"ui__dialog-overlay"
-    [ column ~key:"e2ee-c"
-        ~style_class:
-          ("e2ee-password-modal-content ui__dialog-content"
-          ^ extra)
-        ~data_attrs:
-          [ ("role", "dialog")
-          ; ("aria-modal", "true")
-          ; ("aria-labelledby", "ls-e2ee-title") ]
-        ~gap:32
-        [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title
-            ~accessibility_identifier:"ls-e2ee-title" []
-        ; column ~key:"f" ~style_class:"ls-e2ee-form" ~gap:16
-            ( [ pw_input ctx ~key:"p1" ~value:pw1 ~autofocus:true
-                  ~placeholder:I18n.e2ee_password_ph
-                  ~on_enter:submit_now ]
-            @ ( if two
-                then
-                  [ pw_input ctx ~key:"p2" ~value:pw2
-                      ~autofocus:false
-                      ~placeholder:I18n.e2ee_password_again_ph
-                      ~on_enter:submit_now
-                  ; if_ ~test:warn.Signal.state_signal
-                      (text ~key:"mm"
-                         ~style_class:"ls-warn-text"
-                         ~value:I18n.e2ee_password_not_matched
-                         [])
-                  ]
-                else [] )
-            @ [ button ~key:"s" ~variant:`primary
-                  ~style_class:"ui__button ls-btn-primary"
-                  ~text:I18n.submit
-                  ~on_press:(fun _ -> submit_now ())
-                  []
-              ] )
-        ]
+  (* dialog kind supplies the card chrome; the ls-dialog-layer cover
+     popover supplies the scrim and Escape dispatch *)
+  dialog ~key:"e2ee-dlg"
+    ~style_class:("e2ee-password-modal-content" ^ extra)
+    ~data_attrs:
+      [ ("aria-modal", "true"); ("aria-labelledby", "ls-e2ee-title") ]
+    [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title
+        ~accessibility_identifier:"ls-e2ee-title" []
+    ; column ~key:"f" ~style_class:"ls-e2ee-form" ~gap:16
+        ( [ pw_input ctx ~key:"p1" ~value:pw1 ~autofocus:true
+              ~placeholder:I18n.e2ee_password_ph
+              ~on_enter:submit_now ]
+        @ ( if two
+            then
+              [ pw_input ctx ~key:"p2" ~value:pw2
+                  ~autofocus:false
+                  ~placeholder:I18n.e2ee_password_again_ph
+                  ~on_enter:submit_now
+              ; if_ ~test:warn.Signal.state_signal
+                  (text ~key:"mm"
+                     ~style_class:"ls-warn-text"
+                     ~value:I18n.e2ee_password_not_matched
+                     [])
+              ]
+            else [] )
+        @ [ button ~key:"s" ~variant:`primary
+              ~style_class:"ui__button ls-btn-primary"
+              ~text:I18n.submit
+              ~on_press:(fun _ -> submit_now ())
+              []
+          ] )
     ]
     ctx parent

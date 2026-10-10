@@ -239,12 +239,6 @@ pub fn register(shared: &Shared) {
         "border:2px solid var(--ls-link-text-color)",
         "",
     );
-    // .ui__dialog-close { position:absolute; right/top:1rem; opacity:.7 }
-    lui_gpui::style::register_class_style(
-        "ui__dialog-close",
-        "position:absolute; top:16px; right:16px; opacity:0.7",
-        "cursor-pointer",
-    );
     let mut shared = shared.borrow_mut();
     shared
         .extension_renderers
@@ -355,21 +349,6 @@ fn register_class_styles() {
     // win over class declarations, so only the paint rules live here).
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
     class("ui__dialog-main-content", "width:100%", "");
-    class(
-        "ui__dialog-close",
-        "position:absolute;top:0.75rem;right:0.75rem",
-        "",
-    );
-    class(
-        "ui__toaster-viewport",
-        "position:absolute;top:3rem;right:1rem;width:22.5rem",
-        "pointer-events-none",
-    );
-    class(
-        "ui__toast",
-        "border-width:1px;border-radius:6px;background:background",
-        "pointer-events-auto",
-    );
     class("ls-font-sample", "font-size:14px;line-height:20px;font-weight:600", "");
     class("ls-font-name", "font-size:11.2px;line-height:16px", "");
     // ---- body-mounted popup chrome (resources/css/lui-overlay.css
@@ -391,16 +370,6 @@ fn register_class_styles() {
     );
     class(
         "ui__dropdown-menu-sub-content",
-        menu_chrome,
-        "pointer-events-auto overflow-y-auto overflow-x-hidden",
-    );
-    class(
-        "ui__context-menu-content",
-        menu_chrome,
-        "pointer-events-auto overflow-y-auto overflow-x-hidden",
-    );
-    class(
-        "ui__select-content",
         menu_chrome,
         "pointer-events-auto overflow-y-auto overflow-x-hidden",
     );

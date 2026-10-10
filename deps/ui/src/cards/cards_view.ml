@@ -295,35 +295,30 @@ let modal st =
   let opened_at = Ui_services.time_now () in
   (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
      registered class dictionary makes the shell a window-sized layer
-     and centers the abspos content by flex alignment. *)
+     and centers the content by flex alignment. On web the dialog kind
+     portals itself out — the shell mounts empty there. *)
   box ~key:"cards-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
-    [ Ui_parts.pressable
-        ~on_press:(fun _ ->
+    [ (* dialog kind owns scrim, centering, focus trap and
+         outside/Escape dismiss; ls-dialog-flashcards keeps the
+         per-dialog CSS hooks. The opening click's 400ms debounce
+         guards the modal from the same-press dismiss. *)
+      dialog ~key:"cards-dlg" ~style_class:"ls-dialog-flashcards"
+        ~on_dismiss:(fun _ ->
           if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)
-        (box ~key:"cards-ov" ~style_class:"ui__dialog-overlay" [])
-    ; (* label="flashcards__cp" follows the dialogs_view convention:
-         ls-dialog-flashcards class + class-selector twins in
-         lui-overlay.css; the base .ui__dialog-content rule already
-         centers via left/top + translate *)
-      column ~key:"cards-ct"
-        ~max_width:672 ~gap:16 ~padding:24 ~style_class:"ui__dialog-content ls-dialog-flashcards grid w-full lg:max-w-3xl border sm:rounded-lg bg-background shadow-lg ui__dialog-zoom-in"
-        ~data_attrs:
-          [ ("data-state", "open"); ("role", "dialog") ]
         [ (* column (not box): flex-column parent so cards-modal's
              ~grow:1. can claim the main-content height on every
              platform *)
-          column ~key:"cards-main" ~style_class:"ui__dialog-main-content"
+          column ~key:"cards-main" ~grow:1.
             [ column ~key:"cards-modal"
                 ~accessibility_identifier:"cards-modal"
                 ~style_class:"ls-cards-stack" ~grow:1.
                 [ selector_row st; cards_body st ] ]
-        ; button ~key:"cards-close" ~variant:`ghost ~size:`icon
-            ~style_class:"ui__dialog-close"
+        ; Ui_components.dialog_close ~key:"cards-close"
             ~label:(t_ "ui/close")
-            ~icon:`x
             ~on_press:(fun _ -> Cards_state.close st)
-            [] ] ]
+        ]
+    ]
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in

@@ -39,6 +39,7 @@ let has_class n cls =
   | None -> false
 
 let exists_class h cls = List.exists (fun n -> has_class n cls) (nodes h)
+let exists_kind h kind = List.exists (fun n -> n.M.kind = kind) (nodes h)
 let by_identifier h id =
   List.find (fun n -> M.string_prop n "accessibility-identifier" = Some id)
     (nodes h)
@@ -107,7 +108,7 @@ let select_editor h =
 let settings h =
   h.open_settings ();
   h.flush ();
-  h.check "settings dialog mounts its real content" (exists_class h "ui__dialog-content");
+  h.check "settings dialog mounts its real content" (exists_kind h "dialog");
   select_editor h;
   h.check "editor settings tab becomes selected"
     (Hashtbl.find (by_identifier h "editor").M.props "selected" = Lui_protocol.BoolValue true);
@@ -120,7 +121,7 @@ let settings h =
     (h.storage_get "wide-mode" = Some (if before then "\"false\"" else "\"true\""));
   h.close_settings ();
   h.flush ();
-  h.check "settings closes" (not (exists_class h "ui__dialog-content"));
+  h.check "settings closes" (not (exists_kind h "dialog"));
   h.open_settings ();
   h.flush ();
   select_editor h;

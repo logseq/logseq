@@ -160,7 +160,7 @@ let focusable_sel =
 let top_content () =
   match
     Ui_services.dom_query_all
-      ".ui__dialog-content,.ui__alert-dialog-content"
+      ".ui__dialog-content,.ui__alert-dialog-content,.lui-dialog"
   with
   | [] -> None
   | els -> Some (List.nth els (List.length els - 1))

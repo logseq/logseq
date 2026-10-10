@@ -504,12 +504,16 @@ let panel ctx fields (a : auth_ui) : t =
      :: (if a.err = "" then []
          else
            (* cljs shui/alert {:variant :destructive} + alert-description —
-              destructive styling comes from the .cp__user-login .ui__alert
-              rules *)
-           [ column ~key:"err" ~style_class:"ui__alert"
-               [ paragraph ~key:"err-d"
-                   ~style_class:"ui__alert-description"
-                   ~value:a.err [] ] ])
+              the .cp__user-login .ui__alert rule's chrome now rides
+              the alert kind's typed props (same fixed oklch bg the
+              rule hard-coded for both themes); the spacer replaces
+              its margin-bottom:1rem *)
+           [ alert ~key:"err" ~variant:`destructive
+               ~background:"oklch(80.8% 0.114 19.571)"
+               ~border_width:1 ~border_color:"transparent"
+               ~corner_radius:8 ~padding:16
+               [ paragraph ~key:"err-d" ~value:a.err [] ]
+           ; spacer ~height:16 [] ])
     @ inner)
 
 let body (_ms : Model.t Signal.signal) : t =

@@ -413,7 +413,7 @@ let test_dialogs () =
   Dialogs_state.close_all ();
   flush ();
   check "dialogs closed"
-    (find_where (fun n -> has_tok n "ui__dialog-content") = [])
+    (find_where (fun n -> n.M.kind = "dialog") = [])
 
 (* ---------------- page menu / confirm / toasts / help ---------------- *)
 
@@ -502,7 +502,7 @@ let test_toasts () =
     (Action.Toast_push
        { Model.toast_id = 1; toast_text = "Saved"; toast_kind = "success"
        ; toast_key = None });
-  (match find_where (fun n -> has_tok n "ui__toast") with
+  (match find_where (fun n -> n.M.kind = "toast") with
    | [] -> check "toast node" false
    | t :: _ ->
        check "toast text"
@@ -514,7 +514,7 @@ let test_toasts () =
      record's own toast_id -- the first toast is always id 0 *)
   send (Action.Toast_dismiss 0);
   check "toast dismissed"
-    (find_where (fun n -> has_tok n "ui__toast") = [])
+    (find_where (fun n -> n.M.kind = "toast") = [])
 
 let test_help () =
   send Action.Help_toggle;

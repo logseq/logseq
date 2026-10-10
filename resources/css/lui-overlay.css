@@ -114,9 +114,7 @@
    data-[side] slide-in-from-* (8px) */
 .ui__popover-content,
 .ui__dropdown-menu-content,
-.ui__dropdown-menu-sub-content,
-.ui__context-menu-content,
-.ui__select-content {
+.ui__dropdown-menu-sub-content {
   --lui-pop-dx: 0;
   --lui-pop-dy: 0;
   --ls-page-title-size: 1rem;
@@ -150,35 +148,28 @@
 /* cljs shui.css: dropdown menus inherit body text color, not popover-foreground */
 .ui__dropdown-menu-content,
 .ui__dropdown-menu-sub-content,
-.ui__context-menu-content {
-  color: inherit;
-}
 
 .ui__popover-content[data-side="bottom"],
 .ui__dropdown-menu-content[data-side="bottom"],
-.ui__dropdown-menu-sub-content[data-side="bottom"],
-.ui__select-content[data-side="bottom"] {
+.ui__dropdown-menu-sub-content[data-side="bottom"] {
   --lui-pop-dy: -0.5rem;
 }
 
 .ui__popover-content[data-side="top"],
 .ui__dropdown-menu-content[data-side="top"],
-.ui__dropdown-menu-sub-content[data-side="top"],
-.ui__select-content[data-side="top"] {
+.ui__dropdown-menu-sub-content[data-side="top"] {
   --lui-pop-dy: 0.5rem;
 }
 
 .ui__popover-content[data-side="left"],
 .ui__dropdown-menu-content[data-side="left"],
-.ui__dropdown-menu-sub-content[data-side="left"],
-.ui__select-content[data-side="left"] {
+.ui__dropdown-menu-sub-content[data-side="left"] {
   --lui-pop-dx: 0.5rem;
 }
 
 .ui__popover-content[data-side="right"],
 .ui__dropdown-menu-content[data-side="right"],
-.ui__dropdown-menu-sub-content[data-side="right"],
-.ui__select-content[data-side="right"] {
+.ui__dropdown-menu-sub-content[data-side="right"] {
   --lui-pop-dx: -0.5rem;
 }
 
@@ -190,8 +181,7 @@
 /* ---- menu chrome ---------------------------------------------------- */
 
 .ui__dropdown-menu-content,
-.ui__dropdown-menu-sub-content,
-.ui__select-content {
+.ui__dropdown-menu-sub-content {
   padding: 0.25rem;
 }
 
@@ -234,9 +224,8 @@
 
 /* menu item (dropdown + context + sub-trigger + select rows) */
 .ui__dropdown-menu-item,
-.ui__context-menu-item,
-.ui__dropdown-menu-sub-trigger,
-.ui__select-item {
+
+.ui__dropdown-menu-sub-trigger {
   position: relative;
   display: flex;
   align-items: center;
@@ -250,62 +239,22 @@
 }
 
 .ui__dropdown-menu-item[data-highlighted],
-.ui__context-menu-item[data-highlighted],
+
 .ui__dropdown-menu-sub-trigger[data-highlighted],
-.ui__dropdown-menu-sub-trigger[data-open],
-.ui__select-item[data-highlighted] {
+.ui__dropdown-menu-sub-trigger[data-open] {
   background: hsl(var(--muted));
   color: inherit;
 }
 
-.ui__dropdown-menu-item[data-disabled],
-.ui__context-menu-item[data-disabled],
-.ui__select-item[data-disabled] {
+.ui__dropdown-menu-item[data-disabled] {
   pointer-events: none;
   opacity: 0.5;
 }
 
-.ui__dropdown-menu-separator,
-.ui__context-menu-separator,
-.ui__select-separator {
+.ui__dropdown-menu-separator {
   height: 1px;
   margin: 0.25rem -0.25rem;
   background: hsl(var(--muted));
-}
-
-.ui__select-content {
-  position: relative;
-  z-index: 99999;
-}
-
-.ui__select-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 2.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid hsl(var(--input, var(--border)));
-  border-radius: 0.375rem;
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.875rem;
-}
-
-.ui__select-trigger:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px hsl(var(--ring));
-}
-
-.ui__select-icon {
-  flex-shrink: 0;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-}
-
-.ui__select-label {
-  padding: 0.375rem 0.5rem 0.375rem 2rem;
-  font-size: 0.875rem;
-  font-weight: 600;
 }
 
 /* the kind's children mount before its built-in slots (slots aren't
@@ -360,16 +309,6 @@
 
 .ui__dropdown-menu-checkbox-item[data-highlighted] {
   background: hsl(var(--muted));
-}
-
-.ui__dropdown-menu-item-indicator {
-  position: absolute;
-  left: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 0.875rem;
-  height: 0.875rem;
 }
 
 /* select item row inside cp__select results */
@@ -709,11 +648,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ls-cm-swatch,
-.ls-cm-heading-btn,
-/* DOM parity: the heading buttons emit a literal trailing comma in the
-   class list (cljs menu-heading join quirk), so the token is
-   'ls-cm-heading-btn,' — match it too */
-.ls-cm-heading-btn\, {
+.ls-cm-heading-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1111,25 +1046,14 @@ div[data-keep-selection].menu-links-wrapper {
    named icon is set it stays invisible but still takes layout space,
    shifting labels right of the cljs layout — collapse it entirely */
 .ui__dropdown-menu-content .lui-menu-item-icon:not([data-name]),
-.ui__context-menu-content .lui-menu-item-icon:not([data-name]),
-.ui__popover-content .lui-menu-item-icon:not([data-name]) {
-  display: none;
-}
 
 /* same for the check slot: cljs menus have no trailing 16px box — the
    invisible check would push the shortcut/chevron off the right edge */
 .ui__dropdown-menu-content .lui-menu-item-check,
-.ui__context-menu-content .lui-menu-item-check,
-.ui__popover-content .lui-menu-item-check {
-  display: none;
-}
 
 /* cljs items are flex rows with normal (0) gap; spacing between icon and
    label comes from the icon's own margin (gap-1 = 4px) */
 .ui__dropdown-menu-content .lui-menu-item,
-.ui__context-menu-content .lui-menu-item {
-  gap: 0;
-}
 
 /* cljs shui dialog title: text-lg font-semibold leading-none tracking-tight
    (+ tailwind preflight margin reset) */
@@ -1144,57 +1068,41 @@ div[data-keep-selection].menu-links-wrapper {
 /* master's untitled dialogs still mount a hidden h2.ui__dialog-title —
    display:none removes it from the content grid so it contributes no
    row gap before .ui__dialog-main-content */
-.ui__dialog-content > .ui__dialog-title-empty {
-  display: none;
-}
-
-.ui__dialog-close {
-  position: absolute;
-  right: 1rem;
-  top: 1rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 0.25rem;
-  opacity: 0.7;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  background: none;
-  border-style: none;
-  color: inherit;
-}
-
-.ui__dialog-close:hover {
-  opacity: 1;
-}
-
-.ui__dialog-close .lui-button-label:empty,
-.ls-info-icon .lui-button-label:empty {
-  display: none;
-}
 
 /* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
    dialog open */
-.ui__dialog-close:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--lui-c-background), 0 0 0 4px hsl(var(--ring));
-}
 
 .ui__dialog-main-content {
   min-height: 0;
   overflow-y: auto;
 }
 
+/* dialog kind chrome: the kit .lui-dialog centers the card but owns no
+   padding/gap/width — cljs ui__dialog-content was gap 1rem, padding
+   1.5rem, w-full max-w-2xl lg:max-w-3xl */
+.lui-dialog {
+  gap: 1rem;
+  padding: 1.5rem;
+  width: min(42rem, calc(100vw - 2rem));
+}
+
+@media (min-width: 1024px) {
+  .lui-dialog {
+    width: 48rem;
+  }
+}
+
+/* settings mounts its own padded shell */
+.lui-dialog.ls-dialog-settings {
+  padding: 0;
+}
+
 /* cljs ui.css: flashcards dialog sizing */
-.ui__dialog-content[label="flashcards__cp"],
-.ui__dialog-content.ls-dialog-flashcards {
+.lui-dialog.ls-dialog-flashcards {
   padding: 1.5rem 1.25rem 1rem;
 }
 
-.ui__dialog-content[label="flashcards__cp"] .ui__dialog-main-content,
-.ui__dialog-content.ls-dialog-flashcards .ui__dialog-main-content {
+.lui-dialog.ls-dialog-flashcards .ui__dialog-main-content {
   max-height: 85vh;
   min-height: 65vh;
   overflow: auto;
@@ -1202,8 +1110,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (min-width: 820px) {
-  .ui__dialog-content[label="flashcards__cp"],
-  .ui__dialog-content.ls-dialog-flashcards {
+  .lui-dialog.ls-dialog-flashcards {
     min-width: 800px;
     max-width: min(85%, 980px);
   }
@@ -1241,11 +1148,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* LUI dialog bodies stack their content in one column */
-.ls-dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
 
 /* per-name dialog sizing (was inline utilities on the content node) */
 .ls-dialog-export-page {
@@ -1274,14 +1176,12 @@ div[data-keep-selection].menu-links-wrapper {
   overflow: auto;
 }
 
-.ui__dialog-content[label="app-settings"],
-.ui__dialog-content.ls-dialog-settings {
+.lui-dialog.ls-dialog-settings {
   max-width: 64rem;
   overflow: hidden;
 }
 
-.ui__dialog-content[label="plugins-dashboard"],
-.ui__dialog-content.ls-dialog-plugins {
+.lui-dialog.ls-dialog-plugins {
   width: 90vw;
   max-width: 1246px;
   max-height: calc(100vh - 50px);
@@ -1296,9 +1196,8 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
-.ui__dialog-content[label="new-db-graph"],
-.ui__dialog-content.ls-dialog-new-graph,
-.ui__dialog-content.ls-dialog-add-graph {
+.lui-dialog.ls-dialog-new-graph,
+.lui-dialog.ls-dialog-add-graph {
   max-width: 500px;
 }
 
@@ -1311,16 +1210,14 @@ div[data-keep-selection].menu-links-wrapper {
   top: 50%;
 }
 
-.ui__dialog-content[label="app-settings"],
-.ui__dialog-content.ls-dialog-settings {
+.lui-dialog.ls-dialog-settings {
   /* cljs sizes the settings dialog border-box: 1024px incl padding */
   box-sizing: border-box;
   width: min(1024px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
 }
 
-.ui__dialog-content[label="app-settings"] .settings-modal,
-.ui__dialog-content.ls-dialog-settings .settings-modal {
+.lui-dialog.ls-dialog-settings .settings-modal {
   border-radius: 0.75rem;
 }
 
@@ -1383,17 +1280,14 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* cljs login.css: login form controls span the card width */
-.ui__dialog-content[label="user-login"] .form-input,
-.ui__dialog-content.ls-dialog-login .form-input,
-.ui__dialog-content[label="user-login"] .ui__button.as-solid,
-.ui__dialog-content.ls-dialog-login .ui__button.as-solid {
+.lui-dialog.ls-dialog-login .form-input,
+.lui-dialog.ls-dialog-login .ui__button.as-solid {
   width: 100%;
 }
 
 /* cljs login.css: .ui__dialog-content[label=user-login] centers a
    ~440px authenticator column */
-.ui__dialog-content[label="user-login"],
-.ui__dialog-content.ls-dialog-login {
+.lui-dialog.ls-dialog-login {
   display: flex;
   align-items: center;
   width: auto;
@@ -1401,8 +1295,7 @@ div[data-keep-selection].menu-links-wrapper {
   padding: 0 1.5rem 1.5rem;
 }
 
-.ui__dialog-content[label="user-login"] .ui__dialog-main-content,
-.ui__dialog-content.ls-dialog-login .ui__dialog-main-content {
+.lui-dialog.ls-dialog-login .ui__dialog-main-content {
   padding: 0;
   width: 70vw;
   max-width: 500px;
@@ -1410,16 +1303,9 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (min-width: 640px) {
-  .ui__dialog-content[label="user-login"] .ui__dialog-main-content,
-  .ui__dialog-content.ls-dialog-login .ui__dialog-main-content {
+  .lui-dialog.ls-dialog-login .ui__dialog-main-content {
     width: 440px;
   }
-}
-
-.ui__dialog-content[label="user-login"] .ui__dialog-close,
-.ui__dialog-content.ls-dialog-login .ui__dialog-close {
-  z-index: 10;
-  top: 4px;
 }
 
 /* e2ee password modal */
@@ -1553,245 +1439,21 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- toasts ------------------------------------------------------------ */
 
-.lui-toast-viewport:has(> .ui__toast) {
-  position: fixed;
-  margin: 0;
-  overflow: visible;
-  pointer-events: none;
-  width: calc(100vw - 2rem);
-  z-index: 100000;
+/* kit viewport is bottom-right; Logseq toasts stack top-right */
+.lui-toast-viewport {
   bottom: auto;
   right: 1rem;
   left: auto;
   top: 3rem;
+  width: calc(100vw - 2rem);
+  z-index: 100000;
 }
 
 @media (min-width: 500px) {
-  .lui-toast-viewport:has(> .ui__toast) {
+  .lui-toast-viewport {
     width: 22.5rem;
     right: 2rem;
   }
-}
-
-.ui__toast {
-  --gap: 0.75rem;
-  --peek: 0.75rem;
-  --scale: calc(1 - (var(--toast-index) * 0.1));
-  --shrink: calc(1 - var(--scale));
-  --height: var(--toast-frontmost-height, var(--toast-height));
-  --offset-y: calc(
-    var(--toast-offset-y) + (var(--toast-index) * var(--gap)) +
-      var(--toast-swipe-movement-y));
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: auto;
-  width: 100%;
-  margin: 0 auto 0 0;
-  box-sizing: border-box;
-  height: var(--height);
-  max-height: calc(100dvh - 5rem);
-  overflow: hidden;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
-     --ls-primary-text-color here would warm every label */
-  color: inherit;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  cursor: default;
-  pointer-events: auto;
-  transform-origin: top center;
-  z-index: calc(1000 - var(--toast-index));
-  transform: translateX(var(--toast-swipe-movement-x))
-    translateY(
-      calc(
-        var(--toast-swipe-movement-y) + (var(--toast-index) * var(--peek)) +
-          (var(--shrink) * var(--height))))
-    scale(var(--scale));
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s,
-    height 0.15s;
-}
-
-.ui__toast[data-expanded] {
-  transform: translateX(var(--toast-swipe-movement-x))
-    translateY(var(--offset-y));
-  height: var(--toast-height);
-}
-
-.ui__toast[data-starting-style],
-.ui__toast[data-ending-style] {
-  transform: translateY(-150%);
-}
-
-.ui__toast[data-limited] {
-  opacity: 0;
-}
-
-.ui__toast[data-ending-style] {
-  opacity: 0;
-}
-
-.ui__toast[data-ending-style][data-swipe-direction="up"] {
-  transform: translateY(calc(var(--toast-swipe-movement-y) - 150%));
-}
-
-.ui__toast[data-ending-style][data-swipe-direction="down"] {
-  transform: translateY(calc(var(--toast-swipe-movement-y) + 150%));
-}
-
-.ui__toast[data-ending-style][data-swipe-direction="left"] {
-  transform: translateX(calc(var(--toast-swipe-movement-x) - 150%))
-    translateY(var(--offset-y));
-}
-
-.ui__toast[data-ending-style][data-swipe-direction="right"] {
-  transform: translateX(calc(var(--toast-swipe-movement-x) + 150%))
-    translateY(var(--offset-y));
-}
-
-.ui__toast::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 0;
-  width: 100%;
-  height: calc(var(--gap) + 1px);
-}
-
-.ui__toast:focus-visible {
-  outline: 2px solid hsl(var(--primary, var(--ls-link-text-color, #0f7b6c)));
-  outline-offset: -1px;
-}
-
-.lui-toast-viewport:has(.ui__toast ~ .ui__toast) .ui__toast {
-  max-height: calc((100dvh - 5rem - 0.75rem) / 2);
-}
-
-.lui-toast-viewport:has(.ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
-  max-height: calc((100dvh - 5rem - 1.5rem) / 3);
-}
-
-.lui-toast-viewport:has(
-    .ui__toast ~ .ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
-  max-height: calc((100dvh - 5rem - 2.25rem) / 4);
-}
-
-.ui__toast-content {
-  box-sizing: border-box;
-  overflow: hidden;
-  transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.lui-toast-viewport:not(:hover):not(:focus-within)
-  > .ui__toast:not(:last-child) > .ui__toast-content {
-  opacity: 0;
-}
-
-.ui__toast-content[data-expanded] {
-  opacity: 1;
-}
-
-/* cljs `.ui__toast-content.untitled`: close floats top-right, status icon
-   sits inline with the description row */
-.ui__toast-header {
-  position: absolute;
-  top: 1.25rem;
-  left: 0.75rem;
-  right: 0.25rem;
-  z-index: 1;
-}
-
-.ui__toast-body {
-  display: flex;
-  min-height: 0;
-  width: 100%;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.75rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-block: 0.5rem;
-}
-
-.ui__toast-text {
-  display: flex;
-  min-height: 0;
-  min-width: 0;
-  flex: 1;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 0.5rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-
-
-.ui__toast-title {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.25rem;
-}
-
-.ui__toast-description {
-  margin: 0;
-  min-height: 0;
-  min-width: 0;
-  max-height: 100%;
-  max-width: 100%;
-  flex: 1;
-  overflow: auto;
-  overscroll-behavior: contain;
-  user-select: text;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  opacity: 0.9;
-  color: var(--ls-primary-text-color);
-}
-
-/* status icon sits inside the (absolutely positioned) header; keep the
-   description row's icon slot as a flex spacer like the cljs layout */
-.ui__toast-text::before {
-  content: '';
-  width: 1.25rem;
-  flex-shrink: 0;
-}
-
-.ui__toast-close {
-  border-radius: 0.375rem;
-  min-height: auto;
-  background: none;
-  color: color-mix(in oklab, var(--lui-c-foreground) 50%, transparent);
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.ui__toast-close:hover {
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
-}
-
-.ui__toast-status-icon {
-  font-size: 16px;
-}
-
-.ui__toast-status-icon.info {
-  color: var(--rx-blue-09-alpha, var(--lx-blue-09, hsl(208 93% 48%)));
-}
-
-.ui__toast-status-icon.success {
-  color: var(--rx-green-09-alpha, var(--lx-green-09, hsl(142 71% 45%)));
-}
-
-.ui__toast-status-icon.warning {
-  color: var(--rx-yellow-10-alpha, var(--lx-yellow-10, hsl(45 93% 40%)));
-}
-
-.ui__toast-status-icon.error {
-  color: var(--rx-red-10-alpha, var(--lx-red-10, hsl(359 82% 48%)));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1800,8 +1462,7 @@ div[data-keep-selection].menu-links-wrapper {
   .ui__alert-dialog-overlay,
   .ui__dialog-content,
   .ui__alert-dialog-content,
-  .ui__toast,
-  .ui__toast-content {
+  .ui__alert-dialog-content {
     animation: none;
     transition: none;
   }
@@ -3741,24 +3402,11 @@ select.form-select {
 /* cljs login.css: destructive auth alert — bg-red-300 light,
    red-800/90 + red-200 text dark; the Alert base classes
    (rounded-lg border p-4) land via tailwind */
-.cp__user-login .ui__alert {
-  position: relative;
-  width: 100%;
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: oklch(80.8% 0.114 19.571);
-}
 
 .dark .cp__user-login .ui__alert {
   border-color: oklch(44.4% 0.177 26.899);
   background: color-mix(in oklab, oklch(44.4% 0.177 26.899) 90%, transparent);
   color: oklch(88.5% 0.062 18.334);
-}
-
-.cp__user-login .ui__alert-description {
-  margin-bottom: -0.75rem;
 }
 
 /* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
@@ -4598,7 +4246,6 @@ select.form-select {
   overflow: hidden;
 }
 
-
 .ls-card-scroll {
   flex: 1;
   min-height: 0;
@@ -4656,9 +4303,6 @@ select.form-select {
 }
 
 .ui__dropdown-menu-item.del,
-.ui__context-menu-item.del {
-  opacity: 0.6;
-}
 
 .property-key {
   display: flex;
@@ -4709,11 +4353,6 @@ select.form-select {
 
 .ls-icon-dim {
   opacity: 0.4;
-}
-
-.ui__select-icon {
-  flex-shrink: 0;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
 }
 
 .ls-span3 {
@@ -5543,17 +5182,6 @@ select.form-select {
 }
 
 /* help menu popup */
-.cp__sidebar-help-menu-popup {
-  position: fixed;
-  right: 0;
-  bottom: 52px;
-  z-index: 999;
-  background: var(--ls-secondary-background-color, hsl(var(--popover)));
-  border: 1px solid var(--lui-c-border);
-  border-radius: 0.375rem;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-  padding: 0.25rem 0;
-}
 
 .cp__sidebar-help-menu-popup .it {
   display: flex;
@@ -5599,27 +5227,6 @@ select.form-select {
 }
 
 /* settings select trigger + cols */
-.ui__select-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-radius: 0.375rem;
-  border: 1px solid hsl(var(--input));
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  cursor: pointer;
-  color: inherit;
-  text-align: left;
-}
-
-.ui__select-trigger > span {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 
 .ls-select-lg {
   height: 2.5rem;

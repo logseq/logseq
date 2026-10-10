@@ -446,17 +446,10 @@ let unmount uuid =
   Hashtbl.remove instances uuid
 
 (* -- language picker (.code-block-actions .select-language) -- *)
-let picker : D.el option ref = ref None
-
-let close_picker () =
-  match !picker with
-  | Some el ->
-      D.el_remove el;
-      picker := None
-  | None -> ()
+(* cljs shows the picker as a menu anchored under the button —
+   Views_popup.show_menu owns placement, keyboard nav and dismissal. *)
 
 let pick_lang uuid lang =
-  close_picker ();
   ignore
     (let* () = ensure_core () in
      (match (instance uuid, mode_file lang) with
@@ -479,41 +472,26 @@ let pick_lang uuid lang =
      Js.Promise.resolve ())
 
 let open_lang_picker uuid =
-  match !picker with
-  | Some _ -> close_picker ()
-  | None ->
-      ignore
-        (let* () = ensure_core () in
-         (match
-            ( D.query_selector ".cp__overlays"
-            , D.query_selector
-                ("#ls-block-" ^ uuid ^ " .select-language") )
-          with
-          | Some host, Some button ->
-          let r = D.el_bounding_rect button in
-          let menu =
-            D.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
-          in
-          D.el_set_attr menu "style"
-            (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:var(--ls-z-index-level-1)"
-               (D.rect_left r) (D.rect_bottom r +. 4.));
-              Array.iter
-                (fun info ->
-                  match json_string info "name" with
-                  | Some name ->
-                      let row =
-                        D.h ~cls:Menu_item.base_cls
-                          ~attrs:Menu_item.item_attrs ~text:name
-                          ~on_click:(fun _ -> pick_lang uuid name)
-                          ()
-                      in
-                      D.el_append_child menu row
-                  | None -> ())
-                (mode_infos (cm ()));
-              D.el_append_child host menu;
-              picker := Some menu
-          | _ -> ());
-         Js.Promise.resolve ())
+  ignore
+    (let* () = ensure_core () in
+     (match
+        Ui_services.dom_query
+          ("#ls-block-" ^ uuid ^ " .select-language")
+      with
+      | Some button ->
+          Views_popup.show_menu ~anchor:button
+            ~cls_prefix:"ls-code-lang-picker "
+            (List.filter_map
+               (fun info ->
+                 match json_string info "name" with
+                 | Some name ->
+                     Some
+                       (Views_popup.MItem
+                          (name, fun () -> pick_lang uuid name))
+                 | None -> None)
+               (Array.to_list (mode_infos (cm ()))))
+      | None -> ());
+     Js.Promise.resolve ())
 
 (* .code-block-actions copy button (cljs copy-code!: clipboard +
    "Copied!" notification) *)
@@ -540,14 +518,5 @@ let install () =
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
     S.code_focus := focus_block;
-    D.add_document_listener "mousedown"
-      (fun ev ->
-        match
-          ( !picker
-          , D.closest_sel ".ls-code-lang-picker, .code-block-actions"
-              (D.ev_target ev) )
-        with
-        | Some _, None -> close_picker ()
-        | _ -> ())
-      true
+    ()
   end
