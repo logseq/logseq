@@ -54,6 +54,7 @@
   [repo]
   (when repo
     (-> (p/let [_ (db-restore/restore-graph! repo)
+                _ (repo-handler/<restore-date-formatter! repo)
                 _ (graph-handler/<upsert-current-graph-registry!)]
           (graph-handler/remember-current-graph-id-in-tab!)
           (repo-config-handler/start {:repo repo}))

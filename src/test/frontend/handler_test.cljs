@@ -1,7 +1,16 @@
 (ns frontend.handler-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.date :as date]
-            [frontend.handler.page :as page-handler]))
+            [frontend.db.async :as db-async]
+            [frontend.db.restore :as db-restore]
+            [frontend.handler :as handler]
+            [frontend.handler.graph :as graph-handler]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (deftest date-watch-queries-the-journal-only-when-the-day-changes-test
   (let [today (atom "Jul 19th, 2026")
@@ -40,3 +49,52 @@
       (finally
         (set! js/setInterval original-set-interval)
         (set! js/clearInterval original-clear-interval)))))
+
+(deftest restore-and-setup-loads-date-formatter-before-journals-render-test
+  (async done
+    (let [repo "logseq_db_startup_date_fmt"
+          formatter "yyyy-MM-dd"
+          order (atom [])]
+      (-> (p/with-redefs [state/get-current-repo (constantly repo)
+                          db-restore/restore-graph!
+                          (fn [graph]
+                            (swap! order conj :restore-graph)
+                            (is (= repo graph))
+                            (p/resolved nil))
+                          db-async/<get-date-formatter
+                          (fn [graph]
+                            (swap! order conj :get-date-formatter)
+                            (is (= repo graph))
+                            (p/resolved formatter))
+                          graph-handler/<upsert-current-graph-registry!
+                          (fn [] (p/resolved nil))
+                          graph-handler/remember-current-graph-id-in-tab!
+                          (fn [])
+                          repo-config-handler/start
+                          (fn [_])
+                          ui-handler/add-style-if-exists!
+                          (fn [])
+                          shortcut/refresh!
+                          (fn [])
+                          page-handler/init-commands!
+                          (fn [])
+                          page-handler/watch-for-date!
+                          (fn []
+                            (swap! order conj :watch-for-date)
+                            (is (= formatter (state/get-date-formatter))
+                                "Journal creation must see the persisted format, not the default."))
+                          state/set-db-restoring!
+                          (fn [restoring?]
+                            (when (false? restoring?)
+                              (swap! order conj :db-restoring-false)
+                              (is (= formatter (state/get-date-formatter))
+                                  "Settings must see the persisted format before the UI leaves restoring.")))]
+            (p/let [_ (handler/restore-and-setup! repo)]
+              (is (= formatter (state/get-date-formatter)))
+              (is (= [:restore-graph :get-date-formatter :db-restoring-false :watch-for-date]
+                     @order)
+                  "Startup restore must load the date formatter after the graph and before journals/settings render.")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
