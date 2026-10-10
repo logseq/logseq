@@ -92,6 +92,7 @@ let body (_ms : Model.t Signal.signal) : t =
                  ; if_ ~test:(Signal.value cloud)
                      (row ~key:"ng-e2ee-row"
                         ~style_class:"ls-ng-row ls-ng-sub"
+                        ~margin_left:12
                         [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
                             ~checked:(Signal.value e2ee)
                             ~on_toggle:(fun () -> toggle e2ee)

@@ -123,7 +123,7 @@ let copy_save_row ctx =
             (fun (st : S.t) -> st.content <> None || st.png <> None)
             (st_sig ctx)))
     (row ~key:"export-btns" ~gap:24 ~style_class:"export-btns"
-      ~data_attrs:[ ("style", "margin-top:4px") ]
+      ~margin_top:4
     [ button ~key:"export-copy" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
         ~on_press:(fun _ ->
@@ -144,7 +144,7 @@ let copy_save_row ctx =
 
 let options_rows ctx =
   box ~key:"export-opts" ~style_class:"export-opts"
-    ~data_attrs:[ ("style", "margin-top:-6px") ]
+    ~margin_top:(-6)
     [ row ~key:"row-indent" ~cross:`center ~gap:16 ~min_height:46
         [ shown ctx in_text
             (label ~key:"indent-l"

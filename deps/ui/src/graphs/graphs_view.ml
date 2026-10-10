@@ -180,7 +180,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
  fun ctx parent ->
   let refreshing = Signal.state ctx.Lui_ui.ui_scheduler false in
   column ~key:"remote-sec"
-    [ divider ~key:"remote-hr" ~style_class:"mt-8" []
+    [ divider ~key:"remote-hr" ~margin_top:32 []
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
         [ heading ~key:"rh" ~level:2
             ~value:T.remote_graphs []

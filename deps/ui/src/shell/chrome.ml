@@ -813,7 +813,8 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                  ]
                [ column ~key:"ls-head" ~gap:4 ~padding_horizontal:12
                    ~style_class:"sidebar-header-container"
-                   ~data_attrs:[ ("style", "margin-bottom:4px") ]
+                   ~margin_bottom:4
+                   ~data_attrs:[ ("style", "flex-shrink:0") ]
                    [ Left_sidebar_view.header ms ]
                ; Left_sidebar_view.contents ms
                ]
@@ -1051,10 +1052,10 @@ let help_menu_popup : t =
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
-        ; divider ~key:"hm-hr1"
+        ; divider ~key:"hm-hr1" ~margin_vertical:8
             ~data_attrs:
               [ ( "style"
-                , "margin:8px 0;border:0;border-top:1px solid \
+                , "border:0;border-top:1px solid \
                    var(--lui-c-border)" )
               ]
             []
@@ -1067,10 +1068,10 @@ let help_menu_popup : t =
         ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; divider ~key:"hm-hr2"
+        ; divider ~key:"hm-hr2" ~margin_vertical:8
             ~data_attrs:
               [ ( "style"
-                , "margin:8px 0;border:0;border-top:1px solid \
+                , "border:0;border-top:1px solid \
                    var(--lui-c-border)" )
               ]
             []
@@ -1078,10 +1079,10 @@ let help_menu_popup : t =
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
         ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
-        ; divider ~key:"hm-hr3"
+        ; divider ~key:"hm-hr3" ~margin_vertical:8
             ~data_attrs:
               [ ( "style"
-                , "margin:8px 0;border:0;border-top:1px solid \
+                , "border:0;border-top:1px solid \
                    var(--lui-c-border)" )
               ]
             []

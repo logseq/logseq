@@ -509,7 +509,7 @@ let date_label y m d =
    literal <YYYY-MM-DD ...> text inline (active attr marks <..> vs [..]) *)
 let timestamp_text_el ~literal =
   (* cljs span.timestamp[active] — the active attr has no readers *)
-  text ~style_class:"timestamp" ~value:literal []
+  text ~style_class:"timestamp" ~margin_horizontal:4 ~value:literal []
 
 (* ---------- cloze ---------- *)
 

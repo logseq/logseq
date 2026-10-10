@@ -622,7 +622,7 @@ let switch_action_row ~key ~for_ ~label ~on ~on_toggle () =
 
 let features_pane ctx =
   column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
-    ~gap:16 ~padding:4
+    ~gap:16 ~padding:4 ~margin_bottom:32
     [ home_page_row ctx
     ; C.action_row ~key:"plugs" ~for_:"plugin_system"
         ~label:T.plugins_label

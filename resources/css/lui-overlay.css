@@ -253,12 +253,6 @@
   opacity: 0.5;
 }
 
-.ui__dropdown-menu-separator {
-  height: 1px;
-  margin: 0.25rem -0.25rem;
-  background: hsl(var(--muted));
-}
-
 /* the kind's children mount before its built-in slots (slots aren't
    retained children); restore cljs order: icon slot, label, view
    children (shortcut / submenu chevron), check slot */
@@ -356,10 +350,6 @@
   font-size: 1.25rem;
 }
 
-.ls-dialog-head-text {
-  margin-left: 1rem;
-}
-
 .ls-dialog-headline {
   font-size: 1.125rem;
   font-weight: 500;
@@ -391,12 +381,6 @@
   background: var(--lx-gray-05, var(--ls-menu-hover-color, var(--rx-gray-05)));
 }
 
-.menu-separator {
-  margin: 0.25rem 0;
-  opacity: 0.5;
-  border-top: 1px solid var(--lui-c-border);
-}
-
 .hide-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -420,23 +404,6 @@
   min-width: 0;
 }
 
-.ls-ac-node-icon {
-  display: flex;
-  align-items: center;
-  height: 1.25rem;
-  margin-right: 0.25rem;
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-
-.ls-ac-bc {
-  font-size: 0.75rem;
-  opacity: 0.7;
-  margin-bottom: 0.25rem;
-  margin-left: 3px;
-  min-width: 0;
-}
-
 .ls-ac-ic {
   display: flex;
   align-items: center;
@@ -444,19 +411,6 @@
   min-width: 0;
 }
 
-/* trailing shortcut text inside context-menu rows */
-.ls-cm-sc {
-  margin-left: auto;
-  padding-left: 0.5rem;
-}
-
-/* sub-menu trigger chevron */
-.ls-menu-chevron {
-  margin-left: auto;
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
 
 /* ---- autocomplete (#ui__ac) ------------------------------------------ */
 
@@ -549,10 +503,6 @@
   padding-bottom: 64px;
 }
 
-.ls-preview-popup .ls-page-blocks {
-  margin-top: 1rem;
-}
-
 /* ---- context menu rows ----------------------------------------------- */
 
 .ls-context-menu-content {
@@ -562,13 +512,6 @@
 /* block-tag popup is w-60 (240px) in cljs (was an inline width) */
 .ls-context-menu-content.ls-tag-menu {
   width: 240px;
-}
-
-.ls-context-menu-content [role="separator"] {
-  opacity: 0.8;
-  height: 1px;
-  margin: 0.25rem -0.25rem;
-  background: hsl(var(--muted));
 }
 
 /* color swatch row + heading row inside the block context menu */
@@ -585,20 +528,6 @@
 .ls-cm-headings {
   padding-top: 0.25rem;
   padding-bottom: 0.5rem;
-}
-
-.ls-cm-headings-row {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  flex: 1;
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
-}
-
-.ls-cm-colors-row {
-  margin-top: 0.5rem;
 }
 
 .ls-cm-swatch,
@@ -874,7 +803,6 @@
 /* leading icon inside a menu item — cljs uses gap-1 (4px) between
    icon and label inside .ui__dropdown-menu-item */
 .ls-menu-item-icon {
-  margin-right: 0.25rem;
   flex-shrink: 0;
 }
 
@@ -994,8 +922,6 @@
    options block (margin-collapsed select my-2), mt-4 before the
    copy/save row — the export-inner column's uniform gap-3 overshoots
    both */
-.ls-dialog-export-page .export-opts { margin-top: -6px; }
-.ls-dialog-export-page .export-btns { margin-top: 4px; }
 
 /* cljs shui/dialog-open! on publish-page-dialog uses the default
    .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
@@ -1600,10 +1526,6 @@
   padding: 0.375rem;
 }
 
-.ls-property-dropdown [role="separator"] {
-  margin: 0.5rem 0;
-}
-
 .ui__input {
   height: 29px;
   padding: 0 0.5rem;
@@ -1987,10 +1909,6 @@ select.form-select {
   opacity: 0.8;
 }
 
-.ui__dropdown-menu-content .cp__emoji-icon-picker {
-  margin: -0.25rem;
-}
-
 .color-picker {
   border-radius: 0.375rem;
   width: 24px;
@@ -2280,10 +2198,6 @@ select.form-select {
 
 .ls-dc {
   display: contents;
-}
-
-.ls-mb {
-  margin-bottom: 2rem;
 }
 
 /* LUI wraps the actual switch input in a label. Style the input so the
@@ -2584,10 +2498,6 @@ select.form-select {
   gap: 0.25rem;
 }
 
-.ls-ng-sub {
-  margin-left: 0.75rem;
-}
-
 .ls-ng-label {
   opacity: 0.7;
   font-size: 0.875rem;
@@ -2610,25 +2520,10 @@ select.form-select {
   padding: 0.5rem;
 }
 
-.ls-mb-sm {
-  margin-bottom: 1rem;
-}
-
 .ls-strong {
   font-weight: 500;
 }
 
-.ls-ex-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-left: 0.25rem;
-}
-
-/* cljs components/export.cljs: h1.title.mb-8 */
-.export h1.title.ls-mb {
-  margin: 0 0 2rem;
-}
 
 /* cljs tailwind preflight + export.cljs [:hr]: my-8 */
 .export hr {
@@ -2664,11 +2559,6 @@ select.form-select {
   text-align: left;
 }
 
-/* cljs: [:div.mb-4.ml-2.opacity-70.text-sm (block-breadcrumb ...)] */
-.ls-card-bc {
-  margin: 0 0 1rem 0.5rem;
-  font-size: 0.875rem;
-}
 
 .ls-gap {
   gap: 0.5rem;
@@ -2702,16 +2592,6 @@ select.form-select {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-}
-
-.ls-card-actions {
-  margin-top: 2rem;
-  padding-bottom: 0.5rem;
-  flex-shrink: 0;
-}
-
-.ls-ml {
-  margin-left: 0.5rem;
 }
 
 .ls-cards-col {
@@ -3068,15 +2948,6 @@ select.form-select {
   min-width: 0;
 }
 
-/* cljs .ls-view-body is mt-1 */
-.ls-view-body {
-  margin-top: 4px;
-}
-
-/* cljs page-inner children carry .mt-4 on the blocks section */
-.page-inner > .ls-page-blocks {
-  margin-top: 16px;
-}
 
 /* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
    kept in flow here so the rows list needs no top offset) —
@@ -3286,9 +3157,6 @@ select.form-select {
 
 /* cljs ui.css: fold carets hang 27px into the left gutter instead of
    taking inline width in the foldable header */
-.ls-foldable-title-control {
-  margin-left: -27px;
-}
 
 /* cljs ui.css foldable collapse contract: grid-rows 1fr->0fr animates the
    fold, and overflow:hidden on the inner makes it a BFC so a child's
@@ -3386,10 +3254,6 @@ select.form-select {
   margin: 0;
 }
 
-.ls-filters .cp__filters {
-  margin: 0 0 1rem 0.5rem;
-}
-
 .ls-filters .cp__filters:empty {
   display: none;
 }
@@ -3419,10 +3283,6 @@ select.form-select {
   border: none;
   outline: none;
   color: inherit;
-}
-
-.ls-filters-refs {
-  margin-top: 1rem;
 }
 
 .ls-filters-refs:empty {

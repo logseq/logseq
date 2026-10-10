@@ -297,7 +297,15 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
   in
   let view_of ((it, fidx) : menu_item * int) : t =
     match it with
-    | MSep -> Menu_item.separator ~key:(Printf.sprintf "vp%d-sep-%d" pid fidx)
+    | MSep ->
+        (* ls-property-dropdown ruleset gives separators 0.5rem 0 instead
+           of the dropdown's default 0.25rem -0.25rem *)
+        if String.starts_with ~prefix:"ls-property-dropdown" cls then
+          Menu_item.separator ~key:(Printf.sprintf "vp%d-sep-%d" pid fidx)
+            ~mv:8 ~mh:0
+        else
+          Menu_item.separator ~key:(Printf.sprintf "vp%d-sep-%d" pid fidx)
+            ~mv:4 ~mh:(-4)
     | MCustom el -> el
     | MItem (label, on) ->
         cls_of "ui__dropdown-menu-item" fidx
@@ -562,7 +570,7 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
            [ box ~style_class:"ls-dialog-head-icon"
                [ box ~style_class:"ls-dialog-error"
                    [ icon ~key:"ic" ~name:(`app "alert-triangle") [] ] ]
-           ; box ~style_class:"ls-dialog-head-text"
+           ; box ~style_class:"ls-dialog-head-text" ~margin_left:16
                [ Logseq_el.el ~tag:"h3" ~id:"modal-headline"
                    ~attrs:[ ("class", "ls-dialog-headline") ]
                    ~text:headline [] ]

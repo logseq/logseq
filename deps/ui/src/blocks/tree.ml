@@ -889,11 +889,11 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
   let b = Signal.get bs in
   row ~key:("children-" ^ uuid)
     ~style_class:"block-children-container"
+    ~margin_left:29 ~margin_bottom:(-2)
     ~data_attrs:
-      [ (* lui-core.css margin-left:29px on .block-children-container is
-           stylesheet geometry — native backends see it via the style
-           data attr; the web DOM ignores data-style *)
-        ("style", "position:relative;margin-left:29px;padding-top:0.125rem;margin-bottom:-0.125rem")
+      [ (* padding-top stays in the style data attr — no per-side
+           padding prop; native backends read margins via typed props *)
+        ("style", "position:relative;padding-top:0.125rem")
       ]
     [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
@@ -1024,8 +1024,9 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
   row ~key:("children-" ^ uuid)
     ~style_class:"block-children-container"
+    ~margin_left:29 ~margin_bottom:(-2)
     ~data_attrs:
-      [ ("style", "position:relative;margin-left:29px;padding-top:0.125rem;margin-bottom:-0.125rem") ]
+      [ ("style", "position:relative;padding-top:0.125rem") ]
     [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~data_attrs:

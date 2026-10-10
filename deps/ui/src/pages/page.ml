@@ -536,13 +536,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 ~style_class:
                   ("block-main-container is-page-title-row"
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
-                ~data_attrs:
-                  [ ( "style"
-                    , "width:100%;"
-                      ^
-                      if icon_el = None then "margin-left:-30px"
-                      else "margin-left:-36px" )
-                  ]
+                ~margin_left:(if icon_el = None then -30 else -36)
+                ~data_attrs:[ ("style", "width:100%") ]
                 ~on_pointer_enter:(fun _ ->
                   if collapsable_title () then (
                     Signal.set caret_hover true;
@@ -813,8 +808,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           list_wrap ]
   in
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-    ~min_height:60
-    ~data_attrs:[ ("style", "overflow:hidden;margin-left:-20px") ]
+    ~min_height:60 ~margin_left:(-20)
+    ~data_attrs:[ ("style", "overflow:hidden") ]
     [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
         ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
@@ -827,7 +822,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
-    box ~key ~width:14 ~height:16
+    box ~key ~width:14 ~height:16 ~margin_left:(-27)
       ~style_class:"ls-foldable-title-control block-control"
       [ box ~key:"ch"
           ~style_class:(if collapsed then "" else "control-hide")
@@ -902,7 +897,7 @@ let journal_references_view (p : Model.page) : t =
       column ~key:("jrefs-" ^ key)
         ~style_class:"references"
         [ box ~key:"jrfc" ~style_class:"ls-foldable-content"
-            [ column ~key:"jrb" ~style_class:"ls-view-body"
+            [ column ~key:"jrb" ~style_class:"ls-view-body" ~margin_top:4
                 (List.map references_row refs)
             ]
         ]
@@ -1082,9 +1077,9 @@ let journal_item_sig (ms : Model.t Signal.signal)
                           ps ms))
                 ; pagebar_slots_el p0
                 ]
-            ; column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
-                ~min_height:60
-                ~data_attrs:[ ("style", "overflow:hidden;margin-left:-20px") ]
+            ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+                ~min_height:60 ~margin_top:16 ~margin_left:(-20)
+                ~data_attrs:[ ("style", "overflow:hidden") ]
                 [ box ~key:"page-blocks-inner"
                     ~style_class:"page-blocks-inner relative"
                     ~data_attrs:
@@ -1358,7 +1353,9 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
      correct at any size, the threshold is only an optimization *)
   let list_el = if use_virt then virt_list else keyed_list in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
-  (column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+  (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+    ~min_height:60 ~margin_top:16 ~margin_left:(-20)
+    ~data_attrs:[ ("style", "overflow:hidden") ]
     [ box ~key:"page-blocks-inner"
         ~style_class:"page-blocks-inner relative"
         ~data_attrs:

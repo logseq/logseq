@@ -514,12 +514,12 @@ let nav_group ms st =
                           ; P.Opacity, Ui_components.fv 0.6
                           ; P.HoverOpacity, Ui_components.fv 0.8 ]
                           (row ~style_class:"as-edit"
-                             [ icon_ ~size:14
-                                 ~attrs:
-                                   [ ( "style"
-                                     , "margin-left:3px;margin-right:11px" )
-                                   ]
-                                 "filter-edit" ])) ] ])
+                             [ Ui_components.with_props
+                                 [ Lui_protocol.MarginLeft
+                                 , Ui_components.iv 3
+                                 ; Lui_protocol.MarginRight
+                                 , Ui_components.iv 11 ]
+                                 (icon_ ~size:14 "filter-edit") ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
                 (fun (route, (checked, tag_titles)) ->
@@ -824,10 +824,10 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                   [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
                       [ row ~key:"gsel-th" ~cross:`center ~main:`center
                           ~width:24 ~height:24 ~opacity:0.8
-                          ~style_class:"thumb"
+                          ~style_class:"thumb" ~margin_left:(-2)
                           ~data_attrs:
                             [ ( "style"
-                              , "overflow:hidden;margin-left:-2px;\
+                              , "overflow:hidden;\
                                  border-radius:calc(var(--radius) - 4px);\
                                  flex-shrink:0" )
                             ]
@@ -845,7 +845,8 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                                  padding-right:16px;position:relative" )
                             ]
                           ~value_signal:(Signal.map name_of ms) [] ]
-                  ; icon_ ~size:18 "selector" ])
+                  ; icon_ ~size:18 "selector"
+                      ~attrs:[ ("style", "margin-right:0") ] ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st)
         ] ]

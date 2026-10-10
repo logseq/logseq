@@ -163,6 +163,8 @@ let rec card_view st b phase =
                   | [] -> spacer ~key:"bc-none" []
                   | cs ->
                       row ~key:"bc" ~style_class:"breadcrumb ls-card-bc"
+                        ~margin_bottom:16 ~margin_left:8
+                        ~data_attrs:[ ("style", "font-size:0.875rem") ]
                         (List.concat_map
                            (fun c ->
                              [ text ~style_class:"breadcrumb-item"
@@ -176,6 +178,8 @@ let rec card_view st b phase =
             ]
         ]
     ; box ~key:"actions" ~style_class:"ls-card-actions"
+        ~margin_top:32
+        ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
         [ (if np = "show-cloze" || np = "show-answer" then
              button ~key:"answers" ~accessibility_identifier:"card-answers"
                ~style_class:"card-answers !px-2 !py-1 bg-primary/5 \
@@ -246,6 +250,7 @@ let cards_body st =
              scope has no cards at all); a consumed list -> finished *)
           if List.length cards = 0 && all = [] then
             column ~key:"empty" ~style_class:"ls-card content ls-ml"
+              ~margin_left:8
               [ heading ~key:"h" ~level:2
                   ~value:(t_ "flashcard.empty/title") []
               ; paragraph ~key:"d"
@@ -253,17 +258,19 @@ let cards_body st =
                   [] ]
           else if List.length cards = 0 then
             column ~key:"nodue" ~style_class:"ls-card content ls-ml"
+              ~margin_left:8
               [ heading ~key:"h" ~level:2
                   ~value:(t_ "flashcard.empty/no-due-title") []
               ; paragraph ~key:"d"
                   ~value:(t_ "flashcard.empty/no-due-desc") []
-              ; box ~key:"btns" ~style_class:"mt-4"
+              ; box ~key:"btns" ~margin_top:16
                   [ practice_again_btn st ] ]
           else
             column ~key:"fin" ~style_class:"ls-card content ls-ml"
+              ~margin_left:8
               [ paragraph ~key:"d"
                   ~value:(t_ "flashcard.review/finished") []
-              ; box ~key:"btns" ~style_class:"mt-4"
+              ; box ~key:"btns" ~margin_top:16
                   [ practice_again_btn st ] ])
     (Logseq_el.own ctx
        (Signal.map2
