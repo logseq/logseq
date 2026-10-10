@@ -3907,6 +3907,13 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
+(defn- class-or-property-page-title?
+  "Tag and property page titles own a property panel that defaults collapsed."
+  [config block]
+  (boolean
+   (and (:page-title? config)
+        (or (entity/class? block) (entity/property? block)))))
+
 (defn- block-collapsed?
   "Collapsed state combining transient UI overrides with the persisted flag.
    Row-level children subscriptions gate on the same predicate so collapsed
@@ -3916,12 +3923,16 @@
     (:ignore-block-collapsed? config)
     false
 
+    (class-or-property-page-title? config block)
+    ;; Publishing remounts without persisted UI collapse state. Keep the
+    ;; same closed default the interactive app uses for #task and similar
+    ;; class/property pages.
+    (if (some? temp-collapsed?) temp-collapsed? true)
+
     (or (:ref? config)
         (boolean (:custom-query? config))
         (:view? config)
-        (root-block? config block)
-        (and (or (entity/class? block) (entity/property? block))
-             (:page-title? config)))
+        (root-block? config block))
     temp-collapsed?
 
     :else
@@ -4554,7 +4565,7 @@
              (let [block-id (:block/uuid block)]
                (when-not (:property-block? config)
                  (cond
-                   (and (:page-title? config) (or (entity/class? block) (entity/property? block)) (not config/publishing?))
+                   (class-or-property-page-title? config block)
                    (let [collapsed? (state/get-block-collapsed block-id container-id)]
                      (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
 
