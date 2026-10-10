@@ -87,3 +87,12 @@
 (deftest jpeg-xl-is-an-image-format
   (is (contains? (common-config/img-formats) :jxl))
   (is (contains? config/image-formats :jxl)))
+
+(deftest get-export-css-path-is-absolute-disk-path
+  (with-redefs [config/get-repo-dir (constantly "/graphs/demo")]
+    (is (= "/graphs/demo/logseq/export.css"
+           (config/get-export-css-path "logseq_db_demo")))))
+
+(deftest get-custom-css-path-is-relative-for-db-graphs
+  (is (= "logseq/custom.css"
+         (config/get-custom-css-path "logseq_db_demo"))))

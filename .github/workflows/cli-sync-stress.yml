@@ -92,7 +92,7 @@ jobs:
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Fetch db-sync pnpm deps
-        run: pnpm --dir deps/db-sync install --frozen-lockfile
+        run: pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
 
       - name: Build stress runtime
         run: |
