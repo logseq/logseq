@@ -394,6 +394,17 @@
     :count 0
     :rows []}])
 
+(defn- query-row-entity-ids
+  "View-data reloads immediately after a listed row is deleted, while
+   the query resource still carries that UUID for up to 2s. Skip
+   missing rows. Throwing here rejects the whole get-render-snapshots
+   batch."
+  [db query-row-uuids]
+  (into []
+        (keep (fn [block-uuid]
+                (:db/id (d/entity db [:block/uuid block-uuid]))))
+        query-row-uuids))
+
 (defn- view-data
   [db resource-key _runtime]
   (let [[_ view-uuid context] resource-key
@@ -423,11 +434,7 @@
               query (when (= :code (:logseq.property.node/display-type query-block))
                       (:query (common-util/safe-read-string {:log-error? false}
                                                             (:block/title query-block))))
-              query-entity-ids (mapv (fn [block-uuid]
-                                       (:db/id (common/entity-by-uuid! db
-                                                                      :query-row-uuid
-                                                                      block-uuid)))
-                                     (:query-row-uuids context))
+              query-entity-ids (query-row-entity-ids db (:query-row-uuids context))
               option (cond-> (-> context
                                  (dissoc :feature-type :query-row-uuids
                                          :initial-row-count :row-offset)
