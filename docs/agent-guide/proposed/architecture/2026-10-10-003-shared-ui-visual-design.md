@@ -493,3 +493,32 @@ for gpui:
 
 Also unchanged by design: `.lui-dialog.ls-dialog-cmdk` host geometry
 block on both renderers, scrollbars, font stacks.
+
+## Task 5 leftovers (settings & properties)
+
+Blocked items with no typed-prop channel, kept as CSS or deferred:
+
+- Date-picker/calendar family (44 rules: `.ui__calendar`,
+  `.ls-editor-date-picker`, `.ls-date-month-menu`, `.ls-repeat-panel`,
+  `.ls-time-picker`) — needs a calendar recipe + `color-scheme` and
+  `table[role=grid]` support first.
+- Grid track templates: `.property-panel-row`
+  `fit-content(260px) minmax(0,1fr)` stays (no `grid-template-columns`
+  prop). The `.it` 3-col grid was replaced by grow ratios instead.
+- Web `file_picker` backend, blur event channel, parent-hover channel
+  (`.prop-edit-ico` reveal, `:has(...:hover)` operands) — capability
+  gaps; CSS/hook rules kept.
+- Fractional sizing: plugin card `width:calc(50% - .5rem)` rides a
+  `style` data_attr; `dvh` modal heights unchanged.
+- Breakpoint channels: `.settings-menu-item[data-id="keymap"]`
+  hide/show at 640px and `.panel-wrap`/`cp__settings-inner` 640/768
+  breakpoints kept as media-query rules.
+- `.shortcut-toolbar-row`/`.shortcut-filter-pills` keep `flex-wrap:wrap`
+  only (no wrap prop); `.ls-cm-colors-row` keeps `margin-top`.
+- `.select-item` value chips, importer/onboarding/new-graph/cards text
+  recipes, `.ui__select-*`/`.ls-font-*` select & font pickers,
+  `.ui__switch`/`.ui__checkbox` internals — un-migrated (either stay-
+  custom emitters or pending sibling recipes).
+- `::first-letter` capitalize, `-webkit-line-clamp`, `text-align`,
+  `resize`, `transform` (switch knob, `.ls-icon-mini` scale) — no prop
+  channel, CSS kept or handled by existing rules.

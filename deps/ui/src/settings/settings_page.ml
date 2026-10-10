@@ -77,33 +77,31 @@ let language_row ctx =
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  (* ~gap:16 inline = the web .it stylesheet's gap:1rem exactly, so web
-     rendering is unchanged; native has no stylesheet, so the gap must
-     live on the row itself (the deleted native twin used ~gap:24) *)
-  row ~key:"theme" ~style_class:"it ls-it-top" ~gap:16
-    [ column ~key:"theme-lc" ~style_class:"ls-it-label-col"
-        [ label ~key:"theme-l" ~style_class:"ls-label"
-            ~value:
-              (reactive
-                 (fun m ->
-                   let effective =
-                     if m = "system" then
-                       if Ui_services.theme_prefers_dark () then "dark"
-                       else "light"
-                     else m
-                   in
-                   T.switch_to_theme
-                     (if effective = "dark" then T.theme_light
-                      else T.theme_dark))
-                 (Signal.value mode))
-            []
-        ]
-    ; row ~key:"theme-rc" ~style_class:"ls-it-actions"
-        [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
-        ; row ~key:"theme-desc" ~style_class:"ls-it-side"
-            [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
-        ]
-    ]
+  Ui_components.form_row ~key:"theme"
+    ~label:
+      (Ui_components.form_label ~key:"theme-l"
+         ~text_signal:
+           (Signal.map
+              (fun m ->
+                let effective =
+                  if m = "system" then
+                    if Ui_services.theme_prefers_dark () then "dark"
+                    else "light"
+                  else m
+                in
+                T.switch_to_theme
+                  (if effective = "dark" then T.theme_light
+                   else T.theme_dark))
+              (Signal.value mode))
+         ~text:"" ())
+    ~top:true
+    ~control:
+      (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
+         [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
+         ; row ~key:"theme-desc" ~cross:`center
+             [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
+         ])
+    ()
 
 let font_button ~key ~label ~active ~on_click =
   button ~key ~variant:`secondary ~selected:active ~label
@@ -181,8 +179,10 @@ let accent_swatch ~key ~modal ~current color =
         [ box ~key:(key ^ "-s")
             ~style_class:(if none then "ls-swatch-none" else "ls-swatch-dot")
             ~opacity:(if none || active then 1. else 0.)
-            ?background:
-              (if none then None else Some ("var(--rx-" ^ color ^ "-07)"))
+            ~width:(if none then 12 else 8) ~height:(if none then 2 else 8)
+            ~corner_radius:9999
+            ~background:
+              (if none then "#b91c1c" else "var(--rx-" ^ color ^ "-07)")
             []
         ]
     ]
@@ -283,28 +283,28 @@ let date_format_row ctx =
     List.sort_uniq String.compare (current :: journal_formatters)
   in
   let mst = dfmt_menu_state ctx in
-  row ~key:"dfmt" ~gap:24 ~cross:`center ~style_class:"it"
-    [ C.label_el ~key:"dfmt-l" ~for_:"custom_date_format"
-        ~text:T.custom_date_format []
-    ; column ~key:"dfmt-r" ~style_class:"ls-it-value"
-        [ column ~key:"dfmt-w" ~style_class:"ls-select-wrap"
-            [ select ~key:"dfmt-s"
-                ~width:200 ~height:29 ~corner_radius:4
-                ~padding_horizontal:8
-                ~background:"var(--lx-gray-03)"
-                ~style_class:"ui__select-trigger form-select is-small ls-date-format"
-                ~text:(date_option_text current)
-                ~on_press:(fun _ ->
-                  Signal.set mst (not (Runtime.signal_get mst));
-                  Runtime.flush ())
-                []
-            ; reactive ~equal:( == ) (fun open_ ->
-                  if open_ then dfmt_menu ~key:"dfmt" mst options current
-                  else spacer ~key:"dfmt-m-x" [])
-                (Signal.value mst)
-            ]
-        ]
-    ]
+  Ui_components.form_row ~key:"dfmt"
+    ~label:
+      (Ui_components.form_label ~key:"dfmt-l"
+         ~text:T.custom_date_format ())
+    ~control:
+      (column ~key:"dfmt-w" ~max_width:320 ~cross:`stretch
+         [ select ~key:"dfmt-s"
+             ~width:200 ~height:29 ~corner_radius:4
+             ~padding_horizontal:8
+             ~background:"var(--lx-gray-03)"
+             ~style_class:"ui__select-trigger form-select is-small ls-date-format"
+             ~text:(date_option_text current)
+             ~on_press:(fun _ ->
+               Signal.set mst (not (Runtime.signal_get mst));
+               Runtime.flush ())
+             []
+         ; reactive ~equal:( == ) (fun open_ ->
+             if open_ then dfmt_menu ~key:"dfmt" mst options current
+             else spacer ~key:"dfmt-m-x" [])
+             (Signal.value mst)
+         ])
+    ()
 
 let editor_pane ctx =
   column ~key:"pane-editor" ~style_class:"panel-wrap"
@@ -349,36 +349,35 @@ type keymap_model =
 
 let keymap_pill st ~key ~title filter =
   let active s = s.km_filter = filter in
-  toggle_button ~key ~variant:`ghost ~checked:(reactive active (Signal.value st))
-    ~label:title ~style_class:"shortcut-filter-pill"
+  Ui_components.chip_toggle ~key ~radius:9999 ~pad_v:2 ~pad_h:8
+    ~font_size:"0.75rem"
     ~text:(title ^ Ui_services.literal_text " \xc2\xb7 " ^ string_of_int (Keymap_data.count filter))
+    ~checked_signal:(Signal.map active (Signal.value st))
     ~on_toggle:(fun _ ->
-        Runtime.signal_set st { (Runtime.signal_get st) with km_filter = filter }) []
+        Runtime.signal_set st { (Runtime.signal_get st) with km_filter = filter }) ()
 
 let keymap_controls st =
   let categories = List.filter_map (function
       | Keymap_data.Category title -> Some title | _ -> None) Keymap_data.items in
   column ~key:"km-ctl"
     ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
-    [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row"
-        [ row ~key:"km-sw" ~style_class:"search-input-wrap" ~cross:`center
-            [ box ~key:"km-si" ~style_class:"search-icon"
-                [ icon ~key:"km-sic" ~name:`search [] ]
-            ; search_field ~key:"km-in"
-                ~style_class:"form-input is-small"
-                ~placeholder:T.keymap_search_placeholder ~autofocus:true
-                ~text:(reactive (fun s -> s.km_query) (Signal.value st))
-                ~on_input:(function
-                    | Lui_protocol.TextChanged (_, query) ->
-                        Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
-                    | _ -> ()) []
-            ]
+    [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
+        ~main:`space_between
+        [ Ui_components.search_row ~key:"km-sw" ~height:26
+            ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
+            ~placeholder:T.keymap_search_placeholder
+            ~text_signal:(Signal.map (fun s -> s.km_query) (Signal.value st))
+            ~on_input:(function
+                | Lui_protocol.TextChanged (_, query) ->
+                    Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
+                | _ -> ()) ()
         ; button ~key:"km-kb"
             ~style_class:"shortcut-keystroke-inactive"
             ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys []
         ]
     ; row ~key:"km-pills" ~style_class:"shortcut-pills-row"
-        [ row ~key:"km-fp" ~style_class:"shortcut-filter-pills"
+        [ toggle_group ~key:"km-fp"
+            ~gap:4 ~style_class:"shortcut-filter-pills"
             [ keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All
             ; keymap_pill st ~key:"km-pc" ~title:T.keymap_custom Keymap_data.Custom
             ; keymap_pill st ~key:"km-pu" ~title:T.keymap_unset Keymap_data.Unset
@@ -656,13 +655,11 @@ let nav_item ~key (id, label, icn) =
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
-    (list_item ~key ~style_class:"settings-menu-item"
-       ~corner_radius:4
-       ~accessibility_identifier:id
-       ~data_attrs:[ ("data-id", id) ]
-       ~icon:(Icons.name_ref icn) ~text:label
-       ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
-       ~on_press:(fun _ -> S.set_tab id) [])
+    (Ui_components.nav_item ~key ~data_id:id ~icon:(Icons.name_ref icn)
+       ~text:label
+       ~selected_signal:
+         (Signal.map (fun (s : S.t) -> s.tab = id) (S.signal ()))
+       ~on_press:(fun _ -> S.set_tab id) ())
 
 let pane_of ~modal ctx tab =
   match tab with

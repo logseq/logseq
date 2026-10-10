@@ -1902,50 +1902,32 @@ a.page-title {
   overflow-x: hidden;
 }
 
-.bottom-property-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border-radius: 9999px;
-  padding: 0.125rem 0.5rem;
-  height: 1.5rem;
-  max-width: 100%;
-  font-size: 0.875rem;
-  background-color: var(--ls-secondary-background-color);
-  position: relative;
-  overflow: hidden;
-  flex: 0 0 auto;
-  color: var(--ls-primary-text-color);
-  box-shadow: inset 0 0 0 1px var(--ls-border-color);
+/* pill container chrome is now the shared property_pill recipe
+   (deps/ui/src/shared/ui_components.ml); keep only the inner tweaks:
+   pill key is plain compact text — no icon, no ghost-button chrome */
+.bottom-property-pill .property-key-inner {
+  min-height: 0;
+  gap: 0;
+}
 
+.bottom-property-pill .property-k {
+  height: auto;
+  min-height: 0;
+  padding: 0;
   line-height: 20px;
+}
 
-  /* pill key is plain compact text — no icon, no ghost-button chrome */
-  .property-key-inner {
-    min-height: 0;
-    gap: 0;
-  }
+.bottom-property-pill .lui-button {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
 
-  .property-k {
-    height: auto;
-    min-height: 0;
-    padding: 0;
-    line-height: 20px;
-  }
-
-  .lui-button {
-    height: auto;
-    min-height: 0;
-    padding: 0;
-    justify-content: flex-start;
-  }
-
-  .property-value-container,
-  &.property-value-container {
-    flex: 0 0 auto;
-    min-width: 0;
-    min-height: 0;
-  }
+.bottom-property-pill .property-value-container {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* cljs common.css .external-link — border-bottom underline, no

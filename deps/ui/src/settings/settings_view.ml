@@ -105,31 +105,24 @@ let lang_menu ~key st mst =
 (* li > i(mode swatch) + strong — list_item ~on_press; the .active
    ring class and the mode-* swatch classes stay reactive via
    class_signal since kinds take only a static ~style_class *)
+(* cljs: .radix only when an accent color is stored — no CSS rules
+   target it; dropped as dead. option_card carries the .mode-* thumbnail
+   (as an <img> now, not a CSS background) + the active ring. *)
 let theme_item ~st mode label =
   C.class_signal (Signal.value st)
     (fun active -> if active = mode then "active" else "")
-    (list_item ~key:("tm-" ^ mode)
-       ~selected:(reactive (fun active -> active = mode) (Signal.value st))
+    (Ui_components.option_card ~key:("tm-" ^ mode) ~mode
+       ~image_url:("../img/" ^ mode ^ "-theme.png") ~label
+       ~selected_signal:
+         (Signal.map (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
          use_mode mode;
          Signal.set st mode;
-         Runtime.flush ())
-       [ (* cljs: .radix only when an accent color is stored
-            (:ui/radix-color); mode-active draws the .active>i ring *)
-         C.class_signal (Signal.value st)
-           (fun active ->
-             "mode-" ^ mode
-             ^ (if active = mode then " mode-active" else "")
-             ^ (if Ui_services.storage_get "radix-color" <> None
-                then " radix"
-                else ""))
-           (box ~key:("tmi-" ^ mode) ~width:92 [])
-       ; text ~key:("tms-" ^ mode) ~value:label []
-       ])
+         Runtime.flush ()) ())
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =
-  list ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
+  row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
     ~cross:`center
     [ theme_item ~st "light" T.theme_light
     ; theme_item ~st "dark" T.theme_dark

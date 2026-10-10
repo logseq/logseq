@@ -200,8 +200,8 @@ let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
 (* cljs bottom-property-pill-cp: inline-flex pill = [key + ":"] row
    then .bottom-property-content value — all on one line *)
 let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
-  row ~gap:4 ~cross:`center
-    ~style_class:"bottom-property-pill bottom-property-pill-focusable"
+  Ui_components.property_pill
+    ~key:("pp-" ^ Option.value (D.row_ident prow) ~default:"x")
     [ Lui_elements.row ~gap:0 ~cross:`center
         [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
         ; text ~value:":"

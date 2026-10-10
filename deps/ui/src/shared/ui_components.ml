@@ -542,3 +542,223 @@ let ls_tooltip_keys ~key children : t =
   with_props [ P.Opacity, fv 0.8 ]
     (row ~key ~style_class:"ls-tooltip-keys" ~cross:`center ~gap:1
        children)
+
+(* -- settings & properties recipes (task 5) ----------------------------- *)
+
+(* `.it` form row — the deleted `sm:grid-cols-3` rules become flex
+   growth: label cell 1/3, control cell 2/3 (the `>:nth-child(2):last-child`
+   span-2 when no side slot); each `side` slot is its own third. A `desc`
+   flips the row to top-aligned like the deleted `.ls-it-top`. The
+   <640px stacked variant is a documented leftover (no breakpoint
+   channel). *)
+let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
+    ?(top = false) ~control () : t =
+  row ~key ~style_class:"it" ~gap:16 ~min_width:0
+    ~cross:(if top || desc <> None then `start else `center)
+    ([ column ~key:(key ^ "-lc") ~grow:1. ~min_width:0 ~cross:`stretch
+         ~gap:0
+         ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
+              (label :: label_extra) ]
+          @ match desc with Some d -> [ d ] | None -> [])
+     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
+         ~grow:(if side = [] then 2. else 1.)
+         [ control ] ]
+    @ List.mapi
+        (fun i s ->
+          box ~key:(key ^ "-s" ^ string_of_int i) ~grow:1. ~min_width:0
+            [ s ])
+        side)
+
+(* `.ls-label`/`.it-label` — 14px medium, 20px line, 70% opacity. *)
+let form_label ~key ?text_signal ~text () : t =
+  with_props
+    [ P.FontSize, sv "0.875rem"
+    ; P.FontWeight, iv 500
+    ; P.LineHeight, sv "1.25rem"
+    ; P.Opacity, fv 0.7
+    ]
+    (match text_signal with
+     | Some s -> label ~key ~value_signal:s []
+     | None -> label ~key ~value:text [])
+
+(* `.it-desc`/`.ls-it-desc` — 12px muted line under a label or next to a
+   control. *)
+let form_desc ~key ~value : t =
+  text ~key ~font_size:"0.75rem" ~value
+    ~foreground:
+      "var(--lx-gray-10, var(--ls-secondary-text-color, \
+       var(--muted-foreground)))"
+    []
+
+(* Leading-icon search field — the `.search-ctls`/`.search-input-wrap`/
+   `.search-input` pattern: the row anchors an absolutely-positioned
+   icon; its unset top falls back to the flex static position
+   (`cross:`center` → vertically centered). `pad_left` clears the icon —
+   per-side padding has no prop, the documented channel is the
+   data-attrs style pair. `borderless` kills the `.lui-search-field`
+   border+ring (icon-picker's gray-03 input). *)
+let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
+    ?(pad_left = 28) ?background ?(borderless = false) ?(trailing = [])
+    ?autofocus ~placeholder ~text_signal:text ~on_input () : t =
+  with_props [ P.Position, sv "relative" ]
+    (row ~key ~style_class:"ls-search-row" ~cross:`center ~gap:0
+       ~min_width:0
+       ([ with_props
+            [ P.Position, sv "absolute"
+            ; P.InsetLeft, fv (if pad_left >= 32 then 10. else 8.)
+            ; P.Opacity, fv 0.5
+            ; P.PointerEnabled, P.BoolValue false
+            ]
+            (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ])
+        ; with_props
+            ([ P.FontSize, sv font_size ]
+            @
+            if borderless then
+              [ P.BorderWidth, iv 0; P.FocusShadow, sv "none" ]
+            else [])
+            (search_field ~key:"in" ~grow:1. ~min_width:0 ~height
+               ?background ~placeholder ?autofocus ~text_signal:text
+               ~data_attrs:
+                 [ ( "style"
+                   , "padding-left: " ^ string_of_int pad_left ^ "px" )
+                 ]
+               ~on_input [])
+        ]
+       @ trailing))
+
+(* Settings nav item — `.settings-menu-item` visual spec: 6/8px padding,
+   4px radius, 14px/20px type; hover and active paint ride the
+   `--lx-nav-active` mode token (black 10% light / white 8% dark —
+   replaces the `.active`/`.dark .active` pair). The `.active` class
+   itself stays on the element via the caller's class_signal (gpui
+   hook). *)
+let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
+    ~on_press () : t =
+  with_props [ P.HoverBackground, sv "var(--lx-nav-active)" ]
+    (with_props
+       [ P.FontSize, sv "0.875rem"; P.LineHeight, sv "1.25rem" ]
+       (list_item ~key ~icon ~text ~corner_radius:4 ~min_height:0
+          ~padding_vertical:6 ~padding_horizontal:8 ~main:`start
+          ~style_class:"settings-menu-item"
+          ~accessibility_identifier:data_id
+          ~data_attrs:[ "data-id", data_id ]
+          ~background_signal:
+            (Signal.map
+               (fun a ->
+                 if a then "var(--lx-nav-active)" else "transparent")
+               selected)
+          ~selected_signal:selected ~on_press []))
+
+(* Pill/chip toggle — the `.shortcut-filter-pill` (9999 bordered) and
+   `.secondary-tabs > button` (6px radius, 4/12 padding) shapes share one
+   recipe: ghost toggle_button, checked = gray-04 fill + full opacity.
+   `radius`/`pad_v`/`pad_h`/`font_size` select the variant. The kind has
+   no background/opacity signal channels, so the paint rides a reactive
+   rebuild on `checked`. *)
+let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
+    ~checked_signal:checked ?(off_opacity = 0.7) ~on_toggle () : t =
+  reactive ~equal:( = ) (fun c ->
+    with_props
+      [ P.Cursor, sv "pointer"
+      ; P.FontSize, sv font_size
+      ; P.Opacity, fv (if c then 1. else off_opacity)
+      ; P.HoverOpacity, fv 1.
+      ]
+      (toggle_button ~key ~variant:`ghost ~text ~checked:c ~on_toggle
+         ~min_height:0 ~height:(pad_v * 2 + 14) ~padding_vertical:pad_v
+         ~padding_horizontal:pad_h ~corner_radius:radius ~border_width:1
+         ~border_color:
+           "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
+         ~background:
+           (if c then
+              "var(--lx-gray-04, var(--ls-tertiary-background-color, \
+               hsl(var(--muted))))"
+            else "transparent")
+         []))
+    checked
+
+(* Round color swatch button — `.color-picker-presets .it`, the accent
+   swatch, `.ls-cm-swatch` share this chrome: ghost button, fixed square,
+   9999 radius; the colored dot/variant glyph is a child so "none"/"-"
+   variants ride the same 30px hit area. *)
+let color_swatch ~key ~size ~background ~on_press ?(selected = false)
+    ?(opacity = 1.) ?hover_opacity ?border_color ?border_width ?label
+    ?style_class children : t =
+  with_props
+    ([ P.Cursor, sv "pointer"; P.Opacity, fv opacity ]
+    @
+    match hover_opacity with
+    | Some o -> [ P.HoverOpacity, fv o ]
+    | None -> [])
+    (button ~key ~variant:`ghost ~width:size ~height:size ~min_width:size
+       ~min_height:size ~padding:0 ~corner_radius:9999 ~background
+       ~selected ~on_press ?border_color ?label ?style_class
+       ?border_width:(match border_color with
+                      | Some _ -> Some (Option.value ~default:1 border_width)
+                      | None -> None)
+       children)
+
+(* `.bottom-property-pill` — 24px rounded chip (key + ":" + value):
+   gray-03 fill, inset 1px ring, nowrap. The class stays as the
+   gpui/web hook; visuals ride typed props. *)
+let property_pill ~key children : t =
+  with_props
+    [ ( P.Shadow
+      , sv "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
+    ; P.FontSize, sv "0.875rem"
+    ; P.LineHeight, sv "20px"
+    ; P.Overflow, sv "hidden"
+    ]
+    (row ~key ~style_class:"bottom-property-pill bottom-property-pill-focusable"
+       ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
+       ~padding_horizontal:8 ~corner_radius:9999 ~min_width:0
+       ~background:
+         "var(--lx-gray-03, var(--ls-secondary-background-color))"
+       ~foreground:
+         "var(--lx-gray-12, var(--ls-primary-text-color))" children)
+
+(* Plugin card — `.lui-card` stacks children into one grid cell, so the
+   whole card body arrives as a single child. position:relative keeps
+   the gear menu's absolute `.menu-list` anchored to the card. *)
+let plugin_card ~key ?(classes = "") child : t =
+  with_props [ P.Position, sv "relative" ]
+    (card ~key ~style_class:("cp__plugins-item-card" ^ classes)
+       ~corner_radius:8 ~padding:12 ~min_width:256 ~border_width:1
+       ~border_color:
+         "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
+       ~data_attrs:[ "style", "width:calc(50% - 0.5rem);box-sizing:border-box" ]
+       [ child ])
+
+(* Theme-mode option card — the `.cp__theme-modes-options > li` spec:
+   92px thumbnail (`i.mode-*`) over a centered 12px label, `.9` opacity
+   until hover/active, selected thumbnail ring = inset 2px link color.
+   list_item keeps the `selected` prop + kind hooks; the active ring
+   rides the thumbnail's shadow signal. Per-side pads ride the
+   documented data-attrs style pair. *)
+let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
+    ~on_press () : t =
+  with_props
+    [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
+    (list_item ~key ~selected_signal:selected ~on_press
+       ~min_height:0 ~padding_vertical:0 ~padding_horizontal:0
+       ~data_attrs:[ "style", "padding-right:8px" ]
+       [ Ui_parts.class_signal selected
+           (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
+           (with_signal_props
+              [ ( P.Shadow
+                , Signal.map
+                    (fun s ->
+                      if s then
+                        "inset 0 0 0 2px var(--ls-link-text-color, \
+                         hsl(var(--primary)))"
+                      else "none")
+                    selected )
+              ]
+              (image ~key:"i" ~url:image_url ~alt:label ~width:92
+                 ~height:63 ~corner_radius:4
+                 ~background:"var(--lx-gray-04, hsl(var(--muted)))" []))
+       ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
+           ~line_height:"1rem" ~value:label
+           ~data_attrs:[ "style", "padding-top:6px;padding-right:8px" ]
+           []
+       ])
