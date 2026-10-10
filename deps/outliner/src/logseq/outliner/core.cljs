@@ -1233,12 +1233,30 @@
 
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
-  (let [reversed? (and (not non-consecutive?)
-                       (:block/order (first top-level-blocks))
-                       (:block/order (second top-level-blocks))
-                       (> (compare (:block/order (first top-level-blocks))
-                                   (:block/order (second top-level-blocks))) 0))]
-    (if reversed? (reverse top-level-blocks) top-level-blocks)))
+  (let [[a b] top-level-blocks
+        same-parent? (= (:db/id (:block/parent a)) (:db/id (:block/parent b)))
+        reversed? (and (not non-consecutive?)
+                       same-parent?
+                       (:block/order a)
+                       (:block/order b)
+                       (> (compare (:block/order a) (:block/order b)) 0))]
+    (cond
+      ;; 2 blocks' :block/order values say which comes first only when they
+      ;; have the same parent; a last child and its parent's next sibling
+      ;; count as consecutive, and theirs are unrelated: page order instead
+      ;; the sort leaves out blocks with no page-order path (property
+      ;; values): keep every block, or a property value selected with its
+      ;; parent's next sibling would drop out of the move or delete
+      (and (not non-consecutive?) b (not same-parent?) (de/entity? a)
+           (= (:db/id (:block/page a)) (:db/id (:block/page b)))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
+      (ldb/sort-page-random-blocks (.-db a) top-level-blocks)
+
+      reversed? (reverse top-level-blocks)
+
+      :else top-level-blocks)))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)
 (def ^:private comment-tag-ident :logseq.class/Comment)
