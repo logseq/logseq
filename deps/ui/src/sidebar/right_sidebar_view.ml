@@ -270,7 +270,7 @@ let item_header st idx (it : Sidebar_state.item) =
                 | Some el -> Popups_state.anchor_of_el el
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
-              Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)
+              Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32

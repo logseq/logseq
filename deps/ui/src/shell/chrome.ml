@@ -59,19 +59,23 @@ let dots_button =
     ~on_press:(fun _ ->
       (* cljs header.cljs popup-show! {align "end" align-offset -32}:
          menu's right edge = trigger right + 32 (before viewport
-         clamp), flush under the trigger *)
-      match Web_dom.query_selector ".toolbar-dots-btn" with
-      | Some el ->
-          let r = Web_dom.el_bounding_rect el in
-          Runtime.send
-            (Action.Page_menu_set
-               (Some
-                  ( Web_dom.rect_right r +. 32.
-                  , Web_dom.rect_top r
-                  , Web_dom.rect_bottom r
-                  , true
-                  , None )))
-      | None -> ())
+         clamp), flush under the trigger. Press again closes — the
+         trigger is the popover's layer-owned element so its presses
+         never count as outside-dismiss. *)
+      if (Runtime.model ()).Model.page_menu = None then
+        match Web_dom.query_selector ".toolbar-dots-btn" with
+        | Some el ->
+            let r = Web_dom.el_bounding_rect el in
+            Runtime.send
+              (Action.Page_menu_set
+                 (Some
+                    ( Web_dom.rect_right r +. 32.
+                    , Web_dom.rect_top r
+                    , Web_dom.rect_bottom r
+                    , true
+                    , None )))
+        | None -> ()
+      else Runtime.send (Action.Page_menu_set None))
     []
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx

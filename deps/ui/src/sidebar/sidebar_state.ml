@@ -99,9 +99,23 @@ let anchor_of_raw_target (ev : Ui_services.ev) =
       else (x +. (w /. 2.), y, y +. h)
   | None -> (ev.x, ev.y, ev.y)
 
+(* a popover's trigger sits inside the layer's owned set, so pressing
+   it while the popover is open never produces an outside-dismiss —
+   the press itself must close the menu (click-once open, click-again
+   close) *)
+let toggle_menu st name =
+  Runtime.signal_set st.open_menu
+    (if Runtime.signal_get st.open_menu = name then "" else name)
+
 let open_lp_menu st ~target ~recent ~ax ~atop ~abot =
   lp_ctx := Some (target, recent, ax, atop, abot);
   Runtime.signal_set st.open_menu ("lp-" ^ target)
+
+(* row dots-button variant: press again closes (see toggle_menu);
+   contextmenu keeps open_lp_menu — right-click moves/re-opens *)
+let toggle_lp_menu st ~target ~recent ~ax ~atop ~abot =
+  lp_ctx := Some (target, recent, ax, atop, abot);
+  toggle_menu st ("lp-" ^ target)
 ;;
 
 let click_target sel (ev : Ui_services.ev) =
@@ -999,8 +1013,6 @@ let on_model st (m : Model.t) =
    | _ -> ())
 
 let close_menu st = Runtime.signal_set st.open_menu ""
-let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
-let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 
 (* anchor for the graphs-selector dropdown — the trigger row's
    bottom-left corner (cljs popup-show! align :start) *)
@@ -1011,6 +1023,13 @@ let im_xy : (float * float * float) ref = ref (0., 0., 0.)
 let open_item_menu st key ~ax ~atop ~abot =
   im_xy := (ax, atop, abot);
   Runtime.signal_set st.open_menu ("item-" ^ key)
+
+(* same toggle contract as toggle_menu, for the item-actions dots
+   button; contextmenu callers keep open_item_menu since a right-click
+   is a move/re-open gesture, not a toggle *)
+let toggle_item_menu st key ~ax ~atop ~abot =
+  im_xy := (ax, atop, abot);
+  toggle_menu st ("item-" ^ key)
 
 (* cljs left_sidebar.cljs x-menu-content: right-click or the dots
    button on a favorites/recent row opens the unfavorite/open-in-sidebar

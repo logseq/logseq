@@ -578,6 +578,32 @@ blockquote {
   }
 }
 
+/* the kit paints --color-accent (blue bg + white fg) on ghost-hover /
+   [data-selected] / focus-visible — cljs chrome buttons stay neutral
+   in every state, so neutralize the kit states on these surfaces */
+.cp__header .as-ghost,
+.left-sidebar-top .as-ghost {
+  &:hover, &:focus-visible, &[data-selected] {
+    color: inherit;
+  }
+
+  &:focus-visible, &[data-selected] {
+    background-color: transparent;
+  }
+}
+
+.cp__graphs-selector > .item {
+  &:hover {
+    color: inherit;
+    background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
+  }
+
+  &:focus-visible, &[data-selected] {
+    color: inherit;
+    background-color: transparent;
+  }
+}
+
 /* the pane is a docked split child >=sm (the grid track owns its
    width; overflow clips .left-sidebar-inner while the track animates
    to/from 0) and a fixed overlay below sm, unchanged from cljs */
