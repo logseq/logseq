@@ -157,13 +157,37 @@
        (when (some? value)
          (str " " value))))
 
+(defn- closed-property-value?
+  [value]
+  (if (set? value)
+    (some :block/closed-value-property value)
+    (:block/closed-value-property value)))
+
+(defn- exportable-property-ident?
+  [db property-ident context]
+  (not (or (contains? db-property/db-attribute-properties property-ident)
+           (contains? (:excluded-properties context) property-ident)
+           (:logseq.property/hide? (d/entity db property-ident)))))
+
+(defn- property-value-has-nested-content?
+  [db value context]
+  (some (fn [v]
+          (when-let [id (:db/id v)]
+            (let [entity (d/entity db id)]
+              (or (seq (:block/_parent entity))
+                  (some #(exportable-property-ident? db % context)
+                        (keys (db-property/properties entity)))))))
+        (if (set? value) value [value])))
+
 (defn- default-property-values-as-blocks?
-  [property value context]
+  "Open :default values use nested blocks for many-cardinality properties, or
+  when a value has children/nested properties. Single-cardinality scalars stay inline."
+  [db property value context]
   (and (:export-default-property-values-as-blocks? context)
        (= :default (:logseq.property/type property))
-       (not (if (set? value)
-              (some :block/closed-value-property value)
-              (:block/closed-value-property value)))))
+       (not (closed-property-value? value))
+       (or (db-property/many? property)
+           (property-value-has-nested-content? db value context))))
 
 (defn- block-properties-content
   [db block spaces-tabs context]
@@ -174,11 +198,7 @@
                   block)
         properties (->> (db-property/properties block)
                         (remove (fn [[k _]]
-                                  (contains? db-property/db-attribute-properties k)))
-                        (remove (fn [[k _]]
-                                  (contains? (:excluded-properties context) k)))
-                        (remove (fn [[k _]]
-                                  (:logseq.property/hide? (d/entity db k))))
+                                  (not (exportable-property-ident? db k context))))
                         (into {}))]
     (when (seq properties)
       (let [sorted-properties (->> (keys properties)
@@ -192,7 +212,7 @@
                                                   (:block/raw-title property)
                                                   (name property-ident))
                                value (get properties property-ident)]
-                           (if (default-property-values-as-blocks? property value context)
+                           (if (default-property-values-as-blocks? db property value context)
                              (str (property-line-content property-title nil spaces-tabs context)
                                   "\n"
                                   (property-value-blocks-content db property value (str spaces-tabs "  ") context))

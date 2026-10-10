@@ -40,12 +40,12 @@ marker `key::`.
 Page properties appear before the first block. Block properties appear under the
 block they belong to.
 
-Open `:default` property values are represented by nested value blocks:
+Single-cardinality open `:default` values stay inline with the property key.
+Many-cardinality open `:default` values use nested value blocks:
 
 ```markdown
 - Oscar Wilde
-  * description::
-    - Irish poet and playwright
+  * description:: Irish poet and playwright
   * books::
     - The Picture of Dorian Gray
       * year:: 1891
