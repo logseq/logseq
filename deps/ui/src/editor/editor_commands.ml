@@ -17,7 +17,7 @@
    declarative. The pre-LUI DOM contract is kept verbatim:
    .ls-editor-date-picker / .ui__calendar-cell / .ui__calendar-day
    classes, role=grid/gridcell/menu/menuitem
-   attributes, and the [role=checkbox] repeat panel. *)
+   attributes, and the [aria-checked]/[data-checked] repeat checkbox. *)
 
 open Promise_ext
 open Lui_elements
@@ -598,7 +598,7 @@ let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
     ; P.TextOverflow, sv "ellipsis"
     ; ( P.HoverBackground
       , sv "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
-    (button ~variant:`ghost ~cross:`center ~main:`space_between ~gap:4
+    (button ~variant:`ghost ~cross:`center ~main:`space_between
        ~grow:1. ~min_width:0 ~height:32 ~padding_horizontal:8
        ~border_width:1
        ~border_color:
@@ -794,7 +794,10 @@ let repeat_panel ps : t =
            ~data_attrs:[ ("style", "margin-bottom: 4px") ]
            [ Ui_components.with_props
                [ P.FontSize, sv "0.75rem"; P.LineHeight, sv "1" ]
-               (button ~key:"cb" ~style_class:"jtrigger" ~variant:`ghost
+               (* no [role="checkbox"]: the web focus layer strips [role]
+                  from non-tab buttons; [aria-checked] + [data-checked]
+                  carry the state *)
+               (button ~key:"cb" ~variant:`ghost
                   ~width:16 ~min_width:16 ~height:16 ~padding:0
                   ~corner_radius:3 ~border_width:1
                   ~background:
@@ -818,9 +821,8 @@ let repeat_panel ps : t =
                   ~data_attrs:
                     (reactive
                        (fun po ->
-                         [ ("role", "checkbox")
-                         ; ( "style"
-                           , "--accent: 0 0% 0% / 0; "
+                         [ ( "style"
+                           , "cursor: pointer; --accent: 0 0% 0% / 0; "
                              ^ (match rpt_of po with
                                 | Some { repeated = true; _ } ->
                                     "border-color: transparent"
@@ -920,7 +922,7 @@ let cal_head ps : t =
     [ row ~key:"selects" ~cross:`center ~gap:4
         [ Ui_components.with_props
             [ P.FontSize, sv "0.875rem"
-            ; P.FontWeight, sv "500"
+            ; P.FontWeight, P.IntValue 500
             ; P.WhiteSpace, sv "nowrap" ]
             (button ~key:"msel" ~style_class:"ls-date-month-select"
                ~variant:`ghost ~main:`start ~height:32 ~min_width:96
