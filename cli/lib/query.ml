@@ -772,6 +772,24 @@ let query_args query inputs =
   if query_in_ends_with_percent query then Vec.push_back args db_query_dsl_rules
   else args
 
+(* Relative inputs such as :today, :-7d or :+30d-end are plain keywords until
+   the db-worker resolves them; sent as given to thread-api/q they are bound as
+   literal keywords and match nothing. The worker resolves them the way the app
+   does for query blocks and returns every input it does not recognise
+   unchanged, so --inputs '[:logseq.property/status.done "daily"]' keeps
+   working. Anything but a sequence of the same length (nil when the graph is
+   not open) falls back to the inputs as given. *)
+let resolve_inputs invoke_config ~repo inputs =
+  if Vec.is_empty inputs then Cli_effect.pure inputs
+  else
+    Cli_effect.map
+      (fun value ->
+        match Edn_util.as_seq value with
+        | Some resolved when Vec.length resolved = Vec.length inputs -> resolved
+        | _ -> inputs)
+      (Transport.thread_api_resolve_query_inputs invoke_config ~repo
+         ~inputs:(Edn_util.vector_t_vec inputs))
+
 let build ?registry:_ config _globals parsed =
   match parsed with
   | Parsed_list -> Ok List
@@ -876,6 +894,12 @@ let query_entry_value (entry : query_entry) =
          (Edn_util.keyword "query", entry.query);
        |])
 
+let query_result mode value =
+  Cli_result.ok ~command:Command_id.Query mode
+    (Query_result
+       (Edn_util.map_vec
+          (Vec.of_array [| (Edn_util.keyword "result", value) |])))
+
 let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
@@ -896,16 +920,11 @@ let execute_with_mode action config mode =
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Query mode err)
         | Ok invoke_config ->
-            bind
-              (Transport.thread_api_q invoke_config ~repo
-                 ~query:(Edn_util.vector_t_vec (query_args query inputs)))
-              (fun value ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Query mode
-                     (Query_result
-                        (Edn_util.map_vec
-                           (Vec.of_array
-                              [| (Edn_util.keyword "result", value) |]))))))
+            bind (resolve_inputs invoke_config ~repo inputs) (fun inputs ->
+                bind
+                  (Transport.thread_api_q invoke_config ~repo
+                     ~query:(Edn_util.vector_t_vec (query_args query inputs)))
+                  (fun value -> pure (query_result mode value))))
 
 let meta ?(examples = Vec.empty) id doc =
   {
