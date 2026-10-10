@@ -835,13 +835,14 @@ let dialog_close ~key ~label ~on_press : t =
    (e.g. the selected-count text). The kit composite's own
    `surface`/`corner_radius:20` are transparent on web, so the capsule
    is what paints the floating surface there. *)
-let action_bar_capsule ~key ?(cls = "") child : t =
+let action_bar_capsule ~key ?(cls = "") ?border_color ?border_width
+    child : t =
   with_props
     [ ( P.Shadow
       , sv "0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, \
            0.08)" ) ]
     (box ~key ~style_class:cls ~background:"hsl(var(--popover))"
-       ~corner_radius:6 [ child ])
+       ?border_color ?border_width ~corner_radius:6 [ child ])
 
 (* Inline action toolbar — the `toolbar` kind's role=toolbar semantics
    with the .lui-toolbar card chrome flattened, so it reads as the

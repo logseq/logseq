@@ -144,32 +144,42 @@ and node () : t =
                 ~style_class:"selection-action-bar"
                 ~data_attrs:[ ("data-keep-selection", "true") ]
                 [ Uc.action_bar_capsule ~key:"sbg"
-                    (C.action_toolbar
-                       ~items:
-                         [ C.toolbar_item ~label:(I18n.t "property/set-tags")
-                             ~icon:(`app "hash")
-                             ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
-                         ; C.toolbar_item
-                             ~label:(I18n.t "block.comments/add-comment")
-                             ~icon:(`app "message-circle")
-                             ~on_press:(fun _ -> Comments.add_comment ()) ()
-                         ; C.toolbar_item ~label:(I18n.t "ui/copy")
-                             ~on_press:(fun _ ->
-                               Editor_actions.copy_selection_text ();
-                               Editor_actions.clear_selection ()) ()
-                         ; C.toolbar_item
-                             ~label:(I18n.t "property/set-property")
-                             ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
-                         ; C.toolbar_item
-                             ~label:(I18n.t "property/unset-property")
-                             ~on_press:(fun _ -> open_prop_dlg ~remove:true) ()
-                         ; C.toolbar_item ~icon:`trash
-                             ~label:(I18n.t "editor/delete-selection")
-                             ~on_press:(fun _ ->
-                               Editor_actions.delete_selection ()) ()
-                         ; C.toolbar_item ~icon:(`app "dots")
-                             ~label:(I18n.t "ui/show-more")
-                             ~on_press:(fun _ ->
+                    ~border_color:"var(--lui-c-border)" ~border_width:1
+                    (row ~key:"sbr" ~gap:0 ~cross:`stretch
+                       ((* cljs shui segmented bar: tags/comment/delete/
+                           more are icon-only cells; copy and the
+                           property actions keep their text labels;
+                           thin dividers separate every cell *)
+                         let sbtn ~key ~label ?icon ?text ~on_press =
+                           button ~key ~variant:`ghost ~size:`sm ~label
+                             ?icon ?text ~on_press []
+                         in
+                         let sep k = divider ~key:k ~orientation:`vertical [] in
+                         let items =
+                           [ sbtn ~key:"sb-tag" ~label:(I18n.t "property/set-tags")
+                               ~icon:(`app "hash")
+                               ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
+                           ; sbtn ~key:"sb-cmt" ~label:(I18n.t "block.comments/add-comment")
+                               ~icon:(`app "message-circle")
+                               ~on_press:(fun _ -> Comments.add_comment ()) ()
+                           ; sbtn ~key:"sb-cpy" ~label:(I18n.t "ui/copy")
+                               ~text:(I18n.t "ui/copy")
+                               ~on_press:(fun _ ->
+                                 Editor_actions.copy_selection_text ();
+                                 Editor_actions.clear_selection ()) ()
+                           ; sbtn ~key:"sb-set" ~label:(I18n.t "property/set-property")
+                               ~text:(I18n.t "property/set-property")
+                               ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
+                           ; sbtn ~key:"sb-uns" ~label:(I18n.t "property/unset-property")
+                               ~text:(I18n.t "property/unset-property")
+                               ~on_press:(fun _ -> open_prop_dlg ~remove:true) ()
+                           ; sbtn ~key:"sb-del" ~label:(I18n.t "editor/delete-selection")
+                               ~icon:`trash
+                               ~on_press:(fun _ ->
+                                 Editor_actions.delete_selection ()) ()
+                           ; sbtn ~key:"sb-mor" ~label:(I18n.t "ui/show-more")
+                               ~icon:(`app "dots")
+                               ~on_press:(fun _ ->
                                (* cljs: the bar's dots menu is a dropdown
                                   anchored to the trigger button — the last
                                   .lui-button in the capsule *)
@@ -186,7 +196,13 @@ and node () : t =
                                    Popups_state.open_cm st ~ax ~atop ~abot
                                      ~block_id:first ~multi:true
                                | _ -> ()) ()
-                         ] ())
-                ]))
+                           ]
+                         in
+                         List.concat_map
+                           (fun (i, item) ->
+                             if i = 0 then [ item ]
+                             else [ sep (Printf.sprintf "sb-sep-%d" i); item ])
+                           (List.mapi (fun i it -> (i, it)) items))) ]
+                ))
       source )
     ctx parent
