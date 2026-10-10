@@ -9,20 +9,8 @@
 open Lui_elements
 
 module S = Editor_state
-
-
-
-(* title moves to ~label (the a11y name on native hosts); icon buttons
-   carry ~icon, text buttons ~text — the button kind supplies
-   type=button and the icon/label spans on web *)
-let action_btn ?id key ?(title = "") ?(text = "") ?icon on_click : t =
-  button ~key
-    ~style_class:"ui__button selection-action-button"
-    ?accessibility_identifier:id
-    ?icon
-    ~label:title ~text
-    ~on_press:(fun _ -> on_click ())
-    []
+module C = Lui_element_combine
+module Uc = Ui_components
 
 (* popover opened under the bar for the current selection (the dialog's
    own current_target resolves the selected uuids for batch ops) *)
@@ -155,47 +143,50 @@ and node () : t =
               popover ~key:"sbar" ~at:(l, t -. 48.)
                 ~style_class:"selection-action-bar"
                 ~data_attrs:[ ("data-keep-selection", "true") ]
-                [ row ~key:"sbg"
-                    ~cross:`center
-                    ~style_class:"selection-action-group inline-flex pointer-events-auto"
-                    [ action_btn "sab-tags" ~title:(I18n.t "property/set-tags")
-                        ~icon:(`app "hash")
-                        (fun () -> open_prop_dlg ~remove:false)
-                    ; action_btn "sab-cmt"
-                        ~title:(I18n.t "block.comments/add-comment")
-                        ~icon:(`app "message-circle")
-                        (fun () -> Comments.add_comment ())
-                    ; action_btn "sab-cpy" ~text:(I18n.t "ui/copy")
-                        (fun () ->
-                          Editor_actions.copy_selection_text ();
-                          Editor_actions.clear_selection ())
-                    ; action_btn "sab-setp"
-                        ~text:(I18n.t "property/set-property")
-                        (fun () -> open_prop_dlg ~remove:false)
-                    ; action_btn "sab-unset"
-                        ~text:(I18n.t "property/unset-property")
-                        (fun () -> open_prop_dlg ~remove:true)
-                    ; action_btn "sab-del" ~icon:`trash
-                        ~title:(I18n.t "editor/delete-selection")
-                        (fun () -> Editor_actions.delete_selection ())
-                    ; action_btn "sab-dots" ~id:"sab-dots"
-                        ~icon:(`app "dots")
-                        ~title:(I18n.t "ui/show-more")
-                        (fun () ->
-                          (* cljs: the bar's dots menu is a dropdown
-                             anchored to the trigger button *)
-                          match
-                            ( !(Popups_state.active)
-                            , Ui_services.dom_by_id "sab-dots" )
-                          with
-                          | Some st, Some btn ->
-                              let ax, atop, abot =
-                                Popups_state.anchor_of_el btn
-                              in
-                              Popups_state.open_cm st ~ax ~atop ~abot
-                                ~block_id:first ~multi:true
-                          | _ -> ())
-                    ]
+                [ Uc.action_bar_capsule ~key:"sbg"
+                    (C.action_toolbar
+                       ~items:
+                         [ C.toolbar_item ~label:(I18n.t "property/set-tags")
+                             ~icon:(`app "hash")
+                             ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
+                         ; C.toolbar_item
+                             ~label:(I18n.t "block.comments/add-comment")
+                             ~icon:(`app "message-circle")
+                             ~on_press:(fun _ -> Comments.add_comment ()) ()
+                         ; C.toolbar_item ~label:(I18n.t "ui/copy")
+                             ~on_press:(fun _ ->
+                               Editor_actions.copy_selection_text ();
+                               Editor_actions.clear_selection ()) ()
+                         ; C.toolbar_item
+                             ~label:(I18n.t "property/set-property")
+                             ~on_press:(fun _ -> open_prop_dlg ~remove:false) ()
+                         ; C.toolbar_item
+                             ~label:(I18n.t "property/unset-property")
+                             ~on_press:(fun _ -> open_prop_dlg ~remove:true) ()
+                         ; C.toolbar_item ~icon:`trash
+                             ~label:(I18n.t "editor/delete-selection")
+                             ~on_press:(fun _ ->
+                               Editor_actions.delete_selection ()) ()
+                         ; C.toolbar_item ~icon:(`app "dots")
+                             ~label:(I18n.t "ui/show-more")
+                             ~on_press:(fun _ ->
+                               (* cljs: the bar's dots menu is a dropdown
+                                  anchored to the trigger button — the last
+                                  .lui-button in the capsule *)
+                               match
+                                 ( !(Popups_state.active)
+                                 , Ui_services.dom_query
+                                     ".selection-action-bar \
+                                      .lui-button:last-child" )
+                               with
+                               | Some st, Some btn ->
+                                   let ax, atop, abot =
+                                     Popups_state.anchor_of_el btn
+                                   in
+                                   Popups_state.open_cm st ~ax ~atop ~abot
+                                     ~block_id:first ~multi:true
+                               | _ -> ()) ()
+                         ] ())
                 ]))
       source )
     ctx parent

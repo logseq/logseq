@@ -814,34 +814,41 @@ let set_tags_dlg inst =
 let action_bar inst : t =
   let isig = sig_of inst in
   if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
-    (box ~style_class:"table-action-bar"
-       [ row ~gap:4 ~cross:`center ~background:"secondary"
-           ~style_class:"ls-table-actions"
-           ([ text ~style_class:"selection-count" ~padding_horizontal:8
-                ~value_signal:
-                  (Signal.map
-                     (fun (s : V.vstate) ->
-                       I.selected_count (V.Sset.cardinal s.V.selected))
-                     isig)
-                []
-            ; button ~variant:`ghost ~size:`icon ~icon:(`app "hash")
-                ~label:(I.t "property/set-tags")
-                ~on_press:(fun _ -> set_tags_dlg inst) []
-            ; button ~variant:`ghost ~size:`sm ~text:(I.t "ui/copy")
-                ~on_press:(fun _ -> copy_selected inst ()) []
-            ; button ~variant:`ghost ~size:`sm
-                ~text:(I.t "property/set-property")
-                ~on_press:(fun _ -> open_prop_dlg inst ~remove:false) []
-            ; button ~variant:`ghost ~size:`sm
-                ~text:(I.t "property/unset-property")
-                ~on_press:(fun _ -> open_prop_dlg inst ~remove:true) []
-            ]
-            @ (if inst.V.feature = "all-pages" then []
-               else
-                 [ button ~variant:`ghost ~size:`icon ~icon:`trash
-                     ~label:(I.t "editor/delete-selection")
-                     ~on_press:(fun _ -> delete_selected inst ()) [] ]))
-       ])
+    ((* the selected-count text isn't a toolbar_item — it sits as
+        leading content next to the kit toolbar inside the capsule *)
+     Ui_components.action_bar_capsule ~key:"tac"
+       ~cls:"table-action-bar"
+       (row ~gap:4 ~cross:`center
+          [ text ~padding_horizontal:8
+              ~value_signal:
+                (Signal.map
+                   (fun (s : V.vstate) ->
+                     I.selected_count (V.Sset.cardinal s.V.selected))
+                   isig)
+              []
+          ; Lui_element_combine.action_toolbar
+              ~items:
+                ([ Lui_element_combine.toolbar_item
+                     ~label:(I.t "property/set-tags") ~icon:(`app "hash")
+                     ~on_press:(fun _ -> set_tags_dlg inst) ()
+                 ; Lui_element_combine.toolbar_item ~label:(I.t "ui/copy")
+                     ~on_press:(fun _ -> copy_selected inst ()) ()
+                 ; Lui_element_combine.toolbar_item
+                     ~label:(I.t "property/set-property")
+                     ~on_press:(fun _ -> open_prop_dlg inst ~remove:false)
+                     ()
+                 ; Lui_element_combine.toolbar_item
+                     ~label:(I.t "property/unset-property")
+                     ~on_press:(fun _ -> open_prop_dlg inst ~remove:true)
+                     ()
+                 ]
+                 @ (if inst.V.feature = "all-pages" then []
+                    else
+                      [ Lui_element_combine.toolbar_item ~icon:`trash
+                          ~label:(I.t "editor/delete-selection")
+                          ~on_press:(fun _ -> delete_selected inst ())
+                          () ]))
+              () ]))
 
 (* ---------- table ---------- *)
 

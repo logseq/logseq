@@ -62,6 +62,15 @@ let int_prop_signal prop source f (elem : t) : t =
   Lui_ui.int_property_signal context node prop (Signal.map f source);
   node
 
+(* reactive float prop — same wrap pattern as prop_signal; for kinds
+   (e.g. toolbar) that lack an ~opacity_signal constructor arg *)
+let float_prop_signal prop source f (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  ignore (standard_kind context node);
+  Lui_ui.float_property_signal context node prop (Signal.map f source);
+  node
+
 (* cljs mock-textarea style — kept for the property default-value
    textarea in properties_menu (the block editor's caret mirror is
    gone: logseq-editor measures via Range.getClientRects). The element's

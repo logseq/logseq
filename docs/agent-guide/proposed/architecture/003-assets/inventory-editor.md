@@ -268,3 +268,54 @@ chrome additionally needs:
 KaTeX sizing overrides, scrollbar rules, `overflow-anchor`, iframe/video
 embeds internals, `::selection` color, `outline:none` input resets,
 `float` images, `::first-line`, motion reduce guards.
+
+## Task 5 deletion pass (devin/003-t5-editor)
+
+Recipes added in `deps/ui/src/shared/ui_components.ml`:
+`action_bar_capsule` (popover-bg/6px-radius/shadow card spec for the two
+floating action bars — the kit `action_toolbar` composite's own
+`surface` bg is transparent on web) and `flat_toolbar` (`toolbar` kind,
+role=toolbar, card chrome flattened via the data-attrs style pair —
+the kind admits no background/border/pad/opacity props; the reveal
+opacity rides a wrapping box). Kind/composite adoptions:
+`Lui_element_combine.action_toolbar` (selection action bar, table
+batch-action bar), `toolbar` (view-head `.view-actions`),
+`Lui_element_combine.breadcrumb_trail` (page zoom/namespace/block-page
+breadcrumbs), `Signal.state` + `~opacity`/`float_prop_signal` for the
+view-head hover reveal (G7 pattern — restores cljs's hover-lit that the
+earlier class port had dropped to popup-open-only; `.ls-add-view` and
+`.view-actions` share the derivation).
+
+CSS deleted in `resources/css/lui-overlay.css` (~190 lines):
+`.selection-action-bar` (pointer-events/bg/radius/shadow →
+`action_bar_capsule` props; the `.lui-popup-positioner`/`lui-popover`
+pointer-events split already covers the hit-transparent bar) and all
+`.selection-action-button*` rules (joined-buttons border/margin/radius
+set — kit toolbar items); `.view-actions` layout/gap rule and the
+`.ls-view-head.ls-refs .view-actions` / `.views .ls-add-view` opacity
+rules incl. `.ls-lit` (signal-driven now — `.view-actions`/`.ls-add-view`
+keep only `transition: opacity 300ms ease-in` as decoration);
+`.view-action-search` + `.view-action-search input` (box/row wrappers
+were not toolbar-legal — flat `search_items` now);
+`.ls-search-input` (borderless transparent input → props);
+`.view-action-type` + `.view-action-type.ls-dim` +
+`.view-action-type .property-value-inner*` (jtrigger/select-item box
+stack → one ghost button, muted color → `~foreground`);
+`.ls-add-view` padding/margin/color/hover rules (→ props +
+`~foreground`; `-ml-1` via data-attrs style pair).
+
+CSS deleted in `resources/css/lui-core.css` (~30 lines):
+`.breadcrumb__segment` (28ch max-width), `.breadcrumb__label`
+(ellipsis), `.breadcrumb__segment-icon`, `.breadcrumb__overflow` —
+`page.ml` was the sole live emitter of segment/label (icon/overflow
+were already dead); `.breadcrumb`/`.block-parents` wrapper classes are
+kept on the wrapper `box` so the nowrap/overflow-clip container
+behavior survives. `.breadcrumb a`, `.breadcrumb.block-parents*`,
+`.breadcrumb-item*` stay — sidebar/cards/chrome still emit them.
+
+Kept as hooks/deco: `.selection-action-bar` (mousedown `closest`
+listener), `.table-action-bar`, `.view-actions`, `.ls-view-head`,
+`.ls-refs`, `.ls-add-view`, `.ls-icon-btn` (still emitted by cards/
+plugins too), `.ls-view-tab` + `.ls-dim` (non-current tab dimming).
+The `!h-7 !px-1` utility overrides on view-head buttons became
+`~height:28 ~min_height:28 ~padding_horizontal:4` props.

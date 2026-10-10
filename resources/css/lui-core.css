@@ -2089,33 +2089,6 @@ a.page-title {
   opacity: 1;
 }
 
-.breadcrumb__segment {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: var(--breadcrumb-segment-max-width, 28ch);
-  vertical-align: middle;
-}
-
-.breadcrumb__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.breadcrumb__segment-icon {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-right: 2px;
-}
-
-.breadcrumb__overflow {
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
 /* ============================ Outliner =================================== */
 
 .blocks-list-wrap {

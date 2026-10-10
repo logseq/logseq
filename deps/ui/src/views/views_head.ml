@@ -26,11 +26,13 @@ let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
 (* `title` (tooltip) has no component prop — it lands on ~label
-   (aria-label), which an icon-only button wants anyway *)
+   (aria-label), which an icon-only button wants anyway. The !h-7
+   !px-1 utility overrides moved to size props. *)
 let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
   let mk label =
     button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
-      ?label ~style_class:("ls-icon-btn !h-7 !px-1" ^ extra)
+      ?label ~style_class:("ls-icon-btn" ^ extra)
+      ~height:28 ~min_height:28 ~padding_horizontal:4
       ~on_press:(fun _ -> on_click ()) []
   in
   mk (if title_ = "" then None else Some title_)
@@ -177,8 +179,10 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
               []) ])
     ctx parent
 
-(* .views > tabs + .ls-add-view (a fade target along with .view-actions) *)
-let tabs_el inst ~dim : t =
+(* .views > tabs + .ls-add-view — the button rides the same
+   head-hover/popup-open opacity signal as .view-actions (G7 pattern:
+   Signal.state + ~opacity, no hover primitive) *)
+let tabs_el inst ~op : t =
  fun ctx parent ->
   row ~style_class:"views"
     [ Lui_elements.keyed
@@ -188,12 +192,13 @@ let tabs_el inst ~dim : t =
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
         ~mount:(view_tab inst)
-    ; Ui_parts.class_signal dim
-        (fun d ->
-          (* cljs add-view: h-7 !px-1 -ml-1 ghost button *)
-          "ls-add-view !h-7 !px-1 -ml-1 " ^ if d then "ls-dim" else "ls-lit")
-        (button ~variant:`ghost ~size:`sm ~icon:`plus
-           ~label:I.add_new_view
+    ; Ui_parts.float_prop_signal Lui_protocol.Opacity op Fun.id
+        (button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
+           ~style_class:"ls-add-view"
+           ~height:28 ~min_height:28 ~padding_horizontal:4
+           ~data_attrs:[ ("style", "margin-left: -4px") ]
+           ~foreground:
+             "var(--ls-secondary-text-color, var(--muted-foreground))"
            ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst) []) ]
     ctx parent
 
@@ -545,16 +550,33 @@ and mk_group_sort inst ident label =
 let more_actions_el inst : t =
   button ~variant:`ghost ~size:`sm ~icon:`ellipsis
     ~label:(I.t "ui/show-more")
-    ~style_class:"ls-icon-btn !h-7 !px-1"
+    ~style_class:"ls-icon-btn"
+    ~height:28 ~min_height:28 ~padding_horizontal:4
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
 
 (* ---------- display type ---------- *)
 
+(* toolbar-legal: one ghost button whose icon follows display_type —
+   the old jtrigger/select-item box stack wasn't a control kind *)
 let display_type_el inst : t =
  fun ctx parent ->
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  Ui_parts.pressable
+  button ~variant:`ghost ~size:`sm ~style_class:"ls-icon-btn"
+    ~height:28 ~min_height:28 ~padding_horizontal:4
+    ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+    ~accessibility_identifier:wrap_id
+    ~label:(I.t "property.built-in/view-type")
+    ~icon_signal:
+      (Logseq_el.own ctx
+         (Signal.map
+            (fun (s : V.vstate) ->
+              Views_table.icon_of
+                (match s.V.display_type with
+                 | "list" -> "list"
+                 | "gallery" -> "layout-grid"
+                 | _ -> "table"))
+            (sig_of inst)))
     ~on_press:(fun _ ->
       match Ui_services.dom_by_id wrap_id with
       | Some anchor ->
@@ -569,78 +591,68 @@ let display_type_el inst : t =
                ; P.MItem (I.list_view, fun () -> set "list")
                ; P.MItem (I.gallery_view, fun () -> set "gallery") ])
       | None -> ())
-    (box ~style_class:"view-action-type ls-dim"
-       ~accessibility_identifier:wrap_id
-       [ box ~style_class:"property-value-inner"
-           [ box ~style_class:"jtrigger"
-               ~accessibility_identifier:
-                 ("trigger-" ^ Ui_services.env_random_uuid ())
-               [ box ~style_class:"select-item"
-                   [ box ~style_class:"ls-icon-color-wrap"
-                       [ Views_table.icon_dyn
-                           (Logseq_el.own ctx
-                              (Signal.map
-                                 (fun (s : V.vstate) ->
-                                   match s.V.display_type with
-                                   | "list" -> "list"
-                                   | "gallery" -> "layout-grid"
-                                   | _ -> "table")
-                                 (sig_of inst))) ] ] ] ] ])
+    []
     ctx parent
 
 (* ---------- search ---------- *)
 
 (* cljs renders the search icon ALWAYS (click is a no-op while the input
-   is open) — e2e clicks it twice, so the button must not disappear *)
-let search_el inst : t =
- fun ctx parent ->
+   is open) — e2e clicks it twice, so the button must not disappear.
+   Flat element list: [search_items] splices straight into the
+   view-actions toolbar (the old box/row wrappers weren't toolbar-legal
+   kinds); [search_el] keeps the row for the publishing head. *)
+let search_items inst : t list =
   let deb = Ui_services.timers_debounce 300 in
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
-  let open_sig =
+  let open_cond ctx =
     Logseq_el.own ctx
       (Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst))
   in
-  (* DOM-only keydown lost its Escape-closes-search path — no component
-     event maps it *)
-  box ~style_class:"view-action-search"
-    [ row ~style_class:"ls-row"
-        [ ghost_btn "search" ~title_:(I.t "cmdk.action/search")
-            ~on_click:(fun () ->
-              if not (V.get inst).V.search_open then begin
-                V.update inst (fun s -> { s with V.search_open = true });
-                ignore
-                  (Ui_services.timers_timeout
-                     (fun () ->
-                       match Ui_services.dom_by_id input_id with
-                       | Some el -> el.Ui_services.focus ()
-                       | None -> ())
-                     0)
-              end)
-        ; if_ ~test:open_sig
-            (row
-               [ (* input, not search_field: a native search box paints
-                    its own clear control — with the manual x ghost_btn
-                    below that made two *)
-                 input ~style_class:"ls-search-input"
-                   ~accessibility_identifier:input_id
-                   ~placeholder:I.type_to_search
-                   ~text:(V.get inst).V.input
-                   ~width:220 ~autofocus:true
-                   ~on_input:(fun ev ->
-                     match ev with
-                     | L.TextChanged (_, v) ->
-                         deb (fun () ->
-                             V.update inst (fun s -> { s with V.input = v });
-                             refresh inst)
-                     | _ -> ())
-                   []
-               ; ghost_btn "x" ~title_:I.close
-                   ~on_click:(fun () ->
-                     V.update inst (fun s ->
-                         { s with V.input = ""; search_open = false });
-                     refresh inst) ]) ]
-    ]
-    ctx parent
+  [ ghost_btn "search" ~title_:(I.t "cmdk.action/search")
+      ~on_click:(fun () ->
+        if not (V.get inst).V.search_open then begin
+          V.update inst (fun s -> { s with V.search_open = true });
+          ignore
+            (Ui_services.timers_timeout
+               (fun () ->
+                 match Ui_services.dom_by_id input_id with
+                 | Some el -> el.Ui_services.focus ()
+                 | None -> ())
+               0)
+        end)
+  ; (fun ctx parent ->
+     (* DOM-only keydown lost its Escape-closes-search path — no
+        component event maps it *)
+     if_ ~test:(open_cond ctx)
+       ((* input, not search_field: a native search box paints its own
+           clear control — with the manual x ghost_btn below that made
+           two *)
+        Ui_components.with_props
+          [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+          ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+          (input ~accessibility_identifier:input_id
+             ~placeholder:I.type_to_search ~text:(V.get inst).V.input
+             ~width:220 ~height:28 ~autofocus:true ~border_width:0
+             ~background:"transparent" ~padding:0
+             ~on_input:(fun ev ->
+               match ev with
+               | L.TextChanged (_, v) ->
+                   deb (fun () ->
+                       V.update inst (fun s -> { s with V.input = v });
+                       refresh inst)
+               | _ -> ())
+             []))
+       ctx parent)
+  ; (fun ctx parent ->
+     if_ ~test:(open_cond ctx)
+       (ghost_btn "x" ~title_:I.close ~on_click:(fun () ->
+          V.update inst (fun s ->
+              { s with V.input = ""; search_open = false });
+          refresh inst))
+       ctx parent)
+  ]
+
+let search_el inst : t = row ~gap:4 ~cross:`center (search_items inst)
 
 (* ---------- filters row ---------- *)
 
@@ -950,9 +962,10 @@ let refs_filter_btn inst : t =
   Ui_parts.class_signal
     (Logseq_el.own ctx
        (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
-    (fun c -> "ls-icon-btn !h-7 !px-1" ^ c)
+    (fun c -> "ls-icon-btn" ^ c)
     (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
        ~icon:(Views_table.icon_of "filter-cog")
+       ~height:28 ~min_height:28 ~padding_horizontal:4
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
        ~on_press:(fun _ ->
          match
@@ -966,9 +979,10 @@ let refs_filter_btn inst : t =
 (* ---------- head ---------- *)
 
 (* cljs view-head fades actions/tabs to opacity-75, lit on hover —
-   mouseover/mouseout are DOM-only, so lit now follows "a popup is
-   open" alone; refs sections hide actions entirely until the head
-   is hovered (opacity-0 via .ls-refs) *)
+   restored via the G7 pattern (Signal.state + ~opacity on pointer
+   enter/leave, also the only hover channel on the native backends);
+   refs sections hide actions entirely until the head is hovered or a
+   popup is open (opacity-0, was .ls-refs) *)
 let render_head inst : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
@@ -985,7 +999,11 @@ let render_head inst : t =
       ; search_el inst ] ctx parent
   else
   let sched = ctx.Lui_ui.ui_scheduler in
-  let dim = Signal.map (fun open_ -> not open_) (P.open_signal sched) in
+  let is_refs =
+    match inst.V.kind with
+    | V.KLinkedRefs | V.KUnlinkedRefs -> true
+    | _ -> false
+  in
   let has_add_object =
     match inst.V.kind with
     | V.KTagPage _ | V.KPropertyPage _ -> (
@@ -994,13 +1012,30 @@ let render_head inst : t =
         | None -> false)
     | _ -> false
   in
+  let popup_open = P.open_signal sched in
+  (* Views_popup's open_st is a global singleton — its owner is
+     whichever scheduler created it first, so map2 inputs must both
+     live on popup_open's scheduler, not this ctx's *)
+  let hover = Signal.state popup_open.Signal.owner false in
+  (* lit = head hovered || a popup is open; the same opacity derivation
+     drives .view-actions and .ls-add-view *)
+  let op =
+    Logseq_el.own ctx
+      (Signal.map2
+         (fun h open_ ->
+           let lit = h || open_ in
+           if is_refs then if lit then 1. else 0.
+           else if lit then 1.
+           else 0.75)
+         hover.Signal.state_signal popup_open)
+  in
   row
+    ~on_pointer_enter:(fun _ -> Signal.set hover true; Runtime.flush ())
+    ~on_pointer_leave:(fun _ ->
+      Signal.set hover false;
+      Runtime.flush ())
     ~style_class:
-      ("ls-view-head"
-      ^
-      (match inst.V.kind with
-       | V.KLinkedRefs | V.KUnlinkedRefs -> " ls-refs"
-       | _ -> ""))
+      ("ls-view-head" ^ if is_refs then " ls-refs" else "")
     [ row ~style_class:"ls-view-head-left"
         [ (match inst.V.kind with
            | V.KQuery _ ->
@@ -1011,15 +1046,15 @@ let render_head inst : t =
                          (fun (s : V.vstate) -> I.live_query (count_of s))
                          (sig_of inst)))
                  []
-           | _ -> tabs_el inst ~dim) ]
-    ; Ui_parts.class_signal dim
-        (fun d -> "view-actions" ^ if d then " ls-dim" else " ls-lit")
-        (row ~key:"actions"
-           [ (match inst.V.kind with
-              | V.KLinkedRefs -> refs_filter_btn inst
-              | _ -> spacer ~key:"no-refcog" [])
-           ; (* cljs (seq sorting): the button reacts to the applied view
-                entity — mount-time sorting is [] until load_views lands *)
+           | _ -> tabs_el inst ~op) ]
+    ; Ui_components.flat_toolbar ~key:"actions" ~cls:"view-actions"
+        ~label:"View actions" ~opacity_signal:op
+        ((match inst.V.kind with
+          | V.KLinkedRefs -> [ refs_filter_btn inst ]
+          | _ -> [])
+         @ [ (* cljs (seq sorting): the button reacts to the applied
+                view entity — mount-time sorting is [] until load_views
+                lands *)
              if_
                ~test:
                  (Logseq_el.own ctx
@@ -1028,7 +1063,8 @@ let render_head inst : t =
                        (sig_of inst)))
                (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
                   ~icon:(Views_table.icon_of "arrows-up-down")
-                  ~style_class:"ls-icon-btn !h-7 !px-1"
+                  ~style_class:"ls-icon-btn"
+                  ~height:28 ~min_height:28 ~padding_horizontal:4
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1041,7 +1077,8 @@ let render_head inst : t =
                   [])
            ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
-               ~style_class:"ls-icon-btn !h-7 !px-1"
+               ~style_class:"ls-icon-btn"
+               ~height:28 ~min_height:28 ~padding_horizontal:4
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->
@@ -1052,12 +1089,11 @@ let render_head inst : t =
                  | Some a -> filter_popup inst a
                  | None -> ())
                []
-           ; search_el inst
-           ; display_type_el inst
-           ; more_actions_el inst
-           ; (if has_add_object then
-                ghost_btn "plus" ~title_:I.new_node
-                  ~on_click:(fun () -> (V.ops ()).V.o_add_object inst)
-              else spacer ~key:"no-add" [])
-           ]) ]
+           ]
+         @ search_items inst
+         @ [ display_type_el inst; more_actions_el inst ]
+         @ (if has_add_object then
+              [ ghost_btn "plus" ~title_:I.new_node
+                  ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
+            else [])) ]
     ctx parent

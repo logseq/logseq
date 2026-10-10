@@ -808,3 +808,40 @@ let dialog_close ~key ~label ~on_press : t =
     ; P.HoverOpacity, fv 1. ]
     (button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
        ~corner_radius:4 ~icon:`x ~label ~on_press [])
+
+(* -- editor chrome (task 5) -------------------------------------------- *)
+
+(* Floating action-bar capsule — the deleted
+   .selection-action-bar/.table-action-bar card spec (popover bg, 6px
+   radius, drop shadow) as props. Wraps an
+   [Lui_element_combine.action_toolbar], optionally with leading content
+   (e.g. the selected-count text). The kit composite's own
+   `surface`/`corner_radius:20` are transparent on web, so the capsule
+   is what paints the floating surface there. *)
+let action_bar_capsule ~key ?(cls = "") child : t =
+  with_props
+    [ ( P.Shadow
+      , sv "0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, \
+           0.08)" ) ]
+    (box ~key ~style_class:cls ~background:"hsl(var(--popover))"
+       ~corner_radius:6 [ child ])
+
+(* Inline action toolbar — the `toolbar` kind's role=toolbar semantics
+   with the .lui-toolbar card chrome flattened, so it reads as the
+   plain ghost-icon row it replaces (.view-actions). The kind admits
+   only orientation/label/gap/style-class/placement/data-attrs (no
+   background/border/pad/opacity), so the chrome reset goes through
+   the documented data-attrs style pair and the reveal opacity rides
+   a wrapping box (which does take ~opacity_signal). The `toolbar`
+   kind requires a non-empty accessibility label or the store rejects
+   the whole patch batch.
+   Toolbar children are restricted to control kinds (button/input/
+   select/text/spacer/divider): mount conditional buttons with [if_]
+   (mounts no node when false) and never [box]/[row] wrappers inside. *)
+let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
+  box ~style_class:cls ?opacity_signal ~min_width:0
+    [ toolbar ~key ~orientation:`horizontal ~label ~gap:4
+        ~data_attrs:
+          [ ("style", "background: transparent; border: none; \
+                      padding: 0") ]
+        children ]
