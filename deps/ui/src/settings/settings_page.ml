@@ -100,7 +100,6 @@ let theme_row ctx =
                    else T.theme_dark))
               (Signal.value mode))
          ~text:"" ())
-    ~top:true
     ~control:
       (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
          [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
@@ -134,7 +133,7 @@ let editor_font_row () =
     [ row ~key:"font-btns" ~style_class:"ls-row-gap"
         [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
     ; box ~key:"font-g" ~style_class:"ls-font-global"
-        [ row ~key:"font-gl" ~cross:`center
+        [ row ~key:"font-gl" ~cross:`center ~min_height:28
             ~style_class:"ls-check-row"
             [ C.checkbox_el ~key:"font-gc" ~on:font.S.fglobal
                 ~on_change:(fun b -> S.set_editor_font_global b)
@@ -171,7 +170,7 @@ let color_label = function
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
-  box ~key
+  box ~key ~width:20 ~height:20
     ~opacity:(if active then 1. else 0.5)
     [ button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
@@ -207,7 +206,7 @@ let accent_row ~modal =
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r" ~for_:"toggle_radix_theme"
-        ~label:T.accent_color
+        ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
@@ -217,6 +216,7 @@ let accent_row ~modal =
              ])
         ()
     ; text ~key:"acc-n" ~style_class:"ls-desc"
+        ~data_attrs:[ "style", "margin-top: 3px" ]
         ~value:T.accent_color_alert []
     ]
 
@@ -677,11 +677,9 @@ let pane_of ~modal ctx tab =
 let article ~modal ctx =
   (* overflow-y stays on the data_attrs style channel — axis-specific
      overflow has no typed-prop form *)
-  Ui_components.with_props
-    [ Lui_protocol.WidthViewport, Lui_protocol.FloatValue 1.0 ]
-    (column ~key:"settings-article" ~style_class:"settings-article"
-       ~padding:16 ~grow:1. ~min_height:192
-       ~data_attrs:[ "style", "overflow-y: auto" ]
+  column ~key:"settings-article" ~style_class:"settings-article"
+    ~padding:16 ~grow:1. ~min_height:192
+    ~data_attrs:[ "style", "overflow-y: auto" ]
        [ row ~key:"art-h" ~style_class:"cp__settings-header"
            ~cross:`center ~main:`start ~gap:8 ~height:40
            ~padding_vertical:8
@@ -695,7 +693,7 @@ let article ~modal ctx =
            ]
        ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
            (S.signal ())
-       ])
+       ]
 
 let inner ~modal : t =
  fun ctx parent ->

@@ -87,6 +87,9 @@ let lang_menu ~key st mst =
     ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
+    (* radix select popper anchors the menu ~2px right of the kit's
+       base anchor (measured: cljs content x 586.33 vs kit 584.33) *)
+    ~data_attrs:[ "style", "margin-left: 2px" ]
     (List.mapi
        (fun i (code, label) ->
          let label = Ui_services.literal_text label in
@@ -94,6 +97,8 @@ let lang_menu ~key st mst =
            ~key:(Printf.sprintf "lmi-%s-%d" key i)
            ~text:label
            ~selected:(code = current_lang ())
+           ~checked:(code = current_lang ())
+           ~min_height:32
            ~on_press:(fun _ev ->
              set_language code;
              Signal.set st label;

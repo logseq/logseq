@@ -553,41 +553,50 @@ let ls_tooltip_keys ~key children : t =
 
 (* `.it` form row — the deleted `sm:grid-cols-3` rules become flex
    growth: label cell 1/3, control cell 2/3 (the `>:nth-child(2):last-child`
-   span-2 when no side slot); each `side` slot is its own third. A `desc`
-   flips the row to top-aligned like the deleted `.ls-it-top`. The
-   <640px stacked variant is a documented leftover (no breakpoint
-   channel). *)
+   span-2 when no side slot); each `side` slot is its own third. Every
+   cljs `.it` carries `sm:items-start`, so cells top-align. The <640px
+   stacked variant is a documented leftover (no breakpoint channel). *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
-    ?(top = false) ~control () : t =
+    ?(col_gap = 24) ~control () : t =
   (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
      columns — flex-grow with auto bases drifts with content width, so
-     the cells carry explicit zero-basis flex ratios *)
-  row ~key ~style_class:"it" ~gap:16 ~min_width:0
-    ~cross:(if top || desc <> None then `start else `center)
+     the cells carry explicit zero-basis flex ratios. .its nested inside
+     another wrapper keep sm:gap-4 (16px) — e.g. the accent row *)
+  let third =
+    Printf.sprintf "calc((100%% - %dpx) / 3)" (2 * col_gap)
+  in
+  row ~key ~style_class:"it" ~gap:col_gap ~min_width:0 ~cross:`start
     ([ column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch
          ~gap:0
-         ~data_attrs:[ "style", "flex: 1 1 0; min-width: 0" ]
+         ~data_attrs:
+           [ "style"
+           , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
          ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
               (label :: label_extra) ]
           @ match desc with Some d -> [ d ] | None -> [])
      ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
          ~data_attrs:
            [ "style"
-           , Printf.sprintf "flex: %d 1 0; min-width: 0"
-               (if side = [] then 2 else 1) ]
+           , Printf.sprintf "flex: %s; min-width: 0"
+               (if side = [] then "1 1 0"
+                else "0 0 " ^ third) ]
          [ control ] ]
     @ List.mapi
         (fun i s ->
           box ~key:(key ^ "-s" ^ string_of_int i) ~min_width:0
-            ~data_attrs:[ "style", "flex: 1 1 0; min-width: 0" ] [ s ])
+            ~data_attrs:
+              [ "style"
+              , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
+            [ s ])
         side)
 
-(* `.ls-label`/`.it-label` — 14px medium, 20px line, 70% opacity. *)
-let form_label ~key ?text_signal ~text () : t =
+(* `.ls-label`/`.it-label` — 14px medium, 28px line, 70% opacity.
+   Inside a flex-col label cell cljs uses leading-5 (20px). *)
+let form_label ~key ?(line_height = "1.75rem") ?text_signal ~text () : t =
   with_props
     [ P.FontSize, sv "0.875rem"
     ; P.FontWeight, iv 500
-    ; P.LineHeight, sv "1.25rem"
+    ; P.LineHeight, sv line_height
     ; P.Opacity, fv 0.7
     ]
     (match text_signal with
@@ -652,9 +661,10 @@ let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
        [ P.FontSize, sv "0.875rem"; P.LineHeight, sv "1.25rem" ]
        (list_item ~key ~icon ~text ~corner_radius:4 ~min_height:0
           ~padding_vertical:6 ~padding_horizontal:8 ~main:`start
+          ~foreground:"inherit"
           ~style_class:"settings-menu-item"
           ~accessibility_identifier:data_id
-          ~data_attrs:[ "data-id", data_id ]
+          ~data_attrs:[ "data-id", data_id; "style", "gap:0" ]
           ~background_signal:
             (Signal.map
                (fun a ->
@@ -753,29 +763,23 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
   with_props
     [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
     (list_item ~key ~on_press ~selected_signal:selected
-       ~min_height:0 ~padding_vertical:0 ~padding_horizontal:0
-       (* cljs li: <i> thumbnail 87x60 on top, <strong> label centered
+       ~min_height:0 ~width:100 ~padding_vertical:0 ~padding_horizontal:0
+       (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
           below — column keeps the label under the image instead of
-          beside it *)
-       [ column ~key:"c" ~cross:`center ~gap:0
+          beside it; cljs li has no padding, i and strong are flush *)
+       [ column ~key:"c" ~cross:`start ~gap:0
            [ Ui_parts.class_signal selected
                (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-               (with_signal_props
-                  [ ( P.Shadow
-                    , Signal.map
-                        (fun s ->
-                          if s then
-                            "inset 0 0 0 2px var(--ls-link-text-color, \
-                             hsl(var(--primary)))"
-                          else "none")
-                        selected )
-                  ]
-                  (image ~key:"i" ~url:image_url ~alt:label ~width:87
-                     ~height:60 ~corner_radius:4
-                     ~background:"var(--lx-gray-04, hsl(var(--muted)))" []))
+               (image ~key:"i" ~url:image_url ~alt:label ~width:92
+                  ~height:63 ~corner_radius:4
+                  ~data_attrs:
+                    [ "style", "height:63.25px;object-fit:cover" ]
+                  ~background:"var(--lx-gray-04, hsl(var(--muted)))" [])
            ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
                ~line_height:"1rem" ~value:label ~text_alignment:`center
-               ~data_attrs:[ "style", "width:87px;height:20px;line-height:20px" ]
+               ~data_attrs:
+                 [ "style"
+                 , "width:92px;height:22px;line-height:16px;padding-top:3px" ]
                []
            ]
        ])
@@ -786,7 +790,7 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
    spec as props — migrated dropdown/select popups carry this chrome so
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
 let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
-    items : t =
+    ?(data_attrs = []) items : t =
   with_props
     [ ( P.Shadow
       , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
@@ -796,7 +800,7 @@ let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
        ~border_color:"var(--lui-c-border)" ~border_width:1
-       ~corner_radius:6 ~style_class:cls items)
+       ~corner_radius:6 ~style_class:cls ~data_attrs items)
 
 (* Same chrome on a popover surface — for anchored popups whose children
    are not menu rows (dropdown_menu rejects non-menu children). *)

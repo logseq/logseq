@@ -544,7 +544,7 @@
 
 /* prod ui__dialog-content: fixed inset-0 m-auto centers the card
    (vertical center, not the old cljs :align :top); bg-background
-   rounded-lg 8px, text --ls-primary-text-color; the a11y title row is
+   rounded-lg 8px, text inherits body color; the a11y title row is
    0-height so the grid gap must not push the body down */
 .lui-dialog.ls-dialog-cmdk {
   overflow: hidden;
@@ -555,7 +555,7 @@
   max-height: calc(100dvh - 6rem);
   border-radius: 8px;
   background: hsl(var(--background));
-  color: var(--ls-primary-text-color);
+  color: inherit;
 }
 
 /* prod radix overlay is bg-background/90 in every theme — the kit's
@@ -843,6 +843,11 @@
   gap: 1rem;
   padding: 1.5rem;
   width: min(42rem, calc(100vw - 2rem));
+  /* cljs ui__dialog-content paints no foreground — dialog text inherits
+     body color; the kit's --color-card-foreground (slate-950) and the
+     radius-xl corner read darker than prod's rounded-lg card */
+  color: inherit;
+  border-radius: 8px;
   /* kit .lui-dialog is fixed inset-0 m-auto: height:auto stretches to
      the max-height cap; cljs ui__dialog-content is content-sized
      (top-50% translate) — fit-content restores that for every named
@@ -1609,7 +1614,10 @@
 @media (min-width: 768px) {
   .cp__settings-inner > .settings-article,
   .cp__settings-inner > article {
-    width: 44rem;
+    /* article flex-fills the inner row beside the 16rem aside — a fixed
+       width overflows the dialog card (observed: 896px inside a 1024px
+       frame pushes the scroll edge past the rounded border) */
+    flex: 1 1 0;
     max-width: calc(100vw - 24rem);
     height: 70vh;
   }
@@ -1622,6 +1630,33 @@
 
 .settings-menu-item[data-id="keymap"] {
   display: none;
+}
+
+/* cljs .settings-menu-link icon slot is 18px; the kit's list-item icon
+   slot defaults to 16px */
+.settings-menu-item.lui-list-item[data-name]:before {
+  width: 18px;
+  height: 18px;
+}
+
+/* cljs theme-mode .active: 2px ring just inside the thumbnail edge.
+   A shadow/outline on the image span hides under the <img> child, so
+   the ring rides an absolutely-positioned ::after painted above it. */
+.lui-image.mode-active {
+  position: relative;
+}
+/* .lui-image-pixels ships object-fit:unset!important, so !important is
+   required to render the thumbnail like cljs background-size:cover */
+.lui-image[class*="mode-"] img {
+  object-fit: cover !important;
+}
+.lui-image.mode-active:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px var(--ls-link-text-color, hsl(var(--primary)));
+  pointer-events: none;
 }
 
 /* the item is the button itself in the LUI tree (cljs wraps a
@@ -2133,10 +2168,12 @@ select.form-select {
 
 .ls-ver-text {
   font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .fade-link {
   font-size: 0.875rem;
+  line-height: 1.25rem;
   text-decoration: underline;
   display: inline;
   opacity: 0.7;
@@ -3732,9 +3769,17 @@ html[data-theme=light] {
    item has no icon and is unchecked — cljs dropdown-menu-item renders
    only label+children, so hide the empty slots or they squeeze the
    label into ellipsis (e.g. tag menu "Go to #…" items) */
-.lui-menu-item > .lui-menu-item-icon:empty,
+.lui-menu-item > .lui-menu-item-icon:empty:not([data-name]),
 .lui-menu-item > .lui-menu-item-check:empty {
   display: none;
+}
+
+/* ...except select menus, where cljs keeps a check/indicator column on
+   every item for alignment (radix Select.ItemIndicator, before the
+   label — below the kit's -3/-2 icon/label order values) */
+.ls-select-content .lui-menu-item > .lui-menu-item-check {
+  display: flex;
+  order: -4;
 }
 
 /* cljs datepicker renders light chrome even under dark theme (the

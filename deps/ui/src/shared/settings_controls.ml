@@ -141,10 +141,12 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
 
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
-    ?(stretch = false) () =
+    ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem") () =
   ignore for_;
-  Ui_components.form_row ~key
-    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+  Ui_components.form_row ~key ~col_gap
+    ~label:
+      (Ui_components.form_label ~key:(key ^ "-l") ~line_height:label_lh
+         ~text:label ())
     ?desc:
       (Option.map
          (fun d -> Ui_components.form_desc ~key:(key ^ "-d") ~value:d)
