@@ -46,9 +46,18 @@
 (defonce *quit-dirty? (volatile! true))
 
 (defn setup-updater! [^js win]
-  ;; manual/auto updater
-  (init-updater {:repo   "logseq/logseq"
-                 :win    win}))
+  ;; manual/auto updater, set up once the window has loaded: loading
+  ;; electron-updater took about 115 ms, in the app open's path when it ran
+  ;; right after the window was created. Returns its teardown.
+  (let [*dispose (atom nil)
+        *torn-down? (atom false)]
+    (.once (.-webContents win) "did-finish-load"
+           (fn []
+             (when-not @*torn-down?
+               (reset! *dispose (init-updater {:repo "logseq/logseq"
+                                               :win win})))))
+    #(do (reset! *torn-down? true)
+         (when-let [dispose @*dispose] (dispose)))))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
