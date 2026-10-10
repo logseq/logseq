@@ -7,6 +7,7 @@
             [frontend.test.helper :as test-helper :include-macros true]
             [frontend.util :as util]
             [frontend.worker.query-dsl :as query-dsl]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.build :as sqlite-build]))
@@ -646,6 +647,35 @@
 
     "(tags [page-tag-1 page-tag-2])"
     ["page1" "page2"]))
+
+(deftest tags-query-with-a-quote-or-backslash-in-the-tag-title
+  ;; db-test #1374: a tag renamed to a title with " or \ broke every query on it
+  (load-test-files
+   [{:page {:block/title "quoted" :build/tags [:TagA]}}
+    {:page {:block/title "slashed" :build/tags [:TagB]}}
+    {:page {:block/title "hashed" :build/tags [:TagC]}}
+    {:page {:block/title "nested" :build/tags [:TagD]}}])
+  ;; rename the tags, as on the tag page
+  (let [conn (conn/get-db test-helper/test-db false)
+        rename! (fn [old title]
+                  (let [tag (ldb/get-page @conn old)]
+                    (d/transact! conn [{:db/id (:db/id tag)
+                                        :block/title title
+                                        :block/name (common-util/page-name-sanity-lc title)}])))]
+    (rename! "TagA" "Project\"")
+    (rename! "TagB" "back\\slash")
+    (rename! "TagC" "say \"#hi\"")
+    (rename! "TagD" "Project[[Gremlin Garden]]"))
+  (is (= #{"quoted"} (set (map :block/name (dsl-query "(tags [[Project\"]])")))))
+  (is (= #{"slashed"} (set (map :block/name (dsl-query "(tags [[back\\slash]])")))))
+  (is (= #{"hashed"} (set (map :block/name (dsl-query "(tags [[say \"#hi\"]])")))))
+  (is (= #{"nested"} (set (map :block/name (dsl-query "(tags [[Project[[Gremlin Garden]]]])"))))
+      "a [[...]] inside the title is kept whole")
+  (is (= "(tags \"[[a \\\"b\\\\ c]]\")"
+         (query-dsl/pre-transform "(tags [[a \"b\\ c]])")))
+  (is (= "(and \"[[x]]\" \"[[y [[z]]]]\" \"s [[not a ref]]\")"
+         (query-dsl/pre-transform "(and [[x]] [[y [[z]]]] \"s [[not a ref]]\")"))
+      "refs outside strings are quoted, nested pairs kept, strings untouched"))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
