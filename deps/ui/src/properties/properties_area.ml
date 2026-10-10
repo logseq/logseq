@@ -55,6 +55,8 @@ let property_icon row =
   match name with
   | Some n ->
       box ~key:"pk-i" ~style_class:"property-icon"
+        ~data_attrs:[ ("style", "display:flex;align-items:center;\
+          margin-right:4px") ]
         [ Icons.icon ~size:15. ~cls:"opacity-50" n ]
   | None ->
       box ~key:"pk-b" ~style_class:"bullet-container"
@@ -71,10 +73,19 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   else
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
-  (column ~gap:0 ~style_class:"property-key-inner"
+  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28
+     ~style_class:"property-key-inner"
+     ~data_attrs:[ ("style", "position:relative;width:100%;min-width:0") ]
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
+         ~foreground:"var(--ls-primary-text-color)"
+         ~data_attrs:
+           [ ( "style"
+             , "height:auto;min-height:0;padding:0;line-height:20px;\
+                justify-content:flex-start;overflow:hidden;\
+                text-overflow:ellipsis;white-space:nowrap" )
+           ]
          ~label:(D.row_title row)
          ~text:(D.row_title row)
          ~on_press:(fun _ -> Runtime.signal_set menu_open true)
@@ -99,11 +110,24 @@ let value_cell ctx row : t =
   let entity_value =
     match D.row_value row with W.Map _ -> true | _ -> false
   in
-  Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~main:`start
+  let centered =
+    D.value_empty_p (D.row_value row)
+    || (match D.row_type row with
+        | "node" | "checkbox" -> true
+        | _ -> false)
+  in
+  Lui_elements.row ~gap:4 ~cross:(if centered then `center else `start)
+    ~grow:1.0 ~main:`start ~min_width:0 ~min_height:28
     ~style_class:"ls-block property-value-container property-value-panel"
+    ~data_attrs:[ ("style", "position:relative;flex-shrink:1;\
+      padding-top:0;padding-bottom:0;container-type:normal") ]
     ((if show_panel_bullet row || entity_value then
         [ box ~key:"vpb" ~style_class:"property-panel-bullet"
+            ~min_height:24 ~opacity:0.6
+            ~data_attrs:[ ("style", "display:inline-flex;\
+              align-items:center;margin-left:7px;margin-right:-7px") ]
             [ box ~style_class:"bullet-container"
+                ~data_attrs:[ ("style", "position:relative;left:0;top:0") ]
                 [ box ~style_class:"bullet" [] ]
             ]
         ]
@@ -117,7 +141,12 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
       ^ (if D.value_empty_p (D.row_value row) then
            " property-panel-row-empty"
          else ""))
+    ~data_attrs:
+      [ ("data-property-type", D.row_type row)
+      ; ("style", "width:100%;padding-right:0.75rem;margin-left:0") ]
     [ column ~min_width:150 ~max_width:260 ~cross:`stretch ~gap:0
+        ~main:`center ~min_height:28
+        ~foreground:"var(--ls-primary-text-color)"
         ~style_class:"property-key-panel"
         [ key_cell ctx ~owner_is_tag ~owner_title row ]
     ; value_cell ctx row
@@ -131,9 +160,18 @@ let toggle_row : t =
        else "property/show-hidden-properties")
   in
   row ~gap:0 ~style_class:"property-pair property-panel-row hidden-properties-toggle-row"
+    ~data_attrs:[ ("style", "padding-right:0.75rem") ]
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
+        ~main:`center ~min_height:28
         [ button ~variant:`ghost ~size:`sm ~text_alignment:`start
             ~style_class:"property-key-inner hidden-properties-toggle-key"
+            ~min_height:28 ~foreground:"var(--ls-primary-text-color)"
+            ~data_attrs:
+              [ ( "style"
+                , "width:100%;min-width:0;padding:0;border:0;\
+                   background:transparent;text-align:left;\
+                   cursor:pointer" )
+              ]
             ~label ~text:label
             ~on_press:(fun _ ->
               S.toggle_hidden ();
@@ -192,7 +230,8 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
        @ (if can_toggle && d.hidden <> [] then [ toggle_row ] else []))
 
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:0 ~style_class:"properties-panel"
+  column ~gap:0 ~corner_radius:6 ~style_class:"properties-panel"
+    ~data_attrs:[ ("style", "overflow:hidden") ]
     (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
 
 (* ---------- pills (block-below) ---------- *)
@@ -207,28 +246,42 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
         ; text ~value:":"
             ~style_class:"select-none" []
         ]
-    ; Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
-        ~style_class:"bottom-property-content property-value-container"
-        [ V.view ctx prow ]
+    ; Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+        (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
+           ~style_class:"bottom-property-content property-value-container"
+           ~data_attrs:
+             [ ("style", "position:relative;min-width:0;overflow:hidden;\
+                flex-shrink:0") ]
+           [ V.view ctx prow ])
     ]
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
-  column ~gap:4 ~grow:1.0
-    ~min_width:0 ~style_class:"positioned-properties block-below text-sm overflow-x-hidden w-full"
+  Ui_components.with_props
+    [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+    (column ~gap:4 ~grow:1.0
+       ~min_width:0 ~style_class:"positioned-properties block-below text-sm overflow-x-hidden w-full"
     [ row ~gap:6 ~cross:`center ~grow:1.0
         ~min_width:0 ~style_class:"bottom-properties-row w-full"
+        ~data_attrs:[ ("style", "padding:0.25rem 0;max-height:2rem;\
+          overflow-y:hidden") ]
         [ row ~gap:8 ~cross:`center ~grow:1.0
             ~min_width:0 ~style_class:"bottom-properties-pills-strip basis-0"
+            ~data_attrs:[ ("style", "flex:1 1 0;width:0;max-width:100%;\
+              flex-wrap:nowrap;overflow-x:hidden") ]
             (List.map
                (pill_view ctx ~owner_is_tag ~owner_title)
                below_rows)
         ]
-    ]
+    ])
 
 (* cljs new-property: .ls-new-property > secondary sm button with a
    plus icon *)
 let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
   row ~gap:0 ~style_class:"ls-new-property"
+    ~data_attrs:
+      [ ("style", if for_class then "" else "margin-top:0.5rem") ]
     [ button ~variant:`secondary ~size:`sm
         ~icon:(`app "plus")
         ~style_class:"jtrigger flex"
@@ -295,14 +348,18 @@ let block_area ~uuid : t =
             (* reactive branch roots must keep identical props: set-prop
                diffs on stack kind (gap/style-class) are unsupported
                on native and abort the whole reconcile *)
-            column ~gap:2 ~style_class:"ls-block-content-indent" []
+            column ~gap:2 ~style_class:"ls-block-content-indent"
+              ~data_attrs:[ ("style", "padding-left:45px") ] []
           else
             let ctx = block_ctx uuid key in
             column ~gap:2
               ~style_class:"ls-block-content-indent"
+              ~data_attrs:[ ("style", "padding-left:45px") ]
               [ column ~key:("parea-" ^ uuid)
                   ~accessibility_identifier:uuid
                   ~style_class:"ls-properties-area ls-block-properties"
+                  ~data_attrs:
+                    [ ("style", "margin-top:2px;margin-left:7px") ]
                   [ panel_view ctx ~owner_is_tag:false
                       ~owner_title:""
                       ~can_toggle:
@@ -527,6 +584,8 @@ let class_schema_row prop =
 let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
   column ~gap:4 ~style_class:"mt-2"
     [ column ~gap:2 ~style_class:"property-key text-sm"
+        ~min_width:160 ~min_height:28 ~main:`center
+        ~data_attrs:[ ("style", "font-size:15px") ]
         [ row ~gap:4 ~cross:`center
             ~style_class:"property-key-inner"
             [ icon ~name:(`app "letter-p") ~point_size:14 []
@@ -622,6 +681,7 @@ let page_area (p : Model.page) : t =
               column ~key:("parea-" ^ uuid)
                 ~accessibility_identifier:uuid
                 ~style_class:"ls-properties-area ls-page-properties"
+                ~data_attrs:[ ("style", "margin-top:1rem") ]
                 [ panel_view ctx ~owner_is_tag:p.Model.page_is_tag
                     ~owner_title:p.Model.page_title
                     ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])

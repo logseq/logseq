@@ -532,9 +532,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                  live on .is-page-title-row (+ .ls-pt-no-icon) in
                  lui-core.css; cljs page.css gives the title row gap-2 *)
               row ~key:"pt-row"
-                ~gap:8 ~style_class:
+                ~gap:8 ~min_height:24 ~grow:1. ~min_width:0
+                ~style_class:
                   ("block-main-container is-page-title-row"
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
+                ~data_attrs:
+                  [ ( "style"
+                    , "width:100%;"
+                      ^
+                      if icon_el = None then "margin-left:-30px"
+                      else "margin-left:-36px" )
+                  ]
                 ~on_pointer_enter:(fun _ ->
                   if collapsable_title () then (
                     Signal.set caret_hover true;
@@ -544,6 +552,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     Signal.set caret_hover false;
                     Runtime.flush ()))
                 [ row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24
+                    ~data_attrs:
+                      [ ( "style"
+                        , "position:relative;top:calc((\
+                           var(--ls-page-title-size, 32px) * 1.38 - 24px)\
+                           / 2)" )
+                      ]
                     ~style_class:
                       ("is-with-icon"
                       ^ (if title_collapsed then " bullet-closed" else "")
@@ -572,20 +586,37 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                           (box ~key:"pt-ca"
                              ~style_class:"block-control"
                              ~accessibility_identifier:("control-" ^ uuid)
+                             ~min_width:22 ~min_height:22
+                             ~opacity:0.4
+                             ~data_attrs:
+                               [ ( "style"
+                                 , "font-size:0.875rem;\
+                                    line-height:1.42857;\
+                                    margin-top:1px;\
+                                    padding:0.125rem;\
+                                    user-select:none;\
+                                    cursor:default" )
+                               ]
                              [ cs ]))
                      ]
-        ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch
+        ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch ~min_width:0
+            ~data_attrs:[ ("style", "width:100%") ]
             [ column ~key:"pt-col2" ~cross:`stretch
                         [ row ~key:"pt-bmc" ~gap:8
+                            ~data_attrs:[ ("style", "width:100%") ]
                             ((match icon_el with
                               | None -> []
                               | Some ic ->
                                   [ row ~key:"pt-icon"
                                       ~style_class:"ls-page-icon"
+                                      ~data_attrs:[ ("style", "line-height:1") ]
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
                                           ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost ls-page-icon-btn"
+                                          ~data_attrs:
+                                            [ ("style", "height:auto;\
+                                                padding-bottom:1.5px") ]
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
                                               ".ls-page-title .ls-page-icon")
@@ -596,16 +627,34 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ]
                                   ])
                             @ [ column ~key:"pt-col3" ~grow:1. ~cross:`stretch
-                                [ box ~key:"pt-wrap"
-                                    ~style_class:"ls-page-title-container block-content-or-editor-wrap"
-                                    [ box ~key:"pt-inner2"
+                                ~min_width:0
+                                [ Ui_components.with_props
+                                    [ Lui_protocol.FontSize,
+                                      Ui_components.sv
+                                        "var(--ls-page-title-size, 32px)"
+                                    ; Lui_protocol.FontWeight,
+                                      Ui_components.iv 500 ]
+                                    (box ~key:"pt-wrap" ~grow:1.
+                                       ~foreground:
+                                         "var(--lx-gray-12, \
+                                          var(--ls-title-text-color))"
+                                       ~style_class:"ls-page-title-container block-content-or-editor-wrap"
+                                       ~data_attrs:[ ("style", "width:100%") ]
+                                    [ box ~key:"pt-inner2" ~grow:1.
                                         ~style_class:"block-content-or-editor-inner"
+                                        ~data_attrs:
+                                          [ ("style", "width:100%;\
+                                             padding-right:0.25rem") ]
                                         [ row ~key:"pt-row2" ~grow:1.
                                             ~gap:4 ~cross:`center
+                                            ~min_width:0
                                             ~style_class:"block-row"
                                             ([ column ~key:"pt-cw" ~gap:8
                                                  ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
+                                                 ~data_attrs:
+                                                   [ ("style", "user-select:text;\
+                                                      overflow-x:visible") ]
                                                  ~on_pointer_enter:(fun _ ->
                                                    Signal.set actions_hover true;
                                                    Runtime.flush ())
@@ -636,7 +685,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                              ]
                                             @ title_tag_chips page)
                                         ]
-                                    ]
+                                    ])
                                 ]
                             ]
                         )
@@ -667,7 +716,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      extension (target identity + interactive flag) *)
   Logseq_el.el ~key:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
-    ~attrs:[ ("data-testid", "page title") ]
+    ~attrs:
+      [ ("data-testid", "page title")
+      ; ("style", "border-radius:calc(var(--radius) - 4px)")
+      ]
     ~events:"click contextmenu"
     ~on_dom_event:(fun name payload ->
       match name with
@@ -717,7 +769,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
          .ls-virt-row[data-index] > .ls-block *)
       [ box ~key:"blw-virt" ~style_class:"blocks-list-wrap"
           ~data_attrs:
-            [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
+            [ ("data-level", "0"); ("data-virtuoso-scroller", "true")
+            ; ("style", "position:relative") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.) ~initial_rows:48
               (* cljs virtuoso overscan 254px + increase-viewport-by
@@ -739,7 +792,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
               ~render:(Tree.block_row ~library ~scope ~virtualize) items ] ]
     else
       [ box ~key:"blw" ~style_class:"blocks-list-wrap"
-          ~data_attrs:[ ("data-level", "0") ]
+          ~data_attrs:
+            [ ("data-level", "0"); ("style", "position:relative") ]
           (List.map (Tree.block_row ~library ~scope ~virtualize) blocks) ]
   in
   (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
@@ -759,6 +813,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           list_wrap ]
   in
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+    ~min_height:60
+    ~data_attrs:[ ("style", "overflow:hidden;margin-left:-20px") ]
     [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
         ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
@@ -980,18 +1036,38 @@ let journal_item_sig (ms : Model.t Signal.signal)
     a.Model.page_linked_refs == b.Model.page_linked_refs
     && is_today_journal a = is_today_journal b
   in
+  let is_first () =
+    match (Signal.get ms).Model.journals with
+    | first :: _ ->
+        first.Model.page_uuid = (Signal.get ps).Model.page_uuid
+    | [] -> false
+  in
   Ui_parts.class_signal
     (Logseq_el.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
     (fun _ ->
       "journal-item content relative"
       ^ if is_last () then " journal-last-item" else "")
     (column ~key:("ji-" ^ key)
+       ~data_attrs:
+         [ ( "style"
+           , "overflow-anchor:none;"
+             ^
+             if is_first () then "padding-top:0;min-height:500px"
+             else "min-height:250px"
+             ^ ";padding-bottom:102px"
+             ^
+             if is_last () then ""
+             else
+               ";border-bottom:1px solid \
+                var(--lx-gray-04, var(--ls-border-color))" )
+         ]
     [ (* data-page-tags is the page-wrap plugin contract *)
       box ~key:("jiw-" ^ key)
         ~style_class:(page_wrap_cls (Signal.get ms) p0)
         ~data_attrs:(page_wrap_attrs p0)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"relative page-inner"
+            ~data_attrs:[ ("style", "padding-bottom:4rem") ]
             [ row ~key:("jit-" ^ key) ~main:`space_between
                 [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
@@ -1007,6 +1083,8 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 ; pagebar_slots_el p0
                 ]
             ; column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+                ~min_height:60
+                ~data_attrs:[ ("style", "overflow:hidden;margin-left:-20px") ]
                 [ box ~key:"page-blocks-inner"
                     ~style_class:"page-blocks-inner relative"
                     ~data_attrs:
@@ -1016,7 +1094,9 @@ let journal_item_sig (ms : Model.t Signal.signal)
                     [ Lui_elements.if_ ~test:nonempty
                         (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
-                           ~data_attrs:[ ("data-level", "0") ]
+                           ~data_attrs:
+                             [ ("data-level", "0")
+                             ; ("style", "position:relative") ]
                            [ Lazy_children.lazy_rows ~source:blocks_sig
                                ~key:Tree.block_key ~cmp:String.compare
                                ~estimate_height:(fun b ->
@@ -1067,6 +1147,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
   in
   (box ~key:"journals" ~accessibility_identifier:"journals"
     ~style_class:"h-full"
+    ~data_attrs:[ ("style", "overflow-anchor:none") ]
     [ box ~key:"js"
         [ box ~key:"jvp"
             [ box ~key:"jil"
@@ -1446,6 +1527,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
      (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
         [ column ~key:"page-inner" ~gap:32
             ~style_class:"relative page-inner"
+            ~data_attrs:[ ("style", "padding-bottom:4rem") ]
             [ reactive ~equal:top_eq top_view ms
             ; page_tabs_el m0
             ; blocks_area ~scope ~library ?puuid ms
