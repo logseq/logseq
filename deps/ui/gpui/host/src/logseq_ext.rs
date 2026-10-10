@@ -307,6 +307,17 @@ pub fn register(shared: &Shared) {
 /// stylesheet for all of these — this table is gpui-only.
 fn register_class_styles() {
     use lui_gpui::style::register_class_style as class;
+    // Page-title cosmetics (lui-core.css): 36px title scale and radius —
+    // cosmetic tokens that typed props don't cover. Layout for this
+    // region (column centering, bottom gap) rides typed props in the
+    // views (chrome.ml), so no cp__content-wrap/cp__main-content entries.
+    class(
+        "ls-page-title-container",
+        "font-size:var(--ls-page-title-size);font-weight:500;\
+         color:var(--ls-title-text-color, foreground)",
+        "",
+    );
+    class("ls-page-title", "border-radius:4px", "");
     class("cp__overlays", "position:absolute;inset:0", "pointer-events-none");
     class("cp__overlay-layer", "position:absolute;inset:0", "pointer-events-none");
     class(
