@@ -648,9 +648,12 @@
         value-maps (mapv (fn [schema]
                            (persistent!
                             (reduce (fn [acc eid]
-                                      (if-let [v (eid-sort-value db schema eid)]
-                                        (assoc! acc eid v)
-                                        acc))
+                                      ;; false (an unchecked checkbox) is a
+                                      ;; value; only nil is missing
+                                      (let [v (eid-sort-value db schema eid)]
+                                        (if (some? v)
+                                          (assoc! acc eid v)
+                                          acc)))
                                     (transient {})
                                     eid-vec)))
                          schemas)]
