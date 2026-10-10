@@ -73,9 +73,11 @@
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
         page {:db/id 42
               :block/title "Existing Page"
-              :block/uuid page-uuid}
+              :block/uuid page-uuid
+              :block/tags [{:db/ident :logseq.class/Page}]}
         page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
                         {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+                        :logseq.property/built-in?
                         {:block/parent ...}]
         calls (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test")
@@ -118,6 +120,41 @@
             "A page with the same title but other tags is not reused")
         (is (contains? tag-titles "Kestrel"))
         (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Juniper"]] @conn))))))))
+
+(defn- <create-with-graph!
+  "<create! against conn: the name lookup pulls from conn, the create runs
+  the outliner's create."
+  [conn title]
+  (p/with-redefs [state/get-current-repo (constantly "test")
+                  state/<invoke-db-worker
+                  (fn [api _repo selector lookup-ref]
+                    (is (= :thread-api/pull api))
+                    (let [entity-id (if (= :block/name (first lookup-ref))
+                                      (:db/id (ldb/get-page @conn (second lookup-ref)))
+                                      lookup-ref)]
+                      (p/resolved (some->> entity-id (d/pull @conn selector)))))
+                  db-transact/apply-outliner-ops
+                  (fn [_conn ops _opts]
+                    (let [[_op [title' create-options]] (first ops)]
+                      (p/resolved (outliner-page/create! conn title' create-options))))]
+    (page-common-handler/<create! title {:redirect? false :edit? false})))
+
+(deftest-async create-page-does-not-open-a-namespace-child-or-a-tag-test
+  ;; db-test #1345: the name lookup returns the oldest page of that name of
+  ;; any kind anywhere; creating "Bar" with "Foo/Bar" there, or "foo" with a
+  ;; tag "Foo" there, opened them instead of creating the page
+  (let [conn (db-test/create-conn-with-blocks {:classes {:Foo {}}})]
+    (p/let [_ (outliner-page/create! conn "Foo2/Bar" {:split-namespace? true})
+            child (ldb/get-page @conn "Bar")
+            bar (<create-with-graph! conn "Bar")
+            tag (ldb/get-page @conn "Foo")
+            foo (<create-with-graph! conn "foo")
+            again (<create-with-graph! conn "Bar")]
+      (is (not= (:db/id child) (:db/id bar)) "a new top-level Bar, not Foo2/Bar's Bar")
+      (is (nil? (:block/parent (d/entity @conn (:db/id bar)))))
+      (is (not= (:db/id tag) (:db/id foo)) "a new page foo, not the tag Foo")
+      (is (ldb/internal-page? (d/entity @conn (:db/id foo))))
+      (is (= (:db/id bar) (:db/id again)) "creating Bar again opens the top-level Bar"))))
 
 (deftest-async favorite-mutations-use-atomic-worker-commands-test
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
