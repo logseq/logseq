@@ -10,7 +10,7 @@ if [ -n "${LUI_SOURCE:-}" ]; then
 else
   opam pin add -y -n lui git+https://github.com/logseq/lui.git#51a6addb7097cddf8721d5bcf3e7521c093055f2
 fi
-opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#df355e15869ceb7220c0365ae7057e4c3fc558b2
+opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#02e18cdc5e0ad672aa223f638eaa3ba52fc9421e
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n melange-transit-core git+https://github.com/logseq/melange-transit.git#main
 opam pin add -y -n melange-transit-melange git+https://github.com/logseq/melange-transit.git#main
