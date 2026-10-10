@@ -45,20 +45,26 @@ let revision = "dev" (* logseq.common.version/REVISION — goog-define default *
 let version_row () =
   C.action_row ~key:"ver" ~for_:"current-version" ~label:T.current_version
     ~actions:
-      [ row ~key:"ver-a" ~style_class:"cp__settings-app-updater"
-          ~cross:`center
-          [ row ~key:"ver-c" ~style_class:"ctls" ~cross:`center
-              [ row ~key:"ver-i" ~style_class:"ls-ver-wrap"
-                  ~cross:`center
-                  [ box ~key:"ver-b" []
-                  ; text ~key:"ver-v" ~style_class:"ls-ver-text"
-                      ~value:version []
-                  ; link ~key:"ver-cl" ~style_class:"fade-link"
-                      ~url:"https://docs.logseq.com/#/page/changelog"
-                      ~text:T.changelog []
-                  ]
-              ]
-          ]
+      [ Ui_components.with_props
+          [ Lui_protocol.Position, Lui_protocol.StringValue "relative" ]
+          (row ~key:"ver-a" ~style_class:"cp__settings-app-updater"
+             ~cross:`center ~min_height:20
+             ~data_attrs:[ "style", "margin-bottom: -5px" ]
+             [ Ui_components.with_props
+                 [ ( Lui_protocol.Position
+                   , Lui_protocol.StringValue "relative" ) ]
+                 (row ~key:"ver-c" ~style_class:"ctls" ~cross:`center
+                    [ row ~key:"ver-i" ~style_class:"ls-ver-wrap"
+                        ~cross:`center
+                        [ box ~key:"ver-b" []
+                        ; text ~key:"ver-v" ~style_class:"ls-ver-text"
+                            ~value:version []
+                        ; link ~key:"ver-cl" ~style_class:"fade-link"
+                            ~url:"https://docs.logseq.com/#/page/changelog"
+                            ~text:T.changelog []
+                        ]
+                    ])
+             ])
       ]
     ()
 
@@ -70,7 +76,7 @@ let language_row ctx =
   C.action_row ~key:"lang" ~for_:"preferred_language"
     ~label:T.language_label
     ~actions:
-      [ V.lang_trigger ~ctx ~key:"lang-sel" ~h_cls:"ls-select-md"
+      [ V.lang_trigger ~ctx ~key:"lang-sel" ~height:32
           ~st:lang_label
       ]
     ()
@@ -669,17 +675,27 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  column ~key:"settings-article" ~style_class:"settings-article"
-    [ row ~key:"art-h" ~style_class:"cp__settings-header"
-        [ heading ~key:"art-ht" ~level:1
-            ~style_class:"cp__settings-category-title"
-            ~value:
-              (reactive (fun (s : S.t) -> tab_title s.tab) (S.signal ()))
-            []
-        ]
-    ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
-        (S.signal ())
-    ]
+  (* overflow-y stays on the data_attrs style channel — axis-specific
+     overflow has no typed-prop form *)
+  Ui_components.with_props
+    [ Lui_protocol.WidthViewport, Lui_protocol.FloatValue 1.0 ]
+    (column ~key:"settings-article" ~style_class:"settings-article"
+       ~padding:16 ~grow:1. ~min_height:192
+       ~data_attrs:[ "style", "overflow-y: auto" ]
+       [ row ~key:"art-h" ~style_class:"cp__settings-header"
+           ~cross:`center ~main:`start ~gap:8 ~height:40
+           ~padding_vertical:8
+           [ heading ~key:"art-ht" ~level:1
+               ~style_class:"cp__settings-category-title"
+               ~font_size:"1.25rem"
+               ~value:
+                 (reactive (fun (s : S.t) -> tab_title s.tab)
+                    (S.signal ()))
+               []
+           ]
+       ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
+           (S.signal ())
+       ])
 
 let inner ~modal : t =
  fun ctx parent ->
@@ -687,23 +703,37 @@ let inner ~modal : t =
   S.activate ();
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
-      [ row ~key:"settings-inner" ~style_class:"cp__settings-inner"
-          [ column ~key:"settings-aside"
-              ~style_class:"settings-aside"
-              [ row ~key:"aside-h"
-                  ~style_class:"cp__settings-header"
-                  [ heading ~key:"aside-ht" ~level:1
-                      ~style_class:"cp__settings-modal-title"
-                      ~value:T.settings_title []
-                  ]
-              ; list ~key:"aside-menu"
-                  ~style_class:"settings-menu"
-                  (List.mapi
-                     (fun i it -> nav_item ~key:("nav-" ^ string_of_int i) it)
-                     nav_items)
-              ]
-          ; article ~modal ctx
-          ]
+      [ Ui_components.with_props
+          [ ( Lui_protocol.MinHeightViewport
+            , Lui_protocol.FloatValue 0.55 )
+          ; ( Lui_protocol.MaxHeightViewport
+            , Lui_protocol.FloatValue 0.75 ) ]
+          (column ~key:"settings-inner" ~style_class:"cp__settings-inner"
+             [ column ~key:"settings-aside"
+                 ~style_class:"settings-aside"
+                 ~background:
+                   "var(--lx-gray-03-alpha, var(--rx-gray-03-alpha))"
+                 ~padding:16 ~min_width:160 ~gap:16
+                 [ row ~key:"aside-h"
+                     ~style_class:"cp__settings-header"
+                     ~cross:`center ~main:`start ~gap:8 ~height:40
+                     ~padding:8
+                     [ heading ~key:"aside-ht" ~level:1
+                         ~style_class:"cp__settings-modal-title"
+                         ~font_size:"1.5rem" ~font_weight:600
+                         ~data_attrs:
+                           [ "style", "text-transform: lowercase" ]
+                         ~value:T.settings_title []
+                     ]
+                 ; list ~key:"aside-menu"
+                     ~style_class:"settings-menu" ~padding:0 ~gap:8
+                     (List.mapi
+                        (fun i it ->
+                          nav_item ~key:("nav-" ^ string_of_int i) it)
+                        nav_items)
+                 ]
+             ; article ~modal ctx
+             ])
       ]
   in
   node ctx parent
@@ -719,6 +749,7 @@ let modal_body (_ms : Model.t Signal.signal) : t =
          dialog too — modal=true is only for the compact appearance
          popup (autofocus, as-modal-picker grid, no shortcut chips) *)
       column ~key:"settings-modal" ~style_class:"settings-modal"
+        ~corner_radius:12
         [ inner ~modal:false ]
     in
     node ctx parent
@@ -745,8 +776,12 @@ let appearance_body (_x, y) : t =
         Ui_parts.pressable
           ~on_press:(fun _ ->
             Runtime.send (Action.Appearance_set None))
-          (box ~key:"appearance-backdrop"
-             ~style_class:"ls-popup-backdrop" [])
+          (Ui_components.with_props
+             [ Lui_protocol.Position
+             , Lui_protocol.StringValue "fixed"
+             ; Lui_protocol.Inset, Lui_protocol.FloatValue 0.
+             ; Lui_protocol.ZIndex, Lui_protocol.IntValue 40 ]
+             (box ~key:"appearance-backdrop" []))
         (* cljs PopupContent right-anchors the appearance panel:
            ~620px wide, right edge ~32px from the viewport edge *)
       ; popover ~key:"appearance-wrap"
@@ -754,9 +789,11 @@ let appearance_body (_x, y) : t =
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set None))
           ~style_class:"ui__dropdown-menu-content appearance-popup"
+          ~min_width:192
           [ column ~key:"appearance_settings"
               ~accessibility_identifier:"appearance_settings"
               ~style_class:"cp__settings-appearance-dialog-inner"
+              ~padding:20
               [ reactive ~equal:( == ) (fun (_ : S.t) ->
                     (* cljs cp__settings-appearance-dialog-inner:
                        flex-col gap-4 between the .it rows *)

@@ -93,7 +93,7 @@ let run_views ~registry ~profile ~finish =
   ignore (Lui_app.dispose menu.S.app);
   let language_view _ ctx parent =
     let label = Signal.state ctx.Lui_ui.ui_scheduler "English" in
-    Settings_view.lang_trigger ~ctx ~key:"parity-language" ~h_cls:""
+    Settings_view.lang_trigger ~ctx ~key:"parity-language" ~height:40
       ~st:label ctx parent
   in
   let language = mount language_view in

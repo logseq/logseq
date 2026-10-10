@@ -130,18 +130,19 @@ let theme_modes_ul ~st =
 
 (* shui select trigger + chevron; the popover mounts as a sibling so
    position:fixed anchors it under the trigger on both platforms *)
-let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
+let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~(height : int) ~st =
   let mst = Signal.state ctx.Lui_ui.ui_scheduler false in
   fun uctx parent ->
     (* box (stack kind) so the host anchors the dropdown_menu to the
        select trigger — the cljs combobox markup maps onto select +
        anchored menu_item children *)
     Lui_elements.box ~key:(key ^ "-w")
-      ~style_class:("ls-select-wrap " ^ h_cls)
+      ~style_class:"ls-select-wrap" ~width:256 ~height
+      ~max_width:320 ~corner_radius:6
       [ Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
           ~container_relative_frame:`horizontal
-          ~style_class:h_cls
+          ~width:256 ~height
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())
@@ -163,16 +164,16 @@ let body (_ms : Model.t Signal.signal) : t =
     Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
   in
   let node =
-    column ~key:"settings" ~style_class:"cp__settings"
+    column ~key:"settings" ~style_class:"cp__settings" ~gap:16
       [ heading ~key:"st-h" ~level:2
           ~style_class:"ui__dialog-title" ~value:T.settings_title []
-      ; column ~key:"st-theme" ~style_class:"ls-settings-col"
+      ; column ~key:"st-theme" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-tl" ~value:T.theme_label []
           ; theme_modes_ul ~st:mode
           ]
-      ; column ~key:"st-lang" ~style_class:"ls-settings-col"
+      ; column ~key:"st-lang" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-ll" ~value:T.language_label []
-          ; lang_trigger ~ctx ~key:"st-ls" ~h_cls:"ls-select-lg"
+          ; lang_trigger ~ctx ~key:"st-ls" ~height:40
               ~st:lang_label
           ]
       ]

@@ -534,3 +534,61 @@ Gates: `dune build js_app test gpui/drive_test.exe` clean,
 `test_main` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds; menu + autocomplete spot-checked
 light/dark.
+
+### B5 plugins + settings frame (2026-10-10, branch `devin/004-b5-plugins-settings`)
+
+Batch B5 of plan `2026-10-11-004-css-to-lui-api.md`: migrated the
+plugins dashboard + settings modal frame out of
+`resources/css/lui-overlay.css` into LUI typed props across
+`plugins_view.ml`, `settings_view.ml`, `settings_page.ml`,
+`settings_url_view.ml`, and `dialogs_view.ml` (new `dialog_frame`
+carries the vw/calc dialog geometry as a per-name `data_attrs` style).
+
+Deleted **432 lines** from `lui-overlay.css` (4705 → 4273), ~64
+selector lines:
+
+- Plugins: `ls-dialog-plugins` + `ls-dialog-settings` dialog geometry,
+  `.cp__plugins-page.web-platform .cp__plugins-item-lists`,
+  `.cp__plugins-settings-inner`, `.cp__plugins-installed`,
+  `.cp__plugins-marketplace-cnt`, `.cp__plugins-item-lists[-inner]`,
+  `.plugin-icon`, `.r`, `.head` (both instances — the 1.25rem duplicate
+  won), `.desc` (both), `.ctl` + `.ctl .l/.r` (both), `.menu-list`,
+  `.control-tabs` + `.l/.r` (both instances), `.tabs`/`.tabs-inner`
+  (both), `.l.link-block`, `.ls-pl-empty`/`-text`, `.ls-pl-meta`,
+  `.ls-pl-status`, `.ls-pl-loading`, `.code-mode-wrap`, `.ls-pl-warn`,
+  `.ls-pl-id`, `.ls-pl-link` (hover rule kept).
+- Settings frame: `.cp__settings-inner` (base), dead
+  `.cp__settings-inner > header`/`h1` rules, `.settings-aside`,
+  `.settings-article`, `.cp__settings-header` variants + `.ui__icon`
+  dead pair, `.cp__settings-modal-title`, `.cp__settings-category-title`
+  (`::first-letter` kept), `.settings-menu`, dead `.no-aside > article`,
+  `.panel-wrap` base (media + `> .it:first-of-type` kept),
+  `.cp__settings-app-updater` + `.ctls`,
+  `.cp__settings-appearance-dialog-inner` + `#appearance_settings`,
+  `.appearance-popup`, `.ls-popup-backdrop`, `.ls-select-md`,
+  `.ls-select-lg`, `.ls-select-wrap`, `.ls-settings-col`,
+  `.cp__settings`, scoped `.cp__settings-{sync,publish}-server-cnt
+  .ls-form-actions`, dead `.menu-list .ui__dropdown-menu-item`.
+
+Also deleted: the `ls-popup-backdrop` GPUI class registration in
+`deps/ui/gpui/host/src/logseq_ext.rs` (backdrop now emits
+Position/Inset/ZIndex typed props).
+
+Kept hooks: all `@media` blocks, `::first-letter`,
+`.settings-menu-item[data-id="keymap"]` variants,
+`.panel-wrap > .it:first-of-type`, `.panel-wrap .form-*` cluster,
+`.html-content.ls-pl-html`, `.ls-mono`, `.ls-pl-link:hover`,
+`.ls-form-actions` base, `.ls-select-content` dropdown internals
+(`order`, `data-selected` hovers), `ls-font-sample`/`ls-font-name`
+GPUI regs (out of scope).
+
+Leftovers for follow-up machinery: `top: 100%` percent-inset,
+`flex-wrap`, margins (`margin-top`, `-5px`/`1rem` offsets),
+`calc()`/`min()`/`dvw`/`dvh` clamps, `text-transform`, `order`,
+`:hover`/`:first-of-type`/`[data-*]` selectors, `font-family`,
+scrollbar rules.
+
+Gates: `dune build js_app test gpui/drive_test.exe` clean,
+`test_main.js` 2009 checks 0 failures, `dune runtest` green,
+`npm run css:build` succeeds. Plugins dashboard + settings General/
+Editor sections + appearance popup spot-checked light+dark vs prod.
