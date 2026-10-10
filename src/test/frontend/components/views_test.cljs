@@ -11,6 +11,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -1468,6 +1469,33 @@
                        (set! db-async/<get-blocks original-get-blocks)
                        (set! outliner-op/delete-page! original-delete-page!)
                        (set! state/pub-event! original-pub-event!)
+                       (done)))))))
+
+(deftest save-block-and-focus-after-the-cell-unmounted-test
+  ;; db-test #1357: the cell popup hid after the table cell unmounted, so the
+  ;; ref held nil, nil was selected and a timer called .focus on nil
+  (async done
+    (let [save-block-and-focus #'views/save-block-and-focus
+          selected (atom [])
+          timers (atom [])
+          cleared (atom 0)
+          original-save editor-handler/save-current-block!
+          original-select state/exit-editing-and-set-selected-blocks!
+          original-clear state/clear-edit!]
+      (set! editor-handler/save-current-block! (fn [& _] nil))
+      (set! state/exit-editing-and-set-selected-blocks! (fn [blocks & _] (swap! selected conj blocks)))
+      (set! state/clear-edit! (fn [& _] (swap! cleared inc)))
+      (-> (p/let [_ (save-block-and-focus #js {:current nil}
+                                          (fn [timer] (swap! timers conj timer))
+                                          false)]
+            (is (= [] @selected) "nothing is selected: there is no cell")
+            (is (= [] @timers) "no focus timer is set")
+            (is (= 1 @cleared) "editing still ends"))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! editor-handler/save-current-block! original-save)
+                       (set! state/exit-editing-and-set-selected-blocks! original-select)
+                       (set! state/clear-edit! original-clear)
                        (done)))))))
 
 
