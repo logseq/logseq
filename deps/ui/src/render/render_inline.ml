@@ -1225,13 +1225,16 @@ let hiccup_tag_end s i =
    - Rs_plain: the match renders as literal source text; no hidden markup.
    - Rs_atomic (display, cls): the whole byte range is one non-editable
      unit — a pill while the caret is outside, raw source while inside.
-   - Rs_wrapped (open_len, close_len, re_parse, cls): open/close delimiter
-     bytes around inner content; when [re_parse] the inner range
-     tokenizes again (nested emphasis), otherwise it is literal (code). *)
+   - Rs_wrapped (open_len, close_len, re_parse, cls, show_delims):
+     open/close delimiter bytes around inner content; when [re_parse] the
+     inner range tokenizes again (nested emphasis), otherwise it is
+     literal (code). When [show_delims] the read-mode [parse] emits the
+     delimiter bytes as plain text beside the element (markdown emphasis
+     stays visible in read mode; inline HTML tags keep theirs hidden). *)
 type run_spec =
   | Rs_plain
   | Rs_atomic of string * string
-  | Rs_wrapped of int * int * bool * string
+  | Rs_wrapped of int * int * bool * string * bool
 
 (* One positioned match for the edit layer: [tok_start, tok_stop) are
    byte offsets into the scanned string. Gaps between tokens are plain
@@ -1260,9 +1263,14 @@ let rec parse ?(refs = []) ?(self = "") s =
       ())
     else
       match try_match ~find ~refs ~self s i with
-      | Some (e, len, _) ->
+      | Some (e, len, spec) ->
           flush ();
-          push e;
+          (match spec with
+           | Rs_wrapped (o, c, _, _, true) ->
+               push (D.txt (sub s i o));
+               push e;
+               push (D.txt (sub s (i + len - c) c))
+           | _ -> push e);
           go (i + len)
       | None ->
           Buffer.add_char buf s.[i];
@@ -1586,7 +1594,7 @@ and try_code s i =
       Some
         ( code_span (sub s (i + 1) (j - i - 1))
         , j + 1 - i
-        , Rs_wrapped (1, 1, false, "ed-code") )
+        , Rs_wrapped (1, 1, false, "ed-code", true) )
   | _ -> None
 
 (* **bold** / *italic* *)
@@ -1597,7 +1605,7 @@ and try_star ~refs ~self s i =
         Some
           ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-bold") )
+          , Rs_wrapped (2, 2, true, "ed-bold", true) )
     | _ -> None
   else
     match find_sub s (i + 1) "*" with
@@ -1605,7 +1613,7 @@ and try_star ~refs ~self s i =
         Some
           ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
-          , Rs_wrapped (1, 1, true, "ed-italic") )
+          , Rs_wrapped (1, 1, true, "ed-italic", true) )
     | _ -> None
 
 (* __bold__ / _italic_ *)
@@ -1616,7 +1624,7 @@ and try_uscore ~refs ~self s i =
         Some
           ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-bold") )
+          , Rs_wrapped (2, 2, true, "ed-bold", true) )
     | _ -> None
   else
     match find_sub s (i + 1) "_" with
@@ -1624,7 +1632,7 @@ and try_uscore ~refs ~self s i =
         Some
           ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
-          , Rs_wrapped (1, 1, true, "ed-italic") )
+          , Rs_wrapped (1, 1, true, "ed-italic", true) )
     | _ -> None
 
 (* ~~strike~~ *)
@@ -1635,7 +1643,7 @@ and try_strike ~refs ~self s i =
         Some
           ( emph "del" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-strike") )
+          , Rs_wrapped (2, 2, true, "ed-strike", true) )
     | _ -> None
   else None
 
@@ -1647,7 +1655,7 @@ and try_hl ~refs ~self s i =
         Some
           ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-hl") )
+          , Rs_wrapped (2, 2, true, "ed-hl", true) )
     | _ -> None
   else None
 
@@ -1659,7 +1667,7 @@ and try_eq ~refs ~self s i =
         Some
           ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-hl") )
+          , Rs_wrapped (2, 2, true, "ed-hl", true) )
     | _ -> None
   else None
 
@@ -1745,7 +1753,7 @@ and try_html_tag ~refs ~self s i =
           Some
             ( emph dom_tag (parse ~refs ~self inner)
             , j + String.length close - i
-            , Rs_wrapped (open_len, String.length close, true, "ed-" ^ t) )
+            , Rs_wrapped (open_len, String.length close, true, "ed-" ^ t, false) )
       | _ -> None
     else None
   in

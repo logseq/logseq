@@ -72,7 +72,7 @@ let rec seg (acc : run list) sb lo hi ~cls : run list =
            acc :=
              mk Atomic sb a b ~reveal:(a + 1, b) ~display
                ~cls:(join_cls cls c) :: !acc
-       | Rs_wrapped (o, c, re_parse, c2) ->
+       | Rs_wrapped (o, c, re_parse, c2, _) ->
            let cls' = join_cls cls c2 in
            acc := mk Delim sb a (a + o) ~reveal:(a, b) ~display:"" ~cls:cls' :: !acc;
            let inner_lo = a + o and inner_hi = b - c in
