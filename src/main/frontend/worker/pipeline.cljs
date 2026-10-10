@@ -542,7 +542,12 @@
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
         ensure-comments-tx-data (ensure-comments-blocks-property-on-tag-additions tx-report)
+        ;; Verbatim replay of recorded tx-data already includes repeating-task
+        ;; side effects (reschedule + status reset); re-running commands would
+        ;; double-apply them. Semantic-ops replay contains no derived data, so
+        ;; commands must still run there.
         commands-tx (when-not (or (:undo? tx-meta)
+                                  (:db-sync/replayed-tx-data? tx-meta)
                                   (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
