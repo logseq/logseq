@@ -724,15 +724,38 @@ let right_sidebar (ms : Model.t Signal.signal) =
    the split kind's divider replaced the hand-rolled resizer. The
    sidebar's own top row hosts the toggle + search buttons while
    docked-open (the header only mounts its copies when closed). *)
-let left_sidebar (ms : Model.t Signal.signal) =
+(* reactive MinWidth = the pane's expanded width in px — while the
+   docked track animates to/from ~0 the sidebar's inner column keeps
+   its expanded layout and is clipped by the pane's overflow:hidden
+   (slide-out) instead of reflowing/shrinking its text. The left
+   split's own width is the right split's first track. *)
+let left_inner_min_width (st : Sidebar_state.t)
+    (ms : Model.t Signal.signal) =
+  Ui_parts.int_prop_signal Lui_protocol.MinWidth
+    (Signal.map2 (fun a b -> (a, b))
+       (Signal.map2 (fun m lf -> (m, lf)) ms
+          (Signal.value st.Sidebar_state.left_fraction))
+       (Signal.map2 (fun rf vw -> (rf, vw))
+          (Signal.value st.Sidebar_state.right_fraction)
+          (Signal.value st.Sidebar_state.viewport_w)))
+    (fun ((m, lf), (rf, vw)) ->
+      (* -12 slack: the gaps/dividers keep the exact track fraction a
+         few px under lf*vw; a min-width 1px too wide would clip the
+         pane's border while open *)
+      int_of_float
+        (lf *. vw *. if m.Model.right_sidebar_open then 1. -. rf else 1.)
+      - 12)
+
+let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~style_class:"cp__sidebar-left-layout"
-       [ column ~key:"ls-inner" ~grow:1. ~min_height:0
-           ~style_class:"left-sidebar-inner as-container"
+       [ left_inner_min_width st ms
+           (column ~key:"ls-inner" ~grow:1. ~min_height:0
+              ~style_class:"left-sidebar-inner as-container"
            [ row ~key:"ls-top" ~cross:`center ~gap:4
                ~padding_horizontal:8 ~padding_vertical:4
                ~style_class:"left-sidebar-top"
@@ -742,7 +765,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
                    [ Left_sidebar_view.header ms ]
                ; Left_sidebar_view.contents ms
                ]
-           ]
+           ])
        ; Ui_parts.pressable
            ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
            (box ~key:"shade" ~style_class:"shade-mask" [])
@@ -777,7 +800,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_left_split_resize st)
        (if Ui_services.env_publishing () then Logseq_el.nothing
-        else left_sidebar ms)
+        else left_sidebar ms st)
        content)
 
 (* docked right split: the right dock is the SECOND pane, so the split

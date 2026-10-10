@@ -679,8 +679,10 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     flex-direction: column;
     position: relative;
     width: 100%;
-    /* cljs container.css: mt-6 below sm, 52px >=sm */
-    margin-top: 24px;
+    /* the .left-sidebar-top buttons row owns the top offset now — the
+       wrap only needs a small gap (cljs had mt-6/mt-52px under a
+       sidebar that started below the header's buttons) */
+    margin-top: 4px;
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
   }
 
@@ -690,7 +692,7 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     }
 
     > .wrap {
-      margin-top: 52px;
+      margin-top: 12px;
     }
   }
 

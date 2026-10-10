@@ -530,10 +530,19 @@ let sidebar_item st idx (it : Sidebar_state.item) =
 
 (* ---------- inner ---------- *)
 
+(* reactive MinWidth = the dock's expanded width in px — while the
+   docked track animates to/from ~0 the inner column keeps its
+   expanded layout and is clipped by the pane's overflow:hidden
+   (slide-out) instead of reflowing/shrinking its text *)
 let inner st =
-  column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
-    ~grow:1.
-    ~style_class:"cp__right-sidebar-inner"
+  Ui_parts.int_prop_signal Lui_protocol.MinWidth
+    (Signal.map2 (fun a b -> (a, b))
+       (Signal.value st.Sidebar_state.right_fraction)
+       (Signal.value st.Sidebar_state.viewport_w))
+    (fun (rf, vw) -> int_of_float (rf *. vw) - 12)
+    (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
+       ~grow:1.
+       ~style_class:"cp__right-sidebar-inner"
     [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
         [ column ~key:"rs-col" ~grow:1.
@@ -546,7 +555,7 @@ let inner st =
                        []
                      :: List.mapi (sidebar_item st) items))
                 (Signal.value st.Sidebar_state.items) ] ]
-    ]
+    ])
 
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
