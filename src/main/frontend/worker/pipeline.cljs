@@ -35,7 +35,7 @@
   (let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
-          (:undo? tx-meta) (:redo? tx-meta)))))
+          (:db-sync/replayed-tx-data? tx-meta)))))
 
 (defn- imported-data?
   [tx-meta]
