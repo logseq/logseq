@@ -42,7 +42,7 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
     [ P.Opacity, Ui_components.fv 0.7
     ; P.HoverOpacity, Ui_components.fv 1. ]
     (button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
-       ~padding:4 ~corner_radius:6 ~gap:4
+       ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
        ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
     ~data_attrs:
@@ -742,7 +742,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
       "cp__right-sidebar h-screen "
       ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_components.with_props
-       [ P.ZIndex, Ui_components.sv "var(--ls-z-index-level-1)"
+       [ P.ZIndex, Ui_components.iv 9 (* --ls-z-index-level-1 *)
        ; P.Position, Ui_components.sv "relative"
        ; P.UserSelect, Ui_components.sv "none"
        ; P.Overflow, Ui_components.sv "hidden" ]

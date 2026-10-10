@@ -804,7 +804,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             ; P.Overflow, Ui_components.sv "hidden"
             ; P.Opacity, Ui_components.fv 0.9
             ; P.PressedOpacity, Ui_components.fv 0.7 ]
-            (button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~cross:`center
+            (button ~key:"gsel-a" ~variant:`ghost ~grow:1.
                ~label:(t "graph.switch/select-prompt")
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
