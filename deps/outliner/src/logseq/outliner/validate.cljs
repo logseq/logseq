@@ -4,6 +4,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.date :as common-date]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
@@ -57,9 +58,12 @@
   "Query that finds other ids given the id to ignore, title or lc name to look up, and tags to consider.
    Properties and tags match by exact :block/title; ordinary pages match by :block/name
    (page-name-sanity-lc, same as page creation). Entities with a parent are scoped to
-   that parent; top-level pages only match other top-level pages."
-  [entity]
-  (let [case-sensitive? (case-sensitive-title? entity)]
+   that parent; top-level pages only match other top-level pages (no parent, or the
+   Library as parent: a namespace root's parent is the Library)."
+  [entity library-id]
+  (let [case-sensitive? (case-sensitive-title? entity)
+        parent-id (:db/id (:block/parent entity))
+        top-level? (or (nil? parent-id) (= parent-id library-id))]
     (vec
      (concat
       '[:find [?b ...]
@@ -73,13 +77,16 @@
         ;; Property names are unique in that they can
         ;; have the same names as built-in property names
         '[[(missing? $ ?b :logseq.property/built-in?)]]
-        (:block/parent entity)
+        (not top-level?)
         ;; same parent
         '[[?b :block/parent ?bp]
           [?eid :block/parent ?ep]
           [(= ?bp ?ep)]]
         (not case-sensitive?)
-        '[[(missing? $ ?b :block/parent)]])))))
+        ;; another top-level page: no parent, or the Library
+        [(list 'or
+               '[(missing? $ ?b :block/parent)]
+               ['?b :block/parent (or library-id -1)])])))))
 
 (defn- throw-duplicate
   [title payload]
@@ -97,7 +104,9 @@
                              (> (count this-tags) 1)
                              (> (count another-tags) 1))
                 common-tags)))
-          (d/q (find-other-ids-with-title-and-tags entity)
+          (d/q (find-other-ids-with-title-and-tags
+                entity
+                (:db/id (ldb/get-built-in-page db common-config/library-page-name)))
                db
                (:db/id entity)
                lookup
