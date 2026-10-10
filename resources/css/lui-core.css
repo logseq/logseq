@@ -245,17 +245,10 @@ blockquote {
   overflow-y: hidden;
   position: relative;
   height: 100%;
-  transition: padding-left 0.3s;
 
-  /* cljs container.css: the open left sidebar is an overlay below sm —
-     it does not push content; >=sm it docks and the content shifts */
-  &.is-left-sidebar-open {
-    padding-left: 0;
-
-    @media (min-width: 640px) {
-      padding-left: var(--ls-left-sidebar-width);
-    }
-  }
+  /* the docked split owns the left pane's track — the px-era
+     padding-left shift (and its transition) is gone; .is-left-sidebar-
+     open stays for the extensions-pdf scope that still reads it */
 }
 
 #main-content {
@@ -439,7 +432,6 @@ blockquote {
     display: flex;
     padding-left: 0.5rem;
     height: 100%;
-    min-width: var(--ls-left-sidebar-width);
 
     > div {
       display: flex;
@@ -530,13 +522,6 @@ blockquote {
   }
 }
 
-/* cljs header.css: the .l column's sidebar-width reservation only
-   applies while the docked sidebar is open — otherwise it collapses to
-   its natural 72px so the right cluster gets the width back */
-.theme-container-inner:not(.ls-left-sidebar-open) .cp__header > .l {
-  min-width: auto;
-}
-
 .is-electron.is-mac .cp__header > .l {
   padding-left: 78px;
 }
@@ -547,15 +532,13 @@ blockquote {
 
 /* ========================= Left sidebar ================================== */
 
+/* the pane is a docked split child >=sm (the grid track owns its
+   width; overflow clips .left-sidebar-inner while the track animates
+   to/from 0) and a fixed overlay below sm, unchanged from cljs */
 .cp__sidebar-left-layout {
-  position: fixed;
-  top: 0;
-  left: 0;
-  /* cljs container.css: the collapsed rail stays 10px wide below sm so
-     the edge swipe can grab it; is-open expands to a full overlay */
-  width: 10px;
-  z-index: var(--ls-z-index-level-4);
-  transition: width 0.3s;
+  position: relative;
+  overflow: hidden;
+  z-index: var(--ls-z-index-level-1);
 
   a {
     color: hsl(var(--foreground));
@@ -566,61 +549,80 @@ blockquote {
     }
   }
 
-  &.is-open {
-    width: 100%;
-    height: 100%;
-  }
-
-  &:not(.is-open) .left-sidebar-resizer {
+  > .shade-mask {
     display: none;
   }
 
-  /* cljs container.css: dimming overlay behind the open sidebar on
-     small screens — taps dismiss the sidebar */
-  > .shade-mask {
-    background-color: rgba(0, 0, 0, 0.7);
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    opacity: 0;
-    transition: opacity 0.4s;
-    touch-action: none;
-  }
-
-  &.is-open > .shade-mask {
-    opacity: 1;
-  }
-
-  &.is-closing > .shade-mask {
-    opacity: 0;
-  }
-
-  /* cljs container.css: while the edge swipe is pending the whole
-     overlay widens and follows the finger with no transitions */
-  &.is-touching {
-    width: 100% !important;
-    transition: none;
-
-    .left-sidebar-inner {
-      transition: none !important;
-    }
-
-    > .shade-mask {
-      transition: none !important;
-    }
-  }
-
-  /* cljs container.css &:before — 3rem grab strip under the header
-     edge on small screens (hidden >=sm) */
   &:before {
-    content: " ";
-    height: 3rem;
-    background-color: var(--ls-primary-background-color);
+    display: none;
+  }
+
+  @media (max-width: 639.98px) {
     position: fixed;
-    left: 0;
     top: 0;
-    opacity: 1;
-    z-index: 5;
+    left: 0;
+    /* cljs container.css: the collapsed rail stays 10px wide below sm
+       so the edge swipe can grab it; is-open expands to a full
+       overlay */
+    width: 10px;
+    overflow: visible;
+    z-index: var(--ls-z-index-level-4);
+    transition: width 0.3s;
+
+    &.is-open {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* cljs container.css: dimming overlay behind the open sidebar on
+       small screens — taps dismiss the sidebar */
+    > .shade-mask {
+      display: block;
+      background-color: rgba(0, 0, 0, 0.7);
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      opacity: 0;
+      transition: opacity 0.4s;
+      touch-action: none;
+    }
+
+    &.is-open > .shade-mask {
+      opacity: 1;
+    }
+
+    &.is-closing > .shade-mask {
+      opacity: 0;
+    }
+
+    /* cljs container.css: while the edge swipe is pending the whole
+       overlay widens and follows the finger with no transitions */
+    &.is-touching {
+      width: 100% !important;
+      transition: none;
+
+      .left-sidebar-inner {
+        transition: none !important;
+      }
+
+      > .shade-mask {
+        transition: none !important;
+      }
+    }
+
+    /* cljs container.css &:before — 3rem grab strip under the header
+       edge on small screens */
+    &:before {
+      display: block;
+      content: " ";
+      height: 3rem;
+      background-color: var(--ls-primary-background-color);
+      position: fixed;
+      left: 0;
+      top: 0;
+      opacity: 1;
+      z-index: 5;
+    }
   }
 }
 
@@ -636,34 +638,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-/* cljs container.css: on >=sm the fixed left sidebar drops under the
-   z-10 header so the header's left-menu/search buttons stay visible and
-   clickable while the sidebar is open; level-4 z-index is for the
-   mobile overlay only */
-@media (min-width: 640px) {
-  .cp__sidebar-left-layout {
-    width: 0;
-    z-index: var(--ls-z-index-level-1);
-
-    &.is-open {
-      width: var(--ls-left-sidebar-width);
-
-      .left-sidebar-inner {
-        overflow: visible;
-      }
-    }
-
-    &:before {
-      width: 0;
-      overflow: hidden;
-    }
-
-    > .shade-mask {
-      display: none;
-    }
-  }
-}
-
 .left-sidebar-inner {
   display: flex;
   flex-direction: column;
@@ -675,25 +649,29 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    /* cljs container.css: 74vw overlay sheet below sm, fixed dock
-       width >=sm */
-    width: var(--ls-left-sidebar-sm-width);
+    /* cljs container.css: 74vw overlay sheet below sm; >=sm the docked
+       pane's track owns the width so the sheet stretches to fill it —
+       the pane's overflow clip (not the overlay translate) hides it
+       while closed */
+    width: 100%;
     background-color: var(--left-sidebar-bg-color);
     border-right: 1px solid var(--lx-gray-03, var(--ls-tertiary-background-color));
-    transform: translateX(-100%);
-    transition: transform 0.3s;
     z-index: 3;
-  }
 
-  .is-open > & {
-    transform: translate3d(0, 0, 0);
-    /* cljs: clipped to the overlay while open below sm; visible >=sm
-       inside the docked width (media rule below) */
-    overflow: hidden;
-  }
+    @media (max-width: 639.98px) {
+      width: var(--ls-left-sidebar-sm-width);
+      transform: translateX(-100%);
+      transition: transform 0.3s;
 
-  .is-closing & {
-    transform: translate3d(-100%, 0, 0) !important;
+      .is-open > & {
+        transform: translate3d(0, 0, 0);
+        overflow: hidden;
+      }
+
+      .is-closing & {
+        transform: translate3d(-100%, 0, 0) !important;
+      }
+    }
   }
 
   > .wrap {
@@ -709,7 +687,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   @media (min-width: 640px) {
     &.as-container {
       padding-top: 0;
-      width: var(--ls-left-sidebar-width);
     }
 
     > .wrap {
@@ -770,23 +747,22 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-.cp__sidebar-left-layout .left-sidebar-resizer {
-  position: absolute;
-  width: 3px;
-  top: 0;
-  right: -2px;
-  bottom: 0;
-  overflow: hidden;
-  cursor: col-resize;
-  z-index: 10;
-  transition: background-color 0.2s;
+/* the split kind's divider replaced the hand-rolled resizers;
+   hidden while its pane's track is 0 (sidebar closed / overlay mode) */
+.cp__left-split.is-collapsed > .lui-split-divider,
+.cp__right-split.is-collapsed > .lui-split-divider {
+  display: none;
+}
 
-  &.is-active,
-  &:hover,
-  &:focus,
-  &:active {
-    background-color: var(--ls-active-primary-color, hsl(var(--primary) / 0.9));
-  }
+/* the kit divider is a 1px ::after line inside the ~gap hit zone —
+   widen + accent it on hover/drag so the resize affordance is
+   discoverable (cljs had a visible resizer strip) */
+.cp__left-split:not(.is-collapsed) > .lui-split-divider:hover::after,
+.cp__right-split:not(.is-collapsed) > .lui-split-divider:hover::after,
+.cp__left-split:not(.is-collapsed) > .lui-split-divider:active::after,
+.cp__right-split:not(.is-collapsed) > .lui-split-divider:active::after {
+  width: 3px;
+  background: var(--lx-accent-09, var(--ls-active-primary-color));
 }
 
 .cp__graphs-selector {
@@ -1166,37 +1142,13 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
-  transition: width 0.3s;
   position: relative;
   user-select: none;
   container-type: inline-size;
-
-  .resizer {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 1px;
-    width: 3px;
-    user-select: none;
-    touch-action: none;
-    cursor: col-resize;
-    z-index: 1000;
-    transition: background-color 0.2s;
-
-    &:hover,
-    &:focus,
-    &:active {
-      background-color: hsl(var(--primary) / 0.9);
-    }
-  }
-
-  &.closed {
-    width: 0 !important;
-
-    .resizer {
-      display: none;
-    }
-  }
+  /* the docked split's track owns the width; clip the inner column
+     while the track animates to/from 0 */
+  overflow: hidden;
+  min-width: 0;
 
   &.open {
     max-width: 60vw;
@@ -1316,6 +1268,8 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
 .cp__right-sidebar-inner {
   padding-top: 0;
+  width: 100%;
+  height: 100%;
   background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
 }
 

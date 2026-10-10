@@ -623,7 +623,19 @@ let header (ms : Model.t Signal.signal) =
     ~style_class:"cp__header"
     ~main:`space_between ~cross:`center
     [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
-        [ left_menu_button; search_button ]
+        [ reactive
+            ~equal:(fun (a : Model.t) (b : Model.t) ->
+              a.left_sidebar_open = b.left_sidebar_open)
+            (fun (m : Model.t) ->
+              (* while the sidebar is docked-open its own top row hosts
+                 these buttons; the header mounts them only as the
+                 reopen path for the closed/overlay states *)
+              if m.Model.left_sidebar_open then
+                spacer ~key:"lb-off" ~style_class:"hidden" []
+              else
+                row ~key:"head-l-btns" ~cross:`center
+                  [ left_menu_button; search_button ])
+            ms ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r overflow-x-hidden"
         [ row ~key:"head-crumb" ~grow:1.
@@ -694,7 +706,9 @@ let header (ms : Model.t Signal.signal) =
     ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
-   carries .open/.closed; only renders contents while open *)
+   carries .open/.closed; only renders contents while open. The pane
+   stays mounted — the docked split's track owns its width (0 while
+   closed), which is what lets the close animation play. *)
 let right_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
@@ -705,9 +719,11 @@ let right_sidebar (ms : Model.t Signal.signal) =
        [ Right_sidebar_view.render ms ])
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
-   holds .left-sidebar-inner (contents) + .shade-mask + .left-sidebar-
-   resizer. #left-sidebar{display:none} on desktop keeps the overlay
-   out of the click path when closed. *)
+   holds .left-sidebar-inner (contents) + .shade-mask. The element is
+   the docked split's first pane >=640px and a fixed overlay below;
+   the split kind's divider replaced the hand-rolled resizer. The
+   sidebar's own top row hosts the toggle + search buttons while
+   docked-open (the header only mounts its copies when closed). *)
 let left_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
@@ -717,7 +733,11 @@ let left_sidebar (ms : Model.t Signal.signal) =
        ~style_class:"cp__sidebar-left-layout"
        [ column ~key:"ls-inner" ~grow:1. ~min_height:0
            ~style_class:"left-sidebar-inner as-container"
-           [ box ~key:"ls-wrap" ~style_class:"wrap"
+           [ row ~key:"ls-top" ~cross:`center ~gap:4
+               ~padding_horizontal:8 ~padding_vertical:4
+               ~style_class:"left-sidebar-top"
+               [ left_menu_button; search_button ]
+           ; box ~key:"ls-wrap" ~style_class:"wrap"
                [ box ~key:"ls-head" ~style_class:"sidebar-header-container"
                    [ Left_sidebar_view.header ms ]
                ; Left_sidebar_view.contents ms
@@ -726,8 +746,58 @@ let left_sidebar (ms : Model.t Signal.signal) =
        ; Ui_parts.pressable
            ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
            (box ~key:"shade" ~style_class:"shade-mask" [])
-       ; box ~key:"resizer" ~style_class:"left-sidebar-resizer" []
        ])
+
+(* docked left split: first pane is the full-height sidebar, second is
+   #left-container (header + page scroll). The fraction is a fraction
+   of THIS split's width, persists via ~on_resize, and animates through
+   ~resize_duration when the open flag or the docked gate flips it.
+   Below 640px the pane is a fixed overlay — the track must collapse
+   there or it would hold empty space. *)
+let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
+    (content : t) : t =
+  Ui_parts.class_signal
+    (Signal.map2
+       (fun (m : Model.t) vw -> (m, vw))
+       ms (Signal.value st.Sidebar_state.viewport_w))
+    (fun (m, vw) ->
+      if Sidebar_state.left_docked m.Model.left_sidebar_open vw then
+        "cp__left-split"
+      else "cp__left-split is-collapsed")
+    (split ~key:"left-split" ~grow:1. ~gap:6
+       ~value:
+         (reactive
+            (fun (m : Model.t) f vw ->
+              if Sidebar_state.left_docked m.Model.left_sidebar_open vw
+              then f
+              else Sidebar_state.closed_fraction)
+            ms
+            (Signal.value st.Sidebar_state.left_fraction)
+            (Signal.value st.Sidebar_state.viewport_w))
+       ~resize_duration:300 ~resize_easing:`standard
+       ~on_resize:(Sidebar_state.on_left_split_resize st)
+       (if Ui_services.env_publishing () then Logseq_el.nothing
+        else left_sidebar ms)
+       content)
+
+(* docked right split: the right dock is the SECOND pane, so the split
+   value is 1 - <persisted fraction>; a closed dock pins the value at
+   1.0 and the animation swings it open/closed. *)
+let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
+    (first : t) (second : t) : t =
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "cp__right-split"
+      ^ if m.right_sidebar_open then "" else " is-collapsed")
+    (split ~key:"right-split" ~grow:1. ~gap:6
+       ~value:
+         (reactive
+            (fun (m : Model.t) f ->
+              if m.Model.right_sidebar_open then 1. -. f else 1.)
+            ms (Signal.value st.Sidebar_state.right_fraction))
+       ~resize_duration:300 ~resize_easing:`standard
+       ~on_resize:(Sidebar_state.on_right_split_resize st)
+       first second)
 
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
@@ -735,29 +805,27 @@ let main_content (ms : Model.t Signal.signal) =
       "cp__sidebar-main-layout"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
-       ~grow:1. 
-       [ (if Ui_services.env_publishing () then Logseq_el.nothing else left_sidebar ms)
-       ; (* data-is-margin-less-pages was always emitted "false" and its
-            CSS only matches 'true' — dead attr, dropped *)
-         scroll ~key:"main-content"
-           ~accessibility_identifier:"main-content-container"
-           ~orientation:`vertical ~grow:1.
-           ~style_class:"scrollbar-spacing relative"
-           ~data_attrs_signal:
-             (Signal.map
-                (fun (m : Model.t) ->
-                  (* cljs container.cljs: data-is-margin-less-pages is
-                     the :graph route — the only margin-less page *)
-                  [ ( "data-is-margin-less-pages"
-                    , match m.route with
-                      | Model.Graph_view -> "true"
-                      | _ -> "false" )
-                  ])
-                ms)
-           [ (* cljs container.cljs: #main-content-container centers
-                the max-width column via flex justify-center — for the
-                grid-backed scroll kind the column's margin-inline:auto
-                rule in lui-core.css does the centering *)
+       ~grow:1.
+       [ scroll ~key:"main-content"
+              ~accessibility_identifier:"main-content-container"
+              ~orientation:`vertical ~grow:1.
+              ~style_class:"scrollbar-spacing relative"
+              ~data_attrs_signal:
+                (Signal.map
+                   (fun (m : Model.t) ->
+                     (* cljs container.cljs: data-is-margin-less-pages is
+                        the :graph route — the only margin-less page *)
+                     [ ( "data-is-margin-less-pages"
+                       , match m.route with
+                         | Model.Graph_view -> "true"
+                         | _ -> "false" )
+                     ])
+                   ms)
+              [ (* cljs container.cljs: #main-content-container centers
+                   the max-width column via flex justify-center — for
+                   the grid-backed scroll kind the column's
+                   margin-inline:auto rule in lui-core.css does the
+                   centering *)
              column ~key:"main-inner" ~grow:1.
                   ~style_class:"cp__sidebar-main-content"
                   ~data_attrs_signal:
@@ -969,6 +1037,7 @@ let not_found_page : t =
    flags are re-read on each publish so the live DOM toggles in
    Settings_state (wide-mode) and Pdf_state (hl-colored) stay in sync. *)
 let shell (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       let wide_mode =
@@ -985,16 +1054,19 @@ let shell (ms : Model.t Signal.signal) : t =
        ~style_class:"theme-container-inner"
        [ skip_to_main
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
-        [ Ui_parts.class_signal ms
-            (fun (m : Model.t) ->
-              (* cljs container.cljs: overflow-hidden while RIGHT
-                 sidebar is open *)
-              if m.right_sidebar_open then "overflow-hidden" else "w-full")
-            (column ~key:"left-container"
-               ~accessibility_identifier:"left-container" ~grow:1.
-               ~style_class:"w-full"
-               [ header ms; main_content ms ])
-        ; right_sidebar ms
+        [ right_split ms st
+            (left_split ms st
+               (Ui_parts.class_signal ms
+                  (fun (m : Model.t) ->
+                    (* cljs container.cljs: overflow-hidden while RIGHT
+                       sidebar is open *)
+                    if m.right_sidebar_open then "overflow-hidden"
+                    else "w-full")
+                  (column ~key:"left-container"
+                     ~accessibility_identifier:"left-container" ~grow:1.
+                     ~style_class:"w-full"
+                     [ header ms; main_content ms ])))
+            (right_sidebar ms)
         ; box ~key:"asc" ~accessibility_identifier:"app-single-container"
             []
         ]

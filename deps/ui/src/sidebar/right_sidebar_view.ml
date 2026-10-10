@@ -552,11 +552,9 @@ let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let st = Sidebar_state.ensure ms in
   (Logseq_el.fragment
-     [ (* aria-value*/orientation attrs on the resizer were inert DOM
-          markup — the separator kind carries the role *)
-       separator ~key:"rs-resizer" ~orientation:`vertical
-         ~style_class:"resizer" []
-     ; if_
+     [ (* the hand-rolled .resizer separator is gone — the docked
+          split's divider owns the drag affordance *)
+       if_
          ~test:
            (Logseq_el.own ctx
               (Signal.map

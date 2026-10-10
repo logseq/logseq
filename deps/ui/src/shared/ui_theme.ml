@@ -147,7 +147,6 @@ let common_ls =
   ; "border-radius-medium", "8px"
   ; "headbar-height", "3rem"
   ; "headbar-inner-top-padding", "0px"
-  ; "left-sidebar-width", "246px"
   ; "left-sidebar-sm-width", "74vw"
   ; "left-sidebar-nav-btn-size", "38px"
   ; "native-kb-height", "0px"

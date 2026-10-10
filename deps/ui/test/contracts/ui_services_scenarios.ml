@@ -22,7 +22,7 @@ let run () =
   let session_tbl : (string, string) Hashtbl.t = Hashtbl.create 4 in
   let publishing_ref = ref true and online_ref = ref true in
   let uuid_seq = ref 0 and opened_urls : string list ref = ref [] in
-  let prevented = ref 0 and sidebar_w = ref 0 in
+  let prevented = ref 0 in
   let uuids = ref [ "u1"; "u2" ] in
   let emitted : (string * string) list ref = ref [] in
   let set_hash s =
@@ -309,7 +309,6 @@ let run () =
          ; confirm = (fun _ -> false)
          ; scroll_row_into_view = (fun ~scroller:_ ~row:_ -> ())
          ; ensure_fixups = (fun () -> ())
-         ; apply_left_sidebar_width = (fun px -> sidebar_w := px)
          ; selected_block_uuids = (fun () -> !uuids)
          })
     ; timers =
@@ -478,8 +477,6 @@ let run () =
   check "dom metrics"
     (Ui_services.dom_viewport_width () = 1024.
      && Ui_services.dom_query "body" = None);
-  Ui_services.dom_apply_left_sidebar_width 260;
-  check "sidebar width applied" (!sidebar_w = 260);
   check "selected uuids"
     (Ui_services.dom_selected_block_uuids () = [ "u1"; "u2" ]);
   print_endline "PASS services: installation, storage, theme, navigation, document, ops"

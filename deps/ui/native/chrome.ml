@@ -119,7 +119,18 @@ let topbar (ms : Model.t Signal.signal) : t list =
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
           ~style_class:"cp__header-l"
-          [ left_menu_btn; search_btn ]
+          [ reactive
+              ~equal:(fun (a : Model.t) (b : Model.t) ->
+                a.left_sidebar_open = b.left_sidebar_open)
+              (fun (m : Model.t) ->
+                (* while the sidebar is docked-open its own top row
+                   hosts these buttons; the header mounts them only as
+                   the reopen path for the closed state *)
+                if m.Model.left_sidebar_open then spacer ~key:"lb-off" []
+                else
+                  row ~key:"head-l-btns" ~cross:`center
+                    [ left_menu_btn; search_btn ])
+              ms ]
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~gap:8 ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_btn ms; dots_btn; right_toggle_btn ms ] ]
@@ -179,92 +190,104 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
     [ rtc_indicator ms; Left_sidebar_view.plugins_toolbar ms ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
-   carries .open/.closed; only renders contents while open *)
+   carries .open/.closed; only renders contents while open. The pane
+   stays mounted — the docked split's track owns its width (0 while
+   closed). *)
 let right_sidebar (ms : Model.t Signal.signal) =
-  reactive
-    ~equal:(fun (a : Model.t) (b : Model.t) ->
-      a.right_sidebar_open = b.right_sidebar_open)
+  Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      (* web sizes .cp__right-sidebar.open from a persisted resizer
-         width; on gpui that imperative path is a stub, so mirror the
-         left dock: keep mounted, collapse to zero width while closed *)
-      box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-        ~min_height:0
-        ~style_class:
-          ("cp__right-sidebar h-screen "
-           ^ if m.right_sidebar_open then "open" else "closed")
-        [ row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-            ~width:(if m.right_sidebar_open then 320 else 0)
-            ~background:"muted"
-            ~style_class:"overflow-hidden shrink-0"
-            [ Right_sidebar_view.render ms ]
-        ])
-    ms
+      "cp__right-sidebar h-screen "
+      ^ if m.right_sidebar_open then "open" else "closed")
+    (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+       ~min_height:0
+       ~style_class:"cp__right-sidebar h-screen closed"
+       [ row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+           ~background:"muted"
+           ~style_class:"overflow-hidden shrink-0"
+           [ Right_sidebar_view.render ms ]
+       ])
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
-   is an overlay layer (display:none until .is-open, absolute shade-mask +
-   resizer positioned by CSS). Native has no stylesheet, so the sidebar is a
-   plain docked column: always mounted (web only CSS-hides it), fixed 260px
-   width while open and collapsed to zero width while closed (the web
-   default; resizer drag is a separate affordance), surface background via
-   the `secondary` token, and a thin resizer strip at the edge. The shade
-   is an overlay-mode affordance and doesn't exist in a docked layout. *)
+   is an overlay layer; on gpui it is the docked split's first pane —
+   the subtree stays mounted while closed (the split track owns the
+   width), surface background via the `muted` token. The shade-mask is
+   an overlay-mode affordance and doesn't exist in a docked layout. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  reactive
-    ~equal:(fun (a : Model.t) (b : Model.t) ->
-      a.left_sidebar_open = b.left_sidebar_open
-      && a.left_sidebar_width = b.left_sidebar_width)
+  Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      (* the subtree stays mounted while closed (web only CSS-hides it):
-         contents signal subscriptions and drive checks see the same
-         nodes open or closed — collapse to zero width instead of
-         unmounting *)
-      box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-        ~min_height:0
-        ~style_class:
-          ("cp__sidebar-left-layout self-stretch"
-           ^ if m.left_sidebar_open then " is-open" else "")
-        [ row ~key:"ls-dock" ~grow:1. ~min_height:0
-            ~style_class:"items-stretch"
-            [ column ~key:"ls-inner" ~min_height:0
-                ~width:(if m.left_sidebar_open then m.left_sidebar_width else 0)
-                (* web: --left-sidebar-bg-color = --lx-gray-02 (the
-                   near-white mauve-02 tone, one step above the page);
-                   gpui `muted` is the matching surface tone. *)
-                ~background:"muted"
-                ~style_class:
-                  "left-sidebar-inner as-container overflow-hidden shrink-0"
-                [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
-                    [ box ~key:"ls-head"
-                        ~style_class:"sidebar-header-container"
-                        [ Left_sidebar_view.header ms ]
-                    ; Left_sidebar_view.contents ms
-                    ]
-                ]
-            ; (if not m.left_sidebar_open then spacer ~key:"resizer-none" []
-               else
-                 box ~key:"resizer" ~width:4
-                   ~style_class:"left-sidebar-resizer" [])
-            ]
-        ])
-    ms
+      "cp__sidebar-left-layout self-stretch"
+      ^ if m.left_sidebar_open then " is-open" else "")
+    (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+       ~min_height:0
+       ~style_class:"cp__sidebar-left-layout self-stretch"
+       [ row ~key:"ls-dock" ~grow:1. ~min_height:0
+           ~style_class:"items-stretch"
+           [ column ~key:"ls-inner" ~grow:1. ~min_height:0
+               (* web: --left-sidebar-bg-color = --lx-gray-02 (the
+                  near-white mauve-02 tone, one step above the page);
+                  gpui `muted` is the matching surface tone. *)
+               ~background:"muted"
+               ~style_class:
+                 "left-sidebar-inner as-container overflow-hidden shrink-0"
+               [ row ~key:"ls-top" ~cross:`center ~gap:4
+                   ~padding_horizontal:8 ~padding_vertical:4
+                   ~style_class:"left-sidebar-top"
+                   [ left_menu_btn; search_btn ]
+               ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
+                   [ box ~key:"ls-head"
+                       ~style_class:"sidebar-header-container"
+                       [ Left_sidebar_view.header ms ]
+                   ; Left_sidebar_view.contents ms
+                   ]
+               ]
+           ]
+       ])
 
-let main_content (ms : Model.t Signal.signal) =
+(* docked splits — gpui renders Split natively (h_resizable) and fires
+   ValueChanged on drag; the persisted fraction drives ProgressValue
+   back. ~resize_duration/~resize_easing are ignored on this backend
+   (the gpui kit has no split animation today). *)
+let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
+    (content : t) : t =
+  split ~key:"left-split" ~grow:1. ~gap:6
+    ~value:
+      (reactive
+         (fun (m : Model.t) f ->
+           if m.Model.left_sidebar_open then f
+           else Sidebar_state.closed_fraction)
+         ms (Signal.value st.Sidebar_state.left_fraction))
+    ~resize_duration:300 ~resize_easing:`standard
+    ~on_resize:(Sidebar_state.on_left_split_resize st)
+    (left_sidebar ms) content
+
+let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
+    (first : t) (second : t) : t =
+  split ~key:"right-split" ~grow:1. ~gap:6
+    ~value:
+      (reactive
+         (fun (m : Model.t) f ->
+           if m.Model.right_sidebar_open then 1. -. f else 1.)
+         ms (Signal.value st.Sidebar_state.right_fraction))
+    ~resize_duration:300 ~resize_easing:`standard
+    ~on_resize:(Sidebar_state.on_right_split_resize st)
+    first second
+
+let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       "cp__sidebar-main-layout flex-1 min-h-0 flex"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1. ~min_height:0
-    [ left_sidebar ms
-    ; (* #main-content-container is queried by graphs/recycle.ml —
-         the id rides ~accessibility_identifier; the data-is-* attrs
-         are imperative contracts (graphs_view, container.cljs hooks)
-         carried by data_attrs_signal. On web this element is the page's
-         vertical scroller (.scrollbar-spacing = overflow-y:auto) —
-         emit the real scroll kind so pages taller than the window
-         actually scroll. *)
-      scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
+    [ left_split ms st
+        ((* #main-content-container is queried by graphs/recycle.ml —
+            the id rides ~accessibility_identifier; the data-is-* attrs
+            are imperative contracts (graphs_view, container.cljs hooks)
+            carried by data_attrs_signal. On web this element is the page's
+            vertical scroller (.scrollbar-spacing = overflow-y:auto) —
+            emit the real scroll kind so pages taller than the window
+            actually scroll. *)
+         scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
         ~accessibility_identifier:"main-content-container"
         ~style_class:"scrollbar-spacing"
         ~data_attrs_signal:
@@ -317,6 +340,7 @@ let main_content (ms : Model.t Signal.signal) =
             )
         ]
         ]
+        )
     ])
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
@@ -484,6 +508,7 @@ let not_found_page : t =
     ]
 
 let shell (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       (* h-full: the root view stretches children horizontally but sizes
@@ -497,15 +522,17 @@ let shell (ms : Model.t Signal.signal) : t =
     [ (* invisible logseq-dom carrier: gives the gpui host a stable
          extension ancestor to forward document events through *)
       Logseq_el.carrier
-    ; (* horizontal shell: left-container grows, right-sidebar docks
-         at the trailing edge (web: #app-container is display:flex row) *)
+    ; (* horizontal shell: the docked split owns the right dock's track;
+         left-container grows inside the first pane (web: #app-container
+         is display:flex row) *)
       row ~key:"app" ~accessibility_identifier:"app-container"
         ~style_class:"h-full min-h-0"
-        [ column ~key:"left-container"
-            ~accessibility_identifier:"left-container"
-            ~style_class:"flex-1 min-w-0 h-full overflow-hidden"
-            (topbar ms @ [ hidden_chrome ms; main_content ms ])
-        ; right_sidebar ms
+        [ right_split ms st
+            (column ~key:"left-container"
+               ~accessibility_identifier:"left-container"
+               ~style_class:"flex-1 min-w-0 h-full overflow-hidden"
+               (topbar ms @ [ hidden_chrome ms; main_content ms st ]))
+            (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
     ; overlays ms

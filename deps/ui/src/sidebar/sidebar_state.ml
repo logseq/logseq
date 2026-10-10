@@ -46,6 +46,11 @@ type t =
   ; items : item list Signal.state
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
+  ; (* docked-split fractions + the viewport width the left docked
+       gate reads — see the docked-split fractions section *)
+    left_fraction : float Signal.state
+  ; right_fraction : float Signal.state
+  ; viewport_w : float Signal.state
   }
 
 let st_ref : t option ref = ref None
@@ -74,9 +79,6 @@ let jbool (name : string) (ev : Ui_services.ev) =
 let closest (target : Ui_services.el) sel = target.Ui_services.closest sel
 
 let prevent_default (ev : Ui_services.ev) = ev.Ui_services.prevent_default ()
-
-let ev_client_x (ev : Ui_services.ev) = ev.Ui_services.x
-let ev_client_y (ev : Ui_services.ev) = ev.Ui_services.y
 
 (* open state for the left-sidebar link-item menu: (page ref, is-recent,
    anchor cx, anchor top, anchor bottom). open_menu carries "lp-<ref>"
@@ -109,108 +111,68 @@ let click_target sel (ev : Ui_services.ev) =
 
 let detail_string name (ev : Ui_services.ev) = ev.Ui_services.detail name
 
-(* #right-sidebar is chrome.ml's wrapper and carries no width; the
-   resizer writes the persisted width inline, so we mirror that for
-   .cp__right-sidebar.open to have a visible box. *)
-let sync_right_sidebar_width () =
-  match Ui_services.dom_query "#right-sidebar" with
-  | Some el ->
-      let width =
-        match Ui_services.storage_get "ls-right-sidebar-width" with
-        | Some w -> w
-        | None -> "40%"
-      in
-      el.Ui_services.set_style "width"
-        (if (model ()).Model.right_sidebar_open then width else "0px")
-  | None -> ()
+(* ---------- docked-split fractions ----------
+   The LUI `split` kind owns drag + animation on every platform; the
+   cljs interact.js resizers and their px bookkeeping are gone. Both
+   docks persist a fraction (0..1) — :ls-left-sidebar-width used to
+   hold a px string and :ls-right-sidebar-width a percent; unparseable
+   legacy values fall back to the defaults (unreleased branch — no
+   converter). *)
 
-(* ---------- resizers ----------
-   cljs left_sidebar.cljs/sidebar-resizer + right_sidebar.cljs/sidebar-
-   resizer: interact.js drag clamps the left panel to [240,460]px
-   (persisted :ls-left-sidebar-width, restored into
-   --ls-left-sidebar-width on mount) and the right panel to
-   [max(0.1,320/vw),0.7] of the viewport (persisted
-   "ls-right-sidebar-width"). Raw mousedown/move/up tracking here (no
-   interact.js in LUI). *)
-
-let doc_root () = Ui_services.dom_root ()
-
-let set_style_prop (el : Ui_services.el) name v = el.Ui_services.set_style name v
-let set_el_width (el : Ui_services.el) v = el.Ui_services.set_style "width" v
 let class_add (el : Ui_services.el) c = el.Ui_services.add_class c
 let class_rm (el : Ui_services.el) c = el.Ui_services.remove_class c
 
-let left_resizing : Ui_services.el option ref = ref None
-let right_resizing = ref false
-
 let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 
-(* parse a stored CSS px value ("440px" / "440.5px") *)
-let px_int_of_string s =
-  let n = String.length s in
-  let v =
-    if n > 2 && String.sub s (n - 2) 2 = "px" then
-      String.sub s 0 (n - 2)
-    else s
-  in
-  match Float.of_string_opt v with
-  | Some f -> Some (int_of_float (Float.round f))
-  | None -> None
+(* ~240px / ~460px against a 1440px viewport, expressed as ratios *)
+let left_fraction_min = 0.167
+let left_fraction_max = 0.32
+let left_fraction_default = 0.25
+let right_fraction_min = 0.167
+let right_fraction_max = 0.32
+let right_fraction_default = 0.25
 
-(* cljs restores the persisted left width on mount; the host op applies
-   it through whichever channel the runtime binds (CSS var on web, the
-   model-bound dock width on native) *)
-let sync_left_sidebar_width () =
-  match Ui_services.storage_get "ls-left-sidebar-width" with
-  | Some w -> (
-      match px_int_of_string w with
-      | Some px -> Ui_services.dom_apply_left_sidebar_width px
-      | None -> ())
-  | None -> ()
+let fraction_of_storage ~key ~default =
+  match Ui_services.storage_get key with
+  | Some s -> (
+      let s = Ui_services.storage_unquote s |> String.trim in
+      match Float.of_string_opt s with
+      | Some f when f > 0. && f < 1. -> f
+      | _ -> default)
+  | None -> default
 
-let set_right_width width =
-  Ui_services.storage_set "ls-right-sidebar-width" width;
-  (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
-     the inline write keeps the panel at the dragged size without
-     waiting for the next model publish *)
-  match Ui_services.dom_query "#right-sidebar" with
-  | Some el -> set_el_width el width
-  | None -> ()
+let store_fraction key f =
+  Ui_services.storage_set key (Printf.sprintf "%.4g" f)
 
-let on_resizer_mousedown ev =
-  match click_target ".left-sidebar-resizer" ev with
-  | Some el -> (
-      prevent_default ev;
-      left_resizing := Some el;
-      class_add (doc_root ()) "is-resizing-buf";
-      class_add el "is-active";
-      match closest el "#left-sidebar" with
-      | Some sb -> class_add sb "is-resizing"
-      | None -> ())
-  | None -> (
-      match click_target "#right-sidebar > .resizer" ev with
-      | Some _ ->
-          prevent_default ev;
-          right_resizing := true;
-          class_add (doc_root ()) "is-resizing-buf"
-      | None -> ())
+(* split drags report the new first-pane fraction; clamp to the dock
+   bounds, publish, persist *)
+let on_left_split_resize st ev =
+  match ev with
+  | Lui_protocol.ValueChanged (_, v) ->
+      let f = clampf left_fraction_min left_fraction_max v in
+      Runtime.signal_set st.left_fraction f;
+      store_fraction "ls-left-sidebar-width" f
+  | _ -> ()
 
-let on_resizer_mousemove ev =
-  (match !left_resizing with
-   | Some _ ->
-       let w = clampf 240. 460. (ev_client_x ev) in
-       let px = int_of_float (Float.round w) in
-       Ui_services.dom_apply_left_sidebar_width px;
-       Ui_services.storage_set "ls-left-sidebar-width"
-         (Printf.sprintf "%dpx" px)
-   | None -> ()
-  );
-  if !right_resizing then begin
-    let vw = Ui_services.dom_viewport_width () in
-    let lo = max 0.1 (320. /. vw) in
-    let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
-    set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
-  end
+(* the right dock is the split's SECOND pane — its fraction is 1 - v *)
+let on_right_split_resize st ev =
+  match ev with
+  | Lui_protocol.ValueChanged (_, v) ->
+      let f = clampf right_fraction_min right_fraction_max (1. -. v) in
+      Runtime.signal_set st.right_fraction f;
+      store_fraction "ls-right-sidebar-width" f
+  | _ -> ()
+
+(* below 640px the left pane leaves grid flow (position:fixed overlay),
+   so the docked split fraction must collapse or the empty track would
+   still hold space *)
+let left_docked (open_ : bool) (vw : float) = open_ && vw >= 640.
+
+(* fully-collapsed first pane. The web split backend treats a
+   non-positive ProgressValue as "unset" and falls back to 0.5, so a
+   closed dock reads as a hairline fraction rather than literal 0 —
+   invisible, and it gives the open animation a non-degenerate start. *)
+let closed_fraction = 0.0001
 
 (* ---------- edge-swipe + small-viewport behavior (cljs
    left_sidebar.cljs) ----------
@@ -320,22 +282,6 @@ let on_doc_touchend _ev =
       Runtime.send Action.Toggle_left_sidebar
   end;
   clear_touch_drag ()
-
-let on_resizer_mouseup _ev =
-  (match !left_resizing with
-   | Some el -> (
-       left_resizing := None;
-       class_rm (doc_root ()) "is-resizing-buf";
-       class_rm el "is-active";
-       match closest el "#left-sidebar" with
-       | Some sb -> class_rm sb "is-resizing"
-       | None -> ())
-   | None -> ()
-  );
-  if !right_resizing then begin
-    right_resizing := false;
-    class_rm (doc_root ()) "is-resizing-buf"
-  end
 
 (* ---------- storage ---------- *)
 
@@ -1050,8 +996,7 @@ let on_model st (m : Model.t) =
                push_recent repo id;
                load_recents repo st)
          | _ -> ())
-   | _ -> ());
-  sync_right_sidebar_width ()
+   | _ -> ())
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
@@ -1214,6 +1159,15 @@ let init (ms : Model.t Signal.signal) : t =
         ; items = Signal.state owner []
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []
+        ; left_fraction =
+            Signal.state owner
+              (fraction_of_storage ~key:"ls-left-sidebar-width"
+                 ~default:left_fraction_default)
+        ; right_fraction =
+            Signal.state owner
+              (fraction_of_storage ~key:"ls-right-sidebar-width"
+                 ~default:right_fraction_default)
+        ; viewport_w = Signal.state owner (Ui_services.dom_viewport_width ())
         }
       in
       st_ref := Some st;
@@ -1231,13 +1185,12 @@ let init (ms : Model.t Signal.signal) : t =
       Ui_services.dom_on_document_event "click" (on_doc_click st);
       Ui_services.dom_on_document_event "contextmenu" (on_doc_contextmenu st);
       Ui_services.dom_on_document_event "keydown" (on_doc_keydown st);
-      Ui_services.dom_on_document_event "mousedown" on_resizer_mousedown;
-      Ui_services.dom_on_document_event "mousemove" on_resizer_mousemove;
-      Ui_services.dom_on_document_event "mouseup" on_resizer_mouseup;
       Ui_services.dom_on_document_event "touchstart" on_doc_touchstart;
       Ui_services.dom_on_document_event "touchmove" on_doc_touchmove;
       Ui_services.dom_on_document_event "touchend" on_doc_touchend;
-      sync_left_sidebar_width ();
+      Ui_services.dom_on_window_event "resize" (fun _ ->
+          Runtime.signal_set st.viewport_w
+            (Ui_services.dom_viewport_width ()));
       st
 
 let ensure ms = init ms
