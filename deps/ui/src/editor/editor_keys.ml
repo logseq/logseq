@@ -1148,7 +1148,11 @@ let pending_event ev : Edit_input.event option =
     when String.length key = 1
          && (not (ev.Ui_services.composing))
          && not (mods ev || ev.Ui_services.alt) ->
-      Some (Edit_input.Insert key)
+      (* `key` is a DOM-style name — on native hosts it's the physical
+         (unshifted) key, while key_char carries the real glyph; without
+         it a Shift-typed char lands lowercase during the remount gap *)
+      Some (Edit_input.Insert
+              (Option.value ev.Ui_services.key_char ~default:key))
   | _ -> Some (Edit_input.Key (kev, ev.Ui_services.repeat))
 
 (* a structure op (split/merge/…) remounts the editing sink only after

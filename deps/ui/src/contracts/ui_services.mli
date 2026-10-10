@@ -220,6 +220,10 @@ type ev = {
   alt : bool;
   composing : bool;
   key : string option;
+  key_char : string option;
+  (* The literal character this keystroke inserts, when it's a single
+     char — DOM `key` on web (already shift-applied), the host's
+     keyChar on native (where `key` stays the physical key name). *)
   buttons : int;
   button : int;
   repeat : bool;
