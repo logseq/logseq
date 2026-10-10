@@ -271,8 +271,12 @@ and on_type_chosen d name ty =
 
 (* ---------- phase views ---------- *)
 
-(* fetch-backed list: resolves once, then mounts Sel.view *)
-let async_select ~placeholder ?new_option ?on_search fetch : t =
+(* fetch-backed list: resolves once, then mounts Sel.view. [compact]
+   switches to the anchored popover spec (32px input + 32px rows) —
+   master's mod+p picker is that compact dropdown, not the roomier
+   centered-card variant *)
+let async_select ~placeholder ?(compact = false) ?new_option ?on_search
+    fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let items_st : Sel.item list option Signal.state =
@@ -287,12 +291,13 @@ let async_select ~placeholder ?new_option ?on_search fetch : t =
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ?new_option ?on_search items)
+            Sel.view ~placeholder ~compact ?new_option ?on_search items)
      (Signal.value items_st))
     context parent
 
 let prop_select_view d : t =
   async_select ~placeholder:(I18n.t "property/add-or-change")
+    ~compact:(d.d_anchor <> None)
     ~new_option:(fun name ->
       (* no client-side name validation: invalid names go through
          type-select and the worker rejects the upsert with a
@@ -333,6 +338,7 @@ let type_select_view d name : t =
 
 let node_tags_view d prop : t =
   async_select ~placeholder:(I18n.t "property/choose-tags")
+    ~compact:(d.d_anchor <> None)
     (let* w = D.all_classes () in
      let items =
        Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
@@ -481,11 +487,13 @@ let value_edit_view d prop : t =
         V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
           ~on_pick:(fun id -> pick_value d prop id)
       in
-      (async_select ~placeholder ?new_option:on_new
+      (async_select ~placeholder ~compact:(d.d_anchor <> None)
+         ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
     else
-      (async_select ~placeholder ?new_option:on_new
+      (async_select ~placeholder ~compact:(d.d_anchor <> None)
+         ?new_option:on_new
          (let* w =
             D.property_values ~property_ident:(ident_of prop)
               ~block:(D.uuid_ref d.d_target.uuid)
@@ -531,7 +539,7 @@ let view : t =
                     (Ui_services.dom_viewport_height () -. y -. 8.)
                   ~data_attrs:[ ("role", "dialog") ]
                   ~on_dismiss:(fun _ -> close ())
-                  [ box ~key:"prop-body"
+                  [ box ~key:"prop-body" ~width:232
                       ~style_class:"ls-property-dialog"
                       [ dialog_content d ]
                   ]
@@ -623,4 +631,24 @@ let open_for_block_with_property ~uuids uuid ~ident =
   |> ignore
 
 let open_for_current () =
-  match current_target () with Some t -> open_dialog t | None -> ()
+  match current_target () with
+  | Some t ->
+      (* cljs anchors the picker at the block's content left-bottom
+         (cal_pos recipe: block x+24, bottom+4) — not at the caret *)
+      let anchor =
+        match Editor_state.editing_uuid () with
+        | Some u -> (
+            match
+              Ui_services.dom_query
+                (".ls-block[data-blockid='" ^ u ^ "']")
+            with
+            | Some blk ->
+                let rx, ry, _rw, rh = blk.Ui_services.rect () in
+                Some (rx +. 24., ry +. rh +. 4.)
+            | None -> None)
+        | None -> None
+      in
+      (match anchor with
+       | Some _ -> open_dialog ?anchor t
+       | None -> open_dialog t)
+  | None -> ()

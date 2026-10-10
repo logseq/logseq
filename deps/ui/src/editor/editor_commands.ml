@@ -844,16 +844,39 @@ let cal_body ps (p : popup) : t =
           | _ -> Logseq_el.nothing)
         ps ]
 
-let link_form_body : t =
-  column ~key:"link" ~style_class:"ls-editor-link-form" ~gap:4
-    ~padding:8 ~background:"var(--lx-popover-bg,#fff)"
+(* cljs link form: popover-content (w-72 + p-1.5) wrapping a
+   p-2/gap-2 column — one column at 15px inset (7+8) reproduces the
+   same content box: 288 wide, 258-wide inputs, Submit button below *)
+let submit_link p =
+  let url, label =
+    match Ui_services.dom_query_all ".ls-editor-link-form input" with
+    | [ u; l ] ->
+        ( String.trim (u.Ui_services.value ())
+        , String.trim (l.Ui_services.value ()) )
+    | _ -> ("", "")
+  in
+  let label = if label = "" then url else label in
+  let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
+  let nv, caret =
+    insert_at_trigger p
+      (bang ^ "[" ^ label ^ "](" ^ url ^ ")")
+  in
+  Ops.schedule_save p.uuid nv;
+  close_popup p ~focus_caret:caret
+
+let link_form_body p : t =
+  column ~key:"link" ~style_class:"ls-editor-link-form" ~gap:8
+    ~padding:15 ~width:288
     [ input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
         []
-    ; input ~key:"label" ~placeholder:(I18n.t "ui/label") [] ]
+    ; input ~key:"label" ~placeholder:(I18n.t "ui/label") []
+    ; button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
+        ~height:28 ~min_height:28 ~text:I18n.submit
+        ~on_press:(fun _ -> submit_link p) [] ]
 
 let popup_body ps (p : popup) : t =
   match p.kind with
-  | Link_form _ -> link_form_body
+  | Link_form _ -> link_form_body p
   | Cal_insert | Cal_prop _ -> cal_body ps p
 
 let popup_popover context ps : t =
@@ -1131,23 +1154,6 @@ let open_link_form image uuid from =
   active := Some p;
   Runtime.editor_popup_open := true;
   publish ()
-
-let submit_link p =
-  let url, label =
-    match Ui_services.dom_query_all ".ls-editor-link-form input" with
-    | [ u; l ] ->
-        ( String.trim (u.Ui_services.value ())
-        , String.trim (l.Ui_services.value ()) )
-    | _ -> ("", "")
-  in
-  let label = if label = "" then url else label in
-  let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
-  let nv, caret =
-    insert_at_trigger p
-      (bang ^ "[" ^ label ^ "](" ^ url ^ ")")
-  in
-  Ops.schedule_save p.uuid nv;
-  close_popup p ~focus_caret:caret
 
 (* ---------- popup key router (runs before editor_keys) ---------- *)
 

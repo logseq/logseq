@@ -150,7 +150,7 @@ and node () : t =
                            more are icon-only cells; copy and the
                            property actions keep their text labels;
                            thin dividers separate every cell *)
-                         let sbtn ~key ~label ?icon ?text ~on_press =
+                         let sbtn ~key ~label ?icon ?text ~on_press () =
                            button ~key ~variant:`ghost ~size:`sm ~label
                              ?icon ?text ~on_press []
                          in
