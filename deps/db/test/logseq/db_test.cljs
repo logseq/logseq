@@ -153,6 +153,83 @@
            (ldb/page-exists? @conn "movie" #{:logseq.class/Property}))
         "Class pages correctly not found for given class")))
 
+(deftest page-exists-by-parent
+  (let [conn (db-test/create-conn)
+        library (ldb/get-library-page @conn)
+        top-baz-uuid (random-uuid)
+        foo-uuid (random-uuid)
+        nested-baz-uuid (random-uuid)
+        _ (d/transact! conn
+                       [{:block/uuid top-baz-uuid
+                         :block/title "Baz"
+                         :block/name "baz"
+                         :block/tags :logseq.class/Page}
+                        {:block/uuid foo-uuid
+                         :block/title "Foo"
+                         :block/name "foo"
+                         :block/tags :logseq.class/Page
+                         :block/parent (:db/id library)
+                         :block/order "a0"}
+                        {:block/uuid nested-baz-uuid
+                         :block/title "Baz"
+                         :block/name "baz"
+                         :block/tags :logseq.class/Page
+                         :block/parent [:block/uuid foo-uuid]
+                         :block/order "a0"}])
+        top-baz (d/entity @conn [:block/uuid top-baz-uuid])
+        foo (d/entity @conn [:block/uuid foo-uuid])
+        nested-baz (d/entity @conn [:block/uuid nested-baz-uuid])]
+    (is (= #{} (ldb/uniqueness-parent-ids top-baz))
+        "Standalone page is top-level")
+    (is (= #{} (ldb/uniqueness-parent-ids foo))
+        "Library child is top-level")
+    (is (= #{(:db/id foo)} (ldb/uniqueness-parent-ids nested-baz))
+        "Namespaced child uses its page parent")
+    (is (= #{(:db/id top-baz)}
+           (set (ldb/page-exists-by-parent? @conn "Baz" #{:logseq.class/Page} #{})))
+        "Top-level lookup matches the standalone page, not Foo/Baz")
+    (is (= #{(:db/id nested-baz)}
+           (set (ldb/page-exists-by-parent? @conn "Baz" #{:logseq.class/Page} (:db/id foo))))
+        "Parent lookup matches only the child under Foo")
+    (is (nil? (ldb/page-exists-by-parent? @conn "Baz" #{:logseq.class/Page} #{}
+                                          {:exclude-id (:db/id top-baz)}))
+        "Excluding the standalone page leaves no top-level Baz")))
+
+(deftest page-exists-by-parent-for-tags
+  (let [conn (db-test/create-conn)
+        bar-uuid (random-uuid)
+        foo-uuid (random-uuid)
+        nested-foo-uuid (random-uuid)
+        _ (d/transact! conn
+                       [{:block/uuid bar-uuid
+                         :block/title "Bar"
+                         :block/name "bar"
+                         :block/tags :logseq.class/Tag
+                         :logseq.property.class/extends :logseq.class/Root}
+                        {:block/uuid foo-uuid
+                         :block/title "Foo"
+                         :block/name "foo"
+                         :block/tags :logseq.class/Tag
+                         :logseq.property.class/extends :logseq.class/Root}
+                        {:block/uuid nested-foo-uuid
+                         :block/title "Foo"
+                         :block/name "foo"
+                         :block/tags :logseq.class/Tag
+                         :logseq.property.class/extends [:block/uuid bar-uuid]}])
+        bar (d/entity @conn [:block/uuid bar-uuid])
+        foo (d/entity @conn [:block/uuid foo-uuid])
+        nested-foo (d/entity @conn [:block/uuid nested-foo-uuid])]
+    (is (= #{} (ldb/uniqueness-parent-ids foo))
+        "Top-level tag is in the top-level group")
+    (is (= #{(:db/id bar)} (ldb/uniqueness-parent-ids nested-foo))
+        "Namespaced tag uses its user-tag parent")
+    (is (= #{(:db/id foo)}
+           (set (ldb/page-exists-by-parent? @conn "Foo" #{:logseq.class/Tag} #{})))
+        "Top-level lookup matches #Foo, not #Bar/Foo")
+    (is (= #{(:db/id nested-foo)}
+           (set (ldb/page-exists-by-parent? @conn "Foo" #{:logseq.class/Tag} (:db/id bar))))
+        "Parent lookup matches only the tag under Bar")))
+
 (deftest test-transact-with-multiple-tx-datoms
   (testing "last write wins with same tx"
     (let [conn (d/create-conn)]
