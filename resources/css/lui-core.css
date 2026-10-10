@@ -171,15 +171,6 @@ blockquote {
   margin: 1rem 0;
 }
 
-.external-link {
-  text-decoration: none;
-  border-bottom: 1px solid;
-  word-break: break-all;
-
-  &:hover {
-    cursor: alias;
-  }
-}
 
 /* cljs components/table.css — .classic-table + .markdown-table */
 .table-wrapper.classic-table {
@@ -532,6 +523,11 @@ blockquote {
    docked-open (the header mounts its copies only when closed). Same
    icon-btn geometry as .cp__header: 32px box, 20px glyph, opacity
    states */
+
+/* the kit paints --color-accent (blue bg + white fg) on ghost-hover /
+   [data-selected] / focus-visible — cljs chrome buttons stay neutral
+   in every state, so neutralize the kit states on these surfaces */
+.cp__header .as-ghost,
 .left-sidebar-top {
   .lui-button[data-size="icon"] {
     width: 2rem;
@@ -555,10 +551,6 @@ blockquote {
   }
 }
 
-/* the kit paints --color-accent (blue bg + white fg) on ghost-hover /
-   [data-selected] / focus-visible — cljs chrome buttons stay neutral
-   in every state, so neutralize the kit states on these surfaces */
-.cp__header .as-ghost,
 .left-sidebar-top .as-ghost {
   &:hover, &:focus-visible, &[data-selected] {
     color: inherit;
@@ -650,9 +642,6 @@ blockquote {
       width: 100% !important;
       transition: none;
 
-      .left-sidebar-inner {
-        transition: none !important;
-      }
 
       > .shade-mask {
         transition: none !important;
@@ -823,6 +812,28 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   background: var(--lx-accent-09, var(--ls-active-primary-color));
 }
 
+
+.sidebar-header-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.sidebar-contents-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem 0;
+  position: relative;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  &.is-scrolled {
+    border-top: 1px solid var(--ls-tertiary-border-color);
+  }
 .cp__graphs-selector {
   /* LUI renders .lui-row.item, not a.item */
   > .item {
@@ -899,26 +910,115 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-.sidebar-header-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0 0.75rem;
-  margin-bottom: 0.25rem;
 }
 
-.sidebar-contents-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.25rem 0.75rem 0;
-  position: relative;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
 
-  &.is-scrolled {
-    border-top: 1px solid var(--ls-tertiary-border-color);
+
+.left-sidebar-inner .item.active {
+  border-radius: 6px;
+  background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
+}
+
+/* cljs container.css: #left-sidebar a { opacity-80 hover:opacity-100
+   text-foreground } — LUI nav rows are .item divs, include them */
+#left-sidebar {
+  a,
+  .item {
+    opacity: 0.8;
+    color: hsl(var(--foreground));
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  .cp__graphs-selector > .item {
+    opacity: 0.9;
+  }
+}
+
+.rotating-arrow svg,
+.rotating-arrow .lui-icon {
+  transition: transform 100ms ease-in;
+}
+
+.rotating-arrow.not-collapsed svg,
+.rotating-arrow.not-collapsed .lui-icon {
+  transform: rotate(90deg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .left-sidebar-inner {
+    .item:hover {
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
+    }
+
+    .sidebar-navigations .item:hover .keyboard-shortcut {
+      visibility: visible;
+      opacity: 1;
+      transition: opacity 1s;
+      transition-delay: 2s;
+    }
+
+    .sidebar-content-group-inner > .hd:not(.non-collapsable):hover {
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
+
+      * {
+        opacity: 1 !important;
+      }
+
+      .more {
+        opacity: 0.8;
+      }
+    }
+
+    .sidebar-content-group-inner
+      > .hd.enter-show-more:hover
+      > .b {
+      opacity: 0.8;
+    }
+
+    .sidebar-content-group-inner > .bd a.link-item:hover {
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
+      opacity: 1;
+
+      .sidebar-page-actions {
+        display: inline-flex;
+      }
+    }
+  }
+}
+
+/* ========================= Right sidebar ================================= */
+
+.cp__right-sidebar {
+  z-index: var(--ls-z-index-level-1);
+  position: relative;
+  user-select: none;
+  container-type: inline-size;
+  /* the docked split's track owns the width; clip the inner column
+     while the track animates to/from 0 */
+  overflow: hidden;
+  min-width: 0;
+
+  &.open {
+    max-width: 60vw;
+  }
+
+  /* cljs container.css: @apply mt-0 mx-3 my-5 */
+  .page {
+    margin: 0 0.75rem 1.25rem;
+  }
+.sidebar-navigations {
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+
+  /* LUI renders .lui-row.item, not a */
+  .item .keyboard-shortcut {
+    opacity: 0;
+    visibility: hidden;
+    margin-left: 0.25rem;
+    margin-right: 0.5rem;
   }
 }
 
@@ -1108,114 +1208,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-.sidebar-navigations {
-  gap: 0.125rem;
-  margin-top: 0.25rem;
-
-  /* LUI renders .lui-row.item, not a */
-  .item .keyboard-shortcut {
-    opacity: 0;
-    visibility: hidden;
-    margin-left: 0.25rem;
-    margin-right: 0.5rem;
-  }
-}
-
-.left-sidebar-inner .item.active {
-  border-radius: 6px;
-  background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-}
-
-/* cljs container.css: #left-sidebar a { opacity-80 hover:opacity-100
-   text-foreground } — LUI nav rows are .item divs, include them */
-#left-sidebar {
-  a,
-  .item {
-    opacity: 0.8;
-    color: hsl(var(--foreground));
-
-    &:hover {
-      opacity: 1;
-    }
-  }
-
-  .cp__graphs-selector > .item {
-    opacity: 0.9;
-  }
-}
-
-.rotating-arrow svg,
-.rotating-arrow .lui-icon {
-  transition: transform 100ms ease-in;
-}
-
-.rotating-arrow.not-collapsed svg,
-.rotating-arrow.not-collapsed .lui-icon {
-  transform: rotate(90deg);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .left-sidebar-inner {
-    .item:hover {
-      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-    }
-
-    .sidebar-navigations .item:hover .keyboard-shortcut {
-      visibility: visible;
-      opacity: 1;
-      transition: opacity 1s;
-      transition-delay: 2s;
-    }
-
-    .sidebar-content-group-inner > .hd:not(.non-collapsable):hover {
-      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-
-      * {
-        opacity: 1 !important;
-      }
-
-      .more {
-        opacity: 0.8;
-      }
-    }
-
-    .sidebar-content-group-inner
-      > .hd.enter-show-more:hover
-      > .b {
-      opacity: 0.8;
-    }
-
-    .sidebar-content-group-inner > .bd a.link-item:hover {
-      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-      opacity: 1;
-
-      .sidebar-page-actions {
-        display: inline-flex;
-      }
-    }
-  }
-}
-
-/* ========================= Right sidebar ================================= */
-
-.cp__right-sidebar {
-  z-index: var(--ls-z-index-level-1);
-  position: relative;
-  user-select: none;
-  container-type: inline-size;
-  /* the docked split's track owns the width; clip the inner column
-     while the track animates to/from 0 */
-  overflow: hidden;
-  min-width: 0;
-
-  &.open {
-    max-width: 60vw;
-  }
-
-  /* cljs container.css: @apply mt-0 mx-3 my-5 */
-  .page {
-    margin: 0 0.75rem 1.25rem;
-  }
 
   /* cljs wraps the page in .mt-2 and renders no empty grid rows; the LUI
      page emits empty placeholder divs that take .page-inner gap space */
@@ -1224,10 +1216,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 
   /* cljs keeps the mb-16 trailing space inside .page */
-  .page-inner {
-    margin-bottom: 0;
-    padding-bottom: 4rem;
-  }
 
   .sidebar-item-list {
     margin-left: 0.25rem;
@@ -1241,14 +1229,8 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 
   /* cljs right_sidebar.css: @apply pt-2 only (no mb) */
-  .sidebar-panel-content {
-    padding-top: 0.5rem;
-  }
 
   /* cljs page.cljs renders .ls-page-blocks with margin-left: -20 on desktop */
-  .ls-page-blocks {
-    margin-left: -20px;
-  }
 
   .sidebar-drop-indicator {
     position: relative;
@@ -1271,57 +1253,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     }
   }
 
-  .sidebar-item {
-    position: relative;
-    flex: 1;
-    min-height: 100px;
-
-    /* cljs header row is auto-height at ~32px (h-8 children); the
-       default button height pushed ours to 40px */
-    .sidebar-item-header {
-      height: 32px;
-      min-height: 32px;
-      box-sizing: border-box;
-      align-items: center;
-    }
-
-    .sidebar-item-header .button {
-      height: 32px;
-    }
-
-    &.item-type-block .sidebar-item-header {
-      background: linear-gradient(
-        0deg,
-        var(--ls-secondary-background-color),
-        var(--ls-tertiary-background-color)
-      );
-    }
-
-    &.collapsed {
-      flex: 0;
-      min-height: 0;
-
-      &.item-type-block .sidebar-item-header {
-        background: var(--ls-tertiary-background-color);
-      }
-    }
-
-    .sidebar-item-header .breadcrumb {
-      margin: 0;
-      text-align: left;
-    }
-
-    .item-actions {
-      height: 100%;
-
-      .button {
-        padding: 0;
-        margin-left: 0.5rem;
-        display: flex;
-        align-items: center;
-      }
-    }
-  }
 }
 
 .cp__right-sidebar-inner {
@@ -1348,31 +1279,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   background-color: var(--ls-secondary-background-color);
 }
 
-.cp__right-sidebar-topbar {
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 0 0.25rem;
-  height: 3rem;
-  background-color: var(
-    --ls-right-sidebar-topbar-color,
-    var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8))
-  );
-  z-index: 999;
-
-  button {
-    opacity: 1;
-  }
-  user-select: none;
-  -webkit-app-region: drag;
-
-  a,
-  svg,
-  button {
-    -webkit-app-region: no-drag;
-  }
-}
 
 /* cljs container.css dark block — right-sidebar card + shade-mask */
 html[data-theme='dark'] {
@@ -1439,17 +1345,6 @@ html[data-theme='dark'] {
 #journals {
   overflow-anchor: none;
 
-  .journal-item {
-    border-bottom: 1px solid var(--lx-gray-04, var(--ls-border-color));
-    min-height: 250px;
-    padding-bottom: 102px;
-    overflow-anchor: none;
-
-    &:first-child {
-      padding-top: 0;
-      min-height: 500px;
-    }
-  }
 
   .journal-last-item {
     border-style: none;
@@ -1513,32 +1408,6 @@ h1.title {
   line-height: inherit;
 }
 
-.ls-page-title {
-  border-radius: calc(var(--radius) - 4px);
-
-  .edit-input {
-    width: 100%;
-    border: 0;
-    padding: 0 0.25rem 0 0;
-    background: transparent;
-    outline: 0;
-    box-shadow: none;
-
-    &-wrapper.editing {
-      border-radius: 4px;
-      background-color: var(--ls-secondary-background-color);
-    }
-  }
-
-  .page-icon {
-    line-height: 1;
-
-    .ui__button {
-      height: auto;
-      padding-bottom: 1.5px;
-    }
-  }
-}
 
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
@@ -1594,10 +1463,6 @@ a.page-title {
 }
 
 .ls-properties-area {
-  .properties-panel {
-    border-radius: 0.375rem;
-    overflow: hidden;
-  }
 
   .properties-panel-header {
     padding: 0.5rem 0.75rem;
@@ -1627,38 +1492,6 @@ a.page-title {
     color: var(--ls-primary-text-color);
   }
 
-  .property-key-inner {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.25rem;
-    position: relative;
-    width: 100%;
-    min-width: 0;
-    min-height: 28px;
-
-    .property-icon {
-      display: flex;
-      align-items: center;
-      margin-right: 4px;
-
-      svg,
-      img {
-        width: 15px;
-        height: 15px;
-      }
-    }
-
-    /* cljs .property-m icon button is chromeless: 15px svg, no
-       button padding */
-    .lui-button.property-m {
-      min-width: 0;
-      width: auto;
-      min-height: 0;
-      height: auto;
-      padding: 0;
-    }
-  }
 
   .property-key-panel .property-k {
     display: block;
@@ -1738,6 +1571,32 @@ a.page-title {
   }
 
   .property-pair.property-panel-row[data-property-type='url']
+.cp__right-sidebar-topbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0 0.25rem;
+  height: 3rem;
+  background-color: var(
+    --ls-right-sidebar-topbar-color,
+    var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8))
+  );
+  z-index: 999;
+
+  button {
+    opacity: 1;
+  }
+  user-select: none;
+  -webkit-app-region: drag;
+
+  a,
+  svg,
+  button {
+    -webkit-app-region: no-drag;
+  }
+}
+
     .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
   .property-pair.property-panel-row[data-property-type='url']
     .asset-image-fallback {
@@ -1768,20 +1627,6 @@ a.page-title {
     }
   }
 
-  .property-pair {
-    .property-k {
-      display: inline-block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      line-height: 26px;
-    }
-
-    .property-value {
-      padding-left: 0.25rem;
-      min-height: 28px;
-    }
-  }
 
   .property-pair.property-panel-row .property-k {
     line-height: 20px;
@@ -1816,20 +1661,6 @@ a.page-title {
     min-width: 0;
   }
 
-  .property-panel-bullet {
-    display: inline-flex;
-    align-items: center;
-    opacity: 0.6;
-    margin-left: 7px;
-    margin-right: -7px;
-    min-height: 24px;
-
-    .bullet-container {
-      position: relative;
-      left: 0;
-      top: 0;
-    }
-  }
 
   /* cljs renders the key (.property-k anchor) and scalar values as
      plain inline text affordances — the ghost-button chrome must not
@@ -1883,6 +1714,33 @@ a.page-title {
 
 .ls-block .ls-properties-area.ls-block-properties {
   margin-left: 7px;
+.ls-page-title {
+  border-radius: calc(var(--radius) - 4px);
+
+  .edit-input {
+    width: 100%;
+    border: 0;
+    padding: 0 0.25rem 0 0;
+    background: transparent;
+    outline: 0;
+    box-shadow: none;
+
+    &-wrapper.editing {
+      border-radius: 4px;
+      background-color: var(--ls-secondary-background-color);
+    }
+  }
+
+  .page-icon {
+    line-height: 1;
+
+    .ui__button {
+      height: auto;
+      padding-bottom: 1.5px;
+    }
+  }
+}
+
 }
 
 /* cljs block.css .positioned-properties.block-below: inline pills
@@ -1897,13 +1755,6 @@ a.page-title {
   min-width: 0;
 }
 
-.bottom-properties-row {
-  padding: 0.25rem 0;
-  width: 100%;
-  min-width: 0;
-  max-height: 2rem;
-  overflow-y: hidden;
-}
 
 .bottom-properties-pills-strip {
   flex: 1 1 0;
@@ -1966,27 +1817,10 @@ a.page-title {
   font-size: 0.875rem;
 }
 
-.bottom-property-content {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-  position: relative;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  overflow: hidden;
-}
 
 /* cljs bottom-property-edit-icon: always visible inside pills; the
    same pencil inside a panel row is hover-only like
    .property-panel-edit-btn */
-.prop-edit-ico {
-  width: 18px;
-  height: 18px;
-  min-width: 0;
-  padding: 0;
-  opacity: 0;
-}
 
 .property-pair.property-panel-row:hover .prop-edit-ico,
 .bottom-property-pill .prop-edit-ico,
@@ -2061,26 +1895,7 @@ a.page-title {
 
 /* ============================ Outliner =================================== */
 
-.blocks-list-wrap {
-  position: relative;
-}
 
-.ls-block {
-  flex: 1;
-  position: relative;
-  padding: 0.125rem 0;
-  margin: 0 auto;
-  width: 100%;
-  transform: translateX(0);
-  transition: transform 0.3s ease;
-  will-change: transform;
-  container-type: inline-size;
-  container-name: ls-block;
-
-  &.selected {
-    border-radius: 4px;
-  }
-}
 
 .ls-page-title.title .block-main-container {
   gap: calc(var(--spacing) * 2);
@@ -2146,55 +1961,10 @@ a.page-title {
   );
 }
 
-.block-row {
-  min-width: 0;
-}
 
-.block-content-wrapper {
-  user-select: text;
-  overflow-x: visible;
-}
 
-.block-content-or-editor-wrap {
-  display: flex;
-  flex: 1;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 0.25rem;
 
-  &[data-node-type='quote'] {
-    text-indent: 0;
-    padding: 8px 16px;
-    border-left: 4px solid var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));
-    background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04));
-    color: var(--ls-page-blockquote-color);
-    margin: 0.5rem 0;
-  }
-}
 
-.block-content-or-editor-inner {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  width: 100%;
-  padding-right: 0.25rem;
-}
-
-.block-content {
-  min-height: 24px;
-  max-width: 100%;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  cursor: text;
-
-  img.left {
-    float: left;
-  }
-
-  img.right {
-    float: right;
-  }
-}
 
 .block-title-wrap {
   width: 100%;
@@ -2220,18 +1990,6 @@ a.page-title {
   }
 }
 
-.block-head-wrap {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  width: 100%;
-
-  > .inline.w-full {
-    display: block;
-  }
-}
 
 .block-title-wrap.as-heading {
   display: flex;
@@ -2244,9 +2002,6 @@ a.page-title {
   }
 }
 
-.ls-block-content-indent {
-  padding-left: 45px;
-}
 
 /* Block body content elements */
 .block-body {
@@ -2298,12 +2053,6 @@ a.page-title {
 }
 
 /* Children + indent guides */
-.block-children-container {
-  position: relative;
-  margin-left: 29px;
-  padding-top: 0.125rem;
-  margin-bottom: -0.125rem;
-}
 
 .block-children-left-border {
   z-index: 1;
@@ -2329,10 +2078,6 @@ a.page-title {
   }
 }
 
-.block-children {
-  border-left: 1px solid
-    var(--lx-gray-04-alpha, var(--ls-guideline-color)) !important;
-}
 
 /* Bullet + controls */
 /* heading levels shrink the bullet/icon box — was an inline
@@ -2351,62 +2096,7 @@ a.page-title {
 .block-control-wrap[data-heading="6"],
 .block-main-container[data-heading="6"] { --ls-block-icon-size: 12px; }
 
-.block-control-wrap {
-  height: 24px;
-  position: relative;
 
-  &.is-order-list {
-    margin-right: 0;
-    padding-right: 0;
-
-    .bullet-link-wrap {
-      position: relative;
-      left: -3px;
-    }
-  }
-
-  &.is-with-icon {
-    .bullet-container .icon-cp-container {
-      display: flex;
-    }
-
-    &[data-heading] {
-      height: var(--ls-block-icon-size, 24px);
-
-      .bullet-container {
-        width: var(--ls-block-icon-size, 1em);
-        height: var(--ls-block-icon-size, 1em);
-        min-width: var(--ls-block-icon-size, 1em);
-      }
-    }
-  }
-
-  &.bullet-hidden {
-    padding-right: 2px;
-  }
-}
-
-.block-control {
-  text-decoration: none;
-  font-size: 0.875rem;
-  /* cljs text-sm = font-size .875rem + line-height 1.42857 */
-  line-height: 1.42857;
-  cursor: default;
-  margin-top: 1px;
-  min-width: 22px;
-  min-height: 22px;
-  padding: 0.125rem;
-  user-select: none;
-  opacity: 0.4;
-
-  .control-hide {
-    display: none;
-  }
-
-  &:active {
-    opacity: 0.3;
-  }
-}
 
 /* cljs block-mouse-over/-leave: hovering the block row reveals the fold
    caret on collapsable blocks (collapsed ones always show it via
@@ -2473,26 +2163,6 @@ a.page-title {
   }
 }
 
-.bullet-link-wrap {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-  vertical-align: middle;
-  color: var(--ls-primary-text-color);
-
-  .ui__icon {
-    opacity: 0.8;
-  }
-
-  &:hover > .bullet-container:not(.typed-list) {
-    background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color));
-
-    .bullet {
-      transform: scale(1.2);
-      background-color: var(--lx-gray-08, var(--ls-block-bullet-color)) !important;
-    }
-  }
-}
 
 /* Headings in blocks */
 .ls-block h1,
@@ -2506,6 +2176,23 @@ a.page-title {
 .ls-block h2,
 .editor-inner .h2.uniline-block,
 .block-editor.uniline-block.h2 {
+.ls-block {
+  flex: 1;
+  position: relative;
+  padding: 0.125rem 0;
+  margin: 0 auto;
+  width: 100%;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  will-change: transform;
+  container-type: inline-size;
+  container-name: ls-block;
+
+  &.selected {
+    border-radius: 4px;
+  }
+}
+
   font-size: 1.5rem;
   min-height: 1.5em;
   line-height: 1.38em;
@@ -2592,19 +2279,28 @@ a.page-title {
 }
 
 /* Nesting tint for sidebar/inset blocks */
-.color-level {
-  background-color: var(--lx-gray-02, var(--color-level-1));
-
-  .dark & {
-    background-color: var(--lx-gray-01, var(--color-level-1));
-  }
-}
 
 .color-level .color-level {
   background-color: var(--color-level-2);
 
   .color-level {
     background-color: var(--color-level-3);
+.block-content {
+  min-height: 24px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  cursor: text;
+
+  img.left {
+    float: left;
+  }
+
+  img.right {
+    float: right;
+  }
+}
+
 
     .color-level {
       background-color: var(--color-level-4);
@@ -2628,6 +2324,19 @@ a.page-title {
   width: 100%;
   height: 100%;
   position: absolute;
+.block-head-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
+
+  > .inline.w-full {
+    display: block;
+  }
+}
+
   visibility: hidden;
   top: 0;
   left: 0;
@@ -2749,6 +2458,63 @@ a.page-title {
   font-weight: bolder;
 }
 
+.block-control {
+  text-decoration: none;
+  font-size: 0.875rem;
+  /* cljs text-sm = font-size .875rem + line-height 1.42857 */
+  line-height: 1.42857;
+  cursor: default;
+  margin-top: 1px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0.125rem;
+  user-select: none;
+  opacity: 0.4;
+
+  .control-hide {
+    display: none;
+  }
+
+  &:active {
+    opacity: 0.3;
+  }
+}
+
+.block-control-wrap {
+  height: 24px;
+  position: relative;
+
+  &.is-order-list {
+    margin-right: 0;
+    padding-right: 0;
+
+    .bullet-link-wrap {
+      position: relative;
+      left: -3px;
+    }
+  }
+
+  &.is-with-icon {
+    .bullet-container .icon-cp-container {
+      display: flex;
+    }
+
+    &[data-heading] {
+      height: var(--ls-block-icon-size, 24px);
+
+      .bullet-container {
+        width: var(--ls-block-icon-size, 1em);
+        height: var(--ls-block-icon-size, 1em);
+        min-width: var(--ls-block-icon-size, 1em);
+      }
+    }
+  }
+
+  &.bullet-hidden {
+    padding-right: 2px;
+  }
+}
+
 .ed-italic,
 .ed-i,
 .ed-em {
@@ -2802,6 +2568,27 @@ a.page-title {
 
 .ed-overlay {
   position: absolute;
+.bullet-link-wrap {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  vertical-align: middle;
+  color: var(--ls-primary-text-color);
+
+  .ui__icon {
+    opacity: 0.8;
+  }
+
+  &:hover > .bullet-container:not(.typed-list) {
+    background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color));
+
+    .bullet {
+      transform: scale(1.2);
+      background-color: var(--lx-gray-08, var(--ls-block-bullet-color)) !important;
+    }
+  }
+}
+
   inset: 0;
   pointer-events: none;
 }
@@ -2934,8 +2721,6 @@ a.page-title {
 /* ========================= Inline elements =============================== */
 
 .page-reference {
-  border-radius: 4px;
-  transition: background 0.15s;
 
   .bracket {
     opacity: 0.3;
@@ -2952,7 +2737,6 @@ a.page-title {
 }
 
 .page-ref {
-  color: var(--lx-accent-11, var(--ls-link-text-color));
 
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-hover-color));
@@ -3002,16 +2786,8 @@ a.page-title {
 }
 
 a.tag {
-  font-size: 0.875rem;
   /* cljs uses --text-sm--line-height (1.42857) so the pill scales when
      .block-title-wrap bumps font-size to medium (16px -> 22.86px) */
-  line-height: 1.42857;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  border-radius: 4px;
-  opacity: 0.7;
-  color: var(--lx-accent-11, var(--ls-tag-text-color));
 
   &:hover {
     opacity: 1;
@@ -3168,10 +2944,6 @@ button[role='checkbox'][data-state='unchecked'] {
 
 /* cljs: .ls-block-right is flex-row items-center self-stretch — the
    .block-tags column fills the block row's 24px height */
-.ls-block-right {
-  align-items: center;
-  align-self: stretch;
-}
 
 /* cljs block-title-aux: the class-Query settings button is a muted
    icon that stays opacity-0 until the head row is hovered (was
@@ -3196,19 +2968,9 @@ button[role='checkbox'][data-state='unchecked'] {
 }
 
 .youtube-timestamp {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25em;
-  width: fit-content;
-  white-space: nowrap;
-  line-height: 1;
-  color: var(--lx-accent-11, var(--ls-link-text-color));
 
   &-icon,
   &-label {
-    display: inline-flex;
-    align-items: center;
-    line-height: 1;
   }
 
   svg,
@@ -3271,30 +3033,6 @@ button[role='checkbox'][data-state='unchecked'] {
 
 /* ============================ Misc ======================================= */
 
-.cp__sidebar-help-btn {
-  position: fixed;
-  bottom: 1rem;
-  right: 2rem;
-  opacity: 0.7;
-  z-index: var(--ls-z-index-level-3);
-
-  &:hover {
-    opacity: 1;
-  }
-
-  > .inner {
-    border-radius: 50%;
-    height: 2rem;
-    width: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    user-select: none;
-    cursor: pointer;
-    background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
-  }
-}
 
 .block-add-button {
   cursor: text;
@@ -3442,4 +3180,29 @@ a.close {
   z-index: 3;
   pointer-events: none;
   display: none;
+}
+
+.cp__sidebar-help-btn {
+  position: fixed;
+  bottom: 1rem;
+  right: 2rem;
+  opacity: 0.7;
+  z-index: var(--ls-z-index-level-3);
+
+  &:hover {
+    opacity: 1;
+  }
+
+  > .inner {
+    border-radius: 50%;
+    height: 2rem;
+    width: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    user-select: none;
+    cursor: pointer;
+    background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
+  }
 }

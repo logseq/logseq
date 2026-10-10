@@ -18,6 +18,7 @@
 open Lui_elements
 
 module Wd = Web_dom
+module P = Lui_protocol
 
 
 let skip_to_main =
@@ -34,15 +35,22 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
    reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
    ~label lands as aria-label *and* the tooltip text *)
 let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
-  button ~key ~variant:`ghost ~size:`icon
-    ?accessibility_identifier:(if id = "" then None else Some id)
-    ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
+  (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
+     states — what the deleted .cp__header/.left-sidebar-top icon-btn
+     rules styled *)
+  Ui_components.with_props
+    [ P.Opacity, Ui_components.fv 0.7
+    ; P.HoverOpacity, Ui_components.fv 1. ]
+    (button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
+       ~padding:4 ~corner_radius:6 ~gap:4
+       ?accessibility_identifier:(if id = "" then None else Some id)
+       ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
     ~data_attrs:
       ((match tip with Some t -> [ ("data-tooltip", t) ] | None -> [])
        @ (match keys with
           | Some k -> [ ("data-tooltip-keys", k) ]
           | None -> []))
-    ~on_press:(fun _ -> on_click None) []
+       ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 let search_button =
@@ -468,11 +476,13 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
                  | None -> spacer ~key:"rtc-tx-v" []) ]
           ; row ~key:"rtc-ind" ~cross:`center ~gap:4
               ~style_class:"cp__rtc-sync-indicator"
-              [ button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
-                  ~style_class:cls ~label:"rtc sync"
-                  ~icon:(`app "cloud")
-                  ~on_press:(fun _ -> toggle_rtc_details ())
-                  []
+              [ Ui_components.with_props
+                  [ P.Position, Ui_components.sv "relative" ]
+                  (button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
+                     ~style_class:cls ~label:"rtc sync"
+                     ~icon:(`app "cloud")
+                     ~on_press:(fun _ -> toggle_rtc_details ())
+                     [])
               ]
           ]))
     (Logseq_el.own ctx
@@ -559,16 +569,23 @@ let index_progress (ms : Model.t Signal.signal) : t =
       then
         (* the progress kind emits the fill via --lui-progress-position;
            the __bar class keeps the chip's track sizing on web *)
-        row ~key:"sip" ~cross:`center ~style_class:"search-index-progress"
+        row ~key:"sip" ~cross:`center ~gap:8 ~corner_radius:4
+          ~padding_horizontal:8 ~padding_vertical:4
+          ~background:"var(--ls-tertiary-background-color)"
+          ~style_class:"search-index-progress"
+          ~data_attrs:
+            [ ("style", "opacity:0.9;-webkit-app-region:no-drag") ]
           [ box ~key:"sip-l" 
               [ box ~key:"sip-i" ~style_class:"icon" [ loader_svg ] ]
-          ; text ~key:"sip-t"
+          ; text ~key:"sip-t" ~white_space:"nowrap"
+              ~font_size:"0.75rem"
               ~style_class:"search-index-progress__text"
               ~value:
                 (I18n.tf "search/index-progress"
                    [ string_of_int ib.ib_progress ])
               []
-          ; progress ~key:"sip-b"
+          ; progress ~key:"sip-b" ~width:64 ~height:4 ~corner_radius:4
+              ~background:"var(--ls-quaternary-background-color)"
               ~style_class:"search-index-progress__bar"
               ~value:(Float.of_int ib.ib_progress /. 100.0)
               []
@@ -626,7 +643,16 @@ let header (ms : Model.t Signal.signal) =
   row ~key:"head" ~accessibility_identifier:"head"
     ~style_class:"cp__header"
     ~main:`space_between ~cross:`center
+    ~data_attrs:
+      [ ( "style"
+        , "flex-shrink:0;line-height:1;white-space:nowrap;\
+           padding-top:var(--ls-headbar-inner-top-padding);\
+           margin-top:var(--ls-win32-title-bar-height);\
+           height:calc(var(--ls-headbar-height) + \
+           var(--ls-headbar-inner-top-padding))" )
+      ]
     [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
+        ~data_attrs:[ ("style", "padding-left:8px;height:100%") ]
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
               (* always mounted: hiding via a CSS transition-delay lets
@@ -638,6 +664,7 @@ let header (ms : Model.t Signal.signal) =
                [ left_menu_button; search_button ]) ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r overflow-x-hidden"
+        ~data_attrs:[ ("style", "padding-right:6px") ]
         [ row ~key:"head-crumb" ~grow:1.
             [ reactive
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -714,9 +741,15 @@ let right_sidebar (ms : Model.t Signal.signal) =
     (fun (m : Model.t) ->
       "cp__right-sidebar h-screen "
       ^ if m.right_sidebar_open then "open" else "closed")
-    (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-       ~style_class:"cp__right-sidebar h-screen closed"
-       [ Right_sidebar_view.render ms ])
+    (Ui_components.with_props
+       [ P.ZIndex, Ui_components.sv "var(--ls-z-index-level-1)"
+       ; P.Position, Ui_components.sv "relative"
+       ; P.UserSelect, Ui_components.sv "none"
+       ; P.Overflow, Ui_components.sv "hidden" ]
+       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+          ~style_class:"cp__right-sidebar h-screen closed"
+          ~data_attrs:[ ("style", "container-type:inline-size;min-width:0") ]
+          [ Right_sidebar_view.render ms ]))
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
    holds .left-sidebar-inner (contents) + .shade-mask. The element is
@@ -755,13 +788,32 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
        ~style_class:"cp__sidebar-left-layout"
        [ left_inner_min_width st ms
            (column ~key:"ls-inner" ~grow:1. ~min_height:0
+              ~background:
+                "var(--left-sidebar-bg-color)"
               ~style_class:"left-sidebar-inner as-container"
+              ~data_attrs:
+                [ ( "style"
+                  , "position:relative;height:100%;overflow-y:auto;\
+                     overflow-x:hidden;width:100%;\
+                     border-right:1px solid \
+                     var(--lx-gray-03, \
+                     var(--ls-tertiary-background-color));z-index:3" )
+                ]
            [ row ~key:"ls-top" ~cross:`center ~gap:4
                ~padding_horizontal:8 ~padding_vertical:4
                ~style_class:"left-sidebar-top"
                [ left_menu_button; search_button ]
            ; box ~key:"ls-wrap" ~style_class:"wrap"
-               [ box ~key:"ls-head" ~style_class:"sidebar-header-container"
+               ~data_attrs:
+                 [ ( "style"
+                   , "display:flex;flex-direction:column;\
+                      position:relative;width:100%;margin-top:4px;\
+                      height:calc(100vh - \
+                      var(--ls-headbar-inner-top-padding) - 50px)" )
+                 ]
+               [ column ~key:"ls-head" ~gap:4 ~padding_horizontal:12
+                   ~style_class:"sidebar-header-container"
+                   ~data_attrs:[ ("style", "margin-bottom:4px") ]
                    [ Left_sidebar_view.header ms ]
                ; Left_sidebar_view.contents ms
                ]
@@ -850,6 +902,12 @@ let main_content (ms : Model.t Signal.signal) =
                    centering *)
              column ~key:"main-inner" ~grow:1.
                   ~style_class:"cp__sidebar-main-content"
+                  ~data_attrs:
+                    [ ( "style"
+                      , "width:100%;\
+                         max-width:var(--ls-main-content-max-width);\
+                         margin-inline:auto;container-type:inline-size" )
+                    ]
                   ~data_attrs_signal:
                     (Signal.map
                        (fun (m : Model.t) ->
@@ -967,11 +1025,17 @@ external open_url : string -> unit = "open" [@@mel.scope "window"]
 let help_item key title icon_name act =
   Ui_parts.pressable
     ~on_press:(fun _ -> act ())
-    (row ~key ~cross:`center ~style_class:"it"
-       [ box ~key:(key ^ "-i") ~style_class:"ls-hm-icon"
-           [ Icons.icon ~size:20. icon_name ]
-       ; text ~key:(key ^ "-t") ~style_class:"ls-hm-title" ~value:title []
-       ])
+    (Ui_components.with_props
+       [ P.UserSelect, Ui_components.sv "none"
+       ; P.Cursor, Ui_components.sv "pointer"
+       ; P.FontSize, Ui_components.sv "0.875rem"
+       ; P.HoverBackground, Ui_components.sv "hsl(var(--muted))" ]
+       (row ~key ~cross:`center ~gap:8 ~padding_vertical:4
+          ~padding_horizontal:16
+          [ row ~key:(key ^ "-i") ~cross:`center ~opacity:0.4
+              [ Icons.icon ~size:20. icon_name ]
+          ; text ~key:(key ^ "-t") ~value:title []
+          ]))
 
 let help_menu_popup : t =
   let close () =
@@ -987,7 +1051,13 @@ let help_menu_popup : t =
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
-        ; divider ~key:"hm-hr1" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr1"
+            ~data_attrs:
+              [ ( "style"
+                , "margin:8px 0;border:0;border-top:1px solid \
+                   var(--lui-c-border)" )
+              ]
+            []
         ; help_item "hm-bug" (I18n.help_bug) "bug" close
         ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
             (fun () ->
@@ -997,33 +1067,65 @@ let help_menu_popup : t =
         ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; divider ~key:"hm-hr2" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr2"
+            ~data_attrs:
+              [ ( "style"
+                , "margin:8px 0;border:0;border-top:1px solid \
+                   var(--lui-c-border)" )
+              ]
+            []
         ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
         ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
-        ; divider ~key:"hm-hr3" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr3"
+            ~data_attrs:
+              [ ( "style"
+                , "margin:8px 0;border:0;border-top:1px solid \
+                   var(--lui-c-border)" )
+              ]
+            []
         ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
-    ; column ~key:"hm-ft" ~style_class:"ft"
-        ([ text ~key:"hm-ver" ~style_class:"ls-hm-meta"
+    ; column ~key:"hm-ft" ~gap:4
+        ~data_attrs:[ ("style", "padding-left:44px;padding-bottom:12px") ]
+        ([ text ~key:"hm-ver" ~font_size:"0.75rem"
+             ~data_attrs:[ ("style", "opacity:0.3") ]
              ~value:(Printf.sprintf "Logseq %s" Version.app) [] ]
         @ (match Version.revision () with
            | "" -> []
            | rev ->
-               [ text ~key:"hm-rev" ~style_class:"ls-hm-meta"
+               [ text ~key:"hm-rev" ~font_size:"0.75rem"
+                   ~data_attrs:[ ("style", "opacity:0.3") ]
                    ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
-    [ box ~key:"help" ~style_class:"cp__sidebar-help-btn"
-        [ Ui_parts.pressable
-            ~on_press:(fun _ ->
-              Runtime.send Action.Help_toggle; Runtime.flush ())
-            (box ~key:"help-inner" ~style_class:"inner" [ help_svg ]) ]
+    [ Ui_components.with_props
+        [ P.Position, Ui_components.sv "fixed"
+        ; P.InsetBottom, Ui_components.fv 16.
+        ; P.InsetRight, Ui_components.fv 32.
+        ; P.ZIndex, Ui_components.iv 999
+        ; P.Opacity, Ui_components.fv 0.7
+        ; P.HoverOpacity, Ui_components.fv 1. ]
+        (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
+           [ Ui_parts.pressable
+               ~on_press:(fun _ ->
+                 Runtime.send Action.Help_toggle; Runtime.flush ())
+               (Ui_components.with_props
+                  [ P.UserSelect, Ui_components.sv "none"
+                  ; P.Cursor, Ui_components.sv "pointer" ]
+                  (Ui_components.with_props
+                     [ P.FontWeight, Ui_components.iv 700 ]
+                     (row ~key:"help-inner" ~main:`center ~cross:`center
+                        ~width:32 ~height:32 ~corner_radius:16
+                        ~background:
+                          "var(--lx-gray-02, \
+                           var(--ls-secondary-background-color))"
+                        [ help_svg ]))) ])
     ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
@@ -1036,11 +1138,13 @@ let help_area (ms : Model.t Signal.signal) : t =
    as a fixed overlay (remounting the whole app tree inside a reactive
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
-  (* .cp__not-found (stylesheet) carries the fixed-overlay positioning the
-     inline style used to; text-size/color utility classes stay — they
-     have no typed-prop equivalent *)
-  column ~key:"nf-full" ~main:`center ~cross:`center
-    ~style_class:"cp__not-found"
+  Ui_components.with_props
+    [ P.Position, Ui_components.sv "fixed"
+    ; P.Inset, Ui_components.fv 0.
+    ; P.ZIndex, Ui_components.iv 99999 ]
+    (column ~key:"nf-full" ~main:`center ~cross:`center
+       ~background:"var(--ls-primary-background-color)"
+       ~data_attrs:[ ("style", "min-height:100vh") ]
     [ heading ~key:"nf-h1" ~level:1
         ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~value:"404" []
     ; heading ~key:"nf-h2" ~level:2
@@ -1053,7 +1157,7 @@ let not_found_page : t =
         ~style_class:"ui__button as-outline" ~icon:(`app "home")
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")
         ~on_press:(fun _ -> Ui_services.nav_set_hash "#/") []
-    ]
+    ])
 
 (* cljs container.cljs: the wrapper's state classes all have CSS
    consumers — :not(.ls-left-sidebar-open) collapses .cp__header > .l's
@@ -1086,10 +1190,13 @@ let shell (ms : Model.t Signal.signal) : t =
                        sidebar is open *)
                     if m.right_sidebar_open then "overflow-hidden"
                     else "w-full")
-                  (column ~key:"left-container"
-                     ~accessibility_identifier:"left-container" ~grow:1.
-                     ~style_class:"w-full"
-                     [ header ms; main_content ms ])))
+                  (Ui_components.with_props
+                     [ P.HeightViewport, Ui_components.fv 1. ]
+                     (column ~key:"left-container"
+                        ~accessibility_identifier:"left-container"
+                        ~grow:1. ~style_class:"w-full"
+                        ~data_attrs:[ ("style", "position:relative") ]
+                        [ header ms; main_content ms ]))))
             (right_sidebar ms)
         ; box ~key:"asc" ~accessibility_identifier:"app-single-container"
             []

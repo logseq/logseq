@@ -109,6 +109,8 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   ; (* cljs level = render depth (config :level, 0 at page root), not the
        db block/level *)
     ("data-level", string_of_int depth)
+  ; ( "style"
+    , "position:relative;padding:0.125rem 0;width:100%" )
   ]
   (* cljs sets blockid to the linked entity's uuid and
      originalblockid to the linking block's — we keep blockid as the
@@ -260,12 +262,39 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      --ls-block-icon-size lives in the lui-core.css [data-heading]
      rules *)
 
-  box ~key:("ctrlw-" ^ uuid)
+  let icon_size =
+    match block_heading_lvl b with
+    | Some 1 -> 28 | Some 2 -> 24 | Some 3 -> 20
+    | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
+    | _ -> 0
+  in
+  box ~key:("ctrlw-" ^ uuid) ~height:24
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
-    ~data_attrs:heading_attrs
-    [ link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
-        ~url:"#" ~target:`self_
-        ~accessibility_identifier:("control-" ^ uuid)
+    ~data_attrs:
+      (heading_attrs
+      @ [ ( "style"
+          , "position:relative"
+            ^
+            match block_heading_lvl b with
+            | Some 1 -> ";top:1rem"
+            | Some 2 -> ";top:0.625rem"
+            | _ -> "" )
+        ])
+    [ Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+        ; Lui_protocol.LineHeight, Ui_components.sv "1.42857"
+        ; Lui_protocol.Cursor, Ui_components.sv "default"
+        ; Lui_protocol.UserSelect, Ui_components.sv "none"
+        ; Lui_protocol.Opacity, Ui_components.fv 0.4
+        ; Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+        (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
+           ~url:"#" ~target:`self_
+           ~accessibility_identifier:("control-" ^ uuid)
+           ~data_attrs:
+             [ ( "style"
+               , "margin-top:1px;min-width:22px;min-height:22px;\
+                  padding:0.125rem;text-decoration:none" )
+             ]
         [ Ui_parts.class_signal cs
             (fun c ->
               if caret_shown c then "" else "control-hide")
@@ -297,30 +326,37 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                              ~point_size:13 [])
                        cs ])
             ])
-        ]
+        ])
     ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
+        ~foreground:"var(--ls-primary-text-color)"
+        ~data_attrs:
+          [ ( "style"
+            , "display:inline-flex;align-items:center;line-height:1;\
+               vertical-align:middle"
+              ^
+              if order_list then ";position:relative;left:-3px"
+              else "" )
+          ]
         [ Ui_parts.class_signal cs
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~data_attrs:
                  ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ]
-                 @ (if Ui_services.env_native_block_controls () then
-                      (* the lui-core.css circle is backend styling;
-                         native backends get no stylesheet, so the
-                         container's intrinsic box + centering is
-                         emitted inline. On web the stylesheet's
-                         .bullet-container (var --ls-block-icon-size)
-                         sizes it — inline sizing overrode it and
-                         shifted every block row's text 2px left *)
-                      [ ( "style"
-                        , "display:inline-flex;align-items:center;justify-content:center;height:16px;border-radius:50%"
-                        ^ if order_list then
-                            ";width:1.4em;min-width:1.4em;white-space:nowrap;padding-left:3px"
-                          else ";width:16px;min-width:16px"
-                        )
-                      ]
-                    else []))
+                 @ [ ( "style"
+                     , "display:inline-flex;align-items:center;\
+                        justify-content:center;align-self:center;\
+                        flex-shrink:0;border-radius:50%;line-height:1;\
+                        vertical-align:middle"
+                       ^
+                       if order_list then
+                         ";width:1.4em;min-width:1.4em;white-space:nowrap;\
+                          padding-left:3px;height:1em"
+                       else if icon_size > 0 then
+                         Printf.sprintf ";width:%dpx;min-width:%dpx;\
+                          height:%dpx" icon_size icon_size icon_size
+                       else ";width:1em;min-width:1em;height:1em" )
+                   ])
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None ->
@@ -364,7 +400,10 @@ let content_el uuid (b : Model.block) : t =
   box ~key:("content-" ^ uuid) ~style_class:"block-content inline"
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
-      ([ ("data-blockid", uuid); ("data-containerid", uuid); ("style", "width:100%")
+      ([ ("data-blockid", uuid); ("data-containerid", uuid)
+       ; ( "style"
+         , "width:100%;white-space:pre-wrap;word-wrap:break-word;\
+            cursor:text;max-width:100%" )
        ; ( "data-type"
          , Option.value b.Model.block_ls_type ~default:"default" ) ]
        @
@@ -374,6 +413,12 @@ let content_el uuid (b : Model.block) : t =
     [ row ~key:("bci-" ^ uuid)
          ~main:`space_between
         [ box ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
+            ~data_attrs:
+              [ ( "style"
+                , "display:flex;align-items:center;flex:1;\
+                   flex-wrap:wrap;justify-content:space-between;\
+                   width:100%" )
+              ]
             (if b.Model.block_is_query && not (Ui_services.env_publishing ()) then [ Query_builder.block_el uuid b ]
              else
                match Render.title_outer_class b with
@@ -396,6 +441,7 @@ let content_wrapper uuid (b : Model.block) : t =
      the editor replaces it directly under .block-row *)
   row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
+    ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
     [ content_el uuid b
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
@@ -572,9 +618,10 @@ and row_main ~editable ~library scope (b : Model.block) : t =
   box ~key:("main-" ^ key)
       ~style_class:"block-main-container flex flex-row gap-1"
         ~data_attrs:
-          (match block_heading_lvl b with
-           | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
-           | None -> [])
+          ((match block_heading_lvl b with
+            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
+            | None -> [])
+          @ [ ("style", "min-height:24px") ])
         [ control_wrap ~scope ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
@@ -583,15 +630,39 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                     [ column ~key:("col3-" ^ key) ~grow:1.
                         [ box ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
+                            ~grow:1.
                             ~data_attrs:
-                              (match b.Model.block_display_type with
-                               | Some dt -> [ ("data-node-type", dt) ]
-                               | None -> [])
+                              ((match b.Model.block_display_type with
+                                | Some dt -> [ ("data-node-type", dt) ]
+                                | None -> [])
+                              @ [ ( "style"
+                                  , "display:flex;flex-direction:row;\
+                                     flex-wrap:wrap;gap:0.25rem"
+                                    ^
+                                    if b.Model.block_display_type
+                                       = Some "quote"
+                                    then
+                                      ";text-indent:0;padding:8px 16px;\
+                                       border-left:4px solid \
+                                       var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));\
+                                       background-color:\
+                                       var(--ls-page-blockquote-bg-color, var(--lx-gray-04));\
+                                       color:var(--ls-page-blockquote-color);\
+                                       margin:0.5rem 0"
+                                    else "" )
+                                ])
                             [ box ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
+                                ~grow:1.
+                                ~data_attrs:
+                                  [ ( "style"
+                                    , "display:flex;flex-direction:column;\
+                                       width:100%;padding-right:0.25rem" )
+                                  ]
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
+                                    ~min_width:0
                                     [ Properties_area.block_left_chips ~uuid
                                     ; (if Comments.is_comments_area b then
                                          Comments.area_view uuid b
@@ -601,6 +672,11 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
+                                        ~data_attrs:
+                                          [ ( "style"
+                                            , "flex-shrink:0;\
+                                               position:relative" )
+                                          ]
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; (* cljs .ls-block-right order:
                                              positioned-properties
@@ -817,7 +893,7 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
       [ (* lui-core.css margin-left:29px on .block-children-container is
            stylesheet geometry — native backends see it via the style
            data attr; the web DOM ignores data-style *)
-        ("data-style", "position:relative;margin-left:29px;padding-top:2px")
+        ("style", "position:relative;margin-left:29px;padding-top:0.125rem;margin-bottom:-0.125rem")
       ]
     [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
@@ -913,6 +989,11 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
+                                        ~data_attrs:
+                                          [ ( "style"
+                                            , "flex-shrink:0;\
+                                               position:relative" )
+                                          ]
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; (* cljs .ls-block-right order:
                                              positioned-properties
@@ -944,7 +1025,7 @@ and children_static_el ~depth ~library uuid (b : Model.block) : t =
   row ~key:("children-" ^ uuid)
     ~style_class:"block-children-container"
     ~data_attrs:
-      [ ("data-style", "position:relative;margin-left:29px;padding-top:2px") ]
+      [ ("style", "position:relative;margin-left:29px;padding-top:0.125rem;margin-bottom:-0.125rem") ]
     [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~data_attrs:

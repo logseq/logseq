@@ -12,6 +12,7 @@
 
 open Lui_elements
 module D = Logseq_el
+module P = Lui_protocol
 
 let t = Sidebar_state.t
 
@@ -21,7 +22,7 @@ let t = Sidebar_state.t
    carries over from the cljs span wrapper; `ti`/`ls-icon-*` font classes
    are dropped — the kind renders its own svg, font glyphs would
    double-render *)
-let icon_ ?key ?(cls = "") ?(size = 16) name =
+let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) name =
   icon ?key
     ~name:
       (match name with
@@ -29,6 +30,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
       | "chevron-down" -> `chevron_down
       | n -> `app n)
     ~point_size:size
+    ~data_attrs:attrs
     ~style_class:("ui__icon" ^ if cls = "" then "" else " " ^ cls)
     []
 
@@ -263,27 +265,52 @@ let repos_menu st =
       ~on_press:(fun _ ->
         close ();
         act ())
-      (row ~key ~cross:`center ~gap:6 ~padding_horizontal:12
-         ~padding_vertical:4 ~style_class:"ui__button repos-qa-btn"
-         ~data_attrs:[ ("role", "menuitem") ]
-         [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
+      (Ui_components.with_props
+         [ P.Cursor, Ui_components.sv "pointer"
+         ; P.FontSize, Ui_components.sv "0.875rem"
+         ; P.FontWeight, Ui_components.iv 500
+         ; P.HoverOpacity, Ui_components.fv 0.9
+         ; P.HoverBackground,
+           Ui_components.sv
+             "var(--lx-gray-03, \
+              var(--ls-tertiary-background-color, hsl(var(--muted))))" ]
+         (row ~key ~cross:`center ~gap:6 ~padding_horizontal:12
+            ~padding_vertical:4 ~min_height:32 ~opacity:0.7
+            ~corner_radius:4
+            ~data_attrs:[ ("role", "menuitem") ]
+            [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ]))
   in
   popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:0. ~role:`menu ~min_width:300
+    ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
+    ~padding_horizontal:8
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
     ~style_class:"ui__dropdown-menu-content repos-list"
     [ column ~key:"wrap"
-        ~style_class:(if n_repos <= 1 then "no-repos" else "")
         [ (if n_repos <= 1 then Logseq_el.nothing
            else
-             row ~key:"hd" ~main:`space_between ~cross:`center
-               ~style_class:"repos-hd"
-               [ text ~key:"h4" ~style_class:"repos-h4"
-                   ~value:I18n.switch_to [] ])
-        ; column ~key:"lst" ~style_class:"cp__repos-list-wrap"
-            (List.map repo_item switch_repos
-            @ List.map remote_item remote)
-        ; column ~key:"qa" ~style_class:"cp__repos-quick-actions"
+             Ui_components.with_props
+               [ P.FontSize, Ui_components.sv "0.875rem"
+               ; P.FontWeight, Ui_components.iv 500 ]
+               (row ~key:"hd" ~main:`space_between ~cross:`center
+                  ~padding:8 ~opacity:0.5
+                  [ text ~key:"h4" ~value:I18n.switch_to
+                      ~data_attrs:[ ("style", "padding-bottom:4px") ] [] ]))
+        ; (if n_repos <= 1 then Logseq_el.nothing
+           else
+             column ~key:"lst" ~max_height:320
+               ~data_attrs:
+                 [ ( "style"
+                   , "overflow-y:auto;margin:0 -8px;padding:0 8px 8px" )
+                 ]
+               (List.map repo_item switch_repos
+               @ List.map remote_item remote))
+        ; column ~key:"qa"
+            ~data_attrs:
+              [ ( "style"
+                , "margin:0 -8px;padding:12px 8px 6px 4px"
+                  ^ if n_repos <= 1 then ";margin-top:-6px"
+                    else ";border-top:1px solid hsl(var(--border))" )
+              ]
             [ action "qa-new" I18n.create_db_graph "database-plus"
                 (fun () -> Dialogs_state.open_ "new-graph")
             ; action "qa-imp" I18n.import_existing_notes "database-import"
@@ -342,11 +369,32 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
   let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
   box ~key ~style_class:(class_ ^ act)
     [ Ui_parts.pressable ~on_press:(fun _ -> on_click ())
-        (row ~cross:`center ~corner_radius:6
-           ~style_class:("item group" ^ act)
-           ([ icon_ icon_name
-            ; text  ~grow:1. ~value:title [] ]
-           @ tail @ [ more ])) ]
+        (Ui_components.with_props
+           [ P.UserSelect, Ui_components.sv "none"
+           ; P.Cursor, Ui_components.sv "pointer"
+           ; P.FontSize, Ui_components.sv "0.875rem"
+           ; P.FontWeight, Ui_components.iv 500
+           ; P.LineHeight, Ui_components.sv "1rem"
+           ; P.Opacity, Ui_components.fv 0.8
+           ; P.HoverOpacity, Ui_components.fv 1.
+           ; P.HoverBackground,
+             Ui_components.sv
+               "var(--lx-gray-04, \
+                var(--ls-quaternary-background-color))" ]
+           (row ~cross:`center ~corner_radius:6 ~height:32
+              ~style_class:("item group" ^ act)
+              ~data_attrs:
+                [ ( "style"
+                  , "padding-left:6px;padding-right:2px"
+                    ^ if active
+                      then
+                        ";background-color:var(--lx-gray-04, \
+                         var(--ls-quaternary-background-color))"
+                      else "" )
+                ]
+              ([ icon_ icon_name
+               ; text ~grow:1. ~value:title [] ]
+              @ tail @ [ more ]))) ]
 
 let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
@@ -433,21 +481,51 @@ let nav_group ms st =
   box ~key:"nav-group"
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
-        [ row ~key:"nav-hd" ~cross:`center
-            ~style_class:"hd non-collapsable enter-show-more"
-            [ box ~key:"nav-name" ~style_class:"a"
-                [ box ~style_class:"wrap-th" ~grow:1.
-                    [ text ~value:(t "sidebar.left/navigations") [] ] ]
-            ; box ~key:"nav-more" ~style_class:"b"
-                [ Ui_parts.pressable
-                    ~on_press:(fun _ ->
-                      Sidebar_state.toggle_menu st "nav-edit")
-                    (row ~style_class:"as-edit"
-                       [ icon_ ~size:14 "filter-edit" ]) ] ]
+        [ Ui_components.with_props
+            [ P.InsetTop, Ui_components.fv (-4.)
+            ; P.ZIndex, Ui_components.iv 2
+            ; P.UserSelect, Ui_components.sv "none"
+            ; P.Cursor, Ui_components.sv "default" ]
+            (row ~key:"nav-hd" ~cross:`center ~main:`space_between
+               ~data_attrs_signal:
+                 (Signal.constant ctx.Lui_ui.ui_scheduler
+                    [ ("style", "position:sticky;top:-4px") ])
+               ~height:32 ~corner_radius:6
+               ~background:"var(--left-sidebar-bg-color)"
+               ~style_class:"hd non-collapsable enter-show-more"
+               ~data_attrs:
+                 [ ("style", "padding-left:8px;padding-right:4px") ]
+               [ box ~key:"nav-name" ~style_class:"a"
+                   [ Ui_components.with_props
+                       [ P.FontSize, Ui_components.sv "0.875rem"
+                       ; P.LineHeight, Ui_components.sv "1.25rem"
+                       ; P.FontWeight, Ui_components.iv 500 ]
+                       (row ~cross:`center ~grow:1. ~opacity:0.5
+                          ~style_class:"wrap-th"
+                          [ text ~value:(t "sidebar.left/navigations") [] ]) ]
+               ; box ~key:"nav-more" ~style_class:"b"
+                   [ Ui_parts.pressable
+                       ~on_press:(fun _ ->
+                         Sidebar_state.toggle_menu st "nav-edit")
+                       (Ui_components.with_props
+                          [ P.Position, Ui_components.sv "relative"
+                          ; P.InsetTop, Ui_components.fv (-2.)
+                          ; P.InsetRight, Ui_components.fv (-2.)
+                          ; P.Opacity, Ui_components.fv 0.6
+                          ; P.HoverOpacity, Ui_components.fv 0.8 ]
+                          (row ~style_class:"as-edit"
+                             [ icon_ ~size:14
+                                 ~attrs:
+                                   [ ( "style"
+                                     , "margin-left:3px;margin-right:11px" )
+                                   ]
+                                 "filter-edit" ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
                 (fun (route, (checked, tag_titles)) ->
-                  column ~key:"navs" ~style_class:"sidebar-navigations"
+                  column ~key:"navs" ~gap:2
+                    ~style_class:"sidebar-navigations"
+                    ~data_attrs:[ ("style", "margin-top:4px") ]
                     (* cljs journals item navigates on click; its anchor
                        carries no href. go-to-journals! targets
                        #/all-journals when a default-home page owns #/ *)
@@ -530,12 +608,29 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                  | "" -> Option.value p.Model.page_uuid ~default:""
                  | title -> title)
       | _ -> ())
-    [ link ~url:"#" ~target:`self_ ~style_class:"link-item group"
-        ~data_attrs:
-          [ ("data-lp-ref", lp_ref)
-          ; ("data-lp-recent", if recent then "1" else "0") ]
-        [ box ~style_class:"page-icon" [ icon_ "file" ]
-        ; text ~style_class:"page-title" ~value:p.Model.page_title []
+    [ Ui_components.with_props
+        [ P.Position, Ui_components.sv "relative"
+        ; P.Opacity, Ui_components.fv 0.8
+        ; P.HoverOpacity, Ui_components.fv 1.
+        ; P.HoverBackground,
+          Ui_components.sv
+            "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
+        (link ~url:"#" ~target:`self_ ~style_class:"link-item group"
+           ~data_attrs:
+             [ ("data-lp-ref", lp_ref)
+             ; ("data-lp-recent", if recent then "1" else "0")
+             ; ( "style"
+               , "display:flex;align-items:center;justify-content:\
+                  space-between;height:32px;padding:0 8px;\
+                  border-radius:6px" ) ]
+           [ row ~cross:`center ~style_class:"page-icon"
+               ~data_attrs:[ ("style", "padding-right:4px") ]
+               [ icon_ ~attrs:[ ("style", "margin-right:0") ] "file" ]
+           ; text ~style_class:"page-title" ~value:p.Model.page_title
+               ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
+               ~line_height:"1.25rem"
+               ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
+               []
         (* cljs .sidebar-page-actions dots button inside .link-item —
            its class hooks (sidebar-page-actions, ls-icon-dots) still
            reach the row's target_class check *)
@@ -545,7 +640,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             (* cljs [:i.relative {:style {:top "4px"}}] — the top offset
                rides a stylesheet rule now *)
             [ Icons.icon ~size:18. ~cls:"relative" "dots" ]
-        ]
+        ])
     ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
@@ -571,22 +666,45 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
            [ Ui_parts.pressable
                ~on_press:(fun _ ->
                  Sidebar_state.toggle_group_collapsed st class_)
-               (row ~key:(key ^ "-hd") ~cross:`center ~style_class:"hd"
-                  [ box ~key:(key ^ "-a") ~style_class:"a"
-                      [ box ~style_class:"wrap-th" ~grow:1.
-                          [ text ~value:label [] ] ]
-                  ; box ~key:(key ^ "-b") ~style_class:"b"
-                      [ (* web rotates .more 90deg on .is-expand —
-                           backends without transforms swap the icon *)
-                         reactive
-                           (fun collapsed ->
-                             icon_ ~cls:"more" ~size:15
-                               (if collapsed
-                                   && not (Ui_services.env_css_transform_icons ())
-                                then "chevron-down"
-                                else "chevron-right"))
-                           (Sidebar_state.group_collapsed_sig st class_)
-                      ] ])
+               (Ui_components.with_props
+                  [ P.InsetTop, Ui_components.fv (-4.)
+                  ; P.ZIndex, Ui_components.iv 2
+                  ; P.UserSelect, Ui_components.sv "none"
+                  ; P.Cursor, Ui_components.sv "pointer" ]
+                  (row ~key:(key ^ "-hd") ~cross:`center
+                     ~main:`space_between ~height:32 ~corner_radius:6
+                     ~background:"var(--left-sidebar-bg-color)"
+                     ~style_class:"hd"
+                     ~data_attrs:
+                       [ ( "style"
+                         , "position:sticky;top:-4px;padding-left:8px;\
+                            padding-right:4px" )
+                       ]
+                     [ box ~key:(key ^ "-a") ~style_class:"a"
+                         [ Ui_components.with_props
+                             [ P.FontSize, Ui_components.sv "0.875rem"
+                             ; P.LineHeight, Ui_components.sv "1.25rem"
+                             ; P.FontWeight, Ui_components.iv 500 ]
+                             (row ~cross:`center ~grow:1. ~opacity:0.5
+                                ~style_class:"wrap-th"
+                                [ text ~value:label [] ]) ]
+                     ; box ~key:(key ^ "-b") ~style_class:"b"
+                         [ (* web rotates .more 90deg on .is-expand —
+                              backends without transforms swap the icon *)
+                            reactive
+                              (fun collapsed ->
+                                icon_ ~cls:"more" ~size:15
+                                  ~attrs:
+                                    [ ( "style"
+                                      , "margin-left:2.5px;margin-right:10.5px"
+                                      )
+                                    ]
+                                  (if collapsed
+                                      && not (Ui_services.env_css_transform_icons ())
+                                   then "chevron-down"
+                                   else "chevron-right"))
+                              (Sidebar_state.group_collapsed_sig st class_)
+                         ] ]))
            ; reactive
                ~equal:(fun a b ->
                  List.map
@@ -599,7 +717,10 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                  if ps = [] && not always_bd then Logseq_el.nothing
                  else
                    box ~key:(key ^ "-bd") ~style_class:"bd"
+                     ~data_attrs:[ ("style", "overflow-y:auto") ]
                      [ list ~key:(key ^ "-ul") ~style_class:ul_class
+                         ~data_attrs:
+                           [ ("style", "list-style:none;padding:0;margin:0") ]
                          (List.map
                             (fun p ->
                               page_item_el st p ~li_class ~recent
@@ -678,26 +799,53 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         (* data-tooltip="" suppresses the hover tooltip: the service
            otherwise falls back to this button's required aria-label,
            and master shows no tooltip on the selector *)
-        [ button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~cross:`center
-            ~label:(t "graph.switch/select-prompt")
-            ~style_class:"item"
-            ~data_attrs:(reactive (fun menu _model ->
-                [ ("data-tooltip", ""); ("aria-haspopup", "menu")
-                ; ("aria-expanded", string_of_bool (menu = "repos")) ])
-                (Signal.value st.Sidebar_state.open_menu) ms)
-            ~on_press:(fun _ ->
-              (* the trigger is inside the popover layer's owned set,
-                 so its presses never hit outside-dismiss — a plain
-                 toggle is the whole open/close contract *)
-              Runtime.signal_set st.Sidebar_state.open_menu
-                (if Runtime.signal_get st.open_menu = "repos" then ""
-                 else "repos"))
-               [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
-                   [ box ~key:"gsel-th" ~style_class:"thumb"
-                       [ icon_ "topology-star" ]
-                   ; text ~key:"gsel-n"
-                       ~value_signal:(Signal.map name_of ms) [] ]
-               ; icon_ ~size:18 "selector" ]
+        [ Ui_components.with_props
+            [ P.Position, Ui_components.sv "relative"
+            ; P.Overflow, Ui_components.sv "hidden"
+            ; P.Opacity, Ui_components.fv 0.9
+            ; P.PressedOpacity, Ui_components.fv 0.7 ]
+            (button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~cross:`center
+               ~label:(t "graph.switch/select-prompt")
+               ~style_class:"item"
+               ~data_attrs:(reactive (fun menu _model ->
+                   [ ("data-tooltip", ""); ("aria-haspopup", "menu")
+                   ; ("aria-expanded", string_of_bool (menu = "repos"))
+                   ; ( "style"
+                     , "padding:4px 16px 4px 4px;border-radius:\
+                        calc(var(--radius) - 2px)" ) ])
+                   (Signal.value st.Sidebar_state.open_menu) ms)
+               ~on_press:(fun _ ->
+                 (* the trigger is inside the popover layer's owned set,
+                    so its presses never hit outside-dismiss — a plain
+                    toggle is the whole open/close contract *)
+                 Runtime.signal_set st.Sidebar_state.open_menu
+                   (if Runtime.signal_get st.open_menu = "repos" then ""
+                    else "repos"))
+                  [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
+                      [ row ~key:"gsel-th" ~cross:`center ~main:`center
+                          ~width:24 ~height:24 ~opacity:0.8
+                          ~style_class:"thumb"
+                          ~data_attrs:
+                            [ ( "style"
+                              , "overflow:hidden;margin-left:-2px;\
+                                 border-radius:calc(var(--radius) - 4px);\
+                                 flex-shrink:0" )
+                            ]
+                          [ icon_ ~attrs:[ ("style", "margin-right:0") ]
+                              "topology-star" ]
+                      ; text ~key:"gsel-n"
+                          ~white_space:"nowrap" ~text_overflow:"ellipsis"
+                          ~font_weight:500 ~font_size:"var(--text-sm)"
+                          ~line_height:
+                            "var(--tw-leading, \
+                             var(--text-sm--line-height))"
+                          ~data_attrs:
+                            [ ( "style"
+                              , "overflow:hidden;padding-left:4px;\
+                                 padding-right:16px;position:relative" )
+                            ]
+                          ~value_signal:(Signal.map name_of ms) [] ]
+                  ; icon_ ~size:18 "selector" ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st)
         ] ]
@@ -709,8 +857,15 @@ let header (ms : Model.t Signal.signal) : t =
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  column ~key:"ls-contents" ~style_class:"sidebar-contents-container"
-    [ favorites_group st; recents_group st ]
+  Ui_components.with_props [ P.Position, Ui_components.sv "relative" ]
+    (column ~key:"ls-contents" ~gap:4 ~padding_horizontal:12
+       ~style_class:"sidebar-contents-container"
+       ~data_attrs:
+         [ ( "style"
+           , "padding-top:4px;height:100%;overflow-x:hidden;overflow-y:auto"
+           )
+         ]
+       [ favorites_group st; recents_group st ])
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

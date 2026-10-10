@@ -450,7 +450,14 @@ let value_button ~text ~on_press : t =
      batch, so keep a label plus the cljs "Empty" placeholder *)
   let text = if text = "" then I18n.t "ui/empty" else text in
   button ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~label:text
-    ~text ~style_class:"pv-scalar" ~on_press []
+    ~text ~style_class:"pv-scalar"
+    ~foreground:"var(--ls-primary-text-color)"
+    ~data_attrs:
+      [ ( "style"
+        , "height:auto;min-height:0;padding:0;line-height:20px;\
+           justify-content:flex-start" )
+      ]
+    ~on_press []
 
 (* text/number cell: ghost button <-> autofocused text_field *)
 let scalar_edit_cell ctx row : t =
@@ -964,6 +971,8 @@ let date_view ctx row : t =
              .property-panel-edit-btn *)
           button ~variant:`ghost ~size:`icon ~icon:`edit
             ~style_class:"prop-edit-ico"
+            ~width:18 ~height:18
+            ~data_attrs:[ ("style", "min-width:0;padding:0") ]
             ~label:(I18n.t "ui/edit")
             ~on_press:(fun _ -> Runtime.signal_set open_ true) [])
      ; if_ ~test:(Signal.value open_)
@@ -1308,6 +1317,8 @@ and block_value_wrap (inner : t) : t =
             ~style_class:"block-main-container"
             [ Lui_elements.row ~gap:0 ~cross:`center
                 ~style_class:"block-control-wrap"
+                ~data_attrs:[ ("style", "display:flex;flex-direction:row;\
+                  align-items:center") ]
                 [ box ~style_class:"block-control" []
                 ; box ~style_class:"bullet-container"
                     [ box ~style_class:"bullet" [] ] ]
@@ -1326,5 +1337,11 @@ and url_view ctx row : t =
   else
     block_value_wrap
       (link ~url ~target:`blank ~style_class:"external-link"
-         ~data_attrs:[ ("data-type", "url") ]
+         ~data_attrs:
+           [ ("data-type", "url")
+           ; ( "style"
+             , "text-decoration:none;border-bottom:1px solid;\
+                overflow-wrap:anywhere;word-break:break-word;\
+                white-space:normal;min-width:0;max-width:100%" )
+           ]
          ~text:url [])

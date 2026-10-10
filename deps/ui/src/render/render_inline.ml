@@ -48,7 +48,10 @@ let substring_finder s =
 
 (* .bracket's opacity:0.3 in lui-core.css is stylesheet chrome — the
    muted-foreground token carries the same soft look to native backends *)
-let bracket s = text ~style_class:"bracket" ~foreground:"muted-foreground" ~value:s []
+let bracket s =
+  text ~style_class:"bracket" ~foreground:"muted-foreground"
+    ~data_attrs:[ ("style", "opacity:0.3;display:inline-flex") ]
+    ~value:s []
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on
@@ -73,6 +76,19 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
     | _ -> if tag then "#" ^ name else name
   in
   let cls = if tag then "relative tag" else "relative page-ref" in
+  let fg =
+    if tag then "var(--lx-accent-11, var(--ls-tag-text-color))"
+    else "var(--lx-accent-11, var(--ls-link-text-color))"
+  in
+  let tag_style =
+    if tag then
+      [ ( "style"
+        , "font-size:0.875rem;line-height:1.42857;display:inline-flex;\
+           align-items:center;cursor:pointer;border-radius:4px;\
+           opacity:0.7" )
+      ]
+    else []
+  in
   let base =
     [ ("data-ref", String.lowercase_ascii name)
     ; ("tabindex", "0")
@@ -81,16 +97,19 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
   match uuid_sig with
   | None ->
       (* cljs anchors carry the label as a bare text child *)
-      link ~url:"#" ~target:`self_ ~style_class:cls ~data_attrs:base
-        ~text:txt []
+      link ~url:"#" ~target:`self_ ~style_class:cls
+        ~data_attrs:(base @ tag_style)
+        ~foreground:fg ~text:txt []
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       link ~url:"#" ~target:`self_ ~style_class:cls ~text:txt
+        ~foreground:fg
         ~data_attrs:
           (reactive
              (fun u ->
-               if u = "" then base else ("data-uuid", u) :: base)
+               tag_style
+               @ if u = "" then base else ("data-uuid", u) :: base)
              u_sig)
         []
 
@@ -351,6 +370,7 @@ let block_ref_anchor uuid : t =
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = Signal.map (fun (title, _, _) -> title) (Signal.value st) in
   link ~url:"#" ~target:`self_ ~style_class:"relative page-ref"
+    ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
     ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
     ~text_signal:title_sig
     [] context parent
@@ -425,6 +445,12 @@ let timestamp_el seconds : t =
  fun context parent ->
   Render_libs.ensure ();
   link ~url:"#" ~target:`self_ ~style_class:"youtube-timestamp"
+    ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
+    ~data_attrs:
+      [ ( "style"
+        , "display:inline-flex;align-items:center;gap:0.25em;\
+           width:fit-content;white-space:nowrap;line-height:1" )
+      ]
     [ text ~key:"yti" ~style_class:"youtube-timestamp-icon"
         [ icon ~name:(`app "youtube-timestamp-icon") [] ]
     ; text ~key:"ytl" ~style_class:"youtube-timestamp-label"
@@ -1382,8 +1408,16 @@ and resolved_ref ~refs ~self uuid : t =
                       ; ("draggable", "true") ]
           ~text:("[[" ^ uuid ^ "]]") []
       else
-        D.el ~tag:"span" ~style_class:"page-reference"
-          ~attrs:[ ("data-ref", String.lowercase_ascii title) ]
+        Ui_components.with_props
+          [ Lui_protocol.HoverBackground,
+            Ui_components.sv
+              "var(--lx-accent-04-alpha, \
+               var(--ls-secondary-background-color))" ]
+          (D.el ~tag:"span" ~style_class:"page-reference"
+          ~attrs:
+            [ ("data-ref", String.lowercase_ascii title)
+            ; ("style", "border-radius:4px;transition:background 0.15s")
+            ]
           [ bracket "[["
           ; preview_link
               (link ~url:"#" ~target:`self_
@@ -1395,7 +1429,7 @@ and resolved_ref ~refs ~self uuid : t =
                   else [ row ~display:`contents
                            (if is_math then [ katex_el ~block:false ~display:false (first_line title) ]
                             else parse ~refs:child_refs ~self:uuid (first_line title)) ]))
-          ; bracket "]]" ])
+          ; bracket "]]" ]))
     (Signal.value st))
     context parent
 

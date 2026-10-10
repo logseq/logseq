@@ -592,3 +592,48 @@ Gates: `dune build js_app test gpui/drive_test.exe` clean,
 `test_main.js` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds. Plugins dashboard + settings General/
 Editor sections + appearance popup spot-checked light+dark vs prod.
+
+## B6 sidebar + core purge (2026-10-10, devin/004-b6-sidebar-core)
+
+Overlay: `repos-*`, `cp__sidebar-help-menu-popup`, `ls-hm-*`, `.ui__button.cloud`
+deleted from `lui-overlay.css` (emitters: left_sidebar_view, chrome,
+right_sidebar_view).
+
+Core: ~60 top-level rules deleted from `lui-core.css` — left-sidebar
+(`ls-sidebar`/`nav-link`/`navs`/`hd`/`graphs-selector`/`left-sidebar-top`),
+right-sidebar (`cp__right-sidebar-topbar` + `rs-*`, `sidebar-item` family,
+`cp__page-inner-wrap`, `ls-hp-*`), page (`ls-page-title`/`pt-*`,
+`journal-item`, `ls-page-blocks`, `blocks-list-wrap`, `journals`,
+`page-inner`), properties (panel rows, `property-k`/`property-key-inner`,
+`property-panel-bullet`, `bottom-property*`, `pills-strip`, `control-wrap`,
+`prop-edit-ico`, `external-link`, `ls-block-content-indent`, `parea`,
+`page_area`, `class_section`, `new_property_btn`), outliner (`ls-block`,
+`block-control*`, `bullet-link-wrap`, `bullet-container`, `block-row`,
+`block-content*`, `block-head-wrap`, `ls-block-right`,
+`block-children*`), `.color-level` ladder (depth-1/2 backgrounds emitted
+at the sidebar-item emitters), `cp__sidebar-help-btn`. Surgical strips:
+`a.tag` chip decls, `.page-ref` color, `.page-reference` radius/transition,
+`.youtube-timestamp` core decls (icon-mask/hover rules kept),
+`.bracket` opacity pair emitted inline.
+
+Leftovers: headings h1–h6 ladder, `ed-*` appearance subset, `.embed-page`,
+`.block-ref`/`block-ref-no-title`, `.block-marker`, `span.priority`,
+`.block-tag` recipe, `math-block` width, `asset-container`/`asset-video`,
+`tweet-embed`, `lazy-visibility`, `ls-view-partition-title`,
+`ls-page-icon-btn` bordered-icon recipe, `.bc` breadcrumb, `a.page-title`,
+gpui `register_class_style` pruning for the deleted classes. Several
+nested blocks restored after audit (`sidebar-content-group`,
+`cp__graphs-selector`, `left-sidebar-top`, `sidebar-item`,
+`cp__right-sidebar-topbar`, `ls-page-title`, `block-control`,
+`block-control-wrap`, `bullet-link-wrap`, `block-content`,
+`block-head-wrap`, `property-*`, `external-link`, `ls-block`,
+`cp__sidebar-help-btn`, `sidebar-navigations`, `journal-item`,
+`nav-link`, `toggle-mode` sub-rules) — their hook/hover/scroll/icon
+sub-rules are un-emitted; flat decls now duplicated inline pending a
+rule-by-rule nesting audit.
+
+Props learned: `row`/`column`/`grid` take `~data_attrs_signal` only (no
+`~data_attrs`); `link` takes no layout props (`main`/`cross`) — emit
+`display:flex` geometry via the `("style", ...)` pair; `P.Position`
+accepts only static/relative/absolute/fixed — `sticky` rides the style
+pair.

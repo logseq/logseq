@@ -13,6 +13,7 @@
 
 open Lui_elements
 module D = Logseq_el
+module P = Lui_protocol
 
 let t = Sidebar_state.t
 
@@ -35,6 +36,12 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
 let topbar_btn key label on_click =
   button ~key:("tb-" ^ key) ~text:label
     ~style_class:"button cp__right-sidebar-settings-btn"
+    ~background:"var(--ls-secondary-background-color)"
+    ~data_attrs:
+      [ ( "style"
+        , "white-space:nowrap;display:block;opacity:1;\
+           -webkit-app-region:no-drag" )
+      ]
     ~on_press:(fun _ -> on_click ()) []
 
 let topbar st =
@@ -51,19 +58,34 @@ let topbar st =
       ]
     else []
   in
-  row ~key:"rs-topbar" ~main:`space_between ~cross:`center
-    ~style_class:"cp__right-sidebar-topbar"
-    [ row ~key:"rs-settings" ~gap:4
-        ~style_class:"cp__right-sidebar-settings hide-scrollbar"
-        ([ topbar_btn "contents" (t "page/contents") (fun () ->
-               Sidebar_state.open_sticky_item st "contents")
-         ; topbar_btn "page-graph" (t "graph.page/title") (fun () ->
-               Sidebar_state.open_sticky_item st "page-graph")
-         ; topbar_btn "help" (t "nav/help") (fun () ->
-               Sidebar_state.open_sticky_item st "help")
-         ]
-        @ dev_items)
-    ]
+  fun ctx parent ->
+    Ui_components.with_props
+    [ P.InsetTop, Ui_components.fv 0.
+    ; P.ZIndex, Ui_components.iv 999
+    ; P.UserSelect, Ui_components.sv "none" ]
+    (row ~key:"rs-topbar" ~main:`space_between ~cross:`center
+       ~data_attrs_signal:
+         (Signal.constant ctx.Lui_ui.ui_scheduler
+            [ ( "style"
+              , "position:sticky;top:0;-webkit-app-region:drag" ) ])
+       ~height:48 ~padding_horizontal:4
+       ~background:
+         "var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, \
+          var(--ls-secondary-background-color, #d8e1e8)))"
+       ~style_class:"cp__right-sidebar-topbar"
+       [ row ~key:"rs-settings" ~gap:4
+           ~style_class:"cp__right-sidebar-settings hide-scrollbar"
+           ~data_attrs:[ ("style", "margin:0;overflow:auto") ]
+           ([ topbar_btn "contents" (t "page/contents") (fun () ->
+                  Sidebar_state.open_sticky_item st "contents")
+            ; topbar_btn "page-graph" (t "graph.page/title") (fun () ->
+                  Sidebar_state.open_sticky_item st "page-graph")
+            ; topbar_btn "help" (t "nav/help") (fun () ->
+                  Sidebar_state.open_sticky_item st "help")
+            ]
+           @ dev_items)
+       ])
+    ctx parent
 
 (* ---------- item menus ---------- *)
 
@@ -167,6 +189,7 @@ let breadcrumb crumbs =
   | [] -> spacer ~key:"bc-empty" []
   | first :: rest ->
       row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center
+        ~data_attrs:[ ("style", "margin:0;text-align:left") ]
         (text ~key:("bc-" ^ first)
            ~style_class:"breadcrumb-item" ~value:first []
          :: List.rev (loop [] rest))
@@ -236,9 +259,13 @@ let item_title (it : Sidebar_state.item) =
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   let collapsed = it.Sidebar_state.collapsed in
-  row ~key:("hd-" ^ it.key) ~main:`space_between
+  row ~key:("hd-" ^ it.key) ~main:`space_between ~cross:`center
+    ~height:32 ~min_height:32
+    ~background:"var(--color-level-2)"
     ~style_class:"sidebar-item-header color-level"
+    ~data_attrs:[ ("style", "box-sizing:border-box") ]
     [ button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~padding_horizontal:8
+        ~height:32
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
            kills the whole mount batch *)
@@ -260,6 +287,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
+            ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             (* press events carry no pointer coordinates — anchor the
                menu at the button's rect instead of click clientX/Y *)
             ~on_press:(fun _ ->
@@ -274,6 +302,7 @@ let item_header st idx (it : Sidebar_state.item) =
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
+            ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
             [] ]
     ]
@@ -283,13 +312,21 @@ let item_header st idx (it : Sidebar_state.item) =
    li > a rows (circle markers). Links point at external docs; the
    first li is an action opening the shortcut-settings pane. *)
 let help_pane st =
+  let item_style =
+    "display:list-item;list-style:circle;font-size:16px;\
+     line-height:24px;margin-top:4px"
+  in
   let ext_item ~key label url =
     box ~key ~style_class:"ls-hp-item"
+      ~data_attrs:[ ("style", item_style) ]
       [ link ~url ~target:`blank ~text:label [] ]
   in
   let icon_item ~key label ic =
     box ~key ~style_class:"ls-hp-item"
+      ~data_attrs:[ ("style", item_style) ]
       [ text ~style_class:"ls-hp-iconrow"
+          ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
+          ~data_attrs:[ ("style", "cursor:pointer") ]
           ~on_press:(fun _ ->
             Sidebar_state.open_sticky_item st "shortcut-settings")
           [ row ~cross:`center ~gap:4
@@ -299,16 +336,24 @@ let help_pane st =
   in
   let icon_ext_item ~key label ic url =
     box ~key ~style_class:"ls-hp-item"
+      ~data_attrs:[ ("style", item_style) ]
       [ link ~url ~target:`blank
           [ row ~cross:`center ~gap:4
               [ text ~value:label []
               ; icon_ ~size:18 ic ] ] ]
   in
   let section key title items =
-    [ text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title" ~value:title []
-    ; box ~key:("hpu-" ^ key) ~style_class:"ls-hp-list" items ]
+    [ text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title"
+        ~font_size:"16px" ~line_height:"24px" ~font_weight:700
+        ~foreground:"var(--ls-primary-text-color)"
+        ~data_attrs:[ ("style", "display:block;margin:16px 0 4px") ]
+        ~value:title []
+    ; box ~key:("hpu-" ^ key) ~style_class:"ls-hp-list"
+        ~data_attrs:[ ("style", "display:block;margin-left:19.2px") ]
+        items ]
   in
   box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
+    ~data_attrs:[ ("style", "display:block;margin:4px 0 0 8px") ]
     (section "usage" (t "help/usage-title")
        [ icon_item ~key:"li-shortcuts" (t "help.shortcuts/label")
            "command"
@@ -442,6 +487,7 @@ let item_body st idx (it : Sidebar_state.item) =
         ~style_class:
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+        ~data_attrs:[ ("style", "padding-top:8px") ]
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
             [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
@@ -455,6 +501,7 @@ let item_body st idx (it : Sidebar_state.item) =
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
         ~padding_horizontal:8
+        ~data_attrs:[ ("style", "padding-top:8px") ]
         [ help_pane st ]
   | _ ->
   box ~key:("body-" ^ it.key)
@@ -462,14 +509,17 @@ let item_body st idx (it : Sidebar_state.item) =
     ~style_class:
       ("sidebar-panel-content"
        ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+    ~data_attrs:[ ("style", "padding-top:8px") ]
     ?padding_horizontal:
       (match it.Sidebar_state.kind with
        | "search" | "shortcut-settings" -> None
        | _ -> Some 8)
     [ column ~key:("wrap-" ^ it.key) ~grow:1.
         ~style_class:"page relative cp__page-inner-wrap"
+        ~data_attrs:[ ("style", "margin:0 12px 20px") ]
         [ column ~key:("inner-" ^ it.key) ~gap:16
             ~style_class:"relative page-inner"
+            ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
             ((match it.Sidebar_state.kind with
               | "page-graph" ->
                   [ (* the link-graph canvas isn't ported — same
@@ -490,6 +540,7 @@ let item_body st idx (it : Sidebar_state.item) =
               ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
+                 ~data_attrs:[ ("style", "margin-left:-20px") ]
                  [ (* data-cid is read by editor_actions' [data-cid]
                       closest queries *)
                    box ~key:("pbin-" ^ it.key)
@@ -517,11 +568,14 @@ let item_body st idx (it : Sidebar_state.item) =
 
 let sidebar_item st idx (it : Sidebar_state.item) =
   column ~key:("item-" ^ it.key)
+    ~min_height:100
+    ~background:"var(--lx-gray-02, var(--color-level-1))"
     ~style_class:
       ("sidebar-item content color-level item-type-"
        ^ it.kind
        ^ if it.Sidebar_state.collapsed then " collapsed" else "")
     ~accessibility_identifier:("sbi-" ^ it.Sidebar_state.key)
+    ~data_attrs:[ ("style", "position:relative") ]
     [ column ~key:("wrap-" ^ it.key) ~grow:1. ~style_class:"relative"
         [ item_header st idx it
         ; item_body st idx it
@@ -542,7 +596,9 @@ let inner st =
     (fun (rf, vw) -> int_of_float (rf *. vw) - 12)
     (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
        ~grow:1.
+       ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
        ~style_class:"cp__right-sidebar-inner"
+       ~data_attrs:[ ("style", "width:100%;height:100%;padding-top:0") ]
     [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
         [ column ~key:"rs-col" ~grow:1.
@@ -551,6 +607,12 @@ let inner st =
                 (fun items ->
                   column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
                     ~style_class:"sidebar-item-list scrollbar-spacing"
+                    ~data_attrs:
+                      [ ( "style"
+                        , "margin-left:4px;margin-top:-8px;\
+                           padding-bottom:150px;height:calc(100vh - 48px)"
+                        )
+                      ]
                     (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator"
                        []
                      :: List.mapi (sidebar_item st) items))
