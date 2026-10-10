@@ -1046,31 +1046,29 @@
   (delete-block-inner! repo (get-state)))
 
 (defn delete-blocks!
-  [_repo block-uuids blocks dom-blocks mobile-action-bar?]
+  "Deletes the selected rows `dom-blocks`, whose block uuids are `block-uuids`
+  in selection order. The worker resolves the selection in the op (top-level
+  blocks, recycle roots, journal pages on mobile), so nothing is read first.
+  The editor moves to the row above the first selected row when the op is
+  sent; the rows themselves leave when the worker's delta arrives."
+  [_repo block-uuids dom-blocks mobile-action-bar?]
   (when (seq block-uuids)
-    (let [uuid->dom-block (zipmap block-uuids dom-blocks)
-          block (first blocks)
-          block-parent (get uuid->dom-block (:block/uuid block))
+    (let [block-parent (first dom-blocks)
           sibling-block (when block-parent
                           (util/get-prev-block-non-collapsed-non-embed block-parent))
-          blocks' (block-handler/get-top-level-blocks blocks)
           mobile? (util/capacitor?)
           edit-block-fn (when (and sibling-block (not mobile?))
                           (edit-previous-window-block-fn sibling-block))
-          journals (and mobile? (filter entity/journal? blocks'))
-          blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
-      (when (or (seq journals) (seq blocks))
-        (ui-outliner-tx/transact!
-         (cond-> (merge {:outliner-op :delete-blocks
-                         :mobile-action-bar? mobile-action-bar?}
-                        (block-handler/outliner-tx-meta (first blocks)))
-           edit-block-fn
-           (assoc :editor/edit-block-fn edit-block-fn))
-         (when (seq blocks)
-           (outliner-op/delete-blocks! blocks nil))
-         (when (seq journals)
-           (doseq [journal journals]
-             (outliner-op/delete-page! (:block/uuid journal)))))))))
+          selection (cond-> {:original-ids (block-handler/dom-original-block-ids block-uuids)}
+                      mobile?
+                      (assoc :delete-journals? true))]
+      (ui-outliner-tx/transact!
+       (cond-> {:outliner-op :delete-blocks
+                :mobile-action-bar? mobile-action-bar?}
+         edit-block-fn
+         (assoc :editor/edit-block-fn edit-block-fn
+                :editor/edit-block-on-send? true))
+       (outliner-op/delete-blocks! block-uuids {:selection selection})))))
 
 (defn copy-block-ref!
   ([block-id]
@@ -1289,16 +1287,16 @@
          (when (seq dom-blocks)
            (let [repo (state/get-current-repo)
                  block-uuids (distinct (keep util/selection-node-block-id dom-blocks))]
-             (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
-               (let [blocks (unwrap-block-results results)
-                     top-level-blocks (block-handler/get-top-level-blocks blocks)]
-                 (when-not (every? ldb/recycled? top-level-blocks)
-                   (when (seq top-level-blocks)
-                     ;; Delete the selected nodes only. Page nodes unlink their
-                     ;; namespace parent in INode/-del; expanding a page to its
-                     ;; content would wipe the child page (db-test#1242).
-                     ;; Regular blocks still retract their subtree there.
-                     (delete-blocks! repo (map :block/uuid top-level-blocks) top-level-blocks dom-blocks mobile-action-bar?))))))))))))
+             ;; Delete the selected nodes only. Page nodes unlink their
+             ;; namespace parent in INode/-del; expanding a page to its
+             ;; content would wipe the child page (db-test#1242).
+             ;; Regular blocks still retract their subtree there.
+             ;; Not awaited: the selection ends when the op is sent, and
+             ;; the next key belongs to the editor that moved with it.
+             (p/catch (p/do! (delete-blocks! repo block-uuids dom-blocks mobile-action-bar?))
+                      (fn [error]
+                        (log/error :editor/delete-selection-failed {:error error})))
+             nil)))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -3284,7 +3282,7 @@
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
-            [key-code k code is-processed?]
+            [_key-code k code is-processed?]
             (if (and c
                      (mobile-util/native-android?)
                      (or (= key-code 229)
@@ -3347,11 +3345,6 @@
 
         (close-autocomplete-if-outside input)
 
-        (when-not (or (= k "Shift") is-processed?)
-          (state/set-last-key-code! {:key-code key-code
-                                     :code code
-                                     :key k
-                                     :shift? (.-shiftKey e)}))
         (when-not (state/get-editor-action)
           (state/set-editor-last-pos! (cursor/pos input)))))))
 

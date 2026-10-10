@@ -5,6 +5,7 @@
             [frontend.db.subs-loader :as subs-loader]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
+            [frontend.worker.handler.render-resource.common :as render-common]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -1398,6 +1399,51 @@
                             (map :value (get-in response [:value :hidden-properties]))))
           "Graph property values cross the resource boundary only as UUIDs."))))
 
+(deftest resources-of-a-deleted-block-do-not-fail-their-snapshot-batch-test
+  (let [{:keys [conn resource-block]} (render-resource-fixture)
+        deleted (random-uuid)
+        deleted-key [:block-display-properties deleted default-display-context]
+        deleted-summary-key [:block-comment-summary deleted]
+        live-key [:block-display-properties resource-block default-display-context]]
+    (testing "a delete can reach the worker before a queued batch that names the block"
+      (let [response (render-engine/render-snapshots
+                      @conn
+                      {:blocks [] :children []
+                       :resources [deleted-key deleted-summary-key live-key]}
+                      {})]
+        (doseq [resource-key [deleted-key deleted-summary-key]]
+          (is (= {:watch {:keys #{[:entity deleted]} :all? false} :value nil}
+                 (get-in response [:slots [:resource resource-key]]))
+              "The deleted block's resources render as nil and watch the block"))
+        (is (seq (get-in response [:slots [:resource live-key] :value :full-properties]))
+            "The other resources of the batch render as before")))
+    (testing "a resource of a live block still fails on a bad request"
+      (is (thrown? js/Error
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks [] :children []
+                     :resources [[:block-display-properties resource-block {:page-title? true}]]}
+                    {}))))
+    (testing "a bad request fails as well when its block is gone: only the missing block is caught"
+      (is (thrown? js/Error
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks [] :children []
+                     :resources [[:block-display-properties deleted {:page-title? true}]]}
+                    {}))))
+    (testing "a failure about another entity than the key's owner is not taken for a deleted owner"
+      (with-redefs [render-engine/resource-renderers
+                    (assoc render-engine/resource-renderers :block-comment-summary
+                           {:shape 2
+                            :render (fn [db _resource-key _runtime]
+                                      (render-common/entity-by-uuid! db :other (random-uuid)))})]
+        (is (thrown? js/Error
+                     (render-engine/render-snapshots
+                      @conn
+                      {:blocks [] :children []
+                       :resources [[:block-comment-summary deleted]]}
+                      {})))))))
+
 (deftest block-display-properties-resource-includes-configured-class-properties-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block]} (render-resource-fixture)
@@ -1711,8 +1757,9 @@
 (deftest block-comment-summary-resource-rejects-invalid-uuid-and-thread-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block]} (render-resource-fixture)]
+      ;; a uuid no block carries renders as nil instead:
+      ;; resources-of-a-deleted-block-do-not-fail-their-snapshot-batch-test
       (doseq [resource-key [[:block-comment-summary "not-a-uuid"]
-                            [:block-comment-summary (random-uuid)]
                             [:block-comment-summary resource-block]
                             [:block-comment-summary resource-block :extra]]]
         (is (thrown? js/Error

@@ -22,6 +22,33 @@
                               {:provider :sync-state
                                :resource-key resource-key})))}))
 
+(defn- deleted-owner-uuid
+  "The owner a resource key names, its second element as the renderer's delta
+  handling reads it (`frontend.db.subs/apply-delta-store`), when `error` is
+  the renderer finding no entity for that owner."
+  [resource-key error]
+  (let [owner (second resource-key)]
+    (when (and (uuid? owner)
+               (= owner (common/missing-entity-error-uuid error)))
+      owner)))
+
+(defn- render-resource
+  "Renders a resource. A block can be deleted after the renderer asked for one
+  of its resources and before the worker reaches that request: a delete op
+  sent while the snapshot batch waited behind a slower one. Failing then
+  would reject the whole batch and crash the page, as `missing-view-data`
+  notes for views, so a resource whose owner is gone renders as nil until
+  the delete's delta marks its slot missing. Only that failure is caught;
+  any other error of the renderer, such as an invalid argument, fails the
+  request as it does for a live owner."
+  [render db resource-key runtime]
+  (try
+    (render db resource-key runtime)
+    (catch :default error
+      (if-let [owner (deleted-owner-uuid resource-key error)]
+        [#{[:entity owner]} nil]
+        (throw error)))))
+
 (defn- resource-value
   [db resource-key runtime]
   (when-not (and (vector? resource-key) (seq resource-key))
@@ -41,7 +68,7 @@
         (do
           (when shape
             (common/require-shape! resource-key resource-kind shape))
-          (render db resource-key runtime))
+          (render-resource render db resource-key runtime))
         (common/fail! "Unknown renderer resource key"
                       {:resource-key resource-key})))))
 
