@@ -1085,6 +1085,19 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 1rem;
   padding: 1.5rem;
   width: min(42rem, calc(100vw - 2rem));
+  /* kit .lui-dialog is fixed inset-0 m-auto: height:auto stretches to
+     the max-height cap; cljs ui__dialog-content is content-sized
+     (top-50% translate) — fit-content restores that for every named
+     dialog (settings was filling 100dvh-2rem with dead space) */
+  height: fit-content;
+}
+
+/* title-less dialogs still emit an empty .lui-dialog-title row and a
+   .lui-modal-decoration sibling — as grid items each costs the 1rem
+   dialog gap even at 0 height; dropping them keeps the card flush */
+.lui-dialog-title:has(.lui-dialog-heading:empty),
+.lui-modal-decoration:empty {
+  display: none;
 }
 
 @media (min-width: 1024px) {
