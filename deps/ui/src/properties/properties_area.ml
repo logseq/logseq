@@ -280,8 +280,7 @@ let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
    plus icon *)
 let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
   row ~gap:0 ~style_class:"ls-new-property"
-    ~data_attrs:
-      [ ("style", if for_class then "" else "margin-top:0.5rem") ]
+    ~margin_top:(if for_class then 0 else 8)
     [ button ~variant:`secondary ~size:`sm
         ~icon:(`app "plus")
         ~style_class:"jtrigger flex"
@@ -358,8 +357,7 @@ let block_area ~uuid : t =
               [ column ~key:("parea-" ^ uuid)
                   ~accessibility_identifier:uuid
                   ~style_class:"ls-properties-area ls-block-properties"
-                  ~data_attrs:
-                    [ ("style", "margin-top:2px;margin-left:7px") ]
+                  ~margin_top:2 ~margin_left:7
                   [ panel_view ctx ~owner_is_tag:false
                       ~owner_title:""
                       ~can_toggle:
@@ -681,7 +679,7 @@ let page_area (p : Model.page) : t =
               column ~key:("parea-" ^ uuid)
                 ~accessibility_identifier:uuid
                 ~style_class:"ls-properties-area ls-page-properties"
-                ~data_attrs:[ ("style", "margin-top:1rem") ]
+                ~margin_top:16
                 [ panel_view ctx ~owner_is_tag:p.Model.page_is_tag
                     ~owner_title:p.Model.page_title
                     ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])

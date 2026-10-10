@@ -35,11 +35,13 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
             (reactive
                (fun (has, _) -> if has then 0. else 0.5) fs)
           [ row ~key:"bab-row"
-              [ (* margin-left lives in lui-core.css (.bab-inner): 22px
-                   on page routes, 6px under .ls-block-content-indent *)
-                row ~key:"bab-inner" ~cross:`center ~height:28
-                  ~style_class:"bab-inner"
-                  [ box ~key:"bab-bc" ~style_class:"bullet-container"
-                      [ box ~key:"bab-b" ~style_class:"bullet" [] ]
-                  ] ] ]))
+              [ (* margin-left follows .ls-block-content-indent on the
+                   outer column: 22px flat, 6px indented — bound to the
+                   same flags signal as the class toggle *)
+                Ui_parts.int_prop_signal Lui_protocol.MarginLeft fs
+                  (fun (_has, indented) -> if indented then 6 else 22)
+                  (row ~key:"bab-inner" ~cross:`center ~height:28
+                     ~style_class:"bab-inner"
+                     [ box ~key:"bab-bc" ~style_class:"bullet-container"
+                         [ box ~key:"bab-b" ~style_class:"bullet" [] ] ]) ] ]))
       context parent

@@ -16,7 +16,7 @@ let icon_item ?(data_attrs = []) key label icon_name on_click =
     ~icon:(Icons.name_ref icon_name)
     ~on_click ()
 
-let separator key = Menu_item.separator ~key
+let separator key = Menu_item.separator ~key ~mv:4 ~mh:(-4)
 
 (* items for the current route page; convert only for non-tag pages.
    Recycle navigates to the builtin "Recycle" page by name — cljs

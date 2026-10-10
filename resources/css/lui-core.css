@@ -328,10 +328,6 @@ blockquote {
   padding-bottom: 6rem;
 }
 
-.cp__content-wrap--flush {
-  margin-bottom: 0;
-}
-
 /* cljs page.cljs not-found fixed overlay (was an inline style) */
 .cp__not-found {
   position: fixed;
@@ -781,9 +777,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
        mr-0) — same geometry without the extra element */
     padding-right: calc(var(--spacing) * 1);
 
-    .ui__icon {
-      margin-right: 0;
-    }
   }
 }
 
@@ -812,14 +805,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   background: var(--lx-accent-09, var(--ls-active-primary-color));
 }
 
-
-.sidebar-header-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0 0.75rem;
-  margin-bottom: 0.25rem;
-}
 
 .sidebar-contents-container {
   display: flex;
@@ -852,22 +837,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       opacity: 0.7;
     }
 
-    > .thumb {
-      display: flex;
-      flex-shrink: 0;
-      align-items: center;
-      justify-content: center;
-      width: 1.5rem;
-      height: 1.5rem;
-      overflow: hidden;
-      margin-left: -0.125rem;
-      border-radius: calc(var(--radius) - 4px);
-      opacity: 0.8;
-
-      > .ui__icon {
-        margin-right: 0;
-      }
-    }
 
     > .lui-text {
       white-space: nowrap;
@@ -911,7 +880,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 }
 
 }
-
 
 
 .left-sidebar-inner .item.active {
@@ -1087,10 +1055,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       /* cljs .hd .ui__icon keeps a 20px slot with the glyph centered;
        LUI icons size the element to the glyph (inline width), so the
        same slot is reproduced with symmetric margins */
-      .ui__icon.more {
-        margin-left: 2.5px;
-        margin-right: 10.5px;
-      }
 
       .as-edit {
         opacity: 0.6;
@@ -1102,10 +1066,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
           opacity: 0.8;
         }
 
-        .ui__icon {
-          margin-left: 3px;
-          margin-right: 11px;
-        }
       }
 
       &.enter-show-more > .b {
@@ -1230,7 +1190,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
   /* cljs right_sidebar.css: @apply pt-2 only (no mb) */
 
-  /* cljs page.cljs renders .ls-page-blocks with margin-left: -20 on desktop */
 
   .sidebar-drop-indicator {
     position: relative;
@@ -1351,25 +1310,6 @@ html[data-theme='dark'] {
   }
 }
 
-/* cljs page.cljs: margin-left:-20 inline on every non-mobile
-   .ls-page-blocks; mt-4 only outside the sidebar */
-.ls-page-blocks {
-  min-height: 60px;
-  overflow: hidden;
-  /* cljs page.cljs renders .ls-page-blocks with margin-left: -20 on
-     desktop so the block control column hangs outside the content
-     column */
-  margin-left: -20px;
-}
-
-.page-inner > .ls-page-blocks {
-  margin-top: 1rem;
-}
-
-.cp__right-sidebar .page-inner > .ls-page-blocks {
-  margin-top: 0;
-}
-
 /* the empty bidirectional-properties column sits inside a display:contents
    wrapper, so it is never a direct child of .page-inner — hide it so it
    does not consume a grid/flex gap slot (cljs mounts no element at all) */
@@ -1457,10 +1397,6 @@ a.page-title {
 
 /* cljs property.css: block-level property areas indent +7px and sit
    2px below the block's own content row */
-.ls-block .ls-properties-area.ls-block-properties {
-  margin-top: 2px;
-  margin-left: 7px;
-}
 
 .ls-properties-area {
 
@@ -1707,13 +1643,8 @@ a.page-title {
 
 /* cljs property.css: inside a block the properties area hugs the
    content column (margin-left:7 when .ls-block-properties, mt 2px) */
-.ls-block .ls-properties-area {
-  margin-left: 0;
-  margin-top: 2px;
-}
 
 .ls-block .ls-properties-area.ls-block-properties {
-  margin-left: 7px;
 .ls-page-title {
   border-radius: calc(var(--radius) - 4px);
 
@@ -1803,13 +1734,6 @@ a.page-title {
 
 /* cljs page.cljs add-block row: margin-left 22px on page routes,
    6px when the owner is a block (.ls-block-content-indent marks it) */
-.block-add-button .bab-inner {
-  margin-left: 22px;
-}
-
-.block-add-button.ls-block-content-indent .bab-inner {
-  margin-left: 6px;
-}
 
 /* LUI .lui-button defaults to 13px; pills are text-sm */
 .bottom-property-pill .lui-button,
@@ -1851,17 +1775,6 @@ a.page-title {
   min-height: 28px;
 }
 
-.ls-page-title .ls-page-properties {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-top: 1rem;
-}
-
-.ls-page-title .ls-page-properties > .ls-new-property {
-  margin-top: 0.5rem;
-}
-
 /* ============================ Breadcrumb ================================= */
 
 .breadcrumb {
@@ -1896,7 +1809,6 @@ a.page-title {
 /* ============================ Outliner =================================== */
 
 
-
 .ls-page-title.title .block-main-container {
   gap: calc(var(--spacing) * 2);
 }
@@ -1923,14 +1835,6 @@ a.page-title {
 
 /* cljs block.cljs carries these as an inline style: capacitor 0,
    page-icon -36px, else -30px */
-.block-main-container.is-page-title-row {
-  margin-left: -36px;
-  gap: 8px;
-}
-
-.block-main-container.is-page-title-row.ls-pt-no-icon {
-  margin-left: -30px;
-}
 
 .is-page-title-row > .lui-column {
   flex: 1 1 0%;
@@ -1960,10 +1864,6 @@ a.page-title {
           var(--ls-block-control-size)) / 2
   );
 }
-
-
-
-
 
 
 .block-title-wrap {
@@ -2095,7 +1995,6 @@ a.page-title {
 .block-main-container[data-heading="5"] { --ls-block-icon-size: 13px; }
 .block-control-wrap[data-heading="6"],
 .block-main-container[data-heading="6"] { --ls-block-icon-size: 12px; }
-
 
 
 /* cljs block-mouse-over/-leave: hovering the block row reveals the fold
@@ -2870,10 +2769,6 @@ a.tag {
 .cancelled {
   text-decoration: line-through;
   opacity: 0.7;
-}
-
-span.timestamp {
-  margin: 0 0.25rem;
 }
 
 span.priority {

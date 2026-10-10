@@ -360,9 +360,9 @@ let body (_ms : Model.t Signal.signal) : t =
     [ (* .export h1.title.ls-mb keys on the h1 tag — ~as_ retags the
          heading element *)
       heading ~key:"ex-h" ~level:1 ~as_:`H1 ~style_class:"title ls-mb"
-        ~value:T.export_title []
+        ~margin_bottom:32 ~value:T.export_title []
     ; column ~key:"ex-list" ~style_class:"ls-ex-list" ~gap:16
-        ~data_attrs:[ ("style", "margin-left:0.25rem") ]
+        ~margin_left:4
         ([ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
              export_binary
          ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc

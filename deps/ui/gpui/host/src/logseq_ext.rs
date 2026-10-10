@@ -148,13 +148,8 @@ pub fn register(shared: &Shared) {
         "padding-left:45px",
         "",
     );
-    // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
-    //   margin-left:7px }
-    lui_gpui::style::register_class_style(
-        "ls-block-properties",
-        "margin-top:2px; margin-left:7px",
-        "",
-    );
+    // .ls-block-properties margins ride the typed props
+    // (margin_top:2 / margin_left:7) on the properties_area emitter.
     // .ls-properties-area .properties-panel { border-radius:6px;
     //   overflow:hidden }
     lui_gpui::style::register_class_style(
@@ -426,9 +421,8 @@ fn register_class_styles() {
          padding-bottom:96px",
         "",
     );
-    // .page-inner > .ls-page-blocks hangs the block control column 20px
-    // into the left gutter (cljs page.cljs margin-left:-20 inline).
-    class("ls-page-blocks", "margin-left:-20px;min-height:60px", "");
+    // .ls-page-blocks margins/min-height ride the typed props on every
+    // page-blocks emitter (margin_left:-20, min_height:60).
     // .cp__page-inner-wrap > .page-inner { padding-bottom:4rem }
     class("page-inner", "padding-bottom:64px", "");
     // #journals .journal-item — day separators + bottom breathing room.

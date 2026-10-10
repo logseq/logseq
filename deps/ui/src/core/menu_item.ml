@@ -33,9 +33,13 @@ let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ~on_press:(fun _ -> on_click ())
     (before @ after)
 
-(* retained-tree separator *)
-let separator ~key =
-  separator ~key ~style_class:separator_cls []
+(* retained-tree separator — the old lui-core rule carried height:1px,
+   margin:0.25rem -0.25rem, background:hsl(var(--muted)); ls-property-
+   dropdown menus override margins to 0.5rem 0 via ~mv:~mh *)
+let separator ?(mv = 4) ?(mh = -4) ~key =
+  separator ~key ~style_class:separator_cls ~height:1
+    ~margin_vertical:mv ~margin_horizontal:mh
+    ~background:"hsl(var(--muted))" []
 
 (* dots ghost-icon + anchored dropdown_menu — the cljs shui
    dropdown-menu pairing used by the graphs rows and the collaborators

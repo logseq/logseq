@@ -1030,9 +1030,10 @@ let ref_filter_dialog inst anchor =
                  ; text ~font_size:"0.75rem"
                      ~value:(I.t "reference.filter/directions") [] ]
              ]
-         ; (* cp__filters keeps its class — the .ls-filters .cp__filters
-              margin and :empty rules are leftover hooks *)
-           column ~style_class:"cp__filters" [ chip_rows ]
+         ; (* cp__filters keeps its class — the :empty rule is a
+              leftover hook *)
+           column ~style_class:"cp__filters" ~margin_bottom:16
+             ~margin_left:8 [ chip_rows ]
          ; row ~cross:`center ~gap:8 ~padding_vertical:4
              ~padding_horizontal:8 ~corner_radius:6
              ~style_class:"cp__filters-input-panel"
@@ -1055,9 +1056,9 @@ let ref_filter_dialog inst anchor =
                           deb (fun () -> Signal.set query v)
                       | _ -> ())
                     []) ]
-         ; (* ls-filters-refs keeps its class — margin-top + :empty
-              hooks *)
-           box ~style_class:"ls-filters-refs" [ ref_rows ] ])
+         ; (* ls-filters-refs keeps its class — the :empty rule is a
+              leftover hook *)
+           box ~style_class:"ls-filters-refs" ~margin_top:16 [ ref_rows ] ])
         context parent)
 
 let refs_filter_btn inst : t =

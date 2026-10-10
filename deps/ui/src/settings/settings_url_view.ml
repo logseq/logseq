@@ -78,7 +78,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
           ~style_class:"ls-dialog-title-lg" ~value:title []
       ; column ~key:(key ^ "-b") ~style_class:"ls-pad"
           [ paragraph ~key:(key ^ "-d")
-              ~style_class:"ls-desc ls-mb-sm" ~value:desc []
+              ~style_class:"ls-desc ls-mb-sm" ~margin_bottom:16
+              ~value:desc []
           ; box ~key:(key ^ "-i")
               [ label ~key:(key ^ "-il") ~value:"URL" []
               ; input ~key:(key ^ "-in")

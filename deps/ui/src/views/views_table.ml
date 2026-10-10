@@ -1288,7 +1288,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
                     (box ~style_class:"ls-foldable-title-control block-control cursor-pointer opacity-50 hover:opacity-100"
-                       ~width:14 ~height:16
+                       ~width:14 ~height:16 ~margin_left:(-27)
                        [ (* cljs foldable-caret: span.control-show only
                             while the title is hovered or the group is
                             collapsed — control-hide otherwise *)
@@ -1472,7 +1472,7 @@ let render_table inst s : t =
         [ table_el inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
-  column ~gap:8 ~min_width:0 ~style_class:"ls-view-body"
+  column ~gap:8 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body"
     ((* cljs filters-row renders nil with no filters — mounting the
         empty box would still eat the column gap *)
      (if s.V.filters = [] then [] else [ filters ])

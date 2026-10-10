@@ -105,8 +105,8 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
    non-db-tag popups, empty when the node has no icon *)
 let node_icon_slot ~key (it : S.ac_item) : t =
   row ~key ~style_class:"ls-ac-node-icon" ~cross:`center ~height:20
-    ~opacity:0.5
-    ~data_attrs:[ ("style", "margin-right:0.25rem;flex-shrink:0") ]
+    ~opacity:0.5 ~margin_right:4
+    ~data_attrs:[ ("style", "flex-shrink:0") ]
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
          [ box ~key:"cp" ~style_class:"icon-cp-container"
@@ -140,15 +140,10 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
       (match it.S.ai_breadcrumb with
        | Some "" ->
            [ box ~key:"bc" ~style_class:"ls-ac-bc" ~min_width:0
-               ~opacity:0.7
-               ~data_attrs:
-                 [ ("style", "margin-bottom:0.25rem;margin-left:3px") ]
-               [] ]
+               ~opacity:0.7 ~margin_bottom:4 ~margin_left:3 [] ]
        | Some bc ->
            [ box ~key:"bc" ~style_class:"ls-ac-bc" ~min_width:0
-               ~opacity:0.7
-               ~data_attrs:
-                 [ ("style", "margin-bottom:0.25rem;margin-left:3px") ]
+               ~opacity:0.7 ~margin_bottom:4 ~margin_left:3
                [ text ~key:"b" ~font_size:"0.75rem"
                    ~style_class:
                      "breadcrumb block-parents \
@@ -561,7 +556,7 @@ let cm_color_row (st : S.t) : t =
   row ~key:"colors" ~style_class:"ls-cm-colors" ~main:`space_between
     ~cross:`center ~padding_vertical:4 ~padding_horizontal:8
     [ row ~key:"colors-row" ~style_class:"ls-cm-colors-row" ~gap:4
-        ~data_attrs:[ ("style", "margin-top:0.5rem") ]
+        ~margin_top:8
         (List.map swatch S.colors @ [ remove ]) ]
 ;;
 
@@ -594,7 +589,7 @@ let cm_heading_row (st : S.t) : t =
         , "padding:0.25rem 0.5rem 0.5rem" ) ]
     [ row ~key:"headings-row" ~style_class:"ls-cm-headings-row"
         ~main:`space_between ~cross:`center ~grow:1.
-        ~data_attrs:[ ("style", "margin-left:0.5rem;margin-right:0.5rem") ]
+        ~margin_horizontal:8
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
               (icon ~key:"ic" ~name:(Icons.name_ref "h-auto")
@@ -652,8 +647,8 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
     [ reactive
       (function
       | S.Ci_sep ->
-          divider ~key:"sep"
-            ~style_class:"ui__dropdown-menu-separator" []
+          box ~key:"sepw" ~opacity:0.8
+            [ Menu_item.separator ~key:"sep" ~mv:4 ~mh:(-4) ]
       | S.Ci_colors -> cm_color_row st
       | S.Ci_headings -> cm_heading_row st
       | S.Ci_sub (label, _sub) ->
@@ -971,7 +966,8 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                     ]
                 ]
             ; box ~key:"pvb" ~style_class:"ls-page-blocks"
-                ~data_attrs:[ ("style", "margin-top:1rem") ]
+                ~margin_top:16 ~margin_left:(-20) ~min_height:60
+                ~data_attrs:[ ("style", "overflow:hidden") ]
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
                     (List.map

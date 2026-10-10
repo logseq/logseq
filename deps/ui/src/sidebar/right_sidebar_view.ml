@@ -113,7 +113,13 @@ let item_menu st (it : Sidebar_state.item) =
   let page_ =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
-  let sep key = divider ~key ~style_class:"menu-separator" [] in
+  let sep key =
+    box ~key ~opacity:0.5
+      [ divider ~key:"d" ~style_class:"menu-separator" ~margin_vertical:4
+          ~data_attrs:
+            [ ("style", "border-top:1px solid var(--lui-c-border)") ]
+          [] ]
+  in
   (* cljs popup-show!: element-anchored dropdown — centered on the
      target (ls-anchor-cx), flipping above when the space below runs
      out (ls-anchor-top lifts it by its own height) *)
@@ -540,7 +546,8 @@ let item_body st idx (it : Sidebar_state.item) =
               ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
-                 ~data_attrs:[ ("style", "margin-left:-20px") ]
+                 ~margin_left:(-20) ~min_height:60
+                 ~data_attrs:[ ("style", "overflow:hidden") ]
                  [ (* data-cid is read by editor_actions' [data-cid]
                       closest queries *)
                    box ~key:("pbin-" ^ it.key)
