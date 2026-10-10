@@ -55,15 +55,14 @@ let select_el ctx ~key ~show ~value ~options ~on_change =
            []
        ; reactive (fun open_ ->
              if open_ then
-               dropdown_menu ~key:(key ^ "-m") ~anchor:`below
+               Ui_components.menu_card ~key:(key ^ "-m") ~anchor:`below
                  ~anchor_alignment:`start
-                 ~style_class:"ui__dropdown-menu-content ui__select-content"
+                 ~cls:"ls-select-content"
                  ~on_dismiss:(fun _ -> close ())
                  (List.map
                     (fun (v, label) ->
                       menu_item ~key:(key ^ "-mi-" ^ v) ~text:label
                         ~selected:(v = value (S.cur (S.st ctx)))
-                        ~style_class:"ui__dropdown-menu-item"
                         ~on_press:(fun _ ->
                           on_change v;
                           close ())

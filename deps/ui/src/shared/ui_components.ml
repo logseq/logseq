@@ -762,3 +762,49 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
            ~data_attrs:[ "style", "padding-top:6px;padding-right:8px" ]
            []
        ])
+
+(* -- menus & overlays -------------------------------------------------- *)
+
+(* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card
+   spec as props — migrated dropdown/select popups carry this chrome so
+   the compat class can be dropped. [cls] keeps app-semantic hooks. *)
+let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
+    items : t =
+  with_props
+    [ ( P.Shadow
+      , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+           0.1)" )
+    ; P.FontSize, sv "0.875rem" ]
+    (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
+       ~min_width:128 ~padding:4
+       ~background:"hsl(var(--popover))"
+       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~corner_radius:6 ~style_class:cls items)
+
+(* Same chrome on a popover surface — for anchored popups whose children
+   are not menu rows (dropdown_menu rejects non-menu children). *)
+let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
+    children : t =
+  with_props
+    [ ( P.Shadow
+      , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+           0.1)" ) ]
+    (popover ~key ~anchor ~anchor_alignment ~on_dismiss
+       ~min_width:128 ~padding:4
+       ~background:"hsl(var(--popover))"
+       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~corner_radius:6 ~style_class:cls children)
+
+(* Floating dialog close — the .ui__dialog-close spec (absolute
+   top-right, 16px ghost icon, hover/focus opacity) as props. Mounts
+   inside .lui-dialog-body; the fixed-positioned .lui-dialog section is
+   the containing block. *)
+let dialog_close ~key ~label ~on_press : t =
+  with_props
+    [ P.Position, sv "absolute"
+    ; P.InsetTop, fv 16.
+    ; P.InsetRight, fv 16.
+    ; P.Opacity, fv 0.7
+    ; P.HoverOpacity, fv 1. ]
+    (button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
+       ~corner_radius:4 ~icon:`x ~label ~on_press [])

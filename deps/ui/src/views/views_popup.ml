@@ -516,7 +516,7 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
        it do not dismiss (matches the old overlay semantics) *)
     dialog ~key:(Printf.sprintf "vp-dlg-%d" id)
       ~accessibility_identifier:(Printf.sprintf "vp-dlg-%d" id)
-      ~style_class:"ui__dialog-content"
+      ~style_class:"ls-dialog-generic"
       ~data_attrs:[ ("role", "dialog"); ("aria-modal", "true") ]
       ~on_dismiss:(fun _ -> close_entry id)
       ([ row ~key:"head" ~style_class:"ls-dialog-head"

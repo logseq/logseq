@@ -28,6 +28,49 @@ batch "Menus and dialogs". Source files audited:
 Classification legend: **layout** / **appearance** / **state** /
 **hook** / **deco**.
 
+## Batch status — devin/003-t5-menus (applied)
+
+Migrated to LUI kinds/recipes and their CSS deleted or retargeted:
+
+- `dots_menu` (`core/menu_item.ml`) → `Ui_components.menu_card`
+  (`dropdown_menu` kind) + `menu_item` children.
+- Selects in settings language (`settings_view.lang_menu`), settings
+  date-format (`settings_page.dfmt_menu`) and export
+  (`export_view.export_select`) → `select` trigger + `menu_card`
+  (`ls-select-trigger`/`ls-select-content` classes).
+- Toasts (`toasts_view.ml`) → `toast` kind; `ui__toast*` rules
+  deleted, replaced by a top-right `.lui-toast-viewport` rule.
+- Named dialogs + prompt (`dialogs_view.ml`), cards modal
+  (`cards_view.ml`), e2ee password modal (`ui_requests.ml`) →
+  `dialog` kind; per-dialog chrome kept via `.lui-dialog.ls-dialog-*`
+  scoped selectors; `ui__dialog-content`-based focus trap selector
+  widened to `.lui-dialog`.
+- Help popup (`shell/chrome.ml`) → new `Ui_components.popover_card`
+  (`popover` kind anchored `above`/`end_`; free children allowed).
+- CodeMirror language picker → `Views_popup.show_menu`.
+- Login alert (`login_view.ml`) → `alert` kind, `destructive` variant.
+- `views_popup.show_dialog` → `ls-dialog-generic` on `dialog` kind.
+- gpui `logseq_ext.rs` pruned: `ui__dialog-close`,
+  `ui__toaster-viewport`, `ui__toast`, `ui__context-menu-content`,
+  `ui__select-content` registrations removed.
+
+CSS deleted in `resources/css/lui-overlay.css` (52 insertions / 445
+deletions): all `ui__select-*`, all `ui__context-menu-*` (dead —
+context menu renders `ls-context-menu-*` + menu-item), all
+`ui__toast*` incl. `:has()` viewport, `ui__dialog-close`,
+`ui__dialog-title-empty`, `ui__dropdown-menu-item-indicator`,
+`ls-dialog-body`, `[label="…"]` dialog twins, outer
+`.cp__sidebar-help-menu-popup` positioning (inner item/title/footer
+rules kept), login `ui__alert` rules, escaped `ls-cm-heading-btn\,`
+variant. Added: `.lui-dialog` base chrome (gap/padding/responsive
+width) + `.lui-toast-viewport` top-right placement.
+
+Skipped as blocked (see plan appendix "Leftovers"):
+`views_popup.menu_level` and left-sidebar anchored menus — no
+programmatic menu-anchor prop exists on any menu-capable kind today.
+`pdf_toolbar` docinfo modal stays custom: it is imperative `Web_dom`
+DOM (outside the LUI element tree), not a view to retag.
+
 ## Popup plumbing (portal/positioner)
 
 | Selector / registration | Class | Owner after migration |

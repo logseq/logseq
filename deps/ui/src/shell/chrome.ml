@@ -888,7 +888,10 @@ let help_menu_popup : t =
     Runtime.send Action.Help_toggle;
     Runtime.flush ()
   in
-  box ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+  Ui_components.popover_card ~key:"help-menu"
+    ~cls:"cp__sidebar-help-menu-popup"
+    ~anchor:`above ~anchor_alignment:`end_
+    ~on_dismiss:(fun _ -> close ())
     [ column ~key:"hm-wrap" ~style_class:"list-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close

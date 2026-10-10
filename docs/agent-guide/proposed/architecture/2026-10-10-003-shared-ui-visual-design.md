@@ -522,3 +522,34 @@ Blocked items with no typed-prop channel, kept as CSS or deferred:
 - `::first-letter` capitalize, `-webkit-line-clamp`, `text-align`,
   `resize`, `transform` (switch knob, `.ls-icon-mini` scale) — no prop
   channel, CSS kept or handled by existing rules.
+
+## Task 5 leftovers (menus & overlays batch)
+
+**Programmatic menu anchor — verdict: NOT AVAILABLE in LUI
+`2662e3c`.** `dropdown_menu` anchors to its DOM parent (trigger
+pattern); `context_menu` binds right-click; neither accepts a
+computed rect. `popover` is the only point-anchored kind
+(`~at:(x, y)`, plus `~anchor`/`~anchor_alignment`), but its child
+contract is free-form and rejects `menu_item` children
+(`child_kind_supported` restricts `menu_item` to menu kinds), so it
+cannot carry a menu surface. `views_popup.menu_level` (~20 call
+sites) and the left-sidebar anchored menus stay on
+`ui__dropdown-menu-*` classes this batch.
+
+Required prop shape (LUI capability task, not a logseq-side hack):
+
+- Preferred: `dropdown_menu ~at:(x, y)` or
+  `~anchor_rect:{x,y,w,h}` — open the menu surface at a computed
+  point/rect instead of its DOM parent, with existing
+  `~anchor_alignment`/`~on_dismiss` semantics.
+- Alternative: widen `popover`'s child contract to accept
+  `menu_item`/`menu_section` children (a menu-surface role), so
+  `popover ~at` can host menus.
+- Either way the mounted surface must keep `menu_item` state
+  channels (`selected`, `disabled`, `on_press`) and Escape /
+  outside-tap dismiss parity with `dropdown_menu`.
+
+**pdf docinfo modal** (`extension/pdf_toolbar.ml:887+`) stays
+custom: it is imperative `Web_dom.create_element` DOM outside the
+LUI element tree — needs a view-tree entry point before the `dialog`
+kind can adopt it.

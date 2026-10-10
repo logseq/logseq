@@ -83,9 +83,9 @@ let lang_menu_close mst =
   Runtime.flush ()
 
 let lang_menu ~key st mst =
-  Lui_elements.dropdown_menu ~key:("lm-" ^ key)
+  Ui_components.menu_card ~key:("lm-" ^ key)
+    ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
-    ~style_class:"ui__dropdown-menu-content ui__select-content"
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
@@ -94,7 +94,6 @@ let lang_menu ~key st mst =
            ~key:(Printf.sprintf "lmi-%s-%d" key i)
            ~text:label
            ~selected:(code = current_lang ())
-           ~style_class:"ui__dropdown-menu-item"
            ~on_press:(fun _ev ->
              set_language code;
              Signal.set st label;
@@ -141,7 +140,8 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
       ~style_class:("ls-select-wrap " ^ h_cls)
       [ Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
-          ~style_class:("ui__select-trigger " ^ h_cls)
+          ~container_relative_frame:`horizontal
+          ~style_class:("ls-select-trigger " ^ h_cls)
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())

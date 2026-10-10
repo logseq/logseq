@@ -71,7 +71,7 @@ let run_views ~registry ~profile ~finish =
   let trigger = List.find (fun n -> class_has n "graph-action-btn") (nodes menu) in
   check "graph and member action triggers have an accessible label"
     (P.node_properties_supported P.Button (button_properties trigger));
-  let menu_nodes () = List.filter (fun n -> n.M.kind = "popover") (nodes menu) in
+  let menu_nodes () = List.filter (fun n -> n.M.kind = "dropdown-menu") (nodes menu) in
   S.press menu trigger.M.id;
   eqi "action trigger opens one menu" 1 (List.length (menu_nodes ()));
   check "open action trigger announces expanded state"
@@ -135,7 +135,7 @@ let run_views ~registry ~profile ~finish =
     S.flush notifications
   in
   push "success" "First";
-  let first = List.find (fun n -> class_has n "ui__toast") (nodes notifications) in
+  let first = List.find (fun n -> n.M.kind = "toast") (nodes notifications) in
   check "notifications use the platform toast lifecycle" (first.M.kind = "toast");
   push "error" "Persistent";
   check "adding a notification preserves previous toast identity"
