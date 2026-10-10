@@ -224,12 +224,15 @@ let right_sidebar (ms : Model.t Signal.signal) =
 let left_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__sidebar-left-layout"
+      (* h-full rides the signal too: class_signal replaces the static
+         ~style_class, so a class kept only on the static side never
+         lands — the pane then shrink-wraps and floats mid-window. *)
+      "cp__sidebar-left-layout h-full"
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~min_height:0
        ~style_class:"cp__sidebar-left-layout h-full"
-       [ row ~key:"ls-dock" ~grow:1. ~min_height:0
+       [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
           
            [ column ~key:"ls-inner" ~grow:1. ~min_height:0
                (* web: --left-sidebar-bg-color = --lx-gray-02 (the
