@@ -1,4 +1,8 @@
 {
+ :mcp.query/approval-title "Read-only Logseq query"
+ :mcp.query/approval-message "Allow this exact query once? No graph data will be changed."
+ :mcp.query/approve-once "Approve Once"
+ :mcp.query/approval-detail "Question: {1}\nTools checked: {2}\nWhy dedicated tools cannot answer economically: {3}\nReads: {4}; changes nothing.\nExpected result size: {5}\nHard output limits: 1000 rows and 65536 UTF-8 bytes; results may be truncated.\nExact query:\n{6}\nExact inputs:\n{7}\nApprove only if no dedicated tool can answer this question, or answering it would require a significantly more expensive scan. Approval applies to this invocation only; failures and revisions require fresh approval."
  :account/already-logged-in-as "You are already logged in as {1}"
  :account/auth-error-already-authenticated "You are already signed in."
  :account/auth-error-code-delivery-failed "Failed to send the verification code. Please try again later."

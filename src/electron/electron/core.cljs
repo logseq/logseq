@@ -368,21 +368,24 @@
         cli-dir! #(if utils/win32?
                     (preferred-win-cli-dir)
                     (preferred-unix-cli-dir))]
-    (cli-install/install-cli-launcher!
-     {:windows? utils/win32?
-      :cli-path cli-path
-      :cli-dir! cli-dir!
-      :exe-path (.getPath app "exe")
-      :appimage-path (.-APPIMAGE js/process.env)
-      :path-join path-join
-      :exists? #(fs/existsSync %)
-      :read-file! #(.readFileSync fs % "utf8")
-      :write-file! #(.writeFileSync fs %1 %2 "utf8")
-      :chmod! #(fs/chmodSync %1 %2)
-      :show-error-box! #(.showErrorBox dialog %1 %2)
-      :t t
-      :log-info! logger/info
-      :log-warn! logger/warn})))
+    (if (and (not (.-isPackaged ^js app))
+             (not (fs/existsSync cli-path)))
+      (logger/warn :cli/install "Skipping CLI launcher install; development CLI script is not built.")
+      (cli-install/install-cli-launcher!
+       {:windows? utils/win32?
+        :cli-path cli-path
+        :cli-dir! cli-dir!
+        :exe-path (.getPath app "exe")
+        :appimage-path (.-APPIMAGE js/process.env)
+        :path-join path-join
+        :exists? #(fs/existsSync %)
+        :read-file! #(.readFileSync fs % "utf8")
+        :write-file! #(.writeFileSync fs %1 %2 "utf8")
+        :chmod! #(fs/chmodSync %1 %2)
+        :show-error-box! #(.showErrorBox dialog %1 %2)
+        :t t
+        :log-info! logger/info
+        :log-warn! logger/warn}))))
 
 (defn- on-app-ready!
   [^js app']

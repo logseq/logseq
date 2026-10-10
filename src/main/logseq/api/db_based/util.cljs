@@ -1,5 +1,22 @@
 (ns logseq.api.db-based.util
-  "Shared helpers for DB-based API namespaces.")
+  "Shared helpers for DB-based API namespaces."
+  (:require [clojure.walk :as walk]))
+
+(defn with-embed-info
+  [block]
+  (let [target (or (:block/link block) (:link block))
+        target-uuid (or (:block/uuid target) (:uuid target))]
+    (if target-uuid
+      (cond-> (assoc block :embed {:target_uuid (str target-uuid)
+                                  :target_type (if (or (:block/name target) (:name target)) "page" "block")
+                                  :target_title (or (:block/title target) (:title target))})
+        (:block/link block)
+        (assoc :block/link (select-keys target [:db/id :block/uuid :block/title :block/name])))
+      block)))
+
+(defn with-embed-info-tree
+  [data]
+  (walk/postwalk #(if (map? %) (with-embed-info %) %) data))
 
 (defn remove-hidden-properties
   "Given an entity map, remove properties that shouldn't be returned in api calls."
