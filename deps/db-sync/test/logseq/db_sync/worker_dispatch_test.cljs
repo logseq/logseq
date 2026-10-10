@@ -507,7 +507,7 @@
                          beyond-cap (dispatch/handle-worker-fetch
                                      (request {:graph-id "graph-1"
                                                :permission "read"
-                                               :expires-at (+ now pat-year-ms 1)}) env)
+                                               :expires-at (+ now pat-year-ms (* 24 60 60 1000) 1)}) env)
                          malformed-body (dispatch/handle-worker-fetch
                                          malformed-request env)
                          inaccessible (dispatch/handle-worker-fetch

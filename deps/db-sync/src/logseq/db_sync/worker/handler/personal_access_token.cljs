@@ -8,6 +8,7 @@
             [promesa.core :as p]))
 
 (def ^:private one-year-ms (* 365 24 60 60 1000))
+(def ^:private one-day-ms (* 24 60 60 1000))
 (def ^:private permissions #{"read" "write" "both"})
 (def ^:private rtc-groups #{"team" "rtc_2025_07_10"})
 (def ^:private collection-path "/api/v1/personal-access-tokens")
@@ -90,9 +91,11 @@
           (not (contains? permissions permission))
           (http/bad-request "invalid permission")
 
+          ;; End-of-day in the picker's timezone may run up to ~a day past one
+          ;; year, so the cap leaves a one-day buffer.
           (or (not (number? expires-at))
               (<= expires-at now)
-              (> expires-at (+ now one-year-ms)))
+              (> expires-at (+ now one-year-ms one-day-ms)))
           (http/bad-request "invalid expiration")
 
           :else
