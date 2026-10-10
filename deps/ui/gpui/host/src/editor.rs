@@ -6,8 +6,8 @@
 //! order against the `.ed-r` text runs rendered inside the enclosing
 //! `.block-editor` column. This module supplies the platform half:
 //!
-//! - a specialized extension renderer: an invisible focusable element
-//!   that registers an `ElementInputHandler` during paint, routing
+//! - a specialized extension renderer that paints the native caret from
+//!   this frame's glyph layout and registers an `ElementInputHandler`, routing
 //!   keystrokes and IME marked text into OCaml as `key` / `insert` /
 //!   `composition` / `focus` / `blur` extension events — the same wire
 //!   vocabulary the web adapter emits. Mouse presses inside the block
@@ -16,25 +16,24 @@
 //! - the measurement dom-ops (`caret-rect` / `offset-at` /
 //!   `line-ranges` / `scroll-height` / `set-input-focus`), computed from
 //!   the rendered run nodes: `shared.node_bounds` supplies window-space
-//!   element rects and the gpui text system shapes each run's line for
-//!   glyph positions. Replies return through the platform-event channel;
+//!   element rects and `shared.text_layouts` supplies the exact glyph
+//!   positions used for drawing. Replies return through the platform-event channel;
 //!   px are relative to the `.block-editor` container and offsets are
 //!   UTF-8 model bytes (native units — no UTF-16 boundary translation;
 //!   see the units note in the design doc).
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 
 use gpui_kit::gpui::{
     canvas, div, px, AnyElement, App, AppContext, Bounds, Context, DispatchPhase,
     ElementInputHandler, Entity, EntityId, EntityInputHandler, FocusHandle, FocusOutEvent,
-    InteractiveElement, LineLayout, MouseButton, MouseDownEvent, ParentElement, Pixels,
+    InteractiveElement, MouseButton, MouseDownEvent, ParentElement, Pixels,
     Point, Styled, Subscription, UTF16Selection, Window,
 };
 use gpui_kit::IntoElement;
+use gpui_kit::component::theme::ActiveTheme;
 use lui_core::bridge;
 use lui_core::store::{Node, NodeIdentity, Store};
 use lui_core::wire::Value as WireValue;
@@ -206,18 +205,6 @@ fn rows_of<'a>(runs: &'a [Run]) -> Vec<(i64, Vec<&'a Run>)> {
 // Measurement — gpui text layout over the rendered run nodes
 // ---------------------------------------------------------------------------
 
-/// Shape one run's text the way the node renderer lays it out: the
-/// window text style as a single font run (no `text-*`/`font-*` tokens
-/// reach the `.ed-r` style classes).
-fn layout_run(text: &str, window: &mut Window) -> Arc<LineLayout> {
-    let style = window.text_style();
-    let font_size = style.font_size.to_pixels(window.rem_size());
-    let run = style.to_run(text.len());
-    window
-        .text_system()
-        .layout_line(text, font_size, &[run], None)
-}
-
 /// Snap `index` back onto a UTF-8 boundary (gpui indices are bytes).
 fn utf8_floor(text: &str, mut index: usize) -> usize {
     index = index.min(text.len());
@@ -236,7 +223,7 @@ fn caret_rect(
     shared: &Shared,
     block_id: &str,
     off: i64,
-    window: &mut Window,
+    _window: &mut Window,
 ) -> Option<(f32, f32, f32, Pixels, Pixels)> {
     let (container, runs) = {
         let shared = shared.borrow();
@@ -266,7 +253,13 @@ fn caret_rect(
             } else {
                 utf8_floor(&text, (off - run.lo).max(0) as usize)
             };
-            bounds.origin.x + layout_run(&text, window).x_for_index(index)
+            let layout = shared.borrow().text_layouts.get(&run.node)?.clone();
+            // A content patch can land before its first layout. Geometry
+            // belongs to the drawn text, never to a newer unpainted buffer.
+            if layout.text() != text {
+                return None;
+            }
+            layout.position_for_index(index)?.x
         };
         return Some((
             f32::from(x - origin.x),
@@ -279,23 +272,55 @@ fn caret_rect(
     None
 }
 
+fn paint_caret(shared: &Shared, node_id: i64, window: &mut Window, cx: &mut App) {
+    let (block_id, offset) = {
+        let guard = shared.borrow();
+        let Some(block_id) = ext_str_prop(&guard.store, node_id, "block-id") else { return; };
+        let Some(offset) = ext_int_prop(&guard.store, node_id, "caret") else { return; };
+        (block_id, offset)
+    };
+    // All text runs have completed prepaint before the sink paints. Read
+    // their glyph positions and the current model offset in this frame,
+    // without an OCaml measurement reply or another layout/paint pass.
+    let Some((x, y, height, ox, oy)) = caret_rect(shared, &block_id, offset, window) else { return; };
+    let bounds = Bounds::new(
+        gpui_kit::gpui::point(ox + px(x), oy + px(y)),
+        gpui_kit::gpui::size(px(2.), px(height)),
+    );
+    window.paint_quad(gpui_kit::gpui::fill(bounds, cx.theme().foreground));
+    if crate::perf::enabled() {
+        crate::perf::record("caret_paint", json!({"block_id": block_id, "offset": offset, "x": x, "y": y}));
+    }
+}
+
 /// Model-byte offset under `wx` (window px) inside `run`'s bounds.
 fn offset_in_run(
     shared: &Shared,
     run: &Run,
-    bounds: Bounds<Pixels>,
     wx: Pixels,
-    window: &mut Window,
-) -> i64 {
+    wy: Pixels,
+    _window: &mut Window,
+) -> Option<i64> {
     match run.tag {
         // Pads hit the line-end offset; pill interiors expand.
-        b'z' => run.lo,
-        b'a' => run.lo + 1,
+        b'z' => Some(run.lo),
+        b'a' => Some(run.lo + 1),
         _ => {
             let text = run_text(&shared.borrow().store, run.node);
-            let index =
-                layout_run(&text, window).closest_index_for_x(wx - bounds.origin.x);
-            run.lo + utf8_floor(&text, index) as i64
+            let layout = shared.borrow().text_layouts.get(&run.node)?.clone();
+            if layout.text() != text {
+                return None;
+            }
+            let point = gpui_kit::gpui::point(wx, wy);
+            let index = match layout.index_for_position(point) {
+                Ok(index) | Err(index) => index,
+            };
+            let lower = utf8_floor(&text, index);
+            let upper = text[lower..].chars().next().map_or(lower, |ch| lower + ch.len_utf8());
+            let lower_x = layout.position_for_index(lower)?.x;
+            let upper_x = layout.position_for_index(upper)?.x;
+            let nearest = if (wx - upper_x).abs() < (wx - lower_x).abs() { upper } else { lower };
+            Some(run.lo + nearest as i64)
         }
     }
 }
@@ -350,7 +375,7 @@ fn offset_at(
             return Some(run.lo);
         }
         if wx <= bounds.origin.x + bounds.size.width {
-            return Some(offset_in_run(shared, run, bounds, wx, window));
+            return offset_in_run(shared, run, wx, px(wy), window);
         }
         end = Some(run.hi);
     }
@@ -425,8 +450,21 @@ fn emit_ffi(node_id: i64, name: &CStr, values: String) {
 }
 
 fn emit(shared: &Shared, node_id: i64, name: &CStr, values: String, cx: &mut App) {
+    let started = std::time::Instant::now();
+    let before = crate::perf::enabled().then(|| ext_int_prop(&shared.borrow().store, node_id, "caret"));
+    let payload = crate::perf::enabled().then(|| serde_json::from_str::<Value>(&values).unwrap());
     emit_ffi(node_id, name, values);
     drain_pending(shared, cx);
+    if crate::perf::enabled() {
+        crate::perf::record("input", json!({
+            "event": name.to_string_lossy(),
+            "payload": payload,
+            "block_id": ext_str_prop(&shared.borrow().store, node_id, "block-id"),
+            "caret_before": before.flatten(),
+            "caret_after": ext_int_prop(&shared.borrow().store, node_id, "caret"),
+            "dispatch_ms": started.elapsed().as_secs_f64() * 1000.,
+        }));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -454,28 +492,26 @@ struct EditorInputState {
     subs: Vec<Subscription>,
 }
 
-/// node id -> input entity, keyed by the `logseq-editor` node. Entries
-/// outlive dropped nodes; bounded by mounted editors. Global (not
-/// thread-local) because `on_next_frame` pump callbacks and render run
-/// on different threads — a thread-local map looks empty to the pump.
-static INPUT_STATES: std::sync::LazyLock<Mutex<HashMap<i64, Entity<EditorInputState>>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-
-thread_local! {
+/// Input entities belong to the GPUI app that created them. App globals
+/// follow its context across render and pump callbacks without sharing
+/// entities with another app or depending on the callback's thread.
+#[derive(Default)]
+struct EditorInputs {
+    states: HashMap<i64, Entity<EditorInputState>>,
     /// block-id -> desired focus state: `set-input-focus` can race ahead
     /// of the surface mount (the request is emitted once on the OCaml
     /// side), so it's drained when the input entity is created.
-    static PENDING_FOCUS: RefCell<HashMap<String, bool>> =
-        RefCell::new(HashMap::new());
+    pending_focus: HashMap<String, bool>,
 }
+
+impl gpui_kit::gpui::Global for EditorInputs {}
 
 fn input_state(
     node_id: i64,
     shared: &Shared,
     cx: &mut Context<LuiNodeView>,
 ) -> Entity<EditorInputState> {
-    let mut states = INPUT_STATES.lock().unwrap();
-    if let Some(state) = states.get(&node_id) {
+    if let Some(state) = cx.default_global::<EditorInputs>().states.get(&node_id) {
         return state.clone();
     }
     let shared = shared.clone();
@@ -489,7 +525,7 @@ fn input_state(
         text: String::new(),
         subs: Vec::new(),
     });
-    states.insert(node_id, state.clone());
+    cx.default_global::<EditorInputs>().states.insert(node_id, state.clone());
     state
 }
 
@@ -810,7 +846,7 @@ fn grant_focus(
 }
 
 fn focus_editor(node_id: i64, window: &mut Window, cx: &mut App) {
-    let Some(state) = INPUT_STATES.lock().unwrap().get(&node_id).cloned()
+    let Some(state) = cx.default_global::<EditorInputs>().states.get(&node_id).cloned()
     else {
         return;
     };
@@ -821,31 +857,22 @@ fn focus_editor(node_id: i64, window: &mut Window, cx: &mut App) {
 ///
 /// - Blur a conduit whose node left the store while it still held window
 ///   focus. `window.focus` is not cleared when a focused element
-///   unmounts, and `INPUT_STATES` retains the `FocusHandle`, so the stale
+///   unmounts, and `EditorInputs` retains the `FocusHandle`, so the stale
 ///   id keeps `window.focused()` non-empty — which makes the root key
 ///   forwarder swallow printable keys as if a text input were still
 ///   live. Blurring fires `focus_out`, which emits the conduit `blur`
 ///   event so OCaml can commit the buffer.
 ///
-/// - Notify the focused conduit's view every tick. gpui recomputes
-///   `focused_text_input_active` at the end of every drawn frame from
-///   the elements that called `handle_input` during that paint; on any
-///   frame where the conduit canvas does not repaint, the platform input
-///   handler is unregistered and `insertText` is silently dropped.
-///   Keeping the view dirty each tick keeps the handler registered.
+/// GPUI replays input handlers when it reuses cached paint, so a live
+/// focused conduit does not need another draw on an idle tick.
 pub(crate) fn reconcile_stale_focus(shared: &Shared, window: &mut Window, cx: &mut App) {
-    let states: Vec<(i64, Entity<EditorInputState>)> = INPUT_STATES
-        .lock()
-        .unwrap()
+    let states: Vec<(i64, Entity<EditorInputState>)> = cx.default_global::<EditorInputs>().states
         .iter()
         .map(|(node_id, state)| (*node_id, state.clone()))
         .collect();
     let mut prune: Vec<i64> = Vec::new();
     for (node_id, state) in states {
-        let (view_entity_id, focused) = {
-            let state = state.read(cx);
-            (state.view_entity_id, state.focus.is_focused(window))
-        };
+        let focused = state.read(cx).focus.is_focused(window);
         let present = shared.borrow().store.node(node_id).is_some();
         if !present {
             // Node left the store: blur once (fires `focus_out` -> conduit
@@ -855,12 +882,10 @@ pub(crate) fn reconcile_stale_focus(shared: &Shared, window: &mut Window, cx: &m
                 state.update(cx, |this, cx| this.emit(c"blur", "{}".into(), cx));
             }
             prune.push(node_id);
-        } else if focused {
-            cx.notify(view_entity_id);
         }
     }
     if !prune.is_empty() {
-        let mut states = INPUT_STATES.lock().unwrap();
+        let states = &mut cx.default_global::<EditorInputs>().states;
         for node_id in prune {
             states.remove(&node_id);
         }
@@ -876,7 +901,7 @@ fn set_input_focus(
     window: &mut Window,
     cx: &mut App,
 ) {
-    PENDING_FOCUS.with(|p| p.borrow_mut().insert(block_id.to_owned(), focused));
+    cx.default_global::<EditorInputs>().pending_focus.insert(block_id.to_owned(), focused);
     let node_id = {
         let shared = shared.borrow();
         find_editor_node(&shared.store, block_id)
@@ -889,7 +914,7 @@ fn set_input_focus(
     } else {
         window.blur(cx);
         if let Some(state) =
-            INPUT_STATES.lock().unwrap().get(&node_id).cloned()
+            cx.default_global::<EditorInputs>().states.get(&node_id).cloned()
         {
             state.update(cx, |this, cx| this.emit(c"blur", "{}".into(), cx));
         }
@@ -941,7 +966,7 @@ fn editor_surface(
         .and_then(WireValue::as_str)
     {
         if let Some(want) =
-            PENDING_FOCUS.with(|p| p.borrow_mut().remove(block_id))
+            cx.default_global::<EditorInputs>().pending_focus.remove(block_id)
         {
             // Grant synchronously instead of deferring: `window.focus`
             // only writes window fields, so a grant during render is
@@ -1112,6 +1137,7 @@ fn editor_surface(
         .child(canvas(
             |_, _, _| {},
             move |bounds, _, window, cx| {
+                paint_caret(&hit_shared, node_id, window, cx);
                 window.handle_input(
                     &focus,
                     ElementInputHandler::new(bounds, hit_state.clone()),
@@ -1177,7 +1203,22 @@ pub fn handle_dom_op(
     let replies = match op {
         "caret-rect" => {
             let off = parsed.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            caret_rect(shared, &block_id, off, window)
+            let rect = caret_rect(shared, &block_id, off, window);
+            if crate::perf::enabled() {
+                let editor = find_editor_node(&shared.borrow().store, &block_id);
+                let runs = editor.and_then(|id| editor_runs(&shared.borrow().store, id));
+                crate::perf::record("caret_measure", json!({
+                    "block_id": block_id,
+                    "offset": off,
+                    "rect": rect.map(|(x,y,h,ox,oy)| (x,y,h,f32::from(ox),f32::from(oy))),
+                    "runs": runs.map(|(_, runs)| runs.iter().map(|run| json!({
+                        "lo": run.lo, "hi": run.hi, "tag": run.tag as char,
+                        "text_bytes": run_text(&shared.borrow().store, run.node).len(),
+                        "width": node_bounds(shared, run.node).map(|b| f32::from(b.size.width)),
+                    })).collect::<Vec<_>>()),
+                }));
+            }
+            rect
                 .map(|(x, y, h, ox, oy)| {
                     vec![(
                         "caret-rect".to_string(),
@@ -1242,3 +1283,227 @@ pub fn handle_dom_op(
     Some(replies)
 }
 
+#[cfg(test)]
+mod geometry_tests {
+    use super::{caret_rect, offset_at, reconcile_stale_focus, EditorInputState, EditorInputs};
+    use gpui_kit::component::input::{Input, InputState};
+    use gpui_kit::gpui::{div, point, px, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, StyleRefinement, Styled, Window};
+    use lui_core::wire::decode_batch;
+    use lui_gpui::{LuiShared, Shared};
+    use serde_json::json;
+    use std::{cell::Cell, rc::Rc};
+
+    struct CachedInput {
+        input: Entity<InputState>,
+        renders: Rc<Cell<usize>>,
+    }
+    impl Render for CachedInput {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.renders.set(self.renders.get() + 1);
+            Input::new(&self.input)
+        }
+    }
+    struct InputScene(Entity<CachedInput>);
+    impl Render for InputScene {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let mut style = StyleRefinement::default();
+            style.size.width = Some(px(300.).into());
+            style.size.height = Some(px(40.).into());
+            div().child(self.0.clone().cached(style))
+        }
+    }
+
+    #[gpui_kit::test]
+    fn focused_input_stays_registered_without_idle_redraw(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let mut other_app = cx.new_app();
+        other_app.update(gpui_kit::init);
+        let shared = LuiShared::new();
+        let batch = decode_batch(r#"{"generation":1,"ops":[{"op":"create-node","id":800001,"kind":"root"},{"op":"create-node","id":800002,"kind":"column"},{"op":"insert-child","parent":800001,"child":800002,"index":0}]}"#).unwrap();
+        shared.borrow_mut().store.apply(&batch).unwrap();
+        let renders = Rc::new(Cell::new(0));
+        let counted = renders.clone();
+        let fixture = shared.clone();
+        let (scene, cx) = cx.add_window_view(move |window, cx| {
+            let input = cx.new(|cx| InputState::new(window, cx));
+            let focus = input.read(cx).focus_handle(cx);
+            let view = cx.new(|_| CachedInput { input, renders: counted });
+            let view_entity_id = view.entity_id();
+            let state = cx.new(|_| EditorInputState {
+                node_id: 800001, shared: fixture, focus: focus.clone(), view_entity_id,
+                marked: None, text: String::new(), subs: Vec::new(),
+            });
+            cx.default_global::<EditorInputs>().states.insert(800001, state);
+            focus.focus(window, cx);
+            InputScene(view)
+        });
+        cx.run_until_parked();
+        // A different GPUI app must not read or prune this app's entities.
+        let other_shared = LuiShared::new();
+        other_app.add_empty_window().update(|window, app| {
+            reconcile_stale_focus(&other_shared, window, app);
+        });
+        let before = renders.get();
+        for _ in 0..10 {
+            cx.update(|window, app| reconcile_stale_focus(&shared, window, app));
+        }
+        cx.run_until_parked();
+        assert_eq!(renders.get(), before, "an idle focused editor must not request another draw");
+        // Another part of the window redraws; GPUI replays the cached
+        // input handler even though this view's paint does not run.
+        scene.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        assert_eq!(renders.get(), before);
+        cx.simulate_input("good");
+        cx.update(|_, app| {
+            let input = scene.read(app).0.read(app).input.clone();
+            assert_eq!(input.read(app).value().as_ref(), "good");
+        });
+    }
+
+    struct EditorScene(Shared);
+
+    impl Render for EditorScene {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            // The editor inherits its font from its actual rendered ancestors.
+            div().text_size(px(32.)).child(LuiShared::view_for(&self.0, 1, cx))
+        }
+    }
+
+    #[gpui_kit::test]
+    fn caret_is_painted_in_the_same_frame_as_text(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let shared = LuiShared::new();
+        super::register(&shared);
+        lui_gpui::style::register_class_style("block-editor", "position:relative", "");
+        let batch = decode_batch(&json!({"generation":1,"ops":[
+            {"op":"create-node","id":1,"kind":"root"},
+            {"op":"create-node","id":2,"kind":"column"},
+            {"op":"set-prop","id":2,"property":"style-class","value":"block-editor"},
+            {"op":"create-node","id":3,"kind":"row"},
+            {"op":"set-prop","id":3,"property":"style-class","value":"ed-line"},
+            {"op":"create-node","id":4,"kind":"text"},
+            {"op":"set-prop","id":4,"property":"style-class","value":"ed-r"},
+            {"op":"create-extension","id":5,"identifier":"logseq-editor","fingerprint":"same-frame-test"},
+            {"op":"set-extension-prop","id":5,"property":"block-id","value":"same-frame-block"},
+            {"op":"insert-child","parent":1,"child":2,"index":0},
+            {"op":"insert-child","parent":2,"child":3,"index":0},
+            {"op":"insert-child","parent":3,"child":4,"index":0},
+            {"op":"insert-child","parent":2,"child":5,"index":1}
+        ]}).to_string()).unwrap();
+        shared.borrow_mut().store.apply(&batch).unwrap();
+        let fixture = shared.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| EditorScene(fixture));
+        for (step, (text, caret)) in [
+            ("g", 1), ("go", 2), ("goo", 3), ("good", 4),
+            ("good", 3), ("good", 2), ("good", 3), ("good", 4),
+            ("goo", 3), ("go", 2), ("g", 1), ("\u{200b}", 0),
+            ("a😀你", 8), ("a😀你", 5), ("a😀你", 1), ("a😀你", 0),
+        ].into_iter().enumerate() {
+            let tag = if caret == 0 && text == "\u{200b}" { "z" } else { "p" };
+            let end = if tag == "z" { 0 } else { text.len() };
+            let batch = json!({"generation":step + 2,"ops":[
+                {"op":"set-prop","id":4,"property":"text","value":text},
+                {"op":"set-extension-prop","id":5,"property":"runs","value":format!("0,{end},{tag}")},
+                {"op":"set-extension-prop","id":5,"property":"caret","value":caret}
+            ]}).to_string();
+            cx.update(|window, app| {
+                lui_gpui::apply_batch_json(&shared, &batch, app).unwrap();
+                // Exactly one draw: no measurement replies, mailbox, or second
+                // frame may rescue a cursor painted at the previous offset.
+                window.draw(app).clear(app);
+                let glyph = shared.borrow().text_layouts[&4].position_for_index(caret).unwrap();
+                let quads = window.painted_quads();
+                let scale = window.scale_factor();
+                let carets: Vec<_> = quads.iter().filter(|q| (q.bounds.size.width.0 - 2. * scale).abs() < 0.1).collect();
+                assert_eq!(carets.len(), 1, "one native caret for {text:?} at {caret}");
+                let painted = carets[0].bounds.origin;
+                // GPUI snaps quads to device pixels; glyph positions remain fractional.
+                assert!((painted.x.0 - f32::from(glyph.x) * scale).abs() <= 0.51,
+                    "{text:?} byte {caret}: painted {painted:?}, glyph {glyph:?}, scale {scale}");
+                assert!((painted.y.0 - f32::from(glyph.y) * scale).abs() <= 0.51);
+            });
+        }
+        let batch = json!({"generation":18,"ops":[
+            {"op":"set-prop","id":4,"property":"text","value":"go"},
+            {"op":"create-node","id":6,"kind":"row"},
+            {"op":"set-prop","id":6,"property":"style-class","value":"ed-line"},
+            {"op":"create-node","id":7,"kind":"text"},
+            {"op":"set-prop","id":7,"property":"style-class","value":"ed-r"},
+            {"op":"insert-child","parent":6,"child":7,"index":0},
+            {"op":"insert-child","parent":2,"child":6,"index":1}
+        ]}).to_string();
+        cx.update(|_, app| { lui_gpui::apply_batch_json(&shared, &batch, app).unwrap(); });
+        for (step, (caret, tag)) in [(3, "p"), (4, "p"), (5, "p"), (3, "a"), (12, "a")].into_iter().enumerate() {
+            let (text, end) = if tag == "a" { ("link", 12) } else { ("od", 5) };
+            let batch = json!({"generation":19 + step,"ops":[
+                {"op":"set-prop","id":7,"property":"text","value":text},
+                {"op":"set-extension-prop","id":5,"property":"runs","value":format!("0,2,p;3,{end},{tag}")},
+                {"op":"set-extension-prop","id":5,"property":"caret","value":caret}
+            ]}).to_string();
+            cx.update(|window, app| {
+                lui_gpui::apply_batch_json(&shared, &batch, app).unwrap();
+                window.draw(app).clear(app);
+                let guard = shared.borrow();
+                let bounds = guard.node_bounds[&7];
+                let expected = if tag == "a" {
+                    point(if caret == end { bounds.right() } else { bounds.left() }, bounds.top())
+                } else {
+                    guard.text_layouts[&7].position_for_index(caret - 3).unwrap()
+                };
+                let scale = window.scale_factor();
+                let quads = window.painted_quads();
+                let carets: Vec<_> = quads.iter().filter(|q| (q.bounds.size.width.0 - 2. * scale).abs() < 0.1).collect();
+                assert_eq!(carets.len(), 1);
+                assert!((carets[0].bounds.origin.x.0 - f32::from(expected.x) * scale).abs() <= 0.51);
+                assert!((carets[0].bounds.origin.y.0 - f32::from(expected.y) * scale).abs() <= 0.51,
+                    "caret must paint on the second line");
+            });
+        }
+    }
+
+    #[gpui_kit::test]
+    fn caret_and_click_use_rendered_glyph_positions(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let shared = LuiShared::new();
+        let batch = decode_batch(&json!({"generation":1,"ops":[
+            {"op":"create-node","id":1,"kind":"root"},
+            {"op":"create-node","id":2,"kind":"column"},
+            {"op":"set-prop","id":2,"property":"style-class","value":"block-editor"},
+            {"op":"create-node","id":3,"kind":"row"},
+            {"op":"set-prop","id":3,"property":"style-class","value":"ed-line"},
+            {"op":"create-node","id":4,"kind":"text"},
+            {"op":"set-prop","id":4,"property":"style-class","value":"ed-r"},
+            {"op":"create-extension","id":5,"identifier":"logseq-editor","fingerprint":"geometry-test"},
+            {"op":"set-extension-prop","id":5,"property":"block-id","value":"geometry-block"},
+            {"op":"insert-child","parent":1,"child":2,"index":0},
+            {"op":"insert-child","parent":2,"child":3,"index":0},
+            {"op":"insert-child","parent":3,"child":4,"index":0},
+            {"op":"insert-child","parent":2,"child":5,"index":1}
+        ]}).to_string()).unwrap();
+        shared.borrow_mut().store.apply(&batch).unwrap();
+        let scene_shared = shared.clone();
+        let (scene, cx) = cx.add_window_view(move |_, _| EditorScene(scene_shared));
+        for text in ["good", "a😀你", "iiiiWW"] {
+            let batch = decode_batch(&json!({"generation":2,"ops":[
+                {"op":"set-prop","id":4,"property":"text","value":text},
+                {"op":"set-extension-prop","id":5,"property":"runs","value":format!("0,{},p",text.len())}
+            ]}).to_string()).unwrap();
+            shared.borrow_mut().store.apply_local(&batch.ops).unwrap();
+            scene.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            cx.update(|window, _| {
+                let style = window.text_style();
+                let glyphs = window.text_system().layout_line(text, px(32.), &[style.to_run(text.len())], None);
+                for index in text.char_indices().map(|(i, _)| i).chain(std::iter::once(text.len())) {
+                    let (x, y, _, _, _) = caret_rect(&shared, "geometry-block", index as i64, window).unwrap();
+                    let expected = f32::from(glyphs.x_for_index(index));
+                    assert!((x - expected).abs() < 0.1,
+                        "caret for {text:?} byte {index}: {x}, rendered glyph {expected}");
+                    assert_eq!(offset_at(&shared, "geometry-block", x.round() as i64, y as i64, window), Some(index as i64),
+                        "click at the caret must resolve the same UTF-8 boundary");
+                }
+            });
+        }
+    }
+}

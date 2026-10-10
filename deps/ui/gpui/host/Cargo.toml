@@ -64,3 +64,40 @@ serde_json = "1"
 # collide on 9 slots. layout drops 4.2s -> ~18ms.
 [patch.crates-io]
 taffy = { git = "https://github.com/logseq/taffy", tag = "v0.13.0-logseq.1" }
+
+# Layout is instantiated inside GPUI. Keep the rendering path optimized
+# in development builds so interactive profiling reflects usable frame times.
+[profile.dev.package.logseq-gpui]
+opt-level = 1
+
+[profile.dev.package.gpui-pre]
+opt-level = 3
+
+[profile.dev.package.gpui-base]
+opt-level = 3
+
+[profile.dev.package.gpui-component]
+opt-level = 3
+
+[profile.dev.package.lui-gpui]
+opt-level = 3
+
+# These are runtime calls across crate boundaries, not only generic code
+# instantiated in GPUI: flex layout, wire property reads, and element IDs.
+[profile.dev.package.taffy]
+opt-level = 3
+
+[profile.dev.package.lui-core]
+opt-level = 3
+
+[profile.dev.package.smol_str]
+opt-level = 3
+
+[profile.dev.package.slotmap]
+opt-level = 3
+
+[profile.dev.package.rustc-hash]
+opt-level = 3
+
+[profile.dev.package.refineable]
+opt-level = 3

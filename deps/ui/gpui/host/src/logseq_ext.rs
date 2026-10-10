@@ -39,47 +39,25 @@ static TABLER: LazyLock<serde_json::Value> = LazyLock::new(|| {
     .unwrap_or(serde_json::Value::Null)
 });
 
-/// App-registered icons with no tabler counterpart — mirror of
-/// `src/core/icons.ml` `custom_icons` (full svg markup per name).
-fn custom_svg(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "rotating-arrow" => "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 192 512\" \
-            fill=\"currentColor\"><path fill-rule=\"evenodd\" \
-            d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
-            128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
-            0 402.48 0 384.662z\"/></svg>",
-        // the web rotates the caret 90° via .not-collapsed; there's no
-        // element transform here, so the expanded state gets its own
-        // pre-rotated svg.
-        "rotating-arrow-down" => "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 192 512\" \
-            fill=\"currentColor\"><g transform=\"rotate(90 96 256)\"><path fill-rule=\"evenodd\" \
-            d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
-            128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
-            0 402.48 0 384.662z\"/></g></svg>",
-        "youtube-timestamp-icon" => "<svg xmlns=\"http://www.w3.org/2000/svg\" \
-            fill=\"currentColor\" viewBox=\"0 0 20 20\"><path clip-rule=\"evenodd\" \
-            fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 \
-            1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 \
-            101.415-1.415L11 9.586V6z\"/></svg>",
-        "logseq-logo" => "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" \
-            viewBox=\"0 0 21 21\" height=\"28\" width=\"28\"><ellipse \
-            transform=\"matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 \
-            2.59206)\" rx=\"3.29236\" ry=\"2.04373\"/><ellipse \
-            transform=\"matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 \
-            5.54515)\" rx=\"2.95326\" ry=\"3.37606\"/><ellipse \
-            transform=\"matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 \
-            14.72)\" rx=\"7.78547\" ry=\"6.13006\"/></svg>",
-        _ => return None,
-    })
+/// Expanded disclosure arrows rotate the application's shared SVG on
+/// native hosts, where the web's class transform is not available.
+pub fn install_app_icons(shared: &Shared, payload: &str) {
+    let icons: std::collections::HashMap<String, String> =
+        serde_json::from_str(payload).expect("application icon pack must map names to SVG markup");
+    shared.borrow_mut().app_icon_svg = Some(Rc::new(move |name| {
+        if name == "rotating-arrow-down" {
+            let svg = icons.get("rotating-arrow")?;
+            let (head, body) = svg.split_once('>')?;
+            return Some(format!("{head}><g transform=\"rotate(90 96 256)\">{}</g></svg>",
+                                body.strip_suffix("</svg>")?));
+        }
+        icons.get(name).cloned().or_else(|| app_svg(name))
+    }));
 }
 
-/// Full SVG markup for one `app:` icon name — the custom registry
-/// first, then the bundled tabler table. `currentColor` is left as-is;
+/// Full SVG markup for one bundled Tabler icon name. `currentColor` is left as-is;
 /// the caller binds it to the theme foreground before rasterizing.
 fn app_svg(name: &str) -> Option<String> {
-    if let Some(svg) = custom_svg(name) {
-        return Some(svg.to_string());
-    }
     let children = TABLER.get(name)?.as_array()?;
     let mut svg = String::from(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" \
@@ -289,7 +267,6 @@ pub fn register(shared: &Shared) {
     // `icon ~name:(`app n)` falls through the built-in IconName set to
     // this resolver — every tabler name rasterizes instead of the
     // `[icon]` placeholder.
-    shared.app_icon_svg = Some(Rc::new(|name| app_svg(name)));
 
     register_class_styles();
 }
@@ -846,8 +823,9 @@ fn register_class_styles() {
     class("control-hide", "display:none", "");
 
     // ---- shared-OCaml block editor (resources/css/lui-core.css .ed-*) ----
-    // The overlay paints the selection rects and caret bar over the
-    // .ed-line text runs; each measured rect is an absolutely-positioned
+    // The overlay paints selection rects over the .ed-line text runs;
+    // the editor conduit paints the caret in the same frame as the text.
+    // Each measured selection rect is an absolutely-positioned
     // .ed-pos wrapper whose bound padding pushes the bar to (x, y).
     class("block-editor", "position:relative", "");
     class("ed-line", "min-height:1.5rem", "");
@@ -872,11 +850,6 @@ fn register_class_styles() {
     class(
         "ed-sel",
         "background:var(--ls-block-highlight-color);border-radius:2px",
-        "",
-    );
-    class(
-        "ed-caret",
-        "background:var(--ls-caret-color, var(--ls-primary-text-color))",
         "",
     );
     // .ls-block.selected — block-select (Esc / multi-block) highlight
