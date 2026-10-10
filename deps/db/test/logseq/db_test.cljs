@@ -134,6 +134,40 @@
     (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
     (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
 
+(deftest matching-create-page
+  (testing "plain maps"
+    (is (true? (ldb/matching-create-page?
+                {:block/title "Bar"
+                 :block/tags [{:db/ident :logseq.class/Page}]}
+                {})))
+    (is (false? (ldb/matching-create-page?
+                 {:block/title "Bar"
+                  :block/tags [{:db/ident :logseq.class/Page}]
+                  :block/parent {:block/title "Foo"}}
+                 {}))
+        "A namespaced child page is not a create target")
+    (is (false? (ldb/matching-create-page?
+                 {:block/title "Foo"
+                  :block/tags [{:db/ident :logseq.class/Tag}]}
+                 {}))
+        "A tag is not a page create target")
+    (is (true? (ldb/matching-create-page?
+                {:block/title "Foo"
+                 :block/tags [{:db/ident :logseq.class/Tag}]}
+                {:class? true})))
+    (is (false? (ldb/matching-create-page?
+                 {:block/title "Baz"
+                  :block/tags [{:db/ident :logseq.class/Tag}]
+                  :logseq.property.class/extends [{:block/title "Foo"
+                                                   :db/ident :user.class/Foo}]}
+                 {:class? true}))
+        "A namespaced tag is not a tag create target")
+    (is (false? (ldb/matching-create-page?
+                 {:block/title "foo"
+                  :block/tags [{:db/ident :logseq.class/Property}]}
+                 {}))
+        "A property is not a page create target")))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties

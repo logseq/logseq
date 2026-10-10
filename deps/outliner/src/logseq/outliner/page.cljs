@@ -172,9 +172,7 @@
 (defn- existing-class-for-title
   [db title]
   (when (string? title)
-    (some->> (ldb/page-exists? db title #{:logseq.class/Tag})
-             first
-             (d/entity db))))
+    (ldb/find-matching-create-page db title #{:logseq.class/Tag})))
 
 (defn- resolve-create-page-tag
   "Resolve a tag passed to page create.
@@ -410,20 +408,20 @@
                                   :block/uuid)
         existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
                                         (d/entity db [:block/uuid journal-page-uuid]))
-        existing-page-id (if class-ident-namespace?
-                           (some->> existing-names-page
-                                    (filter #(try (when-let [e (d/entity db %)]
-                                                    (let [ns' (namespace (:db/ident e))]
-                                                      (= (str ns') class-ident-namespace)))
-                                                  (catch :default _ false)))
-                                    (first))
-                           (first existing-names-page))
-        existing-page (or (some->> existing-page-id (d/entity db))
+        create-opts {:class? class?
+                     :journal? (contains? types :logseq.class/Journal)}
+        existing-page (or (if class-ident-namespace?
+                            (some (fn [id]
+                                    (let [e (d/entity db id)]
+                                      (when (and e
+                                                 (= (str (namespace (:db/ident e)))
+                                                    class-ident-namespace)
+                                                 (ldb/matching-create-page? e create-opts))
+                                        e)))
+                                  existing-names-page)
+                            (ldb/find-matching-create-page db title types))
                           existing-page-by-journal-uuid)]
-    (if (and existing-page
-             (or (:block/journal-day existing-page)
-                 (not (:block/parent existing-page))
-                 (ldb/recycled? existing-page)))
+    (if existing-page
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
         (cond

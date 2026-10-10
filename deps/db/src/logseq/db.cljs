@@ -546,6 +546,105 @@
           (common-util/page-name-sanity-lc page-name)
           tags'))))))
 
+(defn- recycle-page?
+  [page]
+  (and (entity-util/built-in? page)
+       (= common-config/recycle-page-name (:block/title page))))
+
+(defn- parent-map
+  [parent]
+  (cond
+    (map? parent) parent
+    (de/entity? parent) parent
+    :else nil))
+
+(defn namespaced-page-child?
+  "True when `page` is nested under another user page.
+
+  Library and Recycle parents do not count: those pages are still create
+  targets for their own title. A numeric `:block/parent` (search result) is
+  treated as nested because the parent entity is not available. Search may
+  set `:block.temp/namespace-child?` from the live entity instead."
+  [page]
+  (if-some [flag (:block.temp/namespace-child? page)]
+    (true? flag)
+    (let [parent (:block/parent page)]
+      (boolean
+       (cond
+         (nil? parent) false
+         (number? parent) true
+         :else
+         (when-let [parent' (parent-map parent)]
+           (not (or (db-db/library? parent')
+                    (recycle-page? parent')))))))))
+
+(defn namespaced-class-child?
+  "True when `class` extends a user class. `#Foo/Baz` stores Baz as a tag
+  that extends Foo, while a top-level `#Baz` extends Root Tag."
+  [class]
+  (if-some [flag (:block.temp/namespace-child? class)]
+    (true? flag)
+    (boolean
+     (some (fn [extend]
+             (let [ident (if (keyword? extend) extend (:db/ident extend))]
+               (and (keyword? ident)
+                    (not= :logseq.class/Root ident)
+                    ;; Built-in parents (e.g. a tag extending a built-in class)
+                    ;; do not count as namespaces. Keyword idents carry no
+                    ;; `built-in?` flag, so fall back to the class namespace.
+                    (not= "logseq.class" (namespace ident))
+                    (not (or (and (map? extend) (:logseq.property/built-in? extend))
+                             (and (de/entity? extend) (:logseq.property/built-in? extend)))))))
+           (let [extends (:logseq.property.class/extends class)]
+             (cond
+               (nil? extends) []
+               (or (sequential? extends) (set? extends)) extends
+               :else [extends]))))))
+
+(defn namespaced-create-child?
+  "Whether this page or tag is a namespace child that must not satisfy create."
+  [page]
+  (if (entity-util/class? page)
+    (namespaced-class-child? page)
+    (namespaced-page-child? page)))
+
+(defn matching-create-page?
+  "Whether `page` is a valid reuse target for create of the requested kind.
+
+  A page, tag and property may share a name, and the same title may exist in
+  different namespaces. Create must only reuse a top-level page of the
+  requested type."
+  [page opts]
+  (let [create-class? (:class? opts)
+        create-journal? (:journal? opts)]
+    (boolean
+     (and page
+          (cond
+            create-class?
+            (and (entity-util/class? page)
+                 (not (namespaced-class-child? page)))
+
+            create-journal?
+            (entity-util/journal? page)
+
+            :else
+            (and (or (entity-util/internal-page? page)
+                     (entity-util/journal? page))
+                 (not (namespaced-page-child? page))))))))
+
+(defn find-matching-create-page
+  "Existing page that create may reuse for `title` and `types`, or nil."
+  [db title types]
+  (when (and db title (seq types))
+    (let [types' (if (coll? types) (set types) #{types})
+          opts {:class? (contains? types' :logseq.class/Tag)
+                :journal? (contains? types' :logseq.class/Journal)}]
+      (some (fn [id]
+              (let [e (d/entity db id)]
+                (when (matching-create-page? e opts)
+                  e)))
+            (or (page-exists? db title types') [])))))
+
 (defn get-page
   "Get a page given its unsanitized name or uuid"
   [db page-id-name-or-uuid]

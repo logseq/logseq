@@ -80,6 +80,7 @@
 
 (def ^:private page-for-create-selector
   '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+    :logseq.property/built-in?
     {:block/tags [:db/id :db/ident :block/uuid :block/title]}
     {:block/parent ...}])
 
@@ -135,10 +136,14 @@
 
          :else
          (when-not (string/blank? title')
-           ;; With explicit tags, the worker finds an existing page by title and tags
+           ;; With explicit tags, the worker finds an existing page by title and tags.
+           ;; Name lookup can hit a nested page, tag or property; only reuse a
+           ;; top-level page of the requested kind.
            (p/let [existing-page (when-not (or class? (seq (:tags options)))
                                    (<page-for-create title'))]
-             (if (and existing-page (not (ldb/recycled? existing-page)))
+             (if (and existing-page
+                      (not (ldb/recycled? existing-page))
+                      (ldb/matching-create-page? existing-page {:class? class?}))
                (do
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))
