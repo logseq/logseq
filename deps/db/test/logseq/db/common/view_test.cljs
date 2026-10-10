@@ -725,6 +725,66 @@
                                                      :sorting [{:id :user.property/score :asc? false}]})]
     (is (= ["With score" "Without score"] (result-titles conn result)))))
 
+(defn- find-title-id
+  [conn title]
+  (d/q '[:find ?e .
+         :in $ ?title
+         :where [?e :block/title ?title]]
+       @conn
+       title))
+
+(defn- grouped-row-titles-by-key
+  [conn result]
+  (into {}
+        (map (fn [[group rows]]
+               [group (mapv (fn [id] (:block/title (d/entity @conn id))) rows)]))
+        (:data result)))
+
+(deftest get-view-data-query-result-missing-custom-sort-value-stays-last-test
+  (let [conn (topic-conn
+              [{:page {:block/title "dated" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3}}}
+               {:page {:block/title "undated" :build/tags [:Topic]}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(find-title-id conn "undated")
+                                   (find-title-id conn "dated")]}
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? false}]))]
+    (is (= ["dated" "undated"] (result-titles conn asc)))
+    (is (= ["dated" "undated"] (result-titles conn desc)))))
+
+(deftest get-view-data-grouped-missing-custom-sort-value-stays-last-test
+  (let [conn (topic-conn
+              [{:page {:block/title "dated-red" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3
+                                          :user.property/bucket 1}}}
+               {:page {:block/title "undated-red" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 1}}}
+               {:page {:block/title "dated-blue" :build/tags [:Topic]
+                       :build/properties {:user.property/score 1
+                                          :user.property/bucket 2}}}
+               {:page {:block/title "undated-blue" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 2}}}]
+              :properties {:user.property/score {:logseq.property/type :number}
+                           :user.property/bucket {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :user.property/bucket]])
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        titles-by-bucket (fn [asc?]
+                           (grouped-row-titles-by-key
+                            conn
+                            (db-view/get-view-data
+                             @conn view-id
+                             (assoc option :sorting [{:id :user.property/score :asc? asc?}]))))]
+    (doseq [asc? [true false]]
+      (let [titles (titles-by-bucket asc?)]
+        (is (= ["dated-red" "undated-red"] (get titles 1)))
+        (is (= ["dated-blue" "undated-blue"] (get titles 2)))))))
+
 (deftest get-view-data-class-objects-status-closed-value-sort-test
   (let [conn (topic-conn
               [{:page {:block/title "Doing" :build/tags [:Topic]
