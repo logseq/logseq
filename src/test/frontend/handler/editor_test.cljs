@@ -1573,6 +1573,68 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(defn- delete-empty-ordered-list-at-zero-pos-result
+  [{:keys [edit-block snapshot-block]}]
+  (let [deleted? (atom false)
+        removed-list? (atom false)
+        originals [state/get-input cursor/pos util/stop state/get-current-repo
+                   state/get-edit-block db-async/<get-block-sibling
+                   editor/get-state editor/delete-block-inner!
+                   util/get-prev-block-non-collapsed-non-embed
+                   db-subs/block-snapshot editor/save-current-block!
+                   editor/remove-block-own-order-list-type!]
+        restore! (fn []
+                   (set! state/get-input (nth originals 0))
+                   (set! cursor/pos (nth originals 1))
+                   (set! util/stop (nth originals 2))
+                   (set! state/get-current-repo (nth originals 3))
+                   (set! state/get-edit-block (nth originals 4))
+                   (set! db-async/<get-block-sibling (nth originals 5))
+                   (set! editor/get-state (nth originals 6))
+                   (set! editor/delete-block-inner! (nth originals 7))
+                   (set! util/get-prev-block-non-collapsed-non-embed (nth originals 8))
+                   (set! db-subs/block-snapshot (nth originals 9))
+                   (set! editor/save-current-block! (nth originals 10))
+                   (set! editor/remove-block-own-order-list-type! (nth originals 11)))]
+    (set! state/get-input (constantly #js {:value ""}))
+    (set! cursor/pos (constantly 0))
+    (set! util/stop (constantly nil))
+    (set! state/get-current-repo (constantly test-helper/test-db))
+    (set! state/get-edit-block (constantly edit-block))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! editor/get-state (constantly {:config {}}))
+    (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
+    (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
+    (set! db-subs/block-snapshot (fn [_] {:status :ready :value snapshot-block}))
+    (set! editor/save-current-block! (constantly nil))
+    (set! editor/remove-block-own-order-list-type! (fn [_] (reset! removed-list? true)))
+    (-> (#'editor/delete-block-when-zero-pos! nil)
+        (p/then (fn []
+                  {:deleted? @deleted?
+                   :removed-list? @removed-list?}))
+        (p/finally restore!))))
+
+(deftest delete-block-when-zero-pos-uses-latest-ordered-list-snapshot-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          numbered {:db/id 1
+                    :block/uuid block-id
+                    :block/title ""
+                    :block/page {:db/id 10}
+                    :logseq.property/order-list-type {:block/title "number"}}
+          plain (dissoc numbered :logseq.property/order-list-type)]
+      (-> (p/let [first-result (delete-empty-ordered-list-at-zero-pos-result
+                                {:edit-block numbered
+                                 :snapshot-block numbered})
+                  second-result (delete-empty-ordered-list-at-zero-pos-result
+                                 {:edit-block numbered
+                                  :snapshot-block plain})]
+            (is (= {:deleted? false :removed-list? true} first-result)
+                "The first Backspace on an empty numbered list must remove the list type.")
+            (is (= {:deleted? true :removed-list? false} second-result)
+                "A later Backspace must delete the block once the renderer snapshot is no longer numbered."))
+          (p/finally done)))))
+
 (deftest editor-delete-guards-nil-input-test
   (testing "stale editing state without a textarea is a no-op"
     (let [deleted (atom [])]
