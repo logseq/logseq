@@ -8,7 +8,7 @@ set -eu
 if [ -n "${LUI_SOURCE:-}" ]; then
   opam pin add --kind=git -y -n lui "$LUI_SOURCE"
 else
-  opam pin add -y -n lui git+https://github.com/logseq/lui.git#2662e3c84114d4b9fa84efac8c6c67de414954ed
+  opam pin add -y -n lui git+https://github.com/logseq/lui.git#51a6addb7097cddf8721d5bcf3e7521c093055f2
 fi
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#df355e15869ceb7220c0365ae7057e4c3fc558b2
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
