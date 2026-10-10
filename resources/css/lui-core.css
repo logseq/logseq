@@ -438,6 +438,24 @@ blockquote {
       display: flex;
       align-items: center;
     }
+
+    /* the header's toggle+search stay mounted while the sidebar is
+       docked-open; is-hidden removes them instantly on open, and the
+       delayed fade-in on close lets the pane's own top row clip out
+       first so both copies are never visible at once */
+    .head-l-btns {
+      visibility: visible;
+      opacity: 1;
+      transition:
+        visibility 0s linear 0.28s,
+        opacity 0.12s linear 0.28s;
+
+      &.is-hidden {
+        visibility: hidden;
+        opacity: 0;
+        transition: none;
+      }
+    }
   }
 
   > .r {
@@ -782,6 +800,13 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 .cp__left-split.is-collapsed > .lui-split-divider,
 .cp__right-split.is-collapsed > .lui-split-divider {
   display: none;
+}
+
+/* the divider is the drag handle and it tracks the pointer while
+   dragging, so col-resize on it covers hover and the whole drag */
+.cp__left-split:not(.is-collapsed) > .lui-split-divider,
+.cp__right-split:not(.is-collapsed) > .lui-split-divider {
+  cursor: col-resize;
 }
 
 /* the kit divider is a 1px ::after line inside the ~gap hit zone —

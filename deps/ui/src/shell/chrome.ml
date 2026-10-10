@@ -623,19 +623,15 @@ let header (ms : Model.t Signal.signal) =
     ~style_class:"cp__header"
     ~main:`space_between ~cross:`center
     [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
-        [ reactive
-            ~equal:(fun (a : Model.t) (b : Model.t) ->
-              a.left_sidebar_open = b.left_sidebar_open)
+        [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
-              (* while the sidebar is docked-open its own top row hosts
-                 these buttons; the header mounts them only as the
-                 reopen path for the closed/overlay states *)
-              if m.Model.left_sidebar_open then
-                spacer ~key:"lb-off" ~style_class:"hidden" []
-              else
-                row ~key:"head-l-btns" ~cross:`center
-                  [ left_menu_button; search_button ])
-            ms ]
+              (* always mounted: hiding via a CSS transition-delay lets
+                 the sidebar's own top row clip out before these fade
+                 in, so a toggle never shows both copies at once *)
+              if m.Model.left_sidebar_open then "head-l-btns is-hidden"
+              else "head-l-btns")
+            (row ~key:"head-l-btns" ~cross:`center
+               [ left_menu_button; search_button ]) ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r overflow-x-hidden"
         [ row ~key:"head-crumb" ~grow:1.

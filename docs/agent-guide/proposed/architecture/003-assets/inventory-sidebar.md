@@ -124,8 +124,9 @@ Structure/state attributes consumed by gestures, tests, and view logic:
 - `#main-container.is-left-sidebar-open`, `.theme-container-inner` with
   `.ls-left-sidebar-open` / `.ls-wide-mode`, `data-is-margin-less-pages`,
   `data-is-full-width`
-- ~~`.left-sidebar-resizer` (+ `.is-active`), `.cp__right-sidebar .resizer`~~ — deleted (003): `Lui_elements.split`'s `.lui-split-divider` is the handle; new (003): `> .lui-split-divider:hover/:active ::after` widens to 3px accent for discoverability, `.is-collapsed > .lui-split-divider` display:none
-- new (003): `.left-sidebar-top` row inside `.left-sidebar-inner` — hosts the toggle/search buttons moved out of `.cp__header > .l` while the sidebar is open
+- ~~`.left-sidebar-resizer` (+ `.is-active`), `.cp__right-sidebar .resizer`~~ — deleted (003): `Lui_elements.split`'s `.lui-split-divider` is the handle; new (003): `> .lui-split-divider` `cursor: col-resize`, `:hover/:active ::after` widens to 3px accent for discoverability, `.is-collapsed > .lui-split-divider` display:none
+- new (003): `.left-sidebar-top` row inside `.left-sidebar-inner` — hosts the toggle/search buttons moved out of `.cp__header > .l` while the sidebar is open; its icon buttons reuse the `.cp__header` 32px/20px geometry
+- new (003): `.cp__header > .l .head-l-btns` — permanently mounted copy of the toggle/search pair for the closed state; `is-hidden` (driven by `left_sidebar_open`) removes it instantly on open, and a 0.28s `visibility`/`opacity` transition-delay fades it in only after the sidebar's own top row has clipped out, so a toggle never shows both copies
 - `.sidebar-content-group` with `.is-expand` / `.has-children`,
   `.hd`/`.bd`/`.more`/`.as-edit` structure, `.non-collapsable`
 - `.item` + `.active`, `a.link-item` + `[data-popup-active]`,
