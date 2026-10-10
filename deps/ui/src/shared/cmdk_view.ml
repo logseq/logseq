@@ -276,10 +276,14 @@ let hl_segments ~query ~text : (bool * string) list =
 
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
    padding 0 border-radius 0; data-testid is the original (unmarked)
-   title *)
+   title. The runs live inside a gap-0 row, NOT inside a text/span
+   element: keyed children mounted under a text element render as
+   .lui-stack divs — block-level inside the span — which wraps every
+   segment to its own line. As row children they are flex items and
+   stay on one line like the deleted display:inline rules intended. *)
 let hl_span key (item_sig : S.item Signal.signal)
     (title_of : S.item -> string) : t =
-  text ~key ~as_:`Span
+  row ~key ~gap:0 ~cross:`center
     ~data_attrs:
       (reactive
          (fun it ->
@@ -322,6 +326,11 @@ let wrapper_attrs (it : S.item) =
 
 let row_data_attrs (it : S.item) =
   [ ("data-cmdk-item", "true")
+  ; (* [data-cmdk-item]{margin-inline:2px} — no typed margin prop, so it
+       lands through the documented data-attrs style pair. The baseline
+       renders the bg at x196-1083 (asymmetric insets 3/4), so left/right
+       are spelled out instead of margin-inline. *)
+    ("style", "margin-left: 3px; margin-right: 4px")
   ; ("data-item-index", string_of_int it.S.idx)
   ; ("data-item-key", it.S.ikey)
   ; ( "data-highlighted"
@@ -408,7 +417,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
              ])
     | None -> None
   in
-  box ~key:"item-wrap" ~padding_horizontal:2
+  box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
     [ (* pressable: the delegated document click can't see inside the
          native tree — on_press routes row clicks to the item directly *)
@@ -554,7 +563,6 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
           else group_header svs st g)
         group_sig
     ; column ~key:"results" ~style_class:"search-results"
-        ~padding_horizontal:2
         [ keyed ~source:items_sig ~key:S.item_dom_key
             ~cmp:Stdlib.compare
             ~mount:(fun item_sig -> item_row svs st item_sig)
@@ -632,7 +640,11 @@ let input_row svs st : t =
       st.S.vs.Signal.state_signal
   in
   Ui_components.cmdk_input_row ~key:"input-row"
-    [ (* move_mode can flip while the palette stays open (move-blocks
+    [ (* cljs .cp__cmdk-input-row prepends a dimmed search glyph; the
+         kept CSS rule `.cp__cmdk-input-row .ui__icon` carries the
+         flex-shrink/opacity *)
+      Icons.icon ~size:16. "search"
+    ; (* move_mode can flip while the palette stays open (move-blocks
          command); no placeholder_signal exists, so a keyed remount
          swaps the placeholder — the caller re-focuses the input right
          after the state publish *)

@@ -105,3 +105,36 @@ keyed ~source:items_s ~key:(fun it -> it.id) ~cmp:Int.compare
 ## Comments and docs
 
 All code comments and PR descriptions must be in English.
+
+## Local dev loop (web)
+
+Fast iterate on deps/ui view code against the real app — no full rebuild
+per change:
+
+1. One-time setup (already done once per VM): root `pnpm install`,
+   `pnpm gulp:build` (wipes `static/` — must run first), `npm run css:build`,
+   `pnpm --dir deps/db-worker build`, then the initial
+   `pnpm ui:build` (or `dune build js_app` inside deps/ui). All
+   OCaml-flavored builds run under `opam exec --switch=5.5.0 --`
+   (the 5.5.0 switch carries the melange pins).
+2. Watch the UI bundle:
+   `cd deps/ui && opam exec --switch=5.5.0 -- dune build js_app --watch`
+   — re-emits the bundle on every .ml save.
+3. Serve the built app:
+   `node scripts/serve-static.mjs` from the REPO ROOT (port 3010), open
+   `http://localhost:3010/index.html?rtc-test=true`.
+4. Refresh the browser to pick up a rebuild. Theme for captures is
+   localStorage `theme` = `"light"|"dark"`, `system-theme?` = `"false"`.
+5. Playwright drives headless Chrome from
+   `~/repos/logseq/node_modules/playwright` with the box chrome at
+   `/opt/.devin/chrome/chrome/linux-*/chrome-linux64/chrome`;
+   open cmdk with `Control+k` (Meta+k is intercepted by real Chrome),
+   wait for `.cp__cmdk input`.
+
+DOM-shape traps seen in cmdk: `keyed`/`reactive` children inside a
+`text` element mount as `.lui-stack` divs — block-level inside a `<span>`,
+so title/info runs must live directly inside a `row` (flex items), never
+inside a `text`/`span` element. `data_attrs` may carry a `style` pair as
+the documented last-resort inline-declaration channel (merged per
+property, e.g. killing `.lui-input`'s hardcoded `ring-2` focus ring that
+no typed prop reaches).
