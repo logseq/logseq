@@ -108,6 +108,48 @@
   (or (:property column)
       (built-in-property (or (:id column) (:db/ident column)))))
 
+(defn- new-record-properties
+  "Prefill unambiguous equality filters. Other operators describe constraints,
+   rather than a value to assign to a new record."
+  [table]
+  (let [{:keys [or? filters]} (get-in table [:state :filters])
+        defaults (keep
+                  (fn [[ident operator match]]
+                    (when (and (= :is operator)
+                               (not (contains? #{:block/page :block/parent :block/uuid
+                                                 :block/created-at :block/updated-at} ident))
+                               (or (boolean? match)
+                                   (and (set? match) (= 1 (count match)))))
+                      (let [value (if (set? match) (first match) match)
+                            value (if (uuid? value) [:block/uuid value] value)
+                            column (some #(when (= ident (:id %)) %) (:columns table))
+                            property (when column (column-property column))]
+                        [ident (if (db-property/many? property) #{value} value)])))
+                  filters)]
+    (reduce (fn [result [ident value]]
+              (update result ident #(if (set? value)
+                                      (set/union (or % #{}) value)
+                                      value)))
+            {} (if or? (take 1 defaults) defaults))))
+
+(defn- <add-new-view-record!
+  [add-new-object! view table opts]
+  (let [group-properties (:properties opts)
+        default-table (if (get-in table [:state :filters :or?])
+                        (update-in table [:state :filters :filters]
+                                   #(remove (fn [[ident]] (contains? group-properties ident)) %))
+                        table)
+        properties (merge-with (fn [default group-value]
+                                 (if (set? default)
+                                   (set/union default (cond
+                                                        (set? group-value) group-value
+                                                        (some? group-value) #{group-value}
+                                                        :else #{}))
+                                   group-value))
+                               (new-record-properties default-table)
+                               group-properties)]
+    (add-new-object! view table (assoc opts :properties properties))))
+
 (defn- filterable-column?
   [column]
   (let [property (column-property column)]
@@ -2137,7 +2179,7 @@
        :size :sm
        :on-click (fn [_]
                    (let [f (get-in table [:data-fns :add-new-object!])]
-                     (f view-entity table)))}
+                     (<add-new-view-record! f view-entity table nil)))}
       (ui/icon (if asset? "upload" "plus")))
      [:div (t :node/new)])))
 
@@ -2146,7 +2188,7 @@
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
    {:on-click (fn [_]
                 (let [f (get-in table [:data-fns :add-new-object!])]
-                  (f view-entity table)))}
+                  (<add-new-view-record! f view-entity table nil)))}
    (ui/icon "plus" {:size 14})
    [:div (t :view/new)]])
 
@@ -3591,7 +3633,7 @@
   (let [group-table (if (fn? add-new-object!)
                       (assoc-in table' [:data-fns :add-new-object!]
                                 (fn [_]
-                                  (add-new-object! view-entity outer-table
+                                  (<add-new-view-record! add-new-object! view-entity outer-table
                                                    {:properties
                                                     {(:db/ident group-by-property)
                                                      (if (map? value)

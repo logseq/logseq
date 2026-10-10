@@ -19,7 +19,12 @@
   [class properties]
   (p/let [block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid class)
-                                                       :properties (merge properties {:block/tags (:db/id class)})
+                                                       :properties (update properties :block/tags
+                                                                           #(conj (cond
+                                                                                    (set? %) %
+                                                                                    (some? %) #{%}
+                                                                                    :else #{})
+                                                                                  (:db/id class)))
                                                        :edit-block? false})]
     (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
