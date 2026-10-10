@@ -106,11 +106,15 @@ let main root =
      the same task so input never waits for a timer or a second frame. *)
   let flush () =
     let flushed = Platform.perf_time "editor-content" (fun () -> Lui_app.flush app) in
+    let premeasured = !Editor_state.premeasured_model in
+    Editor_state.premeasured_model := None;
     (match Editor_state.editing () with
      | Some e ->
-         ignore (Platform.perf_time "editor-measure" (fun () ->
-           Editor_actions.refresh_overlay e.Editor_state.uuid));
-         ignore (Platform.perf_time "editor-overlay" (fun () -> Lui_app.flush app));
+         if not (match premeasured with Some model -> model == e.Editor_state.model | None -> false) then begin
+           ignore (Platform.perf_time "editor-measure" (fun () ->
+             Editor_actions.refresh_overlay e.Editor_state.uuid));
+           ignore (Platform.perf_time "editor-overlay" (fun () -> Lui_app.flush app))
+         end;
          (match !Editor_state.active_frame with
           | Some frame ->
               (match (Signal.get_state frame).Edit_input.caret with

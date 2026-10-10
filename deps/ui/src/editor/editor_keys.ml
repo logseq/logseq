@@ -442,13 +442,8 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (* cljs shortcut tables key on the unshifted key plus modifier
            flags — same normalization the DOM path used *)
         match shortcut_key_str key with
-        (* macOS readline keys — native textarea parity; ctrl+shift
-           extends the selection. These shadow the mod-key cases
-           below, so they must match first *)
-        | "a" when ctrl && not meta && Ui_services.env_is_mac () ->
-            Edit_model.move m Edit_model.Home ~extend:shift
-        | "e" when ctrl && not meta && Ui_services.env_is_mac () ->
-            Edit_model.move m Edit_model.End ~extend:shift
+        (* macOS readline edit commands precede the generic mod bindings.
+           Movement aliases are normalized before visual-line measurement. *)
         | "k" when ctrl && not meta && Ui_services.env_is_mac () ->
             kill_line_after m
         | "d" when ctrl && not meta && Ui_services.env_is_mac () ->
@@ -457,10 +452,6 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             Edit_model.delete_backward m
         | "t" when ctrl && not meta && Ui_services.env_is_mac () ->
             transpose_chars m
-        | "b" when ctrl && not meta && Ui_services.env_is_mac () ->
-            Edit_model.move m Edit_model.Left ~extend:shift
-        | "f" when ctrl && not meta && Ui_services.env_is_mac () ->
-            Edit_model.move m Edit_model.Right ~extend:shift
         (* ctrl edit keys — before the mod cases: mods ⊃ ctrl *)
         | "l" when ctrl && not meta -> clear_block m
         | "u" when ctrl && not meta -> kill_line_before m
@@ -939,6 +930,21 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
+  let ev =
+    match ev with
+    | Edit_input.Key (key, repeat)
+      when key.Edit_model.ctrl && not (key.meta || key.alt)
+           && Ui_services.env_is_mac () ->
+        let navigation = match String.lowercase_ascii key.key with
+          | "a" -> Some "Home" | "e" -> Some "End"
+          | "b" -> Some "ArrowLeft" | "f" -> Some "ArrowRight"
+          | "p" -> Some "ArrowUp" | "n" -> Some "ArrowDown"
+          | _ -> None in
+        (match navigation with
+         | Some navigation -> Edit_input.Key ({key with key = navigation; ctrl = false}, repeat)
+         | None -> ev)
+    | _ -> ev
+  in
   (* Popup-owned keys must yield before the structure queue. Replaying
      Enter after autocomplete has closed would split the block even
      though that physical key already chose a command. *)
@@ -1048,8 +1054,10 @@ and apply_input ?frame uuid ev =
        | Some fr when Ui_services.env_edit_units () = `U16 && m'.source == m0.source
                       && Edit_view.reveal_dirty m0 m' = [] ->
            let measured = Edit_input.measure conduit m' in
-           if Option.is_some measured.Edit_input.caret then
+           if Option.is_some measured.Edit_input.caret then begin
+             S.premeasured_model := Some m';
              Signal.update fr (fun _ -> measured)
+           end
        | _ -> ());
       (* Compare against the session model before line measurement;
          refresh_lines may have derived m0 without publishing it. A structural op that settled mid-dispatch (e.g. merge_next on a

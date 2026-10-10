@@ -262,11 +262,15 @@ let immutable_ref (r : E.run) =
   r.kind = E.Atomic && List.mem "ed-block-ref" (String.split_on_char ' ' r.cls)
 
 let snap_ref m off ~forward =
-  match List.find_opt
-          (fun r -> immutable_ref r && off > r.E.start_off && off < r.end_off)
-          m.runs with
-  | Some r -> if forward then r.end_off else r.start_off
-  | None -> off
+  let rec find = function
+    | [] -> off
+    | (r : E.run) :: rest ->
+        if r.start_off >= off then off
+        else if off < r.end_off && immutable_ref r then
+          if forward then r.end_off else r.start_off
+        else find rest
+  in
+  find m.runs
 
 let rebuild m source ~caret ~anchor ~dirty =
   let next =

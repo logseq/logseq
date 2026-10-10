@@ -1274,9 +1274,16 @@ let on_model_input ~deleted uuid =
   | None -> ()
 
 let page_reference_at (m : Edit_model.t) pos =
-  List.find_opt (fun (r : Edit_runs.run) ->
-      r.kind = Edit_runs.Atomic && Str_util.contains r.cls "ed-page-ref"
-      && r.start_off + 2 <= pos && pos <= r.end_off - 2) m.runs
+  let rec find = function
+    | [] -> None
+    | (r : Edit_runs.run) :: rest ->
+        if r.start_off > pos then None
+        else if r.kind = Edit_runs.Atomic && r.start_off + 2 <= pos
+                && pos <= r.end_off - 2 && Str_util.contains r.cls "ed-page-ref"
+        then Some r
+        else find rest
+  in
+  find m.runs
 
 let on_caret_move uuid =
   match !active, Editor_actions.edit_model uuid with

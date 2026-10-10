@@ -183,6 +183,10 @@ let on_edit_exit f = edit_exit_handlers := f :: !edit_exit_handlers
 let notify_edit_exit uuid = List.iter (fun f -> f uuid) !edit_exit_handlers
 let caret_changed : (string -> unit) ref = ref (fun _ -> ())
 
+(* A caret-only input measures unchanged text before publication. The web
+   flush consumes this exact model identity to avoid measuring it twice. *)
+let premeasured_model : Edit_model.t option ref = ref None
+
 (* Virt_list binds this to its item-key scroller — editor_actions pulls
    the editing row back into the virtual window when its editor can't
    mount (the row scrolled out or an insert landed below the edge) *)

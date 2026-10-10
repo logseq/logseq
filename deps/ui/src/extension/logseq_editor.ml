@@ -305,6 +305,7 @@ type ed_state =
   ; mutable drag_off : int
   ; mutable input_rect : Edit_input.rect option
   ; mutable run_snapshot : (Js.Json.t array * run_index) option
+  ; mutable caret_animations : (W.Element.t * animation array) option
   }
 
 external state_get : W.Element.t -> ed_state Js.Undefined.t = "__lsEd"
@@ -321,6 +322,7 @@ let state_of el =
       ; on_mousedown = None; dragging = false; on_mousemove = None
       ; on_mouseup = None; on_dblclick = None; drag_off = -1
       ; input_rect = None; run_snapshot = None
+      ; caret_animations = None
       }
 
 (* block-id -> input element; commands resolve through this *)
@@ -341,7 +343,9 @@ let container_of el : W.Element.t option =
 let run_snapshot el =
   let st = state_of el in
   match st.run_snapshot with
-  | Some ((els, _) as snapshot) when Array.for_all j_is_connected els -> snapshot
+  (* The runs property invalidates this snapshot whenever keyed fragments
+     change. Sink replacement creates a new state; movement can borrow it. *)
+  | Some snapshot -> snapshot
   | _ ->
       let els = match container_of el with
         | Some c -> arr_from (qsa_json c ".ed-r")
@@ -380,12 +384,23 @@ let emit_str el name k v =
 
 (* every frag whose unit span covers [off], document order *)
 let frags_at runs off =
-  let acc = ref [] in
-  Array.iteri
-    (fun i (a, b, _k) ->
-      if a <= off && off <= b then acc := i :: !acc)
-    runs;
-  List.rev !acc
+  (* Source spans are ordered and only meet at their boundaries. Locate
+     the first possible fragment without scanning a long block. *)
+  let rec lower lo hi =
+    if lo >= hi then lo
+    else
+      let mid = lo + ((hi - lo) / 2) in
+      let _, ending, _ = runs.(mid) in
+      if ending < off then lower (mid + 1) hi else lower lo mid
+  in
+  let rec collect i acc =
+    if i >= Array.length runs then List.rev acc
+    else
+      let starting, ending, _ = runs.(i) in
+      if starting > off then List.rev acc
+      else collect (i + 1) (if off <= ending then i :: acc else acc)
+  in
+  collect (lower 0 (Array.length runs)) []
 
 (* float rect: caret spot in viewport px — domrect is opaque, so pick
    the edge that matters *)
@@ -470,56 +485,9 @@ let caret_rect_el el (off : int) : frect option =
    then leave the native menu's generic items. *)
 let select_range_el el lo hi : bool =
   let st = state_of el in
-  let els = run_els el in
-  let rng = create_range () in
-  let place ~start off =
-    (* prefer real content runs over zero-width pads: an offset shared
-       by a pad and a text frag must land on the text, or the range
-       collapses onto the ZWSP *)
-    let rec pick = function
-      | [] -> None
-      | i :: tl -> (
-          if i >= Array.length els || i >= Array.length st.runs then
-            pick tl
-          else
-            match st.runs.(i) with
-            | _, _, "z" -> (match pick tl with None -> Some i | some -> some)
-            | _ -> Some i)
-    in
-    match pick (frags_at st.runs off) with
-    | Some i -> (
-        let a, b, tag = st.runs.(i) in
-        let fel = els.(i) in
-        match tag with
-        | "a" ->
-            if start then (
-              if off <= a then range_set_start_before rng fel
-              else range_set_start_after rng fel)
-            else if off >= b then range_set_end_after rng fel
-            else range_set_end_before rng fel;
-            true
-        | _ -> (
-            let tn = j_first_child fel in
-            if js_nullish tn then false
-            else (
-              let u16 =
-                if tag = "z" then 0
-                else min (off - a) (String.length (j_text_content fel))
-              in
-              if start then range_set_start rng tn u16
-              else range_set_end rng tn u16;
-              true)))
-    | _ -> false
-  in
-  if lo < hi && place ~start:true lo && place ~start:false hi then (
-    let s = w_get_selection () in
-    sel_remove_all s;
-    sel_add_range s rng;
-    true)
-  else if lo = hi then (
+  if lo = hi then (
     (* Preserve the native input's collapsed insertion selection, including
-       during IME preview. Only clear an ended rendered text selection;
-       unrelated page selections remain untouched. *)
+       during IME preview. Collapsed moves need no fragment discovery. *)
     let s = w_get_selection () in
     (if sel_range_count s > 0 && not (sel_is_collapsed s) then
        let a = sel_anchor_node s in
@@ -534,6 +502,54 @@ let select_range_el el lo hi : bool =
                Web_dom.el_set_selection_range active 0 0
            | _ -> ()));
     true)
+  else if lo < hi then (
+    let els = run_els el in
+    let rng = create_range () in
+    let place ~start off =
+      (* prefer real content runs over zero-width pads: an offset shared
+         by a pad and a text frag must land on the text, or the range
+         collapses onto the ZWSP *)
+      let rec pick = function
+        | [] -> None
+        | i :: tl -> (
+            if i >= Array.length els || i >= Array.length st.runs then
+              pick tl
+            else
+              match st.runs.(i) with
+              | _, _, "z" -> (match pick tl with None -> Some i | some -> some)
+              | _ -> Some i)
+      in
+      match pick (frags_at st.runs off) with
+      | Some i -> (
+          let a, b, tag = st.runs.(i) in
+          let fel = els.(i) in
+          match tag with
+          | "a" ->
+              if start then (
+                if off <= a then range_set_start_before rng fel
+                else range_set_start_after rng fel)
+              else if off >= b then range_set_end_after rng fel
+              else range_set_end_before rng fel;
+              true
+          | _ -> (
+              let tn = j_first_child fel in
+              if js_nullish tn then false
+              else (
+                let u16 =
+                  if tag = "z" then 0
+                  else min (off - a) (String.length (j_text_content fel))
+                in
+                if start then range_set_start rng tn u16
+                else range_set_end rng tn u16;
+                true)))
+      | _ -> false
+    in
+    if place ~start:true lo && place ~start:false hi then (
+      let s = w_get_selection () in
+      sel_remove_all s;
+      sel_add_range s rng;
+      true)
+    else false)
   else false
 
 (* px -> model unit offset: caretRangeFromPoint hits a text node inside
@@ -687,18 +703,39 @@ let command_keys =
   [ "Enter"; "Tab"; "Escape"; "Backspace"; "Delete"; "ArrowLeft"
   ; "ArrowRight"; "ArrowUp"; "ArrowDown"; "Home"; "End" ]
 
+let restart_caret_blink el =
+  let st = state_of el in
+  let current = match st.caret_animations with
+    | Some (caret, current) when j_is_connected (el_json caret) -> Some current
+    | _ ->
+        st.caret_animations <- None;
+        (match container_of el with
+         | Some container ->
+             (match W.Element.querySelector ".ed-caret" container with
+              | Some caret ->
+                  let current = animations caret in
+                  st.caret_animations <- Some (caret, current);
+                  Some current
+              | None -> None)
+         | None -> None)
+  in
+  (* getAnimations forces style resolution; the mounted bar keeps the same
+     animation until selection or surface teardown replaces it. *)
+  match current with
+  | Some current -> Array.iter (fun a -> animation_time a 0.) current
+  | None -> ()
+
 let on_keydown el ev =
   let st = state_of el in
   let key = Option.value (jstr ev "key") ~default:"" in
   let meta = jbool ev "metaKey" and ctrl = jbool ev "ctrlKey" in
-  (* Like a textarea, movement restarts the visible half of the blink. *)
-  if List.mem key [ "ArrowLeft"; "ArrowRight"; "ArrowUp"; "ArrowDown"; "Home"; "End" ] then
-    (match container_of el with
-     | Some container ->
-         (match W.Element.querySelector ".ed-caret" container with
-          | Some caret -> Array.iter (fun a -> animation_time a 0.) (animations caret)
-          | None -> ())
-     | None -> ());
+  (* Native text controls keep the caret visible during repeated editing,
+     including readline movement and keys that cannot move past an edge. *)
+  if not (st.composing || jbool ev "isComposing")
+     && (List.mem key command_keys
+         || (ctrl && not meta && List.mem (String.lowercase_ascii key)
+               [ "a"; "b"; "d"; "e"; "f"; "h"; "k"; "n"; "p"; "t"; "u"; "w" ]))
+  then restart_caret_blink el;
   if not (st.composing || jbool ev "isComposing") then emit_now el "key"
     (String_map.empty
     |> String_map.add "key" (StringValue key)
@@ -726,6 +763,7 @@ let on_beforeinput el ev =
        carry the text *)
     ()
   else (
+    restart_caret_blink el;
     (match kind with
      | "insertText" | "insertReplacementText" -> (
          match jstr ev "data" with

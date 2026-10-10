@@ -305,6 +305,67 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     for (let i = 0; i < 12; i++) { states.add(getComputedStyle(caret).opacity); await pause(100); }
     assert(states.has('0') && states.has('1'), {states: [...states]});
   });
+  for (const [name, modifiers] of [
+    ['f', {ctrlKey: true}], ['b', {ctrlKey: true}],
+    ['a', {ctrlKey: true}], ['e', {ctrlKey: true}],
+    ['n', {ctrlKey: true}], ['p', {ctrlKey: true}],
+    ['ArrowRight', {}], ['ArrowLeft', {}], ['Home', {}], ['End', {}],
+  ]) {
+    await test('Native caret: repeated navigation stays visible ' + name, async () => {
+      await fixture([Array(12).fill('a sufficiently long line').join('\n')]);
+      key('Home', {metaKey: true});
+      for (let i = 0; i < 5; i++) key('ArrowDown');
+      for (let i = 0; i < 8; i++) key('ArrowRight');
+      await pause(30);
+      const caret = document.querySelector('.ed-caret');
+      for (let i = 0; i < 4; i++) {
+        caret.getAnimations()[0].currentTime = 750;
+        key(name, {...modifiers, repeat: i > 0});
+        await new Promise(requestAnimationFrame);
+        assert(document.querySelector('.ed-caret') === caret && getComputedStyle(caret).opacity === '1',
+          {name, i, opacity: getComputedStyle(caret).opacity});
+      }
+    });
+  }
+  await test('Native caret: navigation updates geometry before returning to the browser', async () => {
+    await fixture(['a long enough line for immediate navigation']); key('Home'); await pause(400);
+    for (const [name, modifiers, direction] of [
+      ['ArrowRight', {}, 1], ['f', {ctrlKey: true}, 1],
+      ['ArrowLeft', {}, -1], ['b', {ctrlKey: true}, -1],
+    ]) {
+      const before = document.querySelector('.ed-caret').getBoundingClientRect().x;
+      key(name, modifiers);
+      const after = document.querySelector('.ed-caret').getBoundingClientRect().x;
+      assert((after - before) * direction > 0, {name, before, after});
+    }
+  });
+  await test('Native caret: text insertion and deletion restart the visible blink phase', async () => {
+    await fixture(['native blink']); key('End'); await pause(30);
+    const caret = document.querySelector('.ed-caret');
+    for (const action of [() => insert('x'), () => key('Backspace'), () => key('h', {ctrlKey: true})]) {
+      caret.getAnimations()[0].currentTime = 750;
+      action(); await new Promise(requestAnimationFrame);
+      assert(getComputedStyle(caret).opacity === '1', {opacity: getComputedStyle(caret).opacity});
+    }
+    const states = new Set();
+    for (let i = 0; i < 12; i++) { states.add(getComputedStyle(caret).opacity); await pause(100); }
+    assert(states.has('0') && states.has('1'), {states: [...states]});
+  });
+  await test('Native caret: readline shortcuts navigate visual rows and extend selection', async () => {
+    await fixture(['one two three four five six seven eight nine ten '.repeat(30)]);
+    key('Home', {metaKey: true});
+    const first = document.querySelector('.ed-caret').getBoundingClientRect().y;
+    key('n', {ctrlKey: true});
+    const second = document.querySelector('.ed-caret').getBoundingClientRect().y;
+    assert(second > first + 10, {first, second});
+    key('e', {ctrlKey: true}); const end = input().__lsEd.caret_off;
+    key('a', {ctrlKey: true}); const start = input().__lsEd.caret_off;
+    assert(start > 0 && end > start, {start, end});
+    key('p', {ctrlKey: true});
+    assert(input().__lsEd.caret_off === 0, {offset: input().__lsEd.caret_off});
+    key('n', {ctrlKey: true, shiftKey: true}); insert('X');
+    assert(text().startsWith('X') && text().length < 48 * 30, {value: text()});
+  });
   await test('Regression: wrapped lines support Down Up Home End and selection', async () => {
     const value = 'First line wraps naturally: ' + 'one two three four five six seven eight nine ten '.repeat(12);
     const {blocks} = await fixture([value, 'next']); key('Home', {metaKey: true});
@@ -937,18 +998,17 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     tree = await logseq.api.get_page_blocks_tree(page.uuid);
     assert(tree.length === 2 && tree[1].uuid === blocks[1].uuid && tree[1].content === 'siblingtyped', {tree});
   });
-  await test('Caret keeps blinking during continuous text input', async () => {
+  await test('Caret stays visible during continuous text input', async () => {
     await fixture(['blink']); key('End'); await pause(20);
     const caret = document.querySelector('.ed-caret');
     const animation = caret.getAnimations()[0];
     assert(animation, {animation: getComputedStyle(caret).animationName});
-    const start = animation.currentTime;
     for (let i = 0; i < 50; i++) {
       insert('x'); await pause(20);
       assert(document.querySelector('.ed-caret') === caret, {at: i});
+      assert(getComputedStyle(caret).opacity === '1', {at: i, opacity: getComputedStyle(caret).opacity});
     }
-    assert(animation.currentTime > start + 700 && document.activeElement === input(),
-      {start, end: animation.currentTime, active: document.activeElement?.id});
+    assert(document.activeElement === input(), {active: document.activeElement?.id});
   });
   const paste = (target, value) => {
     const data = new DataTransfer();
