@@ -576,10 +576,14 @@ fn register_class_styles() {
     // + .cp__content-wrap) — without the max-width + auto inline margins
     // the page column bleeds full-width and the -20px .ls-page-blocks
     // gutter clips text at the window edge.
+    // No margin-inline:auto here — the parent row already centers via
+    // justify-center (native/chrome.ml main-content-row ~main:`center);
+    // an auto left margin absorbs all free space and anchors the column
+    // to the right edge under taffy.
     class(
         "cp__sidebar-main-content",
         "width:100%;max-width:var(--ls-main-content-max-width,960px);\
-         margin-left:auto;margin-right:auto;flex-grow:1",
+         flex-grow:1",
         "",
     );
     // .cp__content-wrap { margin:0 auto; width:100%; padding-bottom:6rem }
