@@ -1659,18 +1659,24 @@
        (into [:div.flex.flex-row]
              (map cell unpinned-columns)))]))
 
+(defn- search-input-visible?
+  "Keep the search field open after a remount whenever a query is already present."
+  [show-input? input]
+  (or (boolean show-input?) (not (string/blank? input))))
+
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
-  (let [[show-input? set-show-input!] (hooks/use-state false)]
+  (let [[show-input? set-show-input!] (hooks/use-state false)
+        input-visible? (search-input-visible? show-input? input)]
     [:div.flex.flex-row.items-center
      (shui/button
       {:variant "ghost"
        :class "text-muted-foreground !px-1"
        :size :sm
-       :on-click #(when-not show-input?
+       :on-click #(when-not input-visible?
                     (set-show-input! true))}
       (ui/icon "search" {:size 15}))
-     (when show-input?
+     (when input-visible?
        [:<>
         (shui/input
          {:placeholder (t :view.filter/type-to-search)
@@ -3975,6 +3981,20 @@
   [view-data previous-view-data]
   (or view-data previous-view-data))
 
+(defn- view-paint-identity
+  "Search input is part of the resource key. Exclude it so a typed
+   query can keep the previous paint (and the search field) mounted."
+  [window-context]
+  (dissoc window-context :input))
+
+(defn- retained-view-paint
+  "Keep the last successful view payload while a search refetch is in
+   flight. Drop it immediately when filter/sort/layout identity changes."
+  [view-data previous-view-data previous-identity next-identity]
+  (view-paint-source view-data
+                     (when (= previous-identity next-identity)
+                       previous-view-data)))
+
 (hsx/defc ^:large-vars/cleanup-todo loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
@@ -4001,8 +4021,11 @@
                                         viewport-height)
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
+        paint-identity-key (pr-str (view-paint-identity window-context))
         window-or-full-data (db-hooks/use-resource (:resource-key plan))
         [previous-view-data set-previous-view-data!] (hooks/use-state nil)
+        [retained-paint-identity-key set-retained-paint-identity-key!]
+        (hooks/use-state paint-identity-key)
         [full-data-active? set-full-data-active!] (hooks/use-state false)
         full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
                                                         (:full-key plan)))
@@ -4030,7 +4053,10 @@
                            :ready (:value full-snapshot)
                            :error (throw (:error full-snapshot))
                            nil))
-        view-data (view-paint-source window-or-full-data previous-view-data)
+        view-data (retained-view-paint window-or-full-data
+                                       previous-view-data
+                                       retained-paint-identity-key
+                                       paint-identity-key)
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
                       (view-data->rows view-data))
@@ -4078,11 +4104,18 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
-       ;; Keep previous paint only for same-context refetches (delete).
-       ;; A new filter/sort/input key must not keep the old 431-row table.
-       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       ;; Keep previous paint for same-context refetches (delete) and
+       ;; search-input-only key changes so the toolbar stays mounted.
+       ;; A new filter/sort/layout key must not keep the old 431-row table.
+       (when (not= retained-paint-identity-key paint-identity-key)
+         (set-retained-paint-identity-key! paint-identity-key)
+         (set-previous-view-data! nil))
+       js/undefined)
+     [paint-identity-key])
     (hooks/use-effect!
      (fn []
        (let [next-layout [display-type group-by-property-ident]]
