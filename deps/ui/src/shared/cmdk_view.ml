@@ -544,7 +544,7 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
         match List.rev v.S.groups with
         | last :: _ -> last.S.gid = g.S.gid
         | [] -> true)
-      st.S.vs.Signal.state_signal group_sig
+      (Signal.value st.S.vs) group_sig
   in
   Ui_components.cmdk_group ~key:"group"
     ~kind:(gid_name (Signal.get group_sig).S.gid)
@@ -575,7 +575,7 @@ let groups_body svs st : t =
  fun ctx parent ->
   let groups_sig =
     Signal.map (fun (v : S.view) -> v.S.groups)
-      st.S.vs.Signal.state_signal
+      (Signal.value (st.S.vs))
   in
   (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
@@ -602,10 +602,10 @@ let scroller svs st : t =
       (fun (v : S.view) ->
         v.S.groups <> []
         && List.exists (fun (g : S.group) -> g.S.gitems <> []) v.S.groups)
-      st.S.vs.Signal.state_signal
+      (Signal.value (st.S.vs))
   in
   let input_sig =
-    Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
+    Signal.map (fun (v : S.view) -> v.S.input) (Signal.value (st.S.vs))
   in
   (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
      the results stack inside a single column instead *)
@@ -616,7 +616,7 @@ let scroller svs st : t =
               match v.S.filter with
               | Some gid -> search_only_chip svs st gid
               | None -> spacer ~key:"chip" [])
-            st.S.vs.Signal.state_signal
+            (Signal.value (st.S.vs))
         ; groups_body svs st
         ; if_
             ~test:
@@ -637,7 +637,7 @@ let scroller svs st : t =
 let input_row svs st : t =
   let move_sig =
     Signal.map (fun (v : S.view) -> v.S.move_mode)
-      st.S.vs.Signal.state_signal
+      (Signal.value (st.S.vs))
   in
   Ui_components.cmdk_input_row ~key:"input-row"
     [ (* cljs .cp__cmdk-input-row prepends a dimmed search glyph; the
@@ -755,7 +755,7 @@ let hints svs st : t =
             ; reactive (tip_el svs)
                 (Signal.map
                    (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
-                   st.S.vs.Signal.state_signal)
+                   (Signal.value (st.S.vs)))
             ]
         ]
     ; (* the hint bar's shape is the action variant, not the item's
@@ -766,7 +766,7 @@ let hints svs st : t =
         (action_hints svs)
         (Signal.map
            (fun (v : S.view) -> S.item_at v v.S.hl)
-           st.S.vs.Signal.state_signal)
+           (Signal.value (st.S.vs)))
     ])
     ctx parent
 
@@ -880,7 +880,7 @@ let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
     ; click = handle_click st
     ; mousemove = handle_mousemove st };
   let open_sig =
-    Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
+    Signal.map (fun (v : S.view) -> v.S.open_) (Signal.value (st.S.vs))
   in
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale

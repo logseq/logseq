@@ -181,7 +181,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
     Logseq_el.own context
       (Signal.map2
          (fun (it : S.ac_item) (v : S.view) -> (it, v))
-         item_sig st.S.vs.Signal.state_signal)
+         item_sig (Signal.value st.S.vs))
   in
   box ~key ~style_class:"menu-link-wrap"
     [ (* cljs/e2e contract: a.menu-link[#ac-<idx>].chosen — a real
@@ -309,7 +309,7 @@ let ac_inner (st : S.t) : t =
                        | None -> List.map (fun it -> AItem it) g.g_items)
                      (ac_groups xs))
            | None -> [])
-         st.S.vs.Signal.state_signal)
+         (Signal.value (st.S.vs)))
   in
   let unit_key u =
     match u with
@@ -357,7 +357,7 @@ let ac_popover (st : S.t) : t =
      derived signal bound under that scope, so an eagerly-created map would
      throw "cannot observe a disposed signal" on the next mount *)
  fun context parent ->
-  let vs = st.S.vs.Signal.state_signal in
+  let vs = (Signal.value (st.S.vs)) in
   (* cljs PopoverContent: ui__popover-content + card + transition
      classes. #ui__ac (imperative queries) sits on the positioner via
      ~accessibility_identifier; the .ui__popover-content content node is
@@ -654,7 +654,7 @@ let cm_sub_state (st : S.t)
               Some (m.S.sub_open, x, y, items)
           | _ -> None)
       | _ -> None)
-    st.S.vs.Signal.state_signal
+    (Signal.value (st.S.vs))
 ;;
 
 let cm_popover (st : S.t) : t =
@@ -667,13 +667,13 @@ let cm_popover (st : S.t) : t =
            match v.S.cm with
            | Some m -> List.mapi (fun i e -> (i, e)) m.S.entries
            | None -> [])
-         st.S.vs.Signal.state_signal)
+         (Signal.value (st.S.vs)))
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content merged with
      the content-props class (280px ls-context-menu-content, 240px
      ls-tag-menu for block-tag popups); the items sit in a flat
      div[data-keep-selection], not a second card *)
-  let vs = st.S.vs.Signal.state_signal in
+  let vs = (Signal.value (st.S.vs)) in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
        "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
@@ -912,7 +912,7 @@ let pv_dyn (st : S.t) : t =
        | Some p -> pv_popover st p)
      (Logseq_el.own context
         (Signal.map (fun (v : S.view) -> v.S.pv)
-           st.S.vs.Signal.state_signal)))
+           (Signal.value (st.S.vs)))))
     context parent
 
 (* base-ui dropdown-menu roving focus: ArrowUp/Down (and Home/End) move
@@ -1300,12 +1300,12 @@ let render (_ms : Model.t Signal.signal) : t =
   let ac_open =
     Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.ac <> None)
-         st.S.vs.Signal.state_signal)
+         (Signal.value (st.S.vs)))
   in
   let cm_open =
     Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.cm <> None)
-         st.S.vs.Signal.state_signal)
+         (Signal.value (st.S.vs)))
   in
   let body =
     Logseq_el.fragment

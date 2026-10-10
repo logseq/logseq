@@ -147,7 +147,7 @@ let el : t =
          (function
            | None -> Logseq_el.nothing
            | Some tip -> tip_view tip)
-         s.Signal.state_signal)
+         (Signal.value (s)))
         context parent
 
 (* mousemove rather than mouseover: gpui feeds document mousemove only

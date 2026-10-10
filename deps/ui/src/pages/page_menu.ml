@@ -156,7 +156,7 @@ let user_item () : Lui_elements.t =
   let username = Option.value (Rtc_flows.username ()) ~default:"" in
   let email = Option.value (Rtc_flows.email ()) ~default:"" in
   let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
-  let maskedv = Signal.value masked in
+  let maskedv = (Signal.value masked) in
   (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
      data-menu-tail keeps it out of the open-time initial highlight *)
   box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"

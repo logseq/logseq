@@ -208,7 +208,7 @@ let ghost_btn () =
    swaps (secure_field <-> input), a structural branch, so if_ mounts the
    alternative; the eye icon is just a prop flip -> ~icon_signal *)
 let toggle_pw ctx =
-  let st_sig = Signal.value (st ctx) in
+  let st_sig = (Signal.value (st ctx)) in
   let pw_input ~key ~visible =
     let value_sig = Signal.map (fun (s : pst) -> s.password) st_sig in
     let on_input ev =

@@ -495,7 +495,7 @@ let init (ms : Model.t Signal.signal) : t =
   match !st_ref with
   | Some st -> st
   | None ->
-      let owner = ms.Signal.owner in
+      let owner = (Signal.signal_owner (ms)) in
       let st =
         { open_ = Signal.state owner false
         ; decks = Signal.state owner []

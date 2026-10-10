@@ -78,7 +78,7 @@ let mount ?(cls = "") uuid scope : t =
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
     [ Edit_view.view ~model:model_sig
-        ~frame:frame.Signal.state_signal ~block_id:uuid ~cls
+        ~frame:(Signal.value (frame)) ~block_id:uuid ~cls
         ~on_input:(Editor_keys.apply_input ~frame uuid)
     ])
     ctx parent

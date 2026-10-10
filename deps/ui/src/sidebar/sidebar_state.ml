@@ -1,5 +1,5 @@
 (* Sidebar state — favorites, recents, sticky-nav prefs and right-sidebar
-   items. Area signals live on the app scheduler (ms.Signal.owner); async
+   items. Area signals live on the app scheduler (Signal.signal_owner (ms)); async
    loads publish via Runtime.signal_set so the DOM updates outside the LUI
    event loop.
 
@@ -1168,7 +1168,7 @@ let init (ms : Model.t Signal.signal) : t =
   match !st_ref with
   | Some st -> st
   | None ->
-      let owner = ms.Signal.owner in
+      let owner = (Signal.signal_owner (ms)) in
       let st =
         { favorites = Signal.state owner []
         ; recents = Signal.state owner []

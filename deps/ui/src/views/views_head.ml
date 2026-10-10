@@ -20,8 +20,7 @@ open Lui_elements
 
 let if_ = Lui_elements.if_
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
-  inst.V.st.Signal.state_signal
-
+  (Signal.value (inst.V.st))
 let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
@@ -373,7 +372,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
         (fun context parent ->
           let sched = context.Lui_ui.ui_scheduler in
           let query = Signal.state sched "" in
-          let qsig = query.Signal.state_signal in
+          let qsig = (Signal.value (query)) in
           (D.el ~style_class:"ls-vf-col"
              (column ~style_class:"cp__select cp__select-main"
                 [ D.el ~style_class:"input-wrap"
@@ -849,8 +848,8 @@ let ref_filter_dialog inst anchor =
       let gen = Signal.state sched 0 in
       let deb = Ui_services.timers_debounce 200 in
       let combined =
-        Signal.map2 (fun q g -> (q, g)) query.Signal.state_signal
-          gen.Signal.state_signal
+        Signal.map2 (fun q g -> (q, g)) (Signal.value (query))
+          (Signal.value (gen))
       in
       let ref_button title count_opt =
         D.el ~tag:"button" ~style_class:"ls-ref-btn" ~events:"click"
@@ -1016,7 +1015,7 @@ let render_head inst : t =
   (* Views_popup's open_st is a global singleton — its owner is
      whichever scheduler created it first, so map2 inputs must both
      live on popup_open's scheduler, not this ctx's *)
-  let hover = Signal.state popup_open.Signal.owner false in
+  let hover = Signal.state (Signal.signal_owner popup_open) false in
   (* lit = head hovered || a popup is open; the same opacity derivation
      drives .view-actions and .ls-add-view *)
   let op =
@@ -1027,7 +1026,7 @@ let render_head inst : t =
            if is_refs then if lit then 1. else 0.
            else if lit then 1.
            else 0.75)
-         hover.Signal.state_signal popup_open)
+         (Signal.value (hover)) popup_open)
   in
   row
     ~on_pointer_enter:(fun _ -> Signal.set hover true; Runtime.flush ())

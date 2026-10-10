@@ -38,7 +38,7 @@ type frame = Edit_input.frame
    same helper as Logseq_el.own, kept local so the editor surface has
    zero logseq-dom deps *)
 let own context (source : 'a Signal.signal) =
-  if !(source.Signal.upstream_subscriptions) <> [] then
+  if (Signal.has_upstream_subscriptions source) then
     Signal.own_signal context.Lui_ui.ui_scope source
   else
     source

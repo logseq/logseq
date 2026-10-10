@@ -20,7 +20,7 @@ let dirty : int Signal.signal option ref = ref None
 
 let dirty_signal (owner : Signal.scheduler) : int Signal.signal =
   let st = Signal.state owner 0 in
-  let s = Signal.value st in
+  let s = (Signal.value st) in
   dirty := Some s;
   s
 
@@ -28,7 +28,7 @@ let dirty_value (owner : Signal.scheduler) : int Signal.signal =
   match !dirty with
   | Some s -> s
   | None ->
-      let s = Signal.value (Signal.state owner 0) in
+      let s = (Signal.value (Signal.state owner 0)) in
       dirty := Some s;
       s
 let toolbar_items () : ui_item list = []

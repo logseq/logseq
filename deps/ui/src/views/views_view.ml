@@ -22,8 +22,7 @@ open Lui_elements
 type t = Lui_elements.t
 
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
-  inst.V.st.Signal.state_signal
-
+  (Signal.value (inst.V.st))
 let feature_of_kind = function
   | V.KAllPages -> "all-pages"
   | V.KTagPage _ -> "class-objects"

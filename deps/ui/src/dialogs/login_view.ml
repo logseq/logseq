@@ -524,5 +524,5 @@ let body (_ms : Model.t Signal.signal) : t =
   (reactive ~equal:( == ) (fun a ->
        box ~key:"login" ~style_class:"cp__user-login"
          [ panel ctx fields a ])
-     (auth_st ctx).Signal.state_signal)
+     (Signal.value ((auth_st ctx))))
     ctx parent

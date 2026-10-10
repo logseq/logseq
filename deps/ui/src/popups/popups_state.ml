@@ -198,7 +198,7 @@ let popup_signal () =
       Some
         (Signal.map
            (fun v -> v.ac <> None || v.cm <> None || v.pv <> None)
-           t.vs.Signal.state_signal)
+           (Signal.value (t.vs)))
   | None -> None
 
 (* signal of whether a popover layer other than the context menu is open —
@@ -211,7 +211,7 @@ let non_cm_popup_signal () =
       Some
         (Signal.map
            (fun v -> v.ac <> None || v.pv <> None)
-           t.vs.Signal.state_signal)
+           (Signal.value (t.vs)))
   | None -> None
 
 let ac_open () =

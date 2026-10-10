@@ -161,7 +161,7 @@ let make ?(register = true) scheduler svs : t =
   (* the modal palette is the singleton shortcuts dispatch through;
      sidebar cmdk blocks are independent and must not steal the refs *)
   if register then begin
-    latest_vs := Some vs.Signal.state_signal;
+    latest_vs := Some (Signal.value vs);
     latest_t := Some st;
     latest_st := Some st
   end;
@@ -172,9 +172,9 @@ let make ?(register = true) scheduler svs : t =
    first so same-tick updates (on_input -> refresh, chained set_in calls)
    see the freshest view instead of lagging one update behind. *)
 let get st =
-  match !(st.vs.Signal.pending) with
+  match (Signal.state_pending st.vs) with
   | Some v -> v
-  | None -> Signal.get st.vs.Signal.state_signal
+  | None -> Signal.get (Signal.value st.vs)
 
 (* whether the palette is open — chrome like the selection action-bar
    hides while it is up *)

@@ -119,7 +119,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
         box  [ render it ]
       else
         let near = near_of k in
-        let ns = near.Signal.state_signal in
+        let ns = (Signal.value (near)) in
         (* TODO(component): the lazy-mount dom-event is the Swift spine
            contract — the attr could ride ~data_attrs but no component
            kind carries a custom event channel *)
@@ -195,7 +195,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
       box  [ mount item_sig ]
     else
       let near = near_of k in
-      let ns = near.Signal.state_signal in
+      let ns = (Signal.value (near)) in
       (* TODO(component): same lazy-mount dom-event Swift spine contract as
          [list] — stays a logseq-div *)
       Logseq_el.el 

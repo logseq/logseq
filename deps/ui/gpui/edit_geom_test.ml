@@ -182,9 +182,9 @@ let test_reply_updates_mounted_overlay () =
       (Signal.map (fun st -> match st.ES.editing with
          | Some e -> e.ES.model
          | None -> Edit_model.create ~units:Edit_model.Bytes "")
-         state.Signal.state_signal) in
+         (Signal.value state)) in
     Edit_view.view ~model
-      ~frame:frame.Signal.state_signal ~block_id:"blk-1" ~cls:""
+      ~frame:(Signal.value (frame)) ~block_id:"blk-1" ~cls:""
       ~on_input:(fun _ -> ())
   in
   let session = DS.mount ~registry ~profile:Logseq_editor.web_profile
@@ -247,8 +247,8 @@ let test_gpui_owns_caret_paint () =
     let frame = Signal.state ctx.Lui_ui.ui_scheduler
       { EI.caret = Some { EI.x = 40; y = 0; w = 0; h = 16 }
       ; selection = [ { EI.x = 8; y = 0; w = 32; h = 16 } ] } in
-    Edit_view.view ~model:model.Signal.state_signal
-      ~frame:frame.Signal.state_signal ~block_id:"native-caret" ~cls:""
+    Edit_view.view ~model:(Signal.value (model))
+      ~frame:(Signal.value (frame)) ~block_id:"native-caret" ~cls:""
       ~on_input:(fun _ -> ())
   in
   let session = DS.mount ~registry ~profile:Logseq_editor.gpui_profile

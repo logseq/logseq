@@ -106,7 +106,7 @@ let nav_edit_menu st =
 
 let plugins_menu st =
   let owner =
-    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+    (Signal.signal_owner (Signal.value st.Sidebar_state.open_menu))
   in
   let extra_item key label icn f =
     Ui_parts.pressable
@@ -634,7 +634,7 @@ let recents_group st =
 let plugins_toolbar (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   let owner =
-    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+    (Signal.signal_owner (Signal.value st.Sidebar_state.open_menu))
   in
   reactive
     (fun _dirty ->

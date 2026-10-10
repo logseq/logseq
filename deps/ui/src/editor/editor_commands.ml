@@ -875,7 +875,7 @@ let popup_popover context ps : t =
    popup signal the imperative entries publish into *)
 let popup_view context parent =
   let vs = popup_vs_of context in
-  let ps = vs.Signal.state_signal in
+  let ps = (Signal.value (vs)) in
   let open_s =
     Logseq_el.own context (Signal.map (fun po -> po <> None) ps)
   in

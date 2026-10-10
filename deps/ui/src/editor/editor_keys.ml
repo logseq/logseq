@@ -1109,7 +1109,7 @@ and apply_input ?frame uuid ev =
              keep re-measuring until the overlay paints (same recovery
              apply_focus uses) *)
           let f =
-            match !(fr.Signal.pending) with
+            match (Signal.state_pending fr) with
             | Some v -> v
             | None -> Signal.get_state fr
           in

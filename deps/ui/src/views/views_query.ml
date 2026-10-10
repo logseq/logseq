@@ -366,7 +366,7 @@ let cm_host inst : Lui_elements.t =
     Logseq_el.own ctx
       (Signal.map
          (fun s -> s.V.query_editor_open)
-         inst.V.st.Signal.state_signal)
+         (Signal.value (inst.V.st)))
   in
   Lui_elements.if_ ~test:open_sig
     (fun ctx parent ->

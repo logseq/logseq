@@ -111,8 +111,7 @@ let view_overlays_state_of (context : Lui_ui.ui_context) =
       s
 
 let view_overlays (context : Lui_ui.ui_context) =
-  Signal.value (view_overlays_state_of context)
-
+  (Signal.value (view_overlays_state_of context))
 let push_view_overlay context ~key ~view ~on_escape =
   let s = view_overlays_state_of context in
   let cur = Runtime.signal_get s in
@@ -224,8 +223,7 @@ let show_hidden_signal (context : Lui_ui.ui_context) =
   | None ->
       let s = Signal.state context.Lui_ui.ui_scheduler !show_hidden in
       show_hidden_state := Some s;
-      Signal.value s
-
+      (Signal.value s)
 let toggle_hidden () =
   show_hidden := not !show_hidden;
   (match !show_hidden_state with

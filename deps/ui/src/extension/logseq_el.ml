@@ -135,7 +135,7 @@ let reactive_text f source = Signal.map (fun v -> StringValue (f v)) source
    signals (Signal.value/state_signal) carry no upstream links and are
    left alone so they survive the unmount. *)
 let own context (source : 'a Signal.signal) =
-  if !(source.Signal.upstream_subscriptions) <> [] then
+  if (Signal.has_upstream_subscriptions source) then
     Signal.own_signal context.Lui_ui.ui_scope source
   else
     source

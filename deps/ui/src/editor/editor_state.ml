@@ -318,7 +318,7 @@ let set_drag v = set (fun st -> { st with drag = v })
 let editing () =
   match !st with
   | Some s -> (
-      match !(s.Signal.pending) with
+      match (Signal.state_pending s) with
       | Some v -> v.editing
       | None -> (read ()).editing)
   | None -> initial.editing

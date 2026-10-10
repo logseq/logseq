@@ -66,7 +66,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
      from their own signals (journals' journal_page_sig) pass a key-only
      equality so splices never remount the whole row *)
   let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
-  let vstate_sig = st.Signal.state_signal in
+  let vstate_sig = (Signal.value (st)) in
   let height_s =
     Signal.map
       (fun (s : Logseq_virt.vstate) -> FloatValue s.v_total)

@@ -160,7 +160,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       ; preset = preset_color ()
       }
   in
-  let sv = Signal.value st in
+  let sv = (Signal.value st) in
   (* async emoji search token — a stale fill must not clobber a newer
      query's results *)
   let gen = ref 0 in

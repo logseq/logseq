@@ -27,7 +27,7 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
   let near =
     Signal.state ctx.Lui_ui.ui_scheduler (Hashtbl.mem forced uuid)
   in
-  let near_sig = near.Signal.state_signal in
+  let near_sig = (Signal.value (near)) in
   (Logseq_el.el ~key ~style_class:"block-children"
      ~attrs_signal_v:
        (Logseq_el.attrs_signal near_sig (fun n ->
@@ -93,7 +93,7 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
              let b = Signal.get bs in
              let uuid = key b in
              let near = near_of uuid in
-             let near_sig = near.Signal.state_signal in
+             let near_sig = (Signal.value (near)) in
              Logseq_el.el 
                ~attrs_signal_v:
                  (Logseq_el.attrs_signal near_sig (fun n ->

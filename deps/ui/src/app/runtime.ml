@@ -137,7 +137,7 @@ let flush () =
    state, clobbering open_=true back to false. Reads that feed later
    writes must see the staged value. *)
 let signal_get (state : 'a Signal.state) : 'a =
-  match !(state.Signal.pending) with
+  match (Signal.state_pending state) with
   | Some v -> v
   | None -> Signal.get_state state
 

@@ -479,7 +479,7 @@ let cloze_reveal_all = ref false
 let cloze_el answer cue : t =
  fun context parent ->
   let open_ = Signal.state context.Lui_ui.ui_scheduler !cloze_reveal_all in
-  let sig_ = Signal.value open_ in
+  let sig_ = (Signal.value open_) in
   let hidden_text = match cue with Some c -> "(" ^ c ^ ")" | None -> "[...]" in
   (* keydown (Enter/Space) has no component equivalent — click toggles.
      role/button+tabindex+aria-pressed have no kind props *)
@@ -1340,7 +1340,7 @@ and page_ref ?(tag = false) ~refs ~self name =
     (* cljs data-ref is the resolved entity uuid, not the written name *)
     fun context parent ->
     let st = name_uuid_state context name in
-    let uuid_sig = Signal.value st in
+    let uuid_sig = (Signal.value st) in
     if tag then
       preview_link (page_link ~tag:true ~uuid_sig name) context parent
     else
@@ -1404,7 +1404,7 @@ and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
   ignore (refs, self);
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
-  let title_sig = Signal.value st in
+  let title_sig = (Signal.value st) in
   (link ~url:"#" ~target:`self_ ~style_class:"relative tag"
     ~data_attrs:
       (reactive

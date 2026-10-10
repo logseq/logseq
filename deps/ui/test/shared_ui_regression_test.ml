@@ -227,7 +227,9 @@ let run_views ~registry ~profile ~finish =
   (* new Signal.subscribers is an opaque linked registry — probe leaked
      downstream work instead: publishing to the sources after unmount must
      perform no more computation than it did before the views mounted *)
-  let sched = (Option.get !visible).Signal.state_signal.Signal.owner in
+  let sched =
+    (Signal.signal_owner (Signal.value (Option.get !visible)))
+  in
   let st r default =
     match !r with
     | Some s -> s

@@ -304,7 +304,7 @@ let auto_backup ctx =
            [ text ~key:"ab-na-s"
                ~value:(T.t "export.backup/unsupported-desc") [] ]
        else
-         let folder_sig = (folder_st ctx).Signal.state_signal in
+         let folder_sig = Signal.value ((folder_st ctx)) in
          Logseq_el.fragment
            [ Lui_elements.if_
                ~test:

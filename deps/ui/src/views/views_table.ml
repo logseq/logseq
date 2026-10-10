@@ -22,8 +22,7 @@ open Lui_elements
 let if_ = Lui_elements.if_
 let keyed = Lui_elements.keyed
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
-  inst.V.st.Signal.state_signal
-
+  (Signal.value (inst.V.st))
 let refresh inst = (V.ops ()).V.o_refresh inst
 
 (* schema icon names -> builtin variants; every other name resolves
@@ -574,7 +573,7 @@ let header_button inst (c : V.column) : t =
       (Signal.map
          (fun (s : V.vstate) ->
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
-         inst.V.st.Signal.state_signal)
+         (Signal.value (inst.V.st)))
   in
   button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
     ~main:`start ~height:32 ~padding_horizontal:8
@@ -989,7 +988,7 @@ let row_stream inst cols uuids : t =
     Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
-         inst.V.st.Signal.state_signal)
+         (Signal.value (inst.V.st)))
   in
   let items = Signal.get items_sig in
   (* a windowed fetch that has more rows server-side still needs the
@@ -1007,7 +1006,7 @@ let row_stream inst cols uuids : t =
           (Signal.map
              (fun (s : V.vstate) ->
                Array.of_list (List.map (row_item_of s) uuids))
-             inst.V.st.Signal.state_signal
+             (Signal.value (inst.V.st))
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
       ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
       ~render:(fun (u, blk) -> row_el inst cols ~row_uuid:u ~blk)
@@ -1195,7 +1194,7 @@ let foldable inst ~key ~title ~(body : t) : t =
     Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
-         inst.V.st.Signal.state_signal)
+         (Signal.value (inst.V.st)))
   in
   (column
     [ row ~style_class:"ls-foldable-title content"
@@ -1258,7 +1257,7 @@ let list_stream inst uuids : t =
     Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
-         inst.V.st.Signal.state_signal)
+         (Signal.value (inst.V.st)))
   in
   let items = Signal.get items_sig in
   let title_of s (_, blk) =
@@ -1280,7 +1279,7 @@ let list_stream inst uuids : t =
           (Signal.map
              (fun (s : V.vstate) ->
                Array.of_list (List.map (row_item_of s) uuids))
-             inst.V.st.Signal.state_signal
+             (Signal.value (inst.V.st))
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
       ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
       ~render:(fun (u, blk) -> list_row_el ~row_uuid:u ~blk)
@@ -1359,7 +1358,7 @@ let render_gallery inst _s : t =
           (Logseq_el.own ctx
              (Signal.map
                 (fun (s' : V.vstate) -> flat_items s')
-                inst.V.st.Signal.state_signal))
+                (Signal.value (inst.V.st))))
         ~key:keyed_row_key ~cmp:String.compare
         ~mount:(fun item_sig -> gallery_card_el_sig inst item_sig) ]
     ctx parent

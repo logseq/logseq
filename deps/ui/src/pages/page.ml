@@ -280,8 +280,8 @@ let title_editor (page : Model.page) : t =
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
      [ Edit_view.view
-         ~model:model_st.Signal.state_signal
-         ~frame:frame.Signal.state_signal ~block_id:uuid ~on_input ~cls:""
+         ~model:(Signal.value (model_st))
+         ~frame:(Signal.value (frame)) ~block_id:uuid ~on_input ~cls:""
      ])
     ctx parent
 
@@ -1190,7 +1190,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     | x :: rest when n > 0 -> x :: take (n - 1) rest
     | _ -> []
   in
-  let tick = Signal.state ms.Signal.owner 0 in
+  let tick = Signal.state (Signal.signal_owner ms) 0 in
   let spine_sig =
     Logseq_el.own ctx
       (Signal.map

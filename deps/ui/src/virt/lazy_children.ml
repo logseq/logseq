@@ -91,7 +91,7 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
     Signal.state ctx.Lui_ui.ui_scheduler
       (Hashtbl.mem forced uuid || not lazy_feasible)
   in
-  let near_sig = near.Signal.state_signal in
+  let near_sig = (Signal.value (near)) in
   let el_id = "lazy-" ^ key in
   if lazy_feasible && not (Hashtbl.mem forced uuid) then
     set_timeout (fun () -> attach ctx el_id near) 0;

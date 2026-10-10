@@ -60,7 +60,7 @@ let ensure_open_st sched =
       open_st := Some st;
       st
 
-let open_signal sched = (ensure_open_st sched).Signal.state_signal
+let open_signal sched = Signal.value ((ensure_open_st sched))
 
 let close_entry id =
   open_popups := List.filter (fun e -> e.p_id <> id) !open_popups;
@@ -159,14 +159,14 @@ let anchored_popover ~key ~id ~place ~cls ~on_dismiss children : t =
   popover ~key ~role:`menu ~accessibility_identifier:id
     ~at_signal:
       (map (fun (pl : placement) -> (pl.px, pl.py))
-         place.Signal.state_signal)
+         (Signal.value (place)))
     ~data_attrs_signal:
       (map
          (fun (pl : placement) ->
            (if placement_style pl = "" then []
             else [ ("style", placement_style pl) ])
            @ [ ("data-keep-selection", ""); ("tabindex", "-1") ])
-         place.Signal.state_signal)
+         (Signal.value (place)))
     ~style_class:cls ~on_dismiss children
 
 (* ---------- menus ---------- *)
@@ -198,7 +198,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let mst = Signal.state sched { mf = 0; msub = -1; mcheck = [] } in
-  let msig = mst.Signal.state_signal in
+  let msig = (Signal.value (mst)) in
   let sub_keys : (int, U.ev -> unit) Hashtbl.t = Hashtbl.create 4 in
   let counter = ref 0 in
   let entries =
@@ -372,9 +372,9 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let query = Signal.state sched "" in
     let chosen = Signal.state sched 0 in
     let sel_values = Signal.state sched [] in
-    let qsig = query.Signal.state_signal
-    and csig = chosen.Signal.state_signal
-    and ssig = sel_values.Signal.state_signal in
+    let qsig = Signal.value (query)
+    and csig = Signal.value (chosen)
+    and ssig = (Signal.value (sel_values)) in
     let filtered q =
       if q = "" then items
       else List.filter (fun it -> Fuzzy.score q it.si_label > 0.) items
@@ -578,6 +578,6 @@ let layer : t =
         stack_st := Some s;
         s
   in
-  keyed ~source:st.Signal.state_signal ~key:(fun p -> p.p_id)
+  keyed ~source:(Signal.value (st)) ~key:(fun p -> p.p_id)
     ~cmp:Int.compare ~mount:(fun p_s -> (get p_s).p_view)
     context parent

@@ -553,7 +553,7 @@ let asset_container uuid (b : Model.block) : t =
                    | None -> ())
                  (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
-           ready.Signal.state_signal
+           (Signal.value (ready))
        ] @ (if Ui_services.env_publishing () then [] else [ action_bar uuid b ])))
       context parent
 
@@ -633,8 +633,7 @@ let file_block uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
   let url =
-    (asset_url_sig ~mime:(mime_of_ext ext) uuid file context)
-      .Signal.state_signal
+    (Signal.value (asset_url_sig ~mime:(mime_of_ext ext) uuid file context))
   in
   let src_attrs base =
     Logseq_el.attrs_signal url (fun u ->
@@ -730,7 +729,7 @@ let file_cell_el (w : W.t) : t =
           Js.Promise.resolve ())
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
   box ~style_class:"block-content" ~max_height:30
-    [ image ~url_signal:src.Signal.state_signal ~alt:file [] ]
+    [ image ~url_signal:(Signal.value (src)) ~alt:file [] ]
     ctx parent
 
 (* ---------- command hookup ---------- *)

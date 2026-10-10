@@ -40,11 +40,11 @@ module Make (A : ARG) = struct
      it back wholesale, clobbering the staged write *)
   let value () =
     let s = state () in
-    match !(s.Signal.pending) with
+    match (Signal.state_pending s) with
     | Some v -> v
     | None -> Signal.get_state s
 
-  let signal () = (state ()).Signal.state_signal
+  let signal () = Signal.value ((state ()))
 
   let set f =
     Signal.update (state ()) f;

@@ -129,7 +129,7 @@ let view (r : Dialogs_state.ui_request) : t =
                   ~autofocus:false
                   ~placeholder:I18n.e2ee_password_again_ph
                   ~on_enter:submit_now
-              ; if_ ~test:warn.Signal.state_signal
+              ; if_ ~test:(Signal.value (warn))
                   (text ~key:"mm"
                      ~style_class:"ls-warn-text"
                      ~value:I18n.e2ee_password_not_matched

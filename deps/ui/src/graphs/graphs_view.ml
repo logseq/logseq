@@ -207,7 +207,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
 
 let view (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
-  let remote_sig = Signal.value (remote_st ctx) in
+  let remote_sig = (Signal.value (remote_st ctx)) in
   (* local repos minus the graphs the sync server also hosts — cljs
      combine-local-&-remote-graphs merges by :url so a downloaded
      remote renders once, under Remote graphs *)

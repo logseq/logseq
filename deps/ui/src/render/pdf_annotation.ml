@@ -178,8 +178,7 @@ let area_display (b : Model.block) context : t =
                       ~style_class:"w-full" []
                   ]
               ])
-    st.Signal.state_signal
-
+    (Signal.value (st))
 (* cljs hl-ref prefix-link — pointerdown opens the pdf at the hl
    (unless the click lands on a .blank span inside an area hl) *)
 let prefix_el (b : Model.block) : t =

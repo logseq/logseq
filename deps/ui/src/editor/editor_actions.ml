@@ -118,7 +118,7 @@ let refresh_overlay uuid =
       in
       let measured = Edit_input.measure conduit m in
       let current =
-        match !(fr.Signal.pending) with
+        match (Signal.state_pending fr) with
         | Some v -> v
         | None -> Signal.get_state fr
       in

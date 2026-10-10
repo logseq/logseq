@@ -31,7 +31,7 @@ let view_sig : view option Signal.state option ref = ref None
 
 let get_view () =
   match !view_sig with
-  | Some s -> Signal.get s.Signal.state_signal
+  | Some s -> Signal.get (Signal.value s)
   | None -> None
 
 let set_view v =
@@ -48,22 +48,20 @@ let update_view f =
    that, set_current's write to S.current is picked up on first read *)
 let asset_signal context : Model.pdf_asset option Signal.signal =
   match !current_sig with
-  | Some s -> s.Signal.state_signal
+  | Some s -> Signal.value (s)
   | None ->
       let s =
         Signal.state context.Lui_ui.ui_scheduler !Pdf_state.current
       in
       current_sig := Some s;
-      s.Signal.state_signal
-
+      (Signal.value (s))
 let view_signal context : view option Signal.signal =
   match !view_sig with
-  | Some s -> s.Signal.state_signal
+  | Some s -> Signal.value (s)
   | None ->
       let s = Signal.state context.Lui_ui.ui_scheduler None in
       view_sig := Some s;
-      s.Signal.state_signal
-
+      (Signal.value (s))
 (* ---------- attrs ---------- *)
 
 let hl_rect_json (r : Model.hl_rect) : J.t =
