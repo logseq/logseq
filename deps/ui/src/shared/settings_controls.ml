@@ -176,6 +176,6 @@ let edit_link_row ~key ~label ~button ~href ~for_ () =
     ~actions:
       [ link ~key:(key ^ "-a")
           ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
-          ~url:href ~text:button []
+          ~url:href ~target:`self_ ~text:button []
       ]
     ()

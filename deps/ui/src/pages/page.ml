@@ -39,7 +39,7 @@ let zoom_breadcrumbs (page : Model.page) : t list =
                    (fun (p : Model.block) ->
                      ( p.block_title
                      , nav_crumb
-                         ("#/block/"
+                         ("#/page/"
                          ^ Option.value p.block_uuid ~default:"") ))
                    parents)
               () ]
@@ -56,7 +56,11 @@ let breadcrumbs (page : Model.page) : t list =
               ~items:
                 (List.map
                    (fun (p : Model.block) ->
-                     (p.block_title, nav_crumb ("#/page/" ^ p.block_title)))
+                     ( p.block_title
+                     , nav_crumb
+                         ("#/page/"
+                         ^ Option.value p.block_uuid
+                             ~default:p.block_title) ))
                    page.page_parents
                  @ [ ( page.page_title
                      , nav_crumb
@@ -1517,6 +1521,7 @@ let region (ms : Model.t Signal.signal) : t =
       | Model.Ready, Model.All_graphs -> Graphs_view.view ms
       | Model.Ready, Model.Page "Recycle" -> Recycle.view ms
       | Model.Ready, Model.Settings -> Settings_page.view m
+      | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, _ -> (
           match m.route_page, m.page_missing with

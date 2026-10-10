@@ -11,6 +11,7 @@ type route =
   | Graph_view
   | Import
   | Settings
+  | File of string (* cljs /file/:path — raw file editor (config.edn etc.) *)
   | Not_found of string
 
 type icon =

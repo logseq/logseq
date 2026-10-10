@@ -80,7 +80,8 @@ let effects (action : Action.t) : unit =
            Ui_services.doc_set_title ((!Subs_state.i18n) "nav/settings")
        | Model.Import ->
            Ui_services.doc_set_title ((!Subs_state.i18n) "import/title")
-       | Model.Library | Model.Graph_view | Model.Not_found _ ->
+       | Model.Library | Model.Graph_view | Model.Not_found _
+       | Model.File _ ->
            Ui_services.doc_set_title "Logseq"
        | Model.Page _ | Model.Block_zoom _ -> ())
   | _ -> ()

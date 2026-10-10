@@ -204,6 +204,10 @@
   width: auto;
 }
 
+/* prod keeps the p-1.5 w-72 popover-content and nests .cp__commands-
+   slash inside it — ours carries the class on the popover itself, so
+   the base padding/width already produces prod's outer 288/inner 274 */
+
 .ui__popover-content[data-editor-popup-ref="commands"] #ui__ac-inner,
 .ui__popover-content[data-editor-popup-ref="page-search"] #ui__ac-inner,
 .ui__popover-content[data-editor-popup-ref="block-search"] #ui__ac-inner,
@@ -4852,4 +4856,63 @@ html[data-theme=light] {
   background: transparent;
   color: inherit;
   box-shadow: none;
+}
+
+/* the kbd kind ships kit chrome (.lui-kbd: px-1.5, border, bg, rounded,
+   10px mono) — inside the shui-shortcut wrappers the chrome lives on
+   the wrapper row exactly like prod's kbd.shui-shortcut-key spec, so
+   neutralize the kit layer (padding/border/bg/font can't be typed
+   props) */
+:is(.shui-shortcut-combo, .shui-shortcut-separate, .shui-shortcut-compact, .cp__cmdk-hints) .lui-kbd {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  gap: 0;
+  box-shadow: none;
+}
+
+/* prod kbd.shui-shortcut-key geometry (h-5, 12px, lh16, ls-0.5, pad 2/4,
+   min-w 20, centered) — the kit's px-1.5/h-5 rules target .lui-kbd and
+   load after shui.css, so restate the prod values here; boxed keycaps
+   (no .shui-shortcut-key) keep the chrome on their wrapper row */
+:is(.shui-shortcut-combo, .shui-shortcut-separate, .cp__cmdk-hints) .lui-kbd.shui-shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 20px;
+  padding: 2px 4px;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+}
+
+/* file route (cljs .file > CodeMirror): a mono text surface that fills the
+   content column — font isn't a LUI prop, so it rides the overlay */
+.ls-file-page .lui-textarea {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace);
+  font-size: 13px;
+}
+
+/* the file editor fills the column below its title (cljs CodeMirror does
+   the same); the route host wraps pages in a plain box, so stretch via
+   viewport math rather than grow. The surface is solarized like prod's
+   cm-s-lsradix (#fdf6e3 light / #002b36 dark) */
+.ls-file-page .lui-textarea {
+  field-sizing: initial;
+  height: calc(100dvh - 136px);
+  border-radius: 4px;
+  background: #fdf6e3;
+  color: #657b83;
+}
+.dark .ls-file-page .lui-textarea {
+  background: #002b36;
+  color: #839496;
 }
