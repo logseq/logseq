@@ -4,6 +4,18 @@ type storage = {
   remove : string -> unit;
 }
 
+(* Wire form of a shared theme snapshot. [vars] is the resolved CSS
+   custom-property table for the effective mode — canonical [--lx-*]
+   names, [--ls-*] legacy aliases, and [--lui-*] semantic names, all
+   literal values or var() references (never unresolved names). [kit]
+   maps gpui-kit theme slot names to literal color values for the
+   native host; web ignores it. *)
+type theme_snapshot = {
+  mode : string;
+  vars : (string * string) list;
+  kit : (string * string) list;
+}
+
 (* Semantic theme service. Preference persistence keeps the existing raw
    storage format (cljs-quoted values under "system-theme?"/"theme") —
    callers pass and receive plain semantic values like "dark". *)
@@ -23,6 +35,11 @@ type theme = {
   (* Document data attributes for the effective mode (data-theme). *)
   apply_classes : string -> unit;
   (* Document/body class swap for the effective mode. *)
+  apply_snapshot : theme_snapshot -> unit;
+  (* Deliver the resolved theme snapshot for the effective mode: the
+     shared layer owns the token values ([Ui_theme.snapshot]); the
+     platform applies them to its root theme surface (CSS custom
+     properties on web, kit theme slots + host vars on native). *)
 }
 
 (* Semantic navigation service — one hash route plus history and quiet
@@ -398,6 +415,7 @@ let theme_set_system_pref v = (get ()).theme.set_system_pref v
 let theme_set_pref v = (get ()).theme.set_theme_pref v
 let theme_apply_dataset v = (get ()).theme.apply_dataset v
 let theme_apply_classes v = (get ()).theme.apply_classes v
+let theme_apply_snapshot v = (get ()).theme.apply_snapshot v
 
 let nav_hash () = (get ()).nav.hash ()
 let nav_set_hash h = (get ()).nav.set_hash h

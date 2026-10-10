@@ -824,6 +824,7 @@ let fire_route_changed (route : Model.route) =
 let apply_theme_mode (theme : Js.Json.t) =
   (match Js.Json.decodeString (getf theme "mode") with
    | Some m when m <> "" ->
+       if m = "dark" || m = "light" then Ui_theme.apply m;
        Ui_services.theme_apply_dataset m;
        Ui_services.storage_set "ui/theme" ("\"" ^ m ^ "\"");
        (* cljs state/set-custom-theme! — mode -> theme under one key *)
@@ -843,7 +844,9 @@ let reset_custom_theme () =
    | Some s -> (
        try
          match Js.Json.decodeString (Js.Json.parseExn s) with
-         | Some m -> Ui_services.theme_apply_dataset m
+         | Some m ->
+             if m = "dark" || m = "light" then Ui_theme.apply m;
+             Ui_services.theme_apply_dataset m
          | None -> ()
        with _ -> ())
    | None -> ())

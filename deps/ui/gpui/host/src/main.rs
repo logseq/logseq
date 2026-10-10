@@ -45,9 +45,10 @@ fn init_theme(cx: &mut gpui_kit::gpui::App) {
             include_bytes!("../fonts/Inter-BoldItalic.ttf").into(),
         ])
         .expect("embedded Inter fonts must register");
-    // Initial OCaml patches can change the theme during the first draw.
+    // Initial OCaml patches can change the theme during the first draw;
+    // the Logseq palettes arrive via "theme-snapshot" envelopes from the
+    // shared layer (see handle_platform_request).
     gpui_kit::init(cx);
-    logseq_theme::apply(cx);
     gpui_kit::component::theme::Theme::update(cx, |theme| {
         theme.font_family = "Inter".into();
     });
@@ -280,6 +281,7 @@ fn handle_platform_request(
             };
         }
         "open-url" => cx.open_url(payload),
+        "theme-snapshot" => crate::logseq_theme::apply_snapshot(cx, payload),
         "ui-state" => {
             // {"lang","root-classes","body-classes","data":{"theme":..}}
             // — the host-facing bit is the app-chosen light/dark mode:
@@ -643,19 +645,34 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     #[gpui_kit::test]
-    fn startup_uses_logseq_palette_and_inter(cx: &mut gpui_kit::TestAppContext) {
+    fn theme_snapshot_registers_palette_and_vars(cx: &mut gpui_kit::TestAppContext) {
         use gpui_kit::component::theme::{Theme, ThemeMode};
+        // Mirrors the envelope the shared OCaml layer pushes through
+        // `request_host "theme-snapshot"` before the ui-state mode flip.
+        let payload = serde_json::json!({
+            "mode": "dark",
+            "vars": { "--lx-overlay-color": "#00000088" },
+            "kit": {
+                "background": "#002b36",
+                "muted.foreground": "#8abbbb",
+            },
+        })
+        .to_string();
         cx.update(|app| {
             super::init_theme(app);
-            for (mode, expected_name) in [
-                (ThemeMode::Light, "Logseq Light"),
-                (ThemeMode::Dark, "Logseq Dark"),
-            ] {
-                Theme::change(mode, None, app);
-                let theme = Theme::global(app);
-                assert_eq!(theme.theme_name().as_ref(), expected_name);
-                assert_eq!(theme.font_family.as_ref(), "Inter");
-            }
+            super::logseq_theme::apply_snapshot(app, &payload);
+            Theme::change(ThemeMode::Dark, None, app);
+            let theme = Theme::global(app);
+            assert_eq!(theme.theme_name().as_ref(), "Logseq Dark");
+            assert_eq!(theme.font_family.as_ref(), "Inter");
+            // Snapshot kit slots reached the installed ThemeConfig —
+            // #002b36 ≈ hsl(194°, 100%, 10.6%).
+            let bg = theme.colors.background;
+            assert!((bg.h - 0.539).abs() < 0.01 && (bg.l - 0.106).abs() < 0.01);
+            // …and the vars table resolves `var(--lx-*)` colors.
+            let overlay =
+                lui_gpui::style::color("var(--lx-overlay-color)").expect("var resolves");
+            assert!((overlay.a - 0.533).abs() < 0.01);
         });
     }
 

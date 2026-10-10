@@ -16,6 +16,7 @@ let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~
    can only go up after Platform_web.install *)
 let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
+let () = Theme_web_test.run ()
 
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)

@@ -55,6 +55,16 @@ let theme_set_pref v =
 
 let theme_apply_dataset effective = doc_set_data "theme" effective
 
+(* Root custom-property delivery — the shared Ui_theme snapshot lands
+   verbatim on documentElement so canonical --lx-*, legacy --ls-* and
+   --lui-* names all resolve for still-live CSS. *)
+let root_set_prop : string -> string -> unit =
+  [%mel.raw
+    "function (k, v) { document.documentElement.style.setProperty(k, v) }"]
+
+let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
+  List.iter (fun (name, value) -> root_set_prop name value) snap.vars
+
 let theme_apply_classes effective =
   if effective = "dark" then begin
     doc_add_class "dark";
@@ -154,6 +164,7 @@ let install ~request_flush ~dom ~timers ~files =
         ; set_theme_pref = theme_set_pref
         ; apply_dataset = theme_apply_dataset
         ; apply_classes = theme_apply_classes
+        ; apply_snapshot = theme_apply_snapshot
         }
     ; nav =
         { hash = Platform.location_hash
