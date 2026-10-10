@@ -648,7 +648,7 @@
         value-maps (mapv (fn [schema]
                            (persistent!
                             (reduce (fn [acc eid]
-                                      (if-let [v (eid-sort-value db schema eid)]
+                                      (if-some [v (eid-sort-value db schema eid)]
                                         (assoc! acc eid v)
                                         acc))
                                     (transient {})
