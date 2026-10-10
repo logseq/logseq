@@ -51,6 +51,7 @@ let with_model e model =
 type t =
   { editing : editing option
   ; selected : String_set.t
+  ; selection_scope : string
   ; anchor : string option (* selection focus end for shift-arrow *)
   ; action_bar : bool
   ; collapsed : String_set.t
@@ -72,6 +73,7 @@ type t =
 let initial =
   { editing = None
   ; selected = String_set.empty
+  ; selection_scope = "main"
   ; anchor = None
   ; action_bar = false
   ; collapsed = String_set.empty
@@ -320,7 +322,11 @@ let editing () =
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
-let selected () = (read ()).selected
+let selection_state () = if ready () then value () else initial
+let selected () = (selection_state ()).selected
+let selection_scope () = (selection_state ()).selection_scope
+let interaction_scope () =
+  match editing () with Some e -> e.scope | None -> selection_scope ()
 let is_selected uuid = String_set.mem uuid (selected ())
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
@@ -390,7 +396,7 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
   | Some u ->
       effective_collapsed_in ~scope u b.Model.block_default_collapsed
         (read ())
-let anchor () = (read ()).anchor
+let anchor () = (selection_state ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
 (* History cursors travel with their transaction, including the editing scope
@@ -408,10 +414,11 @@ let history_cursor () =
   match editing () with
   | Some e -> history_editing e
   | None -> Wire.Map
-      [ Wire.Keyword "selected-blocks", Wire.List
+      [ Wire.Keyword "scope", Wire.String (selection_scope ())
+      ; Wire.Keyword "selected-blocks", Wire.List
           (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))
       ; Wire.Keyword "selection-anchor",
-          (match (read ()).anchor with Some u -> Wire.Uuid u | None -> Wire.Nil)
+          (match anchor () with Some u -> Wire.Uuid u | None -> Wire.Nil)
       ]
 
 (* Captured before a source mutation and consumed by its scheduled save. *)
@@ -448,11 +455,21 @@ let rec find_in blocks uuid =
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
-(* block sources outside the current page tree (right-sidebar items) —
-   the owning area registers its lookup at init *)
-let extra_sources : (string -> Model.block option) list ref = ref []
+(* Container owners expose their trees for lookup, navigation and selection. *)
+let extra_sources : (string * (unit -> Model.block list)) list ref = ref []
 
-let add_block_source f = extra_sources := f :: !extra_sources
+let add_block_source ~scope f = extra_sources := (scope, f) :: !extra_sources
+
+let blocks_in_scope scope =
+  let page_scope =
+    match Runtime.route () with
+    | Model.Block_zoom uuid -> "zoom-" ^ uuid
+    | _ -> "main"
+  in
+  if scope = "main" || scope = page_scope then page_blocks ()
+  else match scope with
+    | "quick-add" -> (Quick_add_state.value ()).Quick_add_state.blocks
+    | _ -> (List.assoc scope !extra_sources) ()
 
 let find uuid =
   match find_in (page_blocks ()) uuid with
@@ -460,8 +477,8 @@ let find uuid =
   | None ->
       let rec go = function
         | [] -> None
-        | f :: fs -> (
-            match f uuid with Some _ as r -> r | None -> go fs)
+        | (_, f) :: fs -> (
+            match find_in (f ()) uuid with Some _ as r -> r | None -> go fs)
       in
       go !extra_sources
       |> (fun r ->
@@ -531,7 +548,7 @@ let rec find_parent_in blocks uuid =
 
 let find_parent uuid =
   (* top-level: parent = None (page) *)
-  let tops = page_blocks () in
+  let tops = blocks_in_scope (interaction_scope ()) in
   let rec top_idx i = function
     | [] -> None
     | b :: _ when b.Model.block_uuid = Some uuid -> Some i
@@ -565,7 +582,7 @@ let flat_visible ?(scope = "main") () =
         in
         go acc rest
   in
-  List.rev (go [] (page_blocks ()))
+  List.rev (go [] (blocks_in_scope scope))
 
 let flat_all () =
   let rec go acc blocks =

@@ -332,7 +332,26 @@ let test_shape () =
   let m4 = M.set_source m "a [[x]] c" in
   check "shape changes on atomic" (M.shape m4 <> s0)
 
+let test_double_click () =
+  List.iter
+    (fun (source, offset, expected) ->
+      let m = Edit_input.handle ~route:Edit_input.no_route
+          ~conduit:Edit_input.no_conduit (M.create source)
+          (Edit_input.Dblclick offset) in
+      check (Printf.sprintf "double click %S at %d" source offset)
+        (M.selection_range m = expected))
+    [ "one two", 0, Some (0, 3)
+    ; "one two", 3, Some (3, 4)
+    ; "one two", 4, Some (4, 7)
+    ; "one two", 7, Some (4, 7)
+    ; "one.two", 3, Some (3, 4)
+    ; "one  two", 4, Some (3, 5)
+    ; "", 0, None
+    ; "中文 word", 7, Some (7, 11)
+    ]
+
 let run () =
+  test_double_click ();
   test_byte_exact ();
   test_run_kinds ();
   test_reveal ();

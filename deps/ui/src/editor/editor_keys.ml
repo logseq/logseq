@@ -1457,7 +1457,26 @@ let on_keydown ev =
 
 let on_paste ev =
   if Ui_services.env_publishing () then () else begin
-  if S.ready () then A.paste_blocks ev
+  if S.ready () then
+    let editor_target =
+      match S.editing (), closest ".ed-input" ev.Ui_services.target with
+      | Some e, Some input -> input.Ui_services.attr "data-block-id" = Some e.S.uuid
+      | _ -> false
+    in
+    if editor_target || not (is_editable_target ev.Ui_services.target) then
+      let clipboard = !(S.clipboard), !(S.clipboard_text) in
+      if !S.structure_pending then (
+        let text = ev.Ui_services.clipboard_get "text/plain"
+        and html = ev.Ui_services.clipboard_get "text/html" in
+        ev.Ui_services.prevent_default ();
+        ev.Ui_services.stop_immediate ();
+        let saved = { ev with Ui_services.clipboard_get =
+            (function "text/plain" -> text | "text/html" -> html | _ -> "") } in
+        let context = Runtime.repo (), Runtime.route () in
+        S.enqueue_edit_action ~real:true (fun () ->
+            if context = (Runtime.repo (), Runtime.route ()) then
+              A.paste_blocks ~clipboard saved))
+      else A.paste_blocks ~clipboard ev
 
 (* a clipboard event aimed at the open editor's conduit input *)
   end

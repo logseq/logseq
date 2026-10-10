@@ -231,7 +231,7 @@ let init () =
          leaving `selected` behind keeps the selection action bar visible
          on the freshly loaded page *)
       Editor_actions.cancel_pending_focus ();
-      if Editor_state.ready () then Editor_actions.clear_selection ());
+      if Editor_state.ready () then Editor_actions.clear_selection ~scope:"main" ());
   Ui_services.dom_on_document_event ~capture:true "pointerdown"
     (fun _ -> last_ui_input_ms := Ui_services.time_now ());
   Ui_services.dom_on_document_event ~capture:true "keydown"

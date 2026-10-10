@@ -260,9 +260,8 @@ let handle ~route ~conduit m (ev : event) : Edit_model.t =
       in
       Edit_model.select m ~anchor ~focus:off
   | Dblclick off ->
-      Edit_model.select m
-        ~anchor:(Edit_model.word_left m.Edit_model.units m.Edit_model.source off)
-        ~focus:(Edit_model.word_right m.Edit_model.units m.Edit_model.source off)
+      let anchor, focus = Edit_model.word_bounds m.Edit_model.units m.Edit_model.source off in
+      Edit_model.select m ~anchor ~focus
   | Menu name -> route.menu name; m
 
 (* fold the conduit's measurements into the frame the overlay draws:

@@ -84,9 +84,12 @@ let exit_to_props uuid ops =
 
 (* ---------- calendar ---------- *)
 
-let month_names =
-  [| "January"; "February"; "March"; "April"; "May"; "June"; "July"
-   ; "August"; "September"; "October"; "November"; "December" |]
+let month_names () =
+  Array.map I18n.t
+    [| "format.month/january"; "format.month/february"; "format.month/march"
+     ; "format.month/april"; "format.month/may"; "format.month/june"
+     ; "format.month/july"; "format.month/august"; "format.month/september"
+     ; "format.month/october"; "format.month/november"; "format.month/december" |]
 
 type popup_kind =
   | Cal_insert (* "date picker": Enter writes [[journal]] at the slash range *)
@@ -348,7 +351,7 @@ let toggle_month_menu () =
                                     update_p (fun r ->
                                         { r with cm = i + 1
                                                ; menu = None }) ))
-                              (Array.to_list month_names)
+                              (Array.to_list (month_names ()))
                         } })
           | None -> ()))
 
@@ -767,7 +770,7 @@ let cal_head ps : t =
             ~text:(reactive
                      (fun po ->
                        match po with
-                       | Some q -> month_names.(q.cm - 1)
+                       | Some q -> (month_names ()).(q.cm - 1)
                        | None -> "")
                      ps)
             ~on_press:(fun _ -> toggle_month_menu ())
@@ -775,11 +778,11 @@ let cal_head ps : t =
         ; year_input ps ]
     ; box ~key:"nav" ~style_class:"ls-cal-nav"
         [ button ~key:"prev" ~style_class:"ls-cal-nav-btn"
-            ~label:"Previous month"
+            ~label:(I18n.t "editor.date-picker/previous-month")
             ~on_press:(fun _ -> nav_month (-1))
             [ Icons.icon "chevron-left" ]
         ; button ~key:"next" ~style_class:"ls-cal-nav-btn"
-            ~label:"Next month"
+            ~label:(I18n.t "editor.date-picker/next-month")
             ~on_press:(fun _ -> nav_month 1)
             [ Icons.icon "chevron-right" ] ] ]
 

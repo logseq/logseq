@@ -296,6 +296,7 @@ type ed_state =
   ; mutable dragging : bool
   ; mutable on_mousemove : (Js.Json.t -> unit) option
   ; mutable on_mouseup : (Js.Json.t -> unit) option
+  ; mutable on_dblclick : (Js.Json.t -> unit) option
   ; mutable drag_off : int
   ; mutable input_rect : Edit_input.rect option
   }
@@ -312,7 +313,7 @@ let state_of el =
   | None ->
       { block_id = ""; runs = [||]; caret_off = 0; composing = false
       ; on_mousedown = None; dragging = false; on_mousemove = None
-      ; on_mouseup = None; drag_off = -1
+      ; on_mouseup = None; on_dblclick = None; drag_off = -1
       ; input_rect = None
       }
 
@@ -850,6 +851,7 @@ let create _id document emit =
   st.on_mousedown <- Some on_md;
   st.on_mousemove <- Some on_mm;
   st.on_mouseup <- Some on_mu;
+  st.on_dblclick <- Some on_dc;
   state_set el st;
   add_doc_listener document "mousedown" on_md;
   add_doc_listener document "mousemove" on_mm;
@@ -905,8 +907,11 @@ let cleanup el =
   (match st.on_mousemove with
    | Some f -> remove_doc_listener doc "mousemove" f
    | None -> ());
-  match st.on_mouseup with
+  (match st.on_mouseup with
   | Some f -> remove_doc_listener doc "mouseup" f
+  | None -> ());
+  match st.on_dblclick with
+  | Some f -> remove_doc_listener doc "dblclick" f
   | None -> ()
 
 let adapter : Lui_web_types.web_extension_adapter =

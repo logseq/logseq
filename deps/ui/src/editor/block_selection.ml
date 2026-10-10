@@ -101,6 +101,11 @@ let pointerdown ev =
     | Some block_el -> (
         match block_el.Ui_services.attr "data-blockid" with
         | Some uuid ->
+            let scope = Editor_actions.scope_of_el block_el in
+            S.set (fun st ->
+                if st.S.selection_scope = scope then st else
+                { st with S.selection_scope = scope;
+                  selected = S.String_set.empty; anchor = None });
             (* the row's control band (collapse arrow, bullet) runs its
                own shift-click behaviors — the selection modifiers only
                apply to the content area *)

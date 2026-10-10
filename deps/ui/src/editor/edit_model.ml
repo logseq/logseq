@@ -205,6 +205,22 @@ let word_left u s off =
     in
     go i
 
+let word_bounds u s off =
+  let n = String.length s in
+  if n = 0 then 0, 0 else
+  let off = clamp_caret u s off in
+  let off = if off = n then prev_cp u s off else off in
+  let cls = cp_class u s off in
+  let rec left i =
+    if i = 0 then i else
+    let p = prev_cp u s i in
+    if cp_class u s p = cls then left p else i
+  in
+  let rec right i =
+    if i < n && cp_class u s i = cls then right (i + cp_len u s i) else i
+  in
+  left off, right off
+
 (* --- model ------------------------------------------------------------------ *)
 
 type t =

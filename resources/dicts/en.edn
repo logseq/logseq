@@ -513,6 +513,9 @@
  :editor/template-insert-error "Template insert error: {1}"
  :editor/undo-error "Undo failed."
 
+ :editor.date-picker/next-month "Next month"
+ :editor.date-picker/previous-month "Previous month"
+
  :editor.document-mode/new-block-hint "{1} to create new block"
  :editor.document-mode/title "Document mode"
  :editor.document-mode/toggle-desc "Click `D` or type {1} to toggle document mode"
@@ -734,6 +737,19 @@
  :format/highlight "Highlight"
  :format/italics "Italics"
  :format/strikethrough "Strikethrough"
+
+ :format.month/april "April"
+ :format.month/august "August"
+ :format.month/december "December"
+ :format.month/february "February"
+ :format.month/january "January"
+ :format.month/july "July"
+ :format.month/june "June"
+ :format.month/march "March"
+ :format.month/may "May"
+ :format.month/november "November"
+ :format.month/october "October"
+ :format.month/september "September"
 
  :graph/all-graphs "All graphs"
  :graph/already-exists-error "The graph '{1}' already exists. Please try again with another name."

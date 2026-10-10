@@ -64,7 +64,8 @@ let mount ?(cls = "") uuid scope : t =
      hit-test time, so mirroring inside the contextmenu handler lands
      too late. A collapsed range stands in for "no selection" *)
   ignore
-    (Signal.subscribe ~emit_initial:true (S.editing_sig ())
+    (Signal.own ctx.Lui_ui.ui_scope
+      (Signal.subscribe ~emit_initial:true (S.editing_sig ())
        (fun (e : S.editing option) ->
           match e with
           | Some e when e.S.uuid = uuid && e.S.scope = scope -> (
@@ -73,7 +74,7 @@ let mount ?(cls = "") uuid scope : t =
               | None ->
                   Editor_sink.select_range uuid e.S.model.caret
                     e.S.model.caret)
-          | _ -> ()));
+          | _ -> ())));
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
     [ Edit_view.view ~model:model_sig

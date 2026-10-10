@@ -859,6 +859,165 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     assert(animation.currentTime > start + 700 && document.activeElement === input(),
       {start, end: animation.currentTime, active: document.activeElement?.id});
   });
+  const paste = (target, value) => {
+    const data = new DataTransfer();
+    data.setData('text/plain', value);
+    const event = new ClipboardEvent('paste', {clipboardData: data, bubbles: true, cancelable: true});
+    target.dispatchEvent(event);
+    return event;
+  };
+  await test('Review: rejected exit preserves input received during saving', async () => {
+    const {blocks} = await fixture(['base']); key('End'); insert('before');
+    const original = Worker.prototype.postMessage;
+    let rejected = false;
+    Worker.prototype.postMessage = function(message, ...rest) {
+      if (!rejected && message.argumentList?.[0]?.value === 'thread-api/apply-outliner-ops') {
+        rejected = true; throw new Error('Injected exit save rejection');
+      }
+      return Reflect.apply(original, this, [message, ...rest]);
+    };
+    try { key('Escape'); insert('AFTER'); await pause(650); }
+    finally { Worker.prototype.postMessage = original; }
+    assert(rejected && text() === 'basebeforeAFTER', {rejected, value: text()});
+    key('Escape'); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === 'basebeforeAFTER', {mode: 'persisted'});
+  });
+  await test('Review: structured paste waits for optimistic split persistence', async () => {
+    const {page} = await fixture(['base']); key('End');
+    const original = Worker.prototype.postMessage;
+    let held;
+    Worker.prototype.postMessage = function(message, ...rest) {
+      if (!held && message.argumentList?.[0]?.value === 'thread-api/apply-outliner-ops'
+          && message.argumentList?.[1]?.value.includes('insert-blocks')) {
+        held = {worker: this, message, rest}; return;
+      }
+      return Reflect.apply(original, this, [message, ...rest]);
+    };
+    try {
+      key('Enter'); await wait(() => held && input());
+      paste(input(), '- pasted one\n- pasted two'); await pause(120);
+      Reflect.apply(original, held.worker, [held.message, ...held.rest]);
+      await pause(700);
+    } finally { Worker.prototype.postMessage = original; }
+    key('Escape'); await pause(450);
+    const titles = (await logseq.api.get_page_blocks_tree(page.uuid)).map(b => b.content);
+    assert(titles.join('|') === 'base|pasted one|pasted two', {titles});
+  });
+  await test('Review: link form owns its clipboard paste', async () => {
+    await fixture(['link source']); key('l', {metaKey: true});
+    await wait(() => document.querySelector('.ls-editor-link-form input'));
+    const field = document.querySelector('.ls-editor-link-form input'); field.focus();
+    const event = paste(field, 'https://example.com');
+    assert(!event.defaultPrevented && text() === 'link source', {prevented: event.defaultPrevented, value: text()});
+    key('Escape');
+  });
+  await test('Review: normal paste uses current external clipboard content', async () => {
+    const {page} = await fixture(['internal original']); key('Escape'); await pause(100);
+    const data = new DataTransfer();
+    document.body.dispatchEvent(new ClipboardEvent('copy', {clipboardData: data, bubbles: true, cancelable: true}));
+    assert(data.getData('text/plain').includes('internal original'), {copied: data.getData('text/plain')});
+    paste(document.body, 'external replacement'); await pause(650); key('Escape'); await pause(450);
+    const titles = (await logseq.api.get_page_blocks_tree(page.uuid)).map(b => b.content);
+    assert(titles.join('|') === 'internal original|external replacement', {titles});
+  });
+  await test('Review: sidebar navigation and selection stay in their tree', async () => {
+    await fixture(['main block']); key('Escape'); await pause(100);
+    const name = 'Sidebar review ' + crypto.randomUUID();
+    const page = await logseq.api.create_page(name, {}, {});
+    const first = await logseq.api.append_block_in_page(name, 'sidebar first', {});
+    const second = await logseq.api.append_block_in_page(name, 'sidebar second', {});
+    await logseq.api.open_in_right_sidebar(page.uuid);
+    await wait(() => document.getElementById('block-content-' + first.uuid));
+    const content = document.getElementById('block-content-' + first.uuid);
+    content.scrollIntoView(); content.click(); await wait(() => input()?.id.endsWith(first.uuid));
+    key('End'); key('ArrowDown'); await pause(350);
+    assert(input()?.id.endsWith(second.uuid), {input: input()?.id, expected: second.uuid});
+    key('Home'); key('ArrowUp'); await pause(350);
+    assert(input()?.id.endsWith(first.uuid), {input: input()?.id, expected: first.uuid});
+    key('Escape'); await pause(100);
+    const copied = new DataTransfer();
+    document.body.dispatchEvent(new ClipboardEvent('copy', {clipboardData: copied, bubbles: true, cancelable: true}));
+    assert(copied.getData('text/plain') === '- sidebar first\n', {copied: copied.getData('text/plain')});
+  });
+  await test('Review: navigation resets selection to the current page tree', async () => {
+    const {blocks} = await fixture(['old zoom']); key('Escape'); await pause(100);
+    location.hash = '#/block/' + blocks[0].uuid;
+    await wait(() => document.querySelector('[data-cid="zoom-' + blocks[0].uuid + '"]'));
+    document.getElementById('block-content-' + blocks[0].uuid).click(); await wait(() => input());
+    key('Escape'); await pause(100);
+    const name = 'Selection navigation ' + crypto.randomUUID();
+    const page = await logseq.api.create_page(name, {}, {});
+    const block = await logseq.api.append_block_in_page(name, 'current page', {});
+    location.hash = '#/page/' + page.uuid;
+    await wait(() => document.getElementById('block-content-' + block.uuid));
+    key('a', {metaKey: true, shiftKey: true}); await pause(50);
+    const copied = new DataTransfer();
+    document.body.dispatchEvent(new ClipboardEvent('copy', {clipboardData: copied, bubbles: true, cancelable: true}));
+    assert(copied.getData('text/plain') === '- current page\n', {copied: copied.getData('text/plain')});
+  });
+  await test('Review: reopening an editor releases selection subscriptions', async () => {
+    const {blocks} = await fixture(['selection lifecycle']);
+    const original = Selection.prototype.removeAllRanges;
+    let updates = 0;
+    Selection.prototype.removeAllRanges = function(...args) { updates++; return Reflect.apply(original, this, args); };
+    const selectWord = async () => {
+      key('Home', {metaKey: true}); await pause(30); updates = 0;
+      key('ArrowRight', {shiftKey: true}); await pause(30); return updates;
+    };
+    try {
+      const before = await selectWord();
+      for (let i = 0; i < 5; i++) {
+        key('Escape'); await pause(100);
+        document.getElementById('block-content-' + blocks[0].uuid).click(); await wait(() => input()); await pause(50);
+      }
+      const after = await selectWord(); assert(before === 1 && after === before, {before, after});
+    } finally { Selection.prototype.removeAllRanges = original; }
+  });
+  await test('Review: editor unmount removes document double-click listeners', async () => {
+    const {blocks} = await fixture(['listener lifecycle']); key('Escape'); await pause(100);
+    const add = document.addEventListener, remove = document.removeEventListener;
+    const retained = new Set(); let added = 0;
+    document.addEventListener = function(type, fn, ...args) {
+      if (type === 'dblclick') { retained.add(fn); added++; }
+      return Reflect.apply(add, this, [type, fn, ...args]);
+    };
+    document.removeEventListener = function(type, fn, ...args) {
+      if (type === 'dblclick') retained.delete(fn);
+      return Reflect.apply(remove, this, [type, fn, ...args]);
+    };
+    try {
+      for (let i = 0; i < 5; i++) {
+        document.getElementById('block-content-' + blocks[0].uuid).click(); await wait(() => input());
+        key('Escape'); await pause(120);
+      }
+      assert(added === 5 && retained.size === 0, {added, retained: retained.size});
+    } finally { document.addEventListener = add; document.removeEventListener = remove; }
+  });
+  await test('Review: double-click word beginnings do not include the preceding word', async () => {
+    await fixture(['one two']);
+    const span = [...surface().querySelectorAll('.ed-r')].find(e => e.textContent === 'one two');
+    const range = document.createRange(); range.setStart(span.firstChild, 4); range.setEnd(span.firstChild, 5);
+    const rect = range.getBoundingClientRect();
+    span.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true,
+      clientX: rect.left + rect.width * .2, clientY: rect.top + rect.height / 2}));
+    await pause(30); insert('X');
+    assert(text() === 'one X', {value: text()});
+  });
+  await test('Review: calendar labels follow the selected locale', async () => {
+    const {blocks} = await fixture(['calendar']);
+    document.dispatchEvent(new CustomEvent('ls:editor-command', {detail: {command: 'scheduled', block: blocks[0].uuid}}));
+    await wait(() => document.querySelector('.ls-date-month-select'));
+    const lang = JSON.parse(localStorage.getItem('preferred-language') || '"en"');
+    const formatter = new Intl.DateTimeFormat(lang, {month: 'long'});
+    const label = document.querySelector('.ls-date-month-select').textContent;
+    assert(label === formatter.format(new Date()), {lang, label});
+    document.querySelector('.ls-date-month-select').click(); await pause(50);
+    const months = [...document.querySelectorAll('.ls-date-month-menu [role=menuitem]')].map(e => e.textContent);
+    assert(months.length === 12 && months.every((label, i) => label === formatter.format(new Date(2026, i, 1))), {lang, months});
+    const labels = [...document.querySelectorAll('.ls-cal-nav-btn')].map(e => e.getAttribute('aria-label'));
+    assert(labels.join('|') === (lang === 'zh-CN' ? '上个月|下个月' : 'Previous month|Next month'), {lang, labels});
+    key('Escape');
+  });
   console.table(results);
   globalThis.editorBrowserProgress.done = true;
   return results;

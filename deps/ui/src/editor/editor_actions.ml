@@ -355,6 +355,11 @@ let run_structure ?recover ~restore p finish =
       let restore = match recover with Some f -> f (current ()) | None -> restore in
       let* () = if current () then Ops.refresh_page () else Js.Promise.resolve () in
       if current () then (
+        let restore =
+          match restore, S.editing () with
+          | Some original, Some live when original.S.epoch == live.S.epoch -> Some live
+          | _ -> restore
+        in
         S.set (fun st -> { st with S.editing = restore });
         match restore with
         | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
@@ -486,6 +491,7 @@ let rec enter_edit ?scope uuid caret =
                 { st with
                   S.editing =
                     Some (S.mk_editing ~caret ~uuid ~buffer ~scope ~base:buffer ())
+                ; selection_scope = scope
                 ; selected = S.String_set.empty
                 ; anchor = None
                 ; action_bar = false
@@ -534,6 +540,7 @@ let rec exit_edit ~select =
               S.set (fun st ->
                   { st with
                     S.editing = None
+                  ; selection_scope = e.scope
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
@@ -1131,7 +1138,7 @@ let merge_next uuid =
 let flat_uuids () =
   List.filter_map
     (fun b -> b.Model.block_uuid)
-    (S.flat_visible ~scope:"main" ())
+    (S.flat_visible ~scope:(S.interaction_scope ()) ())
 
 (* cljs sends selected blocks to move/delete ops in document order;
    String_set.elements is uuid-sorted, which corrupts worker ordering *)
@@ -1201,8 +1208,8 @@ let extend_selection up =
       | Some h -> (
           let nbr =
             (if up
-             then S.prev_visible ~scope:"main"
-             else S.next_visible ~scope:"main")
+             then S.prev_visible ~scope:(S.selection_scope ())
+             else S.next_visible ~scope:(S.selection_scope ()))
               h
           in
           match nbr with
@@ -1211,7 +1218,7 @@ let extend_selection up =
                  navigable-sibling-block treats .ls-page-title as a
                  block, so shift+up past it conj's the title row into
                  the selection *)
-              if up then
+              if up && S.selection_scope () = "main" then
                 (match Ui_services.dom_query ".ls-page-title .ls-block" with
                  | Some tb -> (
                      match tb.Ui_services.attr "data-blockid" with
@@ -1235,13 +1242,16 @@ let extend_selection up =
                       ; action_bar = true
                       }))))
 
-let select_single uuid =
+let select_single_in ~scope uuid =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.singleton uuid
+      ; selection_scope = scope
       ; anchor = Some uuid
       ; action_bar = false
       })
+
+let select_single uuid = select_single_in ~scope:(scope_of_uuid uuid) uuid
 
 let select_all () =
   match flat_uuids () with
@@ -1254,10 +1264,11 @@ let select_all () =
           ; action_bar = false
           })
 
-let clear_selection () =
+let clear_selection ?scope () =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.empty
+      ; selection_scope = (match scope with Some scope -> scope | None -> st.selection_scope)
       ; anchor = None
       ; action_bar = false
       })
@@ -1289,7 +1300,7 @@ let select_parent () =
       match S.find_parent u with
       | Some (Some p, _) -> (
           match p.Model.block_uuid with
-          | Some pu -> select_single pu
+          | Some pu -> select_single_in ~scope:(S.selection_scope ()) pu
           | None -> select_all ())
       | _ -> select_all ())
   | [] -> select_all ()
@@ -1300,14 +1311,14 @@ let move_selection_focus up =
   | [ cur ] -> (
       let nb =
         (if up
-         then S.prev_visible ~scope:"main"
-         else S.next_visible ~scope:"main")
+         then S.prev_visible ~scope:(S.selection_scope ())
+         else S.next_visible ~scope:(S.selection_scope ()))
           cur
       in
       match nb with
       | Some b -> (
           match b.Model.block_uuid with
-          | Some u -> select_single u
+          | Some u -> select_single_in ~scope:(S.selection_scope ()) u
           | None -> ())
       | None -> ())
   | _ -> ()
@@ -1336,7 +1347,7 @@ let indent_or_outdent ~indent =
                 match s.Model.block_uuid with
                 | Some su ->
                     S.set_silent (fun st ->
-                        S.collapsed_ui_transform ~scope:"main" su
+                        S.collapsed_ui_transform ~scope:(S.interaction_scope ()) su
                           false
                           { st with
                             S.collapsed =
@@ -1389,7 +1400,7 @@ let delete_selection () =
         | None -> List.hd uuids
       in
       let prev =
-        match S.prev_visible ~scope:"main" first with
+        match S.prev_visible ~scope:(S.selection_scope ()) first with
         | Some p -> p.Model.block_uuid
         | None -> None
       in
@@ -1406,7 +1417,7 @@ let delete_selection () =
                      { st with
                        S.editing =
                          Some
-                           (S.mk_editing ~uuid:pu ~buffer ~scope:"main"
+                           (S.mk_editing ~uuid:pu ~buffer ~scope:(S.selection_scope ())
                               ~base:buffer ~caret:(String.length buffer) ())
                      ; selected = S.String_set.empty
                      ; anchor = None
@@ -1542,9 +1553,8 @@ let copy_selection_text () =
       in
       let blocks = List.filter_map S.find roots in
       S.clipboard := blocks;
-      Ui_services.clipboard_copy
-        (String.concat "\n"
-           (List.map (fun b -> b.Model.block_title) blocks))
+      S.clipboard_text := String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks);
+      Ui_services.clipboard_copy !(S.clipboard_text)
 
 (* ---- external paste (handler.paste.cljs/paste-copied-text) ----
 
@@ -1778,11 +1788,11 @@ let splice_clipboard_text uuid text =
    branch — html→markdown wins over plain text, block-shaped text
    extracts into blocks, blank-line text into one block per paragraph,
    and anything else splices at the cursor *)
-let paste_into_editor ev =
+let paste_into_editor ~clipboard:(trees, copied_text) ev =
   let clip_text = ev.Ui_services.clipboard_get "text/plain" in
   let clip_html = ev.Ui_services.clipboard_get "text/html" in
-  match (S.editing (), !(S.clipboard)) with
-  | Some e, (_ :: _ as trees) when clip_text = !(S.clipboard_text) -> (
+  match (S.editing (), trees) with
+  | Some e, (_ :: _ as trees) when clip_text = copied_text -> (
       match S.find e.uuid with
       | Some b ->
           ev.Ui_services.prevent_default ();
@@ -1880,12 +1890,13 @@ let paste_external ev ~text ~html =
         ev.Ui_services.prevent_default ();
         paste_lines lines
 
-let paste_blocks ev =
+let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
   match S.editing () with
-  | Some _ -> paste_into_editor ev
+  | Some _ -> paste_into_editor ~clipboard ev
   | None -> (
-      match !(S.clipboard) with
-      | _ :: _ as trees -> (
+      match trees with
+      | _ :: _ when ev.Ui_services.clipboard_get "text/plain" = copied_text -> (
+          ev.Ui_services.prevent_default ();
           match selected_uuids () with
           | _ :: _ as sel ->
               ignore
@@ -1897,7 +1908,7 @@ let paste_blocks ev =
                 edit_last_inserted resp;
                 Js.Promise.resolve ())
           | [] -> ())
-      | [] ->
+      | _ ->
           paste_external ev
             ~text:(ev.Ui_services.clipboard_get "text/plain")
             ~html:(ev.Ui_services.clipboard_get "text/html"))
@@ -2089,8 +2100,9 @@ let restore_history result =
                    | _ -> invalid_arg "history selection must contain UUIDs") S.String_set.empty xs
              | _ -> invalid_arg "history cursor must contain editing or selection state" in
            let anchor = Wire.map_get_uuid cursor "selection-anchor" in
+           let selection_scope = Option.get (Wire.map_get_string cursor "scope") in
            S.set (fun st -> { st with S.editing = None; selected; anchor;
-             action_bar = false });
+             selection_scope; action_bar = false });
            Js.Promise.resolve ())
 
 let () = S.restore_history := restore_history
@@ -2204,9 +2216,9 @@ let arrow_nav uuid up =
       match b.Model.block_uuid with
       | Some nu ->
           save_if_dirty uuid;
-          enter_edit nu (caret_of uuid)
+          enter_edit ~scope nu (caret_of uuid)
       | None -> ())
-  | None -> if up then (exit_edit ~select:false; focus_page_title ())
+  | None -> if up && scope = "main" then (exit_edit ~select:false; focus_page_title ())
 
 (* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
    block — master keeps one logical caret across block boundaries:
@@ -2229,9 +2241,9 @@ let arrow_edge uuid up =
               (let* buffer =
                  Ops.title_for_edit (String.trim (display_title nu))
                in
-               enter_edit nu (String.length buffer);
+               enter_edit ~scope nu (String.length buffer);
                Js.Promise.resolve ())
-          else enter_edit nu 0
+          else enter_edit ~scope nu 0
       | None -> ())
   | None -> ()
 

@@ -102,10 +102,11 @@
 
 ; Generate native/dicts_gen.ml from the shared cljs dicts — same shape as
 ; the src/ rule; the dicts dir lives outside this dune-project
-; (../../resources/dicts), so it can't be a tracked dep — run
-; `dune build --force` to pick up dict edits.
+; (../../resources/dicts), so it can't be a tracked dep. Regenerate on each
+; build so dictionary edits are picked up.
 (rule
  (target dicts_gen.ml)
+ (deps (universe))
  (action
   (run
    sh

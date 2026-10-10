@@ -1220,9 +1220,8 @@ let init (ms : Model.t Signal.signal) : t =
       model_signal := Some ms;
       (* sidebar item blocks are editable: expose them to Editor_state.find
          so click-to-edit works on .cp__right-sidebar block rows *)
-      Editor_state.add_block_source (fun uuid ->
-          List.find_map
-            (fun (it : item) -> Editor_state.find_in it.blocks uuid)
+      Editor_state.add_block_source ~scope:"sidebar" (fun () ->
+          List.concat_map (fun (it : item) -> it.blocks)
             (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Ui_services.dom_on_document_event "ls:open-right-sidebar" (fun ev ->

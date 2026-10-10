@@ -513,6 +513,9 @@
  :editor/template-insert-error "模板插入错误：{1}"
  :editor/undo-error "撤销失败。"
 
+ :editor.date-picker/next-month "下个月"
+ :editor.date-picker/previous-month "上个月"
+
  :editor.document-mode/new-block-hint "{1} 创建新块"
  :editor.document-mode/title "文档模式"
  :editor.document-mode/toggle-desc "按 `D` 键或输入 {1} 切换文档模式"
@@ -734,6 +737,19 @@
  :format/highlight "高亮"
  :format/italics "斜体"
  :format/strikethrough "删除线"
+
+ :format.month/april "四月"
+ :format.month/august "八月"
+ :format.month/december "十二月"
+ :format.month/february "二月"
+ :format.month/january "一月"
+ :format.month/july "七月"
+ :format.month/june "六月"
+ :format.month/march "三月"
+ :format.month/may "五月"
+ :format.month/november "十一月"
+ :format.month/october "十月"
+ :format.month/september "九月"
 
  :graph/all-graphs "所有图谱"
  :graph/already-exists-error "知识库 '{1}' 已存在。请使用其他名称重试。"
