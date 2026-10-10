@@ -481,7 +481,7 @@
                    :db/ident :logseq.class/Tag}]
     (is (= []
            (#'property-value/scoped-class-nodes
-            property [page-class tag-class] nil {})))))
+            property [page-class tag-class] nil {} [])))))
 
 (deftest property-value-selected-detects-current-ref-value-test
   (is (true? (#'property-value/property-value-selected?
@@ -616,7 +616,161 @@
             property
             [topic-class]
             [matching-parent matching-child matching-wrapped matching-entity-tags unrelated]
-            {10 [11]})))))
+            {10 [11]} [])))))
+
+(deftest scoped-node-selector-renders-hydrated-selected-choices-test
+  (let [selected {:db/id 200
+                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                  :block/title "Read [[11111111-1111-1111-1111-111111111111]]"}
+        property {:db/ident :user.property/subjects
+                  :logseq.property/type :node
+                  :logseq.property/classes [{:db/id 10 :db/ident :user.class/Subject}]}
+        selected-choice {:value selected :label "Read [[Named page]]"}
+        unrelated-choice {:value {:db/id 201 :block/title "Already removed"}
+                          :label "Already removed"}
+        captured* (atom nil)]
+    (with-redefs [hooks/use-state (fn [initial] [initial identity])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [& _])
+                  property-value/select-aux (fn [_block _property opts]
+                                              (reset! captured* opts)
+                                              nil)]
+      (doseq [values [[selected] selected]]
+        (render-static
+         (property-value/select-node
+          property
+          {:block {:db/id 1 :user.property/subjects values}
+           :multiple-choices? true
+           :class-data {:selected-nodes [selected-choice unrelated-choice]}}
+          []))
+        (is (= ["Read [[Named page]]"] (map :label-value (:items @captured*))))
+        (is (= [200] (map :value (:items @captured*))))
+        (is (= [200] (:selected-choices @captured*))))
+      (render-static
+       (property-value/select-node
+        property
+        {:block {:db/id 1 :user.property/subjects []}
+         :multiple-choices? true
+         :class-data {:selected-nodes [selected-choice]}}
+        []))
+      (is (empty? (:items @captured*))
+          "A hydrated out-of-scope choice disappears once it is no longer selected."))))
+
+(deftest scoped-node-selector-keeps-newly-selected-choices-test
+  (let [selected {:db/id 200
+                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                  :block/title "New subject"}
+        property {:db/ident :user.property/subjects
+                  :logseq.property/type :node
+                  :logseq.property/classes [{:db/id 10 :db/ident :user.class/Subject}]}
+        captured* (atom nil)]
+    (with-redefs [hooks/use-state (fn [initial] [initial identity])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [& _])
+                  property-value/select-aux (fn [_block _property opts]
+                                              (reset! captured* opts)
+                                              nil)]
+      (doseq [choice [selected (assoc {:value (select-keys selected [:db/id :block/uuid])}
+                                     :label "New subject")]]
+        (render-static
+         (property-value/select-node
+          property
+          {:block {:db/id 1 :user.property/subjects [selected]}
+           :multiple-choices? true
+           :class-data {:selected-nodes []}}
+          [choice {:db/id 201 :block/title "Unselected out of scope"}]))
+        (is (= [200] (map :value (:items @captured*))))
+        (is (= ["New subject"] (map :label-value (:items @captured*))))))))
+
+(deftest scoped-class-nodes-keeps-selected-nodes-outside-scope-test
+  (let [property {:db/ident :user.property/subjects
+                  :logseq.property/type :node}
+        topic-class {:db/id 10
+                     :db/ident :user.class/Subject}
+        matching {:db/id 100
+                  :block/title "In scope"
+                  :block/tags [10]}
+        selected-out-of-scope {:db/id 200
+                               :block/title "Lost tag"
+                               :block/tags [20]}
+        unrelated {:db/id 102
+                   :block/title "Other"
+                   :block/tags [20]}
+        block {:user.property/subjects #{selected-out-of-scope}}
+        selected-nodes [selected-out-of-scope]
+        selected-ids (set (#'property-value/property-value->ids
+                           (:user.property/subjects block)))]
+    (is (= [selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            []
+            {}
+            selected-nodes))
+        "Selected nodes appear even when scoped class objects are empty.")
+    (is (= [matching selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching unrelated]
+            {}
+            selected-nodes))
+        "Selected nodes stay in the list even when they are absent from scoped results.")
+    (is (= [matching selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching selected-out-of-scope]
+            {}
+            selected-nodes))
+        "Selected nodes that lost the required tag are not filtered out of search results.")
+    (is (= [matching]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching]
+            {}
+            [matching]))
+        "A still-in-scope selected node is not duplicated.")
+    (is (contains? selected-ids 200)
+        "The out-of-scope choice remains selected so the checkbox can uncheck it.")))
+
+(deftest add-or-remove-unchecks-selected-node-outside-scope-test
+  (async done
+         (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               selected {:db/id 200
+                         :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                         :block/title "Lost tag"
+                         :block/tags [20]}
+               block {:db/id 1
+                      :block/uuid block-uuid
+                      :user.property/subjects #{selected}}
+               property {:db/ident :user.property/subjects
+                         :db/valueType :db.type/ref
+                         :db/cardinality :db.cardinality/many
+                         :logseq.property/type :node}
+               calls* (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [])
+                               state/get-state (constantly nil)
+                               db-async/<get-block (fn [_repo _block-ref _opts]
+                                                     (p/resolved block))
+                               db-property-handler/batch-delete-property-value!
+                               (fn [block-ids property-ident value]
+                                 (swap! calls* conj [(vec block-ids) property-ident value])
+                                 (p/resolved nil))]
+                 (#'property-value/add-or-remove-property-value
+                  block property 200 false {}))
+               (p/then (fn [_]
+                         (is (= [[[block-uuid]
+                                  :user.property/subjects
+                                  200]]
+                                @calls*)
+                             "Unchecking an out-of-scope selected node removes it.")
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest scoped-class-nodes-keeps-hydrated-broad-scope-initial-choices-test
   (let [property {:logseq.property/type :node}
@@ -631,7 +785,7 @@
                           :label "Unrelated block"}]
     (is (= [matching-choice]
            (#'property-value/scoped-class-nodes
-            property [page-class] [matching-choice unrelated-choice] {})))))
+            property [page-class] [matching-choice unrelated-choice] {} [])))))
 
 (deftest load-initial-node-choices-loads-existing-values-for-broad-page-scope-test
   (async done

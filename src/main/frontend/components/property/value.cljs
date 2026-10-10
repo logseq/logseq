@@ -1291,13 +1291,13 @@
     (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node'))))
 
 (defn- scoped-class-nodes
-  [property classes result structured-children-by-class-id]
-  (let [broad-scope? (broad-scoped-node-property? property classes)]
-    (if (some? result)
-      (let [class-ids (scoped-class-ids classes structured-children-by-class-id)]
-        (filter #(node-matches-scoped-classes? class-ids %) result))
-      (when broad-scope?
-        []))))
+  [property classes result structured-children-by-class-id selected-nodes]
+  (if (some? result)
+    (let [class-ids (scoped-class-ids classes structured-children-by-class-id)
+          matching (filter #(node-matches-scoped-classes? class-ids %) result)]
+      (reduce add-initial-node-choice (vec matching) selected-nodes))
+    (when (broad-scoped-node-property? property classes)
+      [])))
 
 (defn- <load-initial-node-choices
   ([repo property non-root-classes]
@@ -1320,7 +1320,7 @@
   result]
   (let [[*input set-input!] (hooks/use-state nil)
         [*selected-choices set-*selected-choices!] (hooks/use-state nil)
-        {:keys [all-classes class-options extends-class-options structured-children-by-class-id
+        {:keys [all-classes class-options extends-class-options selected-nodes structured-children-by-class-id
                 extends-by-class-id]} (:class-data opts)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
@@ -1377,7 +1377,11 @@
 	                result
 
                 (seq classes)
-                (scoped-class-nodes property classes result structured-children-by-class-id)
+                (scoped-class-nodes property classes result structured-children-by-class-id
+                                    (filter (fn [choice]
+                                              (contains? selected-choice-ids
+                                                         (:db/id (or (:value choice) choice))))
+                                            (concat selected-nodes result)))
 
                 :else
                 (if (empty? result)
