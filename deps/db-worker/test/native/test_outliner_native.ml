@@ -3654,6 +3654,103 @@ let test_moves_keep_selected_descendants_under_their_ancestor () =
     cases
 
 
+(* cljs test-move-blocks-up-down-click-order (core_test.cljs) — a run of
+   siblings selected in any click order moves as if selected in page
+   order (db-test #1316). *)
+let test_move_blocks_up_down_click_order () =
+  let cases =
+    [ ( [ "b43"; "b42" ], true, [ "b42"; "b43"; "b41"; "b44" ] );
+      ( [ "b43"; "b42" ], false, [ "b41"; "b44"; "b42"; "b43" ] );
+      ( [ "b42"; "b43" ], true, [ "b42"; "b43"; "b41"; "b44" ] );
+      ( [ "b42"; "b43" ], false, [ "b41"; "b44"; "b42"; "b43" ] ) ]
+  in
+  List.iter
+    (fun (titles, up, expected) ->
+       let conn =
+         Db_test_util.create_conn_with_blocks
+           ~pages_and_blocks:
+             [ { page = { default_page with pg_title = Some "page1" };
+                 blocks =
+                   [ { default_block with b_title = Some "b41" };
+                     { default_block with b_title = Some "b42" };
+                     { default_block with b_title = Some "b43" };
+                     { default_block with b_title = Some "b44" } ] } ]
+           ()
+       in
+       let db = db_of conn in
+       let sel =
+         List.map (fun t -> Option.get (find_block_by_content db t)) titles
+       in
+       Outliner_core.move_blocks_up_down_conn conn sel up;
+       let db = db_of conn in
+       let page = Option.get (Ldb.get_page db (String "page1")) in
+       check (String.concat "," titles ^ (if up then " up" else " down"))
+         (ordered_child_titles page = expected))
+    cases
+
+
+(* cljs test-move-nested-pages-up-down-click-order (core_test.cljs) —
+   nested pages have no :block/page; they must move in page order too,
+   alone or beside a regular block. *)
+let test_move_nested_pages_up_down_click_order () =
+  let cases =
+    [ ( [ "nested-70"; "nested-60" ], true, [ "nested-60"; "nested-70"; "b41"; "b44" ] );
+      ( [ "nested-70"; "nested-60" ], false, [ "b41"; "b44"; "nested-60"; "nested-70" ] );
+      ( [ "nested-60"; "b41" ], false, [ "nested-70"; "b41"; "nested-60"; "b44" ] );
+      ( [ "nested-60"; "b41" ], true, [ "b41"; "nested-60"; "nested-70"; "b44" ] ) ]
+  in
+  List.iter
+    (fun (titles, up, expected) ->
+       let conn =
+         Db_test_util.create_conn_with_blocks
+           ~pages_and_blocks:
+             [ { page = { default_page with pg_title = Some "page1" };
+                 blocks = [ { default_block with b_title = Some "b41" } ] } ]
+           ()
+       in
+       let db = db_of conn in
+       let page1 = Option.get (Ldb.get_page db (String "page1")) in
+       let b41 = Option.get (find_block_by_content db "b41") in
+       let order41 = Option.get (Ldb.string_value b41 "block/order") in
+       let page1_uuid = Option.get (Ldb.uuid_value page1 "block/uuid") in
+       let page_class = ident_ent_exn db "logseq.class/Page" in
+       ignore
+         (Datascript.transact_conn conn
+            [ Add (Entity_id page1.id, "block/tags", Ref page_class.id) ]);
+       let parent_ref = Db_test_util.(Vec [ Kw "block/uuid"; Uuid page1_uuid ]) in
+       let now_ms = int_of_float (now ()) in
+       let nested_page title order =
+         Db_test_util.
+           [ "block/uuid", Uuid (gen_uuid ());
+             "block/name", Str title;
+             "block/title", Str title;
+             "block/created-at", Int64 now_ms;
+             "block/updated-at", Int64 now_ms;
+             "block/tags", Set_ [ Kw "logseq.class/Page" ];
+             "block/parent", parent_ref;
+             "block/order", Str order ]
+       in
+       transact_maps conn
+         [ nested_page "nested-60" (order41 ^ "1");
+           nested_page "nested-70" (order41 ^ "2");
+           Db_test_util.
+             [ "block/uuid", Uuid (gen_uuid ());
+               "block/title", Str "b44";
+               "block/page", parent_ref;
+               "block/parent", parent_ref;
+               "block/order", Str (order41 ^ "3") ] ];
+       let db = db_of conn in
+       let sel =
+         List.map (fun t -> Option.get (find_page_by_title db t)) titles
+       in
+       Outliner_core.move_blocks_up_down_conn conn sel up;
+       let db = db_of conn in
+       let page = Option.get (Ldb.ent_of_id db page1.id) in
+       check (String.concat "," titles ^ (if up then " up" else " down"))
+         (ordered_child_titles page = expected))
+    cases
+
+
 let core_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "insert-blocks-does-not-trust-stale-right-order" `Quick test_insert_blocks_does_not_trust_stale_right_order;
     Alcotest.test_case "insert-blocks-finds-right-order-on-1k-sibling-page" `Quick test_insert_blocks_finds_right_order_on_1k_sibling_page;
@@ -3671,6 +3768,8 @@ let core_cases : unit Alcotest.test_case list =
     Alcotest.test_case "test-delete-page-with-outliner-core" `Quick test_delete_page_with_outliner_core;
     Alcotest.test_case "delete-blocks-page-ancestor-keeps-nested-root" `Quick test_delete_blocks_page_ancestor_keeps_nested_root;
     Alcotest.test_case "moves-keep-selected-descendants" `Quick test_moves_keep_selected_descendants_under_their_ancestor;
+    Alcotest.test_case "move-blocks-up-down-click-order" `Quick test_move_blocks_up_down_click_order;
+    Alcotest.test_case "move-nested-pages-up-down-click-order" `Quick test_move_nested_pages_up_down_click_order;
     Alcotest.test_case "delete-blocks-hard-retracts-subtree" `Quick test_delete_blocks_hard_retracts_subtree;
     Alcotest.test_case "delete-blocks-removes-range-comments-when-all-targets-are-deleted" `Quick test_delete_blocks_removes_range_comments_when_all_targets_are_deleted;
     Alcotest.test_case "delete-blocks-keeps-range-comments-when-some-targets-remain" `Quick test_delete_blocks_keeps_range_comments_when_some_targets_remain;
