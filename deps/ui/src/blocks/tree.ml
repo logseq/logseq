@@ -385,7 +385,6 @@ let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   box ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~display:`inline
     ~min_height:24
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
@@ -416,13 +415,13 @@ let content_el uuid (b : Model.block) : t =
                           b)
                    ]
                | Some `inline_flex ->
-                   [ box ~key:("bt-" ^ uuid) ~display:`inline_flex
+                   [ row ~key:("bt-" ^ uuid)
                        (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
                | Some `inline ->
-                   [ box ~key:("bt-" ^ uuid) ~display:`inline
+                   [ row ~key:("bt-" ^ uuid)
                        (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
@@ -700,8 +699,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                                position:relative;\
                                                align-self:flex-start" )
                                           ]
-                                        [ spacer ~key:("bg-" ^ key) []
-                                        ; (* cljs .ls-block-right order:
+                                        [ (* cljs .ls-block-right order:
                                              positioned-properties
                                              :block-right (priority pill)
                                              then tag chips *)
@@ -1021,8 +1019,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                                position:relative;\
                                                align-self:flex-start" )
                                           ]
-                                        [ spacer ~key:("bg-" ^ key) []
-                                        ; (* cljs .ls-block-right order:
+                                        [ (* cljs .ls-block-right order:
                                              positioned-properties
                                              :block-right then tag chips *)
                                           Properties_area.block_right_chips

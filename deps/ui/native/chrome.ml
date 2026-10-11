@@ -320,7 +320,16 @@ let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
               ^ (match m.route with
                  | Model.All_pages -> " w-full"
                  | _ -> ""))
-            (box ~key:"main-inner"
+            (Ui_parts.int_prop_signal Lui_protocol.MaxWidth ms
+               (fun (m : Model.t) ->
+                 (* cljs: .cp__sidebar-main-content = flex:1 +
+                    max-width var(--ls-main-content-max-width)=960px +
+                    margin-inline auto (the row centers it);
+                    is-full-width routes cap at 100vw *)
+                 match m.route with
+                 | Model.All_pages -> 100000
+                 | _ -> 960)
+            (box ~key:"main-inner" ~grow:1.
             ~data_attrs_signal:
               (Signal.map (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
@@ -350,7 +359,7 @@ let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                           | _ -> [ ("style", "margin-bottom: 120px") ])
                         ms)
                    [ Page.region ms ]) ]
-            )
+            ))
         ]
         ]
         )
