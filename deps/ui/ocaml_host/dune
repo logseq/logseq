@@ -56,6 +56,8 @@
 (rule
  (copy ../native/logseq_katex.ml logseq_katex.ml))
 (rule
+ (copy ../native/markdown.ml markdown.ml))
+(rule
  (copy ../native/menu_bar.ml menu_bar.ml))
 (rule
  (copy ../native/native_embed.ml native_embed.ml))

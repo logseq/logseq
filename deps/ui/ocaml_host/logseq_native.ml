@@ -509,6 +509,12 @@ let () =
                in
                Host_icons.image_of (Lui_host.store h) !scale_cell id r
              | None -> None);
+        image_in =
+          (fun id r ->
+             match !host_cell with
+             | Some h ->
+               Host_icons.image_of (Lui_host.store h) !scale_cell id r
+             | None -> None);
         shadow_of =
           (fun name -> Lui_theme.shadow_of !Theme_vars.mode name) }
   in
@@ -534,8 +540,8 @@ let () =
            | _ -> []) };
   let host =
     Lui_host.create ~hooks ~layout:(module Lui_layout)
-      ~measure:(fun id text _w _h ->
-        let w, h = Text_engine.measure_text text_engine id text in
+      ~measure:(fun id text w _h ->
+        let w, h = Text_engine.measure_text ~width:w text_engine id text in
         let tp = Lui_paint.text_placement_of (text_engine.store ()) id in
         let s = text_engine.scale () in
         Some

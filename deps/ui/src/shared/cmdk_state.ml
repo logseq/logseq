@@ -1429,6 +1429,10 @@ and run_command st repo (cid : string) =
   | "ui/toggle-help" ->
       close st;
       st.svs.Svs.toggle_help ()
+  | "ui/goto-plugins" ->
+      (* cljs goto-plugins-dashboard! — plugins dialog *)
+      close st;
+      st.svs.Svs.dialogs_open "plugins"
   | "ui/toggle-wide-mode" ->
       close st;
       st.svs.Svs.settings_toggle_wide ()

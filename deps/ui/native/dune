@@ -86,6 +86,8 @@
 (rule
  (copy ../src/dialogs/login_view.ml login_view.ml))
 (rule
+ (copy ../src/dialogs/plugins_view.ml plugins_view.ml))
+(rule
  (copy ../src/dialogs/quick_add_state.ml quick_add_state.ml))
 (rule
  (copy ../src/dialogs/quick_add_view.ml quick_add_view.ml))
