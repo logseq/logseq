@@ -78,9 +78,9 @@ let area_display (b : Model.block) context : Lui_elements.t =
                           []
                       ]
                   ; D.el ~key:"hl-img" ~tag:"img"
-                      ~data_attrs:[ ("style", "width:100%") ]
                       ~attrs:
-                        [ ("src", r.src)
+                        [ ("style", "width:100%")
+                        ; ("src", r.src)
                         ; ( "id"
                           , "hl-area-img-"
                             ^ Option.value b.Model.block_uuid

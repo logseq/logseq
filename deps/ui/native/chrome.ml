@@ -252,8 +252,9 @@ let left_sidebar (ms : Model.t Signal.signal) =
                    ; Left_sidebar_view.contents ms
                    ]
                ]
+           )
            ]
-       ])
+       ]))
 
 (* docked splits — gpui renders Split natively (h_resizable) and fires
    ValueChanged on drag; the persisted fraction drives ProgressValue

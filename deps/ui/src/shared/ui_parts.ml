@@ -109,7 +109,7 @@ let hit_transparent (elem : t) : t =
  fun context parent ->
   let node = elem context parent in
   ignore (standard_kind context node);
-  Lui_ui.bool_property context node Lui_wire_schema.PointerEnabled false;
+  Lui_ui.bool_property context node Lui_protocol.PointerEnabled false;
   node
 
 (* The imperative side queries .mock-text/.editor-inner/.block-editor by

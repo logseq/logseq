@@ -113,6 +113,7 @@ let attrs_of_view (v : view) : (string * string) list =
   ; "automenu", bool_str (Pdf_state.auto_open_ctx ())
   ; "hl_mode", bool_str !Pdf_state.highlight_mode
   ; "area_mode", bool_str !Pdf_state.area_mode
+  ; "style", "width:100%;height:100%"
   ]
 
 (* ---------- event payload parsing ---------- *)
@@ -383,7 +384,6 @@ let viewer_el : Lui_elements.t =
           (* TODO(component): logseq-pdf native extension widget —
              events + on_dom_event have no component equivalent *)
           Logseq_el.el ~tag:"pdf"
-            ~data_attrs:[ ("style", "width:100%;height:100%") ]
             ~events
             ~on_dom_event
             ~attrs_signal_v:
