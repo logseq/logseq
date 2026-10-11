@@ -119,6 +119,36 @@
                                      :db/other-tx [[:db/add (:db/id b2) :block/collapsed? true]]})
     (is (true? (:block/collapsed? (d/entity @conn (:db/id b2)))))))
 
+(deftest remove-disallowed-inline-classes-cases
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {}}
+               :pages-and-blocks [{:page {:block/title "page1"} :blocks [{:block/title "b1"}]}]})
+        db @conn
+        b1 (db-test/find-block-by-content db "b1")
+        contents (db-test/find-page-by-title db "Contents")
+        topic (d/entity db :user.class/Topic)
+        title (str "see #[[" (:block/uuid contents) "]]")
+        strip #(#'outliner-core/remove-disallowed-inline-classes db (merge {:db/id (:db/id b1) :block/title title} %))]
+    (is (some? contents))
+    (testing "a built-in page used as an inline tag is dropped from the tags and the title, however the tags are given"
+      (doseq [tags [(:db/id contents) [:block/uuid (:block/uuid contents)] [contents]]]
+        (let [block (strip {:block/tags tags})]
+          (is (empty? (:block/tags block)) (pr-str tags))
+          (is (= "see #Contents" (:block/title block)) (pr-str tags)))))
+    (testing "an allowed tag stays"
+      (is (= [(:db/id topic)] (map :db/id (:block/tags (strip {:block/tags [topic] :block/title "x"}))))))
+    (testing "a disallowed tag the title does not use is left alone"
+      (let [block (strip {:block/tags [contents] :block/title "plain"})]
+        (is (= "plain" (:block/title block)))
+        (is (= [(:db/id contents)] (map :db/id (:block/tags block))))))
+    (testing "a map with a page name (a page being created) is returned as it is"
+      (let [new-page {:db/id (:db/id b1) :block/name "new page" :block/title title :block/tags [contents]}]
+        (is (= new-page (#'outliner-core/remove-disallowed-inline-classes db new-page)))))
+    (testing "a page is returned as it is"
+      (let [page {:db/id (:db/id (db-test/find-page-by-title db "page1")) :block/name "page1"
+                  :block/title title :block/tags [contents]}]
+        (is (= page (#'outliner-core/remove-disallowed-inline-classes db page)))))))
+
 (deftest a-copied-block-keeps-its-references-by-uuid
   (let [src-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
