@@ -6,14 +6,27 @@
 
 let dom = Logseq_el.el
 
-let item key label on_click = Menu_item.el ~key ~label ~on_click ()
+(* cljs ui__dropdown-menu-item: px-2 py-1.5, ~32px row *)
+let item key label on_click =
+  Ui_components.with_props
+    [ Lui_protocol.MinHeight, Ui_components.iv 32
+    ; Lui_protocol.PaddingHorizontal, Ui_components.iv 8 ]
+    (Menu_item.el ~key ~label ~on_click ())
 
-(* cljs dropdown-menu-item renders its :icon before the title *)
+(* cljs dropdown-menu-item renders its :icon before the title:
+   px-2 item, gap-1 between the 18px icon and the label. The host
+   pads the label ink by padding-horizontal and also insets children
+   by it, so the label pad is 8+18+4=30 and the icon pulls back 22. *)
 let icon_item key label icon_name on_click =
   Ui_components.with_props
-    [ Lui_protocol.MinHeight, Ui_components.iv 26 ]
+    [ Lui_protocol.MinHeight, Ui_components.iv 32
+    ; Lui_protocol.PaddingHorizontal, Ui_components.iv 30 ]
     (Menu_item.el ~key ~label
-       ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
+       ~before:
+         [ Ui_components.with_props
+             [ Lui_protocol.MarginLeft, Ui_components.iv (-22)
+             ; Lui_protocol.MarginTop, Ui_components.iv 7 ]
+             (Icons.icon ~size:18. ~cls:"ls-menu-item-icon" icon_name) ]
        ~on_click ())
 
 let separator key = Menu_item.separator ~key ~mv:4 ~mh:(-4)

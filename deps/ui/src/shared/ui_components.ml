@@ -263,11 +263,11 @@ let cmdk_item_header ~key children =
 let cmdk_item_main ~key children =
   row ~key ~cross:`start ~gap:12 children
 
-(* 16x20 rounded icon chip; the glyph
+(* 20x20 rounded icon chip (cljs w-5 h-5); the glyph
    color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
-    ~width:16 ~height:20 ~corner_radius:4
+    ~width:20 ~height:20 ~corner_radius:4
     ~background:
       "var(--lx-gray-05, var(--ls-tertiary-background-color, \
        hsl(var(--muted))))"
@@ -687,13 +687,23 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
    replaces the `.active`/`.dark .active` pair). The `.active` class
    itself stays on the element via the caller's class_signal (native
    hook). *)
-let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
+let nav_item ~key ~data_id ~icon:icon_ ~text ~selected_signal:selected
     ~on_press () : t =
+  (* cljs settings-menu-link: px-2 py-1.5 flex items-center; the ui/icon
+     svg is 18px followed by the strong label ~8px later (icon slot ends
+     at x+8+18, label at +34). The host paints the kind's own label at
+     padding-horizontal, so the leading icon rides as a positioned
+     child pulled back inside the label inset. *)
+  let icn_el =
+    with_props
+      [ P.MarginLeft, iv (-26); P.MarginTop, iv 1 ]
+      (Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_)
+  in
   with_props [ P.HoverBackground, sv "var(--lx-nav-active)" ]
     (with_props
        [ P.FontSize, sv "0.875rem"; P.LineHeight, sv "1.25rem" ]
-       (list_item ~key ~icon ~text ~corner_radius:4 ~min_height:0
-          ~padding_vertical:6 ~padding_horizontal:8 ~main:`start
+       (list_item ~key ~text ~corner_radius:4 ~min_height:0 ~height:32
+          ~padding_vertical:6 ~padding_horizontal:34 ~main:`start
           ~foreground:"inherit"
           ~style_class:"settings-menu-item"
           ~accessibility_identifier:data_id
@@ -703,7 +713,8 @@ let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
                (fun a ->
                  if a then "var(--lx-nav-active)" else "transparent")
                selected)
-          ~selected_signal:selected ~on_press []))
+          ~selected_signal:selected ~on_press:on_press
+          (icn_el :: [])))
 
 (* Pill/chip toggle — the `.shortcut-filter-pill` (9999 bordered) and
    `.secondary-tabs > button` (6px radius, 4/12 padding) shapes share one

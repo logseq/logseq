@@ -358,7 +358,7 @@ let shortcut_hint hov binding =
   let keys = String.split_on_char ' ' binding in
   row ~key:("sc-" ^ binding) ~cross:`center
     [ row ~key:"wrap" ~style_class:"keyboard-shortcut" ~cross:`center
-        ~display:`inline_flex ~gap:2
+        ~display:`inline_flex ~gap:2 ~margin_left:4 ~margin_right:8
         ~opacity_signal:
           (Signal.map (fun h -> if h then 1. else 0.) (Signal.value hov))
         [ row ~key:"sep" ~gap:4 ~cross:`center
@@ -408,7 +408,8 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
                 [ ( "style"
                   , "padding-left:6px;padding-right:2px" ) ]
               ([ Ui_components.with_props
-                   [ Lui_protocol.MarginLeft, Ui_components.iv 4 ]
+                   [ Lui_protocol.MarginLeft, Ui_components.iv 4
+                   ; Lui_protocol.MarginRight, Ui_components.iv 8 ]
                    (icon_ icon_name)
                ; text ~grow:1. ~value:title [] ]
               @ tail @ [ more ]))) ]
@@ -902,14 +903,17 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                           ~line_height:
                             "var(--tw-leading, \
                              var(--text-sm--line-height))"
+                          ~margin_left:4
                           ~data_attrs:
                             [ ( "style"
-                              , "overflow:hidden;padding-left:4px;\
+                              , "overflow:hidden;\
                                  padding-right:16px;position:relative" )
                             ]
                           ~value_signal:(Signal.map name_of ms) ~grow:1. []
-                      ; icon_ ~size:16 "selector"
-                          ~attrs:[ ("style", "margin-right:0") ] ] ])
+                      ; Ui_components.with_props
+                          [ P.MarginRight, Ui_components.iv (-4) ]
+                          (icon_ ~size:18 "selector"
+                             ~attrs:[ ("style", "margin-right:0") ]) ] ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st)
         ] ]

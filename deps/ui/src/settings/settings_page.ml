@@ -678,7 +678,7 @@ let nav_item ~key (id, label, icn) =
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
-    (Ui_components.nav_item ~key ~data_id:id ~icon:(Icons.name_ref icn)
+    (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected_signal:
          (Signal.map (fun (s : S.t) -> s.tab = id) (S.signal ()))
@@ -742,7 +742,7 @@ let inner ~modal : t =
                          ~value:T.settings_title []
                      ]
                  ; list ~key:"aside-menu"
-                     ~style_class:"settings-menu" ~padding:0 ~gap:8
+                     ~style_class:"settings-menu" ~padding:0 ~gap:6
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)
