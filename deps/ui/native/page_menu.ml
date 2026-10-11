@@ -10,13 +10,11 @@ let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
 (* cljs dropdown-menu-item renders its :icon before the title *)
 let icon_item key label icon_name on_click =
-  Menu_item.el ~key ~label
-    ~before:
-      [ Ui_components.with_props
-          [ Lui_protocol.MarginRight, Ui_components.iv 4 ]
-          (Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name)
-      ]
-    ~on_click ()
+  Ui_components.with_props
+    [ Lui_protocol.MinHeight, Ui_components.iv 26 ]
+    (Menu_item.el ~key ~label
+       ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
+       ~on_click ())
 
 let separator key = Menu_item.separator ~key ~mv:4 ~mh:(-4)
 
@@ -150,42 +148,34 @@ let global_items () =
 let inner_width () : float = Host.inner_width ()
 
 let view (x, _atop, y, with_app_items) (p : Model.page option) =
-  let style =
+  (* toolbar dots menu is w-64 (cljs header.cljs); the page
+     right-click keeps the 280px context-menu look *)
+  let w = if with_app_items then 256 else 280 in
+  let at_x =
     if with_app_items then
-      (* toolbar dots menu: x is the trigger's right edge -> anchor
-         the menu's right edge to it like the cljs dropdown *)
-      Printf.sprintf
-        "position:fixed;right:%.0fpx;top:%.0fpx;--available-height:\
-         calc(100vh - %.0fpx)"
-        (Float.max 8. (inner_width () -. x))
-        y (y +. 8.)
+      (* x is the trigger's right edge — anchor the menu's right edge
+         to it like the cljs dropdown *)
+      Float.max 8. (x -. float_of_int w)
     else
-      Printf.sprintf
-        "position:fixed;left:%.0fpx;top:%.0fpx;--available-height:\
-         calc(100vh - %.0fpx)"
-        (* cljs anchors a 1px point at the click; the 280px
-           ls-context-menu-content centers on it *)
-        (Float.max 8. (Float.min (x -. 140.) (inner_width () -. 288.)))
-        y (y +. 8.)
+      (* cljs anchors a 1px point at the click; the context menu
+         centers on it, clamped inside the viewport *)
+      Float.max 8. (Float.min (x -. 140.) (inner_width () -. 288.))
   in
-  (* TODO(component): the popover kind now covers point positioning on
-     web, but the native popover backends renders children inline (no
-     positioning) — the dom shell stays until LUIApple implements
-     popover placement *)
-  Logseq_el.el ~key:"page-menu" ~tag:"div"
-    (* toolbar dots menu is w-64 (cljs header.cljs); the page
-       right-click keeps the context-menu look *)
+  (* the retained popover kind owns point placement + dismiss on
+     native; the div[role=menu] shell inside keeps the e2e markup *)
+  Lui_elements.popover ~transition:Ui_components.popover_transition
+    ~key:"page-menu" ~at:(at_x, y) ~role:`menu ~min_width:w ~max_width:w
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
        else "ui__dropdown-menu-content ls-context-menu-content")
-    ~attrs:[ ("style", style); ("role", "menu") ]
-    (* cljs header.cljs toolbar-dots-menu = page items + hr + app
-       items; a page right-click shows page items only *)
-    (match p, with_app_items with
-     | Some p, true ->
-         page_items p @ [ separator "pg-app" ] @ global_items ()
-     | Some p, false -> page_items p
-     | None, _ -> global_items ())
+    (* the document click-catcher in shell owns outside-press + Escape
+       for this menu; an on_dismiss here would double it *)
+    [ Lui_elements.box ~key:"w"
+        (match p, with_app_items with
+         | Some p, true ->
+             page_items p @ [ separator "pg-app" ] @ global_items ()
+         | Some p, false -> page_items p
+         | None, _ -> global_items ()) ]
 
 let btn key label variant act =
   Lui_elements.button ~key ~variant ~size:`sm

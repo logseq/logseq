@@ -87,7 +87,39 @@ let rec resolve_value (s : string) (depth : int) : string option =
             | None -> None))
     | None -> Some s
 
-let color_of (s : string) : Lui_scene.color option =
+(* "fn(var(--x) [/ a])" — hsl()/rgb() functional notation wrapped
+   around a var(). The vars table stores resolved colors, never
+   channel triples, so the inner token name resolves against the same
+   chain; [alpha] scales the resolved color's alpha. *)
+let fn_var_ref (s : string) : (string * float option) option =
+  let len = String.length s in
+  match String.index_opt s '(' with
+  | Some i when len > i + 2 && s.[len - 1] = ')' -> (
+    let inner = String.sub s (i + 1) (len - i - 2) in
+    match String.split_on_char '/' inner with
+    | [ head ] -> (
+      match var_ref (String.trim head) with
+      | Some (name, _fallback) -> Some (name, None)
+      | None -> None)
+    | [ head; a ] -> (
+      match var_ref (String.trim head) with
+      | Some (name, _fallback) -> (
+        let a = String.trim a in
+        let pct =
+          String.length a > 0 && a.[String.length a - 1] = '%'
+        in
+        match
+          float_of_string_opt
+            (if pct then String.sub a 0 (String.length a - 1) else a)
+        with
+        | Some v ->
+          Some (name, Some (if pct then v /. 100. else v))
+        | None -> Some (name, None))
+      | None -> None)
+    | _ -> None)
+  | _ -> None
+
+let rec color_of (s : string) : Lui_scene.color option =
   let v =
     match var_ref s with
     | Some _ -> resolve_value s 0
@@ -103,6 +135,43 @@ let color_of (s : string) : Lui_scene.color option =
       | None -> (
           match Lui_theme.color_of !mode v with
           | Some _ as c -> c
-          | None -> Lui_window.Theme.color_of v))
+          | None -> (
+              match Lui_window.Theme.color_of v with
+              | Some _ as c -> c
+              | None -> (
+                  match fn_var_ref v with
+                  | None -> None
+                  | Some (name, alpha) -> (
+                      let tok =
+                        if
+                          String.length name > 2
+                          && String.sub name 0 2 = "--"
+                        then String.sub name 2 (String.length name - 2)
+                        else name
+                      in
+                      match color_of ("var(--" ^ tok ^ ")") with
+                      | Some _ as c -> c
+                      | None -> (
+                          let tok =
+                            (* --x-foreground slots alias onto the plain
+                               foreground rather than per-surface text
+                               entries *)
+                            if
+                              String.ends_with ~suffix:"-foreground" tok
+                              && Lui_theme.color_of !mode tok = None
+                            then "foreground"
+                            else tok
+                          in
+                          match Lui_theme.color_of !mode tok with
+                          | Some c ->
+                            Some
+                              (match alpha with
+                               | None -> c
+                               | Some a ->
+                                 { c with Lui_scene.a =
+                                     int_of_float
+                                       (Float.round
+                                          (a *. float c.Lui_scene.a)) })
+                          | None -> None))))))
 
 let count_of_mode m = Hashtbl.length (vars_of_mode m)

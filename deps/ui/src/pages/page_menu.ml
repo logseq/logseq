@@ -252,10 +252,11 @@ let global_items () =
           close ();
           Sidebar_state.open_dialog "login") ]
 
-external inner_width : float = "innerWidth" [@@mel.scope "window"]
-external inner_height : float = "innerHeight" [@@mel.scope "window"]
-
 let view (ax, atop, abot, with_app_items) (p : Model.page option) =
+  (* mel innerWidth/innerHeight — Ui_services.dom_viewport_* serves both
+     hosts *)
+  let inner_width = Ui_services.dom_viewport_width () in
+  let inner_height = Ui_services.dom_viewport_height () in
   (* cljs popup-show!: pointer menus anchor to the event target
      element — ls-anchor-cx centers the positioner on ax and
      ls-anchor-top lifts it by its own height when it flips above *)

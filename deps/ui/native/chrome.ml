@@ -59,8 +59,11 @@ let search_btn =
    Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
    to the same trigger. *)
 let dots_btn =
-  icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon:`ellipsis
-    ~label:(I18n.t "header/more") (fun () ->
+  button ~key:"dots-btn" ~variant:`ghost ~size:`icon ~icon:`ellipsis
+    ~label:(I18n.t "header/more")
+    ~accessibility_identifier:"toolbar-dots-btn"
+    ~style_class:"toolbar-dots-btn"
+    ~on_press:(fun _ ->
       (* re-pressing the trigger toggles the menu closed (the document
          click-catcher installed in [shell] dismisses on outside press
          only — the button itself is outside the menu surface) *)
@@ -72,6 +75,7 @@ let dots_btn =
           Dom_ext.toolbar_dots_pos := Some (x, 48.);
           Runtime.send
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
+    []
 
 (* cljs header.cljs hides home on the :home route — press no-ops there *)
 let home_btn ms =
