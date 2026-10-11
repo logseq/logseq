@@ -39,6 +39,7 @@ let filelog fmt =
 
 let debug = ref false
 let dump = ref false
+let dump_tree_flag = Atomic.make false
 let dbg fmt =
   if !debug then begin
     Printf.eprintf fmt;
@@ -130,6 +131,11 @@ let input_of_event e =
 let () =
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
+  (try
+     if Sys.getenv "LOGSEQ_NATIVE_TREEDUMP" <> "" then
+       Sys.set_signal Sys.sigusr1
+         (Sys.Signal_handle (fun _ -> Atomic.set dump_tree_flag true))
+   with _ -> ());
   if !debug then begin
     match open_out_gen [Open_creat; Open_append] 0o644
             "/tmp/logseq_native_host.log" with
@@ -718,6 +724,23 @@ let () =
       native_activate ()
     end;
     drain_events ();
+    (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
+       (id kind key class rect, indented) to the debug log. *)
+    if Atomic.exchange dump_tree_flag false then begin
+      let rec out depth id =
+        let r = Rects.get rects id in
+        dbg "%s%d %s key=%s class=%s %.0f,%.0f %.0fx%.0f"
+          (String.make (2 * depth) ' ') id (Lui_store.kind store id)
+          (Option.value (Lui_store.string_prop store id "key")
+             ~default:"-")
+          (Option.value
+             (Lui_store.string_prop store id "style-class")
+             ~default:"-")
+          r.Lui_scene.x r.Lui_scene.y r.Lui_scene.w r.Lui_scene.h;
+        List.iter (out (depth + 1)) (Lui_store.child_ids store id)
+      in
+      List.iter (out 0) (Lui_store.root_ids store)
+    end;
     (* OCaml worker threads poke wakeup() when the app mailbox fills —
        pump drains it on this entry thread; returned patches apply. *)
     if Atomic.exchange Bridge.pending_wakeup false then begin
