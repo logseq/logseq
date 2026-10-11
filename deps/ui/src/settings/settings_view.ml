@@ -171,6 +171,8 @@ let body (_ms : Model.t Signal.signal) : t =
   let node =
     column ~key:"settings" ~style_class:"cp__settings" ~gap:16
       [ heading ~key:"st-h" ~level:2
+          ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
+          ~data_attrs:[ ("style", "letter-spacing:-0.01em;margin:0") ]
           ~style_class:"ui__dialog-title" ~value:T.settings_title []
       ; column ~key:"st-theme" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-tl" ~value:T.theme_label []

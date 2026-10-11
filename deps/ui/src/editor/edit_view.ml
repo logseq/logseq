@@ -377,6 +377,58 @@ let composition_prop (m : Edit_model.t) : wire_value =
 
 (* --- run fragments ------------------------------------------------------------ *)
 
+(* cls tokens that keep the read-mode ref colors on the edit surface —
+   the generic pill/raw styling is skipped when one is present *)
+let accent_ref_tokens =
+  [ "ed-url"; "ed-link"; "ed-page-ref"; "ed-block-ref"; "ed-tag" ]
+
+let accent_ref cls =
+  List.exists
+    (fun t -> List.mem t accent_ref_tokens)
+    (String.split_on_char ' ' cls)
+
+let accent_fg = "var(--lx-accent-11, var(--ls-link-text-color))"
+
+(* cls tokens the typed props cover, translated at mount (keyed
+   remounts pick up cls changes). ed-bold/ed-italic stay class-driven
+   (bolder / font-style have no channel); ed-hidden, ed-pad and the
+   :hover rules too. *)
+let frag_binds cls =
+  let module P = Lui_protocol in
+  List.concat_map
+    (fun t ->
+      match t with
+      | "ed-code" ->
+          [ ( P.FontFamily
+            , Ui_components.sv
+                "MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
+                 'COURIER NEW', monospace" )
+          ; P.FontSize, Ui_components.sv "0.9em"
+          ; ( P.BackgroundValue
+            , Ui_components.sv
+                "var(--lx-gray-06, var(--ls-page-inline-code-bg-color))"
+            )
+          ; ( P.ForegroundValue
+            , Ui_components.sv
+                "var(--lx-gray-11, var(--ls-page-inline-code-color))" )
+          ; P.LineHeight, Ui_components.sv "1.45"
+          ; P.PaddingVertical, Ui_components.iv 3
+          ; P.PaddingHorizontal, Ui_components.iv 5 ]
+      | "ed-hl" ->
+          [ ( P.BackgroundValue
+            , Ui_components.sv "var(--ls-page-mark-bg-color, #fef3ac)" )
+          ; ( P.ForegroundValue
+            , Ui_components.sv "var(--ls-page-mark-color, #262626)" )
+          ; P.PaddingVertical, Ui_components.iv 0
+          ; P.PaddingHorizontal, Ui_components.iv 4
+          ; P.CornerRadius, Ui_components.iv 4 ]
+      | "ed-strike" ->
+          [ P.TextDecoration, Ui_components.sv "line-through" ]
+      | t when List.mem t accent_ref_tokens ->
+          [ P.ForegroundValue, Ui_components.sv accent_fg ]
+      | _ -> [])
+    (String.split_on_char ' ' cls)
+
 (* kinds take only a static ~style_class at this LUI rev — reactive
    class toggles go through Ui_parts.class_signal (binds StyleClass on
    the mounted node) *)
@@ -387,37 +439,71 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
         ~style_class:"ed-r ed-pad" []
   | Frag_plain ->
       Ui_parts.class_signal frag_s (fun f -> "ed-r" ^ cls_suffix f)
-        (text ~value:(reactive (fun f -> f.text) frag_s)
-           ~style_class:"ed-r" [])
+        (Ui_components.with_props
+           (frag_binds (Signal.sample frag_s).cls)
+           (text ~value:(reactive (fun f -> f.text) frag_s)
+              ~style_class:"ed-r" []))
   | Frag_delim ->
       Ui_parts.class_signal frag_s
         (fun f ->
           "ed-r ed-delim" ^ (if f.shown then "" else " ed-hidden")
           ^ cls_suffix f)
-        (text ~value:(reactive (fun f -> f.text) frag_s)
-           ~style_class:"ed-r ed-delim" [])
+        (Ui_components.with_props
+           (frag_binds (Signal.sample frag_s).cls
+            @ if accent_ref (Signal.sample frag_s).cls
+              then []
+              else
+                [ ( Lui_protocol.ForegroundValue
+                  , Ui_components.sv "var(--ls-secondary-text-color)" )
+                ])
+           (text ~value:(reactive (fun f -> f.text) frag_s)
+              ~style_class:"ed-r ed-delim" []))
   | Frag_raw ->
       Ui_parts.class_signal frag_s
         (fun f -> "ed-r ed-raw" ^ cls_suffix f)
-        (text ~value:(reactive (fun f -> f.text) frag_s)
-           ~style_class:"ed-r ed-raw" [])
+        (Ui_components.with_props
+           (frag_binds (Signal.sample frag_s).cls
+            @ if accent_ref (Signal.sample frag_s).cls
+              then []
+              else
+                [ ( Lui_protocol.BackgroundValue
+                  , Ui_components.sv "var(--ls-tertiary-background-color)"
+                  )
+                ])
+           (text ~value:(reactive (fun f -> f.text) frag_s)
+              ~style_class:"ed-r ed-raw" []))
   | Frag_pill when List.mem "ed-block-ref" (String.split_on_char ' ' (Signal.sample frag_s).cls) ->
       let f = Signal.sample frag_s in
-      row ~style_class:("ed-r ed-pill" ^ cls_suffix f)
-        [ Render_inline.page_ref ~refs:[] ~self:"" f.display ]
+      Ui_components.with_props
+        [ ( Lui_protocol.ForegroundValue, Ui_components.sv accent_fg )
+        ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+        (row ~style_class:("ed-r ed-pill" ^ cls_suffix f)
+           [ Render_inline.page_ref ~refs:[] ~self:"" f.display ])
   | Frag_pill ->
       (* click reveals the raw source: dropping the caret inside the
          atomic's strict interior expands it via the model *)
       Ui_parts.class_signal frag_s
         (fun f -> "ed-r ed-pill" ^ cls_suffix f)
-        (text
-           ~value:(reactive (fun f -> f.display) frag_s)
-           ~style_class:"ed-r ed-pill"
-           ~on_press:(fun _ ->
-             on_input
-               (Edit_input.Pointer
-                  (start_off_of (Signal.sample frag_s).idx + 1, false)))
-           [])
+        (Ui_components.with_props
+           (frag_binds (Signal.sample frag_s).cls
+            @ [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+            @ if accent_ref (Signal.sample frag_s).cls
+              then []
+              else
+                [ ( Lui_protocol.BackgroundValue
+                  , Ui_components.sv "var(--ls-tertiary-background-color)"
+                  )
+                ; Lui_protocol.CornerRadius, Ui_components.iv 4
+                ; Lui_protocol.PaddingVertical, Ui_components.iv 0
+                ; Lui_protocol.PaddingHorizontal, Ui_components.iv 4 ])
+           (text
+              ~value:(reactive (fun f -> f.display) frag_s)
+              ~style_class:"ed-r ed-pill"
+              ~on_press:(fun _ ->
+                on_input
+                  (Edit_input.Pointer
+                     (start_off_of (Signal.sample frag_s).idx + 1, false)))
+              []))
 
 let same_rendered_frags before after =
   let rec equal a b =
@@ -443,9 +529,14 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
     let f = List.find (fun f -> f.idx = idx) (Signal.sample line_s).frags in
     f.start_off
   in
-  (row ~style_class:"ed-line"
-     [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
-         ~mount:(frag_view ~on_input ~start_off_of) ])
+  (Ui_components.with_props
+     [ Lui_protocol.DisplayValue, Ui_components.sv "block"
+     ; Lui_protocol.Position, Ui_components.sv "relative"
+     ; Lui_protocol.ZIndex, Ui_components.iv 1
+     ; Lui_protocol.UserSelect, Ui_components.sv "text" ]
+     (row ~style_class:"ed-line"
+        [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
+            ~mount:(frag_view ~on_input ~start_off_of) ]))
     context parent
 
 (* --- selection overlay + caret -------------------------------------------------
@@ -459,15 +550,29 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
    flush inside set_prop *)
 let clamp_nonneg v = if v < 0 then 0 else v
 
+let ed_pos_wrap () =
+  Ui_components.with_props
+    [ Lui_protocol.Position, Ui_components.sv "absolute"
+    ; Lui_protocol.InsetLeft, Ui_components.fv 0.
+    ; Lui_protocol.InsetTop, Ui_components.fv 0. ]
+    (row ~style_class:"ed-pos" [])
+
 let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
  fun context parent ->
   let rect_s = own context (Signal.map snd r_s) in
-  let wrap = (row ~style_class:"ed-pos" []) context parent in
+  let wrap = (ed_pos_wrap ()) context parent in
   bind_int context wrap PaddingHorizontal
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) rect_s);
   bind_int context wrap PaddingVertical
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) rect_s);
-  let bar = (row ~style_class:"ed-sel" []) context (Some wrap) in
+  let bar =
+    (Ui_components.with_props
+       [ ( Lui_protocol.BackgroundValue
+         , Ui_components.sv "var(--ls-block-highlight-color)" )
+       ; Lui_protocol.CornerRadius, Ui_components.iv 2 ]
+       (row ~style_class:"ed-sel" []))
+      context (Some wrap)
+  in
   bind_int context bar WidthValue
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.w) rect_s);
   bind_int context bar HeightValue
@@ -485,12 +590,21 @@ let caret_view (frame : frame Signal.signal) : t =
              ~default:{ x = 0; y = 0; w = 0; h = 0 })
          frame)
   in
-  let wrap = (row ~style_class:"ed-pos" []) context parent in
+  let wrap = (ed_pos_wrap ()) context parent in
   bind_int context wrap PaddingHorizontal
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) r_s);
   bind_int context wrap PaddingVertical
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) r_s);
-  let bar = (row ~style_class:"ed-caret" ~width:2 []) context (Some wrap) in
+  let bar =
+    (Ui_components.with_props
+       [ ( Lui_protocol.BackgroundValue
+         , Ui_components.sv
+             "var(--ls-caret-color, var(--ls-primary-text-color))" )
+       ; Lui_protocol.Position, Ui_components.sv "relative"
+       ; Lui_protocol.ZIndex, Ui_components.iv 2 ]
+       (row ~style_class:"ed-caret" ~width:2 []))
+      context (Some wrap)
+  in
   bind_int context bar HeightValue
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.h) r_s);
   wrap
@@ -516,9 +630,14 @@ let overlay (frame : frame Signal.signal) : t =
          (caret_view frame)
      ]
   in
-  (column ~style_class:"ed-overlay"
-     (keyed ~source:sel_s ~key:fst ~cmp:Int.compare ~mount:sel_rect_view
-      :: caret))
+  (Ui_components.with_props
+     [ Lui_protocol.Position, Ui_components.sv "absolute"
+     ; Lui_protocol.Inset, Ui_components.fv 0.
+     ; Lui_protocol.PointerEnabled, Ui_components.bv false ]
+     (column ~style_class:"ed-overlay"
+        (keyed ~source:sel_s ~key:fst ~cmp:Int.compare
+           ~mount:sel_rect_view
+         :: caret)))
     context parent
 
 (* --- input sink ---------------------------------------------------------------- *)

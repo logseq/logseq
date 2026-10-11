@@ -514,9 +514,12 @@ let panel ctx fields (a : auth_ui) : t =
   Logseq_el.fragment
     ((* cljs card-header (p-6 + pb-7) + card-title (text-2xl) *)
      heading ~key:"lg-t" ~level:2
-       ~font_size:"1.5rem" ~line_height:"1"
+       ~font_size:"1.5rem" ~font_weight:600 ~line_height:"1"
        ~style_class:"ui__dialog-title ls-auth-title"
-       ~data_attrs:[ ("style", "padding-top:1.5rem;padding-bottom:1.75rem") ]
+       ~data_attrs:
+         [ ( "style"
+           , "letter-spacing:-0.01em;margin:0;padding-top:1.5rem;\
+              padding-bottom:1.75rem" ) ]
        ~value:title []
      :: (if a.err = "" then []
          else

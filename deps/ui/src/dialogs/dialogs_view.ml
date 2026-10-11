@@ -92,7 +92,8 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
                  margin reset) *)
               heading ~key:("dlg-t-" ^ name) ~level:2
                 ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
-                ~data_attrs:[ ("style", "letter-spacing:-0.01em") ]
+                ~data_attrs:
+                  [ ("style", "letter-spacing:-0.01em;margin:0") ]
                 ~style_class:"ui__dialog-title" ~value:title
                 ~accessibility_identifier:("ls-dialog-title-" ^ name) [] ])
         @ [ (* scroll kind so native backends map it to their scroll

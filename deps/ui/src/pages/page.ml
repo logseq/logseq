@@ -115,8 +115,13 @@ let block_page_breadcrumb (page : Model.page) : t list =
   match page.page_parents with
   | [] -> []
   | parents ->
-      [ box ~key:"bc" ~min_width:0 ~padding_vertical:8
-          ~style_class:"breadcrumb block-parents"
+      [ Ui_components.with_props
+          [ Lui_protocol.Overflow, Ui_components.sv "hidden"
+          ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+          (row ~key:"bc" ~min_width:0 ~padding_vertical:8
+             ~cross:`center
+             ~style_class:"breadcrumb block-parents"
+             ~data_attrs:[ ("style", "max-width:100%") ]
           [ Lui_element_combine.breadcrumb_trail ~key:"bct"
               ~items:
                 (List.map
@@ -126,7 +131,7 @@ let block_page_breadcrumb (page : Model.page) : t list =
                          ("#/page/"
                          ^ Option.value p.block_uuid ~default:"") ))
                    parents)
-              () ] ]
+              () ]) ]
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
@@ -394,11 +399,15 @@ let title_content (page : Model.page) : t =
       [ ("data-blockid", uuid); ("data-containerid", uuid); ("data-type", "default")
       ; ("style", "width: 100%") ]
     [ row ~key:"pt-bci" ~main:`space_between
-        [ box ~key:"pt-bh" ~style_class:"block-head-wrap"
-            [ box ~key:"pt-w"
-                [ Render.wrap ~cls:"block-title-wrap"
-                    ~self:uuid page.page_title ]
-            ]
+        [ Ui_components.with_props
+            [ Lui_protocol.FlexWrap, Ui_components.sv "wrap" ]
+            (row ~key:"pt-bh" ~style_class:"block-head-wrap"
+               ~main:`space_between ~cross:`center ~grow:1.
+               ~data_attrs:[ ("style", "width:100%") ]
+               [ box ~key:"pt-w"
+                   [ Render.wrap ~cls:"block-title-wrap"
+                       ~self:uuid page.page_title ]
+               ])
         ]
     ]
 
@@ -578,12 +587,14 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                           ~on_press:(fun _ ->
                             if collapsable_title () then
                               toggle_title_collapse ())
-                          (box ~key:"pt-ca"
-                             ~style_class:"block-control"
-                             ~accessibility_identifier:("control-" ^ uuid)
-                             ~min_width:22 ~min_height:22
-                             ~opacity:0.4
-                             ~data_attrs:
+                          (Ui_components.with_props
+                             [ Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+                             (box ~key:"pt-ca"
+                                ~style_class:"block-control"
+                                ~accessibility_identifier:("control-" ^ uuid)
+                                ~min_width:22 ~min_height:22
+                                ~opacity:0.4
+                                ~data_attrs:
                                [ ( "style"
                                  , "font-size:0.875rem;\
                                     line-height:1.42857;\
@@ -592,7 +603,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                     user-select:none;\
                                     cursor:default" )
                                ]
-                             [ cs ]))
+                             [ cs ])))
                      ]
         ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch ~min_width:0
             ~data_attrs:[ ("style", "width:100%") ]

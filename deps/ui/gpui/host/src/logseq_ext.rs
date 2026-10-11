@@ -97,17 +97,8 @@ pub fn register(shared: &Shared) {
     // gpui backend has no stylesheet, so classes that carry real layout on
     // the web are registered here once (`style::register_class_style`).
     //
-    // .block-head-wrap { display:flex; align-items:center; flex:1;
-    //                    flex-wrap:wrap; justify-content:space-between;
-    //                    width:100% }
-    // Without the flex-1 the wrap shrink-wraps its content and siblings
-    // (fenced code editor, wide blocks) collapse to their intrinsic
-    // minimum instead of filling the block row.
-    lui_gpui::style::register_class_style(
-        "block-head-wrap",
-        "",
-        "flex flex-row flex-wrap items-center justify-between flex-1 w-full",
-    );
+    // .block-head-wrap rides typed props on the row emitters (main/cross/
+    // grow/wrap) — no registration needed.
     // .extensions__code-lang { display: none } — the language chip
     // lives in .code-block-actions on the web; the span is markup only.
     lui_gpui::style::register_class_style("extensions__code-lang", "", "hidden");
@@ -118,14 +109,9 @@ pub fn register(shared: &Shared) {
         "width:100%; overflow:hidden; border-radius:4px",
         "",
     );
-    // .page-reference .bracket { opacity: 0.3; display: inline-flex }
-    lui_gpui::style::register_class_style("bracket", "opacity:0.3", "");
-    // .page-ref { color: var(--ls-link-text-color) }
-    lui_gpui::style::register_class_style(
-        "page-ref",
-        "color:var(--ls-link-text-color)",
-        "",
-    );
+    // .page-reference .bracket and .page-ref's color/hover ride typed
+    // props + inline styles on the render_inline emitters — no class
+    // registrations needed.
     // lui-core.css blockquote { padding:8px 16px; border-left:4px solid
     //   var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));
     //   background-color: var(--ls-page-blockquote-bg-color,
@@ -253,30 +239,9 @@ fn register_class_styles() {
          justify-content:center;align-items:center",
         "pointer-events-none",
     );
-    // cljs dialog-confirm chrome (lui-overlay.css ~:1550): header/title/
-    // main-content/footer rules the web twin carries. The gpui title is
-    // an icon+heading row, so it joins flex here instead of block.
-    class(
-        "ui__alert-dialog-header",
-        "display:flex;flex-direction:column;gap:8px;text-align:left",
-        "",
-    );
-    class(
-        "ui__alert-dialog-title",
-        "display:flex;flex-direction:row;align-items:center;gap:8px;\
-         font-size:18px;font-weight:600;line-height:28px",
-        "",
-    );
-    class(
-        "ui__alert-dialog-main-content",
-        "padding-top:8px;padding-bottom:8px",
-        "",
-    );
-    class(
-        "ui__alert-dialog-footer",
-        "display:flex;flex-direction:row;justify-content:flex-end;gap:8px",
-        "",
-    );
+    // cljs dialog-confirm chrome: header/title/main-content/footer all
+    // ride typed props on the ui_components emitters — no class
+    // registrations needed.
     // the inline style sets position:fixed + left/top + z-index (el attrs
     // win over class declarations, so only the paint rules live here).
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");

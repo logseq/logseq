@@ -177,8 +177,11 @@ let rec card_view st b phase =
                         ~data_attrs:[ ("style", "font-size:0.875rem") ]
                         (List.concat_map
                            (fun c ->
-                             [ text ~style_class:"breadcrumb-item"
-                                 ~value:c []
+                             [ Ui_components.with_props
+                                 [ Lui_protocol.Opacity, Ui_components.fv 0.7
+                                 ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                                 (text ~style_class:"breadcrumb-item"
+                                    ~value:c [])
                              ; text ~value:"/" ~padding_horizontal:4 [] ])
                            cs))
                 (Signal.value st.Cards_state.crumbs)

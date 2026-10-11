@@ -398,6 +398,7 @@ let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   box ~key:("content-" ^ uuid) ~style_class:"block-content inline"
+    ~min_height:24
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -412,13 +413,11 @@ let content_el uuid (b : Model.block) : t =
        | None -> [])
     [ row ~key:("bci-" ^ uuid)
          ~main:`space_between
-        [ box ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            ~data_attrs:
-              [ ( "style"
-                , "display:flex;align-items:center;flex:1;\
-                   flex-wrap:wrap;justify-content:space-between;\
-                   width:100%" )
-              ]
+        [ Ui_components.with_props
+            [ Lui_protocol.FlexWrap, Ui_components.sv "wrap" ]
+            (row ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
+               ~main:`space_between ~cross:`center ~grow:1.
+               ~data_attrs:[ ("style", "width:100%") ]
             (if b.Model.block_is_query && not (Ui_services.env_publishing ()) then [ Query_builder.block_el uuid b ]
              else
                match Render.title_outer_class b with
@@ -431,7 +430,7 @@ let content_el uuid (b : Model.block) : t =
                | None ->
                    Render.title_block ~self:uuid ~annot:true
                      ~resolved:(S.title_for uuid b.block_title)
-                     b)        ]
+                     b))       ]
     ]
 
 let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
@@ -508,19 +507,31 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   let priv = private_tag_ident ident in
   (* the delegated context-menu handler reads data-tag-uuid/id/title/
      priv off the chip root — they ride ~data_attrs *)
-  box ~key:("tag-" ^ key)
-    ~style_class:"block-tag"
-    ~data_attrs:
-      [ ("data-tag-uuid", tuuid)
-      ; ("data-tag-id", string_of_int dbid)
-      ; ("data-tag-title", tag)
-      ; ("data-tag-priv", if priv then "true" else "false") ]
+  Ui_components.with_props
+    [ Lui_protocol.DisplayValue, Ui_components.sv "flex"
+    ; Lui_protocol.Position, Ui_components.sv "relative"
+    ; Lui_protocol.CornerRadius, Ui_components.iv 4
+    ; ( Lui_protocol.HoverBackground
+      , Ui_components.sv "var(--lx-gray-03)" ) ]
+    (box ~key:("tag-" ^ key)
+       ~style_class:"block-tag"
+       ~data_attrs:
+         [ ("data-tag-uuid", tuuid)
+         ; ("data-tag-id", string_of_int dbid)
+         ; ("data-tag-title", tag)
+         ; ("data-tag-priv", if priv then "true" else "false")
+         ; ("style", "padding-left:8px;padding-right:4px") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         [ (* the link kind renders a real <a> so a.hash-symbol css keeps
              matching; href="#" is the cljs decorative-anchor convention *)
-          link ~key:("th-" ^ key)
-            ~url:"#" ~target:`self_
-            ~style_class:"hash-symbol select-none" ~text:"#" []
+          Ui_components.with_props
+            [ Lui_protocol.Opacity, Ui_components.fv 0.7
+            ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+            ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+            ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
+            (link ~key:("th-" ^ key)
+               ~url:"#" ~target:`self_
+               ~style_class:"hash-symbol select-none" ~text:"#" [])
         ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
            else
              (* the 'x' press needs a pressable kind — link is not one,
@@ -540,15 +551,20 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                   ~value:"x" []))
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
-          link ~key:("ta-" ^ key)
-            ~url:"#" ~target:`self_
-            ~style_class:"tag relative"
+          Ui_components.with_props
+            [ Lui_protocol.Opacity, Ui_components.fv 0.7
+            ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+            ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+            ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
+            (link ~key:("ta-" ^ key)
+               ~url:"#" ~target:`self_
+               ~style_class:"tag relative"
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
-            [ text ~key:"ts" ~value:tag [] ]
-        ] ]
+            [ text ~key:"ts" ~value:tag [] ])
+        ] ])
 
 let tags_el uuid (b : Model.block) : t =
   let quads =
@@ -1175,6 +1191,7 @@ let page_embed (name : string) : t =
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the editor *)
        box ~key:"embed-page" ~style_class:"embed-page"
+         ~padding:8 ~margin_top:8 ~margin_bottom:8
          (List.map (block_row ~scope:"embed" ~editable:false) shown
           @ (if capped then [ embed_more_el name ] else [])))
      (Signal.value st))

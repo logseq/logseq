@@ -371,8 +371,7 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
   box ~key ~style_class:(class_ ^ act)
     [ Ui_parts.pressable ~on_press:(fun _ -> on_click ())
         (Ui_components.with_props
-           [ P.UserSelect, Ui_components.sv "none"
-           ; P.Cursor, Ui_components.sv "pointer"
+           [ P.Cursor, Ui_components.sv "pointer"
            ; P.FontSize, Ui_components.sv "0.875rem"
            ; P.FontWeight, Ui_components.iv 500
            ; P.LineHeight, Ui_components.sv "1rem"

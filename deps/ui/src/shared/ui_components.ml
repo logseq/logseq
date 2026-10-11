@@ -18,6 +18,7 @@ module P = Lui_protocol
 let sv v = P.StringValue v
 let iv v = P.IntValue v
 let fv v = P.FloatValue v
+let bv v = P.BoolValue v
 
 (* Post-mount static binds for props with no constructor argument
    (overflow, shadow, cursor, user-select, font-* on container kinds).

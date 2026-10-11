@@ -1327,7 +1327,17 @@ and block_value_wrap (inner : t) : t =
                 ~style_class:"block-control-wrap"
                 ~data_attrs:[ ("style", "display:flex;flex-direction:row;\
                   align-items:center") ]
-                [ box ~style_class:"block-control" []
+                [ Ui_components.with_props
+                    [ Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+                    (box ~style_class:"block-control"
+                       ~min_width:22 ~min_height:22 ~opacity:0.4
+                       ~data_attrs:
+                         [ ( "style"
+                           , "font-size:0.875rem;line-height:1.42857;\
+                              margin-top:1px;padding:0.125rem;\
+                              user-select:none;cursor:default;\
+                              text-decoration:none" ) ]
+                       [])
                 ; box ~style_class:"bullet-container"
                     [ box ~style_class:"bullet" [] ] ]
             ; Lui_elements.box ~grow:1.0

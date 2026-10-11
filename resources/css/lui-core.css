@@ -328,15 +328,6 @@ blockquote {
   padding-bottom: 6rem;
 }
 
-/* cljs page.cljs not-found fixed overlay (was an inline style) */
-.cp__not-found {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  min-height: 100vh;
-  background: var(--ls-primary-background-color);
-}
-
 /* ============================== Header =================================== */
 
 .button {
@@ -628,10 +619,6 @@ blockquote {
       opacity: 1;
     }
 
-    &.is-closing > .shade-mask {
-      opacity: 0;
-    }
-
     /* cljs container.css: while the edge swipe is pending the whole
        overlay widens and follows the finger with no transitions */
     &.is-touching {
@@ -700,10 +687,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       .is-open > & {
         transform: translate3d(0, 0, 0);
         overflow: hidden;
-      }
-
-      .is-closing & {
-        transform: translate3d(-100%, 0, 0) !important;
       }
     }
   }
@@ -1197,10 +1180,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       transition: background-color 0.2s;
     }
 
-    &.drag-over::after {
-      z-index: 1000;
-      background-color: var(--ls-active-primary-color);
-    }
   }
 
 }
@@ -1465,32 +1444,6 @@ a.page-title {
   }
 
   .property-pair.property-panel-row[data-property-type='url']
-.cp__right-sidebar-topbar {
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 0 0.25rem;
-  height: 3rem;
-  background-color: var(
-    --ls-right-sidebar-topbar-color,
-    var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8))
-  );
-  z-index: 999;
-
-  button {
-    opacity: 1;
-  }
-  user-select: none;
-  -webkit-app-region: drag;
-
-  a,
-  svg,
-  button {
-    -webkit-app-region: no-drag;
-  }
-}
-
     .property-value-panel a:not(.block-control):not(.bullet-link-wrap){
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -1573,35 +1526,7 @@ a.page-title {
 /* cljs property.css: inside a block the properties area hugs the
    content column (margin-left:7 when .ls-block-properties, mt 2px) */
 
-.ls-block .ls-properties-area.ls-block-properties {
-.ls-page-title {
-  border-radius: calc(var(--radius) - 4px);
 
-  .edit-input {
-    width: 100%;
-    border: 0;
-    padding: 0 0.25rem 0 0;
-    background: transparent;
-    outline: 0;
-    box-shadow: none;
-
-    &-wrapper.editing {
-      border-radius: 4px;
-      background-color: var(--ls-secondary-background-color);
-    }
-  }
-
-  .page-icon {
-    line-height: 1;
-
-    .ui__button {
-      height: auto;
-      padding-bottom: 1.5px;
-    }
-  }
-}
-
-}
 
 /* cljs block.css .positioned-properties.block-below: inline pills
    strip under the block title cell */
@@ -1704,33 +1629,9 @@ a.page-title {
 
 /* ============================ Breadcrumb ================================= */
 
-.breadcrumb {
-  a {
-    color: var(--ls-link-text-color);
-  }
-}
-
-/* cljs: block-parents crumbs use primary text color, not link blue */
-.breadcrumb.block-parents a {
-  color: var(--ls-primary-text-color);
-}
-
-.breadcrumb.block-parents {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.breadcrumb-item {
-  opacity: 0.7;
-}
-
-.breadcrumb-item:hover {
-  opacity: 1;
-}
+/* crumbs are ghost caption buttons (kit breadcrumb_trail) — the old
+   a-only color rules were dead; item opacity + the block-parents row
+   layout ride typed props on the emitters */
 
 /* ============================ Outliner =================================== */
 
@@ -2084,14 +1985,8 @@ a.page-title {
   border-bottom-color: transparent;
 }
 
-.block-ref .ls-block :is(h1, h2),
-.block-ref .editor-inner :is(.h1, .h2),
-.block-ref :is(h1, h2, h3, h4, h5, h6) {
-  border-bottom: none;
-  font-size: 1rem;
-}
-
 /* Selection highlight */
+
 .block-highlight,
 .ls-block.selected {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
@@ -2107,37 +2002,17 @@ a.page-title {
 
 .color-level .color-level {
   background-color: var(--color-level-2);
+}
 
-  .color-level {
-    background-color: var(--color-level-3);
+/* min-height is typed on the box; whitespace/wrap/cursor ride the
+   emitter's style attr */
 .block-content {
-  min-height: 24px;
-  max-width: 100%;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  cursor: text;
-
   img.left {
     float: left;
   }
 
   img.right {
     float: right;
-  }
-}
-
-
-    .color-level {
-      background-color: var(--color-level-4);
-
-      .color-level {
-        background-color: var(--color-level-5);
-
-        .color-level {
-          background-color: var(--color-level-6);
-        }
-      }
-    }
   }
 }
 
@@ -2149,23 +2024,14 @@ a.page-title {
   width: 100%;
   height: 100%;
   position: absolute;
-.block-head-wrap {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  width: 100%;
-
-  > .inline.w-full {
-    display: block;
-  }
-}
-
   visibility: hidden;
   top: 0;
   left: 0;
 }
+
+/* .block-head-wrap layout rides typed props on the row emitters
+   (main/cross/grow/wrap) — the old rule was dead anyway, nested by
+   accident inside .mock-text */
 
 .editor-inner {
   position: relative;
@@ -2207,30 +2073,20 @@ a.page-title {
    hit point lands inside a real DOM selection over selectable text —
    user-select:none suppresses that entirely, so the line content opts
    back in while .ed-sel keeps painting the visible selection */
-.block-editor .ed-line {
-  user-select: text;
-}
-
 .block-editor ::selection {
   background: transparent;
 }
 
+/* text paints above the .ed-overlay selection/caret layer — the
+   absolute .ed-pos wrappers would otherwise cover the glyphs (typed
+   position/z-index on the row carry that) */
 .ed-line {
-  display: block;
   white-space: pre-wrap;
   min-height: 1.5em;
-  /* text paints above the .ed-overlay selection/caret layer — the
-     absolute .ed-pos wrappers would otherwise cover the glyphs */
-  position: relative;
-  z-index: 1;
 }
 
 .ed-r {
   white-space: pre-wrap;
-}
-
-.ed-delim {
-  color: var(--ls-secondary-text-color);
 }
 
 .ed-hidden {
@@ -2238,69 +2094,37 @@ a.page-title {
   display: none;
 }
 
+/* chip appearance (bg/corner/padding/cursor) is typed on the frag;
+   text kind cannot take display — keep it here */
 .ed-pill {
   display: inline-block;
-  background: var(--ls-tertiary-background-color);
-  border-radius: 0.25rem;
-  padding: 0 0.25rem;
-  cursor: pointer;
 }
 
-/* node refs keep their read-mode colors in edit mode: the read-mode
-   .page-ref link / a.tag render accent-colored on transparent — the
-   generic .ed-pill grey chip would lose that. Applies to the collapsed
-   pill and the revealed raw interior (cls suffix rides both). */
+/* node refs keep their read-mode colors in edit mode: the accent
+   foreground comes through typed props (see frag_binds); display on
+   the text kind is the only declaration left here */
 .ed-pill.ed-block-ref,
 .ed-pill.ed-page-ref,
 .ed-pill.ed-tag,
 .ed-pill.ed-link,
 .ed-r.ed-url {
   display: inline;
-  background: none;
-  padding: 0;
-  color: var(--lx-accent-11, var(--ls-link-text-color));
-}
-
-.ed-raw.ed-page-ref,
-.ed-raw.ed-tag,
-.ed-raw.ed-link,
-.ed-raw.ed-url {
-  background: none;
-  color: var(--lx-accent-11, var(--ls-link-text-color));
-}
-
-.ed-raw {
-  background: var(--ls-tertiary-background-color);
 }
 
 /* edit-surface inline marks mirror their read-mode element styles so the
    text geometry stays identical when a block enters editing — mirrors
    `b/strong`, `i/em`, `del/s`, `u/ins`, `mark`, `:not(pre) > code` and
    `sub/sup` UA + theme rules above. */
-.ed-bold,
-.ed-b{
+.ed-bold {
   font-weight: bolder;
 }
 
+/* .block-control chrome rides typed props + the emitters' inline style;
+   .control-hide stays the class-toggle channel for caret reveal, and
+   :active is the PressedOpacity prop */
 .block-control {
-  text-decoration: none;
-  font-size: 0.875rem;
-  /* cljs text-sm = font-size .875rem + line-height 1.42857 */
-  line-height: 1.42857;
-  cursor: default;
-  margin-top: 1px;
-  min-width: 22px;
-  min-height: 22px;
-  padding: 0.125rem;
-  user-select: none;
-  opacity: 0.4;
-
   .control-hide {
     display: none;
-  }
-
-  &:active {
-    opacity: 0.3;
   }
 }
 
@@ -2339,43 +2163,14 @@ a.page-title {
   }
 }
 
-.ed-italic,
-.ed-i,
-.ed-em {
+.ed-italic {
   font-style: italic;
 }
 
-.ed-strike,
-.ed-s,
-.ed-del {
-  text-decoration: line-through;
-}
-
-.ed-u{
-  text-decoration: underline;
-}
-
-.ed-hl{
-  background: var(--ls-page-mark-bg-color, #fef3ac);
-  color: var(--ls-page-mark-color, #262626);
-  padding: 0 4px;
-  border-radius: 4px;
-}
-
 .ed-code {
+  /* remaining declarations are typed (see frag_binds); corner_radius
+     takes px only so the var() radius stays here */
   border-radius: var(--ls-border-radius-low, 3px);
-  font-size: 0.9em;
-  font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
-    monospace;
-  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color));
-  color: var(--lx-gray-11, var(--ls-page-inline-code-color));
-  line-height: 1.45;
-  padding: 3px 5px;
-}
-
-.ed-sub {
-  vertical-align: sub;
-  font-size: smaller;
 }
 
 .ed-pad {
@@ -2383,8 +2178,6 @@ a.page-title {
   display: inline-block;
 }
 
-.ed-overlay {
-  position: absolute;
 .bullet-link-wrap {
   display: inline-flex;
   align-items: center;
@@ -2406,28 +2199,10 @@ a.page-title {
   }
 }
 
-  inset: 0;
-  pointer-events: none;
-}
-
-.ed-pos {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
-.ed-sel {
-  background: var(--ls-block-highlight-color);
-  border-radius: 0.125rem;
-}
-
 .ed-caret {
-  background: var(--ls-caret-color, var(--ls-primary-text-color));
-  /* text is z-index:1 over the overlay so .ed-sel paints under the
-     glyphs — but the caret must stay visible, including inside
-     backgrounded pills (.ed-hl/.ed-code) that would hide it */
-  position: relative;
-  z-index: 2;
+  /* bg/position/z-index are typed; text is z-index:1 over the overlay
+     so the caret must stay above, including inside backgrounded pills
+     (.ed-hl/.ed-code) */
   animation: ed-caret-blink 1s step-end infinite;
 }
 
@@ -2521,11 +2296,21 @@ a.page-title {
   font-size: 14px;
 }
 
-.heading-bg {
-  border-radius: 9999px;
-  width: 18px;
-  height: 18px;
+.cp__right-sidebar-topbar {
+  button {
+    opacity: 1;
+  }
 
+  a,
+  svg,
+  button {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* the swatch ring lands on the inner box only while its wrapping
+   anchor is hovered — an ancestor-state rule props cannot express */
+.heading-bg {
   a:hover > & {
     box-shadow: 0 0 0 2px var(--lx-gray-09, var(--ls-secondary-text-color));
   }
@@ -2533,26 +2318,15 @@ a.page-title {
 
 /* ========================= Inline elements =============================== */
 
+/* .bracket's chrome rides the emitter's inline style; .page-ref's
+   hover color is a typed HoverForeground prop */
 .page-reference {
-
-  .bracket {
-    opacity: 0.3;
-    display: inline-flex;
-  }
-
   &:hover {
     background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color));
   }
 
   .asset-block-wrap {
     display: inline-block;
-  }
-}
-
-.page-ref {
-
-  &:hover {
-    color: var(--lx-accent-11, var(--ls-link-text-hover-color));
   }
 }
 
@@ -2600,11 +2374,8 @@ a.page-title {
 
 a.tag {
   /* cljs uses --text-sm--line-height (1.42857) so the pill scales when
-     .block-title-wrap bumps font-size to medium (16px -> 22.86px) */
-
-  &:hover {
-    opacity: 1;
-  }
+     .block-title-wrap bumps font-size to medium (16px -> 22.86px).
+     (the :hover opacity was dead — the emitters' inline opacity wins) */
 
   &[data-ref] + &[data-ref] {
     margin: 0 3px;
@@ -2617,51 +2388,14 @@ a.tag {
   opacity: 1;
 }
 
-.block-ref {
-  border-bottom: 0.5px solid var(--ls-block-ref-link-text-color);
-  cursor: alias;
-  display: inherit;
-  margin-bottom: -1px;
-
-  .block-ref {
-    margin: 0 0.25rem;
-  }
-
-  &:hover {
-    color: var(--ls-link-text-hover-color);
-  }
-
-  .block-content {
-    cursor: inherit;
-
-    &-inner {
-      display: inherit;
-
-      > * {
-        display: inherit;
-      }
-    }
-  }
-}
+/* .block-ref anchors are emitted as .relative.page-ref links — the
+   dead .block-ref ruleset is gone */
 
 .embed-page {
-  padding: 0.5rem;
-  margin: 0.5rem 0;
-
   > section {
     margin-bottom: 5px;
   }
 
-  &.in-sidebar {
-    background-color: var(--ls-tertiary-background-color);
-  }
-}
-
-.done,
-.canceled,
-.cancelled {
-  text-decoration: line-through;
-  opacity: 0.7;
 }
 
 .ui__checkbox:not([data-checked]),
@@ -2674,29 +2408,13 @@ button[role='checkbox'][data-state='unchecked'] {
   border-color: var(--lx-gray-11, var(--ls-primary-text-color));
 }
 
+/* flex display, position, paddings and the hover fill are typed on
+   the chip box; the anchors' font/opacity are typed on the links */
 .block-tag {
-  display: flex;
-  position: relative;
-  padding-left: 0.5rem;
-  padding-right: 0.25rem;
-
-  &:hover {
-    background-color: var(--lx-gray-03);
-    border-radius: 4px;
-  }
-
   a.tag,
   a.hash-symbol {
     display: flex;
-    font-size: 0.875rem;
-    font-weight: 400;
     align-items: center;
-    opacity: 0.7;
-  }
-
-  a.tag:hover,
-  a.hash-symbol:hover {
-    opacity: 1;
   }
 
   /* the remove-tag 'x' is hover-only: hidden until the tag is hovered
@@ -2736,19 +2454,11 @@ button[role='checkbox'][data-state='unchecked'] {
   opacity: 0;
   transition: opacity .3s ease-in;
   margin-left: 8px;
-  color: var(--ls-secondary-text-color, var(--lx-gray-11));
 }
 
 .block-head-wrap:hover .ls-query-setting,
 .ls-query-setting:focus-visible {
   opacity: 1;
-}
-
-.block-properties,
-.page-properties {
-  margin: 4px 0;
-  padding: 4px 8px;
-  background-color: var(--lx-gray-03, var(--ls-block-properties-background-color));
 }
 
 .youtube-timestamp {
@@ -2773,10 +2483,6 @@ button[role='checkbox'][data-state='unchecked'] {
     -webkit-mask-size: contain;
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-position: center;
-  }
-
-  &:hover {
-    color: var(--lx-accent-12, var(--ls-link-text-hover-color));
   }
 }
 
@@ -2813,10 +2519,6 @@ button[role='checkbox'][data-state='unchecked'] {
 
 /* ============================ Misc ======================================= */
 
-
-.block-add-button {
-  cursor: text;
-}
 
 .visible-scrollbar {
   ::-webkit-scrollbar-thumb {

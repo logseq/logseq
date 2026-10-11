@@ -327,6 +327,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
 let query_setting_el ~block_uuid =
   button ~key:"qs" ~variant:`ghost ~size:`icon
     ~style_class:"ls-query-setting"
+    ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
     ~label:(I18n.t "block/set-query")
     ~icon:`settings
     ~on_press:(fun _ -> Views_view.toggle_query_editor ~block_uuid)

@@ -579,10 +579,18 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
       ~style_class:"ls-dialog-generic"
       ~data_attrs:[ ("role", "dialog"); ("aria-modal", "true") ]
       ~on_dismiss:(fun _ -> close_entry id)
-      ([ row ~key:"head" ~style_class:"ls-dialog-head"
-           [ box ~style_class:"ls-dialog-head-icon"
-               [ box ~style_class:"ls-dialog-error"
-                   [ icon ~key:"ic" ~name:(`app "alert-triangle") [] ] ]
+      ([ row ~key:"head" ~style_class:"ls-dialog-head" ~cross:`center
+           [ row ~style_class:"ls-dialog-head-icon" ~cross:`center
+               ~main:`center ~width:40 ~height:40 ~corner_radius:9999
+               ~background:"var(--lx-red-03, rgb(220 60 70 / 0.15))"
+               ~data_attrs:[ ("style", "flex-shrink:0") ]
+               [ Ui_components.with_props
+                   [ Lui_protocol.FontSize, Ui_components.sv "1.25rem" ]
+                   (box ~style_class:"ls-dialog-error"
+                      ~foreground:
+                        "var(--lx-red-10, \
+                         hsl(var(--destructive, #d64545)))"
+                      [ icon ~key:"ic" ~name:(`app "alert-triangle") [] ]) ]
            ; box ~style_class:"ls-dialog-head-text" ~margin_left:16
                [ Logseq_el.el ~tag:"h3" ~id:"modal-headline"
                    ~attrs:[ ("class", "ls-dialog-headline") ]
@@ -590,7 +598,9 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
            ]
        ]
        @ body
-       @ [ row ~key:"footer" ~style_class:"ls-dialog-footer"
+       @ [ row ~key:"footer" ~style_class:"ls-dialog-footer" ~main:`end_
+             ~gap:16
+             ~data_attrs:[ ("style", "padding-top:1.5rem") ]
              [ Ui_components.with_props
                  [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
                  ; Lui_protocol.FontWeight, Ui_components.iv 500

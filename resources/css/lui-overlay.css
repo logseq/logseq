@@ -320,44 +320,14 @@
   min-width: 0;
 }
 
-.cp__select-apply {
-  padding: 1rem;
-}
-
-/* confirm dialog head/footer (views_popup show_dialog) */
-.ls-dialog-head {
-  display: flex;
-  align-items: center;
-}
-
-.ls-dialog-head-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 9999px;
-  flex-shrink: 0;
-  background: var(--lx-red-03, rgb(220 60 70 / 0.15));
-}
-
-.ls-dialog-error {
-  color: var(--lx-red-10, hsl(var(--destructive, #d64545)));
-  font-size: 1.25rem;
-}
-
+/* confirm dialog head/footer (views_popup show_dialog) — the head row,
+   icon slot, error chip and footer now ride typed props on the
+   emitters; the h3 headline is a Logseq_el node (no prop channel) */
 .ls-dialog-headline {
   font-size: 1.125rem;
   font-weight: 500;
   line-height: 1.5rem;
   margin: 0;
-}
-
-.ls-dialog-footer {
-  padding-top: 1.5rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
 }
 
 /* ---- menu links (cljs common.css) ------------------------------------ */
@@ -694,44 +664,13 @@
   }
 }
 
-.ui__alert-dialog-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  text-align: left;
-}
-
-.ui__alert-dialog-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.75rem;
-}
-
-/* cljs dialog-confirm :content wrapper — div.ui__alert-dialog-main-content
-   around p.opacity-60 (16px text, ~8px breathing room each side) */
-
-.ui__alert-dialog-main-content .ls-confirm-desc {
-  font-size: 1rem;
-  line-height: 1.5rem;
-  opacity: 0.6;
-}
+/* alert-dialog chrome migrated to typed props: header is a gap-8
+   column, title/footer/main-content ride the ui_components emitters,
+   ls-confirm-desc is fully typed (font-size/line-height/opacity) */
 
 .ui__alert-dialog-description {
   font-size: 0.875rem;
   color: var(--ls-secondary-text-color, var(--muted-foreground));
-}
-
-.ui__alert-dialog-footer {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.ls-alert-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 /* footer buttons (confirm/cancel) used inside dialogs + menus */
@@ -755,15 +694,8 @@
    label comes from the icon's own margin (gap-1 = 4px) */
 .ui__dropdown-menu-content .lui-menu-item,
 
-/* cljs shui dialog title: text-lg font-semibold leading-none tracking-tight
-   (+ tailwind preflight margin reset) */
-.ui__dialog-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  margin: 0;
-}
+/* cljs shui dialog title: text-lg font-semibold leading-none
+   tracking-tight — now typed on the heading emitters */
 
 /* master's untitled dialogs still mount a hidden h2.ui__dialog-title —
    display:none removes it from the content grid so it contributes no

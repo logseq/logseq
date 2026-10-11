@@ -61,6 +61,8 @@ let topbar st =
   fun ctx parent ->
     Ui_components.with_props
     [ P.InsetTop, Ui_components.fv 0.
+    ; P.InsetLeft, Ui_components.fv 0.
+    ; P.InsetRight, Ui_components.fv 0.
     ; P.ZIndex, Ui_components.iv 999
     ; P.UserSelect, Ui_components.sv "none" ]
     (row ~key:"rs-topbar" ~main:`space_between ~cross:`center
@@ -185,8 +187,11 @@ let breadcrumb crumbs =
     | [] -> List.rev acc
     | c :: rest ->
         loop
-          (text ~key:("bc-" ^ c)
-             ~style_class:"breadcrumb-item" ~value:c []
+          (Ui_components.with_props
+             [ Lui_protocol.Opacity, Ui_components.fv 0.7
+             ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+             (text ~key:("bc-" ^ c)
+                ~style_class:"breadcrumb-item" ~value:c [])
            :: text ~key:("bcsep-" ^ c) ~value:"/" ~padding_horizontal:4 []
            :: acc)
           rest
@@ -196,8 +201,11 @@ let breadcrumb crumbs =
   | first :: rest ->
       row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center
         ~data_attrs:[ ("style", "margin:0;text-align:left") ]
-        (text ~key:("bc-" ^ first)
-           ~style_class:"breadcrumb-item" ~value:first []
+        (Ui_components.with_props
+           [ Lui_protocol.Opacity, Ui_components.fv 0.7
+           ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+           (text ~key:("bc-" ^ first)
+              ~style_class:"breadcrumb-item" ~value:first [])
          :: List.rev (loop [] rest))
 
 let item_title (it : Sidebar_state.item) =
