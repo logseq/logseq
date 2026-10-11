@@ -6,6 +6,7 @@
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.render-resource.common :as common]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -243,20 +244,24 @@
       :query-result
       base))))
 
+(defn- skip-row-without-uuid
+  [eid]
+  (log/warn :renderer-resource/row-missing-uuid {:db-id eid})
+  nil)
+
 (defn- normalize-view-row
   [db row]
   (cond
     (integer? row)
-    (common/entity-uuid! db row)
+    (or (common/entity-uuid db row)
+        (skip-row-without-uuid row))
 
-    (and (map? row) (uuid? (:block/uuid row)))
+    (uuid? (:block/uuid row))
     (:block/uuid row)
 
-    (and (map? row) (integer? (:db/id row)))
-    (common/entity-uuid! db (:db/id row))
-
-    (and (de/entity? row) (uuid? (:block/uuid row)))
-    (:block/uuid row)
+    (integer? (:db/id row))
+    (or (common/entity-uuid db (:db/id row))
+        (skip-row-without-uuid (:db/id row)))
 
     :else
     (common/fail! "Unsupported view resource row" {:row row})))
@@ -317,7 +322,7 @@
 
 (defn- normalize-view-rows
   [db rows]
-  (mapv #(normalize-view-row db %) rows))
+  (into [] (keep #(normalize-view-row db %)) rows))
 
 (defn- normalize-flat-view-data
   [db result]
@@ -380,7 +385,7 @@
     (contains? result :ref-matched-children-ids)
     (assoc :matched-child-uuids
            (when-some [ids (:ref-matched-children-ids result)]
-             (into #{} (map #(common/entity-uuid! db %)) ids)))
+             (into #{} (keep #(common/entity-uuid db %)) ids)))
 
       (contains? result :properties)
       (assoc :properties (query-property-maps db (:properties result))))))
