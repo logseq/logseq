@@ -40,8 +40,18 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                    same flags signal as the class toggle *)
                 Ui_parts.int_prop_signal Lui_protocol.MarginLeft fs
                   (fun (_has, indented) -> if indented then 6 else 22)
-                  (row ~key:"bab-inner" ~cross:`center ~height:28
+                  (row ~key:"bab-inner" ~cross:`center ~height:28 ~grow:1.
                      ~style_class:"bab-inner"
-                     [ box ~key:"bab-bc" ~style_class:"bullet-container"
-                         [ box ~key:"bab-b" ~style_class:"bullet" ~transition:"transform 0.2s" [] ] ]) ] ]))
+                     [ (* same bullet metrics as the block gutter dot in
+                          blocks/tree.ml — style_class alone carries no
+                          size on style-less backends *)
+                        box ~key:"bab-bc" ~style_class:"bullet-container"
+                          ~main:`center ~cross:`center ~width:16 ~height:16
+                          ~corner_radius:8
+                          [ box ~key:"bab-b" ~style_class:"bullet"
+                              ~transition:"transform 0.2s" ~width:6 ~height:6
+                              ~corner_radius:999 ~opacity:0.8
+                              ~background:
+                                "var(--lx-gray-08, var(--ls-block-bullet-color))"
+                              [] ] ]) ] ]))
       context parent

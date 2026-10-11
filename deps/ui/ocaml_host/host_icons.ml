@@ -78,6 +78,16 @@ let svg_of name =
           | [] -> None
           | kids -> Some (Icons.svg_of_children ~size:24. name kids)))
 
+(* debug: resolution status for tree dumps — "ok:<name>" when an svg
+   matches, "miss:<name>" when nothing does. *)
+let resolved_name store id =
+  match icon_name store id with
+  | None -> None
+  | Some name -> (
+    match svg_of name with
+    | Some _ -> Some ("ok:" ^ name)
+    | None -> Some ("miss:" ^ name))
+
 let image_of store scale id r : Lui_scene.image option =
   match icon_name store id with
   | None -> None
