@@ -104,3 +104,5 @@ let color_of (s : string) : Lui_scene.color option =
           match Lui_theme.color_of !mode v with
           | Some _ as c -> c
           | None -> Lui_window.Theme.color_of v))
+
+let count_of_mode m = Hashtbl.length (vars_of_mode m)

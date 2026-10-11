@@ -16,6 +16,20 @@ module J = Yojson.Safe
 
 let log fmt = Printf.eprintf (fmt ^^ "\n%!")
 
+(* Bundle launches have no reachable stderr — mirror a diagnostic line
+   into the shared host log the same way logseq_native.filelog does. *)
+let filelog fmt =
+  match
+    (try
+       Some
+         (open_out_gen [ Open_append; Open_creat ] 0o644
+            "/tmp/logseq_native_host.log")
+     with _ -> None)
+  with
+  | Some oc ->
+    Printf.kfprintf (fun oc -> close_out oc) oc (fmt ^^ "\n")
+  | None -> Printf.ifprintf stdout fmt
+
 (* Host environment the dispatcher acts on — set once by main after
    Lui_host.create so handlers can reach the store, Ui state, rects and
    the repaint sink. *)
@@ -653,6 +667,9 @@ let handle (envelope : string) =
              | _ -> ())
           | "theme-snapshot" ->
             Theme_vars.install_snapshot payload;
+            filelog "theme-snapshot installed: light=%d dark=%d"
+              (Theme_vars.count_of_mode Lui_theme.Light)
+              (Theme_vars.count_of_mode Lui_theme.Dark);
             e.repaint ()
           | "app-icons" -> Host_icons.install payload
           | "dom-op" -> (
