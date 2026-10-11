@@ -505,9 +505,35 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   (* cljs shows .ls-page-title-actions on .block-content-wrapper:hover
-     (opacity 0 at rest); no stylesheet on native backends, so the same
-     pointer enter/leave signal drives the opacity prop instead *)
+     with delay-300 (opacity 0 at rest); no stylesheet on native
+     backends, so pointer enter/leave feeds a 300ms reveal timer that
+     drives the opacity prop instead. A leave before the timer fires
+     cancels the reveal — matching the CSS transition's behavior *)
   let actions_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let actions_timer : int option ref = ref None in
+  let actions_reveal () =
+    match !actions_timer with
+    | Some _ -> ()
+    | None ->
+        actions_timer :=
+          Some
+            (Ui_services.timers_timeout
+               (fun () ->
+                 actions_timer := None;
+                 Signal.set actions_hover true;
+                 Runtime.flush ())
+               300)
+  in
+  let actions_hide () =
+    (match !actions_timer with
+     | Some t ->
+         Ui_services.timers_clear_timeout t;
+         actions_timer := None
+     | None -> ());
+    if Runtime.signal_get actions_hover then (
+      Signal.set actions_hover false;
+      Runtime.flush ())
+  in
   let body =
     (* cljs db-page-title: the page title is a full block row —
        .ls-block > .is-page-title-row > bullet control + nested
@@ -664,19 +690,23 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ~gap:4 ~cross:`center
                                             ~min_width:0
                                             ~style_class:"block-row"
-                                            ([ column ~key:"pt-cw" ~gap:8
+                                            ([ Ui_components.with_props
+                                                 (* the title-actions
+                                                    row anchors
+                                                    absolutely here *)
+                                                 [ Lui_protocol.Position
+                                                 , Ui_components.sv
+                                                     "relative" ]
+                                                 (column ~key:"pt-cw" ~gap:8
                                                  ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
                                                  ~data_attrs:
                                                    [ ("style", "user-select:text;\
                                                       overflow-x:visible") ]
                                                  ~on_pointer_enter:(fun _ ->
-                                                   Signal.set actions_hover true;
-                                                   Runtime.flush ())
+                                                   actions_reveal ())
                                                  ~on_pointer_leave:(fun _ ->
-                                                   if Runtime.signal_get actions_hover then (
-                                                     Signal.set actions_hover false;
-                                                     Runtime.flush ()))
+                                                   actions_hide ())
                                                  ((if m.editing_title then
                                                     []
                                                   else
@@ -696,7 +726,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                        title_editor page
                                                      else
                                                        title_content page)
-                                                  ])
+                                                  ]))
                                              ]
                                             @ title_tag_chips page)
                                         ]

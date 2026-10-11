@@ -773,18 +773,24 @@ let el_offset_width (el : element) : float =
   rect_width r
 
 (* get_element_by_id keeps the ref-handle element shape live_ids used:
-   {#ref, ref-id} resolves through the same dom-op/measure paths. *)
+   {#ref, ref-id} resolves through the same dom-op/measure paths. When the
+   id is already in the live snapshot tree the snapshot itself is richer —
+   it carries the ancestors closest/query walks need, which the bare
+   handle lacks. *)
 let by_id (id : string) : element option =
-  let in_docs =
-    List.exists (fun el -> dom_id_of el = Some id)
+  match
+    List.find_opt
+      (fun el -> dom_id_of el = Some id)
       (!doc_elements_provider ())
-  in
-  if in_docs || id <> "" then
-    Some
-      (Js.Json.JObject
-         [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id) ])
-  else
-    None
+  with
+  | Some el -> Some el
+  | None ->
+      if id <> "" then
+        Some
+          (Js.Json.JObject
+             [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id) ])
+      else
+        None
 
 (* document.activeElement — focus/blur document events carry the
    target's ref-id *)

@@ -544,9 +544,7 @@ let cmdk_empty ~key children : t =
    off so the bubble never steals hover from its own trigger. *)
 let tooltip_content ~key ~at ~arrow_x ~above children : t =
   with_props
-    [ P.FontSize, sv "0.75rem"
-    ; P.LineHeight, sv "16px"
-    ; P.ZIndex, iv 50
+    [ P.ZIndex, iv 50
     ; P.PointerEnabled, P.BoolValue false
     ; ( P.Shadow
       , sv
@@ -554,25 +552,27 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
            0.1)" )
     ]
     (popover ~transition:popover_transition ~key ~accessibility_identifier:"lui-tooltip" ~at
-       ~style_class:"ui__tooltip-content" ~gap:6 ~cross:`center
+       ~style_class:"ui__tooltip-content" ~gap:6
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6 ~max_width:320
        ~corner_radius:6 ~border_width:1
        ~border_color:"var(--lui-c-border)" ~background:"hsl(var(--popover))"
        ~foreground:"hsl(var(--popover-foreground))"
-       (children
-       @ [ with_props
-             ([ P.Position, sv "absolute"
-              ; P.PointerEnabled, P.BoolValue false
-              ; P.InsetLeft, fv arrow_x
-              ]
-             @ if above then [ P.InsetBottom, fv (-4.) ]
-               else [ P.InsetTop, fv (-4.) ])
-             (box ~key:"arrow" ~style_class:"ui__tooltip-arrow" ~width:8
-                ~height:8 ~border_width:1
-                ~border_color:"hsl(var(--border))"
-                ~background:"hsl(var(--popover))" [])
-         ]))
+       ([ with_props
+            [ P.FontSize, sv "0.75rem"; P.LineHeight, sv "16px" ]
+            (column ~key:"tip" ~gap:6 children)
+        ; with_props
+            ([ P.Position, sv "absolute"
+             ; P.PointerEnabled, P.BoolValue false
+             ; P.InsetLeft, fv arrow_x
+             ]
+            @ if above then [ P.InsetBottom, fv (-4.) ]
+              else [ P.InsetTop, fv (-4.) ])
+            (box ~key:"arrow" ~style_class:"ui__tooltip-arrow" ~width:8
+               ~height:8 ~border_width:1
+               ~border_color:"hsl(var(--border))"
+               ~background:"hsl(var(--popover))" [])
+        ]))
 
 let ls_tooltip_col ~key children : t =
   column ~key ~cross:`start ~gap:4 children

@@ -533,14 +533,26 @@ let close_cm st =
   S.close_cm st
 
 let cm_color_row (st : S.t) : t =
+  (* tailwind <color>-500 paints the web swatch dot; the --color-*
+     vars aren't defined on the native host so the concrete values
+     carry the same paint *)
   let swatch c =
+    let hex =
+      match c with
+      | "yellow" -> "#eab308"
+      | "red" -> "#ef4444"
+      | "pink" -> "#ec4899"
+      | "green" -> "#22c55e"
+      | "blue" -> "#3b82f6"
+      | "purple" -> "#a855f7"
+      | _ -> "#6b7280"
+    in
     Ui_components.color_swatch ~key:("color-" ^ c) ~size:30
       ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t ("color/" ^ c))
       ~on_press:(fun _ -> run_cm_color st c)
       [ box ~key:"bg" ~style_class:"heading-bg" ~width:18 ~height:18
-          ~corner_radius:9999
-          ~background:("var(--color-" ^ c ^ "-500)") [] ]
+          ~corner_radius:9999 ~background:hex [] ]
   in
   let remove =
     Ui_components.color_swatch ~key:"color-rm" ~size:30
@@ -580,8 +592,8 @@ let cm_heading_row (st : S.t) : t =
     List.init 6 (fun i ->
         let n = string_of_int (i + 1) in
         cm_heading_btn st ("h-" ^ n) (U.tf "editor/heading" [ n ]) n
-          (icon ~key:"ic" ~name:(Icons.name_ref ("h-" ^ n)) ~style_class:"ui__icon"
-             []))
+          (icon ~key:"ic" ~name:(Icons.name_ref ("h-" ^ n)) ~point_size:18
+             ~style_class:"ui__icon" []))
   in
   row ~key:"headings" ~style_class:"ls-cm-headings"
     ~main:`space_between ~cross:`center
@@ -593,47 +605,39 @@ let cm_heading_row (st : S.t) : t =
         ~margin_horizontal:8
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
-              (icon ~key:"ic" ~name:(Icons.name_ref "h-auto")
+              (icon ~key:"ic" ~name:(Icons.name_ref "h-auto") ~point_size:18
                  ~style_class:"ui__icon" [])
           ; cm_heading_btn st "h-rm" (U.t "editor/remove-heading")
               "none"
-              (icon ~key:"ic" ~name:(Icons.name_ref "heading-off")
+              (icon ~key:"ic" ~name:(Icons.name_ref "heading-off") ~point_size:18
                  ~style_class:"ui__icon" []) ]) ]
 ;;
 
-(* shui/shortcut root for :combo (binding has "+") and :separate styles *)
+(* shui/shortcut root for :combo (binding has "+") and :separate styles —
+   row kinds + Ui_components keycaps like cmdk_view; a text/box nest
+   stacked the keycaps vertically over the item label. *)
 let cm_shortcut_el (binding, caps) : t =
   let combo = String.contains binding '+' in
-  let kbd_el i cap =
-    kbd ~key:("k" ^ string_of_int i)
-      ~style_class:
-        (if combo then "shui-shortcut-key"
-         else "shui-shortcut-key shui-key-boxed")
-      ~value:(Ui_services.literal_text cap) []
-  in
-  let children =
+  let cells =
     List.concat
       (List.mapi
          (fun i cap ->
-           let sep =
-             if combo && i > 0 then
-               [ text ~key:("sep" ^ string_of_int i)
-                   ~style_class:"shui-shortcut-separator" ~value:"" [] ]
-             else []
-           in
-           sep @ [ kbd_el i cap ])
+           (if combo && i > 0 then
+              [ Ui_components.keycap_separator
+                  ~key:("sep" ^ string_of_int i) ]
+            else [])
+           @ [ Ui_components.keycap
+                 ~key:("k" ^ string_of_int i)
+                 ~boxed:(not combo) ~glow:true ~min_slot:20
+                 ~value:(Ui_services.literal_text cap) ])
          caps)
   in
-  text ~key:"sc" ~style_class:"ls-cm-sc" ~grow:1.
+  row ~key:"sc" ~style_class:"ls-cm-sc" ~main:`end_ ~grow:1.
     ~data_attrs:[ ("style", "padding-left:0.5rem") ]
-    [ text ~key:"sc-wrap"
-        [ box ~key:"sc-box"
-            ~style_class:
-              (if combo then "shui-shortcut-combo shui-shortcut-glow"
-               else "shui-shortcut-separate shui-shortcut-glow")
-            ~gap:(if combo then 0 else 4)
-            children
-        ]
+    [ (if combo then
+         Ui_components.shortcut_combo ~key:"sc-box" ~glow:true cells
+       else
+         Ui_components.shortcut_separate ~key:"sc-box" ~glow:false cells)
     ]
 
 let cm_item_cls = "ui__dropdown-menu-item"
@@ -661,10 +665,12 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:[ ("role", "menuitem") ]
             ~text:label
-            [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
-                ~style_class:"ls-menu-chevron"
-                ~data_attrs:
-                  [ ("style", "margin-left:auto;flex-shrink:0") ] [] ]
+            [ (* margin-left:auto doesn't translate — a grow row
+                 ~main:`end_ pushes the chevron to the item's right
+                 edge on every host *)
+              row ~key:"chev-wrap" ~main:`end_ ~grow:1.
+                [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
+                    ~style_class:"ls-menu-chevron" [] ] ]
       | S.Ci_item (label, scut, cmd) ->
           menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]
@@ -697,7 +703,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   Ui_components.with_props [ Ui_components.sub_card_shadow ]
     (popover ~transition:Ui_components.popover_transition ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
-       ~padding:4 ~background:"hsl(var(--popover))"
+       ~padding:4
        ~border_color:"var(--lui-c-border)" ~border_width:1
        ~corner_radius:6
        ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
@@ -757,7 +763,6 @@ let cm_popover (st : S.t) : t =
              | Some m when m.S.tag <> None -> 240
              | _ -> 280)
            (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
-              ~background:"hsl(var(--popover))"
               ~border_color:"var(--lui-c-border)" ~border_width:1
               ~corner_radius:6
               ~at_signal:
@@ -927,7 +932,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
   (Ui_components.with_props [ Ui_components.card_shadow ]
      (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
-        ~padding:6 ~background:"hsl(var(--popover))"
+        ~padding:6
         ~border_color:"var(--lui-c-border)" ~border_width:1
         ~corner_radius:6
         ~available_height:

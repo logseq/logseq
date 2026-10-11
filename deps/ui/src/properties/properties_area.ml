@@ -482,14 +482,25 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   let key = page_key uuid in
   let anchor_id = "pta-" ^ uuid in
+  (* cljs shui/button sm + "px-2 py-0 h-6 text-xs text-muted-foreground":
+     a 24px ghost text button, 12px text, 8px horizontal padding *)
   let add_btn ?a11y text on_press =
-    button ~variant:`ghost ~size:`sm ~text_alignment:`start
-      ~style_class:"as-ghost"
-      ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
-      ?accessibility_identifier:a11y ~label:text ~text ~on_press []
+    Ui_components.with_props
+      [ Lui_protocol.FontSize, Ui_components.sv "12px" ]
+      (button ~variant:`ghost ~size:`sm ~text_alignment:`start
+         ~style_class:"as-ghost" ~height:24 ~padding_horizontal:8
+         ~padding_vertical:0
+         ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+         ?accessibility_identifier:a11y ~label:text ~text ~on_press [])
   in
   let node =
-    (row ~key:"pta" ~accessibility_identifier:anchor_id
+    (* cljs .ls-page-title-actions: absolute, -top-5 (20px above the
+       title wrapper's top edge) — out of flow so it never shifts the
+       title text; the wrapper's relative position anchors it *)
+    (Ui_components.with_props
+       [ Lui_protocol.Position, Ui_components.sv "absolute"
+       ; Lui_protocol.InsetTop, Ui_components.fv (-20.) ]
+       (row ~key:"pta" ~accessibility_identifier:anchor_id
        ~cross:`center ~gap:8
        ~style_class:"ls-page-title-actions"
        ~opacity:(reactive
@@ -502,7 +513,11 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
          if Runtime.signal_get hover then (
            Signal.set hover false;
            Runtime.flush ()))
-       ([ add_btn
+       ([ (* cljs shows "Add icon" only while the page has no icon;
+             once one exists the icon button itself is the edit path *)
+          (if p.Model.page_icon <> None then box ~key:"ic-off" []
+         else
+           add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
              match Ui_services.dom_query ("#" ^ anchor_id) with
@@ -541,7 +556,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
                      ignore
                        (let* _ = Outliner_ops.apply [ op ] in
                        !Runtime.reload_current_view ()))
-             | None -> ())
+             | None -> ()))
        ; (if p.Model.page_is_tag then
             add_btn ~a11y:(anchor_id ^ "-prop")
               (I18n.t "class/add-property") (fun _ ->
@@ -568,7 +583,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
                       ; title = p.Model.page_title
                       }
                 | None -> ()))
-        ] @ slots))
+        ] @ slots)))
       context parent
   in
   S.note_area_node ~key node;

@@ -141,10 +141,12 @@ let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 (* ~240px / ~460px against a 1440px viewport, expressed as ratios *)
 let left_fraction_min = 0.167
 let left_fraction_max = 0.32
-let left_fraction_default = 0.25
+(* app.logseq.com ships ~246px — px semantics, so the default is its
+   1440px-viewport ratio *)
+let left_fraction_default = 0.171
 let right_fraction_min = 0.167
-let right_fraction_max = 0.32
-let right_fraction_default = 0.25
+let right_fraction_max = 0.5
+let right_fraction_default = 0.4
 
 let fraction_of_storage ~key ~default =
   match Ui_services.storage_get key with
@@ -158,13 +160,29 @@ let fraction_of_storage ~key ~default =
 let store_fraction key f =
   Ui_services.storage_set key (Printf.sprintf "%.4g" f)
 
-(* split drags report the new first-pane fraction; clamp to the dock
-   bounds, publish, persist *)
+(* the left dock keeps a constant pixel width (cljs persisted px):
+   left_fraction is always the inner split's effective value — when the
+   right dock opens or the window resizes, it is rescaled so the dock's
+   rendered px width does not move. Stored values are viewport
+   fractions; a drag writes back value * content-ratio. *)
+let right_dock_open st = (model ()).Model.right_sidebar_open
+
+let left_content_ratio st =
+  if right_dock_open st then 1. -. Runtime.signal_get st.right_fraction
+  else 1.
+
+let rescale_left st factor =
+  let f = Runtime.signal_get st.left_fraction *. factor in
+  Runtime.signal_set st.left_fraction (clampf 0.02 0.98 f)
+
+(* split drags report the new first-pane fraction of the CONTENT area;
+   normalize to a viewport fraction before persisting *)
 let on_left_split_resize st ev =
   match ev with
   | Lui_protocol.ValueChanged (_, v) ->
-      let f = clampf left_fraction_min left_fraction_max v in
-      Runtime.signal_set st.left_fraction f;
+      Runtime.signal_set st.left_fraction v;
+      let f = clampf left_fraction_min left_fraction_max
+          (v *. left_content_ratio st) in
       store_fraction "ls-left-sidebar-width" f
   | _ -> ()
 
@@ -172,8 +190,11 @@ let on_left_split_resize st ev =
 let on_right_split_resize st ev =
   match ev with
   | Lui_protocol.ValueChanged (_, v) ->
+      let ratio_old = left_content_ratio st in
       let f = clampf right_fraction_min right_fraction_max (1. -. v) in
       Runtime.signal_set st.right_fraction f;
+      if right_dock_open st then
+        rescale_left st (ratio_old /. left_content_ratio st);
       store_fraction "ls-right-sidebar-width" f
   | _ -> ()
 
@@ -986,6 +1007,8 @@ let page_key (p : Model.page) =
   | Some u -> "u:" ^ u
   | None -> "d:" ^ string_of_int (Option.value p.Model.page_db_id ~default:0)
 
+let prev_right_open = ref false
+
 let on_model st (m : Model.t) =
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
@@ -1010,7 +1033,14 @@ let on_model st (m : Model.t) =
                push_recent repo id;
                load_recents repo st)
          | _ -> ())
-   | _ -> ())
+   | _ -> ());
+  (* right-dock open/close: rescale the left split so its px width
+     stays put *)
+  if m.Model.right_sidebar_open <> !prev_right_open then (
+    prev_right_open := m.Model.right_sidebar_open;
+    let ratio = 1. -. Runtime.signal_get st.right_fraction in
+    rescale_left st
+      (if m.Model.right_sidebar_open then 1. /. ratio else ratio))
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 
@@ -1208,8 +1238,11 @@ let init (ms : Model.t Signal.signal) : t =
       Ui_services.dom_on_document_event "touchmove" on_doc_touchmove;
       Ui_services.dom_on_document_event "touchend" on_doc_touchend;
       Ui_services.dom_on_window_event "resize" (fun _ ->
-          Runtime.signal_set st.viewport_w
-            (Ui_services.dom_viewport_width ()));
+          let w_old = Runtime.signal_get st.viewport_w in
+          let w_new = Ui_services.dom_viewport_width () in
+          Runtime.signal_set st.viewport_w w_new;
+          if w_new > 0. && w_new <> w_old then
+            rescale_left st (w_old /. w_new));
       st
 
 let ensure ms = init ms

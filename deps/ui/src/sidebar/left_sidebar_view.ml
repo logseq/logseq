@@ -354,11 +354,13 @@ let menu_host st =
 
 (* cljs shui/shortcut separate-keys: space-separated bindings render one
    kbd per key inside .shui-shortcut-separate *)
-let shortcut_hint binding =
+let shortcut_hint hov binding =
   let keys = String.split_on_char ' ' binding in
   row ~key:("sc-" ^ binding) ~cross:`center
     [ row ~key:"wrap" ~style_class:"keyboard-shortcut" ~cross:`center
         ~display:`inline_flex ~gap:2
+        ~opacity_signal:
+          (Signal.map (fun h -> if h then 1. else 0.) (Signal.value hov))
         [ row ~key:"sep" ~gap:4 ~cross:`center
             ~style_class:"shui-shortcut-separate shui-shortcut-glow"
             (List.map
@@ -369,10 +371,13 @@ let shortcut_hint binding =
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
+let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
     ?(more = Logseq_el.nothing) () =
   let act = if active then " active" else "" in
-  let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
+  let hov = Signal.state sched false in
+  let tail =
+    match shortcut with Some s -> [ shortcut_hint hov s ] | None -> []
+  in
   box ~key ~style_class:(class_ ^ act)
     [ Ui_parts.pressable ~on_press:(fun _ -> on_click ())
         (Ui_components.with_props
@@ -388,7 +393,13 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
                 var(--ls-quaternary-background-color))" ]
            (row ~cross:`center ~corner_radius:6 ~height:32
               ~style_class:("item group" ^ act)
-              ~padding_horizontal:6
+              ~padding_horizontal:2
+              ~on_pointer_enter:(fun _ ->
+                Signal.set hov true;
+                Runtime.flush ())
+              ~on_pointer_leave:(fun _ ->
+                Signal.set hov false;
+                Runtime.flush ())
               ?background:
                 (if active then
                    Some "var(--lx-gray-04, var(--ls-quaternary-background-color))"
@@ -396,22 +407,25 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
               ~data_attrs:
                 [ ( "style"
                   , "padding-left:6px;padding-right:2px" ) ]
-              ([ icon_ icon_name
+              ([ Ui_components.with_props
+                   [ Lui_protocol.MarginLeft, Ui_components.iv 4 ]
+                   (icon_ icon_name)
                ; text ~grow:1. ~value:title [] ]
               @ tail @ [ more ]))) ]
 
-let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
-  nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
+let nav_route ~sched ~class_ ~active ~title ~icon_name ?shortcut hash =
+  nav_link ~sched ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
+    ?shortcut
     ~on_click:(fun () ->
       Ui_services.nav_set_hash (Runtime.nav_hash hash);
       Ui_services.dom_dispatch "ls:navigate")
     ()
 
-let tag_nav ~active_route class_ label titles =
+let tag_nav ~sched ~active_route class_ label titles =
   match List.assoc_opt class_ titles with
   | Some title ->
       Some
-        (nav_link ~key:("tag-" ^ class_) ~class_:("tag-view-nav " ^ class_)
+        (nav_link ~sched ~key:("tag-" ^ class_) ~class_:("tag-view-nav " ^ class_)
            ~active:(active_route = Model.Page title)
            ~title:(t label) ~icon_name:"hash"
            ~on_click:(fun () -> Sidebar_state.navigate_to_page title)
@@ -419,7 +433,7 @@ let tag_nav ~active_route class_ label titles =
   | None -> None
 
 (* active nav per route — cljs sidebar-navigations-loaded *)
-let nav_items ~active_route (checked, tag_titles) =
+let nav_items ~sched ~active_route (checked, tag_titles) =
   List.filter_map
     (fun nav ->
       match nav with
@@ -435,7 +449,7 @@ let nav_items ~active_route (checked, tag_titles) =
           if not on then None
           else
             Some
-              (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
+              (nav_link ~sched ~key:"nl-flashcards" ~class_:"flashcards-nav"
                  ~active:false ~title:(t "nav/flashcards") ~icon_name:"cards"
                  ~shortcut:"g f"
                  ~on_click:(fun () ->
@@ -457,17 +471,18 @@ let nav_items ~active_route (checked, tag_titles) =
                  ()))
       | "all-pages" ->
           Some
-            (nav_route ~class_:"all-pages-nav"
+            (nav_route ~sched ~class_:"all-pages-nav"
                ~active:(active_route = Model.All_pages) ~title:(t "nav.all-pages/label")
                ~icon_name:"files" "#/all-pages")
       | "graph-view" ->
           Some
-            (nav_route ~class_:"graph-view-nav"
+            (nav_route ~sched ~class_:"graph-view-nav"
                ~active:(active_route = Model.Graph_view)
                ~title:(t "nav/graph-view") ~icon_name:"hierarchy"
                ~shortcut:"g g" "#/graph")
-      | "tag/tasks" -> tag_nav ~active_route "tasks" "nav/tasks" tag_titles
-      | "tag/assets" -> tag_nav ~active_route "assets" "nav/assets" tag_titles
+      | "tag/tasks" -> tag_nav ~sched ~active_route "tasks" "nav/tasks" tag_titles
+      | "tag/assets" ->
+          tag_nav ~sched ~active_route "assets" "nav/assets" tag_titles
       | _ -> None)
     checked
 
@@ -477,6 +492,7 @@ let nav_group ms st =
   Cards_state.Due_count.mount ctx 0;
   if not (Cards_state.Due_count.ready ()) then ()
   else Cards_state.update_due_count ();
+  let nav_hov = Signal.state ctx.Lui_ui.ui_scheduler false in
   let navs_sig =
     Logseq_el.own ctx
       (Signal.map2
@@ -488,7 +504,7 @@ let nav_group ms st =
                (Signal.value st.Sidebar_state.nav_checked)
                (Signal.value st.nav_tag_titles))))
   in
-  box ~key:"nav-group"
+  box ~key:"nav-group" ~padding_horizontal:12
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
         [ Ui_components.with_props
@@ -500,12 +516,18 @@ let nav_group ms st =
                ~data_attrs_signal:
                  (Signal.constant ctx.Lui_ui.ui_scheduler
                     [ ("style", "position:sticky;top:-4px") ])
-               ~height:32 ~corner_radius:6
+               ~height:32 ~corner_radius:6 ~padding_horizontal:4
+               ~on_pointer_enter:(fun _ ->
+                 Signal.set nav_hov true;
+                 Runtime.flush ())
+               ~on_pointer_leave:(fun _ ->
+                 Signal.set nav_hov false;
+                 Runtime.flush ())
                ~background:"var(--left-sidebar-bg-color)"
                ~style_class:"hd non-collapsable enter-show-more"
                ~data_attrs:
                  [ ("style", "padding-left:8px;padding-right:4px") ]
-               [ box ~key:"nav-name" ~style_class:"a"
+               [ box ~key:"nav-name" ~style_class:"a" ~margin_left:4
                    [ Ui_components.with_props
                        [ P.FontSize, Ui_components.sv "0.875rem"
                        ; P.LineHeight, Ui_components.sv "1.25rem"
@@ -514,6 +536,11 @@ let nav_group ms st =
                           ~style_class:"wrap-th"
                           [ text ~value:(t "sidebar.left/navigations") [] ]) ]
                ; box ~key:"nav-more" ~style_class:"b"
+                   ~width:28 ~height:32 ~main:`center
+                   ~opacity_signal:
+                     (Signal.map
+                        (fun h -> if h then 0.8 else 0.)
+                        (Signal.value nav_hov))
                    ~transition:"opacity 0.15s"
                    [ Ui_parts.pressable
                        ~on_press:(fun _ ->
@@ -521,26 +548,23 @@ let nav_group ms st =
                        (Ui_components.with_props
                           [ P.Position, Ui_components.sv "relative"
                           ; P.InsetTop, Ui_components.fv (-2.)
-                          ; P.InsetRight, Ui_components.fv (-2.)
-                          ; P.Opacity, Ui_components.fv 0.6
-                          ; P.HoverOpacity, Ui_components.fv 0.8 ]
+                          ; P.Opacity, Ui_components.fv 0.8 ]
                           (row ~style_class:"as-edit"
                              [ Ui_components.with_props
                                  [ Lui_protocol.MarginLeft
-                                 , Ui_components.iv 3
-                                 ; Lui_protocol.MarginRight
-                                 , Ui_components.iv 11 ]
+                                 , Ui_components.iv 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
                 (fun (route, (checked, tag_titles)) ->
-                  column ~key:"navs" ~gap:2
+                  column ~key:"navs" ~gap:2 ~margin_top:4
                     ~style_class:"sidebar-navigations"
                     ~data_attrs:[ ("style", "margin-top:4px") ]
                     (* cljs journals item navigates on click; its anchor
                        carries no href. go-to-journals! targets
                        #/all-journals when a default-home page owns #/ *)
-                    ((nav_link ~key:"nl-journals" ~class_:"journals-nav"
+                    ((nav_link ~sched:ctx.Lui_ui.ui_scheduler ~key:"nl-journals"
+                       ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
                        ~title:(t "nav/journals") ~icon_name:"calendar"
                        ~shortcut:"g j"
@@ -555,7 +579,8 @@ let nav_group ms st =
                                 Js.Promise.resolve ())
                               (Router.go_to_journals_target ())))
                        ())
-                    :: nav_items ~active_route:route (checked, tag_titles)
+                    :: nav_items ~sched:ctx.Lui_ui.ui_scheduler ~active_route:route
+                         (checked, tag_titles)
                   ))
                 navs_sig
             ]
@@ -630,6 +655,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
           Ui_components.sv
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
         (link ~url:"#" ~target:`self_ ~style_class:"link-item group"
+           ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
              [ ("data-lp-ref", lp_ref)
              ; ("data-lp-recent", if recent then "1" else "0")
@@ -637,8 +663,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                , "display:flex;align-items:center;justify-content:\
                   space-between;height:32px;padding:0 8px;\
                   border-radius:6px" ) ]
-           [ row ~cross:`center ~style_class:"page-icon"
-               ~data_attrs:[ ("style", "padding-right:4px") ]
+           [ row ~cross:`center ~style_class:"page-icon" ~margin_right:4
                [ icon_ ~attrs:[ ("style", "margin-right:0") ] "file" ]
            ; text ~style_class:"page-title" ~value:p.Model.page_title
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
@@ -703,6 +728,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                   ; P.Cursor, Ui_components.sv "pointer" ]
                   (row ~key:(key ^ "-hd") ~cross:`center
                      ~main:`space_between ~height:32 ~corner_radius:6
+                     ~padding_horizontal:4
                      ~background:"var(--left-sidebar-bg-color)"
                      ~style_class:"hd"
                      ~data_attrs:
@@ -710,7 +736,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                          , "position:sticky;top:-4px;padding-left:8px;\
                             padding-right:4px" )
                        ]
-                     [ box ~key:(key ^ "-a") ~style_class:"a"
+                     [ box ~key:(key ^ "-a") ~style_class:"a" ~margin_left:4
                          [ Ui_components.with_props
                              [ P.FontSize, Ui_components.sv "0.875rem"
                              ; P.LineHeight, Ui_components.sv "1.25rem"
@@ -719,7 +745,8 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                 ~style_class:"wrap-th"
                                 [ text ~value:label [] ]) ]
                      ; box ~key:(key ^ "-b") ~style_class:"b"
-                         ~transition:"opacity 0.15s"
+                         ~width:28 ~height:32 ~main:`center
+                         ~opacity:0.4 ~transition:"opacity 0.15s"
                          [ (* web rotates .more 90deg on .is-expand —
                               backends without transforms swap the icon *)
                             reactive
@@ -731,10 +758,11 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                       , "margin-left:2.5px;margin-right:10.5px"
                                       )
                                     ]
-                                  (if collapsed
-                                      && not (Ui_services.env_css_transform_icons ())
-                                   then "chevron-down"
-                                   else "chevron-right"))
+                                  (if
+                                     Ui_services.env_css_transform_icons ()
+                                     || collapsed
+                                   then "chevron-right"
+                                   else "chevron-down"))
                               (Sidebar_state.group_collapsed_sig st class_)
                          ] ]))
            ; reactive
@@ -827,7 +855,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         else r
     | None -> t "graph.switch/select-prompt"
   in
-  box ~key:"gsel"
+  box ~key:"gsel" ~padding_horizontal:12
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
         (* data-tooltip="" suppresses the hover tooltip: the service
@@ -840,6 +868,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             ; P.PressedOpacity, Ui_components.fv 0.7 ]
             (button ~key:"gsel-a" ~variant:`ghost ~grow:1.
                ~label:(t "graph.switch/select-prompt")
+               ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:6
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
                    [ ("data-tooltip", ""); ("aria-haspopup", "menu")
@@ -878,9 +907,9 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                               , "overflow:hidden;padding-left:4px;\
                                  padding-right:16px;position:relative" )
                             ]
-                          ~value_signal:(Signal.map name_of ms) [] ]
-                  ; icon_ ~size:18 "selector"
-                      ~attrs:[ ("style", "margin-right:0") ] ])
+                          ~value_signal:(Signal.map name_of ms) ~grow:1. []
+                      ; icon_ ~size:16 "selector"
+                          ~attrs:[ ("style", "margin-right:0") ] ] ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st)
         ] ]
@@ -894,6 +923,7 @@ let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Ui_components.with_props [ P.Position, Ui_components.sv "relative" ]
     (column ~key:"ls-contents" ~gap:4 ~padding_horizontal:12
+       ~padding_vertical:4
        ~style_class:"sidebar-contents-container"
        ~data_attrs:
          [ ( "style"

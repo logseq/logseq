@@ -37,6 +37,8 @@ let topbar_btn key label on_click =
   button ~key:("tb-" ^ key) ~text:label
     ~style_class:"button cp__right-sidebar-settings-btn"
     ~background:"var(--ls-secondary-background-color)"
+    ~height:32 ~padding_horizontal:10 ~padding_vertical:4
+    ~corner_radius:6
     ~data_attrs:
       [ ( "style"
         , "white-space:nowrap;display:block;opacity:1;\
@@ -630,6 +632,7 @@ let inner st =
             ; reactive
                 (fun items ->
                   column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
+                    ~margin_left:4 ~margin_top:(-8)
                     ~style_class:"sidebar-item-list scrollbar-spacing"
                     ~data_attrs:
                       [ ( "style"

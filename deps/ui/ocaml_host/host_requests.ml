@@ -327,17 +327,20 @@ let set_named (e : env) (id : int) (name : string) (v : wire_value) =
   e.apply_batch { generation = 0; ops = [ op ] }
 
 let attrs_of (e : env) (id : int) : (string * string) list =
-  let raw =
-    match Lui_store.string_prop e.store id "attrs" with
-    | Some _ as s -> s
-    | None -> Lui_store.string_prop e.store id "data-attrs"
-  in
-  match Option.map J.from_string raw with
-  | Some (`Assoc kvs) ->
-    List.filter_map (fun (k, v) ->
-        match v with `String s -> Some (k, s) | _ -> None)
-      kvs
-  | _ -> []
+  match Lui_store.string_prop e.store id "attrs" with
+  | Some raw ->
+    (* put_attrs writes attrs as a JSON assoc; guard the parse anyway *)
+    (match (try J.from_string raw with Yojson.Json_error _ -> `Null) with
+     | `Assoc kvs ->
+       List.filter_map
+         (fun (k, v) -> match v with `String s -> Some (k, s) | _ -> None)
+         kvs
+     | _ -> [])
+  | None ->
+    (* data-attrs uses the \x1e/\x1f wire encoding, not JSON *)
+    (match Lui_store.string_prop e.store id "data-attrs" with
+     | Some raw -> data_attrs_decode raw
+     | None -> [])
 
 let put_attrs (e : env) (id : int) (attrs : (string * string) list) =
   let json =
