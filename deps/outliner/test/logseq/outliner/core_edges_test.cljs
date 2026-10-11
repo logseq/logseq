@@ -2,6 +2,7 @@
   "Cases of the outliner core that no other test checks: a change to any of
    these lines left every test passing."
   (:require [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
@@ -357,6 +358,30 @@
                                   (db-test/find-block-by-content @conn "target") {:sibling? true :outliner-op :paste})
     (is (nil? (db-test/find-block-by-content @conn "pic")))
     (is (some? (db-test/find-block-by-content @conn "plain")))))
+
+(deftest resolve-refs-dedup-cases
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "Existing"} :blocks []}])
+        db @conn
+        dedup #'outliner-core/resolve-refs-dedup
+        page-ref (fn [title] {:block/type "page" :block/title title
+                              :block/name (string/lower-case title) :block/uuid (random-uuid)})]
+    (testing "two refs to one new page create it once"
+      (let [[[r1 tx1] [r2 tx2]] (dedup db [(page-ref "Fresh") (page-ref "Fresh")] #{})]
+        (is (seq tx1))
+        (is (nil? tx2))
+        (is (= (:block/uuid r1) (:block/uuid r2)))))
+    (testing "#Movie and #movie are two classes"
+      (let [[[r1 tx1] [r2 tx2]] (dedup db [(page-ref "Movie") (page-ref "movie")] #{"movie"})]
+        (is (seq tx1))
+        (is (seq tx2))
+        (is (not= (:block/uuid r1) (:block/uuid r2)))))
+    (testing "a ref to an existing page reuses it"
+      (let [[[r tx]] (dedup db [(page-ref "Existing")] #{})]
+        (is (nil? tx))
+        (is (= (:block/uuid (db-test/find-page-by-title db "Existing")) (:block/uuid r)))))
+    (testing "a new journal ref creates a journal"
+      (let [[[_ tx]] (dedup db [(assoc (page-ref "Dec 16th, 2024") :block/type "journal")] #{})]
+        (is (some :block/journal-day tx))))))
 
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
