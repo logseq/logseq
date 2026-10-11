@@ -533,12 +533,13 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
     Db.save_block_title v.Wr.vu !value (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
-  Logseq_el.el ~style_class:"block-title-wrap p-2"
+  Logseq_el.el ~style_class:"block-title-wrap"
+    ~attrs:[ ("style", "padding:8px") ]
     [ Ui_components.with_props
         [ Lui_protocol.FontSize, Ui_components.sv "16px"
         ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
-        (input ~style_class:"cp__select-input w-full !p-1.5"
-           ~data_attrs:[ ("type", "text") ]
+        (input ~style_class:"cp__select-input" ~padding:6
+           ~data_attrs:[ ("style", "width:100%"); ("type", "text") ]
            ~text:v.Wr.vtitle ~autofocus:true ~submit_on_enter:true
            ~background:"transparent" ~border_width:0
            ~foreground:"var(--ls-secondary-text-color)"

@@ -15,5 +15,6 @@ let el ?key ~block ~display ~tex () : Lui_elements.t =
     ~tag:(if block then "div" else "span")
     ~style_class:(if block then "latex initial" else "latex-inline initial")
     ~id
-    [ Logseq_el.el ~tag:"span" ~style_class:"opacity-0" ~text:tex [] ]
+    [ Logseq_el.el ~tag:"span" ~attrs:[ ("style", "opacity:0") ]
+        ~text:tex [] ]
     context parent

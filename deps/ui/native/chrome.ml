@@ -159,7 +159,7 @@ let rtc_tx_text (r : Model.rtc) =
 let rtc_indicator (ms : Model.t Signal.signal) : t =
   reactive (fun (r : Model.rtc option) ->
       match r with
-      | None -> spacer ~key:"rtc-off" ~style_class:"hidden" []
+      | None -> box ~key:"rtc-off" ~display:`none []
       | Some r ->
           let open_ = Platform.online () && r.rtc_lock in
           let syncing = open_ && r.rtc_pending_server > 0 in
@@ -178,7 +178,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ^ (if queuing then " queuing" else "")
           in
           box ~key:"rtc" 
-            [ box ~key:"rtc-tx" ~style_class:"hidden"
+            [ box ~key:"rtc-tx" ~display:`none
                 ~accessibility_identifier:"rtc-tx"
                 ~data_attrs:[ ("data-testid", "rtc-tx") ]
                 [ Lui_elements.text ~key:"rtc-tx-v"
@@ -195,7 +195,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
    their DOM mounts hidden so emitters and the rtc-tx e2e element stay
    alive. *)
 let hidden_chrome (ms : Model.t Signal.signal) : t =
-  box ~key:"chrome-hidden" ~style_class:"hidden"
+  box ~key:"chrome-hidden" ~display:`none
     [ rtc_indicator ms; Left_sidebar_view.plugins_toolbar ms ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
@@ -205,16 +205,18 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
 let right_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__right-sidebar h-screen "
+      "cp__right-sidebar "
       ^ if m.right_sidebar_open then "open" else "closed")
-    (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+    (Ui_components.with_props
+       [ Lui_protocol.HeightViewport, Ui_components.fv 1. ]
+       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
        ~min_height:0
-       ~style_class:"cp__right-sidebar h-screen closed"
-       [ row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-           ~background:"muted"
-           ~style_class:"overflow-hidden shrink-0"
-           [ Right_sidebar_view.render ms ]
-       ])
+       ~style_class:"cp__right-sidebar closed"
+          [ Ui_components.with_props
+              [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+                 ~background:"muted"
+                 [ Right_sidebar_view.render ms ]) ]))
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
    is an overlay layer; on gpui it is the docked split's first pane —
@@ -224,23 +226,21 @@ let right_sidebar (ms : Model.t Signal.signal) =
 let left_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      (* h-full rides the signal too: class_signal replaces the static
-         ~style_class, so a class kept only on the static side never
-         lands — the pane then shrink-wraps and floats mid-window. *)
-      "cp__sidebar-left-layout h-full"
+      "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
-    (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-       ~min_height:0
-       ~style_class:"cp__sidebar-left-layout h-full"
-       [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
-          
-           [ column ~key:"ls-inner" ~grow:1. ~min_height:0
-               (* web: --left-sidebar-bg-color = --lx-gray-02 (the
-                  near-white mauve-02 tone, one step above the page);
-                  gpui `muted` is the matching surface tone. *)
-               ~background:"muted"
-               ~style_class:
-                 "left-sidebar-inner as-container overflow-hidden shrink-0"
+    (Ui_components.with_props
+       [ Lui_protocol.HeightViewport, Ui_components.fv 1. ]
+       (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+          ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+          [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
+             [ Ui_components.with_props
+                 [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+                 (column ~key:"ls-inner" ~grow:1. ~min_height:0
+                    (* web: --left-sidebar-bg-color = --lx-gray-02 (the
+                       near-white mauve-02 tone, one step above the page);
+                       gpui `muted` is the matching surface tone. *)
+                    ~background:"muted"
+                    ~style_class:"left-sidebar-inner as-container"
                [ row ~key:"ls-top" ~cross:`center ~gap:4
                    ~padding_horizontal:8 ~padding_vertical:4
                    ~style_class:"left-sidebar-top"
@@ -520,9 +520,9 @@ let not_found_page : t =
      fixed-overlay positioning the inline style used to *)
   column ~key:"nf-full" ~main:`center ~cross:`center
     ~style_class:"cp__not-found"
-    [ heading ~key:"nf-h1" ~level:1 ~style_class:"text-6xl font-bold"
+    [ heading ~key:"nf-h1" ~level:1 ~font_size:"3.75rem" ~font_weight:700
         ~value:"404" []
-    ; heading ~key:"nf-h2" ~level:2 ~style_class:"text-2xl font-semibold"
+    ; heading ~key:"nf-h2" ~level:2 ~font_size:"1.5rem" ~font_weight:600
         ~value:(I18n.t "page/not-found-title") []
     ; paragraph ~key:"nf-p"
         ~value:(I18n.t "page/not-found-desc") []

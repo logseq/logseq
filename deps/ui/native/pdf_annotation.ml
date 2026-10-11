@@ -78,7 +78,7 @@ let area_display (b : Model.block) context : Lui_elements.t =
                           []
                       ]
                   ; D.el ~key:"hl-img" ~tag:"img"
-                      ~style_class:"w-full"
+                      ~data_attrs:[ ("style", "width:100%") ]
                       ~attrs:
                         [ ("src", r.src)
                         ; ( "id"

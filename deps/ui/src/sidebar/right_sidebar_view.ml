@@ -236,9 +236,7 @@ let item_title (it : Sidebar_state.item) =
       in
       row ~key:"pt" ~style_class:"page-title" ~cross:`center ~gap:4
         (icon_els
-        @ [ text
-              ~style_class:"overflow-hidden text-ellipsis"
-              ~value:it.title []
+        @ [ text ~text_overflow:"ellipsis" ~value:it.title []
           ])
   | [], "contents" ->
       (* cljs: (icon "list-details") + "Contents" *)
@@ -432,7 +430,10 @@ let sidebar_props_row st (it : Sidebar_state.item) =
           box ~key:("props-" ^ it.key)
             [ column ~gap:8
                 (button ~variant:`ghost ~size:`sm
-                   ~style_class:"ui__button text-muted-foreground"
+                   ~style_class:"ui__button"
+                   ~foreground:
+                     "var(--ls-secondary-text-color, \
+                      hsl(var(--muted-foreground)))"
                    ~text:
                      (t
                         (if collapsed then "page/open-properties"
@@ -530,10 +531,13 @@ let item_body st idx (it : Sidebar_state.item) =
        | "search" | "shortcut-settings" -> None
        | _ -> Some 8)
     [ column ~key:("wrap-" ^ it.key) ~grow:1.
-        ~style_class:"page relative cp__page-inner-wrap"
-        ~data_attrs:[ ("style", "margin:0 12px 20px") ]
-        [ column ~key:("inner-" ^ it.key) ~gap:16
-            ~style_class:"relative page-inner"
+        ~style_class:"page cp__page-inner-wrap"
+        ~data_attrs:
+          [ ("style", "position:relative;margin:0 12px 20px") ]
+        [ Ui_components.with_props
+            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            (column ~key:("inner-" ^ it.key) ~gap:16
+               ~style_class:"page-inner"
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
             ((match it.Sidebar_state.kind with
               | "page-graph" ->
@@ -541,7 +545,7 @@ let item_body st idx (it : Sidebar_state.item) =
                        explicit empty state the #/graph route shows *)
                     column ~key:"pg-empty" ~cross:`center ~main:`center
                       ~padding_vertical:64
-                      [ box ~key:"pg-i" ~style_class:"mb-4"
+                      [ box ~key:"pg-i" ~margin_bottom:16
                           [ icon_ ~size:48 "hierarchy" ]
                       ; text ~key:"pg-t"
                           ~value:(t "graph.page/title") []
@@ -559,8 +563,10 @@ let item_body st idx (it : Sidebar_state.item) =
                  ~data_attrs:[ ("style", "overflow:hidden") ]
                  [ (* data-cid is read by editor_actions' [data-cid]
                       closest queries *)
-                   box ~key:("pbin-" ^ it.key)
-                     ~style_class:"page-blocks-inner relative"
+                   Ui_components.with_props
+                     [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                     (box ~key:("pbin-" ^ it.key)
+                        ~style_class:"page-blocks-inner"
                      ~data_attrs:[ ("data-cid", "sidebar") ]
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
@@ -569,7 +575,7 @@ let item_body st idx (it : Sidebar_state.item) =
                             ~flags:(fun ctx ->
                               Signal.constant ctx.Lui_ui.ui_scheduler
                                 (has_children, indented))
-                        ])
+                        ]))
                  ]
              ]
             (* linked references sit inside .page-inner in cljs *)
@@ -577,7 +583,7 @@ let item_body st idx (it : Sidebar_state.item) =
                | "page", Some uuid ->
                    [ Page.references_view ~page_uuid:uuid
                        ~has_refs:(it.linked_refs <> []) () ]
-               | _ -> []))
+               | _ -> [])))
         ]
     ]
 
@@ -592,10 +598,12 @@ let sidebar_item st idx (it : Sidebar_state.item) =
        ^ if it.Sidebar_state.collapsed then " collapsed" else "")
     ~accessibility_identifier:("sbi-" ^ it.Sidebar_state.key)
     ~data_attrs:[ ("style", "position:relative") ]
-    [ column ~key:("wrap-" ^ it.key) ~grow:1. ~style_class:"relative"
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (column ~key:("wrap-" ^ it.key) ~grow:1.
         [ item_header st idx it
         ; item_body st idx it
-        ; item_menu_host st it ]
+        ; item_menu_host st it ])
     ]
 
 (* ---------- inner ---------- *)

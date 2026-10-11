@@ -256,13 +256,13 @@ let body (_ms : Model.t Signal.signal) : t =
   let members_src =
     Logseq_el.own ctx (Signal.map fst (Signal.value members_st))
   in
-  column ~key:"collab" ~padding:8 ~style_class:"-mb-8"
-    [ heading ~key:"collab-h" ~level:1
-        ~style_class:"text-3xl -mt-2 -ml-2"
+  column ~key:"collab" ~padding:8 ~margin_bottom:(-32)
+    [ heading ~key:"collab-h" ~level:1 ~font_size:"1.875rem"
+        ~data_attrs:[ ("style", "margin-top:-8px;margin-left:-8px") ]
         ~value:(T.t "collaboration/members") []
     ; column ~key:"collab-w"
-        ~style_class:"panel-wrap mb-8"
-        [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
+        ~style_class:"panel-wrap" ~margin_bottom:32
+        [ column ~key:"collab-m" ~gap:8 ~margin_top:16
             [ column ~key:"collab-users" ~gap:4
                
                 [ keyed
@@ -280,7 +280,7 @@ let body (_ms : Model.t Signal.signal) : t =
                              ~default:"")
                         m ~refresh)
                 ]
-            ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
+            ; column ~key:"collab-form" ~gap:16 ~margin_top:16
                 [ box ~key:"collab-inv"
                     [ input ~key:"collab-in" ~style_class:"ui__input"
                         ~text_signal:(Signal.value email_st)
@@ -336,7 +336,7 @@ let widget (ms : Model.t Signal.signal) : t =
   in
   (fragment
      [ if_ ~test:(Logseq_el.own ctx (Signal.map not vis_sig))
-         (box ~key:"collab-off" ~style_class:"hidden" [])
+         (box ~key:"collab-off" ~display:`none [])
      ; if_ ~test:vis_sig
          (row ~key:"collab" ~gap:4 ~cross:`center
             [ button ~key:"collab-btn" ~size:`icon

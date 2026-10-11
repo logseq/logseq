@@ -253,8 +253,7 @@ let svg_arrow_right_v2 () =
     ; ("view-box", "0 0 128 128")
     ; ("fill", "currentColor")
     ; ("display", "inline-block")
-    ; ("class", "h-3 w-3")
-    ; ("style", "margin-top:-3px") ]
+    ; ("style", "margin-top:-3px;width:0.75rem;height:0.75rem") ]
     [ node "path"
         [ ( "d"
           , "M99.069 64.173c0 2.027-.77 4.054-2.316 5.6l-55.98 \
@@ -423,9 +422,9 @@ and render_highlights_panel (t : t) (host : D.el) : unit =
         | Some id, Some a when id = a -> " active"
         | _ -> "");
       let h6 = Web_dom.create_element "h6" in
-      Web_dom.el_set_class h6 "flex";
+      Web_dom.el_set_attr h6 "style" "display:flex";
       let sp = Web_dom.create_element "span" in
-      Web_dom.el_set_class sp "flex items-center";
+      Web_dom.el_set_attr sp "style" "display:flex;align-items:center";
       let sm = Web_dom.create_element "small" in
       (match hl.hl_color with
        | Some c -> Web_dom.el_set_attr sm "data-color" c
@@ -564,7 +563,8 @@ and render_finder_state (_t : t) (f : finder) : unit =
     match f.f_status with
     | Some s when s <> 1 ->
         let d = Web_dom.create_element "div" in
-        Web_dom.el_set_class d "flex px-3 py-3 text-xs opacity-90";
+        Web_dom.el_set_attr d "style"
+          "display:flex;padding:12px;font-size:0.75rem;opacity:0.9";
         let cur' = max f.f_cur f.f_cur in
         let q = if f.f_query = "" then f.f_val else f.f_query in
         Web_dom.el_set_text_content d
@@ -575,7 +575,8 @@ and render_finder_state (_t : t) (f : finder) : unit =
         Web_dom.el_append_child f.result_inner d
     | Some 1 ->
         let d = Web_dom.create_element "div" in
-        Web_dom.el_set_class d "px-3 py-3 text-xs opacity-80 text-red-600";
+        Web_dom.el_set_attr d "style"
+          "padding:12px;font-size:0.75rem;opacity:0.8;color:#dc2626";
         Web_dom.el_set_text_content d (I18n.t "pdf/not-found");
         Web_dom.el_append_child f.result_inner d
     | _ -> ()
@@ -584,8 +585,9 @@ and render_finder_state (_t : t) (f : finder) : unit =
 and ghost_btn ?(extra = "") ~icon ~title ~onclick () : D.el =
   let b = Web_dom.create_element "button" in
   Web_dom.el_set_class b
-    (Ui_parts.ghost_btn_cls ~extra:("h-6 text-xs rounded px-3 " ^ extra)
-       ());
+    (Ui_parts.ghost_btn_cls ~extra ());
+  Web_dom.el_set_attr b "style"
+    "height:24px;font-size:0.75rem;border-radius:4px;padding:0 12px";
   Web_dom.el_set_attr b "type" "button";
   Web_dom.el_set_attr b "title" title;
   Web_dom.el_append_child b (ticon icon);

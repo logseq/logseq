@@ -51,6 +51,21 @@ let with_props binds (elem : t) : t =
     binds;
   node
 
+(* shui ghost-button interaction/layout contract as typed props —
+   pairs with Ui_parts.ghost_btn_cls's semantic classes *)
+let ghost_wrap el =
+  with_props
+    [ P.WhiteSpace, sv "nowrap"; P.Cursor, sv "pointer"
+    ; P.UserSelect, sv "none"; P.FontSize, sv "0.875rem"
+    ; P.FontWeight, iv 500
+    ; P.HoverBackground, sv "hsl(var(--secondary) / 0.7)"
+    ; P.HoverForeground, sv "hsl(var(--secondary-foreground))"
+    ; P.FocusShadow, sv
+        "0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--background))"
+    ; P.DisabledOpacity, fv 0.5; P.PressedOpacity, fv 0.8
+    ; P.Transition, sv "background-color 0.15s, color 0.15s" ]
+    el
+
 (* Post-mount reactive string-prop binds (state channels + cursor on
    the cmdk item rows). *)
 let with_signal_props binds (elem : t) : t =

@@ -145,11 +145,15 @@ let area_display (b : Model.block) context : t =
              width — then it fills *)
           let container_cls =
             match r.width with
-            | Some _ -> "asset-container w-full"
+            | Some _ -> "asset-container"
             | None -> "asset-container"
           in
           box ~key:"hl-a" ~style_class:"hl-area" ?width:r.width
             [ box ~key:"hl-ac" ~style_class:container_cls
+                ~data_attrs:
+                  (match r.width with
+                   | Some _ -> [ ("style", "width:100%") ]
+                   | None -> [])
                   [ box ~key:"hl-ab" ~style_class:"asset-action-bar"
                       [ area_btn ~key:"hl-ref" ~title:(I18n.t "asset/ref-block")
                           ~icon:"file-symlink" ~onclick:(fun () ->
@@ -175,7 +179,7 @@ let area_display (b : Model.block) context : t =
                       ~accessibility_identifier:
                         ("hl-area-img-"
                         ^ Option.value b.Model.block_uuid ~default:"")
-                      ~style_class:"w-full" []
+                      ~data_attrs:[ ("style", "width:100%") ] []
                   ]
               ])
     (Signal.value (st))

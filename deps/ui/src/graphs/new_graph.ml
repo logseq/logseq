@@ -104,7 +104,7 @@ let body (_ms : Model.t Signal.signal) : t =
                         ])
                  ]
              ]
-         else box ~key:"ng-no-rtc" ~style_class:"hidden" [])
+         else box ~key:"ng-no-rtc" ~display:`none [])
       ; Ui_components.with_props
           [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
           ; Lui_protocol.FontWeight, Ui_components.iv 500

@@ -179,7 +179,8 @@ let lp_menu st =
          ~padding_horizontal:8 ~padding_vertical:6
          ~style_class:"ui__dropdown-menu-item"
          ~data_attrs:[ ("role", "menuitem") ]
-         ([ icon_ ~cls:"pr-1" icon_name; text ~value:label [] ]
+         ([ icon_ ~attrs:[ ("style", "padding-right:4px") ] icon_name
+          ; text ~value:label [] ]
          @ (match caps with [] -> [] | _ -> [ menu_sc caps ])))
   in
   match !Sidebar_state.lp_ctx with
@@ -444,8 +445,14 @@ let nav_items ~active_route (checked, tag_titles) =
                  ~more:(Lui_elements.dyn
                           (fun (n : int) ->
                             if n > 0 then
-                              text ~style_class:"ml-1 inline-block py-0.5 px-3 text-xs font-medium rounded-full"
-                                ~value:(string_of_int n) []
+                              text ~value:(string_of_int n)
+                                ~data_attrs:
+                                  [ ( "style"
+                                    , "margin-left:4px;display:inline-block;\
+                                       padding:2px 12px;font-size:0.75rem;\
+                                       font-weight:500;border-radius:9999px" )
+                                  ]
+                                []
                             else Logseq_el.nothing)
                           (Cards_state.Due_count.signal ()))
                  ()))
@@ -573,8 +580,11 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
      navigate; shift opens in the right sidebar). The data-lp-* attrs
      still feed the document-level contextmenu handler in
      sidebar_state. *)
-  column ~key ~style_class:li_class
-    ~on_press_detail:(fun ev ->
+  Ui_components.with_props
+    ([ Lui_protocol.FontWeight, Ui_components.iv 500 ]
+     @ if recent then [ Lui_protocol.UserSelect, Ui_components.sv "none" ] else [])
+    (column ~key ~style_class:li_class
+       ~on_press_detail:(fun ev ->
       match ev with
       | Lui_protocol.PressDetail (_, d) ->
           let cls = d.Lui_protocol.target_class in
@@ -635,18 +645,34 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
-               []
+               [] ])
         (* cljs .sidebar-page-actions dots button inside .link-item —
            its class hooks (sidebar-page-actions, ls-icon-dots) still
            reach the row's target_class check *)
-        ; button ~variant:`ghost ~size:`icon
-            ~label:(t "ui/show-more")
-            ~height:28 ~padding_vertical:4 ~corner_radius:4 ~padding_horizontal:6 ~style_class:"active:opacity-80 as-ghost cursor-pointer disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 gap-1 hover:bg-secondary/70 hover:text-secondary-foreground select-none sidebar-page-actions absolute !bg-transparent top-0 scale-75 opacity-40 hover:opacity-80 active:opacity-100 text-sm ui__button"
-            (* cljs [:i.relative {:style {:top "4px"}}] — the top offset
-               rides a stylesheet rule now *)
-            [ Icons.icon ~size:18. ~cls:"relative" "dots" ]
+        ; Ui_components.with_props
+            [ P.Position, Ui_components.sv "absolute"
+            ; P.InsetTop, Ui_components.fv 0.
+            ; P.Cursor, Ui_components.sv "pointer"
+            ; P.UserSelect, Ui_components.sv "none"
+            ; P.Opacity, Ui_components.fv 0.4
+            ; P.HoverOpacity, Ui_components.fv 0.8
+            ; P.PressedOpacity, Ui_components.fv 1.
+            ; P.DisabledOpacity, Ui_components.fv 0.5
+            ; ( P.HoverBackground
+              , Ui_components.sv "hsl(var(--secondary) / 0.7)" )
+            ; ( P.HoverForeground
+              , Ui_components.sv "hsl(var(--secondary-foreground))" )
+            ; ( P.FocusShadow
+              , Ui_components.sv "0 0 0 2px hsl(var(--ring))" ) ]
+            (button ~variant:`ghost ~size:`icon
+               ~label:(t "ui/show-more")
+               ~height:28 ~padding_vertical:4 ~corner_radius:4
+               ~padding_horizontal:6
+               ~style_class:"sidebar-page-actions ui__button"
+               ~data_attrs:
+                 [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
+               [ Icons.icon ~size:18. "dots" ])
         ])
-    ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always
@@ -725,9 +751,11 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                  else
                    box ~key:(key ^ "-bd") ~style_class:"bd"
                      ~data_attrs:[ ("style", "overflow-y:auto") ]
-                     [ list ~key:(key ^ "-ul") ~style_class:ul_class
+                     [ (list ~key:(key ^ "-ul") ~style_class:ul_class
                          ~data_attrs:
-                           [ ("style", "list-style:none;padding:0;margin:0") ]
+                           [ ( "style"
+                             , "list-style:none;padding:0;margin:0;\
+                                font-size:0.875rem" ) ]
                          (List.map
                             (fun p ->
                               page_item_el st p ~li_class ~recent
@@ -735,7 +763,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                   (key ^ "-"
                                    ^ Option.value p.Model.page_uuid
                                        ~default:p.Model.page_title))
-                            ps) ])
+                            ps)) ])
                items_sig
            ]
        ])
@@ -743,15 +771,15 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
 let favorites_group st =
   content_group st ~key:"fav" ~class_:"favorites" ~label:(t "sidebar.left/favorites")
     ~items_sig:(Signal.value st.Sidebar_state.favorites)
-    ~ul_class:"favorites text-sm" ~always_bd:false
-    ~li_class:"favorite-item font-medium" ~recent:false
+    ~ul_class:"favorites" ~always_bd:false
+    ~li_class:"favorite-item" ~recent:false
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
     ~label:(t "sidebar.left/recent-pages")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
-    ~ul_class:"text-sm" ~always_bd:true
-    ~li_class:"recent-item select-none font-medium" ~recent:true
+    ~ul_class:"" ~always_bd:true
+    ~li_class:"recent-item" ~recent:true
 
 (* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
    in the header .ui-items-container. cljs gates it on (seq toolbar

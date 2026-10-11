@@ -94,16 +94,25 @@ let ratings =
 let rating_btn st i (r, label_key, sc, color) =
   let id = "card-" ^ r in
   row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
-    [ button ~key:"b" ~accessibility_identifier:id
-        ~style_class:(id ^ " !px-2 !py-1 bg-primary/5 hover:bg-primary/10 \
-                       border-primary opacity-90 hover:opacity-100 " ^ color)
-        ~label:(t_ label_key)
-        ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
-        ~variant:`outline ~size:`sm
-        ~on_press:(fun _ -> Cards_state.rate st r)
-        [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
-            [ text ~value:(t_ label_key) []
-            ; kbd ~style_class:"scale-90 shui-shortcut-key" ~value:sc [] ] ]
+    [ Ui_components.with_props
+        [ ( Lui_protocol.HoverBackground
+          , Ui_components.sv "hsl(var(--primary) / 0.1)" )
+        ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+        ; Lui_protocol.Opacity, Ui_components.fv 0.9 ]
+        (button ~key:"b" ~accessibility_identifier:id
+           ~padding_horizontal:8 ~padding_vertical:4
+           ~background:"hsl(var(--primary) / 0.05)"
+           ~border_color:"hsl(var(--primary))" ~border_width:1
+           ~style_class:(id ^ " " ^ color)
+           ~label:(t_ label_key)
+           ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
+           ~variant:`outline ~size:`sm
+           ~on_press:(fun _ -> Cards_state.rate st r)
+           [ row ~key:"inner" ~gap:4 ~cross:`center
+               [ text ~value:(t_ label_key) []
+               ; kbd ~style_class:"shui-shortcut-key"
+                   ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                   ~value:sc [] ] ])
     ; text ~key:"due" ~style_class:"ls-desc"
         ~value:(reactive
                   (fun (ls : string list) ->
@@ -116,7 +125,8 @@ let info_btn st =
   fun ctx parent ->
   (box ~key:"info-wrap"
      [ button ~key:"info" ~variant:`ghost ~size:`sm
-         ~style_class:"!px-0 text-muted-foreground !h-4"
+         ~padding_horizontal:0 ~height:16
+         ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
          ~icon:`info ~label:"rating info"
          ~on_press:(fun _ -> Cards_state.toggle_info st)
          []
@@ -130,8 +140,8 @@ let info_btn st =
                (List.map
                   (fun (_, label_key, _, _) ->
                     let desc_key = label_key ^ "-desc" in
-                    column ~key:("info-" ^ label_key) ~style_class:"p-4"
-                      [ text ~style_class:"font-medium"
+                    column ~key:("info-" ^ label_key) ~padding:16
+                      [ text ~font_weight:500
                           ~value:(t_ label_key) []
                       ; text ~value:(t_ desc_key) [] ])
                   ratings))
@@ -194,21 +204,28 @@ let rec card_view st b phase =
         ~margin_top:32
         ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
         [ (if np = "show-cloze" || np = "show-answer" then
-             button ~key:"answers" ~accessibility_identifier:"card-answers"
-               ~style_class:"card-answers !px-2 !py-1 bg-primary/5 \
-                             hover:bg-primary/10 border-primary \
-                             opacity-90 hover:opacity-100"
+             Ui_components.with_props
+               [ ( Lui_protocol.HoverBackground
+                 , Ui_components.sv "hsl(var(--primary) / 0.1)" )
+               ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+               ; Lui_protocol.Opacity, Ui_components.fv 0.9 ]
+               (button ~key:"answers" ~accessibility_identifier:"card-answers"
+                  ~padding_horizontal:8 ~padding_vertical:4
+                  ~background:"hsl(var(--primary) / 0.05)"
+                  ~border_color:"hsl(var(--primary))" ~border_width:1
+                  ~style_class:"card-answers"
                ~variant:`outline ~size:`sm
                ~label:(if np = "show-answer" then t_ "flashcard.review/show-answers"
                        else t_ "flashcard.review/show-clozes")
                ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "s")
                ~on_press:(fun _ -> Cards_state.advance_phase st)
-               [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
+               [ row ~key:"inner" ~gap:4 ~cross:`center
                    [ text ~value:(if np = "show-answer"
                                   then t_ "flashcard.review/show-answers"
                                   else t_ "flashcard.review/show-clozes") []
-                   ; kbd ~style_class:"scale-90 shui-shortcut-key"
-                       ~value:"s" [] ] ]
+                   ; kbd ~style_class:"shui-shortcut-key"
+                       ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                       ~value:"s" [] ] ])
            else rating_buttons st)
         ]
     ]

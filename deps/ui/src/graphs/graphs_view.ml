@@ -69,15 +69,18 @@ let graph_row repo : t =
     [ column ~key:("grl-" ^ repo)
         [ row ~key:("grt-" ^ repo) ~gap:4 ~cross:`center
             (* e2e: div[data-testid='logseq_db_<n>'] span:has-text('<n>') *)
-            [ text ~key:("grn-" ^ repo) ~style_class:"cursor-pointer"
-                ~data_attrs:[ ("aria-label", "logseq/graphs/" ^ short_name repo) ]
+            [ text ~key:("grn-" ^ repo)
+                ~data_attrs:
+                  [ ("style", "cursor:pointer")
+                  ; ("aria-label", "logseq/graphs/" ^ short_name repo) ]
                 ~value:(short_name repo)
                 ~on_press:(fun _ ->
                   ignore (Graphs_ops.navigate_journal repo))
                 []
             ]
         ; text ~key:("grs-" ^ repo) ~as_:`Small
-            ~style_class:"text-muted-foreground"
+            ~foreground:
+              "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
             ~value:
               (T.last_opened_at
                  (match Graphs_ops.meta_last_seen repo with
@@ -149,7 +152,8 @@ let remote_row (name, uuid, e2ee, role) : t =
     ~data_attrs:[ ("data-testid", "logseq_db_" ^ name) ]
     [ column ~key:("rrl-" ^ uuid)
         [ row ~key:("rrt-" ^ uuid) ~gap:4 ~cross:`center
-            [ text ~key:("rrn-" ^ uuid) ~style_class:"cursor-pointer"
+            [ text ~key:("rrn-" ^ uuid)
+                ~data_attrs:[ ("style", "cursor:pointer") ]
                 ~value:name
                 ~on_press:(fun _ ->
                   (* cljs: clicking a merged remote row with a local

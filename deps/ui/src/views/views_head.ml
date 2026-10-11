@@ -914,7 +914,7 @@ let ref_filter_dialog inst anchor =
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
   let lc s = String.lowercase_ascii (Str_util.trim s) in
   P.show_custom ~anchor ~align_end:true
-    ~cls:"ui__dropdown-menu-content p-4"
+    ~cls:"ui__dropdown-menu-content"
     (fun context parent ->
       let sched = context.Lui_ui.ui_scheduler in
       let query = Signal.state sched "" in
@@ -1019,7 +1019,7 @@ let ref_filter_dialog inst anchor =
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
           combined
       in
-      (column ~style_class:"ls-filters filters"
+      (column ~style_class:"ls-filters filters" ~padding:16
          ~min_width:320 ~max_width:500
          [ row ~cross:`start ~gap:16
              ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]

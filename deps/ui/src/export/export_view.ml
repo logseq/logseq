@@ -206,7 +206,7 @@ let png_preview ctx =
               (reactive
                  (fun (st : S.t) -> Option.value st.png_url ~default:"")
                  (st_sig ctx))
-            ~style_class:"my-4" [] ]
+            ~margin_vertical:16 [] ]
     ; if_
         ~test:
           (Logseq_el.own ctx

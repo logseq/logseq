@@ -524,7 +524,7 @@ let asset_img uuid (b : Model.block) file : t =
     ~accessibility_identifier:("asset-img-" ^ uuid)
     ~url:src ~alt:b.Model.block_title ~loading:`lazy_
     ~referrer_policy:`no_referrer ~width:w ?height:h
-    ~style_class:"rounded-sm relative"
+    ~data_attrs:[ ("style", "border-radius:2px;position:relative") ]
     ~on_load:(fun _ -> measure_on_load uuid b)
     []
 

@@ -309,11 +309,17 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
       let head () =
         Some
           (Logseq_el.el
-             ~style_class:
-               "flex flex-row justify-between gap-1 items-center px-1 pb-1 border-b"
+             ~attrs:
+               [ ( "style"
+                 , "display:flex;justify-content:space-between;gap:4px;\
+                    align-items:center;padding:0 4px 4px;\
+                    border-bottom:1px solid var(--lui-c-border)" ) ]
              [ Logseq_el.el ~tag:"label"
-                 ~style_class:"opacity-50 cursor-pointer select-none text-sm"
-                 ~attrs:[ ("for", "built-in") ]
+                 ~attrs:
+                   [ ("for", "built-in")
+                   ; ( "style"
+                     , "opacity:0.5;cursor:pointer;user-select:none;\
+                        font-size:0.875rem" ) ]
                  ~text:I.builder_show_builtin []
              ; Logseq_el.el ~tag:"input"
                  ~attrs:
@@ -443,10 +449,12 @@ let full_text_picker inst ~tree ~loc ~anchor =
   let value = ref "" in
   ignore
     (P.show_custom ~anchor ~cls:"query-builder-picker"
-       (input ~style_class:"form-input block sm:text-sm sm:leading-5"
+       (input ~style_class:"form-input"
           ~accessibility_identifier:"query-builder-search"
           ~placeholder:I.type_to_search
-          ~data_attrs:[ ("aria-label", I.type_to_search) ]
+          ~data_attrs:
+            [ ("aria-label", I.type_to_search)
+            ; ("style", "display:block;font-size:0.875rem;line-height:1.25rem") ]
           ~autofocus:true ~submit_on_enter:true
           ~on_input:(function
             | Lui_protocol.TextChanged (_, s) -> value := s
