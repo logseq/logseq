@@ -385,7 +385,7 @@ let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   box ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~min_height:24
+    ~min_height:24 ~main:`center
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -549,7 +549,12 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                           ; Wire.Int dbid ] ]))
                (Ui_components.with_props
                   [ Lui_protocol.UserSelect, Ui_components.sv "none"
-                  ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                  ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                  ; (* .block-tag:hover reveals the x on the web; the
+                       closest per-element channel keeps it hidden at
+                       rest and reveals it under the pointer *)
+                    Lui_protocol.Opacity, Ui_components.fv 0.
+                  ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
                   (text ~key:("tx-" ^ key)
                      ~style_class:"tag-x"
                      ~data_attrs:
