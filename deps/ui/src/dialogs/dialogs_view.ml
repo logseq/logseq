@@ -52,7 +52,12 @@ let dialog_spec name =
       ( 0
       , "box-sizing:border-box;width:min(1024px, calc(100vw - 2rem));\
          max-width:min(64rem, calc(100vw - 2rem));overflow:hidden"
-      , [ Lui_protocol.MaxWidth, Lui_protocol.IntValue 1024
+      , [ ( Lui_protocol.WidthValue
+          , Lui_protocol.IntValue
+              (int_of_float
+                 (Float.min 1024.
+                    (Ui_services.dom_viewport_width () -. 32.))) )
+        ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1024
         ; Lui_protocol.MaxWidthViewport, Lui_protocol.FloatValue 0.97 ] )
   | "plugins" ->
       ( 24
