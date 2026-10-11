@@ -268,7 +268,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 0
   in
-  box ~key:("ctrlw-" ^ uuid) ~height:24
+  row ~key:("ctrlw-" ^ uuid) ~height:24 ~cross:`center
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~data_attrs:
       (heading_attrs
@@ -327,7 +327,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                        cs ])
             ])
         ])
-    ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
+    ; row ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap" ~cross:`center
         ~foreground:"var(--ls-primary-text-color)"
         ~data_attrs:
           [ ( "style"
@@ -341,22 +341,12 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
+               ~main:`center ~cross:`center ~corner_radius:8
+               ~width:(if order_list then 22 else if icon_size > 0 then icon_size else 16)
+               ~min_width:(if order_list then 22 else if icon_size > 0 then icon_size else 16)
+               ~height:(if order_list then 16 else if icon_size > 0 then icon_size else 16)
                ~data_attrs:
-                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ]
-                 @ [ ( "style"
-                     , "display:inline-flex;align-items:center;\
-                        justify-content:center;align-self:center;\
-                        flex-shrink:0;border-radius:50%;line-height:1;\
-                        vertical-align:middle"
-                       ^
-                       if order_list then
-                         ";width:1.4em;min-width:1.4em;white-space:nowrap;\
-                          padding-left:3px;height:1em"
-                       else if icon_size > 0 then
-                         Printf.sprintf ";width:%dpx;min-width:%dpx;\
-                          height:%dpx" icon_size icon_size icon_size
-                       else ";width:1em;min-width:1em;height:1em" )
-                   ])
+                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None ->
@@ -367,15 +357,11 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                           else "bullet")
                         (box ~key:("b-" ^ uuid)
                            ~transition:"transform 0.2s"
+                           ~width:6 ~height:6 ~corner_radius:999
+                           ~opacity:0.8
+                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
-                             [ ("data-blockid", uuid)
-                             ; (* see the container note above — the dot
-                                  is intrinsic geometry, not a class
-                                  lookup *)
-                               ( "style"
-                               , "width:6px;height:6px;flex-shrink:0;border-radius:999px;opacity:0.8;background:var(--lx-gray-08, var(--ls-block-bullet-color))"
-                               )
-                             ]
+                             [ ("data-blockid", uuid) ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
                           [ label ~key:("ol-" ^ uuid)
