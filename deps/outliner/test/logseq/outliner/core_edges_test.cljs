@@ -6,6 +6,48 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
+(deftest orphaned-page-refs-retract-only-the-page-no-longer-referenced
+  ;; a block's title held [[Kept]] [[Dropped]] (by uuid, as the editor saves
+  ;; it), both empty pages referenced only there; the new title keeps Kept
+  (let [block-uuid (random-uuid)
+        kept-uuid (random-uuid)
+        dropped-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks [{:page {:block/title "Kept" :block/uuid kept-uuid} :blocks []}
+                                               {:page {:block/title "Dropped" :block/uuid dropped-uuid} :blocks []}
+                                               {:page {:block/title "page1"}
+                                                :blocks [{:block/title (str "[[" kept-uuid "]] [[" dropped-uuid "]]")
+                                                          :block/uuid block-uuid}]}])
+        db @conn
+        block (d/entity db [:block/uuid block-uuid])
+        kept (d/entity db [:block/uuid kept-uuid])
+        dropped (d/entity db [:block/uuid dropped-uuid])
+        retracts (fn [new-refs]
+                   (let [txs (atom [])]
+                     (#'outliner-core/remove-orphaned-page-refs! db block txs [kept dropped] new-refs)
+                     @txs))]
+    (testing "a new ref given by its db id alone keeps its page"
+      (is (= [[:db/retractEntity (:db/id dropped)]] (retracts [{:db/id (:db/id kept)}]))))
+    (testing "a new ref given by its name keeps its page"
+      (is (= [[:db/retractEntity (:db/id dropped)]] (retracts [{:block/name "kept"}]))))
+    (testing "unchanged refs retract nothing"
+      (let [txs (atom [])]
+        (#'outliner-core/remove-orphaned-page-refs! db block txs [kept dropped] [kept dropped])
+        (is (empty? @txs))))))
+
+(deftest orphaned-page-refs-keep-a-page-another-block-references
+  (let [block-uuid (random-uuid)
+        shared-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks [{:page {:block/title "Shared" :block/uuid shared-uuid} :blocks []}
+                                               {:page {:block/title "page1"}
+                                                :blocks [{:block/title (str "[[" shared-uuid "]]") :block/uuid block-uuid}
+                                                         {:block/title (str "also [[" shared-uuid "]]")}]}])
+        db @conn
+        block (d/entity db [:block/uuid block-uuid])
+        shared (d/entity db [:block/uuid shared-uuid])
+        txs (atom [])]
+    (#'outliner-core/remove-orphaned-page-refs! db block txs [shared] [])
+    (is (empty? @txs))))
+
 (defn- children-titles
   [db block]
   (map :block/title (sort-by :block/order (:block/_parent (d/entity db (:db/id block))))))
