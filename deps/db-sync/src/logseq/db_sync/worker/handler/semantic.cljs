@@ -556,7 +556,8 @@
       (if (or (not (page? page)) (not (non-blank-string? (:title body))))
         (http/bad-request "invalid page-id or title")
         (do
-          (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)})
+          (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)}
+                                     :encrypted-title? e2ee?)
           (broadcast-change! self)
           (http/json-response nil (assoc (block-response page) :title (:title body))))))
 
@@ -750,7 +751,8 @@
       (if (or (not (tag? tag)) (not (non-blank-string? (:title body))))
         (http/bad-request "invalid tag-id or title")
         (do
-          (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)})
+          (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)}
+                                     :encrypted-title? e2ee?)
           (broadcast-change! self)
           (http/json-response nil (assoc (tag-response tag) :title (:title body))))))
 
@@ -908,7 +910,7 @@
       (http/not-found))))
 
 (defn- handle-properties-and-search
-  [{:keys [^js self request ^js url conn db handler path-params]}]
+  [{:keys [^js self request ^js url conn db handler path-params e2ee?]}]
   (case handler
 
     :semantic/properties-list
@@ -924,7 +926,7 @@
                         conn nil
                         {:logseq.property/type (keyword (or (:type body) "default"))
                          :db/cardinality (keyword (or (:cardinality body) "db.cardinality/one"))}
-                        {:property-name (:title body)})]
+                        {:property-name (:title body) :e2ee? e2ee?})]
           (broadcast-change! self)
           (http/json-response nil (property-response property) 201))))
 
@@ -943,7 +945,7 @@
                        (:cardinality body) (assoc :db/cardinality (keyword (:cardinality body))))
               updated (outliner-property/upsert-property!
                        conn (:db/ident property) schema
-                       (cond-> {} (:title body) (assoc :property-name (:title body))))]
+                       (cond-> {:e2ee? e2ee?} (:title body) (assoc :property-name (:title body))))]
           (broadcast-change! self)
           (http/json-response nil (property-response updated)))))
 

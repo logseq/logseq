@@ -471,7 +471,8 @@
 
 (extend-type Entity
   otree/INode
-  (-save [this *txs-state db {:keys [retract-attributes? retract-attributes outliner-op]
+  (-save [this *txs-state db {:keys [retract-attributes? retract-attributes outliner-op
+                                     encrypted-title?]
                               :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
@@ -500,10 +501,12 @@
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
                                    (not= block-title (:block/title block-entity)))
-          _ (when (and page? block-title)
+          ;; encrypted titles are opaque ciphertext packages, not page titles
+          _ (when (and page? block-title (not encrypted-title?))
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
           m (if page-title-changed?
-              (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
+              (let [_ (when-not encrypted-title?
+                        (outliner-validate/validate-page-title (:block/title m*) {:node m*}))
                     page-name (if-let [journal-day (:block/journal-day block-entity)]
                                 (common-util/page-name-sanity-lc
                                  (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
