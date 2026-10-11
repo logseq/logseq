@@ -1,15 +1,10 @@
 html {
   &[data-color=logseq] {
-    --lx-accent-01: var(--rx-logseq-01);
-    --lx-accent-02: var(--rx-logseq-02);
     --lx-accent-03: var(--rx-logseq-03);
     --lx-accent-04: var(--rx-logseq-04);
-    --lx-accent-05: var(--rx-logseq-05);
     --lx-accent-06: var(--rx-logseq-06);
-    --lx-accent-07: var(--rx-logseq-07);
     --lx-accent-08: var(--rx-logseq-08);
     --lx-accent-09: var(--rx-logseq-09);
-    --lx-accent-10: var(--rx-logseq-10);
     --lx-accent-11: var(--rx-logseq-11);
     --lx-accent-12: var(--rx-logseq-12);
 
@@ -62,16 +57,11 @@ html {
       --ring: 10 71.6% 71.0%;
       --accent-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-tomato-01);
-      --lx-accent-02: var(--rx-tomato-02);
       --lx-accent-03: var(--rx-tomato-03);
       --lx-accent-04: var(--rx-tomato-04);
-      --lx-accent-05: var(--rx-tomato-05);
       --lx-accent-06: var(--rx-tomato-06);
-      --lx-accent-07: var(--rx-tomato-07);
       --lx-accent-08: var(--rx-tomato-08);
       --lx-accent-09: var(--rx-tomato-09);
-      --lx-accent-10: var(--rx-tomato-10);
       --lx-accent-11: var(--rx-tomato-11);
       --lx-accent-12: var(--rx-tomato-12);
       --lx-accent-04-alpha: var(--rx-tomato-04-alpha);
@@ -128,16 +118,11 @@ html {
       --ring: 359 69.5% 74.3%;
       --accent-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-red-01);
-      --lx-accent-02: var(--rx-red-02);
       --lx-accent-03: var(--rx-red-03);
       --lx-accent-04: var(--rx-red-04);
-      --lx-accent-05: var(--rx-red-05);
       --lx-accent-06: var(--rx-red-06);
-      --lx-accent-07: var(--rx-red-07);
       --lx-accent-08: var(--rx-red-08);
       --lx-accent-09: var(--rx-red-09);
-      --lx-accent-10: var(--rx-red-10);
       --lx-accent-11: var(--rx-red-11);
       --lx-accent-12: var(--rx-red-12);
       --lx-accent-04-alpha: var(--rx-red-04-alpha);
@@ -193,16 +178,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-blue-01);
-      --lx-accent-02: var(--rx-blue-02);
       --lx-accent-03: var(--rx-blue-03);
       --lx-accent-04: var(--rx-blue-04);
-      --lx-accent-05: var(--rx-blue-05);
       --lx-accent-06: var(--rx-blue-06);
-      --lx-accent-07: var(--rx-blue-07);
       --lx-accent-08: var(--rx-blue-08);
       --lx-accent-09: var(--rx-blue-09);
-      --lx-accent-10: var(--rx-blue-10);
       --lx-accent-11: var(--rx-blue-11);
       --lx-accent-12: var(--rx-blue-12);
       --lx-accent-04-alpha: var(--rx-blue-04-alpha);
@@ -258,16 +238,11 @@ html {
       --ring: 336 62.3% 72.9%;
       --accent-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-crimson-01);
-      --lx-accent-02: var(--rx-crimson-02);
       --lx-accent-03: var(--rx-crimson-03);
       --lx-accent-04: var(--rx-crimson-04);
-      --lx-accent-05: var(--rx-crimson-05);
       --lx-accent-06: var(--rx-crimson-06);
-      --lx-accent-07: var(--rx-crimson-07);
       --lx-accent-08: var(--rx-crimson-08);
       --lx-accent-09: var(--rx-crimson-09);
-      --lx-accent-10: var(--rx-crimson-10);
       --lx-accent-11: var(--rx-crimson-11);
       --lx-accent-12: var(--rx-crimson-12);
       --lx-accent-04-alpha: var(--rx-crimson-04-alpha);
@@ -323,16 +298,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-pink-01);
-      --lx-accent-02: var(--rx-pink-02);
       --lx-accent-03: var(--rx-pink-03);
       --lx-accent-04: var(--rx-pink-04);
-      --lx-accent-05: var(--rx-pink-05);
       --lx-accent-06: var(--rx-pink-06);
-      --lx-accent-07: var(--rx-pink-07);
       --lx-accent-08: var(--rx-pink-08);
       --lx-accent-09: var(--rx-pink-09);
-      --lx-accent-10: var(--rx-pink-10);
       --lx-accent-11: var(--rx-pink-11);
       --lx-accent-12: var(--rx-pink-12);
       --lx-accent-04-alpha: var(--rx-pink-04-alpha);
@@ -387,16 +357,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-plum-01);
-      --lx-accent-02: var(--rx-plum-02);
       --lx-accent-03: var(--rx-plum-03);
       --lx-accent-04: var(--rx-plum-04);
-      --lx-accent-05: var(--rx-plum-05);
       --lx-accent-06: var(--rx-plum-06);
-      --lx-accent-07: var(--rx-plum-07);
       --lx-accent-08: var(--rx-plum-08);
       --lx-accent-09: var(--rx-plum-09);
-      --lx-accent-10: var(--rx-plum-10);
       --lx-accent-11: var(--rx-plum-11);
       --lx-accent-12: var(--rx-plum-12);
       --lx-accent-04-alpha: var(--rx-plum-04-alpha);
@@ -451,16 +416,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-purple-01);
-      --lx-accent-02: var(--rx-purple-02);
       --lx-accent-03: var(--rx-purple-03);
       --lx-accent-04: var(--rx-purple-04);
-      --lx-accent-05: var(--rx-purple-05);
       --lx-accent-06: var(--rx-purple-06);
-      --lx-accent-07: var(--rx-purple-07);
       --lx-accent-08: var(--rx-purple-08);
       --lx-accent-09: var(--rx-purple-09);
-      --lx-accent-10: var(--rx-purple-10);
       --lx-accent-11: var(--rx-purple-11);
       --lx-accent-12: var(--rx-purple-12);
       --lx-accent-04-alpha: var(--rx-purple-04-alpha);
@@ -515,16 +475,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-violet-01);
-      --lx-accent-02: var(--rx-violet-02);
       --lx-accent-03: var(--rx-violet-03);
       --lx-accent-04: var(--rx-violet-04);
-      --lx-accent-05: var(--rx-violet-05);
       --lx-accent-06: var(--rx-violet-06);
-      --lx-accent-07: var(--rx-violet-07);
       --lx-accent-08: var(--rx-violet-08);
       --lx-accent-09: var(--rx-violet-09);
-      --lx-accent-10: var(--rx-violet-10);
       --lx-accent-11: var(--rx-violet-11);
       --lx-accent-12: var(--rx-violet-12);
       --lx-accent-04-alpha: var(--rx-violet-04-alpha);
@@ -579,16 +534,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-indigo-01);
-      --lx-accent-02: var(--rx-indigo-02);
       --lx-accent-03: var(--rx-indigo-03);
       --lx-accent-04: var(--rx-indigo-04);
-      --lx-accent-05: var(--rx-indigo-05);
       --lx-accent-06: var(--rx-indigo-06);
-      --lx-accent-07: var(--rx-indigo-07);
       --lx-accent-08: var(--rx-indigo-08);
       --lx-accent-09: var(--rx-indigo-09);
-      --lx-accent-10: var(--rx-indigo-10);
       --lx-accent-11: var(--rx-indigo-11);
       --lx-accent-12: var(--rx-indigo-12);
       --lx-accent-04-alpha: var(--rx-indigo-04-alpha);
@@ -643,16 +593,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-cyan-01);
-      --lx-accent-02: var(--rx-cyan-02);
       --lx-accent-03: var(--rx-cyan-03);
       --lx-accent-04: var(--rx-cyan-04);
-      --lx-accent-05: var(--rx-cyan-05);
       --lx-accent-06: var(--rx-cyan-06);
-      --lx-accent-07: var(--rx-cyan-07);
       --lx-accent-08: var(--rx-cyan-08);
       --lx-accent-09: var(--rx-cyan-09);
-      --lx-accent-10: var(--rx-cyan-10);
       --lx-accent-11: var(--rx-cyan-11);
       --lx-accent-12: var(--rx-cyan-12);
       --lx-accent-04-alpha: var(--rx-cyan-04-alpha);
@@ -709,16 +654,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-teal-01);
-      --lx-accent-02: var(--rx-teal-02);
       --lx-accent-03: var(--rx-teal-03);
       --lx-accent-04: var(--rx-teal-04);
-      --lx-accent-05: var(--rx-teal-05);
       --lx-accent-06: var(--rx-teal-06);
-      --lx-accent-07: var(--rx-teal-07);
       --lx-accent-08: var(--rx-teal-08);
       --lx-accent-09: var(--rx-teal-09);
-      --lx-accent-10: var(--rx-teal-10);
       --lx-accent-11: var(--rx-teal-11);
       --lx-accent-12: var(--rx-teal-12);
       --lx-accent-04-alpha: var(--rx-teal-04-alpha);
@@ -773,16 +713,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-green-01);
-      --lx-accent-02: var(--rx-green-02);
       --lx-accent-03: var(--rx-green-03);
       --lx-accent-04: var(--rx-green-04);
-      --lx-accent-05: var(--rx-green-05);
       --lx-accent-06: var(--rx-green-06);
-      --lx-accent-07: var(--rx-green-07);
       --lx-accent-08: var(--rx-green-08);
       --lx-accent-09: var(--rx-green-09);
-      --lx-accent-10: var(--rx-green-10);
       --lx-accent-11: var(--rx-green-11);
       --lx-accent-12: var(--rx-green-12);
       --lx-accent-04-alpha: var(--rx-green-04-alpha);
@@ -838,16 +773,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-grass-01);
-      --lx-accent-02: var(--rx-grass-02);
       --lx-accent-03: var(--rx-grass-03);
       --lx-accent-04: var(--rx-grass-04);
-      --lx-accent-05: var(--rx-grass-05);
       --lx-accent-06: var(--rx-grass-06);
-      --lx-accent-07: var(--rx-grass-07);
       --lx-accent-08: var(--rx-grass-08);
       --lx-accent-09: var(--rx-grass-09);
-      --lx-accent-10: var(--rx-grass-10);
       --lx-accent-11: var(--rx-grass-11);
       --lx-accent-12: var(--rx-grass-12);
       --lx-accent-04-alpha: var(--rx-grass-04-alpha);
@@ -902,16 +832,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-orange-01);
-      --lx-accent-02: var(--rx-orange-02);
       --lx-accent-03: var(--rx-orange-03);
       --lx-accent-04: var(--rx-orange-04);
-      --lx-accent-05: var(--rx-orange-05);
       --lx-accent-06: var(--rx-orange-06);
-      --lx-accent-07: var(--rx-orange-07);
       --lx-accent-08: var(--rx-orange-08);
       --lx-accent-09: var(--rx-orange-09);
-      --lx-accent-10: var(--rx-orange-10);
       --lx-accent-11: var(--rx-orange-11);
       --lx-accent-12: var(--rx-orange-12);
       --lx-accent-04-alpha: var(--rx-orange-04-alpha);
@@ -966,16 +891,11 @@ html {
       --accent-foreground: 190 43% 97%;
       --primary-foreground: 190 43% 97%;
 
-      --lx-accent-01: var(--rx-brown-01);
-      --lx-accent-02: var(--rx-brown-02);
       --lx-accent-03: var(--rx-brown-03);
       --lx-accent-04: var(--rx-brown-04);
-      --lx-accent-05: var(--rx-brown-05);
       --lx-accent-06: var(--rx-brown-06);
-      --lx-accent-07: var(--rx-brown-07);
       --lx-accent-08: var(--rx-brown-08);
       --lx-accent-09: var(--rx-brown-09);
-      --lx-accent-10: var(--rx-brown-10);
       --lx-accent-11: var(--rx-brown-11);
       --lx-accent-12: var(--rx-brown-12);
       --lx-accent-04-alpha: var(--rx-brown-04-alpha);

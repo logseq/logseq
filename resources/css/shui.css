@@ -62,7 +62,6 @@ html {
       }
     }
 
-
     div[data-radix-popper-content-wrapper] div[role=menu],
     .menu-links-outer,
     .absolute-modal[data-modal-name] {
@@ -70,25 +69,11 @@ html {
     }
   }
 
-  &[data-color=logseq] {
-    .references-blocks-item {
-      --lx-bg-override: var(--rx-gray-03-alpha);
-    }
-
-    .block-children-left-border:hover {
-      --ls-block-left-color: var(--rx-logseq-11);
-    }
-  }
-
   &[data-color=none] {
     --ls-block-bullet-color: var(--rx-gray-08);
-    --ls-block-bullet-active-color: var(--rx-gray-12);
 
     ::selection {
       @apply bg-primary/20;
-    }
-
-    #ui__ac-inner {
     }
 
     .cp__cmdk {
@@ -121,11 +106,6 @@ html {
 }
 
 html[data-theme=light] {
-  &[data-color=logseq] {
-    .references-blocks-item {
-      --lx-bg-override: var(--rx-gray-03-alpha);
-    }
-  }
 
   .extensions__pdf-container {
     --lx-pdf-container-dark-bg: var(--lx-gray-11, #042f3c);
