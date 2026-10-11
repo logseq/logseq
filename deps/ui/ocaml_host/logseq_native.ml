@@ -440,6 +440,26 @@ let () =
         shadow_of =
           (fun name -> Lui_theme.shadow_of !Theme_vars.mode name) }
   in
+  (* logseq-em-emoji is a leaf extension element whose glyph travels in
+     its "text" prop (mirrored in the attrs data-emoji for web parity):
+     paint it through the text engine so font-size/foreground inherit
+     like any label. *)
+  Lui_paint.register_extension ~identifier:"logseq-em-emoji"
+    { Lui_paint.paint =
+        (fun ctx store node r ->
+           let id = Lui_store.node_id node in
+           match Lui_store.string_prop store id "text" with
+           | Some s when s <> "" ->
+             let fg =
+               match Host_icons.effective_fg_css store id with
+               | Some css -> (
+                 match Theme_vars.color_of css with
+                 | Some c -> c
+                 | None -> Lui_scene.color 0 0 0 255)
+               | None -> Lui_scene.color 0 0 0 255
+             in
+             ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
+           | _ -> []) };
   let host =
     Lui_host.create ~hooks ~layout:(module Lui_layout)
       ~measure:(fun id text _w _h ->

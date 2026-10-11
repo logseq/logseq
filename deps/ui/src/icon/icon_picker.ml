@@ -241,7 +241,10 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         | row, rest -> row :: chunks n rest)
   in
 
-  let pane_section ~virtual_list label (items : t list) : t =
+  (* items are chunked into rows of 9: the web fallback relied on
+     flex-wrap, which the native layout engine ignores — a single
+     unwrapped row shrink-compresses every cell to a few px *)
+  let pane_section label (items : t list) : t =
     Ui_components.with_props [ P.Overflow, P.StringValue "auto" ]
       (column ~grow:1.
          ~foreground:(reactive (fun (s : pstate) ->
@@ -252,16 +255,11 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                 ~font_size:"0.75rem" ~font_weight:500
                 ~foreground:"var(--lx-gray-07, var(--muted-foreground))"
                 [] ]
-          ::
-          (if virtual_list then
-             [ column ~gap:0
-                 (List.map
-                    (fun row_items ->
-                      row ~gap:4 ~padding_vertical:4 row_items)
-                    (chunks 9 items)) ]
-           else
-             [ row ~gap:4 ~padding_vertical:4
-                 ~data_attrs:[ ("style", "flex-wrap: wrap") ] items ])))
+          :: [ column ~gap:0
+               (List.map
+                  (fun row_items ->
+                    row ~gap:4 ~padding_vertical:4 row_items)
+                  (chunks 9 items)) ]))
   in
 
   let used_item_btns () : t list =
@@ -336,15 +334,15 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             [ column ~data_attrs:[ ("style", "padding-bottom: 2.5rem") ]
                 ((if used = [] then []
                   else
-                    [ pane_section ~virtual_list:false
+                    [ pane_section
                         (I.t "ui/frequently-used") used ])
-                @ [ pane_section ~virtual_list:false
+                @ [ pane_section
                       (I.tf "icon/emojis-count"
                          [ string_of_int (Emoji_mart.emoji_count ()) ])
                       (List.map
                          (fun (id, n) -> item_btn (Emoji_item (id, n)))
                          (take 32 (Emoji_mart.all_emojis ())))
-                  ; pane_section ~virtual_list:false
+                  ; pane_section
                       (I.tf "icon/icons-count"
                          [ string_of_int (List.length (icon_items ())) ])
                       (List.map
@@ -362,9 +360,9 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             [ column ~gap:4 ~grow:1.
                 ((if used = [] then []
                   else
-                    [ pane_section ~virtual_list:false
+                    [ pane_section
                         (I.t "ui/frequently-used") used ])
-                @ [ pane_section ~virtual_list:true
+                @ [ pane_section
                       (I.tf "icon/emojis-count"
                          [ string_of_int (Emoji_mart.emoji_count ()) ])
                       (List.map
@@ -372,7 +370,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          (Emoji_mart.all_emojis ())) ]) ]
       | Tab_icon ->
           column ~gap:4 ~grow:1.
-            [ pane_section ~virtual_list:true
+            [ pane_section
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
                 (List.map
@@ -390,7 +388,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       column ~gap:4 ~grow:1.
         (if items = [] then []
          else
-           [ pane_section ~virtual_list:true
+           [ pane_section
                (I.tf "icon/matched-count" [ string_of_int (List.length items) ])
                (List.map item_btn items) ])
   in
