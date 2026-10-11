@@ -42,6 +42,17 @@
     (testing "the empty page no longer referenced is deleted"
       (is (nil? dropped)))))
 
+(deftest a-save-without-a-title-keeps-the-pages-the-block-references
+  (let [page-uuid (random-uuid)
+        block-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Linked" :block/uuid page-uuid} :blocks []}
+               {:page {:block/title "page1"}
+                :blocks [{:block/title (str "[[" page-uuid "]]") :block/uuid block-uuid}]}])
+        block (d/entity @conn [:block/uuid block-uuid])]
+    (outliner-core/save-block! conn {:db/id (:db/id block) :block/uuid block-uuid :block/collapsed? true})
+    (is (some? (d/entity @conn [:block/uuid page-uuid])))))
+
 (deftest an-edit-keeps-a-page-with-a-property
   (let [{:keys [dropped]} (edit-away-from-dropped {:reviewed true})]
     (is (some? dropped))))
