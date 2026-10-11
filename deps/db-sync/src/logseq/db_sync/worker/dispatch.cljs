@@ -44,7 +44,7 @@
   (or (aget claims "pat_id")
       (aget claims "sub")))
 
-(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url]
+(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url e2ee?]
   (let [graph-id (:graph-id path-params)
         path (reduce-kv (fn [result k value]
                           (string/replace result (str ":" (name k)) value))
@@ -52,6 +52,10 @@
                         path-params)
         target (js/URL. (str (.-origin url) path (.-search url)))]
     (.set (.-searchParams target) "graph-id" graph-id)
+    ;; The graph DB's :logseq.kv/graph-rtc-e2ee? is only set at RTC upload; the
+    ;; index flag is authoritative, so pass it down for DO-side write gating.
+    (when e2ee?
+      (.set (.-searchParams target) "graph-e2ee" "true"))
     (forward-sync-request request env graph-id target)))
 
 (defn- rate-limit-response []
@@ -145,7 +149,7 @@
                                               :handler (:handler operation)
                                               :graph-id graph-id})
                         :else
-                        (forward-semantic-request request env operation url)))))))))))))
+                        (forward-semantic-request request env operation url e2ee?)))))))))))))
 
 (defn- request-user-id
   [request]
