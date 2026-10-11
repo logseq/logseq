@@ -4,8 +4,7 @@
   - canonical: transit vector [iv ciphertext], AES-256-GCM with the graph key
   - RSA envelope: transit map {:logseq.e2ee/keys {user-id wrapped-key} :iv :data},
     readable only by graph members holding the RSA private key"
-  (:require [clojure.string :as string]
-            [logseq.db :as ldb]
+  (:require [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.http :as http]

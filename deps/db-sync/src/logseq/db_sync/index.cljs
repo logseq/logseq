@@ -640,8 +640,9 @@
              :username (aget row "username")})
           rows)))
 
-(defn <graph-member-public-keys [db graph-id]
+(defn <graph-member-public-keys
   "RSA public keys of every graph member that has uploaded a user key pair."
+  [db graph-id]
   (when (string? graph-id)
     (p/let [result (common/<d1-all db
                                   (str "select k.user_id, k.public_key "
