@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { z } from "zod";
 
 import { registerSemanticApiTools, resolveOpenApiRefs } from "./semantic_api_tools.mjs";
 
@@ -125,4 +126,35 @@ test("OpenAPI $refs resolve inline for tool schemas", () => {
   );
   assert.equal(resolved.a.title, "X");
   assert.equal(resolved.list[0].type, "string");
+});
+
+test("tool argument validation follows required fields and constraints in OpenAPI", () => {
+  const server = fakeServer();
+  registerSemanticApiTools(server, {
+    paths: {
+      "/api/v1/example": {
+        post: {
+          operationId: "validateExample",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: {
+              type: "object",
+              required: ["texts", "selector"],
+              properties: {
+                texts: { type: "array", minItems: 1, maxItems: 2, items: { type: "string" } },
+                selector: { oneOf: [{ type: "string" }, { type: "integer", minimum: 1 }] },
+              },
+            } } },
+          },
+        },
+      },
+    },
+  }, async () => ({}));
+  const schema = z.object(server.registered.get("validateExample").config.inputSchema);
+  assert.equal(schema.safeParse({ body: {} }).success, false);
+  assert.equal(schema.safeParse({ body: { texts: [], selector: "a" } }).success, false);
+  assert.equal(schema.safeParse({ body: { texts: ["a", "b", "c"], selector: 1 } }).success, false);
+  assert.equal(schema.safeParse({ body: { texts: ["a"], selector: 0 } }).success, false);
+  assert.deepEqual(schema.parse({ body: { texts: ["a"], selector: 1, extra: true } }),
+    { body: { texts: ["a"], selector: 1, extra: true } });
 });

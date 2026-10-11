@@ -31,29 +31,6 @@ export function resolveOpenApiRefs(value, root, refCache = new Map(), seen = new
   return out;
 }
 
-function jsonSchemaToZod(schema) {
-  if (!schema || typeof schema !== "object") return z.any();
-  if (Array.isArray(schema.enum) && schema.enum.every((v) => typeof v === "string")) {
-    return z.enum(schema.enum);
-  }
-  switch (schema.type) {
-    case "integer":
-      return z.number().int();
-    case "number":
-      return z.number();
-    case "boolean":
-      return z.boolean();
-    case "array":
-      return z.array(jsonSchemaToZod(schema.items));
-    case "object":
-      return z.record(z.string(), z.any());
-    case "string":
-      return z.string();
-    default:
-      return z.any();
-  }
-}
-
 // Register every documented OpenAPI operation as an individual MCP tool so
 // generic clients can discover the API surface through tools/list instead of
 // only through the Code Mode search tool.
@@ -82,7 +59,7 @@ export function registerSemanticApiTools(server, spec, request) {
         properties[param.name] = param.description
           ? { ...paramSchema, description: param.description }
           : paramSchema;
-        let zodType = jsonSchemaToZod(paramSchema);
+        let zodType = z.fromJSONSchema(paramSchema);
         if (param.description) zodType = zodType.describe(param.description);
         if (param.in === "path" || param.required === true) required.push(param.name);
         else zodType = zodType.optional();
@@ -97,7 +74,7 @@ export function registerSemanticApiTools(server, spec, request) {
         properties.body = bodySchema.description
           ? bodySchema
           : { ...bodySchema, description: "Request body" };
-        zodShape.body = jsonSchemaToZod(bodySchema);
+        zodShape.body = z.fromJSONSchema(bodySchema);
         if (op.requestBody.required === true) required.push("body");
         else zodShape.body = zodShape.body.optional();
       }

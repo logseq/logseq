@@ -117,11 +117,11 @@
    "updateProperty" ["Update a property definition" "Updates the name, value type, or cardinality of one typed property definition in a DB graph. Never use legacy file-graph key:: value syntax."]
    "deleteProperty" ["Delete a property definition" "Deletes one property definition through Logseq's property deletion rules."]
    "listAssets" ["List assets" "Returns a cursor-paginated list of asset blocks with optional creation and update time filters."]
-   "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum."]
-   "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed URL for the asset block's R2 object. For an image asset, fetch or use the URL directly to display image content; it does not require an Authorization header."]
+   "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum. On E2EE graphs, title must be encrypted and the body must be the canonical Transit [iv ciphertext] package of AES-GCM-encrypted file bytes; size and checksum describe the plaintext file."]
+   "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed URL for the asset block's R2 object. The URL does not require an Authorization header. On plain graphs, use it to display image content. On E2EE graphs the object contains encrypted file bytes and must be decrypted with the graph AES key before display."]
    "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]
-   "getE2eePublicKeys" ["List graph members' public keys" "Returns the RSA-OAEP public keys of every member of an E2EE graph, for encrypting content readable by all members. Only available on E2EE-encrypted graphs."]
-   "encryptE2eeText" ["Encrypt text for an E2EE graph" "Encrypts each supplied string into a value accepted by title fields on an E2EE graph. With 'key' (base64 raw 32-byte AES-GCM-256 graph key, obtained from GET /e2ee/graphs/:id/aes-key and unwrapped with the RSA private key) produces the canonical encrypted package; without 'key' produces an RSA-envelope package decryptable only by the graph's members."]
+   "getE2eePublicKeys" ["List graph members' public keys" "Returns the RSA-OAEP public keys of every member of an E2EE graph for wrapping the shared graph AES key. Only available on E2EE-encrypted graphs."]
+   "encryptE2eeText" ["Encrypt text for an E2EE graph" "Encrypts each supplied string into the canonical Transit [iv ciphertext] package accepted by E2EE title and name fields. Requires 'key': the base64 raw 32-byte graph AES key, obtained from GET /e2ee/graphs/:id/aes-key and unwrapped with the user's RSA private key. Encrypt normalized, lowercase names separately from display titles."]
    "decryptE2eeText" ["Decrypt text from an E2EE graph" "Decrypts each supplied canonical encrypted package back to plaintext. Requires 'key': the base64 raw 32-byte AES-GCM-256 graph key. Only available on E2EE-encrypted graphs."]})
 
 (defn- operation-routes [path-key]
@@ -173,7 +173,7 @@
 (def ^:private asset-upload-parameters
   [{:name "file-name" :in "query" :required true :schema {:type "string"}}
    {:name "size" :in "query" :required true
-    :description "Exact decoded file size in bytes. The trusted MCP host recalculates it for encoding=base64; direct API uploads must supply it. Uploads larger than 100MB are rejected before R2."
+    :description "Exact plaintext file size in bytes, at most 100MB. For E2EE uploads this excludes the GCM tag and Transit framing; the server validates the encrypted stream against this size."
     :schema {:type "integer" :minimum 0 :maximum 104857600}}
    {:name "title" :in "query" :schema {:type "string"}}
    {:name "page-id" :in "query"
@@ -183,14 +183,18 @@
     :description "Lowercase or uppercase SHA-256 hex digest of the file."
     :schema {:type "string" :pattern "^[0-9a-fA-F]{64}$"}}
    {:name "encoding" :in "query"
-    :description "Use base64 when the caller cannot transfer raw binary, including ChatGPT Code Mode. The server decodes it as a stream before writing to R2; size and checksum describe the decoded file."
+    :description "Use base64 when the caller cannot transfer raw bytes. The server decodes this transport as a stream before writing to R2. On E2EE graphs, base64-encode the complete encrypted Transit package; size and checksum still describe the plaintext file."
     :schema {:type "string" :enum ["base64"]}}])
+
+(def ^:private encrypted-name-schema
+  {:type "string"
+   :description "On E2EE graphs, required whenever renaming a page, tag, or property: separately encrypt the normalized lowercase plaintext name with the graph AES key. Omit on plain graphs."})
 
 (defn- request-schema [operation-id]
   (case operation-id
-    "createPage" {:required ["title"] :properties {:title {:type "string"}}}
-    "updatePage" {:required ["title"] :properties {:title {:type "string"}}}
-    "updateBlock" {:required ["title"] :properties {:title {:type "string"}}}
+    "createPage" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
+    "updatePage" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
+    "updateBlock" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
     "moveBlocks" {:required ["block-ids" "target-id" "position"]
                   :properties {:block-ids {:type "array" :minItems 1 :uniqueItems true
                                            :items {:type "string"}}
@@ -229,18 +233,20 @@
                                :priority {:$ref "#/components/schemas/TaskPrioritySelector"}
                                :scheduled {:type "integer" :description "Scheduled date as YYYYMMDD."}
                                :deadline {:type "integer" :description "Deadline date as YYYYMMDD."}}}
-    "createTag" {:required ["title"] :properties {:title {:type "string"}}}
-    "updateTag" {:required ["title"] :properties {:title {:type "string"}}}
+    "createTag" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
+    "updateTag" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
     "createProperty" {:required ["title"]
-                      :properties {:title {:type "string"} :type {:$ref "#/components/schemas/PropertyType"}
+                      :properties {:title {:type "string"} :name encrypted-name-schema
+                                   :type {:$ref "#/components/schemas/PropertyType"}
                                    :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
-    "updateProperty" {:properties {:title {:type "string"} :type {:$ref "#/components/schemas/PropertyType"}
+    "updateProperty" {:properties {:title {:type "string"} :name encrypted-name-schema
+                                   :type {:$ref "#/components/schemas/PropertyType"}
                                     :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
-    "encryptE2eeText" {:required ["texts"]
+    "encryptE2eeText" {:required ["key" "texts"]
                        :properties {:texts {:type "array" :minItems 1 :maxItems 100
                                             :items {:type "string"}}
                                     :key {:type "string"
-                                          :description "Base64 raw 32-byte AES-GCM-256 graph key. When omitted, encrypts to an RSA-envelope package for all graph members."}}}
+                                          :description "Base64 raw 32-byte AES-GCM-256 graph key."}}}
     "decryptE2eeText" {:required ["key" "texts"]
                        :properties {:key {:type "string"
                                           :description "Base64 raw 32-byte AES-GCM-256 graph key."}

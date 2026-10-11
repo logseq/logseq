@@ -2,6 +2,7 @@
   (:require [cljs.test :as ct]
             [logseq.db-sync.checksum-test]
             [logseq.db-sync.common-test]
+            [logseq.db-sync.e2ee-semantic-test]
             [logseq.db-sync.index-test]
             [logseq.db-sync.malli-schema-test]
             [logseq.db-sync.node-adapter-test]

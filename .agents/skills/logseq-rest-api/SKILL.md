@@ -49,8 +49,8 @@ Request-shape gotchas (verified locally):
 
 ## E2EE graphs
 
-Only `:block/title` and `:block/name` are encrypted; everything else (orders,
-tags, property values, refs) is plaintext to the server.
+Text encryption covers `:block/title` and `:block/name`; orders, tags, property
+values, and refs remain plaintext to the server. Asset file bytes are also encrypted.
 
 **Title write rule**: every `title` field on a write op must be an *encrypted
 package* — a transit string. Plaintext → `400 "content must be an encrypted
@@ -61,12 +61,24 @@ query param — effectively required on e2ee since a missing title fails the
 gate; `file-name` stays plaintext).
 
 **Producing ciphertext** — `POST /api/v1/graphs/:id/e2ee/encrypt`
-`{"texts":["..."]}`:
-- Without `key`: RSA-envelope package (`{:logseq.e2ee/alg rsa-oaep-256+aes-gcm-256}`)
-  readable by every member's private key. **Server-side `decrypt` cannot read
-  these** — use for write-only agents without secrets.
-- With `key` = base64 raw 32-byte AES-GCM graph key: canonical `[iv ct]`
-  package, decryptable via `decryptE2eeText`.
+`{"key":<raw-aes-b64>,"texts":["..."]}` requires the graph's base64 raw 32-byte
+AES-GCM key and returns canonical Transit `[iv ciphertext]` packages. The helper
+receives both the key and plaintext; integrations can instead encrypt locally.
+RSA-envelope content is rejected, preserving the existing client storage format.
+
+**Names**: creating or renaming a page, tag, or property requires a separate
+`name` field containing the encrypted normalized lowercase name. This also applies
+to `updateBlock` when its target is one of those named entities. For example,
+encrypt `"Project Alpha"` and `"project alpha"` separately, then send
+`{"title":<encrypted-title>,"name":<encrypted-name>}`. Never lowercase ciphertext.
+
+**Assets**: encrypt the original file bytes with the graph's AES-GCM key and a
+fresh 12-byte IV, then send the canonical Transit `[iv ciphertext]` package as the
+body, optionally base64-encoding that whole package for transport. `size` is the
+original plaintext byte length; `checksum` is its SHA-256. The title must also be
+encrypted. Plaintext bodies and malformed packages return 400 without creating an
+Asset block. The `upload_asset` and `get_asset_image` MCP tools support plain graphs;
+use client encryption/decryption with the REST API for encrypted graphs.
 
 **Getting the AES key** (agent holds the user's RSA private key):
 `GET /e2ee/graphs/:id/aes-key` → `encrypted-aes-key-base64` (RSA-OAEP wrapped);
@@ -82,12 +94,12 @@ plaintext. `GET .../e2ee/public-keys` lists member RSA keys.
 | `searchGraph` | Runs, but only matches **ciphertext** substrings — plaintext keyword search is impossible (server can't read titles) |
 | `listPageReferences` | Only returns client-authored refs — ref extraction is skipped for API writes on e2ee (`[[name]]` can't exist in ciphertext titles), and the API has no way to supply ref UUIDs, so agents cannot create references on e2ee |
 | Property values on `:db.type/ref` props | Plaintext titles can't resolve (`:block/title` holds ciphertext) → 400. Pass the entity **UUID** or the **ciphertext title** instead — both resolve |
-| `decryptE2eeText` | Canonical `[iv ct]` packages only; RSA-envelope packages → 400 |
+| `decryptE2eeText` | Requires the graph AES key and canonical `[iv ct]` packages |
 | Plaintext titles on any gated write | 400 by design |
 
 Also verified working on e2ee (ciphertext titles): every CRUD op for pages,
 blocks (incl. move + nested tree inserts), tags, tasks, capture, properties,
-assets (`file-name` + ciphertext `title` + raw body), `listGraphs`, all three
+assets (`file-name` + ciphertext `title` + encrypted body), `listGraphs`, all three
 e2ee helpers.
 
 ## Generic API semantics (same on plain graphs)

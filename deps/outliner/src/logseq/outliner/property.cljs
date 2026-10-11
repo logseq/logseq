@@ -317,7 +317,7 @@
       schema)))
 
 (defn- update-property
-  [conn db-ident property schema {:keys [property-name properties] :as opts}]
+  [conn db-ident property schema {:keys [property-name properties e2ee? encrypted-name] :as opts}]
   (validate-property-name-update conn property property-name opts)
   (outliner-validate/validate-editing-built-in-property property schema)
   (let [schema (schema-for-update @conn db-ident property schema)
@@ -330,7 +330,7 @@
                      (into {}))
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
-                 :block/name (common-util/page-name-sanity-lc property-name)))
+                 :block/name (if e2ee? encrypted-name (common-util/page-name-sanity-lc property-name))))
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)
@@ -987,7 +987,8 @@
                       (integer? db-id)
                       (assoc :block-uuid (:block/uuid page)))
               tx-data (concat
-                       [(sqlite-util/build-new-property db-ident' schema opts')]
+                       [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
+                          (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
                        ;; Convert page to property
                        (when db-id
                          [[:db/retract db-id :block/tags :logseq.class/Page]]))]

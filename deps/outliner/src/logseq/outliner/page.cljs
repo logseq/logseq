@@ -386,7 +386,7 @@
    {uuid' :uuid
     :keys [tags properties persist-op?
            class? journal? today-journal? split-namespace? class-ident-namespace
-           encrypted-title?]
+           encrypted-title? encrypted-name]
     :or   {properties               nil
            persist-op?              true}
     :as options}]
@@ -394,7 +394,7 @@
         resolved-tags (resolve-create-page-tags db tags)
         class? (or class? (some (fn [t] (= :logseq.class/Tag (resolved-tag-ident db t))) resolved-tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
-        title (sanitize-title title*)
+        title (if encrypted-title? title* (sanitize-title title*))
         _ (when-not encrypted-title?
             (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}}))
         types (cond class?
@@ -459,10 +459,11 @@
           :else
           {:page-uuid (:block/uuid existing-page)
            :title (:block/title existing-page)}))
-      (let [page (gp-block/page-name->map title db true date-formatter
-                                          {:class? class?
-                                           :page-uuid (when (uuid? uuid') uuid')
-                                           :skip-existing-page-check? true})
+      (let [page (cond-> (gp-block/page-name->map title db true date-formatter
+                                                {:class? class?
+                                                 :page-uuid (when (uuid? uuid') uuid')
+                                                 :skip-existing-page-check? true})
+                   encrypted-title? (assoc :block/name encrypted-name))
             [page parents'] (if (and (not (:block/journal-day page))
                                      (not encrypted-title?)
                                      (text/namespace-page? title)

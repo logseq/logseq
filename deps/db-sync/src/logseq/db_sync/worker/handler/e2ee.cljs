@@ -1,9 +1,5 @@
 (ns logseq.db-sync.worker.handler.e2ee
-  "Edge-side crypto helpers for the semantic API on E2EE graphs.
-  Two package shapes are produced/accepted:
-  - canonical: transit vector [iv ciphertext], AES-256-GCM with the graph key
-  - RSA envelope: transit map {:logseq.e2ee/keys {user-id wrapped-key} :iv :data},
-    readable only by graph members holding the RSA private key"
+  "Semantic API crypto helpers using the graph's canonical AES-GCM packages."
   (:require [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
@@ -19,13 +15,20 @@
     (js/Uint8Array.from (js/Array.from binary) #(.charCodeAt % 0))))
 
 (defn- <import-aes-key [base64-key]
-  (.importKey subtle "raw" (base64->uint8 base64-key) "AES-GCM" false
-              #js ["encrypt" "decrypt"]))
+  (let [payload (base64->uint8 base64-key)]
+    (when-not (= 32 (.-length payload))
+      (throw (ex-info "key must be a 256-bit graph AES key" {})))
+    (.importKey subtle "raw" payload "AES-GCM" false #js ["encrypt" "decrypt"])))
 
-(defn- <import-public-key [public-key-str]
-  (let [exported (ldb/read-transit-str public-key-str)]
-    (.importKey subtle "spki" exported
-                #js {:name "RSA-OAEP" :hash "SHA-256"} false #js ["encrypt"])))
+(defn encrypted-package?
+  "Checks that `value` contains a canonical Transit AES-GCM package."
+  [value]
+  (when (string? value)
+    (let [decoded (try (ldb/read-transit-str value) (catch :default _ nil))]
+      (and (vector? decoded) (= 2 (count decoded))
+           (every? #(instance? js/Uint8Array %) decoded)
+           (= 12 (.-length (first decoded)))
+           (<= 16 (.-length (second decoded)))))))
 
 (defn- <encrypt-text-aes [aes-key text]
   (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
@@ -36,7 +39,7 @@
 (defn- <decrypt-text-aes [aes-key value]
   (let [decoded (try (ldb/read-transit-str value)
                      (catch :default _ nil))]
-    (if-not (and (vector? decoded) (= 2 (count decoded)))
+    (if-not (encrypted-package? value)
       (p/rejected (ex-info "invalid encrypted package" {:value value}))
       (p/let [[iv-data encrypted-data] decoded
               iv (js/Uint8Array. iv-data)
@@ -44,25 +47,6 @@
                                   (js/Uint8Array. encrypted-data))
               transit-text (.decode text-decoder decrypted)]
         (ldb/read-transit-str transit-text)))))
-
-(defn- <encrypt-text-rsa [member-keys text]
-  (p/let [ephemeral (.generateKey subtle #js {:name "AES-GCM" :length 256} true
-                                  #js ["encrypt"])
-          iv (js/crypto.getRandomValues (js/Uint8Array. 12))
-          encrypted (.encrypt subtle #js {:name "AES-GCM" :iv iv} ephemeral
-                              (.encode text-encoder (ldb/write-transit-str text)))
-          exported-ephemeral (.exportKey subtle "raw" ephemeral)
-          wrapped (p/all (map (fn [{:keys [user-id public-key]}]
-                                (p/let [public-key' (<import-public-key public-key)
-                                        wrapped-key (.encrypt subtle #js {:name "RSA-OAEP"}
-                                                              public-key' exported-ephemeral)]
-                                  [user-id (js/Uint8Array. wrapped-key)]))
-                              member-keys))]
-    (ldb/write-transit-str
-     {:logseq.e2ee/alg "rsa-oaep-256+aes-gcm-256"
-      :logseq.e2ee/keys (into {} wrapped)
-      :logseq.e2ee/iv iv
-      :logseq.e2ee/data (js/Uint8Array. encrypted)})))
 
 (defn- <read-body [request]
   (p/let [raw (-> (common/read-json request)
@@ -93,17 +77,12 @@
         (not (valid-texts? texts))
         (http/bad-request "invalid texts")
 
-        (and (some? key) (not (string? key)))
+        (not (string? key))
         (http/bad-request "invalid key")
 
         :else
-        (-> (if (string? key)
-              (p/let [aes-key (<import-aes-key key)]
-                (p/all (mapv #(<encrypt-text-aes aes-key %) texts)))
-              (p/let [member-keys (index/<graph-member-public-keys (aget env "DB") graph-id)]
-                (if (seq member-keys)
-                  (p/all (mapv #(<encrypt-text-rsa member-keys %) texts))
-                  (p/rejected (ex-info "graph has no member public keys" {})))))
+        (-> (p/let [aes-key (<import-aes-key key)]
+              (p/all (mapv #(<encrypt-text-aes aes-key %) texts)))
             (p/then (fn [texts'] (http/json-response nil {:texts texts'})))
             (p/catch (fn [error]
                        (http/bad-request (or (ex-message error) "encrypt failed")))))))

@@ -9,6 +9,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.asset :as db-asset]
@@ -527,7 +528,7 @@
       (if-not (non-blank-string? (:title body))
         (http/bad-request "missing title")
         (let [[title page-id] (outliner-page/create! conn (:title body)
-                                                     {:encrypted-title? e2ee?})]
+                                                     {:encrypted-title? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
 
@@ -557,7 +558,7 @@
         (http/bad-request "invalid page-id or title")
         (do
           (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)}
-                                     :encrypted-title? e2ee?)
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))
           (broadcast-change! self)
           (http/json-response nil (assoc (block-response page) :title (:title body))))))
 
@@ -587,7 +588,8 @@
         (do
           (outliner-core/save-block! conn
                                      (assoc (prepare-block-title! conn e2ee? (:title body))
-                                            :block/uuid (:block/uuid block)))
+                                            :block/uuid (:block/uuid block))
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))
           (broadcast-change! self)
           (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
 
@@ -729,7 +731,7 @@
         (http/bad-request "missing title")
         (let [[title tag-id] (outliner-page/create! conn (:title body)
                                                      {:class? true
-                                                      :encrypted-title? e2ee?})]
+                                                      :encrypted-title? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str tag-id) :title title} 201))))
 
@@ -752,7 +754,7 @@
         (http/bad-request "invalid tag-id or title")
         (do
           (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)}
-                                     :encrypted-title? e2ee?)
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))
           (broadcast-change! self)
           (http/json-response nil (assoc (tag-response tag) :title (:title body))))))
 
@@ -834,7 +836,7 @@
             (http/json-response nil (task-response (d/entity @conn [:block/uuid @task-id])) 201)))))))
 
 (defn- handle-assets
-  [{:keys [^js self request ^js url conn db handler path-params]}]
+  [{:keys [^js self request ^js url conn db handler path-params e2ee?]}]
   (case handler
     :semantic/assets-list
     (paginated-response url :assets
@@ -874,7 +876,8 @@
                                         :content-type (.get (.-headers request) "content-type")
                                         :checksum checksum
                                         :asset-type asset-type
-                                        :encoding encoding})]
+                                        :encoding encoding
+                                        :e2ee? e2ee?})]
                 (if-not (.-ok upload-response)
                   upload-response
                   (-> (p/let [target (or target (ensure-today-page! conn))
@@ -926,7 +929,7 @@
                         conn nil
                         {:logseq.property/type (keyword (or (:type body) "default"))
                          :db/cardinality (keyword (or (:cardinality body) "db.cardinality/one"))}
-                        {:property-name (:title body) :e2ee? e2ee?})]
+                        {:property-name (:title body) :e2ee? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil (property-response property) 201))))
 
@@ -945,7 +948,8 @@
                        (:cardinality body) (assoc :db/cardinality (keyword (:cardinality body))))
               updated (outliner-property/upsert-property!
                        conn (:db/ident property) schema
-                       (cond-> {:e2ee? e2ee?} (:title body) (assoc :property-name (:title body))))]
+                       (cond-> {:e2ee? e2ee? :encrypted-name (:name body)}
+                         (:title body) (assoc :property-name (:title body))))]
           (broadcast-change! self)
           (http/json-response nil (property-response updated)))))
 
@@ -1009,15 +1013,9 @@
 (def ^:private e2ee-gated-write-handlers
   (into e2ee-title-handlers (conj e2ee-tree-handlers :semantic/assets-create)))
 
-(defn- encrypted-package? [value]
-  (when (string? value)
-    (let [decoded (try (ldb/read-transit-str value)
-                       (catch :default _ ::invalid-transit))]
-      (or ;; canonical: [iv ciphertext] AES-GCM-256
-          (and (vector? decoded) (= 2 (count decoded))
-               (every? #(instance? js/Uint8Array %) decoded))
-          ;; RSA-envelope written by the edge encrypt helper
-          (and (map? decoded) (contains? decoded :logseq.e2ee/keys))))))
+(def ^:private e2ee-name-handlers
+  #{:semantic/pages-create :semantic/pages-update :semantic/tags-create :semantic/tags-update
+    :semantic/properties-create :semantic/properties-update})
 
 (defn- block-trees-titles [nodes]
   (mapcat (fn [node] (cons (:title node) (block-trees-titles (:children node))))
@@ -1027,20 +1025,24 @@
   "Titles a write operation wants to store. Assets: the title query param
   (required on e2ee — otherwise a plaintext name would be derived from
   file-name). Others: body titles from a request clone."
-  [request ^js url handler]
+  [{:keys [request ^js url db path-params]} handler]
   (if (= handler :semantic/assets-create)
     (p/resolved [(.get (.-searchParams url) "title")])
     (p/let [body (body-clj (.clone request))]
-      (->> (concat
-            (when (contains? e2ee-title-handlers handler) [(:title body)])
+      (vec (concat
+            (when (and (contains? e2ee-title-handlers handler) (contains? body :title))
+              [(:title body)])
+            (when (and (contains? body :title)
+                       (or (contains? e2ee-name-handlers handler)
+                           (and (= handler :semantic/blocks-update)
+                                (:block/name (find-entity db (:block-id path-params))))))
+              [(:name body)])
             (when (contains? e2ee-tree-handlers handler)
-              (block-trees-titles (:blocks body))))
-           (remove nil?)
-           vec))))
+              (block-trees-titles (:blocks body))))))))
 
 (defn- <e2ee-write-response [context handler]
-  (p/let [titles (<e2ee-write-titles (:request context) (:url context) handler)]
-    (if (every? encrypted-package? titles)
+  (p/let [titles (<e2ee-write-titles context handler)]
+    (if (every? e2ee-handler/encrypted-package? titles)
       ::allowed
       (http/bad-request "content must be an encrypted package on e2ee graphs"))))
 

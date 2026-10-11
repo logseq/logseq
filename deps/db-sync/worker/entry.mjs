@@ -4,7 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
-import { uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
+import { assertUnencryptedGraph, uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
 import {
   ASSET_IMAGE_RESOURCE_URI,
   assertDisplayableImageMetadata,
@@ -150,6 +150,10 @@ async function handleMcp(request, env, ctx) {
       "openai/outputTemplate": ASSET_IMAGE_RESOURCE_URI,
     },
   }, async ({ graphId, assetBlockId }) => {
+    await assertUnencryptedGraph(graphId, {
+      origin: new URL(request.url).origin, authorization, env, ctx,
+      workerFetch: worker.fetch.bind(worker),
+    });
     const metadataUrl = new URL(
       `/api/v1/graphs/${encodeURIComponent(graphId)}/assets/${encodeURIComponent(assetBlockId)}`,
       request.url,
