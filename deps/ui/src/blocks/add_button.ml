@@ -43,5 +43,5 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                   (row ~key:"bab-inner" ~cross:`center ~height:28
                      ~style_class:"bab-inner"
                      [ box ~key:"bab-bc" ~style_class:"bullet-container"
-                         [ box ~key:"bab-b" ~style_class:"bullet" [] ] ]) ] ]))
+                         [ box ~key:"bab-b" ~style_class:"bullet" ~transition:"transform 0.2s" [] ] ]) ] ]))
       context parent

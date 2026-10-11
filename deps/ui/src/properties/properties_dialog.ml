@@ -538,6 +538,7 @@ let view : t =
                   ~available_height:
                     (Ui_services.dom_viewport_height () -. y -. 8.)
                   ~data_attrs:[ ("role", "dialog") ]
+                  ~transition:Ui_components.popover_transition
                   ~on_dismiss:(fun _ -> close ())
                   [ box ~key:"prop-body" ~width:232
                       ~style_class:"ls-property-dialog"

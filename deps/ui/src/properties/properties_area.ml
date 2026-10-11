@@ -120,6 +120,7 @@ let value_cell ctx row : t =
   Lui_elements.row ~gap:4 ~cross:(if centered then `center else `start)
     ~grow:1.0 ~main:`start ~min_width:0 ~min_height:28
     ~style_class:"ls-block property-value-container property-value-panel"
+    ~transition:Ui_components.block_transition
     ~data_attrs:[ ("style", "position:relative;flex-shrink:1;\
       padding-top:0;padding-bottom:0;container-type:normal") ]
     ((if show_panel_bullet row || entity_value then
@@ -736,6 +737,7 @@ let bidi_area (p : Model.page) : t =
                          ]
                      ; row ~gap:4 ~cross:`center
                          ~style_class:"ls-block property-value-container"
+                         ~transition:Ui_components.block_transition
                          [ row ~gap:4 ~style_class:"property-value"
                              (List.map
                                 (fun e ->

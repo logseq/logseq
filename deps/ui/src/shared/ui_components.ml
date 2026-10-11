@@ -20,6 +20,20 @@ let iv v = P.IntValue v
 let fv v = P.FloatValue v
 let bv v = P.BoolValue v
 
+(* cljs .lui-popover open/close motion (fade-in-0 zoom-in-95): every
+   popover call site carries the same shorthand. *)
+let popover_transition =
+  "opacity 120ms cubic-bezier(0.2, 0, 0, 1), transform 120ms \
+   cubic-bezier(0.2, 0, 0, 1)"
+
+(* cljs .ls-block motion: transform 0.3s on the base rule plus the
+   background-color 0.2s cubic-bezier of .block-highlight /
+   .ls-block.selected — merged into one shorthand on the selectable row
+   emitters. Rows that can never gain .selected use plain
+   "transform 0.3s ease". *)
+let block_transition =
+  "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
+
 (* Post-mount static binds for props with no constructor argument
    (overflow, shadow, cursor, user-select, font-* on container kinds).
    Same wrap pattern as Ui_parts.pressable. *)
@@ -521,7 +535,7 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
           "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ]
-    (popover ~key ~accessibility_identifier:"lui-tooltip" ~at
+    (popover ~transition:popover_transition ~key ~accessibility_identifier:"lui-tooltip" ~at
        ~style_class:"ui__tooltip-content" ~gap:6 ~cross:`center
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6 ~max_width:320
@@ -811,7 +825,7 @@ let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     [ ( P.Shadow
       , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" ) ]
-    (popover ~key ~anchor ~anchor_alignment ~on_dismiss
+    (popover ~transition:popover_transition ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
        ~border_color:"var(--lui-c-border)" ~border_width:1

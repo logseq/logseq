@@ -115,12 +115,14 @@ let root_header ~restore ~delete_forever root : t =
 let root_body root : t =
   let uuid = uuid_of root in
   column ~key:("rb-" ^ uuid) ~style_class:"ls-block"
+    ~transition:Ui_components.block_transition
     [ text ~key:("rbt-" ^ uuid) ~style_class:"block-title-wrap"
         ~value:(title_of root) []
     ]
 
 let root_title root : t =
   column ~key:("rbn-" ^ uuid_of root) ~style_class:"ls-block"
+    ~transition:Ui_components.block_transition
     [ text ~key:("rbnt-" ^ uuid_of root) ~value:(title_of root) [] ]
 
 let render_roots ~restore ~delete_forever roots : t =

@@ -140,7 +140,7 @@ and node () : t =
                  no ~on_dismiss: the bar's own mousedown listener decides
                  hide vs clear-selection and [data-keep-selection]
                  surfaces (its cm menu) must not dismiss it *)
-              popover ~key:"sbar" ~at:(l, t -. 48.)
+              popover ~transition:Ui_components.popover_transition ~key:"sbar" ~at:(l, t -. 48.)
                 ~style_class:"selection-action-bar"
                 ~data_attrs:[ ("data-keep-selection", "true") ]
                 [ Uc.action_bar_capsule ~key:"sbg"

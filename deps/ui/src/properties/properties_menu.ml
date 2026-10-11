@@ -499,6 +499,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
   in
   (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
      ~anchor_offset:4.0 ~min_width:200
+     ~transition:Ui_components.popover_transition
      ~on_dismiss:(fun _ -> close ())
      [ menu_body_view ~more_options:[] ~with_title:false m ~close ])
     context parent

@@ -526,6 +526,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               if S.String_set.mem uuid selected then "selected ls-block"
               else "ls-block")
             (column ~key:"pt-block"
+               ~transition:Ui_components.block_transition
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
               [ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -869,6 +870,7 @@ let foldable_title ?on_click ?(control = true) ?(collapsed = false) key
 
 let foldable_content key inner : t =
   box ~key:(key ^ "-fc") ~style_class:"ls-foldable-content"
+    ~transition:"grid-template-rows 0.2s ease-in-out"
     [ box ~key:"fci"  [ inner ] ]
 
 (* cljs views/view {:add-page-column? true} — each ref row carries the
@@ -912,6 +914,7 @@ let journal_references_view (p : Model.page) : t =
       column ~key:("jrefs-" ^ key)
         ~style_class:"references"
         [ box ~key:"jrfc" ~style_class:"ls-foldable-content"
+            ~transition:"grid-template-rows 0.2s ease-in-out"
             [ column ~key:"jrb" ~style_class:"ls-view-body" ~margin_top:4
                 ~min_width:0
                 (List.map references_row refs)

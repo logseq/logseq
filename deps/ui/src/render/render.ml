@@ -204,6 +204,7 @@ let code_block_actions ~self lang =
   (* the language picker is anchored by the .select-language query in
      Code_mirror — the class stays *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+    ~transition:"opacity 300ms ease-in"
     [ (if Ui_services.env_publishing () then text ~value:lang [] else button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~text:
@@ -327,6 +328,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
 let query_setting_el ~block_uuid =
   button ~key:"qs" ~variant:`ghost ~size:`icon
     ~style_class:"ls-query-setting"
+    ~transition:"opacity .3s ease-in"
     ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
     ~label:(I18n.t "block/set-query")
     ~icon:`settings

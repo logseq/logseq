@@ -110,4 +110,5 @@ let editor_wrapper ~key ~id children : t =
    FontAwesome caret path is registered as app: icon "rotating-arrow"
    in Icons.custom_icons *)
 let rotating_arrow key : t =
-  icon ~key ~name:(`app "rotating-arrow") ~point_size:13 []
+  icon ~key ~name:(`app "rotating-arrow") ~point_size:13
+    ~transition:"transform 100ms ease-in" []

@@ -200,6 +200,7 @@ let tabs_el inst ~op : t =
     ; Ui_parts.float_prop_signal Lui_protocol.Opacity op Fun.id
         (button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
            ~style_class:"ls-add-view"
+           ~transition:"opacity 300ms ease-in"
            ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
            ~data_attrs:[ ("style", "margin-left: -4px") ]
            ~foreground:
@@ -1167,8 +1168,10 @@ let render_head inst : t =
                          (sig_of inst)))
                  []
            | _ -> tabs_el inst ~op) ]
-    ; Ui_components.flat_toolbar ~key:"actions" ~cls:"view-actions"
-        ~label:"View actions" ~opacity_signal:op
+    ; Ui_components.with_props
+        [ Lui_protocol.Transition, Ui_components.sv "opacity 300ms ease-in" ]
+        (Ui_components.flat_toolbar ~key:"actions" ~cls:"view-actions"
+           ~label:"View actions" ~opacity_signal:op
         ((match inst.V.kind with
           | V.KLinkedRefs -> [ refs_filter_btn inst ]
           | _ -> [])
@@ -1220,5 +1223,5 @@ let render_head inst : t =
          @ (if has_add_object then
               [ ghost_btn "plus" ~title_:I.new_node
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
-            else [])) ])
+            else []))) ])
     ctx parent

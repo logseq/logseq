@@ -135,6 +135,7 @@ let item_menu st (it : Sidebar_state.item) =
   popover ~key:("imenu-" ^ it.key)
     ~at:(x, if flip then atop else abot)
     ~role:`menu ~min_width:160
+    ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
     ~style_class:
       ("ui__dropdown-menu-content ls-anchor-cx"

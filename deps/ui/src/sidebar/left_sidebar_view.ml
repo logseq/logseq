@@ -22,7 +22,7 @@ let t = Sidebar_state.t
    carries over from the cljs span wrapper; `ti`/`ls-icon-*` font classes
    are dropped — the kind renders its own svg, font glyphs would
    double-render *)
-let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) name =
+let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) ?transition name =
   icon ?key
     ~name:
       (match name with
@@ -31,6 +31,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) name =
       | n -> `app n)
     ~point_size:size
     ~data_attrs:attrs
+    ?transition
     ~style_class:("ui__icon" ^ if cls = "" then "" else " " ^ cls)
     []
 
@@ -46,6 +47,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) name =
    with Sidebar_state's document handler) *)
 let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
   popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
+    ~transition:Ui_components.popover_transition
     ~style_class:("ui__dropdown-menu-content" ^ extra_cls)
     children
 
@@ -207,6 +209,7 @@ let lp_menu st =
       in
       popover ~key:"lp-menu" ~at:(x, if flip then atop else abot)
         ~role:`menu
+        ~transition:Ui_components.popover_transition
         ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
         ~style_class:
           ("ui__dropdown-menu-content w-60 ls-anchor-cx"
@@ -283,6 +286,7 @@ let repos_menu st =
   popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
     ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
     ~padding_horizontal:8
+    ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
     ~style_class:"ui__dropdown-menu-content repos-list"
     [ column ~key:"wrap"
@@ -504,6 +508,7 @@ let nav_group ms st =
                           ~style_class:"wrap-th"
                           [ text ~value:(t "sidebar.left/navigations") [] ]) ]
                ; box ~key:"nav-more" ~style_class:"b"
+                   ~transition:"opacity 0.15s"
                    [ Ui_parts.pressable
                        ~on_press:(fun _ ->
                          Sidebar_state.toggle_menu st "nav-edit")
@@ -689,11 +694,13 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                 ~style_class:"wrap-th"
                                 [ text ~value:label [] ]) ]
                      ; box ~key:(key ^ "-b") ~style_class:"b"
+                         ~transition:"opacity 0.15s"
                          [ (* web rotates .more 90deg on .is-expand —
                               backends without transforms swap the icon *)
                             reactive
                               (fun collapsed ->
                                 icon_ ~cls:"more" ~size:15
+                                  ~transition:"transform 0.2s"
                                   ~attrs:
                                     [ ( "style"
                                       , "margin-left:2.5px;margin-right:10.5px"

@@ -82,7 +82,6 @@ body {
   background-color: var(--ls-secondary-background-color);
   top: -100px;
   z-index: 10000;
-  transition: top 0.3s;
 
   &:focus {
     top: 20px;
@@ -420,9 +419,6 @@ blockquote {
     .head-l-btns {
       visibility: visible;
       opacity: 1;
-      transition:
-        visibility 0s linear 0.28s,
-        opacity 0.12s linear 0.28s;
 
       &.is-hidden {
         visibility: hidden;
@@ -884,11 +880,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-.rotating-arrow svg,
-.rotating-arrow .lui-icon {
-  transition: transform 100ms ease-in;
-}
-
 .rotating-arrow.not-collapsed svg,
 .rotating-arrow.not-collapsed .lui-icon {
   transform: rotate(90deg);
@@ -1048,7 +1039,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       }
 
       &.enter-show-more > .b {
-        transition: opacity 0.15s;
         opacity: 0;
       }
     }
@@ -1120,10 +1110,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
         }
       }
     }
-  }
-
-  .hd .more {
-    transition: transform 0.2s;
   }
 
   &.is-expand {
@@ -1877,7 +1863,6 @@ a.page-title {
 
     .bullet {
       background-color: var(--lx-gray-08, var(--ls-block-bullet-color));
-      transition: transform 0.2s;
     }
   }
 
@@ -1909,7 +1894,6 @@ a.page-title {
   margin: 0 auto;
   width: 100%;
   transform: translateX(0);
-  transition: transform 0.3s ease;
   will-change: transform;
   container-type: inline-size;
   container-name: ls-block;
@@ -1989,7 +1973,6 @@ a.page-title {
 
 .block-highlight,
 .ls-block.selected {
-  transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color);
 }
 
@@ -2229,7 +2212,6 @@ a.page-title {
     flex-direction: row;
     gap: 0.25rem;
     opacity: 0;
-    transition: opacity 300ms ease-in;
     position: absolute;
     right: 0.25rem;
     top: 0.25rem;
@@ -2452,7 +2434,6 @@ button[role='checkbox'][data-state='unchecked'] {
    text-muted-foreground ml-2 transition-opacity opacity-0) */
 .ls-query-setting {
   opacity: 0;
-  transition: opacity .3s ease-in;
   margin-left: 8px;
 }
 

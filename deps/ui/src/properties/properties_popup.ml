@@ -29,6 +29,7 @@ let open_at_key ~key ?(cls = "") ~x ~y (content : t) =
     popover ~key ~at:(x, y) ~style_class:cls
       ~available_height:(Float.max avail 120.)
       ~data_attrs:[ ("role", "dialog") ]
+      ~transition:Ui_components.popover_transition
       ~on_dismiss:(fun _ -> S.remove_view_overlay key)
       [ content ]
   in

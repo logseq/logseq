@@ -282,7 +282,7 @@ let dialog_view (m : Model.t) =
   | None -> (
       match m.confirm with
       | Some c ->
-          Lui_elements.popover ~key:"page-confirm-layer" ~style_class:"ls-dialog-layer"
+          Lui_elements.popover ~transition:Ui_components.popover_transition ~key:"page-confirm-layer" ~style_class:"ls-dialog-layer"
             ~on_dismiss:(fun _ -> Runtime.send (Action.Confirm_set None); Runtime.flush ())
             [ confirm_view c ]
       | None -> Lui_elements.spacer ~key:"page-menu-empty" [])

@@ -23,6 +23,7 @@ module P = Lui_protocol
 
 let skip_to_main =
   button ~key:"skip" ~accessibility_identifier:"skip-to-main"
+    ~transition:"top 0.3s"
     ~text:(I18n.t "nav/skip-to-main-content") []
 
 (* cljs shui/button :ghost :size :sm — semantic classes only; the button
@@ -661,6 +662,8 @@ let header (ms : Model.t Signal.signal) =
               if m.Model.left_sidebar_open then "head-l-btns is-hidden"
               else "head-l-btns")
             (row ~key:"head-l-btns" ~cross:`center
+               ~transition:
+                 "visibility 0s linear 0.28s, opacity 0.12s linear 0.28s"
                [ left_menu_button; search_button ]) ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r overflow-x-hidden"

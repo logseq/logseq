@@ -1074,7 +1074,7 @@ let popup_body ps (p : popup) : t =
   | Cal_insert | Cal_prop _ -> cal_body ps p
 
 let popup_popover context ps : t =
-  popover ~key:"editor-popup"
+  popover ~transition:Ui_components.popover_transition ~key:"editor-popup"
     ~at_signal:
       (Logseq_el.own context
          (Signal.map

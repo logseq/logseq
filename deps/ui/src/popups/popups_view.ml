@@ -397,7 +397,7 @@ let ac_popover (st : S.t) : t =
      an inner box because the overlay CSS keys
      [data-editor-popup-ref]/[data-side] on that class, and ~data_attrs
      land on the positioner *)
-  (popover ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+  (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
      ~at_signal:
        (Logseq_el.own context
           (Signal.map
@@ -696,7 +696,7 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   Ui_components.with_props [ Ui_components.sub_card_shadow ]
-    (popover ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
+    (popover ~transition:Ui_components.popover_transition ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
        ~padding:4 ~background:"hsl(var(--popover))"
        ~border_color:"var(--lui-c-border)" ~border_width:1
        ~corner_radius:6
@@ -756,7 +756,7 @@ let cm_popover (st : S.t) : t =
              match v.S.cm with
              | Some m when m.S.tag <> None -> 240
              | _ -> 280)
-           (popover ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
+           (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
               ~background:"hsl(var(--popover))"
               ~border_color:"var(--lui-c-border)" ~border_width:1
               ~corner_radius:6
@@ -926,7 +926,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
   (Ui_components.with_props [ Ui_components.card_shadow ]
-     (popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
+     (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
         ~padding:6 ~background:"hsl(var(--popover))"
         ~border_color:"var(--lui-c-border)" ~border_width:1
         ~corner_radius:6

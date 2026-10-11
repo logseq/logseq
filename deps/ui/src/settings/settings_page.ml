@@ -800,7 +800,7 @@ let appearance_body (_x, y) : t =
              (box ~key:"appearance-backdrop" []))
         (* cljs PopupContent right-anchors the appearance panel:
            ~620px wide, right edge ~32px from the viewport edge *)
-      ; popover ~key:"appearance-wrap"
+      ; popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
           ~at:(Ui_services.dom_viewport_width () -. 32. -. 624., y) ~width:624
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set None))

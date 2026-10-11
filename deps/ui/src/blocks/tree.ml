@@ -366,6 +366,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                             "selected bullet"
                           else "bullet")
                         (box ~key:("b-" ^ uuid)
+                           ~transition:"transform 0.2s"
                            ~data_attrs:
                              [ ("data-blockid", uuid)
                              ; (* see the container note above — the dot
@@ -739,6 +740,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
   Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
+       ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
@@ -790,6 +792,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
+       ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
     [ reactive
         ~equal:
@@ -983,6 +986,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
+       ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)
     [ box ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
@@ -1169,6 +1173,7 @@ let embed_more_el (name : string) : t =
       Runtime.send (Action.Navigate_to (Model.Page name)))
     (row ~key:"embed-more"
        ~style_class:"ls-block cursor-pointer"
+       ~transition:"transform 0.3s ease"
        [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ])
 
 let page_embed (name : string) : t =

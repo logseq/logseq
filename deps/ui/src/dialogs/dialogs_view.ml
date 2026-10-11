@@ -279,7 +279,7 @@ let render (ms : Model.t Signal.signal) : t =
           in
           (* Custom dialog chrome (confirm/e2ee) still rides a cover
              popover for the layer owner and Escape dispatch. *)
-          popover ~style_class:"ls-dialog-layer"
+          popover ~transition:Ui_components.popover_transition ~style_class:"ls-dialog-layer"
             ~on_dismiss:(fun _ -> close ()) [ view ])
       )
     ctx parent

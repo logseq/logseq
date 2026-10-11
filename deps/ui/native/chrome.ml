@@ -368,7 +368,7 @@ let overlays (ms : Model.t Signal.signal) =
      viewport and the native backends lift the children into a floating
      window layer, so fixed-position chrome (dialogs, menus, toasts)
      never renders in-flow at the document tail. *)
-  popover ~key:"overlays" ~style_class:"cp__overlays"
+  popover ~transition:Ui_components.popover_transition ~key:"overlays" ~style_class:"cp__overlays"
     [ (* popover takes only standard-kind children — the logseq-*
          extension fragments some views emit mount inside a plain box *)
       box ~key:"overlays-wrap" ~grow:1.
@@ -434,7 +434,7 @@ let help_menu_popup () : t =
     Runtime.send Action.Help_toggle;
     Runtime.flush ()
   in
-  popover ~key:"help-menu"
+  popover ~transition:Ui_components.popover_transition ~key:"help-menu"
     ~at:(Host.inner_width (), Host.inner_height () -. 52.)
     ~anchor:`above ~anchor_alignment:`end_
     ~on_dismiss:(fun _ -> close ())

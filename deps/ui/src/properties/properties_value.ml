@@ -428,6 +428,7 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
      Js.Promise.resolve ());
   (popover ~role:`menu ~anchor:`below ~anchor_alignment:`stretch
      ~anchor_offset:4.0 ~min_width:240
+     ~transition:Ui_components.popover_transition
      ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
      [ reactive
          ~equal:(fun a b -> Option.is_some a = Option.is_some b)
@@ -713,6 +714,7 @@ let rep_select ~key ~value ~options ~on_pick : t =
     ; if_ ~test:(Signal.value open_)
         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
            ~anchor_offset:2.0
+           ~transition:Ui_components.popover_transition
            ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
            [ column ~key:"opts" ~style_class:"ls-rep-menu" ~padding:4
                (List.mapi
@@ -879,6 +881,7 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
   in
   popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
     ~anchor_offset:4.0 ~min_width:556
+    ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> on_dismiss ())
     [ row ~key:"dp-row" ~cross:`start
         ~style_class:"ls-property-date-picker"
@@ -1119,6 +1122,7 @@ let extends_view ctx row : t =
      ; if_ ~test:(Signal.value open_)
          (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
+            ~transition:Ui_components.popover_transition
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
             [ reactive
                 ~equal:(fun a b ->
@@ -1210,6 +1214,7 @@ let closed_value_view ~positioned ctx row : t =
          (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~style_class:"ui__popover-content ls-property-select-popup"
             ~anchor_offset:(-3.0) ~width:226
+            ~transition:Ui_components.popover_transition
             ~on_dismiss:(fun _ -> close ())
             [ reactive
                 ~equal:(fun a b -> Option.is_some a = Option.is_some b)
@@ -1321,6 +1326,7 @@ let rec view ?(positioned = false) ctx row : t =
 and block_value_wrap (inner : t) : t =
   Lui_elements.box ~style_class:"property-block-container content w-full"
     [ Lui_elements.box ~style_class:"ls-block"
+        ~transition:Ui_components.block_transition
         [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0
             ~style_class:"block-main-container"
             [ Lui_elements.row ~gap:0 ~cross:`center

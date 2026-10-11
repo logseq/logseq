@@ -208,6 +208,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             | None -> []))
         (button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
            ~padding:0 ~corner_radius:9999 ~label ~tooltip ~on_press
+           ~transition:"opacity 150ms"
            [ child ])
     in
     match it with
@@ -502,7 +503,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                           update (fun s -> { s with pal_open = not s.pal_open }))
                         [])
                  ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
-                     (popover ~key:"pal-pop" ~anchor:`below
+                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~anchor:`below
                         ~anchor_alignment:`start ~anchor_offset:4.
                         ~on_dismiss:(fun _ ->
                           update (fun s -> { s with pal_open = false }))

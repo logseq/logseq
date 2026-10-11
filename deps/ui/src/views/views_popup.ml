@@ -161,6 +161,7 @@ let anchored_popover ~key ~id ~place ~cls ~card ~on_dismiss children : t =
   Ui_components.with_props
     (if card then [ Ui_components.card_shadow ] else [])
     (popover ~key ~role:`menu ~accessibility_identifier:id
+       ~transition:Ui_components.popover_transition
        ~at_signal:
          (map (fun (pl : placement) -> (pl.px, pl.py))
             (Signal.value (place)))
@@ -347,6 +348,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
                  ~test:(map (fun st -> st.msub = fidx) msig)
                  (Ui_components.with_props [ Ui_components.sub_card_shadow ]
                     (popover ~key:(sub_rid pid fidx)
+                       ~transition:Ui_components.popover_transition
                        ~accessibility_identifier:(sub_rid pid fidx)
                        ~anchor:`right ~anchor_alignment:`start
                        ~anchor_offset:(-4.) ~role:`menu ~min_width:128

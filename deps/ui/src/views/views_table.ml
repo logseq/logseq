@@ -347,6 +347,7 @@ let cell_value blk (c : V.column) : W.t =
 let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
  fun ctx parent ->
   checkbox ~accessibility_identifier:id ~label:aria_label
+    ~transition:"opacity 150ms"
     ~style_class:(if jtrigger then "jtrigger" else "")
     ~checked_signal:(Logseq_el.own ctx (Signal.map shown (sig_of inst)))
     ~on_toggle:(fun ev ->
@@ -430,6 +431,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                     cljs keeps one inline flow *)
                  text (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center ~style_class:"ls-title-ghosts"
+                   ~transition:"opacity 150ms"
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]
                ]) ]
@@ -745,7 +747,7 @@ let header_cell inst (c : V.column) : t =
               ; (* resize-handle stays a hook — the opacity 0/.7/1 state
                    ladder can't ride props (inline opacity beats :where
                    hover/pressed) *)
-                box ~style_class:"ls-table-resize-handle" [] ]))
+                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ]))
 
 (* ---------- action bar ---------- *)
 
@@ -1007,14 +1009,13 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
            (Ui_components.with_props
               [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
               (row ~cross:`stretch ~height:33 ~min_height:33
-                 ~max_height:33
+                 ~max_height:33 ~transition:"background-color 150ms"
                  ~accessibility_identifier:("ls-block-" ^ row_uuid)
                  ~data_attrs:
                    [ ("data-blockid", row_uuid); ("data-id", row_uuid)
                    ; ("tabindex", "0")
                    ; ( "style"
-                     , "border-bottom:1px solid hsl(var(--border));\
-                        transition:background-color 150ms" ) ]
+                     , "border-bottom:1px solid hsl(var(--border))" ) ]
                  [ (* cljs: .sticky-columns holds pinned cells, sibling
                       row holds the unpinned ones *)
                    Ui_components.with_props
@@ -1316,14 +1317,20 @@ let foldable inst ~key ~title ~(body : t) : t =
                                       else " not-collapsed")
                                   (box ~key:"caret"
                                      [ icon ~name:(`app "caret-right")
-                                         ~point_size:16 [] ]) ]) ])
+                                         ~point_size:16
+                                         ~transition:
+                                           "transform 100ms ease-in" [] ]) ]) ])
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
         (fun c ->
           "ls-foldable-content" ^ if c then " is-collapsed" else "")
         (box ~key:"content"
-           [ box ~style_class:"ls-foldable-content-inner" [ body ] ]) ])
+           ~transition:"grid-template-rows 0.2s ease-in-out"
+           [ box ~style_class:"ls-foldable-content-inner"
+               ~transition:
+                 "opacity 0.2s ease-in-out, transform 0.2s ease-in-out"
+               [ body ] ]) ])
     ctx parent
 
 let group_title s gv =

@@ -61,9 +61,6 @@
   max-width: var(--lui-popup-available-width, calc(100vw - 1rem));
   overflow: auto;
   pointer-events: auto;
-  transition-property: opacity, transform;
-  transition-duration: 120ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .lui-popover[data-starting-style],
@@ -2123,13 +2120,11 @@ select.form-select {
   font-size: 1.5rem;
   width: 2.25rem;
   height: 2.25rem;
-  transition: opacity 150ms;
 }
 
 .ls-emoji-cell {
   width: 2.25rem;
   height: 2.25rem;
-  transition: opacity 150ms;
 }
 
 .ls-ep-section-title {
@@ -2161,13 +2156,6 @@ select.form-select {
 .ls-view-tab {
   /* cljs shui/button base: inline-flex items-center gap-1 */
   gap: 0.25rem;
-}
-
-/* view-head reveal is signal-driven (~opacity on the head hover/popup
-   states) — the 300ms ease-in stays as decoration on the hook classes */
-.view-actions,
-.ls-add-view {
-  transition: opacity 300ms ease-in;
 }
 
 /* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */
@@ -2289,7 +2277,6 @@ select.form-select {
   background: var(--accent-08, var(--ls-accent-color));
   border-radius: 0.25rem;
   opacity: 0;
-  transition: opacity 300ms;
 }
 
 .ls-table-resize-handle:hover {
@@ -2324,8 +2311,6 @@ select.form-select {
   padding-top: 0;
   padding-bottom: 0;
   overflow: hidden;
-  transition-property: background-color;
-  transition-duration: 150ms;
 }
 
 .ls-table-row div,
@@ -2380,7 +2365,6 @@ select.form-select {
 .ls-table-row [data-table-row-select] .lui-checkbox,
 .ls-table-header-cell .lui-checkbox {
   opacity: 0;
-  transition: opacity 150ms;
 }
 
 .ls-table-row [data-table-row-select]:hover .lui-checkbox,
@@ -2394,7 +2378,6 @@ select.form-select {
    hover-only */
 .ls-table-row .ls-title-ghosts {
   opacity: 0;
-  transition: opacity 150ms;
 }
 
 /* cljs reveals the title ghost buttons from .table-block-title's own
@@ -2448,13 +2431,11 @@ select.form-select {
 .ls-foldable-content {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.2s ease-in-out;
 }
 
 .ls-foldable-content .ls-foldable-content-inner {
   opacity: 1;
   overflow: hidden;
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
 .ls-foldable-content.is-collapsed {
