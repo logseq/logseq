@@ -103,3 +103,33 @@ CAMLprim value loadIconNames(value arg) {
   caml_failwith("loadIconNames: icon names are compiled in on native");
   return Val_unit;
 }
+
+#if defined(__APPLE__)
+#include <objc/objc.h>
+#include <objc/message.h>
+#include <objc/runtime.h>
+
+/* A bare binary never goes through LaunchServices so the NSApp can end
+   up registered-but-inactive: raise_window reorders the window yet the
+   server still routes clicks only after the process activates, which on
+   its own can swallow the first click (or all of them). Activating the
+   shared application once after window creation restores input
+   routing. */
+CAMLprim void logseq_native_activate(void) {
+  Class cls = objc_getClass("NSApplication");
+  if (cls == Nil) return;
+  SEL shared = sel_registerName("sharedApplication");
+  id app = ((id (*)(Class, SEL))objc_msgSend)(cls, shared);
+  if (app == nil) return;
+  SEL policy = sel_registerName("setActivationPolicy:");
+  ((void (*)(id, SEL, long))objc_msgSend)(
+      app, policy, 0L /* NSApplicationActivationPolicyRegular */);
+  /* finishLaunching is a no-op once the app has launched; for an
+     unbundled binary it completes the registration user events
+     require. */
+  SEL finish = sel_registerName("finishLaunching");
+  ((void (*)(id, SEL))objc_msgSend)(app, finish);
+  SEL activate = sel_registerName("activateIgnoringOtherApps:");
+  ((void (*)(id, SEL, int))objc_msgSend)(app, activate, 1);
+}
+#endif

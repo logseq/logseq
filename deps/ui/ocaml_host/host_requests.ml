@@ -24,6 +24,7 @@ type env = {
   ui : Ui.t;
   rects : Rects.t;
   scale : unit -> float;
+  measure : int -> string -> float * float;
   apply_batch : patch_batch -> unit;
   apply_actions : action list -> unit;
   set_ime_rect : Lui_scene.rect -> unit;
@@ -53,6 +54,202 @@ let jint_opt (name : string) (j : J.t) : int option =
   | Some (`Int i) -> Some i
   | Some (`Float f) -> Some (int_of_float f)
   | _ -> None
+
+let jbool_opt (name : string) (j : J.t) : bool option =
+  match jget name j with Some (`Bool b) -> Some b | _ -> None
+
+(* ---------- editor surface measurement (.ed-r runs) ----------
+
+   The app's edit sink mounts a .ed-r element per run fragment; its
+   "runs" prop lists each fragment's model-unit span "lo,hi,kind;…" in
+   the same document order, so index i in the parsed runs pairs with
+   the i-th .ed-r node under the sink's parent. Offsets are UTF-8
+   bytes into the model text; rects are device px. *)
+
+let cls_has e id tok =
+  match Lui_store.string_prop e.store id "style-class" with
+  | Some cls -> List.mem tok (String.split_on_char ' ' cls)
+  | None -> false
+
+type ed_ctx = {
+  sink : int;
+  ox : float;
+  oy : float;
+  runs : (int * int) array;
+  nodes : int array;
+}
+
+let ed_ctx (e : env) (bid : string) : ed_ctx option =
+  match
+    List.find_opt
+      (fun id ->
+        match Lui_store.prop e.store id "block-id" with
+        | Some (StringValue b) -> b = bid
+        | _ -> false)
+      (Lui_store.preorder e.store)
+  with
+  | None -> None
+  | Some sink -> (
+    match Lui_store.parent e.store sink with
+    | None -> None
+    | Some editor ->
+      let ed_rect = Rects.get e.rects editor in
+      let runs =
+        match Lui_store.prop e.store sink "runs" with
+        | Some (StringValue s) ->
+          List.filter_map
+            (fun entry ->
+              match String.split_on_char ',' entry with
+              | [ lo; hi; _kind ] -> (
+                try Some (int_of_string lo, int_of_string hi)
+                with _ -> None)
+              | _ -> None)
+            (String.split_on_char ';' s)
+        | _ -> []
+      in
+      let nodes =
+        List.filter
+          (fun id -> cls_has e id "ed-r")
+          (Lui_store.preorder ~root:editor e.store)
+      in
+      Some
+        { sink
+        ; ox = ed_rect.Lui_scene.x
+        ; oy = ed_rect.Lui_scene.y
+        ; runs = Array.of_list runs
+        ; nodes = Array.of_list nodes
+        })
+
+(* Window-space rect of the n-th .ed-r node, as (x, y, h) relative to
+   the block-editor origin. *)
+let run_rect e ctx i =
+  let r = Rects.get e.rects ctx.nodes.(i) in
+  (r.Lui_scene.x -. ctx.ox, r.Lui_scene.y -. ctx.oy, r.Lui_scene.h)
+
+(* nodes/runs lengths can skew while a re-render is mid-flight —
+   clamp the span index so measurement degrades instead of crashing. *)
+let run_at ctx i =
+  ctx.runs.(min i (Array.length ctx.runs - 1))
+
+(* Span index the model offset lands in — an offset on a boundary
+   takes the later span so a caret at a run edge sits at the start
+   of that run's rect, matching DOM caret affinity. *)
+let run_of_off ctx off =
+  let rec find i =
+    if i >= Array.length ctx.runs then Array.length ctx.runs - 1
+    else
+      let lo, hi = ctx.runs.(i) in
+      if off < hi || (off = lo && lo = hi) then i else find (i + 1)
+  in
+  find 0
+
+let caret_rect e ctx off =
+  if Array.length ctx.nodes = 0 || Array.length ctx.runs = 0
+  then (0., 0., 0.)
+  else begin
+    let i = run_of_off ctx off in
+    let lo, _ = run_at ctx i in
+    let x, y, h = run_rect e ctx i in
+    let text =
+      Option.value ~default:""
+        (Lui_store.string_prop e.store ctx.nodes.(i) "text")
+    in
+    let local = max 0 (min (off - lo) (String.length text)) in
+    let dx, _ =
+      e.measure ctx.nodes.(i) (String.sub text 0 local)
+    in
+    (x +. dx, y, h)
+  end
+
+let offset_at e ctx x y =
+  let wx, wy = ctx.ox +. float x, ctx.oy +. float y in
+  let n = Array.length ctx.nodes in
+  if n = 0 || Array.length ctx.runs = 0 then 0
+  else begin
+    (* closest run by y first, then x — points between lines snap to
+       the line above; past a run's end snaps to its next run. *)
+    let best = ref 0 and bd = ref Float.max_float in
+    Array.iteri
+      (fun i id ->
+        let r = Rects.get e.rects id in
+        let dy =
+          if wy < r.Lui_scene.y then r.Lui_scene.y -. wy
+          else if wy > r.Lui_scene.y +. r.Lui_scene.h then
+            wy -. (r.Lui_scene.y +. r.Lui_scene.h)
+          else 0.
+        in
+        let dx =
+          if wx < r.Lui_scene.x then r.Lui_scene.x -. wx
+          else if wx > r.Lui_scene.x +. r.Lui_scene.w then
+            wx -. (r.Lui_scene.x +. r.Lui_scene.w)
+          else 0.
+        in
+        let d = (dy *. dy) +. (dx *. dx) in
+        if d < !bd then begin bd := d; best := i end)
+      ctx.nodes;
+    let i = !best in
+    let lo, hi = run_at ctx i in
+    let id = ctx.nodes.(i) in
+    let r = Rects.get e.rects id in
+    let text =
+      Option.value ~default:"" (Lui_store.string_prop e.store id "text")
+    in
+    let len = String.length text in
+    (* widest prefix whose advance still precedes the point *)
+    let rec step k =
+      if k >= len then len
+      else
+        let w, _ = e.measure id (String.sub text 0 (k + 1)) in
+        if r.Lui_scene.x +. w <= wx then step (k + 1) else k
+    in
+    lo + min (hi - lo) (step 0)
+  end
+
+let line_ranges e ctx =
+  let n = Array.length ctx.nodes in
+  if n = 0 || Array.length ctx.runs = 0 then ""
+  else begin
+    (* group consecutive runs sharing a baseline y into visual
+       lines; each line's range unions its run spans. *)
+    let b = Buffer.create 128 in
+    let cur_y = ref Float.nan and lo = ref max_int and hi = ref 0 in
+    let flush () =
+      if !lo < !hi then begin
+        if Buffer.length b > 0 then Buffer.add_char b ';';
+        Buffer.add_string b (Printf.sprintf "%d,%d" !lo !hi)
+      end
+    in
+    for i = 0 to n - 1 do
+      let r = Rects.get e.rects ctx.nodes.(i) in
+      let slo, shi = run_at ctx i in
+      if Float.is_nan !cur_y || abs_float (r.Lui_scene.y -. !cur_y) < 1.
+      then begin
+        cur_y := r.Lui_scene.y;
+        lo := min !lo slo;
+        hi := max !hi shi
+      end
+      else begin
+        flush ();
+        cur_y := r.Lui_scene.y;
+        lo := slo;
+        hi := shi
+      end
+    done;
+    flush ();
+    Buffer.contents b
+  end
+
+let scroll_height e ctx =
+  let top = ref Float.max_float and bot = ref 0. in
+  Array.iter
+    (fun id ->
+      let r = Rects.get e.rects id in
+      if r.Lui_scene.h > 0. then begin
+        top := Float.min !top r.Lui_scene.y;
+        bot := Float.max !bot (r.Lui_scene.y +. r.Lui_scene.h)
+      end)
+    ctx.nodes;
+  Float.max 0. (!bot -. (if !top = Float.max_float then !bot else !top))
 
 (* ---------- ref resolution (domops.rs twin) ----------
 
@@ -332,41 +529,59 @@ let dom_op (e : env) (op : string) (body : string) =
   | "imperative-attach" | "imperative-detach" -> ()
   | "caret-rect" | "offset-at" | "line-ranges" | "scroll-height"
   | "set-input-focus" ->
-    (* Editor conduit: no host-rendered editor surface on this backend
-       yet — the contract's "no data" response keeps the app's
-       measure loop cycling (same as a reply that never arrives). *)
-    (match op with
-     | "caret-rect" ->
-       (match jstr_opt "block-id" parsed with
-        | Some bid ->
-          reply "caret-rect"
-            (`Assoc
-               [ ("block-id", `String bid)
-               ; ("x", `Int 0); ("y", `Int 0); ("h", `Int 0)
-               ; ("ox", `Int 0); ("oy", `Int 0) ])
-        | None -> ())
-     | "offset-at" ->
-       (match jstr_opt "block-id" parsed with
-        | Some bid ->
-          reply "offset-at"
-            (`Assoc
-               [ ("block-id", `String bid); ("offset", `Int 0) ])
-        | None -> ())
-     | "line-ranges" ->
-       (match jstr_opt "block-id" parsed with
-        | Some bid ->
-          reply "line-ranges"
-            (`Assoc
-               [ ("block-id", `String bid); ("ranges", `String "") ])
-        | None -> ())
-     | "scroll-height" ->
-       (match jstr_opt "block-id" parsed with
-        | Some bid ->
-          reply "scroll-height"
-            (`Assoc
-               [ ("block-id", `String bid); ("height", `Int 0) ])
-        | None -> ())
-     | _ -> ())
+    (* Editor conduit over the rendered .ed-r text runs — the host's
+       twin of getClientRects over DOM text nodes. The sink node
+       (ed-sink-<block-id>) carries the "runs" prop listing each run's
+       model-unit span in document order; it zips against the .ed-r
+       elements under the sink's parent. All rects are device px;
+       x/y/h are relative to the block-editor element, ox/oy is its
+       window-space origin. A miss replies with the contract's
+       no-data values so the app's measure loop keeps cycling. *)
+    (match jstr_opt "block-id" parsed with
+     | None -> ()
+     | Some bid -> (
+       match ed_ctx e bid with
+       | None -> ()
+       | Some ctx -> (
+         match op with
+         | "caret-rect" ->
+           (match jint_opt "offset" parsed with
+            | Some off ->
+              let x, y, h = caret_rect e ctx off in
+              reply "caret-rect"
+                (`Assoc
+                   [ ("block-id", `String bid)
+                   ; ("offset", `Int off)
+                   ; ("x", `Float x); ("y", `Float y); ("h", `Float h)
+                   ; ("ox", `Float ctx.ox); ("oy", `Float ctx.oy) ])
+            | None -> ())
+         | "offset-at" ->
+           (match (jint_opt "x" parsed, jint_opt "y" parsed) with
+            | Some x, Some y ->
+              let off = offset_at e ctx x y in
+              reply "offset-at"
+                (`Assoc
+                   [ ("block-id", `String bid)
+                   ; ("x", `Int x)
+                   ; ("y", `Int y)
+                   ; ("offset", `Int off) ])
+            | _ -> ())
+         | "line-ranges" ->
+           reply "line-ranges"
+             (`Assoc
+                [ ("block-id", `String bid)
+                ; ("ranges", `String (line_ranges e ctx)) ])
+         | "scroll-height" ->
+           reply "scroll-height"
+             (`Assoc
+                [ ("block-id", `String bid)
+                ; ("height", `Float (scroll_height e ctx)) ])
+         | "set-input-focus" ->
+           (match jbool_opt "focused" parsed with
+            | Some true -> e.focused_text_input ctx.sink
+            | Some false -> e.focused_text_input 0
+            | None -> ())
+         | _ -> ())))
   | other -> log "dom-op %s unsupported: %s" other body
 
 (* ---------- top-level envelope dispatch ---------- *)

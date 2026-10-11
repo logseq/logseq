@@ -18,6 +18,10 @@ open Lui_window
 
 module Sdl = Tsdl.Sdl
 
+(* ocaml_host_stubs.c: NSApplication activation for a bare-binary
+   launch — see its comment. *)
+external native_activate : unit -> unit = "logseq_native_activate"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -25,9 +29,22 @@ let sdl_ok = function
   | Ok v -> v
   | Error (`Msg m) -> failwith ("SDL: " ^ m)
 
+(* Bundle launches have no reachable stderr; mirror diagnostics into a
+   file too. *)
+let log_oc = ref None
+let filelog fmt =
+  match !log_oc with
+  | None -> Printf.ifprintf stdout fmt
+  | Some oc -> Printf.fprintf oc (fmt ^^ "\n%!")
+
 let debug = ref false
+let dump = ref false
 let dbg fmt =
-  if !debug then Printf.eprintf fmt else Printf.ifprintf stderr fmt
+  if !debug then begin
+    Printf.eprintf fmt;
+    filelog fmt
+  end
+  else Printf.ifprintf stderr fmt
 
 let perf_s () =
   Int64.to_float (Sdl.get_performance_counter ())
@@ -112,6 +129,13 @@ let input_of_event e =
 
 let () =
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
+  dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
+  if !debug then begin
+    match open_out_gen [Open_creat; Open_append] 0o644
+            "/tmp/logseq_native_host.log" with
+    | oc -> log_oc := Some oc
+    | exception _ -> ()
+  end;
   let width =
     try int_of_string (Sys.getenv "LOGSEQ_WIDTH") with _ -> 1440
   and height =
@@ -167,6 +191,13 @@ let () =
         | Ok () -> true
         | Error _ -> false)
   in
+  (* A bare-binary launch does not go through LaunchServices, so the
+     process can stay behind whatever app was frontmost and the window
+     server never routes clicks to it. raise_window re-keys the window;
+     a one-shot focus request in the frame loop covers the case where a
+     foreign app was still coming to the front while we created it. *)
+  Sdl.raise_window !win;
+  native_activate ();
   let drawable () = Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in
@@ -517,7 +548,49 @@ let () =
         | Load _ -> "Load"
         | ExtensionEvent (_, tag, _, _) -> "ExtensionEvent:" ^ tag
       in
-      dbg "dispatch %s node=%d" name (Lui_protocol.event_node ev);
+      let node = Lui_protocol.event_node ev in
+      (match Lui_store.string_prop store node "style-class" with
+       | Some c -> dbg "dispatch %s node=%d class=%s" name node c
+       | None -> dbg "dispatch %s node=%d" name node);
+      (* Ancestry trace for identifying mystery hit targets: kind and
+         style-class up to the root, gated by LOGSEQ_NATIVE_DUMP. *)
+      if !dump then begin
+        let kids = Lui_store.child_ids store node in
+        dbg "  children of %d: %s" node
+          (String.concat " " (List.map string_of_int kids));
+        List.iter
+          (fun k ->
+             dbg "  child %d kind=%s key=%s rect=%.0f,%.0f %.0fx%.0f" k
+               (Lui_store.kind store k)
+               (Option.value
+                  (Lui_store.string_prop store k "key") ~default:"-")
+               (let r = Rects.get rects k in
+                r.Lui_scene.x) (Rects.get rects k).Lui_scene.y
+               (Rects.get rects k).Lui_scene.w
+               (Rects.get rects k).Lui_scene.h)
+          kids;
+        let rec walk id =
+          let kind = Lui_store.kind store id in
+          let cls =
+            match Lui_store.string_prop store id "style-class" with
+            | Some c -> c
+            | None -> ""
+          in
+          let key =
+            match Lui_store.string_prop store id "key" with
+            | Some k -> k
+            | None -> "-"
+          in
+          let r = Rects.get rects id in
+          dbg "  node %d kind=%s key=%s class=%s rect=%.0f,%.0f %.0fx%.0f"
+            id kind key cls r.Lui_scene.x r.Lui_scene.y
+            r.Lui_scene.w r.Lui_scene.h;
+          match Lui_store.parent store id with
+          | Some p when p <> id -> walk p
+          | _ -> ()
+        in
+        walk node
+      end;
       (try
          let r = Native_embed.dispatch_lui ev in
          if !debug && r <> "" then
@@ -564,7 +637,8 @@ let () =
   let drain_events () =
     let go = ref true in
     while !go do
-      if Sdl.poll_event (Some e) then
+      if Sdl.poll_event (Some e) then begin
+        dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         match input_of_event e with
         | Some (Input.Resize (w, h)) ->
           win_w := w;
@@ -574,6 +648,7 @@ let () =
         | Some input ->
           apply_actions (Ui.handle ui store rects input)
         | None -> ()
+      end
       else go := false
     done
   in
@@ -596,6 +671,7 @@ let () =
       ui;
       rects;
       scale = (fun () -> !scale_cell);
+      measure = (fun id s -> Text_engine.measure_text text_engine id s);
       apply_batch = (fun b -> ignore (Lui_host.apply_batch host b));
       apply_actions;
       set_ime_rect;
@@ -631,8 +707,16 @@ let () =
   log "logseq_native: %dx%d drawable (scale %.2f), renderer=%s, icons=%d"
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
+  let raises_left = ref 3 in
   while not !quit do
     let t0 = perf_s () in
+    (* See the raise_window note above: re-raise briefly after boot so a
+       racing frontmost app cannot permanently steal input routing. *)
+    if !raises_left > 0 then begin
+      decr raises_left;
+      Sdl.raise_window !win;
+      native_activate ()
+    end;
     drain_events ();
     (* OCaml worker threads poke wakeup() when the app mailbox fills —
        pump drains it on this entry thread; returned patches apply. *)

@@ -395,5 +395,6 @@
  (foreign_stubs
   (language c)
   (names ocaml_host_stubs))
+ (link_flags (:standard -cclib -lobjc))
  (modes native)
  (enabled_if (= %{system} macosx)))
