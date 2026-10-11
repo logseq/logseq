@@ -350,9 +350,10 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
   in
   with_props binds
     (row ~key ~main:`center ~cross:`center
-       ?height:(if boxed then Some 20 else None)
+       (* web kbd.shui-shortcut-key: h-5 + padding 2px 4px *)
+       ~height:20
        ?min_width:(if min_slot > 0 then Some min_slot else None)
-       ?padding_horizontal:(if boxed then Some 4 else None)
+       ~padding_horizontal:4
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ with_props
            [ P.FontSize, sv "var(--lx-text-header)"
