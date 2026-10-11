@@ -91,6 +91,19 @@ let ghost_btn_cls ?(extra = "") () =
    active:opacity-80 as-ghost"
   ^ if extra = "" then "" else " " ^ extra
 
+(* Cover a layer host with the frame: mounted popups measure and place
+   against their nearest out-of-flow ancestor, so a content-sized host
+   collapses them into a zero-width strip at the window center. The
+   viewport props pin the cover the web positioner gives the layer via
+   inset:0 (and gpui gives via its class dictionary). *)
+let viewport_cover (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  ignore (standard_kind context node);
+  Lui_ui.width_viewport context node 1.;
+  Lui_ui.height_viewport context node 1.;
+  node
+
 (* The imperative side queries .mock-text/.editor-inner/.block-editor by
    class, so the semantic classes stay on style_class; flex/grow layout
    moves to the kind's typed props. *)
