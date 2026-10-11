@@ -57,6 +57,7 @@ let required_ls_literals =
   ; "--ls-header-button-background"
   ; "--ls-button-background-hsl"
   ; "--ls-button-background"
+  ; "--ls-block-highlight-color"
   ]
 
 (* vars-classic names rebound per data-color accent (colors.css) or
@@ -83,7 +84,6 @@ let bound_ls =
   ; "--ls-tag-text-color"
   ; "--ls-tag-text-hover-color"
   ; "--ls-slide-background-color"
-  ; "--ls-block-highlight-color"
   ; "--ls-selection-background-color"
   ; "--ls-selection-text-color"
   ; "--ls-page-checkbox-color"
