@@ -256,6 +256,38 @@
     (testing "an outdent onto a linked block takes the linked block itself"
       (is (= ["linked" true] (target [] (b "linked") {:outliner-op :indent-outdent-blocks :indent? false :sibling? true}))))))
 
+(deftest insert-blocks-cases
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "src"} {:block/title ""} {:block/title "full"}]}])
+        b #(db-test/find-block-by-content @conn %)
+        insert (fn [blocks target opts] (outliner-core/insert-blocks @conn blocks target opts))]
+    (testing "an inserted block gets new timestamps"
+      (let [{:keys [blocks]} (insert [{:block/uuid (random-uuid) :block/title "new" :block/created-at 1 :block/updated-at 1}]
+                                     (b "src") {:sibling? true})]
+        (is (< 1 (:block/created-at (first blocks))))))
+    (testing "an existing block given by its db id alone brings its content"
+      (let [{:keys [blocks]} (insert [{:db/id (:db/id (b "src"))}] (b "full") {:sibling? true})]
+        (is (= "src" (:block/title (first blocks))))))
+    (testing "a paste drops an asset block, an insert keeps it"
+      (let [asset {:block/uuid (random-uuid) :block/title "pic" :logseq.property.asset/type "png"}
+            plain {:block/uuid (random-uuid) :block/title "plain"}]
+        (is (= ["plain"] (map :block/title (:blocks (insert [asset plain] (b "src") {:sibling? true :outliner-op :paste})))))
+        (is (= ["pic" "plain"] (map :block/title (:blocks (insert [asset plain] (b "src") {:sibling? true})))))))
+    (testing "one block inserted after an empty block keeps the empty block"
+      (let [empty-block (b "")
+            {:keys [blocks]} (insert [{:block/uuid (random-uuid) :block/title "one"}] empty-block {:sibling? true})]
+        (is (not= (:db/id empty-block) (:db/id (first blocks))))))
+    (testing "asking to replace a target that is not empty does not replace it"
+      (let [full (b "full")
+            {:keys [blocks]} (insert [{:block/uuid (random-uuid) :block/title "x"}
+                                      {:block/uuid (random-uuid) :block/title "y"}]
+                                     full {:sibling? true :replace-empty-target? true})]
+        (is (not-any? #(= (:db/id full) (:db/id %)) blocks))))
+    (testing "the insert's history keeps the inserted uuids"
+      (let [{:keys [tx-meta]} (insert [{:block/uuid (random-uuid) :block/title "h"}] (b "src") {:sibling? true})]
+        (is (true? (get-in tx-meta [:outliner-ops 0 1 2 :keep-uuid?])))))))
+
 (deftest move-up-into-the-parent-of-the-first-moved-block
   ;; c1 is the first child of p, x comes after p: moving [c1 x] up with p as
   ;; the target goes before p, not into p after its last child
