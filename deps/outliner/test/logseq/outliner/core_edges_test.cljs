@@ -219,10 +219,10 @@
         orders #'outliner-core/get-block-orders
         t (db-test/find-block-by-content @conn "t")
         r (db-test/find-block-by-content @conn "r")
-        ot (:block/order t)
-        or' (:block/order r)
-        mid (str ot "V")
-        between? #(and (pos? (compare % ot)) (neg? (compare % or')))]
+        t-order (:block/order t)
+        r-order (:block/order r)
+        mid (str t-order "V")
+        between? #(and (pos? (compare % t-order)) (neg? (compare % r-order)))]
     (is (between? mid))
     (testing "kept orders that fall at the target stay, children's too"
       (is (= [mid "child"] (vec (orders [{:block/level 1 :block/order mid} {:block/level 2 :block/order "child"}] t true true)))))
