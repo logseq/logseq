@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker.handler.index
-  (:require [lambdaisland.glogi :as log]
+  (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
@@ -49,6 +51,15 @@
    (index/<graph-delete-metadata! db graph-id)
    (<delete-graph-storage! env url graph-id)
    (index/<graph-delete-index-entry! db graph-id)))
+
+(defn- transit->base64
+  "base64 of a transit-encoded raw Uint8Array, e.g. the wrapped AES key."
+  [value]
+  (when (string? value)
+    (let [decoded (try (ldb/read-transit-str value)
+                       (catch :default _ nil))]
+      (when (instance? js/Uint8Array decoded)
+        (js/btoa (.join (js/Array.from decoded (fn [b] (js/String.fromCharCode b))) ""))))))
 
 (defn- <safe-user-activity-touch!
   [db user-id]
@@ -311,7 +322,9 @@
           (if (not access?)
             (http/forbidden)
             (p/let [encrypted-aes-key (index/<graph-encrypted-aes-key db graph-id user-id)]
-              (http/json-response :e2ee/graph-aes-key {:encrypted-aes-key encrypted-aes-key})))))
+              (http/json-response :e2ee/graph-aes-key
+                                  {:encrypted-aes-key encrypted-aes-key
+                                   :encrypted-aes-key-base64 (transit->base64 encrypted-aes-key)})))))
 
       :e2ee/graph-aes-key-post
       (cond
@@ -399,12 +412,20 @@
               (http/unauthorized))
 
             :else
-            (p/let [claims (auth/auth-claims request env)
-                    _ (when claims
+            (p/let [claims (auth/semantic-auth-claims request env)
+                    _ (when (and claims (nil? (aget claims "pat_id")))
                         (index/<user-upsert! db claims))]
               (if (nil? claims)
                 (http/unauthorized)
-                (p/let [user-id (aget claims "sub")
+                (if (and (string? (aget claims "pat_graph_id"))
+                         ;; PAT claims may only fetch their graph's wrapped AES key (agent bootstrap)
+                         (not (and (= :e2ee/graph-aes-key-get (:handler route))
+                                   (= (aget claims "pat_graph_id")
+                                      (some-> route :path-params :graph-id))
+                                   (contains? (into #{} (string/split (or (aget claims "scope") "") #"\s+"))
+                                              "logseq/read"))))
+                  (http/forbidden)
+                  (p/let [user-id (aget claims "sub")
                         _ (<safe-user-activity-touch! db user-id)
                         response (handle {:db db
                                           :env env
@@ -417,7 +438,7 @@
                                      (string? graph-id)
                                      (< (.-status response) 400))
                             (<safe-graph-activity-touch! db graph-id))]
-                    response))))))
+                    response)))))))
       (catch :default error
         (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)

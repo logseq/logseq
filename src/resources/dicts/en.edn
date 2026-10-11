@@ -601,6 +601,7 @@
  :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
+ :encryption/copy-key "Copy"
  :encryption/current-password "Current password"
  :encryption/enter-password "Enter password"
  :encryption/enter-password-again "Enter password again"
@@ -616,12 +617,16 @@
  :encryption/forgot-password-warning "If you forget your password, you can force a reset of your encryption password. However, this will make all currently encrypted graph data stored on the server permanently unreadable. After resetting, you'll need to re-upload your graphs from the client."
  :encryption/init-key-pair "Init E2EE encrypt-key-pair"
  :encryption/init-key-pair-error "Init key-pair err: {1}"
+ :encryption/key-unavailable "Key unavailable"
  :encryption/password-not-matched "Password not matched"
  :encryption/password-updated-successfully "Password updated successfully!"
+ :encryption/private-key "Private key (base64)"
+ :encryption/public-key "Public key (base64)"
  :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
+ :encryption/show-private-key "Show private key"
  :encryption/updating-password "Updating password ..."
  :encryption/wrong-password "Wrong password"
 

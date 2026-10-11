@@ -327,14 +327,18 @@
        :block/title (:block/title page)})))
 
 (defn- prepare-block-title! [conn title]
-  (let [refs (->> (page-ref-values title)
+  ;; E2EE titles are opaque ciphertext packages — they contain no resolvable
+  ;; [[refs]] (and transit punctuation must never be parsed as refs).
+  (if (ldb/get-graph-rtc-e2ee? @conn)
+    {:block/title title}
+    (let [refs (->> (page-ref-values title)
                   (keep #(resolve-page-ref! conn %))
                   (reduce (fn [result ref]
                             (assoc result (:block/uuid ref) ref)) {})
                   vals
                   vec)]
-    {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
-     :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
+      {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
+       :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)})))
 
 (defn- tree-block [conn node]
   (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
@@ -516,7 +520,8 @@
     (p/let [body (body-clj request)]
       (if-not (seq (:title body))
         (http/bad-request "missing title")
-        (let [[title page-id] (outliner-page/create! conn (:title body) {})]
+        (let [[title page-id] (outliner-page/create! conn (:title body)
+                                                     {:encrypted-title? (ldb/get-graph-rtc-e2ee? db)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
 
@@ -715,7 +720,9 @@
     (p/let [body (body-clj request)]
       (if-not (seq (:title body))
         (http/bad-request "missing title")
-        (let [[title tag-id] (outliner-page/create! conn (:title body) {:class? true})]
+        (let [[title tag-id] (outliner-page/create! conn (:title body)
+                                                     {:class? true
+                                                      :encrypted-title? (ldb/get-graph-rtc-e2ee? db)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str tag-id) :title title} 201))))
 
@@ -981,16 +988,74 @@
     :semantic/properties-update :semantic/properties-delete
     :semantic/search})
 
+;; E2EE write validation: on encrypted graphs, every title field a caller
+;; supplies must already be an encrypted package — plaintext returns 400.
+(def ^:private e2ee-title-handlers
+  #{:semantic/pages-create :semantic/pages-update :semantic/blocks-update
+    :semantic/tags-create :semantic/tags-update :semantic/tasks-create
+    :semantic/properties-create :semantic/properties-update})
+
+(def ^:private e2ee-tree-handlers
+  #{:semantic/blocks-insert-children :semantic/blocks-insert-tree :semantic/capture})
+
+(def ^:private e2ee-gated-write-handlers
+  (into e2ee-title-handlers (conj e2ee-tree-handlers :semantic/assets-create)))
+
+(defn- encrypted-package? [value]
+  (when (string? value)
+    (let [decoded (try (ldb/read-transit-str value)
+                       (catch :default _ ::invalid-transit))]
+      (or ;; canonical: [iv ciphertext] AES-GCM-256
+          (and (vector? decoded) (= 2 (count decoded))
+               (every? #(instance? js/Uint8Array %) decoded))
+          ;; RSA-envelope written by the edge encrypt helper
+          (and (map? decoded) (contains? decoded :logseq.e2ee/keys))))))
+
+(defn- block-trees-titles [nodes]
+  (mapcat (fn [node] (cons (:title node) (block-trees-titles (:children node))))
+          nodes))
+
+(defn- <e2ee-write-titles
+  "Titles a write operation wants to store. Assets: the title query param
+  (required on e2ee — otherwise a plaintext name would be derived from
+  file-name). Others: body titles from a request clone."
+  [request ^js url handler]
+  (if (= handler :semantic/assets-create)
+    (p/resolved [(.get (.-searchParams url) "title")])
+    (p/let [body (body-clj (.clone request))]
+      (into []
+            (comp
+             (concat
+              (when (contains? e2ee-title-handlers handler) [(:title body)])
+              (when (contains? e2ee-tree-handlers handler)
+                (block-trees-titles (:blocks body))))
+             (remove nil?)) '()))))
+
+(defn- <e2ee-write-response [context handler]
+  (p/let [titles (<e2ee-write-titles (:request context) (:url context) handler)]
+    (if (every? encrypted-package? titles)
+      ::allowed
+      (http/bad-request "content must be an encrypted package on e2ee graphs"))))
+
+(defn- dispatch-handle [context handler]
+  (cond
+    (contains? page-handlers handler) (handle-pages context)
+    (contains? block-handlers handler) (handle-blocks context)
+    (contains? block-property-handlers handler) (handle-block-properties context)
+    (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
+    (contains? task-handlers handler) (handle-tasks context)
+    (contains? asset-handlers handler) (handle-assets context)
+    (contains? property-and-search-handlers handler) (handle-properties-and-search context)
+    :else (http/not-found)))
+
 (defn handle [{:keys [^js self route] :as context}]
   (let [conn (ensure-conn! self)
         handler (:handler route)
-        context (assoc context :conn conn :db @conn :handler handler :path-params (:path-params route))]
-    (cond
-      (contains? page-handlers handler) (handle-pages context)
-      (contains? block-handlers handler) (handle-blocks context)
-      (contains? block-property-handlers handler) (handle-block-properties context)
-      (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
-      (contains? task-handlers handler) (handle-tasks context)
-      (contains? asset-handlers handler) (handle-assets context)
-      (contains? property-and-search-handlers handler) (handle-properties-and-search context)
-      :else (http/not-found))))
+        db @conn
+        context (assoc context :conn conn :db db :handler handler :path-params (:path-params route))]
+    (if (and (ldb/get-graph-rtc-e2ee? db) (contains? e2ee-gated-write-handlers handler))
+      (p/let [result (<e2ee-write-response context handler)]
+        (if (= ::allowed result)
+          (dispatch-handle context handler)
+          result))
+      (dispatch-handle context handler))))

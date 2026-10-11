@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [logseq.common.authorization :as authorization]
+            [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
@@ -303,7 +304,7 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest semantic-api-rejects-e2ee-graphs-before-durable-object-test
+(deftest semantic-api-forwards-e2ee-request-to-durable-object-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")
                forwarded (atom [])
@@ -314,10 +315,101 @@
                                index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
                                common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
                  (p/let [response (dispatch/handle-worker-fetch request env)
+                         forwarded-request (first @forwarded)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (some? forwarded-request))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-edge-ops-require-e2ee-graph-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/e2ee/encrypt" "logseq/write" "POST")
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row false)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
                          body (json-body response)]
-                   (is (= 409 (.-status response)))
-                   (is (= "semantic-api-unavailable-for-e2ee" (:error body)))
+                   (is (= 400 (.-status response)))
+                   (is (= "operation requires an E2EE graph" (:error body)))
                    (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-encrypt-helper-produces-canonical-package-test
+  (async done
+         (let [aes-key (js/Uint8Array.from (range 32) (fn [i] (mod (inc i) 256)))
+               key-b64 (js/btoa (.join (js/Array.from aes-key (fn [b] (js/String.fromCharCode b))) ""))
+               request (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/encrypt"
+                                    #js {:method "POST"
+                                         :headers #js {"authorization" "Bearer semantic-token"
+                                                       "content-type" "application/json"}
+                                         :body (js/JSON.stringify #js {:texts #js ["hello" "世界"]
+                                                                     :key key-b64})})
+               claims #js {"sub" "user-1" "scope" "logseq/write"}
+               env #js {"DB" #js {}
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)
+                         [cipher-1 cipher-2] (:texts body)]
+                   (is (= 200 (.-status response)))
+                   (is (= 2 (count (:texts body))))
+                   (doseq [cipher [cipher-1 cipher-2]]
+                     (let [decoded (ldb/read-transit-str cipher)]
+                       (is (vector? decoded))
+                       (is (= 2 (count decoded)))
+                       (is (every? #(instance? js/Uint8Array %) decoded))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-encrypt-decrypt-round-trip-test
+  (async done
+         (let [aes-key (js/crypto.getRandomValues (js/Uint8Array. 32))
+               key-b64 (js/btoa (.join (js/Array.from aes-key (fn [b] (js/String.fromCharCode b))) ""))
+               plaintext "hello encrypted world"
+               env #js {"DB" #js {}
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}
+               claims #js {"sub" "user-1" "scope" "logseq/read logseq/write"}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [encrypt-request
+                         (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/encrypt"
+                                      #js {:method "POST"
+                                           :headers #js {"authorization" "Bearer semantic-token"
+                                                         "content-type" "application/json"}
+                                           :body (js/JSON.stringify #js {:texts #js [plaintext]
+                                                                       :key key-b64})})
+                         encrypt-response (dispatch/handle-worker-fetch encrypt-request env)
+                         encrypt-body (json-body encrypt-response)
+                         cipher (first (:texts encrypt-body))
+                         decrypt-request
+                         (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/decrypt"
+                                      #js {:method "POST"
+                                           :headers #js {"authorization" "Bearer semantic-token"
+                                                         "content-type" "application/json"}
+                                           :body (js/JSON.stringify #js {:texts #js [cipher]
+                                                                       :key key-b64})})
+                         decrypt-response (dispatch/handle-worker-fetch decrypt-request env)
+                         decrypt-body (json-body decrypt-response)]
+                   (is (= 200 (.-status encrypt-response)))
+                   (is (= 200 (.-status decrypt-response)))
+                   (is (= [plaintext] (:texts decrypt-body)))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))

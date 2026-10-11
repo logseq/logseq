@@ -15,6 +15,9 @@
             [frontend.worker.sync.util :refer [fail-fast fetch-json coerce-http-request] :as sync-util]))
 
 (defonce ^:private *graph->aes-key (atom {}))
+;; user-id -> RSA-OAEP private CryptoKey, cached by <load-user-rsa-key-material.
+;; Used to unwrap RSA-envelope packages written by semantic API agents.
+(defonce ^:private *user-rsa-private-keys (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
 (defonce ^:private *ensure-user-rsa-key-pair-inflight (atom {}))
 (defonce ^:private node-default-auth-file "~/logseq/auth.json")
@@ -555,6 +558,8 @@
                                                  :retry-error retry-error})
                                       (throw retry-error)))))))
           (p/then (fn [key-material]
+                    (when-let [private-key (:private-key key-material)]
+                      (swap! *user-rsa-private-keys assoc user-id private-key))
                     (if-let [password (when (seq @ui-password*)
                                        @ui-password*)]
                       (p/let [_ (<save-e2ee-password password)]
@@ -699,20 +704,48 @@
   (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
     (ldb/write-transit-str encrypted)))
 
+(defn- rsa-envelope-package?
+  "Package shape written by the semantic API's RSA-envelope encrypt helper."
+  [decoded]
+  (and (map? decoded) (contains? decoded :logseq.e2ee/keys)))
+
+(defn- <decrypt-rsa-envelope
+  "Unwrap an RSA-envelope package with a cached user private key. Returns nil
+  when no cached key can unwrap it."
+  [decoded]
+  (let [wrapped-keys (:logseq.e2ee/keys decoded)
+        match (some (fn [[user-id private-key]]
+                      (when-let [wrapped (get wrapped-keys user-id)]
+                        [private-key wrapped]))
+                    @*user-rsa-private-keys)]
+    (when match
+      (-> (p/let [[private-key wrapped] match
+                  ephemeral (crypt/<decrypt-aes-key private-key (js/Uint8Array. wrapped))
+                  decrypted (crypt/<decrypt-uint8array
+                             ephemeral
+                             [(js/Uint8Array. (:logseq.e2ee/iv decoded))
+                              (js/Uint8Array. (:logseq.e2ee/data decoded))])
+                  transit-text (.decode (js/TextDecoder.) decrypted)]
+            (ldb/read-transit-str transit-text))
+          (p/catch (fn [_] nil))))))
+
 (defn <decrypt-text-value
   [aes-key value]
   (assert (string? value) (str "encrypted value should be a string, value: " value))
   (let [decoded (read-transit-safe value)]
     (if (= decoded invalid-transit)
       (p/resolved value)
-      (p/let [value (or (crypt/<decrypt-text-if-encrypted aes-key decoded)
-                        decoded)
-              value' (if (string? value)
-                       (read-transit-safe value)
-                       value)]
-        (if (= value' invalid-transit)
-          value
-          value')))))
+      (if (rsa-envelope-package? decoded)
+        (p/let [value' (<decrypt-rsa-envelope decoded)]
+          (or value' value))
+        (p/let [value (or (crypt/<decrypt-text-if-encrypted aes-key decoded)
+                          decoded)
+                value' (if (string? value)
+                         (read-transit-safe value)
+                         value)]
+          (if (= value' invalid-transit)
+            value
+            value'))))))
 
 (defn- encrypt-tx-item
   [aes-key item]

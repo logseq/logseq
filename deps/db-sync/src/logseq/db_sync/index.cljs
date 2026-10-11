@@ -307,7 +307,6 @@
   (let [cursor-key (when cursor (decode-semantic-graph-cursor cursor))
         [cursor-updated-at cursor-graph-id] cursor-key
         conditions (cond-> [(str "(g.user_id = ? or m.user_id = ?) ")
-                            "g.graph_e2ee = 0"
                             "g.graph_ready_for_use = 1"]
                      (string? name) (conj "lower(g.graph_name) = lower(?)")
                      cursor-key (conj "(g.updated_at < ? or (g.updated_at = ? and g.graph_id > ?))"))
@@ -315,7 +314,7 @@
                (string? name) (conj name)
                cursor-key (conj cursor-updated-at cursor-updated-at cursor-graph-id)
                true (conj (inc limit)))
-        sql (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_ready_for_use, "
+        sql (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_e2ee, g.graph_ready_for_use, "
                  "g.created_at, g.updated_at, m.role, m.invited_by "
                  "from graphs g "
                  "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
@@ -329,7 +328,7 @@
                            {:graph-id (aget row "graph_id")
                             :graph-name (aget row "graph_name")
                             :schema-version (aget row "schema_version")
-                            :graph-e2ee? false
+                            :graph-e2ee? (graph-e2ee-sql->bool (aget row "graph_e2ee"))
                             :graph-ready-for-use? (graph-ready-for-use-sql->bool (aget row "graph_ready_for_use"))
                             :role (aget row "role")
                             :invited-by (aget row "invited_by")
@@ -347,19 +346,19 @@
   (when (and (string? user-id) (string? graph-id))
     (p/let [result (common/<d1-all
                            db
-                           (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_ready_for_use, "
+                           (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_e2ee, g.graph_ready_for_use, "
                                 "g.created_at, g.updated_at, m.role, m.invited_by "
                                 "from graphs g "
                                 "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
                                 "where g.graph_id = ? and (g.user_id = ? or m.user_id = ?) "
-                                "and g.graph_e2ee = 0 and g.graph_ready_for_use = 1")
+                                "and g.graph_ready_for_use = 1")
                            user-id graph-id user-id user-id)
             row (first (common/get-sql-rows result))]
       (when row
         {:graph-id (aget row "graph_id")
          :graph-name (aget row "graph_name")
          :schema-version (aget row "schema_version")
-         :graph-e2ee? false
+         :graph-e2ee? (graph-e2ee-sql->bool (aget row "graph_e2ee"))
          :graph-ready-for-use? (graph-ready-for-use-sql->bool (aget row "graph_ready_for_use"))
          :role (aget row "role")
          :invited-by (aget row "invited_by")
@@ -640,6 +639,21 @@
              :email (aget row "email")
              :username (aget row "username")})
           rows)))
+
+(defn <graph-member-public-keys [db graph-id]
+  "RSA public keys of every graph member that has uploaded a user key pair."
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                  (str "select k.user_id, k.public_key "
+                                       "from graph_members m "
+                                       "join user_rsa_keys k on k.user_id = m.user_id "
+                                       "where m.graph_id = ?")
+                                  graph-id)
+            rows (common/get-sql-rows result)]
+      (mapv (fn [row]
+              {:user-id (aget row "user_id")
+               :public-key (aget row "public_key")})
+            rows))))
 
 (defn <graph-member-update-role! [db graph-id user-id role]
   (common/<d1-run db

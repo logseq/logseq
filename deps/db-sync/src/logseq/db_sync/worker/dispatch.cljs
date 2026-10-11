@@ -7,6 +7,7 @@
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.handler.personal-access-token :as pat-handler]
             [logseq.db-sync.worker.http :as http]
@@ -126,7 +127,8 @@
             (p/let [e2ee? (index/<graph-e2ee? (aget env "DB") graph-id)]
               (cond
                 (nil? e2ee?) (http/not-found)
-                e2ee? (http/error-response "semantic-api-unavailable-for-e2ee" 409)
+                (and (:edge? operation) (not e2ee?))
+                (http/bad-request "operation requires an E2EE graph")
                 :else
                 (let [binding-name (if (= :read (:rate-class operation))
                                      "SEMANTIC_READ_RATE_LIMITER"
@@ -136,8 +138,13 @@
                     (http/error-response "rate limiter unavailable" 503)
                     (p/let [result (.limit limiter #js {:key (str (rate-limit-subject claims) ":"
                                                                (:operation-id operation) ":" graph-id)})]
-                      (if (false? (aget result "success"))
-                        (rate-limit-response)
+                      (cond
+                        (false? (aget result "success")) (rate-limit-response)
+                        (:edge? operation)
+                        (e2ee-handler/handle {:request request :env env
+                                              :handler (:handler operation)
+                                              :graph-id graph-id})
+                        :else
                         (forward-semantic-request request env operation url)))))))))))))
 
 (defn- request-user-id
