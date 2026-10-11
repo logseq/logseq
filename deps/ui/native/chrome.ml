@@ -488,12 +488,16 @@ let help_area (ms : Model.t Signal.signal) : t =
        smallest frame at the point and may land on the wrapper or the svg —
        the document listener walks ancestors, so the handler must sit on
        the outermost element of the hit box. *)
-    [ Ui_parts.pressable
+    [ (* stack overlay child: pin to the bottom-trailing corner —
+         edge-stretch would cover the whole window and swallow every
+         press *)
+      overlay ~key:"help-anchor" ~alignment:`bottom_trailing
+        [ Ui_parts.pressable
         ~on_press:(fun _ ->
           Runtime.send Action.Help_toggle; Runtime.flush ())
         (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
            [ box ~key:"help-inner" ~style_class:"inner"
-               [ help_svg ] ])
+               [ help_svg ] ]) ]
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then
             (* the dismiss catcher box is gone: the popover's own
@@ -573,7 +577,10 @@ let shell (ms : Model.t Signal.signal) : t =
             (column ~key:"left-container"
                ~accessibility_identifier:"left-container" ~grow:1.
                ~min_height:0
-               (topbar ms @ [ hidden_chrome ms; main_content ms st ]))
+               ([ (* invisible logseq-dom carrier: hosts forward
+                     document events through this extension node *)
+                  Logseq_el.carrier ]
+                @ topbar ms @ [ hidden_chrome ms; main_content ms st ]))
             (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]

@@ -652,8 +652,7 @@ let () =
       end;
       (try
          let r = Native_embed.dispatch_lui ev in
-         if !debug && r <> "" then
-           warn "  -> %d bytes" (String.length r);
+         dbg "  dispatch -> %d bytes" (String.length r);
          apply_patch_json r
        with Invalid_argument msg ->
          warn "dispatch rejected event: %s" msg)
