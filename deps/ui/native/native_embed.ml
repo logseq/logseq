@@ -440,7 +440,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
        ^ Js.Json.stringify
            (Js.Json.JObject
               (List.map (fun (name, svg) -> name, Js.Json.JString svg)
-                 (Icons.custom_icons @ Icons.status_icons @ Icons.priority_icons))));
+                 (Icons.app_icon_svgs ()))));
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
   Platform.host_request := platform_request;
