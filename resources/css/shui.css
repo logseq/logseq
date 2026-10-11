@@ -34,7 +34,6 @@ html {
   .ui__dropdown-menu-content,
   .ui__dropdown-menu-sub-content,
   .ui__context-menu-content,
-  .ui__context-menu-sub-content,
   .ui__popover-content,
   .ui__select-content {
     --accent: var(--rx-gray-04-hsl);
@@ -56,15 +55,7 @@ html {
       }
     }
 
-    .ui__dropdown-menu-content.has-search-key {
-      > .head:focus-within + div[data-radix-collection-item] {
-        background-color: var(--lx-gray-04, hsl(var(--accent)));
-      }
-    }
-
-    div[data-radix-popper-content-wrapper] div[role=menu],
-    .menu-links-outer,
-    .absolute-modal[data-modal-name] {
+    div[data-radix-popper-content-wrapper] div[role=menu]{
       background-color: var(--lx-popover-bg, var(--lx-gray-01, hsl(var(--popover))));
     }
   }
@@ -78,29 +69,6 @@ html {
 
     .cp__cmdk {
       --lx-gray-07: var(--rx-gray-07);
-    }
-
-    .ui__toggle {
-      &-background-off {
-        @apply bg-gray-08;
-
-        .switcher {
-          @apply bg-gray-10;
-        }
-      }
-
-      &-background-on {
-        .switcher {
-          @apply bg-gray-03;
-        }
-      }
-    }
-
-    .tl-container {
-      --ls-primary-background-color: hsl(var(--background));
-      --ls-secondary-background-color: var(--rx-gray-01);
-      --ls-tertiary-background-color: var(--rx-gray-03);
-      --ls-quaternary-background-color: var(--rx-gray-05);
     }
   }
 }
@@ -375,48 +343,6 @@ kbd.shui-shortcut-key,
   color: hsl(var(--primary-foreground));
 }
 
-/* Key press animation — separate keys: animate individual kbd elements */
-kbd.shui-shortcut-key-pressed,
-.shui-shortcut-key-pressed {
-  transform: translateY(1px);
-  filter: brightness(0.92);
-}
-
-.shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key-pressed {
-  box-shadow: var(--kbd-glow-top) 0px 2px 0px 0px inset, var(--kbd-glow-bottom) 0px -0.5px 0px 0px inset;
-}
-
-/* Key press animation — combo keys: animate the container (the whole keycap) */
-.shui-shortcut-combo.shui-shortcut-key-pressed {
-  transform: translateY(1px);
-  filter: brightness(0.92);
-}
-
-.shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
-  box-shadow: var(--kbd-glow-top) 0px 2px 0px 0px inset, var(--kbd-glow-bottom) 0px -0.5px 0px 0px inset;
-}
-
-/* Row highlight animation — accent band sweep (only on actual row elements) */
-.shui-shortcut-row.shui-shortcut-row--pressed,
-.shortcut-row.shui-shortcut-row--pressed {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(223, 239, 254, 0.08) 50%,
-    transparent 65%,
-    transparent 100%
-  );
-  background-size: 300% 100%;
-  background-repeat: no-repeat;
-  animation: shortcut-row-sweep 700ms ease-out forwards;
-}
-
-@keyframes shortcut-row-sweep {
-  from { background-position: -50% 0; }
-  to   { background-position: 150% 0; }
-}
-
 /* Ensure consistent height for shortcut containers */
 .shui-shortcut-row {
   min-height: 20px;
@@ -442,16 +368,7 @@ kbd.shui-shortcut-key-pressed,
   }
 }
 
-.ui__list-item-highlighted-span {
-  background-color: var(--lx-accent-06, var(--color-level-4));
-}
-
-.dark .ui__list-item-highlighted-span {
-  background-color: var(--lx-accent-08-alpha, var(--color-level-4));
-}
-
-.ui__select-content,
-.ui__select-item {
+.ui__select-content{
   -webkit-app-region: no-drag;
 }
 
@@ -488,30 +405,7 @@ kbd.shui-shortcut-key-pressed,
   @apply !pointer-events-auto;
 }
 
-.ui__multi-select-content {
-  @apply relative;
-
-  > .head {
-    @apply sticky top-0 z-10;
-  }
-
-  .search-input {
-    > .ui__input {
-      @apply rounded-[1px] h-8;
-    }
-  }
-
-  &:has([data-radix-collection-item]) {
-    > .head {
-      @apply mb-1.5;
-    }
-  }
-}
-
 .ui__calendar {
-  .del-date-btn {
-    @apply active:opacity-80 hover:text-red-rx-09;
-  }
 
   /* Day highlight must win over ghost-button focus rings. */
   [role="gridcell"] > button:focus,
@@ -551,39 +445,3 @@ kbd.shui-shortcut-key-pressed,
   }
 }
 
-.popper-arrow {
-  fill: white;
-  filter: drop-shadow(0 0 3px var(--lx-gray-12));
-  clip-path: inset(0 -10px -10px -10px);
-}
-
-.dark-theme {
-  .popper-arrow {
-    /* FIXME: set the best color for different themes */
-    fill: none;
-  }
-}
-
-.ui__toaster-viewport:has(.ls-wrap-widen) {
-  width: min(680px, calc(100vw - 2rem));
-}
-
-.ui__toast-content {
-  &.untitled {
-    .ui__toast-header {
-      @apply absolute top-1 right-1 w-fit z-1;
-    }
-
-    .ui__toast-body {
-      @apply min-h-0 flex-1 overflow-y-auto overscroll-contain py-2;
-    }
-
-    .ui__toast-text {
-      @apply flex min-h-0 min-w-0 flex-1 flex-row items-start gap-2 overflow-y-auto overscroll-contain;
-    }
-
-    .ui__toast-description {
-      @apply max-h-full max-w-full min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain select-text;
-    }
-  }
-}
