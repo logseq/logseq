@@ -949,7 +949,8 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                 [ box ~key:"pvtc"
                     ~style_class:"ls-page-title-container"
                     [ box ~key:"pvtcw"
-                        ~style_class:"block-content-wrapper relative"
+                        ~style_class:"block-content-wrapper"
+                        ~data_attrs:[ ("style", "position:relative") ]
                         ~on_pointer_enter:(fun _ ->
                           Signal.set hover true;
                           Runtime.flush ())

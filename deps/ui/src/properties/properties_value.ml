@@ -1324,7 +1324,8 @@ let rec view ?(positioned = false) ctx row : t =
    control-wrap (hidden fold arrow + bullet) + a non-flex content wrap
    so inline values (links) keep inline layout and line-box height *)
 and block_value_wrap (inner : t) : t =
-  Lui_elements.box ~style_class:"property-block-container content w-full"
+  Lui_elements.box ~style_class:"property-block-container content"
+    ~data_attrs:[ ("style", "width:100%") ]
     [ Lui_elements.box ~style_class:"ls-block"
         ~transition:Ui_components.block_transition
         [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0

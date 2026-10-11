@@ -159,10 +159,13 @@ let user_item () : Lui_elements.t =
   let maskedv = (Signal.value masked) in
   (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
      data-menu-tail keeps it out of the open-time initial highlight *)
-  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
+  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item"
     ~data_attrs:
-      [ ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
-    [ column ~key:"u-span" ~style_class:"relative"
+      [ ("style", "width:100%")
+      ; ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (column ~key:"u-span"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
             [ text ~key:"u-addr-t"
@@ -198,7 +201,7 @@ let user_item () : Lui_elements.t =
               Runtime.send (Action.Page_menu_set None);
               Runtime.flush ())
             []
-        ]
+        ])
     ]
     ctx parent
 

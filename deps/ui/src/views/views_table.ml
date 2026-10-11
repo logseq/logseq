@@ -401,9 +401,10 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
       in
       inner_cell
         [ row ~cross:`center ~grow:1.
-            [ link ~style_class:"page-ref truncate" ~text:title
+            [ link ~style_class:"page-ref" ~text:title
                 ~data_attrs:
-                  ([ ("data-ref", String.lowercase_ascii page_name)
+                  ([ ("style", "white-space:nowrap;text-overflow:ellipsis")
+                   ; ("data-ref", String.lowercase_ascii page_name)
                    ; ("tabindex", "0"); ("draggable", "true") ]
                    @ if row_uuid <> "" then [ ("data-uuid", row_uuid) ]
                      else [])
@@ -442,12 +443,14 @@ let prop_cell ~blk (c : V.column) : t =
       let t_ = Option.value (Wr.ref_title v) ~default:"" in
       let href = Option.value (Wr.ref_uuid v) ~default:t_ in
       inner_cell
-        [ link ~style_class:"relative page-ref" ~text:t_
-            ~data_attrs:
-              [ ("data-uuid", href); ("tabindex", "0")
-              ; ("draggable", "true")
-              ; ("data-ref", String.lowercase_ascii t_) ]
-            [] ]
+        [ Ui_components.with_props
+            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            (link ~style_class:"page-ref" ~text:t_
+               ~data_attrs:
+                 [ ("data-uuid", href); ("tabindex", "0")
+                 ; ("draggable", "true")
+                 ; ("data-ref", String.lowercase_ascii t_) ]
+               []) ]
   | W.Array xs when c.V.c_many ->
       (* cljs pv: .property-value-inner > .multi-values > select-items;
          the implicit Page class is hidden *)
@@ -481,25 +484,29 @@ let prop_cell ~blk (c : V.column) : t =
                      ([ ("data-tag-title", t_) ]
                       @ if tuuid <> "" then [ ("data-tag-uuid", tuuid) ]
                         else [])
-                   [ link ~style_class:"relative tag" ~text:("#" ^ t_)
+                   [ Ui_components.with_props
+                       [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                       (link ~style_class:"tag" ~text:("#" ^ t_)
                        ~data_attrs:
                          ([ ("tabindex", "0"); ("draggable", "true")
                           ; ("data-ref", String.lowercase_ascii t_) ]
                           @ if tuuid <> ""
                             then [ ("data-uuid", tuuid) ]
                             else [])
-                       [] ]) ]
+                       []) ]) ]
             else
               (if i > 0 then [ text ~value:"," [] ] else [])
               @ [ box
-                    [ link ~style_class:"relative page-ref" ~text:t_
+                    [ Ui_components.with_props
+                        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                        (link ~style_class:"page-ref" ~text:t_
                         ~data_attrs:
                           ([ ("tabindex", "0"); ("draggable", "true")
                            ; ("data-ref", String.lowercase_ascii t_) ]
                            @ (match Wr.ref_uuid x with
                               | Some u -> [ ("data-uuid", u) ]
                               | None -> []))
-                        [] ] ])
+                        []) ] ])
              items)
       in
       inner_cell
@@ -791,9 +798,9 @@ let delete_selected inst () =
         (P.show_dialog
            ~headline:I.batch_delete_title
            ~body:
-             [ D.el ~tag:"ol" ~style_class:"p-2 pt-4"
+             [ D.el ~tag:"ol" ~attrs:[ ("style", "padding:16px 8px 8px") ]
                  (List.map (fun n -> D.el ~tag:"li" ~text:n []) names)
-             ; D.el ~tag:"p" ~style_class:"px-2 opacity-50"
+             ; D.el ~tag:"p" ~attrs:[ ("style", "padding:0 8px;opacity:0.5") ]
                  [ D.el ~tag:"small" ~text:(I.total (List.length names)) [] ]
              ]
            ~confirm_label:I.yes ~on_confirm:do_delete ())
@@ -1174,7 +1181,7 @@ let table_el inst (s : V.vstate) : t =
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
             [ Lui_protocol.Position, Ui_components.sv "relative" ]
-            (box ~style_class:"relative"
+            (box
             [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
                  the header inside the same relative box — overlay carries
                  the placement (style_class utility tokens are pruned) *)
@@ -1207,7 +1214,7 @@ let grouped_table inst ~rows : t =
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
             [ Lui_protocol.Position, Ui_components.sv "relative" ]
-            (box ~style_class:"relative"
+            (box
             [ overlay
                 [ table_header inst cols
                 ; align `top_leading (action_bar inst) ]
@@ -1302,7 +1309,11 @@ let foldable inst ~key ~title ~(body : t) : t =
                                then V.Sset.remove key s.V.collapsed_groups
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
-                    (box ~style_class:"ls-foldable-title-control block-control cursor-pointer opacity-50 hover:opacity-100"
+                    (Ui_components.with_props
+                       [ Lui_protocol.Cursor, Ui_components.sv "pointer"
+                       ; Lui_protocol.Opacity, Ui_components.fv 0.5
+                       ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                       (box ~style_class:"ls-foldable-title-control block-control"
                        ~width:14 ~height:16 ~margin_left:(-27)
                        [ (* cljs foldable-caret: span.control-show only
                             while the title is hovered or the group is
@@ -1319,7 +1330,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                                      [ icon ~name:(`app "caret-right")
                                          ~point_size:16
                                          ~transition:
-                                           "transform 100ms ease-in" [] ]) ]) ])
+                                           "transform 100ms ease-in" [] ]) ]) ]))
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
@@ -1394,20 +1405,22 @@ let render_list inst s : t =
       (* cljs grouped list: .flex.flex-col.border-t.pt-2.gap-2 wrapper +
          .group-list-view; each group body sits in div.-ml-2 (list rows
          hang 8px left of the group title) *)
-      column ~gap:8 ~style_class:"border-t pt-2"
+      column ~gap:8
+        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.gv) [])
                ~body:
-                 (box ~style_class:"-ml-2 mt-1"
+                 (box ~margin_left:(-8) ~margin_top:4
                     [ list_stream inst g.Wr.grows ]))
            gs)
   | Wr.VGroupedList gs ->
       (* cljs renders each partition as a foldable whose title carries
          the page-ref link (caret + page name); the groups wrapper draws
          master's .border-t.pt-2.gap-2 above the partition list *)
-      column ~gap:8 ~style_class:"border-t pt-2"
+      column ~gap:8
+        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.concat
            (List.mapi
               (fun i g ->
@@ -1438,7 +1451,7 @@ let render_list inst s : t =
                            ~target:`self_ ~style_class:"page-ref"
                            ~text:pname [])
                       ~body:
-                        (box ~style_class:"-ml-2 mt-1"
+                        (box ~margin_left:(-8) ~margin_top:4
                            [ list_stream inst rows ]))
                   g.Wr.glparts)
               gs))
@@ -1464,7 +1477,8 @@ let render_table inst s : t =
   | Wr.VGrouped gs ->
       (* cljs grouped tables share the .flex.flex-col.border-t.pt-2.gap-2
          partition wrapper (no .group-list-view — that's list display) *)
-      column ~gap:8 ~style_class:"border-t pt-2"
+      column ~gap:8
+        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1472,7 +1486,8 @@ let render_table inst s : t =
                ~body:(grouped_table inst ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      column ~gap:8 ~style_class:"border-t pt-2"
+      column ~gap:8
+        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)

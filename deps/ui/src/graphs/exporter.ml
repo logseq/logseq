@@ -299,7 +299,8 @@ let load_folder ctx =
 
 let auto_backup ctx =
   column ~key:"ab" ~gap:16
-    [ text ~key:"ab-h" ~style_class:"font-medium opacity-50"
+    [ text ~key:"ab-h" ~font_weight:500
+        ~data_attrs:[ ("style", "opacity:0.5") ]
         ~value:(T.t "export.backup/schedule") []
     ; (if not (Ui_services.files_dir_picker_supported ()) then
          box ~key:"ab-na"
@@ -314,8 +315,9 @@ let auto_backup ctx =
                     (Signal.map (fun f -> f <> None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ row ~key:"ab-row" ~gap:4 ~cross:`center
-                      ~style_class:"text-sm"
-                      [ text ~key:"ab-l" ~style_class:"opacity-50"
+                      ~data_attrs:[ ("style", "font-size:0.875rem") ]
+                      [ text ~key:"ab-l"
+                          ~data_attrs:[ ("style", "opacity:0.5") ]
                           ~value:(T.t "export.backup/folder") []
                       ; text ~key:"ab-n"
                           ~value:(reactive (function
@@ -327,7 +329,8 @@ let auto_backup ctx =
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)
                           [] ]
-                  ; text ~key:"ab-note" ~style_class:"opacity-50 text-sm"
+                  ; text ~key:"ab-note" ~font_size:"0.875rem"
+                      ~data_attrs:[ ("style", "opacity:0.5") ]
                       ~value:(T.t "export.backup/hourly-note") []
                   ; Ui_components.dialog_btn_primary ~key:"ab-go"
                       ~variant:`primary
@@ -348,7 +351,8 @@ let auto_backup ctx =
                       ~text:(T.t "export.backup/set-folder-first")
                       ~on_press:(fun _ -> choose_folder ctx)
                   ; text ~key:"ab-note"
-                      ~style_class:"opacity-50 text-sm"
+                      ~font_size:"0.875rem"
+                      ~data_attrs:[ ("style", "opacity:0.5") ]
                       ~value:(T.t "export.backup/hourly-note") [] ])
            ])
     ]

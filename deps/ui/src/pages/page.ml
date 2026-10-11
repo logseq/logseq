@@ -392,12 +392,12 @@ let title_content (page : Model.page) : t =
      (target element identity + interactive hit) and block attrs on the
      block extension *)
   Logseq_el.el ~key:"pt-content"
-    ~style_class:"block-content inline !cursor-pointer"
+    ~style_class:"block-content"
     ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
     ?on_dom_event:on_event
     ~attrs:
       [ ("data-blockid", uuid); ("data-containerid", uuid); ("data-type", "default")
-      ; ("style", "width: 100%") ]
+      ; ("style", "width: 100%;display:inline;cursor:pointer") ]
     [ row ~key:"pt-bci" ~main:`space_between
         [ Ui_components.with_props
             [ Lui_protocol.FlexWrap, Ui_components.sv "wrap" ]
@@ -516,7 +516,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        .ls-block-right(.block-tags). Tags render while editing too. *)
     [ (* flex-1: cljs .ls-block was the flex child directly; the wrapper
          must fill .ls-page-title's row axis or the title collapses *)
-      box ~key:"pt-inner" ~grow:1. ~style_class:"relative flex-1"
+      Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (box ~key:"pt-inner" ~grow:1.
         [ (* TODO(component): .ls-block title row keeps the imperative
              block attr contract (blockid/containerid/data-… attrs) and
              a dynamic selected class — migrates with the block
@@ -571,8 +573,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                           Ui_parts.class_signal
                             (Signal.value caret_hover)
                             (fun hover ->
-                              (if hover then "cursor-pointer"
-                               else "control-hide")
+                              (if hover then "" else "control-hide")
                               ^ " rotating-arrow"
                               ^
                               if title_collapsed then " collapsed"
@@ -590,8 +591,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                               toggle_title_collapse ())
                           (Ui_components.with_props
                              [ Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
-                             (box ~key:"pt-ca"
-                                ~style_class:"block-control"
+                             (Ui_parts.prop_signal Lui_protocol.Cursor
+                                (Signal.value caret_hover)
+                                (fun h -> if h then "pointer" else "default")
+                                (box ~key:"pt-ca"
+                                   ~style_class:"block-control"
                                 ~accessibility_identifier:("control-" ^ uuid)
                                 ~min_width:22 ~min_height:22
                                 ~opacity:0.4
@@ -604,7 +608,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                     user-select:none;\
                                     cursor:default" )
                                ]
-                             [ cs ])))
+                             [ cs ]))))
                      ]
         ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch ~min_width:0
             ~data_attrs:[ ("style", "width:100%") ]
@@ -707,7 +711,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
              inside the title's .ls-block, after .block-main-container *)
           Properties_area.page_area page
         ])
-      ]
+      ])
     ; (* cljs plugin slot extension point after the title block *)
       row ~key:"pt-slot"
         [ box ~key:"pt-slot-i"
@@ -726,10 +730,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      fire on action-button clicks too. Needs a pointer_detail
      extension (target identity + interactive flag) *)
   Logseq_el.el ~key:"page-title"
-    ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
+    ~style_class:"ls-page-title content title"
     ~attrs:
       [ ("data-testid", "page title")
-      ; ("style", "border-radius:calc(var(--radius) - 4px)")
+      ; ( "style"
+        , "border-radius:calc(var(--radius) - 4px);display:flex;flex:1;\
+           width:100%;align-items:flex-start" )
       ]
     ~events:"click contextmenu"
     ~on_dom_event:(fun name payload ->
@@ -816,7 +822,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
       [ (* TODO(component): containerid is outside the data-* attribute
            vocabulary — stays a dom attr until the block-container
            contract moves *)
-        box ~key:"blc" ~style_class:"flex-1"
+        box ~key:"blc" ~grow:1.
           ~data_attrs:
             (match puuid with
              | Some u -> [ ("data-containerid", u) ]
@@ -826,14 +832,16 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     ~min_height:60 ~margin_left:(-20)
     ~data_attrs:[ ("style", "overflow:hidden") ]
-    [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~data_attrs:(("data-cid", scope) :: inner_attrs)
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner"
+           ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
          @ [ Add_button.el ?puuid
                ~flags:(fun ctx ->
                  Signal.constant ctx.Lui_ui.ui_scheduler
                    (blocks <> [], false))
-           ])
+           ]))
     ]
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
@@ -1000,7 +1008,7 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
 (* cljs page-inner wrap classes — shared by the page route and each
    journal item in the journals list *)
 let page_wrap_cls (m : Model.t) (page : Model.page) : string =
-  "flex-1 page relative cp__page-inner-wrap"
+  "page cp__page-inner-wrap"
   ^ (if page.page_journal_day <> None then " is-journals" else "")
   ^ (if is_today_page m page then " is-today-page" else "")
   ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
@@ -1059,7 +1067,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
   Ui_parts.class_signal
     (Logseq_el.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
     (fun _ ->
-      "journal-item content relative"
+      "journal-item content"
       ^ if is_last () then " journal-last-item" else "")
     (column ~key:("ji-" ^ key)
        ~data_attrs:
@@ -1080,8 +1088,8 @@ let journal_item_sig (ms : Model.t Signal.signal)
         ~style_class:(page_wrap_cls (Signal.get ms) p0)
         ~data_attrs:(page_wrap_attrs p0)
         [ column ~key:("jip-" ^ key) ~gap:32
-            ~style_class:"relative page-inner"
-            ~data_attrs:[ ("style", "padding-bottom:4rem") ]
+            ~style_class:"page-inner"
+            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
             [ row ~key:("jit-" ^ key) ~main:`space_between
                 [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
@@ -1099,10 +1107,12 @@ let journal_item_sig (ms : Model.t Signal.signal)
             ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
                 ~min_height:60 ~margin_top:16 ~margin_left:(-20)
                 ~data_attrs:[ ("style", "overflow:hidden") ]
-                [ box ~key:"page-blocks-inner"
-                    ~style_class:"page-blocks-inner relative"
-                    ~data_attrs:
-                      [ ("data-cid", "main"); ("data-pu", key) ]
+                [ Ui_components.with_props
+                    [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                    (box ~key:"page-blocks-inner"
+                       ~style_class:"page-blocks-inner"
+                       ~data_attrs:
+                         [ ("data-cid", "main"); ("data-pu", key) ]
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
                     [ Lui_elements.if_ ~test:nonempty
@@ -1123,10 +1133,10 @@ let journal_item_sig (ms : Model.t Signal.signal)
                         ~flags:(fun ectx ->
                           Logseq_el.own ectx
                             (Signal.map (fun has -> (has, false)) nonempty))
-                    ]
+                    ])
                 ]
             ]
-        ; column ~key:("jrefs-w-" ^ key) ~gap:32 ~style_class:"ml-1"
+        ; column ~key:("jrefs-w-" ^ key) ~gap:32 ~margin_left:4
             (* cljs journal-page: #today-queries div on the today item,
                then one .fade-in.delay refs section (unlinked refs are
                suppressed on the home route) *)
@@ -1160,8 +1170,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
       (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
   in
   (box ~key:"journals" ~accessibility_identifier:"journals"
-    ~style_class:"h-full"
-    ~data_attrs:[ ("style", "overflow-anchor:none") ]
+    ~data_attrs:[ ("style", "overflow-anchor:none;height:100%") ]
     [ box ~key:"js"
         [ box ~key:"jvp"
             [ box ~key:"jil"
@@ -1172,7 +1181,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                       (Logseq_el.own ctx
                          (Signal.map (fun js -> js = []) journals_sig))
                     (box ~key:"jp" ~padding:24
-                       ~style_class:"journal-item-placeholder animate-pulse" [])
+                       ~style_class:"journal-item-placeholder" [])
                 ; (if Virt_list.enabled ~virtualize:true
                          (List.length (Signal.get journals_sig))
                    then
@@ -1375,17 +1384,19 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     ~min_height:60 ~margin_top:16 ~margin_left:(-20)
     ~data_attrs:[ ("style", "overflow:hidden") ]
-    [ box ~key:"page-blocks-inner"
-        ~style_class:"page-blocks-inner relative"
-        ~data_attrs:
-          (("data-cid", scope)
-           :: (match puuid with
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (box ~key:"page-blocks-inner"
+           ~style_class:"page-blocks-inner"
+           ~data_attrs:
+             (("data-cid", scope)
+              :: (match puuid with
                | Some u -> [ ("data-pu", u) ]
                | None -> []))
         [ (* TODO(component): containerid is outside the data-*
              attribute vocabulary — stays a dom attr until the
              block-container contract moves *)
-          box ~key:"blc" ~style_class:"flex-1"
+          box ~key:"blc" ~grow:1.
             ~data_attrs:
               (match puuid with
                | Some u -> [ ("data-containerid", u) ]
@@ -1404,7 +1415,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                      | Some p -> (p.Model.page_blocks <> [], false)
                      | None -> (false, false))
                    ms))
-        ]
+        ])
     ])
     ctx parent
 
@@ -1477,7 +1488,7 @@ let refs_wrap (m : Model.t) : t =
   match m.route_page with
   | None -> Logseq_el.nothing
   | Some page ->
-      column ~key:"refs-wrap" ~gap:32 ~style_class:"ml-1"
+      column ~key:"refs-wrap" ~gap:32 ~margin_left:4
         (* cljs page-inner: #today-queries div first on today's journal,
            then linked and unlinked refs .fade-in.delay sections *)
         ((if is_today_page m page then
@@ -1511,10 +1522,10 @@ let page_tabs_el (m : Model.t) : t =
           in
           column ~key:("ptabs-" ^ uuid) ~style_class:"page-tabs"
             [ (* .page-tabs > .w-full is a min-width CSS handle *)
-              box ~style_class:"w-full"
+              box ~data_attrs:[ ("style", "width:100%") ]
                 [ box
                     ~style_class:"ui__tabs-content"
-                    [ box ~style_class:"ml-1"
+                    [ box ~margin_left:4
                         [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
                 ]
             ])
@@ -1542,8 +1553,8 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
   (Ui_parts.class_signal ms page_cls
      (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
         [ column ~key:"page-inner" ~gap:32
-            ~style_class:"relative page-inner"
-            ~data_attrs:[ ("style", "padding-bottom:4rem") ]
+            ~style_class:"page-inner"
+            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
             [ reactive ~equal:top_eq top_view ms
             ; page_tabs_el m0
             ; blocks_area ~scope ~library ?puuid ms
@@ -1602,10 +1613,10 @@ let region (ms : Model.t Signal.signal) : t =
           column ~key:"gv" ~style_class:"page"
             [ column ~key:"gv-inner" ~cross:`center ~main:`center
                 ~padding_vertical:128
-                [ box ~key:"gv-i" ~style_class:"mb-4"
+                [ box ~key:"gv-i" ~margin_bottom:16
                     [ Icons.icon ~size:48. "hierarchy" ]
                 ; heading ~key:"gv-t" ~level:2
-                    ~value:(I18n.t "nav/graph-view") ~style_class:"mb-2" []
+                    ~value:(I18n.t "nav/graph-view") ~margin_bottom:8 []
                 ; text ~key:"gv-d"
                     ~value:"Graph view isn't available in this app yet." []
                 ]

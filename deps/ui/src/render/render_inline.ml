@@ -75,7 +75,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
     | Some l when String.trim l <> "" -> l
     | _ -> if tag then "#" ^ name else name
   in
-  let cls = if tag then "relative tag" else "relative page-ref" in
+  let cls = if tag then "tag" else "page-ref" in
   let fg =
     if tag then "var(--lx-accent-11, var(--ls-tag-text-color))"
     else "var(--lx-accent-11, var(--ls-link-text-color))"
@@ -101,7 +101,8 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
       Ui_components.with_props
         [ ( Lui_protocol.HoverForeground
           , Ui_components.sv
-              "var(--lx-accent-11, var(--ls-link-text-hover-color))" ) ]
+              "var(--lx-accent-11, var(--ls-link-text-hover-color))" )
+        ; Lui_protocol.Position, Ui_components.sv "relative" ]
   in
   match uuid_sig with
   | None ->
@@ -383,11 +384,14 @@ let block_ref_anchor uuid : t =
  fun context parent ->
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = Signal.map (fun (title, _, _) -> title) (Signal.value st) in
-  link ~url:"#" ~target:`self_ ~style_class:"relative page-ref"
-    ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
-    ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:title_sig
-    [] context parent
+  Ui_components.with_props
+    [ Lui_protocol.Position, Ui_components.sv "relative" ]
+    (link ~url:"#" ~target:`self_ ~style_class:"page-ref"
+       ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
+       ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
+       ~text_signal:title_sig
+       [] )
+    context parent
 
 let block_ref uuid =
   D.el ~tag:"span" ~style_class:"page-reference"
@@ -963,14 +967,18 @@ let macro_video_el name arguments hint =
               (provider_iframe src)
         | None -> D.txt ""
       else
-        D.el ~tag:"span" ~style_class:"warning mr-1"
-          ~attrs:[ ("title", U.t "block/invalid-url") ]
+        D.el ~tag:"span" ~style_class:"warning"
+          ~attrs:
+            [ ("title", U.t "block/invalid-url")
+            ; ("style", "margin-right:4px") ]
           ~text:(macro_to_text "video" arguments)
           []
   | [] ->
       if hint = None then
-        D.el ~tag:"span" ~style_class:"warning mr-1"
-          ~attrs:[ ("title", U.t "block/empty-url") ]
+        D.el ~tag:"span" ~style_class:"warning"
+          ~attrs:
+            [ ("title", U.t "block/empty-url")
+            ; ("style", "margin-right:4px") ]
           ~text:(macro_to_text "video" arguments)
           []
       else D.txt ""
@@ -1440,11 +1448,13 @@ and resolved_ref ~refs ~self uuid : t =
         text ~style_class:"page-reference"
           ~data_attrs:[ ("data-ref", uuid) ] []
       else if title = uuid then
-        link ~url:"#" ~target:`self_
-          ~style_class:"relative page-ref broken"
-          ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
-                      ; ("draggable", "true") ]
-          ~text:("[[" ^ uuid ^ "]]") []
+        Ui_components.with_props
+          [ Lui_protocol.Position, Ui_components.sv "relative" ]
+          (link ~url:"#" ~target:`self_
+             ~style_class:"page-ref broken"
+             ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                         ; ("draggable", "true") ]
+             ~text:("[[" ^ uuid ^ "]]") [])
       else
         Ui_components.with_props
           [ Lui_protocol.HoverBackground,
@@ -1462,9 +1472,10 @@ and resolved_ref ~refs ~self uuid : t =
                  [ ( Lui_protocol.HoverForeground
                    , Ui_components.sv
                        "var(--lx-accent-11, \
-                        var(--ls-link-text-hover-color))" ) ]
+                        var(--ls-link-text-hover-color))" )
+                 ; Lui_protocol.Position, Ui_components.sv "relative" ]
                  (link ~url:"#" ~target:`self_
-                    ~style_class:"relative page-ref"
+                    ~style_class:"page-ref"
                     ~foreground:
                       "var(--lx-accent-11, var(--ls-link-text-color))"
                     ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
@@ -1485,14 +1496,16 @@ and resolved_tag_ref ~refs ~self uuid : t =
   ignore (refs, self);
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = (Signal.value st) in
-  (link ~url:"#" ~target:`self_ ~style_class:"relative tag"
+  (Ui_components.with_props
+     [ Lui_protocol.Position, Ui_components.sv "relative" ]
+     (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
       (reactive
          (fun (n, _, _) ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ])
+    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ]))
     context parent
 
 and macro_el ~refs ~self body =
@@ -1553,8 +1566,9 @@ and macro_else_el ~refs ~self name arguments : t =
      (fun ms ->
        match List.assoc_opt name ms with
        | Some content ->
-           D.el ~tag:"div" ~style_class:"macro inline"
-             ~attrs:[ ("data-macro-name", name) ]
+           D.el ~tag:"div" ~style_class:"macro"
+             ~attrs:
+               [ ("data-macro-name", name); ("style", "display:inline") ]
              (parse ~refs ~self (macro_subs content arguments))
        | None ->
            D.el ~tag:"div" ~style_class:"macro"

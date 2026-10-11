@@ -64,14 +64,15 @@ let view ~path (ms : Model.t Signal.signal) : t =
       (fun (loaded : bool) ->
         if loaded then
           (* cljs extensions__code > code-lang + code-editor > textarea *)
-          box ~key:"ec" ~style_class:"extensions__code flex flex-1"
+          row ~key:"ec" ~style_class:"extensions__code"
             ~grow:1.
             [ text ~key:"cl"
                 ~value:(String.lowercase_ascii ext)
                 ~style_class:"extensions__code-lang" []
-            ; box ~key:"ce"
-                ~style_class:"code-editor flex flex-1 flex-row w-full"
+            ; row ~key:"ce"
+                ~style_class:"code-editor"
                 ~grow:1.
+                ~data_attrs:[ ("style", "width:100%") ]
                 [ textarea ~key:"fe" ~style_class:"ls-file-textarea"
                     ~grow:1.
                     ~data_attrs:[ ("data-lang", ext) ]

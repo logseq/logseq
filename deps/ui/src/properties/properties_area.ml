@@ -57,7 +57,9 @@ let property_icon row =
       box ~key:"pk-i" ~style_class:"property-icon"
         ~data_attrs:[ ("style", "display:flex;align-items:center;\
           margin-right:4px") ]
-        [ Icons.icon ~size:15. ~cls:"opacity-50" n ]
+        [ Ui_components.with_props
+            [ Lui_protocol.Opacity, Ui_components.fv 0.5 ]
+            (Icons.icon ~size:15. n) ]
   | None ->
       box ~key:"pk-b" ~style_class:"bullet-container"
         [ box ~style_class:"bullet" [] ]
@@ -79,11 +81,12 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
-         ~style_class:"property-k flex select-none jtrigger w-full"
+         ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
          ~data_attrs:
            [ ( "style"
              , "height:auto;min-height:0;padding:0;line-height:20px;\
+                user-select:none;width:100%;\
                 justify-content:flex-start;overflow:hidden;\
                 text-overflow:ellipsis;white-space:nowrap" )
            ]
@@ -246,7 +249,7 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
     [ Lui_elements.row ~gap:0 ~cross:`center
         [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
         ; text ~value:":"
-            ~style_class:"select-none" []
+            ~data_attrs:[ ("style", "user-select:none") ] []
         ]
     ; Ui_components.with_props
         [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
@@ -263,15 +266,18 @@ let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
   Ui_components.with_props
     [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
     (column ~gap:4 ~grow:1.0
-       ~min_width:0 ~style_class:"positioned-properties block-below text-sm overflow-x-hidden w-full"
+       ~min_width:0 ~style_class:"positioned-properties block-below"
+       ~data_attrs:[ ("style", "overflow-x:hidden;width:100%") ]
     [ row ~gap:6 ~cross:`center ~grow:1.0
-        ~min_width:0 ~style_class:"bottom-properties-row w-full"
+        ~min_width:0 ~style_class:"bottom-properties-row"
         ~data_attrs:[ ("style", "padding:0.25rem 0;max-height:2rem;\
-          overflow-y:hidden") ]
+          overflow-y:hidden;width:100%") ]
         [ row ~gap:8 ~cross:`center ~grow:1.0
-            ~min_width:0 ~style_class:"bottom-properties-pills-strip basis-0"
-            ~data_attrs:[ ("style", "flex:1 1 0;width:0;max-width:100%;\
-              flex-wrap:nowrap;overflow-x:hidden") ]
+            ~min_width:0 ~style_class:"bottom-properties-pills-strip"
+            ~data_attrs:
+              [ ( "style"
+                , "flex:1 1 0;width:0;max-width:100%;flex-wrap:nowrap;\
+                   overflow-x:hidden;flex-basis:0" ) ]
             (List.map
                (pill_view ctx ~owner_is_tag ~owner_title)
                below_rows)
@@ -286,7 +292,8 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
     [ button ~variant:`secondary ~size:`sm
         ~icon:(`app "plus")
         ~grow:1. ~min_width:0
-        ~style_class:"jtrigger flex"
+        ~style_class:"jtrigger"
+        ~data_attrs:[ ("style", "display:flex") ]
         ~label:(I18n.t "property/add-new")
         ~text:(I18n.t "property/add-new")
         ~on_press:(fun _ ->
@@ -477,7 +484,8 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
   let anchor_id = "pta-" ^ uuid in
   let add_btn ?a11y text on_press =
     button ~variant:`ghost ~size:`sm ~text_alignment:`start
-      ~style_class:"as-ghost text-muted-foreground"
+      ~style_class:"as-ghost"
+      ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
       ?accessibility_identifier:a11y ~label:text ~text ~on_press []
   in
   let node =
@@ -583,8 +591,10 @@ let class_schema_row prop =
   | None -> None
 
 let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
-  column ~gap:4 ~style_class:"mt-2"
-    [ column ~gap:2 ~style_class:"property-key text-sm"
+  column ~gap:4 ~margin_top:8
+    [ Ui_components.with_props
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+        (column ~gap:2 ~style_class:"property-key"
         ~min_width:160 ~min_height:28 ~main:`center
         ~data_attrs:[ ("style", "font-size:15px") ]
         [ row ~gap:4 ~cross:`center
@@ -592,15 +602,21 @@ let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
             [ icon ~name:(`app "letter-p") ~point_size:14 []
             ; text
                 ~value:(I18n.t "property.built-in/class-properties")
-                ~style_class:"property-k flex select-none w-full" []
+                ~style_class:"property-k"
+                ~data_attrs:
+                  [ ("style", "display:flex;user-select:none;width:100%")
+                  ]
+                []
             ]
         ; text ~value:(I18n.t "class/tag-properties-desc")
-            ~style_class:"text-muted-foreground ml-5" []
-        ]
+            ~foreground:
+              "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+            ~data_attrs:[ ("style", "margin-left:20px") ] []
+        ])
     ; column ~gap:4 
         (List.map (panel_row ctx ~owner_is_tag:true ~owner_title)
            class_rows
-        @ [ column ~style_class:"ml-5"
+        @ [ column ~margin_left:20
               [ new_property_btn ctx ~for_class:true ~owner_title ]
           ])
     ]
@@ -719,7 +735,8 @@ let bidi_area (p : Model.page) : t =
           if d.bidi = [] then Logseq_el.nothing
           else
             column ~gap:8 ~grow:1.0
-              ~style_class:"w-full ls-bidirectional-properties mt-8"
+              ~style_class:"ls-bidirectional-properties" ~margin_top:32
+              ~data_attrs:[ ("style", "width:100%") ]
               (List.map
                  (fun group ->
                    let title =
@@ -733,7 +750,11 @@ let bidi_area (p : Model.page) : t =
                    column ~gap:2
                      [ row ~gap:0 ~style_class:"property-key-panel"
                          [ text ~value:title
-                             ~style_class:"property-k flex select-none w-full" []
+                             ~style_class:"property-k"
+                             ~data_attrs:
+                               [ ( "style"
+                                 , "display:flex;user-select:none;width:100%" )
+                               ] []
                          ]
                      ; row ~gap:4 ~cross:`center
                          ~style_class:"ls-block property-value-container"

@@ -315,7 +315,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
           styling, pre whitespace); the result text itself rides a
           signal prop *)
        text ~key:"rsc" ~as_:`Code ~value:(I18n.t "view/results") []
-     ; box ~style_class:"mt-1"
+     ; box ~margin_top:4
          [ text ~key:"rsp" ~as_:`Pre ~style_class:"code"
              ~value_signal:(Signal.value st)
              [] ] ])
@@ -478,7 +478,7 @@ let table_el ~self lines : t =
       "table-wrapper classic-table force-visible-scrollbar markdown-table"
     [ D.el ~tag:"table"
         ~attrs:
-          [ ("class", "table-auto"); ("border", "2"); ("cellspacing", "0")
+          [ ("border", "2"); ("cellspacing", "0")
           ; ("cellpadding", "6"); ("rules", "groups")
           ; ("frame", "hsides") ]
         ((match header with
@@ -646,7 +646,7 @@ let table_el ~self (header, rows) : t =
     [ D.el ~tag:"div"
         ~style_class:
           "table-wrapper classic-table force-visible-scrollbar markdown-table"
-        [ D.el ~tag:"table" ~style_class:"table-auto"
+        [ D.el ~tag:"table"
             ~attrs:
               [ ("border", "2"); ("cellspacing", "0"); ("cellpadding", "6")
               ; ("rules", "groups"); ("frame", "hsides")
@@ -682,19 +682,21 @@ let body_el ~self s : t option =
 (* cljs block-title picks the .block-head-wrap carrier by
    logseq.property.node/display-type: code -> .flex.flex-1.w-full,
    math -> bare .math-block (no carrier), text -> .w-full.inline. *)
-let title_outer_class (b : Model.block) =
+let title_outer_kind (b : Model.block) =
   (* cljs block-title-aux: the title wrapper is .inline-flex only for
-     class-Query blocks (title + setting button) *)
-  if is_query_block b then Some "inline-flex"
+     class-Query blocks (title + setting button). `flex maps to the
+     row kind (display:flex) with grow — flex-1 + w-full both reduce
+     to filling the head row's track *)
+  if is_query_block b then Some `inline_flex
   else
     match b.Model.block_display_type with
-    | Some "code" -> Some "flex flex-1 w-full"
+    | Some "code" -> Some `flex
     | Some "math" -> None
     | _ ->
         let s = b.Model.block_title in
         if src_block s <> None || src_eval_parts s <> None then
-          Some "flex flex-1 w-full"
-        else Some "w-full inline"
+          Some `flex
+        else Some `inline
 
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references. is_query:

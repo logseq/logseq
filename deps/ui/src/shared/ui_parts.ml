@@ -79,17 +79,14 @@ let float_prop_signal prop source f (elem : t) : t =
 let mock_text_style =
   "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0"
 
-(* cljs shui/button :variant :ghost :size :sm — the shared class
-   bundle; per-site size/padding overrides go in [extra] *)
+(* cljs shui/button :variant :ghost :size :sm — semantic classes only;
+   the former utility bundle's layout/interaction tokens ride the typed
+   prop bind in [ghost_wrap] *)
 let ghost_btn_cls ?(extra = "") () =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none \
-   hover:bg-secondary/70 hover:text-secondary-foreground \
-   active:opacity-80 as-ghost"
-  ^ if extra = "" then "" else " " ^ extra
+  "ui__button as-ghost" ^ if extra = "" then "" else " " ^ extra
+
+(* The shui ghost-button interaction bundle lives in Ui_components
+   (with_props side); ui_parts cannot reference ui_components *)
 
 (* The imperative side queries .mock-text/.editor-inner/.block-editor by
    class, so the semantic classes stay on style_class; flex/grow layout

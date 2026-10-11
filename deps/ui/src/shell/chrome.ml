@@ -123,7 +123,7 @@ let el_ ?(cls = "") ?(text = "") () =
 let pend_row cls_key n =
   let d = el_ () in
   let s = Wd.create_element "span" in
-  Wd.el_set_class s "font-medium mr-1";
+  Wd.el_set_attr s "style" "font-weight:500;margin-right:4px";
   Wd.el_set_text_content s (string_of_int n);
   let l = Wd.create_element "span" in
   Wd.el_set_text_content l (I18n.t cls_key);
@@ -190,14 +190,17 @@ let missing_files_details (files : string list) =
        (string_of_int (List.length files)));
   Web_dom.el_append_child det sum;
   let inner = Web_dom.create_element "div" in
-  Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+  Web_dom.el_set_attr inner "style"
+    "display:flex;flex-direction:column;gap:4px;font-size:0.875rem";
   List.iter
     (fun f ->
       let row = Web_dom.create_element "div" in
-      Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+      Web_dom.el_set_attr row "style"
+        "display:flex;flex-direction:row;gap:4px;align-items:center";
       Web_dom.el_append_child row (alert_triangle_svg ());
       let sp = Web_dom.create_element "span" in
-      Web_dom.el_set_class sp "truncate";
+      Web_dom.el_set_attr sp "style"
+        "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
       Web_dom.el_set_text_content sp f;
       Web_dom.el_append_child row sp;
       Web_dom.el_append_child inner row)
@@ -264,9 +267,12 @@ let open_rtc_details () =
     | None -> false
   in
   let menu = Wd.create_element "div" in
-  Wd.el_set_class menu
-    "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
-     bg-popover p-1 text-popover-foreground shadow-md";
+  Wd.el_set_class menu "ui__dropdown-menu-content";
+  Wd.el_set_attr menu "style"
+    "z-index:50;min-width:8rem;border-radius:6px;border:1px solid \
+     var(--lui-c-border);background:hsl(var(--popover));padding:4px;\
+     color:hsl(var(--popover-foreground));box-shadow:0 4px 6px -1px \
+     rgba(0,0,0,0.1),0 2px 4px -2px rgba(0,0,0,0.1)";
   Wd.el_set_attr menu "role" "menu";
   (match Wd.query_selector ".cp__rtc-sync-indicator .cloud" with
    | Some anchor ->
@@ -277,11 +283,21 @@ let open_rtc_details () =
             "position:fixed;left:%.0fpx;top:%.0fpx;width:240px"
             left (Wd.rect_bottom rect +. 4.0))
    | None -> ());
-  let info = el_ ~cls:"flex flex-col gap-1 p-2 text-gray-11" () in
+  let info = el_ () in
+  Wd.el_set_attr info "style"
+    "display:flex;flex-direction:column;gap:4px;padding:8px;color:\
+      var(--lx-gray-11, hsl(var(--muted-foreground)))";
   Wd.el_append_child info
-    (el_ ~cls:"font-medium mb-2"
-       ~text:(I18n.t (if Ui_services.env_online () then "sync/online" else "sync/offline"))
-       ());
+    (let e =
+       el_
+         ~text:
+           (I18n.t
+              (if Ui_services.env_online () then "sync/online"
+               else "sync/offline"))
+         ()
+     in
+     Wd.el_set_attr e "style" "font-weight:500;margin-bottom:8px";
+     e);
   let p_local =
     match r with Some r -> r.rtc_pending_local | None -> 0
   and p_asset =
@@ -322,7 +338,9 @@ let open_rtc_details () =
   in
   if in_flight <> [] then begin
     let wrap = Web_dom.create_element "div" in
-    Web_dom.el_set_class wrap "assets-sync-progress flex flex-col gap-2";
+    Web_dom.el_set_class wrap "assets-sync-progress";
+    Web_dom.el_set_attr wrap "style"
+      "display:flex;flex-direction:column;gap:8px";
     List.iter
       (fun (dir, label_key) ->
         let rows =
@@ -338,11 +356,13 @@ let open_rtc_details () =
             (I18n.t1 label_key (string_of_int (List.length rows)));
           Web_dom.el_append_child det sum;
           let inner = Web_dom.create_element "div" in
-          Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+          Web_dom.el_set_attr inner "style"
+    "display:flex;flex-direction:column;gap:4px;font-size:0.875rem";
           List.iter
             (fun (p : Asset_progress.t) ->
               let row = Web_dom.create_element "div" in
-              Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+              Web_dom.el_set_attr row "style"
+        "display:flex;flex-direction:row;gap:4px;align-items:center";
               let pct = Web_dom.create_element "span" in
               Web_dom.el_set_class pct "indicator-progress-pie";
               Web_dom.el_set_text_content pct
@@ -353,7 +373,8 @@ let open_rtc_details () =
                 ^ "%");
               Web_dom.el_append_child row pct;
               let sp = Web_dom.create_element "span" in
-              Web_dom.el_set_class sp "truncate";
+              Web_dom.el_set_attr sp "style"
+        "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
               Web_dom.el_set_text_content sp p.ap_id;
               (match (Runtime.model ()).Model.repo with
                | Some repo -> enrich_asset_title sp repo p.ap_id
@@ -371,15 +392,18 @@ let open_rtc_details () =
   (match !Rtc_flows.last_sync_ms with
    | Some ms ->
        Wd.el_append_child info
-         (el_ ~cls:"text-sm"
+         ((let e = el_
             ~text:
               (I18n.t1 "sync/last-synced-time-label"
                  (Ui_services.time_fmt_date (Int64.to_float ms)))
-            ())
+            () in
+          Wd.el_set_attr e "style" "font-size:0.875rem";
+          e))
    | None -> ());
   (* More debug info toggle *)
   let dbg_link = Wd.create_element "a" in
-  Wd.el_set_class dbg_link "fade-link text-sm";
+  Wd.el_set_class dbg_link "fade-link";
+  Wd.el_set_attr dbg_link "style" "font-size:0.875rem";
   Wd.el_set_text_content dbg_link (I18n.t "sync/more-debug-info");
   let dbg_on = ref false in
   let dbg_el = ref (Wd.create_element "div") in
@@ -389,7 +413,7 @@ let open_rtc_details () =
       if !dbg_on then (
         let d = el_ () in
         let pre = Wd.create_element "pre" in
-        Wd.el_set_class pre "select-text";
+        Wd.el_set_attr pre "style" "user-select:text";
         Wd.el_set_text_content pre (rtc_debug_text r);
         Wd.el_append_child d pre;
         dbg_el := d;
@@ -398,7 +422,8 @@ let open_rtc_details () =
   (match Wd.query_selector "body" with Some b -> Wd.el_append_child b menu | None -> ());
   (* Start sync (cljs: shown when rtc-state <> :open) *)
   if not open_ then (
-    let row = el_ ~cls:"mt-4" () in
+    let row = el_ () in
+    Wd.el_set_attr row "style" "margin-top:16px";
     let btn = Wd.create_element "button" in
     Wd.el_set_class btn
       (Settings_controls.btn_cls ~variant:`Solid ~size:`Sm ());
@@ -434,7 +459,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             || (Ui_services.env_rtc_test_mode () && repo <> None))
       in
       if not visible then
-        spacer ~key:"rtc-off" ~style_class:"hidden" []
+        box ~key:"rtc-off" ~display:`none []
       else (
         let open_ =
           Ui_services.env_online ()
@@ -469,7 +494,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
         (* e2e reads [data-testid="rtc-tx"]; ~accessibility_identifier
            keeps the #rtc-tx id as well *)
         box ~key:"rtc" 
-          [ box ~key:"rtc-tx" ~style_class:"hidden"
+          [ box ~key:"rtc-tx" ~display:`none
               ~accessibility_identifier:"rtc-tx"
               ~data_attrs:[ ("data-testid", "rtc-tx") ]
               [ (match r with
@@ -499,10 +524,11 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
   (reactive
     (fun (active : bool) ->
       if not (Rtc_flows.logged_in () && active) then
-        spacer ~key:"td-off" ~style_class:"hidden" []
+        box ~key:"td-off" ~display:`none []
       else
         button ~key:"td" ~variant:`ghost
-          ~style_class:"ui__button as-ghost opacity-50"
+          ~style_class:"ui__button as-ghost"
+          ~data_attrs:[ ("style", "opacity:0.5") ]
           ~text:
             (I18n.t
                (if downloading then "sync/downloading"
@@ -548,7 +574,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
             | Some r -> Graphs_ops.ask_upload r
             | None -> ())
           []
-      else spacer ~key:"lgs-off" ~style_class:"hidden" [])
+      else box ~key:"lgs-off" ~display:`none [])
     (Logseq_el.own ctx
        (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)))
     ctx parent
@@ -666,8 +692,8 @@ let header (ms : Model.t Signal.signal) =
                  "visibility 0s linear 0.28s, opacity 0.12s linear 0.28s"
                [ left_menu_button; search_button ]) ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
-        ~gap:8 ~style_class:"r overflow-x-hidden"
-        ~data_attrs:[ ("style", "padding-right:6px") ]
+        ~gap:8 ~style_class:"r"
+        ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]
         [ row ~key:"head-crumb" ~grow:1.
             [ reactive
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -742,15 +768,16 @@ let header (ms : Model.t Signal.signal) =
 let right_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__right-sidebar h-screen "
+      "cp__right-sidebar "
       ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_components.with_props
        [ P.ZIndex, Ui_components.iv 9 (* --ls-z-index-level-1 *)
+       ; P.HeightViewport, Ui_components.fv 1.
        ; P.Position, Ui_components.sv "relative"
        ; P.UserSelect, Ui_components.sv "none"
        ; P.Overflow, Ui_components.sv "hidden" ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-          ~style_class:"cp__right-sidebar h-screen closed"
+          ~style_class:"cp__right-sidebar closed"
           ~data_attrs:[ ("style", "container-type:inline-size;min-width:0") ]
           [ Right_sidebar_view.render ms ]))
 
@@ -887,7 +914,8 @@ let main_content (ms : Model.t Signal.signal) =
        [ scroll ~key:"main-content"
               ~accessibility_identifier:"main-content-container"
               ~orientation:`vertical ~grow:1.
-              ~style_class:"scrollbar-spacing relative"
+              ~style_class:"scrollbar-spacing"
+              ~data_attrs:[ ("style", "position:relative") ]
               ~data_attrs_signal:
                 (Signal.map
                    (fun (m : Model.t) ->
@@ -942,8 +970,21 @@ let main_content (ms : Model.t Signal.signal) =
                         match m.route with
                         | Model.Journals | Model.Home ->
                             "cp__content-wrap cp__content-wrap--flush"
-                        | _ -> "cp__content-wrap mx-auto")
+                        | _ -> "cp__content-wrap")
                       (box ~key:"content-wrap"
+                         ~data_attrs_signal:
+                           (Signal.map
+                              (fun (m : Model.t) ->
+                                (* cljs div.mx-auto centers the
+                                   content column on margin-less
+                                   routes *)
+                                match m.route with
+                                | Model.Journals | Model.Home -> []
+                                | _ ->
+                                    [ ( "style"
+                                      , "margin-left:auto;margin-right:auto" )
+                                    ])
+                              ms)
                          [ Page.region ms
                          ; (* pb-24 scroll breathing room as a typed
                               spacer — keeps the gpui/backend-agnostic
@@ -1018,8 +1059,8 @@ let overlays (ms : Model.t Signal.signal) =
    the help menu popup *)
 (* cljs container.cljs help-button: inline tabler help-small svg *)
 let help_svg : t =
-  icon ~key:"help-svg" ~name:(`app "help-small") ~point_size:24
-    ~style_class:"icon scale-125" []
+  icon ~key:"help-svg" ~name:(`app "help-small") ~point_size:30
+    ~style_class:"icon" []
 
 external open_url : string -> unit = "open" [@@mel.scope "window"]
 
@@ -1149,12 +1190,15 @@ let not_found_page : t =
     (column ~key:"nf-full" ~main:`center ~cross:`center
        ~background:"var(--ls-primary-background-color)"
        ~data_attrs:[ ("style", "min-height:100vh") ]
-    [ heading ~key:"nf-h1" ~level:1
-        ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~value:"404" []
-    ; heading ~key:"nf-h2" ~level:2
-        ~style_class:"text-2xl font-semibold text-gray-10 mb-6"
+    [ heading ~key:"nf-h1" ~level:1 ~font_size:"3.75rem" ~font_weight:700
+        ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
+        ~margin_bottom:16 ~value:"404" []
+    ; heading ~key:"nf-h2" ~level:2 ~font_size:"1.5rem" ~font_weight:600
+        ~foreground:"var(--lx-gray-10, var(--ls-secondary-text-color))"
+        ~margin_bottom:24
         ~value:(I18n.t "page/not-found-title") []
-    ; paragraph ~key:"nf-p" ~style_class:"text-gray-500 mb-8"
+    ; paragraph ~key:"nf-p" ~foreground:"var(--ls-secondary-text-color, #6b7280)"
+        ~margin_bottom:32
         ~value:(I18n.t "page/not-found-desc") []
     ; button ~key:"nf-btn" ~variant:`outline ~height:40
         ~padding_horizontal:16 ~padding_vertical:8
@@ -1188,18 +1232,17 @@ let shell (ms : Model.t Signal.signal) : t =
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ right_split ms st
             (left_split ms st
-               (Ui_parts.class_signal ms
+               (Ui_parts.prop_signal Lui_protocol.Overflow ms
                   (fun (m : Model.t) ->
                     (* cljs container.cljs: overflow-hidden while RIGHT
                        sidebar is open *)
-                    if m.right_sidebar_open then "overflow-hidden"
-                    else "w-full")
+                    if m.right_sidebar_open then "hidden" else "visible")
                   (Ui_components.with_props
-                     [ P.HeightViewport, Ui_components.fv 1. ]
+                     [ P.HeightViewport, Ui_components.fv 1.
+                     ; P.Position, Ui_components.sv "relative" ]
                      (column ~key:"left-container"
                         ~accessibility_identifier:"left-container"
-                        ~grow:1. ~style_class:"w-full"
-                        ~data_attrs:[ ("style", "position:relative") ]
+                        ~grow:1.
                         [ header ms; main_content ms ]))))
             (right_sidebar ms)
         ; box ~key:"asc" ~accessibility_identifier:"app-single-container"

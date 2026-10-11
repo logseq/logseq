@@ -268,8 +268,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 0
   in
-  box ~key:("ctrlw-" ^ uuid) ~height:24
-    ~style_class:"block-control-wrap flex flex-row items-center h-6"
+  row ~key:("ctrlw-" ^ uuid) ~height:24 ~cross:`center
+    ~style_class:"block-control-wrap"
     ~data_attrs:
       (heading_attrs
       @ [ ( "style"
@@ -398,7 +398,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
-  box ~key:("content-" ^ uuid) ~style_class:"block-content inline"
+  box ~key:("content-" ^ uuid) ~style_class:"block-content"
+    ~display:`inline
     ~min_height:24
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
@@ -421,9 +422,21 @@ let content_el uuid (b : Model.block) : t =
                ~data_attrs:[ ("style", "width:100%") ]
             (if b.Model.block_is_query && not (Ui_services.env_publishing ()) then [ Query_builder.block_el uuid b ]
              else
-               match Render.title_outer_class b with
-               | Some cls ->
-                   [ box ~key:("bt-" ^ uuid) ~style_class:cls
+               match Render.title_outer_kind b with
+               | Some `flex ->
+                   [ row ~key:("bt-" ^ uuid) ~grow:1.
+                       (Render.title_block ~self:uuid ~annot:true
+                          ~resolved:(S.title_for uuid b.block_title)
+                          b)
+                   ]
+               | Some `inline_flex ->
+                   [ box ~key:("bt-" ^ uuid) ~display:`inline_flex
+                       (Render.title_block ~self:uuid ~annot:true
+                          ~resolved:(S.title_for uuid b.block_title)
+                          b)
+                   ]
+               | Some `inline ->
+                   [ box ~key:("bt-" ^ uuid) ~display:`inline
                        (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
@@ -532,7 +545,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
             (link ~key:("th-" ^ key)
                ~url:"#" ~target:`self_
-               ~style_class:"hash-symbol select-none" ~text:"#" [])
+               ~style_class:"hash-symbol" ~text:"#" []
+               |> Ui_components.with_props
+                    [ Lui_protocol.UserSelect, Ui_components.sv "none" ])
         ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
            else
              (* the 'x' press needs a pressable kind — link is not one,
@@ -545,21 +560,25 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                           [ Wire.Uuid owner_uuid
                           ; Wire.Keyword "block/tags"
                           ; Wire.Int dbid ] ]))
-               (text ~key:("tx-" ^ key)
-                  ~style_class:"tag-x cursor-pointer select-none"
-                  ~data_attrs:
-                    [ ("aria-label", I18n.t "block/remove-this-tag") ]
-                  ~value:"x" []))
+               (Ui_components.with_props
+                  [ Lui_protocol.UserSelect, Ui_components.sv "none"
+                  ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                  (text ~key:("tx-" ^ key)
+                     ~style_class:"tag-x"
+                     ~data_attrs:
+                       [ ("aria-label", I18n.t "block/remove-this-tag") ]
+                     ~value:"x" [])))
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           Ui_components.with_props
             [ Lui_protocol.Opacity, Ui_components.fv 0.7
             ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
             ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-            ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
+            ; Lui_protocol.FontWeight, Ui_components.iv 400
+            ; Lui_protocol.Position, Ui_components.sv "relative" ]
             (link ~key:("ta-" ^ key)
                ~url:"#" ~target:`self_
-               ~style_class:"tag relative"
+               ~style_class:"tag"
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
               ; ("data-uuid", tuuid)
@@ -632,8 +651,8 @@ and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
-  box ~key:("main-" ^ key)
-      ~style_class:"block-main-container flex flex-row gap-1"
+  row ~key:("main-" ^ key)
+      ~style_class:"block-main-container" ~gap:4
         ~data_attrs:
           ((match block_heading_lvl b with
             | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
@@ -687,12 +706,13 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                          content_or_editor ~editable uuid
                                            scope b)
                                     ; row ~key:("br-" ^ key)
-                                        ~style_class:"ls-block-right self-start"
+                                        ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center
                                         ~data_attrs:
                                           [ ( "style"
                                             , "flex-shrink:0;\
-                                               position:relative" )
+                                               position:relative;\
+                                               align-self:flex-start" )
                                           ]
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; (* cljs .ls-block-right order:
@@ -988,8 +1008,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)
-    [ box ~key:("main-" ^ key)
-        ~style_class:"block-main-container flex flex-row gap-1"
+    [ row ~key:("main-" ^ key)
+        ~style_class:"block-main-container" ~gap:4
         ~data_attrs:(heading_attrs b)
         [ control_wrap ~scope:"ref" ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
@@ -1007,12 +1027,13 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                     [ Properties_area.block_left_chips ~uuid
                                     ; content_wrapper uuid b
                                     ; row ~key:("br-" ^ key)
-                                        ~style_class:"ls-block-right self-start"
+                                        ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center
                                         ~data_attrs:
                                           [ ( "style"
                                             , "flex-shrink:0;\
-                                               position:relative" )
+                                               position:relative;\
+                                               align-self:flex-start" )
                                           ]
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; (* cljs .ls-block-right order:
@@ -1171,10 +1192,12 @@ let embed_more_el (name : string) : t =
   Ui_parts.pressable
     ~on_press:(fun _ ->
       Runtime.send (Action.Navigate_to (Model.Page name)))
-    (row ~key:"embed-more"
-       ~style_class:"ls-block cursor-pointer"
-       ~transition:"transform 0.3s ease"
-       [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ])
+    (Ui_components.with_props
+       [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+       (row ~key:"embed-more"
+          ~style_class:"ls-block"
+          ~transition:"transform 0.3s ease"
+       [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ]))
 
 let page_embed (name : string) : t =
  fun ctx parent ->
