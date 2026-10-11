@@ -376,6 +376,7 @@ let overlays (ms : Model.t Signal.signal) =
      outside press or Escape would otherwise vanish into it). *)
   Ui_parts.viewport_cover
     (popover ~transition:Ui_components.popover_transition ~key:"overlays" ~style_class:"cp__overlays"
+    ~background:"#00000000"
     ~data_attrs:[ ("data-overlay-layer", "true") ]
     [ (* popover takes only standard-kind children — the logseq-*
          extension fragments some views emit mount inside a plain box *)

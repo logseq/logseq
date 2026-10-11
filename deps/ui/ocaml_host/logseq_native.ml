@@ -1127,6 +1127,9 @@ let () =
     let dirty = Ui.want_frame ui host in
     if dirty then begin
       ignore (Lui_host.repaint host);
+      if !debug then
+        dbg "frame %d ops=%d" !frame
+          (List.length (Lui_host.scene host).Lui_scene.ops);
       populate_rects ();
       fire_viewport_events ();
       ignore (Lui_a11y.sync a11y);
