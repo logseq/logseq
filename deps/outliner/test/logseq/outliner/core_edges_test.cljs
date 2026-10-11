@@ -288,6 +288,42 @@
       (let [{:keys [tx-meta]} (insert [{:block/uuid (random-uuid) :block/title "h"}] (b "src") {:sibling? true})]
         (is (true? (get-in tx-meta [:outliner-ops 0 1 2 :keep-uuid?])))))))
 
+(deftest deleting-the-value-of-a-property-with-a-default-empties-the-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:default {:logseq.property/type :default
+                                      :build/properties {:logseq.property/default-value "foo"}}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b2" :build/properties {:default "bar"}}]}]})
+        b2 (db-test/find-block-by-content @conn "b2")
+        bar (:user.property/default b2)]
+    (is (= "bar" (:block/title bar)))
+    (outliner-core/delete-blocks! conn [bar] {})
+    (is (= :logseq.property/empty-placeholder
+           (:db/ident (:user.property/default (d/entity @conn (:db/id b2))))))))
+
+(deftest deleting-two-values-of-a-property-with-a-default-deletes-both
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:many {:logseq.property/type :default
+                                   :db/cardinality :many
+                                   :build/properties {:logseq.property/default-value "foo"}}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b2" :build/properties {:many #{"bar" "baz"}}}]}]})
+        b2 (db-test/find-block-by-content @conn "b2")
+        values (sort-by :block/order (:user.property/many b2))]
+    (is (= #{"bar" "baz"} (set (map :block/title values))))
+    (outliner-core/delete-blocks! conn values {})
+    (is (every? #(nil? (d/entity @conn (:db/id %))) values))))
+
+(deftest delete-of-a-non-consecutive-selection-deletes-each-block
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"} {:block/title "b2"} {:block/title "b3"}]}])]
+    (outliner-core/delete-blocks! conn [(db-test/find-block-by-content @conn "b1")
+                                       (db-test/find-block-by-content @conn "b3")] {})
+    (is (nil? (db-test/find-block-by-content @conn "b1")))
+    (is (nil? (db-test/find-block-by-content @conn "b3")))
+    (is (some? (db-test/find-block-by-content @conn "b2")))))
+
 (deftest move-up-into-the-parent-of-the-first-moved-block
   ;; c1 is the first child of p, x comes after p: moving [c1 x] up with p as
   ;; the target goes before p, not into p after its last child
