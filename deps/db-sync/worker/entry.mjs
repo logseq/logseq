@@ -4,7 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
-import { uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
+import { assertUnencryptedGraph, uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
 import {
   ASSET_IMAGE_RESOURCE_URI,
   assertDisplayableImageMetadata,
@@ -15,6 +15,7 @@ import { apiDocsResponse } from "./api_docs.mjs";
 import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.mjs";
 import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
 import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
+import { registerSemanticApiTools } from "./semantic_api_tools.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
@@ -40,39 +41,41 @@ async function semanticSpec(request, env, ctx) {
 
 async function handleMcp(request, env, ctx) {
   const authorization = request.headers.get("authorization");
+  const spec = await semanticSpec(request, env, ctx);
+  const semanticApiRequest = async (options) => {
+    if (!options.path.startsWith("/api/v1/")) {
+      throw new Error("Only Logseq server API paths are allowed");
+    }
+    const url = semanticRequestUrl(options, request.url);
+    const headers = {};
+    if (authorization) headers.authorization = authorization;
+    if (options.contentType) headers["content-type"] = options.contentType;
+    else if (options.body !== undefined) headers["content-type"] = "application/json";
+
+    const response = await worker.fetch(
+      new Request(url, {
+        method: options.method,
+        headers,
+        body: semanticRequestBody(options, url),
+      }),
+      env,
+      ctx,
+    );
+    if (response.status === 204) return null;
+    const result = (response.headers.get("content-type") ?? "").includes("application/json")
+      ? await response.json()
+      : await response.text();
+    if (!response.ok) {
+      throw new Error(`Logseq API request failed: ${response.status} ${JSON.stringify(result)}`);
+    }
+    return result;
+  };
   const server = openApiMcpServer({
-    spec: await semanticSpec(request, env, ctx),
+    spec,
     executor: new DynamicWorkerExecutor({ loader: env.LOADER }),
     name: "logseq",
     version: "1.0.0",
-    request: async (options) => {
-      if (!options.path.startsWith("/api/v1/")) {
-        throw new Error("Only Logseq server API paths are allowed");
-      }
-      const url = semanticRequestUrl(options, request.url);
-      const headers = {};
-      if (authorization) headers.authorization = authorization;
-      if (options.contentType) headers["content-type"] = options.contentType;
-      else if (options.body !== undefined) headers["content-type"] = "application/json";
-
-      const response = await worker.fetch(
-        new Request(url, {
-          method: options.method,
-          headers,
-          body: semanticRequestBody(options, url),
-        }),
-        env,
-        ctx,
-      );
-      if (response.status === 204) return null;
-      const result = (response.headers.get("content-type") ?? "").includes("application/json")
-        ? await response.json()
-        : await response.text();
-      if (!response.ok) {
-        throw new Error(`Logseq API request failed: ${response.status} ${JSON.stringify(result)}`);
-      }
-      return result;
-    },
+    request: semanticApiRequest,
   });
   setLogseqMcpServerInfoIcons(server, request);
 
@@ -147,6 +150,10 @@ async function handleMcp(request, env, ctx) {
       "openai/outputTemplate": ASSET_IMAGE_RESOURCE_URI,
     },
   }, async ({ graphId, assetBlockId }) => {
+    await assertUnencryptedGraph(graphId, {
+      origin: new URL(request.url).origin, authorization, env, ctx,
+      workerFetch: worker.fetch.bind(worker),
+    });
     const metadataUrl = new URL(
       `/api/v1/graphs/${encodeURIComponent(graphId)}/assets/${encodeURIComponent(assetBlockId)}`,
       request.url,
@@ -163,10 +170,12 @@ async function handleMcp(request, env, ctx) {
     return assetImageResult(imageResponse, metadata);
   });
 
+  const apiToolDescriptors = registerSemanticApiTools(server, spec, semanticApiRequest);
+
   const transport = new WebStandardStreamableHTTPServerTransport();
   await server.connect(transport);
   server.server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: chatGptToolDescriptors(),
+    tools: [...chatGptToolDescriptors(), ...apiToolDescriptors],
   }));
   return transport.handleRequest(request);
 }

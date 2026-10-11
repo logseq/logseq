@@ -215,7 +215,10 @@
 
 (def e2ee-graph-aes-key-response-schema
   [:map
-   [:encrypted-aes-key {:optional true} [:maybe :string]]])
+   [:encrypted-aes-key {:optional true} [:maybe :string]]
+   ;; base64 of the raw RSA-OAEP wrapped AES key, for agents that unwrap
+   ;; client-side with their RSA private key (no transit parsing needed)
+   [:encrypted-aes-key-base64 {:optional true} [:maybe :string]]])
 
 (def e2ee-grant-access-entry-schema
   [:map

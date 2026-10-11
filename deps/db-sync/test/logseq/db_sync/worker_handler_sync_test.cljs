@@ -913,7 +913,7 @@
                    request (semantic-json-request
                             "/semantic/tasks?graph-id=graph-1" "POST"
                             {:title "Atomic task" :status "TODO" :priority "HIGH"
-                             :scheduled 20260713 :deadline 20260714})]
+                             :scheduled 1783900800000 :deadline 1783987200000})]
                (d/listen! conn ::semantic-create-task-tx
                           #(swap! tx-reports conj %))
                (-> (p/let [response (sync-handler/handle-http self request)
@@ -924,8 +924,8 @@
                      (is (= 1 (count (d/datoms @conn :avet :block/journal-day))))
                      (is (= "logseq.property/status.todo" (get-in body [:status :ident])))
                      (is (= "logseq.property/priority.high" (get-in body [:priority :ident])))
-                     (is (= 20260713 (:scheduled body)))
-                     (is (= 20260714 (:deadline body))))
+                     (is (= 1783900800000 (:scheduled body)))
+                     (is (= 1783987200000 (:deadline body))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (d/unlisten! conn ::semantic-create-task-tx)

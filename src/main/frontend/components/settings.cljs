@@ -2,7 +2,9 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
+            [frontend.common.crypt :as crypt]
             [frontend.components.assets :as assets]
+            [frontend.components.e2ee :as e2ee]
             [frontend.components.email :as email-component]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
@@ -31,6 +33,7 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -1456,11 +1459,13 @@
         [pending? set-pending!] (hooks/use-state false)
         [load-error? set-load-error!] (hooks/use-state false)
         graph-items (->> graphs
-                         (filter (fn [{:keys [graph-e2ee? graph-ready-for-use?]}]
-                                   (and (false? graph-e2ee?)
-                                        (not= false graph-ready-for-use?))))
-                         (mapv (fn [{:keys [GraphName GraphUUID]}]
-                                 {:value (str GraphUUID) :label GraphName})))
+                         (filter (fn [{:keys [graph-ready-for-use?]}]
+                                   (not= false graph-ready-for-use?)))
+                         (mapv (fn [{:keys [GraphName GraphUUID graph-e2ee?]}]
+                                 {:value (str GraphUUID)
+                                  :label (if graph-e2ee?
+                                           (str GraphName " (E2EE)")
+                                           GraphName)})))
         load-tokens! (fn []
                        (set-load-error! false)
                        (-> (rtc-handler/<personal-access-tokens)
@@ -1566,6 +1571,62 @@
       [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
        (t :encryption/reset-password)])))
 
+(defn- exported-key->base64 [^js u8]
+  (when (instance? js/Uint8Array u8)
+    (js/btoa (.join (js/Array.from u8 (fn [b] (js/String.fromCharCode b))) ""))))
+
+(defn- transit->exported-key-base64 [value]
+  (when (string? value)
+    (try (exported-key->base64 (ldb/read-transit-str value))
+         (catch :default _ nil))))
+
+(hsx/defc encryption-key-display
+  [rsa-key-pair]
+  (let [public-key-base64 (transit->exported-key-base64 (:public-key rsa-key-pair))
+        [private-key set-private-key!] (hooks/use-state nil)
+        reveal-private-key!
+        (fn []
+          (let [private-key-promise (p/deferred)
+                encrypted-private-key (ldb/read-transit-str (:encrypted-private-key rsa-key-pair))]
+            (shui/dialog-open!
+             #(e2ee/e2ee-password-to-decrypt-private-key
+               encrypted-private-key private-key-promise)
+             {:auto-width? true
+              :on-close (fn []
+                          (p/reject! private-key-promise (ex-info "cancelled" {}))
+                          (shui/dialog-close!))})
+            (-> (p/let [private-key' private-key-promise
+                        exported (crypt/<export-private-key private-key')]
+                  (set-private-key! (exported-key->base64 exported)))
+                (p/catch (fn [_] nil)))))]
+    [:div.flex.flex-col.gap-3
+     [:div.flex.flex-col.gap-1
+      [:p.text-sm.opacity-70 (t :encryption/public-key)]
+      (if (string? public-key-base64)
+        [:div.flex.items-start.gap-2
+         [:code.text-xs.break-all.flex-1.select-all public-key-base64]
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :on-click #(util/copy-to-clipboard! public-key-base64)}
+          (t :encryption/copy-key))]
+        [:p.text-sm.opacity-70 (t :encryption/key-unavailable)])]
+     [:div.flex.flex-col.gap-1
+      [:p.text-sm.opacity-70 (t :encryption/private-key)]
+      (if (string? private-key)
+        [:div.flex.items-start.gap-2
+         [:code.text-xs.break-all.flex-1.select-all private-key]
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :on-click #(util/copy-to-clipboard! private-key)}
+          (t :encryption/copy-key))]
+        (shui/button
+         {:variant "outline"
+          :size :sm
+          :on-click reveal-private-key!}
+         (t :encryption/show-private-key)))]]))
+
 (hsx/defc encryption
   []
   (let [user-uuid (user-handler/user-uuid)
@@ -1622,6 +1683,7 @@
                                            (set-reset-password-status! (t :encryption/failed-to-update-password))))))]
             [:div.flex.flex-col.gap-4
              ;; [:p "E2EE key-pair already generated!"]
+             (encryption-key-display rsa-key-pair)
              (when-not forgot?
                [:div.flex.flex-col
                 [:p (t :encryption/remember-password-rich)]
