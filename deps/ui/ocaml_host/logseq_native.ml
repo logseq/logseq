@@ -691,21 +691,339 @@ let () =
     in
     Native_embed.platform_event ("window-size\n" ^ body)
   in
+  (* ---- DOM document events ------------------------------------------
+
+     The app also registers DOM-style listeners through
+     Platform.add_event_listener (cmdk shortcuts, editor keys,
+     outside-click dismiss, block dnd, ...). Mirror SDL input into the
+     same "name\njson" envelopes the bridge uses — platform_event feeds
+     them through emit_event's capture -> bubble -> window fan-out.
+
+     Pointer events resolve their target through the same hit test the
+     Input.* dispatch uses (deepest node under the cursor, in device
+     px). Key events target the open menu, else the focused node — the
+     DOM activeElement — like the GPUI host's focus registry. *)
+  let json_escape s =
+    let b = Buffer.create (String.length s + 8) in
+    String.iter
+      (fun c ->
+         if c = '"' then Buffer.add_string b "\\\""
+         else if c = '\\' then Buffer.add_string b "\\\\"
+         else if Char.code c < 0x20 then
+           Buffer.add_string b (Printf.sprintf "\\u%04x" (Char.code c))
+         else Buffer.add_char b c)
+      s;
+    Buffer.contents b
+  in
+  let jstr s = "\"" ^ json_escape s ^ "\"" in
+  let jbool b = if b then "true" else "false" in
+  let emit_dom name node fields =
+    let fields =
+      if node > 0 then ("nodeId", string_of_int node) :: fields
+      else fields
+    in
+    let body =
+      "{"
+      ^ String.concat ","
+          (List.map (fun (k, v) -> jstr k ^ ":" ^ v) fields)
+      ^ "}"
+    in
+    dbg "dom %s node=%d %s" name node body;
+    Native_embed.platform_event (name ^ "\n" ^ body)
+  in
+  let dom_root () =
+    match Lui_store.root_ids store with
+    | id :: _ -> id
+    | [] -> 0
+  in
+  let dom_hit ~x ~y =
+    let s = !scale_cell in
+    match hit store rects ~x:(x *. s) ~y:(y *. s) with
+    | Some id -> id
+    | None -> dom_root ()
+  in
+  (* DOM `buttons` bitmask: 1 primary, 2 secondary, 4 auxiliary. SDL
+     button numbers are 1 left, 2 middle, 3 right while DOM is 0 left,
+     1 middle, 2 right — map through Input.mouse_button. *)
+  let dom_buttons = ref 0 in
+  let dom_button_bit (b : Input.mouse_button) =
+    match b with
+    | Input.Left -> 1
+    | Input.Right -> 2
+    | Input.Middle -> 4
+    | Input.Other n -> 1 lsl (n - 1)
+  in
+  let dom_down_node = ref 0 in
+  let dom_down_clicks = ref 0 in
+  (* Same-hit free moves carry no new information — cap them the way
+     the GPUI host does (~25/s); drags emit every move. *)
+  let last_move_emit = ref (0, 0.) in
+  let mods_fields (m : Input.mods) =
+    [ ("shiftKey", jbool m.Input.shift)
+    ; ("metaKey", jbool m.Input.meta)
+    ; ("ctrlKey", jbool m.Input.ctrl)
+    ; ("altKey", jbool m.Input.alt) ]
+  in
+  let pointer_fields ~x ~y ~button ~buttons ~mods ~extra =
+    [ ("clientX", string_of_int x)
+    ; ("clientY", string_of_int y)
+    ; ("button", string_of_int button)
+    ; ("buttons", string_of_int buttons) ]
+    @ mods_fields mods @ extra
+  in
+  let on_dom_button_down ~x ~y ~btn ~clicks ~mods =
+    let node = dom_hit ~x:(float x) ~y:(float y) in
+    dom_down_node := node;
+    dom_down_clicks := clicks;
+    dom_buttons := !dom_buttons lor dom_button_bit btn;
+    let button = Input.button_to_int btn in
+    emit_dom "mousedown" node
+      (pointer_fields ~x ~y ~button ~buttons:!dom_buttons ~mods
+         ~extra:[ ("detail", string_of_int clicks) ]);
+    emit_dom "pointerdown" node
+      (pointer_fields ~x ~y ~button ~buttons:!dom_buttons ~mods
+         ~extra:[ ("detail", "0") ])
+  in
+  let on_dom_button_up ~x ~y ~btn ~mods =
+    let node = dom_hit ~x:(float x) ~y:(float y) in
+    dom_buttons := !dom_buttons land lnot (dom_button_bit btn);
+    let button = Input.button_to_int btn in
+    let fields ~detail =
+      pointer_fields ~x ~y ~button ~buttons:!dom_buttons ~mods
+        ~extra:[ ("detail", string_of_int detail) ]
+    in
+    (* DOM order: mouseup, pointerup, then click *)
+    emit_dom "mouseup" node (fields ~detail:1);
+    emit_dom "pointerup" node (fields ~detail:0);
+    (match btn with
+     | Input.Left ->
+       if node <> 0 && node = !dom_down_node then begin
+         let clicks = max 1 !dom_down_clicks in
+         emit_dom "click" node (fields ~detail:clicks);
+         if clicks >= 2 then emit_dom "dblclick" node (fields ~detail:clicks)
+       end
+     | Input.Right -> emit_dom "contextmenu" node (fields ~detail:0)
+     | _ -> ());
+    dom_down_node := 0;
+    dom_down_clicks := 0
+  in
+  let on_dom_motion ~x ~y ~rx ~ry ~mods =
+    let node = dom_hit ~x:(float x) ~y:(float y) in
+    let now = Unix.gettimeofday () in
+    let last_node, last_t = !last_move_emit in
+    let skip =
+      !dom_buttons = 0 && last_node = node && now -. last_t < 0.04
+    in
+    if not skip then begin
+      last_move_emit := (node, now);
+      let fields =
+        pointer_fields ~x ~y ~button:0 ~buttons:!dom_buttons ~mods
+          ~extra:[ ("movementX", string_of_int rx)
+                 ; ("movementY", string_of_int ry) ]
+      in
+      emit_dom "mousemove" node fields;
+      emit_dom "pointermove" node fields
+    end
+  in
+  (* DOM KeyboardEvent.key/code for SDL scancodes. `key` is the
+     unshifted name — letters stay lowercase under Shift while the
+     produced glyph goes to `keyChar`; `code` is the physical position
+     name. Same contract the GPUI host emits. *)
+  let named_dom_key = function
+    | 57 -> "CapsLock"
+    | n when n >= 58 && n <= 69 -> "F" ^ string_of_int (n - 57)
+    | 70 -> "PrintScreen"
+    | 71 -> "ScrollLock"
+    | 72 -> "Pause"
+    | 73 -> "Insert"
+    | 83 -> "NumLock"
+    | 101 -> "ContextMenu"
+    | 102 -> "Power"
+    | 224 | 228 -> "Control"
+    | 225 | 229 -> "Shift"
+    | 226 | 230 -> "Alt"
+    | 227 | 231 -> "Meta"
+    | n -> Sdl.get_scancode_name n
+  in
+  (* SDL scancode -> unshifted char for punctuation and keypad keys;
+     char_of_scancode only covers letters and top-row digits. *)
+  let punct_char = function
+    | 45 -> Some '-'
+    | 46 -> Some '='
+    | 47 -> Some '['
+    | 48 -> Some ']'
+    | 49 | 100 -> Some '\\'
+    | 50 -> Some '#'
+    | 51 -> Some ';'
+    | 52 -> Some '\''
+    | 53 -> Some '`'
+    | 54 -> Some ','
+    | 55 -> Some '.'
+    | 56 | 84 -> Some '/'
+    | 85 -> Some '*'
+    | 86 -> Some '-'
+    | 87 -> Some '+'
+    | 99 -> Some '.'
+    | n when n >= 89 && n <= 97 ->
+      Some (Char.chr (Char.code '1' + n - 89))
+    | 98 -> Some '0'
+    | _ -> None
+  in
+  let unshifted_char sc =
+    match Input.char_of_scancode sc with
+    | Some _ as r -> r
+    | None -> punct_char sc
+  in
+  (* US-layout shift pairs for `keyChar`; non-paired chars return
+     themselves. *)
+  let shift_glyph = function
+    | '1' -> '!' | '2' -> '@' | '3' -> '#' | '4' -> '$' | '5' -> '%'
+    | '6' -> '^' | '7' -> '&' | '8' -> '*' | '9' -> '(' | '0' -> ')'
+    | '-' -> '_' | '=' -> '+' | '[' -> '{' | ']' -> '}' | '\\' -> '|'
+    | ';' -> ':' | '\'' -> '"' | '`' -> '~' | ',' -> '<' | '.' -> '>'
+    | '/' -> '?' | '#' -> '~' | c -> c
+  in
+  let dom_key sc =
+    match Input.key_of_sdl_scancode sc with
+    | Input.Return -> "Enter"
+    | Input.Escape -> "Escape"
+    | Input.Backspace -> "Backspace"
+    | Input.Delete -> "Delete"
+    | Input.Tab -> "Tab"
+    | Input.Space -> " "
+    | Input.Arrow_left -> "ArrowLeft"
+    | Input.Arrow_right -> "ArrowRight"
+    | Input.Arrow_up -> "ArrowUp"
+    | Input.Arrow_down -> "ArrowDown"
+    | Input.Home -> "Home"
+    | Input.End -> "End"
+    | Input.Page_up -> "PageUp"
+    | Input.Page_down -> "PageDown"
+    | Input.Other _ -> (
+        match unshifted_char sc with
+        | Some c -> String.make 1 c
+        | None -> named_dom_key sc)
+  in
+  let dom_code sc =
+    match sc with
+    | 40 -> "Enter"
+    | 88 -> "NumpadEnter"
+    | n when n >= 4 && n <= 29 ->
+      "Key" ^ String.make 1 (Char.chr (Char.code 'A' + n - 4))
+    | n when n >= 30 && n <= 38 ->
+      "Digit" ^ String.make 1 (Char.chr (Char.code '1' + n - 30))
+    | 39 -> "Digit0"
+    | 41 -> "Escape" | 42 -> "Backspace" | 43 -> "Tab" | 44 -> "Space"
+    | 45 -> "Minus" | 46 -> "Equal" | 47 -> "BracketLeft"
+    | 48 -> "BracketRight" | 49 -> "Backslash" | 50 -> "IntlHash"
+    | 51 -> "Semicolon" | 52 -> "Quote" | 53 -> "Backquote"
+    | 54 -> "Comma" | 55 -> "Period" | 56 -> "Slash"
+    | 57 -> "CapsLock"
+    | n when n >= 58 && n <= 69 -> "F" ^ string_of_int (n - 57)
+    | 70 -> "PrintScreen" | 71 -> "ScrollLock" | 72 -> "Pause"
+    | 73 -> "Insert"
+    | 74 -> "Home" | 75 -> "PageUp" | 76 -> "Delete" | 77 -> "End"
+    | 78 -> "PageDown"
+    | 79 -> "ArrowRight" | 80 -> "ArrowLeft" | 81 -> "ArrowDown"
+    | 82 -> "ArrowUp"
+    | 83 -> "NumLock"
+    | 84 -> "NumpadDivide" | 85 -> "NumpadMultiply"
+    | 86 -> "NumpadSubtract" | 87 -> "NumpadAdd" | 99 -> "NumpadDecimal"
+    | n when n >= 89 && n <= 98 ->
+      "Numpad" ^ string_of_int ((n - 88) mod 10)
+    | 100 -> "IntlBackslash" | 101 -> "ContextMenu" | 102 -> "Power"
+    | 224 -> "ControlLeft" | 225 -> "ShiftLeft" | 226 -> "AltLeft"
+    | 227 -> "MetaLeft"
+    | 228 -> "ControlRight" | 229 -> "ShiftRight" | 230 -> "AltRight"
+    | 231 -> "MetaRight"
+    | n -> Sdl.get_scancode_name n
+  in
+  let dom_keychar ~shift sc =
+    match Input.key_of_sdl_scancode sc with
+    | Input.Space -> Some " "
+    | Input.Other _ -> (
+        match unshifted_char sc with
+        | Some c ->
+          let c =
+            if shift then
+              match c with
+              | 'a' .. 'z' -> Char.uppercase_ascii c
+              | c -> shift_glyph c
+            else c
+          in
+          Some (String.make 1 c)
+        | None -> None)
+    | _ -> None
+  in
+  let on_dom_key ~down ~scancode ~keymod ~repeat =
+    let mods = mods_of_keymod keymod in
+    let target =
+      let menu = Ui.open_menu ui in
+      if menu <> 0 then menu else Ui.focused ui
+    in
+    let fields =
+      [ ("key", jstr (dom_key scancode))
+      ; ("code", jstr (dom_code scancode))
+      ; ("repeat", jbool repeat) ]
+      @ (match dom_keychar ~shift:mods.Input.shift scancode with
+         | Some kc -> [ ("keyChar", jstr kc) ]
+         | None -> [])
+      @ mods_fields mods
+    in
+    emit_dom (if down then "keydown" else "keyup") target fields
+  in
+  let emit_dom_event e =
+    match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
+    | `Mouse_button_down ->
+      on_dom_button_down
+        ~x:(Sdl.Event.get e Sdl.Event.mouse_button_x)
+        ~y:(Sdl.Event.get e Sdl.Event.mouse_button_y)
+        ~btn:(Input.button_of_sdl
+                (Sdl.Event.get e Sdl.Event.mouse_button_button))
+        ~clicks:(Sdl.Event.get e Sdl.Event.mouse_button_clicks)
+        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+    | `Mouse_button_up ->
+      on_dom_button_up
+        ~x:(Sdl.Event.get e Sdl.Event.mouse_button_x)
+        ~y:(Sdl.Event.get e Sdl.Event.mouse_button_y)
+        ~btn:(Input.button_of_sdl
+                (Sdl.Event.get e Sdl.Event.mouse_button_button))
+        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+    | `Mouse_motion ->
+      on_dom_motion
+        ~x:(Sdl.Event.get e Sdl.Event.mouse_motion_x)
+        ~y:(Sdl.Event.get e Sdl.Event.mouse_motion_y)
+        ~rx:(Sdl.Event.get e Sdl.Event.mouse_motion_xrel)
+        ~ry:(Sdl.Event.get e Sdl.Event.mouse_motion_yrel)
+        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+    | `Key_down ->
+      on_dom_key ~down:true
+        ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
+        ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
+        ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0)
+    | `Key_up ->
+      on_dom_key ~down:false
+        ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
+        ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
+        ~repeat:false
+    | _ -> ()
+  in
   let e = Sdl.Event.create () in
   let drain_events () =
     let go = ref true in
     while !go do
       if Sdl.poll_event (Some e) then begin
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
-        match input_of_event e with
-        | Some (Input.Resize (w, h)) ->
-          win_w := w;
-          win_h := h;
-          apply_actions
-            (Ui.handle ui store rects (Input.Resize (w, h)))
-        | Some input ->
-          apply_actions (Ui.handle ui store rects input)
-        | None -> ()
+        (match input_of_event e with
+         | Some (Input.Resize (w, h)) ->
+           win_w := w;
+           win_h := h;
+           apply_actions
+             (Ui.handle ui store rects (Input.Resize (w, h)))
+         | Some input ->
+           apply_actions (Ui.handle ui store rects input)
+         | None -> ());
+        emit_dom_event e
       end
       else go := false
     done
