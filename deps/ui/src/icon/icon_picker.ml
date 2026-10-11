@@ -405,8 +405,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   (Ui_components.with_props
      [ P.Position, P.StringValue "relative"
      ; P.Overflow, P.StringValue "hidden" ]
-     (column ~style_class:"cp__emoji-icon-picker"
-        ~width:380 ~max_height:408
+     (* fixed height: the picker is a shrink-to-fit popover and the
+       scroll body contributes no intrinsic height — without an explicit
+       height the layer collapses to header+footer chrome. Web clamps
+       the always-tall icon grid to the same 408px cap anyway. *)
+    (column ~style_class:"cp__emoji-icon-picker"
+        ~width:380 ~height:408
         ~data_attrs:
           [ ("data-keep-selection", "true")
           ; ("style", "max-width: calc(100vw - 16px)") ]
