@@ -314,7 +314,7 @@ let conduit block_id : Edit_input.conduit option =
           issue block_id "caret-rect" (string_of_int off);
           request block_id "caret-rect" [ ("offset", jnum_v off) ];
           match Hashtbl.find_opt caret_rects (block_id, off) with
-          | Some (r, ep) when ep = epoch_of block_id ->
+          | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
               Some { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch }
           | _ -> None)
     ; offset_at =
@@ -363,7 +363,10 @@ let popup_pos block_id : (float * float * float) option =
            space (x-20, line bottom - 3, line top), matching the web
            twin's popup_pos *)
         (match Hashtbl.find_opt caret_rects (block_id, off) with
-         | Some (r, ep) when ep = epoch_of block_id ->
+         | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
+             (* ch=0 is the contract's no-data reply — the run is not
+                measured yet; None keeps the caller's sentinel retry
+                polling instead of freezing a bogus anchor *)
              let vx = Float.of_int (r.cx + r.ox)
              and vy = Float.of_int (r.cy + r.oy) in
              Some (vx -. 20., vy +. Float.of_int r.ch -. 3., vy)
@@ -374,7 +377,17 @@ let popup_pos block_id : (float * float * float) option =
   | Some _ -> live
   | None -> (
       match Dom_ext.by_id ("edit-block-" ^ block_id) with
-      | Some el -> Some (Dom_ext.caret_popup_pos el)
+      | Some el ->
+          (* by_id fabricates a {#ref} handle when the id is absent from
+             the snapshot — on hosts with no edit-block-<bid> element its
+             bounding rect stays empty and caret_popup_pos would report a
+             bogus (-20,4,0) anchor that freezes the open-time sentinel
+             retry. Only a measured element may answer. *)
+          let r = Dom_ext.bounding_rect el in
+          if
+            Dom_ext.rect_width r > 0. || Dom_ext.rect_height r > 0.
+          then Some (Dom_ext.caret_popup_pos el)
+          else None
       | None -> None)
 
 (* bounding rect of the .block-editor container — popup clamp anchor.

@@ -112,7 +112,7 @@ let ed_ctx (e : env) (bid : string) : ed_ctx option =
     match Lui_store.parent e.store sink with
     | None -> None
     | Some editor ->
-      let ed_rect = Rects.get e.rects editor in
+      let ed_rect = e.rect_of editor in
       let runs =
         match Lui_store.prop e.store sink "runs" with
         | Some (StringValue s) ->
@@ -142,7 +142,7 @@ let ed_ctx (e : env) (bid : string) : ed_ctx option =
 (* Window-space rect of the n-th .ed-r node, as (x, y, h) relative to
    the block-editor origin. *)
 let run_rect e ctx i =
-  let r = Rects.get e.rects ctx.nodes.(i) in
+  let r = e.rect_of ctx.nodes.(i) in
   (r.Lui_scene.x -. ctx.ox, r.Lui_scene.y -. ctx.oy, r.Lui_scene.h)
 
 (* nodes/runs lengths can skew while a re-render is mid-flight —
@@ -169,15 +169,18 @@ let caret_rect e ctx off =
     let i = run_of_off ctx off in
     let lo, _ = run_at ctx i in
     let x, y, h = run_rect e ctx i in
-    let text =
-      Option.value ~default:""
-        (Lui_store.string_prop e.store ctx.nodes.(i) "text")
-    in
-    let local = max 0 (min (off - lo) (String.length text)) in
-    let dx, _ =
-      e.measure ctx.nodes.(i) (String.sub text 0 local)
-    in
-    (x +. dx, y, h)
+    if h <= 0. then (0., 0., 0.)
+    else begin
+      let text =
+        Option.value ~default:""
+          (Lui_store.string_prop e.store ctx.nodes.(i) "text")
+      in
+      let local = max 0 (min (off - lo) (String.length text)) in
+      let dx, _ =
+        e.measure ctx.nodes.(i) (String.sub text 0 local)
+      in
+      (x +. dx, y, h)
+    end
   end
 
 let offset_at e ctx x y =
@@ -190,7 +193,7 @@ let offset_at e ctx x y =
     let best = ref 0 and bd = ref Float.max_float in
     Array.iteri
       (fun i id ->
-        let r = Rects.get e.rects id in
+        let r = e.rect_of id in
         let dy =
           if wy < r.Lui_scene.y then r.Lui_scene.y -. wy
           else if wy > r.Lui_scene.y +. r.Lui_scene.h then
@@ -209,7 +212,7 @@ let offset_at e ctx x y =
     let i = !best in
     let lo, hi = run_at ctx i in
     let id = ctx.nodes.(i) in
-    let r = Rects.get e.rects id in
+    let r = e.rect_of id in
     let text =
       Option.value ~default:"" (Lui_store.string_prop e.store id "text")
     in
@@ -239,7 +242,7 @@ let line_ranges e ctx =
       end
     in
     for i = 0 to n - 1 do
-      let r = Rects.get e.rects ctx.nodes.(i) in
+      let r = e.rect_of ctx.nodes.(i) in
       let slo, shi = run_at ctx i in
       if Float.is_nan !cur_y || abs_float (r.Lui_scene.y -. !cur_y) < 1.
       then begin
@@ -262,7 +265,7 @@ let scroll_height e ctx =
   let top = ref Float.max_float and bot = ref 0. in
   Array.iter
     (fun id ->
-      let r = Rects.get e.rects id in
+      let r = e.rect_of id in
       if r.Lui_scene.h > 0. then begin
         top := Float.min !top r.Lui_scene.y;
         bot := Float.max !bot (r.Lui_scene.y +. r.Lui_scene.h)
