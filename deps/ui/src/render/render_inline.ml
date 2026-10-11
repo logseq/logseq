@@ -1456,12 +1456,9 @@ and resolved_ref ~refs ~self uuid : t =
                          ; ("draggable", "true") ]
              ~text:("[[" ^ uuid ^ "]]") [])
       else
-        Ui_components.with_props
-          [ Lui_protocol.HoverBackground,
-            Ui_components.sv
-              "var(--lx-accent-04-alpha, \
-               var(--ls-secondary-background-color))" ]
-          (D.el ~tag:"span" ~style_class:"page-reference"
+        (* .page-reference:hover in lui-core.css carries the hover bg;
+           a typed HoverBackground prop cannot reach a dom node *)
+        (D.el ~tag:"span" ~style_class:"page-reference"
           ~attrs:
             [ ("data-ref", String.lowercase_ascii title)
             ; ("style", "border-radius:4px;transition:background 0.15s")

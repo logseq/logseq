@@ -283,8 +283,9 @@ let display_spaces s =
     let b = Buffer.create (String.length s + 8) in
     String.iter
       (fun c ->
-        (* melange text lands Latin-1: \xA0 alone is U+00A0 nbsp *)
-        if c = ' ' then Buffer.add_string b "\xA0"
+        (* U+00A0 nbsp as UTF-8 — a bare \xA0 byte is invalid UTF-8 and
+           renders as U+FFFD on the native host *)
+        if c = ' ' then Buffer.add_string b "\u{00A0}"
         else Buffer.add_char b c)
       s;
     Buffer.contents b
@@ -536,7 +537,7 @@ let group_header svs (st : S.t) (g : S.group) : t =
           && not (S.get st).S.sidebar
        then
          Ui_components.cmdk_group_more ~key:"gmore" ~on_press:toggle
-           [ text ~key:"lbl"
+           [ text ~key:"lbl" ~white_space:"nowrap"
                ~value:
                  (if g.S.gexpanded then svs.Svs.i18n "ui/show-less"
                   else svs.Svs.i18n "ui/show-more")

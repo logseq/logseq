@@ -174,7 +174,7 @@ let cmdk_group_header ~key children =
   with_props
     [ P.FontSize, sv "var(--lx-text-header)"; P.LineHeight, sv "16px" ]
     (row ~key ~style_class:"cp__cmdk-group-header" ~cross:`center
-       ~main:`space_between ~gap:8 ~height:32 ~padding_horizontal:12
+       ~gap:8 ~height:32 ~padding_horizontal:12
        ~background:
          "var(--lx-gray-02, var(--ls-secondary-background-color, \
           hsl(var(--muted))))"
@@ -208,7 +208,7 @@ let cmdk_group_more ~key ~on_press children : t =
        ; P.UserSelect, sv "none"
        ; P.Cursor, sv "pointer"
        ]
-       (row ~key
+       (row ~key ~min_width:110
           [ row ~key:"i"
               ~cross:`center ~gap:4 children ]))
 
