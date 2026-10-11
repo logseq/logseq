@@ -7,7 +7,9 @@
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
+            [logseq.db-sync.worker.handler.personal-access-token :as pat-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [promesa.core :as p]))
@@ -37,7 +39,12 @@
       (string/split #"\s+")
       set))
 
-(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url]
+(defn- rate-limit-subject
+  [claims]
+  (or (aget claims "pat_id")
+      (aget claims "sub")))
+
+(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url e2ee?]
   (let [graph-id (:graph-id path-params)
         path (reduce-kv (fn [result k value]
                           (string/replace result (str ":" (name k)) value))
@@ -45,6 +52,10 @@
                         path-params)
         target (js/URL. (str (.-origin url) path (.-search url)))]
     (.set (.-searchParams target) "graph-id" graph-id)
+    ;; The graph DB's :logseq.kv/graph-rtc-e2ee? is only set at RTC upload; the
+    ;; index flag is authoritative, so pass it down for DO-side write gating.
+    (when e2ee?
+      (.set (.-searchParams target) "graph-e2ee" "true"))
     (forward-sync-request request env graph-id target)))
 
 (defn- rate-limit-response []
@@ -64,7 +75,8 @@
 (defn- handle-semantic-graphs-list [^js env ^js url claims operation]
   (let [limit (semantic-limit url)
         cursor (.get (.-searchParams url) "cursor")
-        name (.get (.-searchParams url) "name")]
+        name (.get (.-searchParams url) "name")
+        pat-graph-id (aget claims "pat_graph_id")]
     (cond
       (nil? limit) (http/bad-request "invalid limit")
       (and cursor (nil? (index/decode-semantic-graph-cursor cursor))) (http/bad-request "invalid cursor")
@@ -72,32 +84,55 @@
       (let [^js limiter (aget env "SEMANTIC_READ_RATE_LIMITER")]
         (if-not limiter
           (http/error-response "rate limiter unavailable" 503)
-          (p/let [result (.limit limiter #js {:key (str (aget claims "sub") ":"
+          (p/let [result (.limit limiter #js {:key (str (rate-limit-subject claims) ":"
                                                        (:operation-id operation))})]
             (if (false? (aget result "success"))
               (rate-limit-response)
-              (p/let [result (index/<semantic-graphs-list
-                               (aget env "DB")
-                               (aget claims "sub")
-                               {:name name :limit limit :cursor cursor})]
-                (http/json-response nil result)))))))))
+              (if (string? pat-graph-id)
+                (p/let [graph (index/<semantic-graph-get
+                               (aget env "DB") (aget claims "sub") pat-graph-id)
+                        graph (when (and graph
+                                         (or (nil? name)
+                                             (= (string/lower-case name)
+                                                (string/lower-case (:graph-name graph)))))
+                                graph)]
+                  (http/json-response nil {:graphs (cond-> [] graph (conj graph))}))
+                (p/let [result (index/<semantic-graphs-list
+                                 (aget env "DB")
+                                 (aget claims "sub")
+                                 {:name name :limit limit :cursor cursor})]
+                  (http/json-response nil result))))))))))
 
 (defn- handle-semantic-request [request ^js env ^js url operation]
-  (p/let [claims (auth/auth-claims request env)]
+  (p/let [claims (auth/semantic-auth-claims request env)]
     (cond
       (nil? claims) (http/unauthorized)
       (not (contains? (scopes claims) (:scope operation))) (http/error-response "insufficient scope" 403)
       (= :semantic/graphs-list (:handler operation))
       (handle-semantic-graphs-list env url claims operation)
       :else
-      (let [graph-id (get-in operation [:path-params :graph-id])]
-        (p/let [access (index-handler/graph-access-response request env graph-id)]
+      (let [graph-id (get-in operation [:path-params :graph-id])
+            pat-graph-id (aget claims "pat_graph_id")]
+        (p/let [access (cond
+                         (and (string? pat-graph-id) (not= pat-graph-id graph-id))
+                         (http/forbidden)
+
+                         (string? pat-graph-id)
+                         (p/let [access? (index/<user-has-access-to-graph?
+                                          (aget env "DB") graph-id (aget claims "sub"))]
+                           (if access?
+                             (http/json-response nil {:ok true})
+                             (http/forbidden)))
+
+                         :else
+                         (index-handler/graph-access-response request env graph-id))]
           (if-not (.-ok access)
             access
             (p/let [e2ee? (index/<graph-e2ee? (aget env "DB") graph-id)]
               (cond
                 (nil? e2ee?) (http/not-found)
-                e2ee? (http/error-response "semantic-api-unavailable-for-e2ee" 409)
+                (and (:edge? operation) (not e2ee?))
+                (http/bad-request "operation requires an E2EE graph")
                 :else
                 (let [binding-name (if (= :read (:rate-class operation))
                                      "SEMANTIC_READ_RATE_LIMITER"
@@ -105,11 +140,16 @@
                       ^js limiter (aget env binding-name)]
                   (if-not limiter
                     (http/error-response "rate limiter unavailable" 503)
-                    (p/let [result (.limit limiter #js {:key (str (aget claims "sub") ":"
+                    (p/let [result (.limit limiter #js {:key (str (rate-limit-subject claims) ":"
                                                                (:operation-id operation) ":" graph-id)})]
-                      (if (false? (aget result "success"))
-                        (rate-limit-response)
-                        (forward-semantic-request request env operation url)))))))))))))
+                      (cond
+                        (false? (aget result "success")) (rate-limit-response)
+                        (:edge? operation)
+                        (e2ee-handler/handle {:request request :env env
+                                              :handler (:handler operation)
+                                              :graph-id graph-id})
+                        :else
+                        (forward-semantic-request request env operation url e2ee?)))))))))))))
 
 (defn- request-user-id
   [request]
@@ -156,6 +196,9 @@
 
          (= path "/openapi.json")
          (http/json-response nil (semantic-routes/openapi-document (or (aget env "COGNITO_ISSUER") "")))
+
+         (pat-handler/route? path)
+         (pat-handler/handle request env)
 
          (semantic-routes/match-public method path)
          (handle-semantic-request request env url (semantic-routes/match-public method path))

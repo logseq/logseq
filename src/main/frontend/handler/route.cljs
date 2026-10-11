@@ -264,6 +264,12 @@
 
 (defn set-route-match!
   [route]
+  ;; The selection holds rendered block DOM nodes; a path change remounts the
+  ;; view and detaches them, so stale nodes must be dropped here — otherwise
+  ;; selection-driven ops (e.g. move up/down) silently apply on the old page.
+  (when (not= (:path route)
+              (:path (state/get-route-match)))
+    (state/clear-selection!))
   (state/swap-state! assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)

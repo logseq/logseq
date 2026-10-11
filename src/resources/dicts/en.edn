@@ -601,6 +601,7 @@
  :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
+ :encryption/copy-key "Copy"
  :encryption/current-password "Current password"
  :encryption/enter-password "Enter password"
  :encryption/enter-password-again "Enter password again"
@@ -616,12 +617,16 @@
  :encryption/forgot-password-warning "If you forget your password, you can force a reset of your encryption password. However, this will make all currently encrypted graph data stored on the server permanently unreadable. After resetting, you'll need to re-upload your graphs from the client."
  :encryption/init-key-pair "Init E2EE encrypt-key-pair"
  :encryption/init-key-pair-error "Init key-pair err: {1}"
+ :encryption/key-unavailable "Key unavailable"
  :encryption/password-not-matched "Password not matched"
  :encryption/password-updated-successfully "Password updated successfully!"
+ :encryption/private-key "Private key (base64)"
+ :encryption/public-key "Public key (base64)"
  :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
+ :encryption/show-private-key "Show private key"
  :encryption/updating-password "Updating password ..."
  :encryption/wrong-password "Wrong password"
 
@@ -1703,6 +1708,7 @@
  :settings/features "Features"
  :settings/general "General"
  :settings/keymap "Keymap"
+ :settings/personal-access-tokens "Personal access tokens"
  :settings/plugins "Plugins"
 
  :settings.account/storage-usage "{1}GB of {2}GB total storage ({3})"
@@ -1863,6 +1869,29 @@
  :sync/storage-exceed-limit "Sync storage exceed limit"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "User doesn't exist yet."
+
+ :sync.personal-access-token/api-docs "API documentation"
+ :sync.personal-access-token/copied "Personal access token copied."
+ :sync.personal-access-token/create "Create token"
+ :sync.personal-access-token/create-title "Create a personal access token"
+ :sync.personal-access-token/created-title "Your new personal access token"
+ :sync.personal-access-token/created-warning "Copy this token now. It cannot be shown again."
+ :sync.personal-access-token/date-summary "Created {1}; expires {2}"
+ :sync.personal-access-token/deleted-graph "Deleted graph"
+ :sync.personal-access-token/description "Create graph-specific credentials for the Logseq REST API."
+ :sync.personal-access-token/empty "No personal access tokens."
+ :sync.personal-access-token/existing-title "Existing tokens"
+ :sync.personal-access-token/expiration "Expiration"
+ :sync.personal-access-token/graph "Graph"
+ :sync.personal-access-token/no-graphs "No synced graphs are available."
+ :sync.personal-access-token/permission "Permission"
+ :sync.personal-access-token/request-error "The personal access token request failed. Please try again."
+ :sync.personal-access-token/revoke "Revoke"
+ :sync.personal-access-token/revoke-confirm "Revoke this personal access token? This cannot be undone."
+
+ :sync.personal-access-token.permission/both "Read and write"
+ :sync.personal-access-token.permission/read "Read"
+ :sync.personal-access-token.permission/write "Write"
 
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Switch to {1} theme"
