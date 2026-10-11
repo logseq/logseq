@@ -434,7 +434,11 @@
                         (when (seq new-pvalue-uuids) (swap! *pvalue-uuids into new-pvalue-uuids))
                         (cond-> node
                           (seq child-nodes) (assoc :build/children child-nodes))))
-        roots (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
+        ;; Without children nesting, every block is a root: a block whose parent is
+        ;; also exported would otherwise be neither nested nor exported
+        roots (if include-children?
+                (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
+                blocks)
         exported-blocks (mapv build-block roots)]
     (cond-> {:blocks exported-blocks
              :pvalue-uuids @*pvalue-uuids}
