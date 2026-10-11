@@ -1036,9 +1036,9 @@ let () =
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name "logseq";
   ignore (Lui_shell.set_window_title "logseq");
-  (* platform_code 1 = MacOS, host_code 6 = the native host
+  (* platform_code 1 = MacOS, host_code 0 = the generic host
      profile (drives the app-icons push and host-gated views). *)
-  let init_patches = Native_embed.initialize 1 6 "" in
+  let init_patches = Native_embed.initialize 1 0 "" in
   apply_patch_json init_patches;
   ignore (Lui_host.repaint host);
   populate_rects ();

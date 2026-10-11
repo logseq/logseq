@@ -365,7 +365,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
     match host_code with
     | 1 -> Lui_protocol.WebHost
     | 2 -> Lui_protocol.SwiftUIHost
-    | 6 -> Lui_protocol.GenericHost
+    | 4 -> Lui_protocol.KotlinHost
     | _ -> Lui_protocol.GenericHost
   in
   let backend =
