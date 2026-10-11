@@ -40,6 +40,13 @@ let daemon_bin () =
           "logseq-db-worker"
       ; Filename.concat (Filename.dirname Sys.executable_name)
           "../Resources/logseq-db-worker"
+      (* in-tree dune build: <root>/deps/ui/_build/default/ocaml_host/
+         -> <root>/deps/db-worker/_build/default/bin/main.exe *)
+      ; Filename.concat (Filename.dirname Sys.executable_name)
+          "../../../../db-worker/_build/default/bin/main.exe"
+      (* launched with the repo root as CWD (e.g. dune exec at root) *)
+      ; Filename.concat (Sys.getcwd ())
+          "deps/db-worker/_build/default/bin/main.exe"
       ; Filename.concat (home ())
           "repos/logseq-rewrite/deps/db-worker/_build/default/bin/main.exe"
       ; Filename.concat (home ())
