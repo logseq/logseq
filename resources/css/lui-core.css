@@ -1621,7 +1621,6 @@ a.page-title {
   width: 0;
   min-width: 0;
   max-width: 100%;
-  flex-wrap: nowrap;
   overflow-x: hidden;
 }
 
@@ -1656,7 +1655,6 @@ a.page-title {
 /* cljs common.css .external-link — border-bottom underline, no
    text-decoration */
 .external-link {
-  text-decoration: none;
   border-bottom: 1px solid;
   word-break: break-all;
 }
@@ -1724,7 +1722,6 @@ a.page-title {
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  flex-wrap: nowrap;
 }
 
 .breadcrumb-item {

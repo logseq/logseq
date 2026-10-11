@@ -519,16 +519,6 @@
   padding-bottom: 0.5rem;
 }
 
-.ls-cm-swatch,
-.ls-cm-heading-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-}
-
 /* ---- cmdk palette ----------------------------------------------------- */
 
 /* prod ui__dialog-content: fixed inset-0 m-auto centers the card
@@ -745,43 +735,6 @@
 }
 
 /* footer buttons (confirm/cancel) used inside dialogs + menus */
-.ui__button.ls-btn-outline {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  color: inherit;
-}
-
-.ui__button.ls-btn-outline:hover {
-  background: hsl(var(--muted));
-}
-
-.ui__button.ls-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border-style: none;
-  background: var(--lx-accent-09, hsl(var(--primary, var(--ls-link-text-color, #0f7b6c))));
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 500;
-  height: 2.5rem;
-  padding: 0 1rem;
-  cursor: pointer;
-}
-
-.ui__button.ls-btn-primary:hover {
-  opacity: 0.9;
-}
 
 /* leading icon inside a menu item — cljs uses gap-1 (4px) between
    icon and label inside .ui__dropdown-menu-item */
@@ -878,24 +831,6 @@
 
 /* dnd-kit a11y live regions (views_table dnd_described/dnd_live) —
    inline style attrs from the old dom() nodes */
-.ls-dnd-a11y {
-  display: none;
-}
-
-.ls-dnd-live {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  border: 0;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0px, 0px, 0px, 0px);
-  clip-path: inset(100%);
-  white-space: nowrap;
-}
 
 /* LUI dialog bodies stack their content in one column */
 
@@ -956,28 +891,6 @@
 }
 
 /* base button inside dialogs (neutral variant) */
-.ui__button.ls-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  color: inherit;
-}
-
-.ui__button.ls-btn:hover {
-  background: hsl(var(--muted));
-}
-
-.ui__button.ls-btn.ls-btn-primary {
-  border-style: none;
-}
 
 /* prompt dialog (import password/text prompt) */
 .ls-prompt-headline {
@@ -1173,24 +1086,6 @@
   justify-content: center;
 }
 
-.ui__calendar-day {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.375rem;
-  border-style: none;
-  background: none;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  color: inherit;
-}
-
-.ui__calendar-day:hover {
-  background: var(--lx-gray-03, var(--ls-menu-hover-color, hsl(var(--muted))));
-}
-
 .ui__calendar-day[data-selected],
 .ui__calendar-day.selected {
   background: var(--lx-accent-09, var(--ls-link-text-color, hsl(var(--primary, #0f7b6c))));
@@ -1314,19 +1209,6 @@
   color-scheme: light dark;
 }
 
-.ls-editor-date-picker .ls-time-now {
-  border: none;
-  background: transparent;
-  padding: 0 0.25rem;
-  font-size: 0.8125rem;
-  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
-  cursor: pointer;
-}
-
-.ls-editor-date-picker .ls-time-now:hover {
-  color: var(--ls-primary-text-color, inherit);
-}
-
 .ls-repeat-frequency-input {
   height: 2rem;
   width: 3.5rem;
@@ -1365,14 +1247,6 @@
 }
 
 /* select-item chips inside value popups / view filters */
-.select-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
 
 .ls-property-dialog {
   display: flex;
@@ -1550,10 +1424,6 @@
   padding-bottom: 0.5rem;
 }
 
-.shortcut-toolbar-row {
-  flex-wrap: wrap;
-}
-
 /* cljs form-input focus ring: 2px surface halo + 2px accent band
    (ring-2 ring-offset-2, hsl(200 97% 37%)) */
 /* cljs shortcut.css .shortcut-keystroke-inactive — bordered "Search by
@@ -1582,28 +1452,9 @@
     var(--lx-gray-04, var(--ls-quaternary-background-color, hsl(var(--accent))));
 }
 
-.shortcut-pills-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
 /* cljs pills-row secondary icons are 18x18 icon-links */
-.shortcut-pills-row .ls-toolbar-gap {
-  height: 1.375rem;
-  align-items: center;
-}
 
 .shortcut-pills-row .icon-link,
-.shortcut-pills-row .lui-button.icon-link {
-  width: 1.125rem;
-  height: 1.125rem;
-  min-height: 0;
-  min-width: 0;
-  padding: 0;
-}
 
 .shortcut-filter-pills {
   flex-wrap: wrap;
@@ -1636,12 +1487,6 @@
   align-items: flex-start;
   justify-content: space-between;
   font-size: 0.875rem;
-}
-
-.keyboard-shortcut {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
 }
 
 /* misc small form controls used across overlays */
@@ -1797,17 +1642,6 @@ select.form-select {
   opacity: 0.8;
 }
 
-.cp__user-login .ls-auth-link {
-  font-size: 0.875rem;
-  opacity: 0.8;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.cp__user-login .ls-auth-link:hover {
-  opacity: 1;
-}
-
 /* cljs card-header (p-6 + pb-7) + card-title (text-2xl) */
 .cp__user-login .ls-auth-title {
   font-size: 1.5rem;
@@ -1916,21 +1750,12 @@ select.form-select {
 }
 
 .shui-shortcut-wrap {
-  display: inline-flex;
-  align-items: center;
   white-space: nowrap;
 }
 
 .ctls {
   display: flex;
   align-items: center;
-}
-
-.ls-ver-wrap {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
 }
 
 .ls-ver-text {
@@ -1950,12 +1775,6 @@ select.form-select {
   opacity: 1;
 }
 
-.ls-toolbar-gap {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .icon-link {
   display: flex;
   align-items: center;
@@ -1968,12 +1787,6 @@ select.form-select {
 
 .icon-link:hover {
   opacity: 1;
-}
-
-.ls-plain-list {
-  list-style: none;
-  margin: 0;
-  padding: 0.75rem 0;
 }
 
 .ls-row {
@@ -2181,27 +1994,10 @@ select.form-select {
   height: 1.25rem;
 }
 
-.ui__button.ls-icon-btn-md {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  background: none;
-  border-style: none;
-  cursor: pointer;
-  color: inherit;
-  border-radius: 0.375rem;
-}
-
 .html-content.ls-pl-html {
   padding-left: 0.25rem;
   flex: 1;
   font-size: 0.875rem;
-}
-
-.ls-mono {
-  font-family: var(--ls-font-family-code, monospace);
 }
 
 .ls-form-actions {
@@ -2316,10 +2112,6 @@ select.form-select {
 }
 
 /* cards (flashcards review modal) */
-.ls-cards-select {
-  /* position:relative moved to a prop; inline-flex can't be typed */
-  display: inline-flex;
-}
 
 /* cljs shui/select-trigger: !px-2 !py-0 !h-8 w-64 — the .lui-select base
    supplies border/radius/::after chevron; this only resizes it */
@@ -2349,14 +2141,6 @@ select.form-select {
 .ls-center {
   display: flex;
   justify-content: center;
-}
-
-.ls-ratings {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2rem;
-  flex-wrap: wrap;
 }
 
 .ls-card.content {
@@ -2432,15 +2216,6 @@ select.form-select {
 }
 
 /* view head helpers */
-.ls-icon-btn {
-  padding: 0 0.25rem;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-  background: none;
-  border-style: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-}
 
 .ls-icon-color-wrap {
   display: inline-flex;
@@ -2453,12 +2228,7 @@ select.form-select {
 
 .ls-view-tab {
   /* cljs shui/button base: inline-flex items-center gap-1 */
-  display: inline-flex;
-  align-items: center;
   gap: 0.25rem;
-  font-size: 0.875rem;
-  height: 1.5rem;
-  padding: 0;
 }
 
 /* view-head reveal is signal-driven (~opacity on the head hover/popup
@@ -2471,46 +2241,16 @@ select.form-select {
 /* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */
 
 .ls-sort-order {
-  display: inline-flex;
-  align-items: center;
   gap: 0.25rem;
-  height: 2rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--ls-border-color);
-  border-radius: 0.375rem;
-  background: transparent;
-  color: var(--ls-primary-text-color);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  cursor: pointer;
 }
 
 .ls-sort-order svg {
   width: 0.75rem;
-  height: 0.75rem;
   opacity: 0.5;
 }
 
 .ls-sort-order .ti {
-  font-size: 0.75rem;
   opacity: 0.5;
-}
-
-.ls-sort-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 2rem;
-  padding: 0 0.25rem;
-  border: none;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-  cursor: pointer;
-}
-
-.ls-sort-x:hover {
-  background: hsl(var(--muted));
 }
 
 .ls-sort-x svg {
@@ -2520,22 +2260,7 @@ select.form-select {
 
 /* cljs: Delete sort ghost button — muted, left-aligned, trash icon */
 .ls-sort-delete {
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
-  width: 100%;
-  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
-  border: none;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-  font-size: 0.875rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ls-sort-delete:hover {
-  background: hsl(var(--muted));
 }
 
 .ls-sort-delete svg {
@@ -2559,18 +2284,6 @@ select.form-select {
   align-items: center;
   border: 1px solid var(--lui-c-border);
   border-radius: 0.25rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.filters-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 1rem;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding: 0.5rem 0;
   min-width: 0;
   max-width: 100%;
 }
@@ -2656,11 +2369,6 @@ select.form-select {
 }
 
 /* position:sticky is not a LUI position value; background moved to a prop */
-.sticky-columns {
-  position: sticky;
-  left: 0;
-  z-index: 8;
-}
 
 /* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
    padding box used by outline rows */
@@ -2828,19 +2536,6 @@ select.form-select {
 
 /* cljs ls-view-head: count/tabs left, view-actions right on one row
    (flex flex-1 flex-nowrap items-center justify-between gap-1) */
-.ls-view-head {
-  display: flex;
-  flex: 1 1 0%;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem;
-  overflow: hidden;
-  min-width: 0;
-  /* cljs foldable-title/view-head rows measure 28px on tag pages and
-     all-pages — keeps the table header at the cljs offset */
-  height: 28px;
-}
 
 .ls-view-head-left {
   display: flex;
@@ -2887,20 +2582,6 @@ select.form-select {
 
 .ls-filters-refs:empty {
   display: none;
-}
-
-.ls-ref-btn {
-  border: 1px solid var(--ls-border-color, hsl(var(--border)));
-  border-radius: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  cursor: pointer;
-  background: transparent;
-  color: inherit;
-}
-
-.ls-ref-btn:hover {
-  border-color: var(--ls-secondary-text-color, var(--muted-foreground));
 }
 
 /* generic size variants for ui__button (was shui size utilities) */
@@ -3110,20 +2791,6 @@ html[data-theme=light] {
 /* cljs .ls-page-icon button: text-muted-foreground 38px glyph offset
    8px inside a 46px wrap (self-start) — LUI's ghost button rendered
    near-black, 40px, flush top */
-.ls-page-icon {
-  box-sizing: border-box;
-  height: 46px;
-  padding-top: 8px;
-}
-
-.ls-page-icon .lui-button.ui__button {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  padding: 0;
-  color: hsl(var(--muted-foreground));
-}
 
 .ls-page-icon .lui-button.ui__button:hover {
   color: hsl(var(--foreground));
@@ -3145,7 +2812,6 @@ html[data-theme=light] {
 }
 .ls-property-select-compact .lui-list-item { font-size: 14px; line-height: 20px; }
 
-.pv-closed-value:hover { background: var(--lx-gray-03); color: inherit; }
 .ls-property-select-popup { color: hsl(var(--popover-foreground) / 0.75); }
 
 .ls-property-select-compact .lui-list-item[data-selected],

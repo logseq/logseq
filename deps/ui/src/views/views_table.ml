@@ -473,6 +473,7 @@ let prop_cell ~blk (c : V.column) : t =
                  in
                  row ~cross:`center ~gap:4 ~padding_vertical:2
                    ~padding_horizontal:6 ~corner_radius:6
+                   ~display:`inline_flex
                    ~style_class:"select-item block-tag"
                    ~data_attrs:
                      ([ ("data-tag-title", t_) ]
@@ -886,7 +887,7 @@ let action_bar inst : t =
    DndDescribedBy-*/DndLiveRegion-* ids *)
 let dnd_described n : t =
   box ~accessibility_identifier:("DndDescribedBy-" ^ n)
-    ~style_class:"ls-dnd-a11y"
+    ~style_class:"ls-dnd-a11y" ~display:`none
     [ text
         ~value:
           "To pick up a draggable item, press the space bar. While \
@@ -897,7 +898,7 @@ let dnd_described n : t =
 
 let dnd_live n : t =
   box ~accessibility_identifier:("DndLiveRegion-" ^ n)
-    ~style_class:"ls-dnd-live"
+    ~style_class:"ls-dnd-live" ~display:`none
     ~data_attrs:
       [ ("role", "status"); ("aria-live", "assertive")
       ; ("aria-atomic", "true") ]
@@ -1016,11 +1017,15 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                         transition:background-color 150ms" ) ]
                  [ (* cljs: .sticky-columns holds pinned cells, sibling
                       row holds the unpinned ones *)
-                   row ~style_class:"sticky-columns"
-                     ~background:
-                       "var(--lx-gray-01, \
-                        var(--ls-primary-background-color))"
-                     (List.map cell_wrap pinned)
+                   Ui_components.with_props
+                     [ Lui_protocol.Position, Ui_components.sv "sticky"
+                     ; Lui_protocol.InsetLeft, Ui_components.fv 0.
+                     ; Lui_protocol.ZIndex, Ui_components.iv 8 ]
+                     (row ~style_class:"sticky-columns"
+                        ~background:
+                          "var(--lx-gray-01, \
+                           var(--ls-primary-background-color))"
+                        (List.map cell_wrap pinned))
                  ; row
                      (List.map cell_wrap free
                       @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
@@ -1094,10 +1099,14 @@ let table_header inst cols : t =
            hsl(var(--border));border-bottom:1px solid \
            hsl(var(--border));will-change:transform;\
            transform:translate3d(0,0,0)" ) ]
-    [ row ~style_class:"sticky-columns"
-        ~background:
-          "var(--lx-gray-01, var(--ls-primary-background-color))"
-        (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "sticky"
+        ; Lui_protocol.InsetLeft, Ui_components.fv 0.
+        ; Lui_protocol.ZIndex, Ui_components.iv 8 ]
+        (row ~style_class:"sticky-columns"
+           ~background:
+             "var(--lx-gray-01, var(--ls-primary-background-color))"
+           (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ]))
     ; row
         (List.map cell_item free
          @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with

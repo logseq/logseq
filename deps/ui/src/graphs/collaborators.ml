@@ -292,11 +292,21 @@ let body (_ms : Model.t Signal.signal) : t =
                           | _ -> ())
                         ~on_submit:(fun _ -> submit ())
                         [] ]
-                ; button ~key:"collab-invite-btn"
-                    ~style_class:"ui__button ls-btn-primary"
-                    ~text:(T.t "collaboration/invite")
-                    ~on_press:(fun _ -> submit ())
-                    []
+                ; Ui_components.with_props
+                    [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                    ; Lui_protocol.FontWeight, Ui_components.iv 500
+                    ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                    ; Lui_protocol.HoverOpacity, Ui_components.fv 0.9 ]
+                    (button ~key:"collab-invite-btn"
+                       ~style_class:"ui__button ls-btn-primary"
+                       ~text:(T.t "collaboration/invite")
+                       ~corner_radius:6 ~border_width:0
+                       ~background:
+                         "var(--lx-accent-09, hsl(var(--primary, \
+                          var(--ls-link-text-color, #0f7b6c))))"
+                       ~foreground:"#fff" ~height:40 ~padding_horizontal:16
+                       ~on_press:(fun _ -> submit ())
+                       [])
                 ]
             ]
         ]

@@ -1165,9 +1165,12 @@ let closed_value_view ~positioned ctx row : t =
   let label = if display = "" then I18n.t "ui/empty" else display in
   let show_text = not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
   (column ~gap:0 ~grow:1.0
-     [ button ~variant:`ghost ~label ~height:24 ~min_height:24
-         ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
-         ~style_class:"pv-closed-value"
+     [ Ui_components.with_props
+         [ Lui_protocol.HoverBackground, Ui_components.sv "var(--lx-gray-03)"
+         ; Lui_protocol.HoverForeground, Ui_components.sv "inherit" ]
+         (button ~variant:`ghost ~label ~height:24 ~min_height:24
+            ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+            ~style_class:"pv-closed-value"
          ~on_press:(fun _ ->
            if Runtime.signal_get open_ then close ()
            else (
@@ -1202,7 +1205,7 @@ let closed_value_view ~positioned ctx row : t =
                      Runtime.signal_set items_st (Some items)))))
          [ Lui_elements.row ~gap:4 ~cross:`center
              ((match icon_id with None -> [] | Some id -> [ Icons.icon id ])
-              @ if show_text then [ text ~value:label [] ] else []) ]
+              @ if show_text then [ text ~value:label [] ] else []) ])
      ; if_ ~test:(Signal.value open_)
          (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~style_class:"ui__popover-content ls-property-select-popup"
@@ -1341,12 +1344,14 @@ and url_view ctx row : t =
   if url = "" then scalar_edit_cell ctx row
   else
     block_value_wrap
-      (link ~url ~target:`blank ~style_class:"external-link"
+      (Ui_components.with_props
+         [ Lui_protocol.TextDecoration, Ui_components.sv "none" ]
+         (link ~url ~target:`blank ~style_class:"external-link"
          ~data_attrs:
            [ ("data-type", "url")
            ; ( "style"
-             , "text-decoration:none;border-bottom:1px solid;\
+             , "border-bottom:1px solid;\
                 overflow-wrap:anywhere;word-break:break-word;\
                 white-space:normal;min-width:0;max-width:100%" )
            ]
-         ~text:url [])
+         ~text:url []))

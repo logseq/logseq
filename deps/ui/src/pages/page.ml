@@ -604,13 +604,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                               | Some ic ->
                                   [ row ~key:"pt-icon"
                                       ~style_class:"ls-page-icon"
-                                      ~data_attrs:[ ("style", "line-height:1") ]
+                                      ~height:46
+                                      ~data_attrs:[ ("style", "line-height:1;box-sizing:border-box;padding-top:8px") ]
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
                                           ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost ls-page-icon-btn"
+                                          ~width:38 ~min_width:38
+                                          ~foreground:"hsl(var(--muted-foreground))"
                                           ~data_attrs:
                                             [ ("style", "height:auto;\
+                                                min-height:38px;padding:0;\
                                                 padding-bottom:1.5px") ]
                                           ~on_press:(fun _ ->
                                             page_icon_picker page

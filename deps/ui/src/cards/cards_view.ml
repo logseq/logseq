@@ -45,6 +45,7 @@ let selector_row st =
     [ Ui_components.with_props
         [ Lui_protocol.Position, Ui_components.sv "relative" ]
         (box ~key:"combo" ~style_class:"ls-cards-select"
+           ~display:`inline_flex
         [ (* cljs shui/select-trigger: the select kind already renders
              role=combobox + its own ::after chevron on web and a native
              picker on GPUI — no icon child needed *)
@@ -55,12 +56,17 @@ let selector_row st =
             ~on_press:(fun _ -> Cards_state.toggle_opts st)
             []
         ; opts_box st ])
-    ; button ~key:"add" ~accessibility_identifier:"ls-cards-add"
-        ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
-        ~label:(t_ "flashcard/add-cards-query-tooltip")
-        ~icon:`plus
-        ~on_press:(fun _ -> Cards_state.add_cards_block st)
-        []
+    ; Ui_components.with_props
+        [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+        (button ~key:"add" ~accessibility_identifier:"ls-cards-add"
+           ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
+           ~padding_horizontal:4
+           ~foreground:
+             "var(--ls-secondary-text-color, var(--muted-foreground))"
+           ~label:(t_ "flashcard/add-cards-query-tooltip")
+           ~icon:`plus
+           ~on_press:(fun _ -> Cards_state.add_cards_block st)
+           [])
     ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
         ~white_space:"nowrap"
         ~value:(reactive
@@ -136,6 +142,7 @@ let info_btn st =
 let rating_buttons st =
   box ~key:"ratings" ~style_class:"ls-center"
     [ row ~key:"row" ~style_class:"ls-ratings"
+        ~cross:`center ~gap:32 ~flex_wrap:`wrap
         (List.mapi (fun i r -> rating_btn st i r) ratings
          @ [ info_btn st ])
     ]

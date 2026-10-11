@@ -528,12 +528,25 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             if multiple then
               [ Logseq_el.el
                   ~attrs:[ ("class", "cp__select-apply"); ("style", "padding:1rem") ]
-                  [ button ~key:("vpsel-a" ^ string_of_int id)
-                      ~style_class:"ui__button ls-btn-outline" ~text:I.apply
-                      ~on_press:(fun _ ->
-                        close_all ();
-                        on_apply (Signal.get_state sel_values))
-                      [] ]
+                  [ Ui_components.with_props
+                      [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                      ; Lui_protocol.FontWeight, Ui_components.iv 500
+                      ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                      ; Lui_protocol.HoverBackground
+                      , Ui_components.sv "hsl(var(--muted))" ]
+                      (button ~key:("vpsel-a" ^ string_of_int id)
+                         ~style_class:"ui__button ls-btn-outline" ~text:I.apply
+                         ~corner_radius:6 ~border_width:1
+                         ~border_color:"var(--lui-c-border)"
+                         ~background:
+                           "var(--ls-primary-background-color, \
+                            var(--lui-c-background))"
+                         ~foreground:"inherit"
+                         ~padding_vertical:8 ~padding_horizontal:16
+                         ~on_press:(fun _ ->
+                           close_all ();
+                           on_apply (Signal.get_state sel_values))
+                         []) ]
               ]
             else []))
     in
@@ -578,15 +591,38 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
        ]
        @ body
        @ [ row ~key:"footer" ~style_class:"ls-dialog-footer"
-             [ button ~key:"cancel" ~style_class:"ui__button ls-btn-outline"
-                 ~text:I.cancel
-                 ~on_press:(fun _ -> close_entry id) []
-             ; button ~key:"confirm" ~style_class:"ui__button ls-btn-primary"
-                 ~text:confirm_label
-                 ~on_press:(fun _ ->
-                   close_entry id;
-                   on_confirm ())
-                 [] ]
+             [ Ui_components.with_props
+                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                 ; Lui_protocol.FontWeight, Ui_components.iv 500
+                 ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                 ; Lui_protocol.HoverBackground
+                 , Ui_components.sv "hsl(var(--muted))" ]
+                 (button ~key:"cancel" ~style_class:"ui__button ls-btn-outline"
+                    ~text:I.cancel
+                    ~corner_radius:6 ~border_width:1
+                    ~border_color:"var(--lui-c-border)"
+                    ~background:
+                      "var(--ls-primary-background-color, \
+                       var(--lui-c-background))"
+                    ~foreground:"inherit"
+                    ~padding_vertical:8 ~padding_horizontal:16
+                    ~on_press:(fun _ -> close_entry id) [])
+             ; Ui_components.with_props
+                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                 ; Lui_protocol.FontWeight, Ui_components.iv 500
+                 ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                 ; Lui_protocol.HoverOpacity, Ui_components.fv 0.9 ]
+                 (button ~key:"confirm" ~style_class:"ui__button ls-btn-primary"
+                    ~text:confirm_label
+                    ~corner_radius:6 ~border_width:0
+                    ~background:
+                      "var(--lx-accent-09, hsl(var(--primary, \
+                       var(--ls-link-text-color, #0f7b6c))))"
+                    ~foreground:"#fff" ~height:40 ~padding_horizontal:16
+                    ~on_press:(fun _ ->
+                      close_entry id;
+                      on_confirm ())
+                    []) ]
          ])
       context parent
   in

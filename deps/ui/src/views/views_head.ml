@@ -278,15 +278,18 @@ let sorting_popup inst anchor =
                                      else I.descending)
                                   []
                               ; icon_el "chevron-down" ])
-                       ; button ~variant:`ghost ~size:`sm ~height:32
-                           ~padding_horizontal:4 ~corner_radius:4
-                           ~style_class:"ls-sort-x"
-                           ~foreground:
-                             "var(--ls-secondary-text-color, \
-                              var(--muted-foreground))"
-                           ~label:I.delete_sort
-                           ~icon:(Views_table.icon_of "x")
-                           ~on_press:(fun _ -> remove_sort so) [] ]
+                       ; Ui_components.with_props
+                           [ Lui_protocol.HoverBackground
+                           , Ui_components.sv "hsl(var(--muted))" ]
+                           (button ~variant:`ghost ~size:`sm ~height:32
+                              ~padding_horizontal:4 ~corner_radius:4
+                              ~style_class:"ls-sort-x"
+                              ~foreground:
+                                "var(--ls-secondary-text-color, \
+                                 var(--muted-foreground))"
+                              ~label:I.delete_sort
+                              ~icon:(Views_table.icon_of "x")
+                              ~on_press:(fun _ -> remove_sort so) []) ]
                    ]) ])
       s.V.sorting
   in
@@ -297,7 +300,9 @@ let sorting_popup inst anchor =
               ((* cljs: ghost button, muted, pl-3, trash icon + label —
                   the asymmetric padding has no prop channel *)
                Ui_components.with_props
-                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                 ; Lui_protocol.HoverBackground
+                   , Ui_components.sv "hsl(var(--muted))" ]
                  (button ~variant:`ghost ~grow:1. ~main:`start
                     ~corner_radius:4 ~style_class:"ls-sort-delete"
                     ~foreground:
@@ -819,9 +824,10 @@ let filters_row inst : t =
          in
          row ~style_class:"filters-row" ~cross:`center
              ~main:`space_between ~gap:16 ~padding_vertical:8 ~min_width:0
-             ~data_attrs:[ ("style", "flex-wrap:wrap;max-width:100%") ]
-           [ row ~cross:`center ~gap:8 ~min_width:0
-               ~data_attrs:[ ("style", "flex-wrap:wrap;max-width:100%") ] chips
+             ~flex_wrap:`wrap
+             ~data_attrs:[ ("style", "max-width:100%") ]
+           [ row ~cross:`center ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+               ~data_attrs:[ ("style", "max-width:100%") ] chips
            ; (if List.length s.V.filters > 1 then
                 (* ls-vf-logic keeps its class for the .75->1 opacity
                    hooks; the box chrome migrated to props *)
@@ -922,12 +928,17 @@ let ref_filter_dialog inst anchor =
       let ref_button title count_opt =
         Ui_components.with_props
           [ Lui_protocol.FontSize, Ui_components.sv "0.75rem" ]
-          ((* ls-ref-btn keeps its class for the :hover border-color
-              hook *)
-           button ~variant:`ghost ~border_width:1 ~corner_radius:6
-             ~padding_vertical:2 ~padding_horizontal:8
-             ~background:"transparent" ~style_class:"ls-ref-btn"
-             ~border_color:"var(--ls-border-color, hsl(var(--border)))"
+          ((* ls-ref-btn keeps its class as the imperative hook *)
+           Ui_components.with_props
+             [ ( Lui_protocol.HoverBorder
+               , Ui_components.sv
+                   "var(--ls-secondary-text-color, \
+                    var(--muted-foreground))" ) ]
+             (button ~variant:`ghost ~border_width:1 ~corner_radius:6
+                ~padding_vertical:2 ~padding_horizontal:8
+                ~background:"transparent" ~style_class:"ls-ref-btn"
+                ~foreground:"inherit"
+                ~border_color:"var(--ls-border-color, hsl(var(--border)))"
              ~on_press_detail:(fun ev ->
                (* cljs ref-button: add? = ref in neither filter; include?
                   = new click -> not shift, existing -> its current
@@ -958,12 +969,10 @@ let ref_filter_dialog inst anchor =
               match count_opt with
               | Some n ->
                 [ text ~as_:`Sup ~value:(" " ^ string_of_int n) [] ]
-              | None -> []))
+              | None -> [])))
       in
       let chip_row label xs =
-        (* flex-wrap has no prop — rides the style channel *)
-        row ~cross:`center
-          ~data_attrs:[ ("style", "flex-wrap:wrap") ]
+        row ~cross:`center ~flex_wrap:`wrap
           (text ~value:label ~font_weight:500 ~padding_vertical:4
              ~data_attrs:[ ("style", "margin-right:0.25rem") ] []
            :: List.map (fun (_, title) -> ref_button title None) xs)
@@ -1091,8 +1100,9 @@ let refs_filter_btn inst : t =
 let render_head inst : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
-    row ~style_class:"ls-view-head" ~gap:8 ~cross:`center
-      ~main:`space_between ~height:28 ~min_width:0 ~grow:1.
+    Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+      (row ~style_class:"ls-view-head" ~gap:8 ~cross:`center
+         ~main:`space_between ~height:28 ~min_width:0 ~grow:1.
       [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
           ~key:(fun (v : Wr.view_ent) -> v.Wr.vu) ~cmp:String.compare
           ~mount:(fun vs ->
@@ -1102,7 +1112,7 @@ let render_head inst : t =
                 V.update inst (fun s -> V.apply_view_entity s (Signal.get vs));
                 refresh inst) [])
       ; text ~value:(reactive (fun s -> I.live_query (count_of s)) (sig_of inst)) []
-      ; search_el inst ] ctx parent
+      ; search_el inst ]) ctx parent
   else
   let sched = ctx.Lui_ui.ui_scheduler in
   let is_refs =

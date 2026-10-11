@@ -394,10 +394,11 @@ let submit_btn ~key label on_submit =
 let action_link ~key ctx text_ tab =
   Ui_components.with_props
     [ Lui_protocol.Cursor, Ui_components.sv "pointer"
-    ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+    ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+    ; Lui_protocol.Opacity, Ui_components.fv 0.8
+    ; Lui_protocol.TextDecoration, Ui_components.sv "underline" ]
     (text ~key ~style_class:"ls-auth-link" ~value:text_
        ~font_size:"0.875rem"
-       ~data_attrs:[ ("style", "opacity:0.8;text-decoration:underline") ]
        ~on_press:(fun _ -> set_tab ctx tab)
        [])
 

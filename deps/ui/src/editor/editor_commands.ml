@@ -703,7 +703,9 @@ let time_row ps : t =
     ~data_attrs:[ ("style", "margin-top: 8px") ]
     [ time_input ps
     ; Ui_components.with_props
-        [ P.FontSize, sv "0.8125rem" ]
+        [ P.FontSize, sv "0.8125rem"
+        ; P.HoverForeground
+          , sv "var(--ls-primary-text-color, inherit)" ]
         (button ~key:"now" ~style_class:"ls-time-now" ~variant:`ghost
            ~padding_horizontal:4 ~padding_vertical:0
            ~foreground:

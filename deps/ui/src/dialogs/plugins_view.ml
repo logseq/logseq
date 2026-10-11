@@ -65,9 +65,12 @@ external open_url_ : string -> unit = "open" [@@mel.scope "window"]
    (no handler) — kept as icon buttons for parity. *)
 let control_tabs ~key ~search_st ~cat_st ~nums =
   let ghost_btn id cls (ic : icon) caption =
-    button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
-      ~style_class:("ui__button ls-icon-btn-md " ^ cls)
-      ~icon:ic ~label:caption []
+    Ui_components.with_props [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+      (button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
+         ~style_class:("ui__button ls-icon-btn-md " ^ cls)
+         ~width:32 ~height:32 ~min_width:32 ~min_height:32
+         ~corner_radius:6 ~foreground:"inherit"
+         ~icon:ic ~label:caption [])
   in
   Ui_components.with_props
     [ Lui_protocol.Position, Lui_protocol.StringValue "relative" ]
@@ -728,10 +731,13 @@ let code_mode_wrap owner pid code_mode =
     ~data_attrs:
       [ ( "style"
         , "padding: 4px 4px 4px 12px; margin: 0 0 32px -4px" ) ]
-    [ textarea ~key:"ta" ~style_class:"form-input ls-mono"
-        ~text_signal:(Signal.value code_txt)
-        ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
-        []
+    [ Ui_components.with_props
+        [ Lui_protocol.FontFamily
+        , Ui_components.sv "var(--ls-font-family-code, monospace)" ]
+        (textarea ~key:"ta" ~style_class:"form-input ls-mono"
+           ~text_signal:(Signal.value code_txt)
+           ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
+           [])
     ; row ~key:"btns" ~style_class:"ls-form-actions" ~main:`end_
         [ button ~key:"reset" ~variant:`ghost ~size:`sm
             ~style_class:"ui__button is-small"

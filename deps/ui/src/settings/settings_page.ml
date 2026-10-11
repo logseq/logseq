@@ -55,13 +55,19 @@ let version_row () =
                    , Lui_protocol.StringValue "relative" ) ]
                  (row ~key:"ver-c" ~style_class:"ctls" ~cross:`center
                     [ row ~key:"ver-i" ~style_class:"ls-ver-wrap"
-                        ~cross:`center
+                        ~cross:`center ~gap:16 ~flex_wrap:`wrap
                         [ box ~key:"ver-b" []
                         ; text ~key:"ver-v" ~style_class:"ls-ver-text"
                             ~value:version []
-                        ; link ~key:"ver-cl" ~style_class:"fade-link"
-                            ~url:"https://docs.logseq.com/#/page/changelog"
-                            ~text:T.changelog []
+                        ; Ui_components.with_props
+                            [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                            ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
+                            ; Lui_protocol.TextDecoration, Ui_components.sv "underline"
+                            ; Lui_protocol.Opacity, Ui_components.fv 0.7
+                            ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                            (link ~key:"ver-cl" ~style_class:"fade-link"
+                               ~url:"https://docs.logseq.com/#/page/changelog"
+                               ~text:T.changelog [])
                         ]
                     ])
              ])
@@ -367,7 +373,7 @@ let keymap_controls st =
   column ~key:"km-ctl"
     ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
     [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
-        ~main:`space_between
+        ~main:`space_between ~flex_wrap:`wrap
         [ Ui_components.search_row ~key:"km-sw" ~height:26
             ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
             ~placeholder:T.keymap_search_placeholder
@@ -376,11 +382,17 @@ let keymap_controls st =
                 | Lui_protocol.TextChanged (_, query) ->
                     Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
                 | _ -> ()) ()
-        ; button ~key:"km-kb"
-            ~style_class:"shortcut-keystroke-inactive"
-            ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys []
+        ; Ui_components.with_props
+            [ ( Lui_protocol.HoverBackground
+              , Ui_components.sv
+                  "var(--lx-gray-04, var(--ls-quaternary-background-color, \
+                   hsl(var(--accent))))" ) ]
+            (button ~key:"km-kb"
+               ~style_class:"shortcut-keystroke-inactive"
+               ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys [])
         ]
     ; row ~key:"km-pills" ~style_class:"shortcut-pills-row"
+        ~cross:`center ~main:`space_between ~gap:8 ~flex_wrap:`wrap
         [ toggle_group ~key:"km-fp"
             ~gap:4 ~style_class:"shortcut-filter-pills"
             [ keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All
@@ -388,14 +400,17 @@ let keymap_controls st =
             ; keymap_pill st ~key:"km-pu" ~title:T.keymap_unset Keymap_data.Unset
             ; keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled Keymap_data.Disabled
             ]
-        ; row ~key:"km-sec" ~style_class:"ls-toolbar-gap"
+        ; row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
+            ~height:22 ~gap:8
             [ button ~key:"km-fold" ~style_class:"icon-link"
+                ~width:18 ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                 ~label:T.keymap_toggle_categories ~icon:(`app "fold")
                 ~on_press:(fun _ ->
                     let model = Runtime.signal_get st in
                     let collapsed = if model.km_collapsed = [] then categories else [] in
                     Runtime.signal_set st { model with km_collapsed = collapsed }) []
             ; button ~key:"km-rf" ~style_class:"icon-link"
+                ~width:18 ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                 ~label:T.keymap_refresh_all ~icon:(`app "refresh") []
             ]
         ]
@@ -408,6 +423,7 @@ let keymap_binding ~key (b : Keymap_data.binding) =
      shortcut cells flow as direct children of the action wrap *)
   box ~key ~style_class:"ls-dc" ~display:`contents
     [ box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
+        ~display:`inline_flex
         [ row ~key:(key ^ "d") ~style_class:cls ~cross:`center
             ~accessibility_identifier:b.data
             (List.concat
@@ -512,7 +528,8 @@ let keymap_pane () : t =
             category, visible,
             keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row :: elements
         | _ -> category, visible, elements) ("", true, []) items in
-    list ~key:"km-ul" ~style_class:"ls-plain-list" (List.rev elements)
+    list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
+      ~margin:0 ~padding_vertical:12 (List.rev elements)
   in
   (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
      [ keymap_controls st

@@ -353,6 +353,7 @@ let shortcut_hint binding =
   let keys = String.split_on_char ' ' binding in
   row ~key:("sc-" ^ binding) ~cross:`center
     [ row ~key:"wrap" ~style_class:"keyboard-shortcut" ~cross:`center
+        ~display:`inline_flex ~gap:2
         [ row ~key:"sep" ~gap:4 ~cross:`center
             ~style_class:"shui-shortcut-separate shui-shortcut-glow"
             (List.map
