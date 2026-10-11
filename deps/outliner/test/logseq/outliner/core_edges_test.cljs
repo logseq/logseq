@@ -189,6 +189,61 @@
     (is (true? (disallowed? @conn {:block/title "Contents"})))
     (is (not (disallowed? @conn {:block/title "Ordinary"})))))
 
+(deftest compare-order-paths-cases
+  (let [cmp #'outliner-core/compare-order-paths]
+    (is (zero? (cmp [] [])))
+    (is (zero? (cmp ["a" "b"] ["a" "b"])))
+    (is (= -1 (cmp [] ["a"])))
+    (is (= 1 (cmp ["a"] [])))
+    (is (= -1 (cmp ["a"] ["a" "b"])) "a parent sorts before its child")
+    (is (neg? (cmp ["a" "b"] ["a" "c"])))
+    (is (pos? (cmp ["b"] ["a" "z"])))))
+
+(deftest outline-order-path-cases
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "p" :build/children [{:block/title "c1"}]}
+                         {:block/title "b1" :build/properties {:default "the value"}}]}])
+        path #'outliner-core/outline-order-path
+        p (db-test/find-block-by-content @conn "p")
+        c1 (db-test/find-block-by-content @conn "c1")]
+    (is (= [(:block/order p) (:block/order c1)] (take-last 2 (path c1))))
+    (is (nil? (path (db-test/find-block-by-content @conn "the value"))) "a property value has no outline path")))
+
+(deftest get-block-orders-cases
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "t" :build/children [{:block/title "first child"}]}
+                         {:block/title "r"}]}])
+        orders #'outliner-core/get-block-orders
+        t (db-test/find-block-by-content @conn "t")
+        r (db-test/find-block-by-content @conn "r")
+        ot (:block/order t)
+        or' (:block/order r)
+        mid (str ot "V")
+        between? #(and (pos? (compare % ot)) (neg? (compare % or')))]
+    (is (between? mid))
+    (testing "kept orders that fall at the target stay, children's too"
+      (is (= [mid "child"] (vec (orders [{:block/level 1 :block/order mid} {:block/level 2 :block/order "child"}] t true true)))))
+    (testing "a kept top-level order below the target gets a new one at the target; a child keeps its own"
+      (let [[o child] (orders [{:block/level 1 :block/order "0"} {:block/level 2 :block/order "child"}] t true true)]
+        (is (between? o))
+        (is (= "child" child))))
+    (testing "a kept top-level order above the right sibling gets a new one at the target"
+      (is (between? (first (orders [{:block/level 1 :block/order "~~"}] t true true)))))
+    (testing "without keep, every block gets a new order at the target"
+      (let [os (orders [{:block/level 1 :block/order mid} {:block/level 1 :block/order mid}] t true false)]
+        (is (every? between? os))
+        (is (apply distinct? os) "two blocks that had the same order get two")))
+    (testing "two kept top-level orders below the target get new ones at the target, in their order"
+      (let [[o1 o2] (orders [{:block/level 1 :block/order "0"} {:block/level 1 :block/order "1"}] t true true)]
+        (is (between? o1))
+        (is (neg? (compare o1 o2)))))
+    (testing "as children, the orders go before the first child"
+      (let [first-child (db-test/find-block-by-content @conn "first child")]
+        (is (every? #(neg? (compare % (:block/order first-child)))
+                    (orders [{:block/level 1}] t false false)))))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
