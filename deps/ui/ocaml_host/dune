@@ -1,0 +1,399 @@
+
+; OCaml SDL native host build — same module set as native/. The shared
+; ../src + ../subs copies and the generated-table rules below are
+; identical to native/dune; the native/*.ml files (the native platform
+; twin: platform.ml, vdom.ml, logseq_el.ml, bridge, …) are copied
+; from ../native so the two hosts can never drift. Only the library
+; name differs; host selection is the host_code the Rust host passes
+; to lui_ocaml_start (6 = native host).
+
+(rule
+ (copy ../native/asset_dom.ml asset_dom.ml))
+(rule
+ (copy ../native/asset_store.ml asset_store.ml))
+(rule
+ (copy ../native/block_dnd.ml block_dnd.ml))
+(rule
+ (copy ../native/browser_ui.ml browser_ui.ml))
+(rule
+ (copy ../native/chrome.ml chrome.ml))
+(rule
+ (copy ../native/cmdk_host.ml cmdk_host.ml))
+(rule
+ (copy ../native/code_mirror.ml code_mirror.ml))
+(rule
+ (copy ../native/comments.ml comments.ml))
+(rule
+ (copy ../native/daemon_client.ml daemon_client.ml))
+(rule
+ (copy ../native/dom_ext.ml dom_ext.ml))
+(rule
+ (copy ../src/editor/editor_cmds.ml editor_cmds.ml))
+(rule
+ (copy ../native/editor_cmds_host.ml editor_cmds_host.ml))
+(rule
+ (copy ../native/emoji_mart.ml emoji_mart.ml))
+(rule
+ (copy ../native/export_page.ml export_page.ml))
+(rule
+ (copy ../native/fetch.ml fetch.ml))
+(rule
+ (copy ../native/html_to_md.ml html_to_md.ml))
+(rule
+ (copy ../src/icon/icon_picker.ml icon_picker.ml))
+(rule
+ (copy ../native/js.ml js.ml))
+(rule
+ (copy ../native/lazy_children.ml lazy_children.ml))
+(rule
+ (copy ../native/logseq_el.ml logseq_el.ml))
+(rule
+ (copy ../native/logseq_codemirror.ml logseq_codemirror.ml))
+(rule
+ (copy ../native/logseq_editor.ml logseq_editor.ml))
+(rule
+ (copy ../native/logseq_emoji.ml logseq_emoji.ml))
+(rule
+ (copy ../native/logseq_katex.ml logseq_katex.ml))
+(rule
+ (copy ../native/menu_bar.ml menu_bar.ml))
+(rule
+ (copy ../native/native_embed.ml native_embed.ml))
+(rule
+ (copy ../native/page_menu.ml page_menu.ml))
+(rule
+ (copy ../native/pdf.ml pdf.ml))
+(rule
+ (copy ../native/pdf_annotation.ml pdf_annotation.ml))
+(rule
+ (copy ../native/pdf_assets.ml pdf_assets.ml))
+(rule
+ (copy ../native/platform.ml platform.ml))
+(rule
+ (copy ../native/plugin_host.ml plugin_host.ml))
+(rule
+ (copy ../native/plugin_readme.ml plugin_readme.ml))
+(rule
+ (copy ../native/plugins_view.ml plugins_view.ml))
+(rule
+ (copy ../src/properties/properties_data.ml properties_data.ml))
+(rule
+ (copy ../src/properties/properties_value.ml properties_value.ml))
+(rule
+ (copy ../native/render_libs.ml render_libs.ml))
+(rule
+ (copy ../native/sdk_json.ml sdk_json.ml))
+(rule
+ (copy ../native/sdk_util.ml sdk_util.ml))
+(rule
+ (copy ../native/sdk_write.ml sdk_write.ml))
+(rule
+ (copy ../native/ui_dom_native.ml ui_dom_native.ml))
+(rule
+ (copy ../native/transit.ml transit.ml))
+(rule
+ (copy ../native/virt_list.ml virt_list.ml))
+(rule
+ (copy ../native/webapi.ml webapi.ml))
+(rule
+ (copy ../native/worker_client.ml worker_client.ml))
+
+; Generate native/dicts_gen.ml from the shared cljs dicts — same shape as
+; the src/ rule; the dicts dir lives outside this dune-project
+; (../../resources/dicts), so it can't be a tracked dep. Regenerate on each
+; build so dictionary edits are picked up.
+(rule
+ (target dicts_gen.ml)
+ (deps (universe))
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../resources/dicts\" %{target}")))
+
+; Same for the emoji table — regenerates from resources/js/emoji-data.js
+; (outside the project) so emoji-mart upgrades can't leave a stale copy.
+(rule
+ (target emoji_mart_data.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/emoji_gen.exe} \"$DUNE_SOURCEROOT/../../resources/js/emoji-data.js\" %{target}")))
+
+
+(rule
+ (copy ../subs/action.ml action.ml))
+(rule
+ (copy ../src/app/boot.ml boot.ml))
+(rule
+ (copy ../subs/decode.ml decode.ml))
+(rule
+ (copy ../src/app/graph.ml graph.ml))
+(rule
+ (copy ../subs/model.ml model.ml))
+(rule
+ (copy ../subs/page_delta.ml page_delta.ml))
+(rule
+ (copy ../subs/subs.ml subs.ml))
+(rule
+ (copy ../subs/subs_state.ml subs_state.ml))
+(rule
+ (copy ../src/app/runtime.ml runtime.ml))
+(rule
+ (copy ../subs/update.ml update.ml))
+(rule
+ (copy ../src/app/view.ml view.ml))
+(rule
+ (copy ../src/app/worker_events.ml worker_events.ml))
+(rule
+ (copy ../src/blocks/add_button.ml add_button.ml))
+(rule
+ (copy ../src/blocks/comments_ops.ml comments_ops.ml))
+(rule
+ (copy ../src/blocks/query_builder.ml query_builder.ml))
+(rule
+ (copy ../src/blocks/selection_bar.ml selection_bar.ml))
+(rule
+ (copy ../src/blocks/tree.ml tree.ml))
+(rule
+ (copy ../src/cards/cards_state.ml cards_state.ml))
+(rule
+ (copy ../src/cards/cards_view.ml cards_view.ml))
+(rule
+ (copy ../src/cards/fsrs_sched.ml fsrs_sched.ml))
+(rule
+ (copy ../src/cmdk/commands_data.ml commands_data.ml))
+(rule
+ (copy ../src/comments/comments_view.ml comments_view.ml))
+(rule
+ (copy ../src/core/edn.ml edn.ml))
+(rule
+ (copy ../src/core/i18n.ml i18n.ml))
+(rule
+ (copy ../src/core/menu_item.ml menu_item.ml))
+(rule
+ (copy ../src/core/overlay.ml overlay.ml))
+(rule
+ (copy ../subs/promise_ext.ml promise_ext.ml))
+(rule
+ (copy ../src/core/str_util.ml str_util.ml))
+(rule
+ (copy ../src/dialogs/dialogs_state.ml dialogs_state.ml))
+(rule
+ (copy ../src/dialogs/dialogs_view.ml dialogs_view.ml))
+(rule
+ (copy ../src/dialogs/login_view.ml login_view.ml))
+(rule
+ (copy ../src/dialogs/quick_add_state.ml quick_add_state.ml))
+(rule
+ (copy ../src/dialogs/quick_add_view.ml quick_add_view.ml))
+(rule
+ (copy ../src/dialogs/ui_requests.ml ui_requests.ml))
+(rule
+ (copy ../src/editor/block_parse.ml block_parse.ml))
+(rule
+ (copy ../src/editor/block_selection.ml block_selection.ml))
+(rule
+ (copy ../src/editor/edit_input.ml edit_input.ml))
+(rule
+ (copy ../src/editor/edit_model.ml edit_model.ml))
+(rule
+ (copy ../src/editor/edit_runs.ml edit_runs.ml))
+(rule
+ (copy ../src/editor/edit_view.ml edit_view.ml))
+(rule
+ (copy ../src/editor/editor_actions.ml editor_actions.ml))
+(rule
+ (copy ../src/editor/editor_commands.ml editor_commands.ml))
+(rule
+ (copy ../src/editor/editor_embed.ml editor_embed.ml))
+(rule
+ (copy ../src/editor/editor_keys.ml editor_keys.ml))
+(rule
+ (copy ../src/editor/editor_sink.ml editor_sink.ml))
+(rule
+ (copy ../src/editor/editor_state.ml editor_state.ml))
+(rule
+ (copy ../src/editor/editor_surface.ml editor_surface.ml))
+(rule
+ (copy ../src/editor/outliner_ops.ml outliner_ops.ml))
+(rule
+ (copy ../src/export/export_formats.ml export_formats.ml))
+(rule
+ (copy ../src/export/export_state.ml export_state.ml))
+(rule
+ (copy ../src/export/export_view.ml export_view.ml))
+(rule
+ (copy ../src/export/publish_view.ml publish_view.ml))
+(rule
+ (copy ../src/extension/pdf_state.ml pdf_state.ml))
+(rule
+ (copy ../src/graphs/graphs_meta.ml graphs_meta.ml))
+(rule
+ (copy ../src/graphs/graphs_ops.ml graphs_ops.ml))
+(rule
+ (copy ../src/graphs/graphs_view.ml graphs_view.ml))
+(rule
+ (copy ../src/graphs/collaborators.ml collaborators.ml))
+ (rule
+ (copy ../src/graphs/asset_progress.ml asset_progress.ml))
+(rule
+ (copy ../src/graphs/importer.ml importer.ml))
+(rule
+ (copy ../src/graphs/new_graph.ml new_graph.ml))
+(rule
+ (copy ../src/graphs/recycle.ml recycle.ml))
+(rule
+ (copy ../src/graphs/rtc_error.ml rtc_error.ml))
+(rule
+ (copy ../src/graphs/rtc_flows.ml rtc_flows.ml))
+(rule
+ (copy ../src/graphs/rtc_ops.ml rtc_ops.ml))
+(rule
+ (copy ../src/graphs/zip.ml zip.ml))
+(rule
+ (copy ../src/graphs/exporter.ml exporter.ml))
+(rule
+ (copy ../src/popups/tooltip.ml tooltip.ml))
+(rule
+ (copy ../src/pages/file_view.ml file_view.ml))
+(rule
+ (copy ../src/pages/page.ml page.ml))
+(rule
+ (copy ../src/pages/page_ops.ml page_ops.ml))
+(rule
+ (copy ../src/popups/popups_state.ml popups_state.ml))
+(rule
+ (copy ../src/popups/popups_view.ml popups_view.ml))
+(rule
+ (copy ../src/properties/properties_area.ml properties_area.ml))
+(rule
+ (copy ../src/properties/properties_dialog.ml properties_dialog.ml))
+(rule
+ (copy ../src/properties/properties_menu.ml properties_menu.ml))
+(rule
+ (copy ../src/properties/properties_popup.ml properties_popup.ml))
+(rule
+ (copy ../src/properties/properties_select.ml properties_select.ml))
+(rule
+ (copy ../src/properties/properties_state.ml properties_state.ml))
+(rule
+ (copy ../src/properties/properties_view.ml properties_view.ml))
+(rule
+ (copy ../src/render/render.ml render.ml))
+(rule
+ (copy ../src/render/render_calc.ml render_calc.ml))
+(rule
+ (copy ../src/render/render_html.ml render_html.ml))
+(rule
+ (copy ../src/render/render_inline.ml render_inline.ml))
+(rule
+ (copy ../src/render/render_state.ml render_state.ml))
+(rule
+ (copy ../src/routing/router.ml router.ml))
+(rule
+ (copy ../src/sdk/sdk_api.ml sdk_api.ml))
+(rule
+ (copy ../src/sdk/sdk_config.ml sdk_config.ml))
+(rule
+ (copy ../src/sdk/sdk_read.ml sdk_read.ml))
+(rule
+ (copy ../src/sdk/sdk_ui.ml sdk_ui.ml))
+(rule
+ (copy ../src/sdk/title_refs.ml title_refs.ml))
+(rule
+ (copy ../src/settings/keymap_data.ml keymap_data.ml))
+(rule
+ (copy ../src/settings/settings_page.ml settings_page.ml))
+(rule
+ (copy ../src/settings/settings_state.ml settings_state.ml))
+(rule
+ (copy ../src/settings/settings_url_view.ml settings_url_view.ml))
+(rule
+ (copy ../src/settings/settings_view.ml settings_view.ml))
+(rule
+ (copy ../src/sidebar/left_sidebar_view.ml left_sidebar_view.ml))
+(rule
+ (copy ../src/sidebar/right_sidebar_view.ml right_sidebar_view.ml))
+(rule
+ (copy ../src/sidebar/sidebar_state.ml sidebar_state.ml))
+(rule
+ (copy ../src/toasts/toast.ml toast.ml))
+(rule
+ (copy ../src/toasts/toasts_view.ml toasts_view.ml))
+(rule
+ (copy ../src/views/views_builder.ml views_builder.ml))
+(rule
+ (copy ../src/views/views_db.ml views_db.ml))
+(rule
+ (copy ../src/views/views_head.ml views_head.ml))
+(rule
+ (copy ../src/views/views_query.ml views_query.ml))
+(rule
+ (copy ../src/views/views_table.ml views_table.ml))
+(rule
+ (copy ../src/views/views_popup.ml views_popup.ml))
+(rule
+ (copy ../src/views/views_state.ml views_state.ml))
+(rule
+ (copy ../src/views/views_view.ml views_view.ml))
+(rule
+ (copy ../src/views/views_wire.ml views_wire.ml))
+
+(library
+ (name logseq_ui_ocamlhost)
+ (wrapped false)
+ (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine))
+ (modes native)
+ (libraries
+   lui
+   logseq_ui_contracts
+   logseq_ui_native_services
+   logseq_ui_shared
+   ocaml-signal
+   melange-transit-core
+   melange-transit-native
+   melange-edn-core
+   melange-edn-native
+   yojson
+   ptime
+   uri
+   unix
+   threads.posix
+   digestif
+   str)
+ (preprocess
+  (pps lui.ppx)))
+(executable
+ (name logseq_native)
+ (modules logseq_native native_embed bridge patch_decode host_requests
+   theme_vars host_icons text_engine)
+ (libraries logseq_ui_ocamlhost
+   lui
+   lui.store
+   lui.scene
+   lui.paint
+   lui.host
+   lui.window
+   lui.layout
+   lui.shell
+   lui.a11y
+   lui.ime
+   lui.text
+   lui.gl
+   lui.metal
+   lui.raster
+   lui.blit
+   lui.gpu
+   lui.svg
+   lui.theme
+   tsdl
+   ocaml-signal
+   unix
+   threads.posix)
+ (foreign_stubs
+  (language c)
+  (names ocaml_host_stubs))
+ (modes native)
+ (enabled_if (= %{system} macosx)))
