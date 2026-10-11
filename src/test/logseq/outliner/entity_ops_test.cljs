@@ -80,6 +80,16 @@
     (is (< 1 (:block/updated-at (d/entity @conn (:db/id b1)))))
     (is (< 1 (:block/updated-at (d/entity @conn (:db/id page)))))))
 
+(deftest collapsing-a-block-does-not-bump-its-updated-at
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
+                                                :blocks [{:block/title "b1" :build/children [{:block/title "c"}]}]}])
+        b1 (db-test/find-block-by-content @conn "b1")]
+    (d/transact! conn [[:db/add (:db/id b1) :block/updated-at 1]])
+    (outliner-core/save-block! conn {:db/id (:db/id b1) :block/uuid (:block/uuid b1) :block/collapsed? true}
+                               {:outliner-op :collapse-expand-blocks})
+    (is (true? (:block/collapsed? (d/entity @conn (:db/id b1)))))
+    (is (= 1 (:block/updated-at (d/entity @conn (:db/id b1)))))))
+
 (deftest save-block-gives-no-page-name-to-a-block
   (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
                                                 :blocks [{:block/title "b1"}]}])

@@ -449,6 +449,30 @@
     (is (= "p" (:block/title target)))
     (is (false? sibling?))))
 
+(deftest property-values-moved-and-inserted
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:many {:logseq.property/type :default :db/cardinality :many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b" :build/properties {:many #{"v1" "v2"}}}
+                                            {:block/title "x"}
+                                            {:block/title "z"}]}]})
+        property-id (:db/id (d/entity @conn :user.property/many))
+        b #(db-test/find-block-by-content @conn %)
+        [v1 v2] (sort-by :block/order (:user.property/many (b "b")))]
+    (testing "a block moved next to a property value becomes a value of that property"
+      (outliner-core/move-blocks! conn [(b "x")] v1 {:sibling? true})
+      (is (= property-id (:db/id (:logseq.property/created-from-property (b "x"))))))
+    (testing "next to an ordinary block, an insert keeps a block's property origin and a paste drops it"
+      (let [y {:block/uuid (random-uuid) :block/title "y" :logseq.property/created-from-property property-id}
+            origin #(:logseq.property/created-from-property (first (:blocks (outliner-core/insert-blocks @conn [y] (b "z") (merge {:sibling? true} %)))))]
+        (is (= property-id (origin {})))
+        (is (nil? (origin {:outliner-op :paste})))))
+    (testing "moving two property values together keeps both"
+      (let [ids (set (map :db/id [v1 v2]))]
+        (outliner-core/move-blocks-up-down! conn [(d/entity @conn (:db/id v2)) (d/entity @conn (:db/id v1))] false)
+        (is (every? #(some? (d/entity @conn %)) ids))
+        (is (every? #(= (:db/id (b "b")) (:db/id (:block/parent (d/entity @conn %)))) ids))))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
