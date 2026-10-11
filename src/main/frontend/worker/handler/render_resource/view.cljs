@@ -35,10 +35,12 @@
 (defn- views
   [db resource-key _runtime]
   (let [[_ owner-lookup feature-type] resource-key
+        ;; the feature type is checked before the owner lookup: a missing
+        ;; owner is caught as a deleted owner, a bad argument is not
+        _ (when-not (keyword? feature-type)
+            (common/fail! "Invalid view feature type" {:feature-type feature-type}))
         owner (view-owner db owner-lookup)
         owner-uuid (common/entity-uuid! db (:db/id owner))]
-    (when-not (keyword? feature-type)
-      (common/fail! "Invalid view feature type" {:feature-type feature-type}))
     [#{[:views owner-uuid feature-type]}
      (->> (d/q view-eids-query db (:db/id owner) feature-type)
           (map #(d/entity db %))
