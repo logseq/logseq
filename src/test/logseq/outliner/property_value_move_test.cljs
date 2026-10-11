@@ -39,6 +39,16 @@
     (move! conn "v3" true)
     (is (= ["v3" "v1" "v2"] (values conn)))))
 
+(deftest values-at-the-edges-stay-where-they-are
+  (let [conn (conn-with-values ["v1" "v2"])]
+    (testing "the first value moved up stays first and a value"
+      (move! conn "v1" true)
+      (is (= ["v1" "v2"] (values conn))))
+    (testing "the last value moved down stays last and a value"
+      (move! conn "v2" false)
+      (is (= ["v1" "v2"] (values conn))))
+    (is (= ["child"] (map :block/title (:block/_parent (db-test/find-block-by-content @conn "b")))))))
+
 (deftest moving-the-first-value-down-keeps-it-a-value
   (let [conn (conn-with-values ["v1" "v2"])]
     (move! conn "v1" false)
