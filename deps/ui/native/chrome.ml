@@ -32,25 +32,29 @@ open Lui_elements
    hidden DOM mounts below so their emitters stay live. *)
 let menu_dismiss_installed = ref false
 
-let icon_btn ~key ?(acc = "") ~icon ~label ?disabled_signal
-    ?foreground_signal on_press =
-  button ~key ~icon ~label ~variant:`ghost ~size:`icon
+let icon_btn ~key ?(acc = "") ~icon_name ~label ?disabled_signal
+    ?foreground_signal ?style_class on_press =
+  button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
+    ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
-    ?disabled_signal ?foreground_signal
-    ~on_press:(fun _ -> on_press ()) []
+    ?disabled_signal ?foreground_signal ?style_class
+    ~on_press:(fun _ -> on_press ())
+    [ Icons.icon ~size:20. icon_name ]
 
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_btn =
-  button ~key:"left-menu-btn" ~icon:`menu ~size:`icon ~variant:`ghost
+  button ~key:"left-menu-btn" ~size:`icon ~width:32 ~height:32
+    ~main:`center ~cross:`center ~variant:`ghost
     ~label:(I18n.t "header/toggle-left-sidebar")
     ~accessibility_identifier:"left-menu"
-    ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar) []
+    ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+    [ Icons.icon ~size:20. "menu-2" ]
 
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
 let search_btn =
-  icon_btn ~key:"search-btn" ~acc:"search-button" ~icon:`search
+  icon_btn ~key:"search-btn" ~acc:"search-button" ~icon_name:"search"
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
 (* cljs anchors the dropdown to the trigger's right edge — the fixed
@@ -59,11 +63,9 @@ let search_btn =
    Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
    to the same trigger. *)
 let dots_btn =
-  button ~key:"dots-btn" ~variant:`ghost ~size:`icon ~icon:`ellipsis
-    ~label:(I18n.t "header/more")
-    ~accessibility_identifier:"toolbar-dots-btn"
+  icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
-    ~on_press:(fun _ ->
+    ~label:(I18n.t "header/more") (fun () ->
       (* re-pressing the trigger toggles the menu closed (the document
          click-catcher installed in [shell] dismisses on outside press
          only — the button itself is outside the menu surface) *)
@@ -75,24 +77,35 @@ let dots_btn =
           Dom_ext.toolbar_dots_pos := Some (x, 48.);
           Runtime.send
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
-    []
 
-(* cljs header.cljs hides home on the :home route — press no-ops there *)
 let home_btn ms =
-  button ~key:"home-btn" ~icon:(`app "home") ~label:(I18n.t "nav/home")
-    ~variant:`ghost ~size:`icon ~accessibility_identifier:"home-btn"
+  button ~key:"home-btn" ~label:(I18n.t "nav/home")
+    ~variant:`ghost ~size:`icon ~width:32 ~height:32 ~main:`center
+    ~cross:`center ~accessibility_identifier:"home-btn"
     ~on_press:(fun _ ->
       match (Signal.get ms).Model.route with
       | Model.Home -> ()
       | _ ->
           Platform.set_location_hash "#/";
           Platform.dispatch "ls:navigate" Js.Json.null)
-    []
+    [ Icons.icon ~size:20. "home" ]
+
+(* cljs header.cljs mounts the home button only off the :home route *)
+let home_item (ms : Model.t Signal.signal) : t =
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      (a.route = Model.Home) = (b.route = Model.Home))
+    (fun (m : Model.t) ->
+      match m.Model.route with
+      | Model.Home -> box ~key:"home-off" []
+      | _ -> home_btn ms)
+    ms
+
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_btn ms =
-  icon_btn ~key:"rs-toggle" ~icon:`panel_right
+  icon_btn ~key:"rs-toggle" ~icon_name:"layout-sidebar-right"
     ~label:(I18n.t "command.ui/toggle-right-sidebar")
     (fun () ->
       Runtime.send Action.Toggle_right_sidebar;
@@ -102,8 +115,8 @@ let right_toggle_btn ms =
    carry status items as their own spaced items, not fused capsules.
    Dimmed while sync is off, accent while queueing (the .cp__rtc-sync
    CSS states don't map onto native). *)
-let rtc_item (ms : Model.t Signal.signal) : t =
-  icon_btn ~key:"rtc-tb" ~icon:(`app "cloud")
+let rtc_item_btn (ms : Model.t Signal.signal) : t =
+  icon_btn ~key:"rtc-tb" ~icon_name:"cloud"
     ~label:"Sync Status" ~acc:"rtc-sync"
     ~foreground_signal:
       (Signal.map
@@ -125,6 +138,19 @@ let rtc_item (ms : Model.t Signal.signal) : t =
          ms)
     (fun () -> ())
 
+(* cljs rtc-indicator-visible?: the cloud mounts only while a synced
+   (rtc-enabled) graph exists — here the worker's rtc-sync-state
+   broadcast, so [m.rtc = None] stays hidden like the web's demo *)
+let rtc_item (ms : Model.t Signal.signal) : t =
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      (a.rtc = None) = (b.rtc = None))
+    (fun (m : Model.t) ->
+      match m.Model.rtc with
+      | None -> box ~key:"rtc-off" []
+      | Some _ -> rtc_item_btn ms)
+    ms
+
 (* cljs container.cljs: single .cp__header row — .l [sidebar-toggle,
    search], .r [rtc, home, dots, right-toggle]. *)
 let topbar (ms : Model.t Signal.signal) : t list =
@@ -138,7 +164,7 @@ let topbar (ms : Model.t Signal.signal) : t list =
              (~76px). With the sidebar open the sidebar's own top row
              hosts them and the header shows only a spacer, so the
              inset can relax. *)
-          (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 76)
+          (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
           (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
              ~style_class:"cp__header-l"
           [ reactive
@@ -155,8 +181,8 @@ let topbar (ms : Model.t Signal.signal) : t list =
                     [ left_menu_btn; search_btn ])
               ms ])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
-          ~gap:8 ~padding_horizontal:6 ~style_class:"cp__header-r"
-          [ rtc_item ms; home_btn ms; dots_btn; right_toggle_btn ms ] ]
+          ~padding_horizontal:6 ~style_class:"cp__header-r"
+          [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
@@ -314,7 +340,15 @@ let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
             vertical scroller (.scrollbar-spacing = overflow-y:auto) —
             emit the real scroll kind so pages taller than the window
             actually scroll. *)
-         scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
+         Ui_parts.int_prop_signal Lui_protocol.PaddingVertical ms
+           (fun (m : Model.t) ->
+             (* cljs container.cljs: margin-less routes (journals/home/
+                all-pages) strip the container's py-8; named pages keep
+                the 32px top pad under the title *)
+             match m.route with
+             | Model.Journals | Model.Home | Model.All_pages -> 0
+             | _ -> 32)
+        (scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
         ~accessibility_identifier:"main-content-container"
         ~style_class:"scrollbar-spacing"
         ~data_attrs_signal:
@@ -375,9 +409,8 @@ let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                    [ Page.region ms ]) ]
             ))
         ]
-        ]
-        )
-    ])
+        ])
+    )])
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
