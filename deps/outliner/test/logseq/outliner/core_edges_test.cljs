@@ -6,6 +6,91 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
+(defn- children-titles
+  [db block]
+  (map :block/title (sort-by :block/order (:block/_parent (d/entity db (:db/id block))))))
+
+(defn- parent-title
+  [db title]
+  (:block/title (:block/parent (db-test/find-block-by-content db title))))
+
+(deftest indent-goes-after-the-last-child-of-the-block-above
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"}
+                         {:block/title "b2" :build/children [{:block/title "c"}]}
+                         {:block/title "b3"}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "b3")] true)
+    (is (= ["c" "b3"] (children-titles @conn (db-test/find-block-by-content @conn "b2"))))))
+
+(deftest indent-of-two-blocks-goes-under-the-block-above-the-first
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1" :build/children [{:block/title "c"}]}
+                         {:block/title "b2"}
+                         {:block/title "b3"}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "b2")
+                                               (db-test/find-block-by-content @conn "b3")] true)
+    (is (= ["c" "b2" "b3"] (children-titles @conn (db-test/find-block-by-content @conn "b1"))))))
+
+(deftest indent-into-a-collapsed-block-expands-it
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b2" :block/collapsed? true :build/children [{:block/title "c"}]}
+                         {:block/title "b3"}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "b3")] true)
+    (is (false? (:block/collapsed? (db-test/find-block-by-content @conn "b2"))))
+    (is (= "b2" (parent-title @conn "b3")))))
+
+(deftest indent-under-a-block-with-no-children
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"} {:block/title "b2"}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "b2")] true)
+    (is (= "b1" (parent-title @conn "b2")))
+    (is (= ["b2"] (children-titles @conn (db-test/find-block-by-content @conn "b1"))))))
+
+(deftest indent-of-a-non-consecutive-selection-does-nothing
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b0"} {:block/title "b1"} {:block/title "b2"} {:block/title "b3"}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "b1")
+                                               (db-test/find-block-by-content @conn "b3")] true)
+    (is (= "page1" (parent-title @conn "b1")))
+    (is (= "page1" (parent-title @conn "b3")))))
+
+(deftest outdent-to-the-original-parent-goes-after-it
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "p" :build/children [{:block/title "c1"} {:block/title "c2"}]}
+                         {:block/title "q"}]}])
+        q (db-test/find-block-by-content @conn "q")]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "c1")] false
+                                          {:parent-original q})
+    (is (= "page1" (parent-title @conn "c1")))
+    (is (= ["c2"] (children-titles @conn (db-test/find-block-by-content @conn "p"))))))
+
+(deftest direct-outdent-takes-the-right-siblings-after-its-own-children
+  ;; p [c1 c2 [g] c3]: outdenting c2 makes c3 c2's child, after g
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "p" :build/children [{:block/title "c1"}
+                                                            {:block/title "c2" :build/children [{:block/title "g"}]}
+                                                            {:block/title "c3"}]}]}])]
+    (outliner-core/indent-outdent-blocks! conn [(db-test/find-block-by-content @conn "c2")] false)
+    (is (= "page1" (parent-title @conn "c2")))
+    (is (= ["g" "c3"] (children-titles @conn (db-test/find-block-by-content @conn "c2"))))))
+
+(deftest a-property-value-block-is-not-outdented
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1" :build/properties {:default "the value"}}]}])
+        value (db-test/find-block-by-content @conn "the value")
+        parent-before (:db/id (:block/parent value))]
+    (is (some? (:logseq.property/created-from-property value)))
+    (outliner-core/indent-outdent-blocks! conn [value] false)
+    (is (= parent-before (:db/id (:block/parent (db-test/find-block-by-content @conn "the value")))))))
+
 (deftest matching-ref-for-tag-prefers-the-exact-title-then-the-first
   (let [match #'outliner-core/matching-ref-for-tag
         lower {:block/uuid 1 :block/title "foo"}
