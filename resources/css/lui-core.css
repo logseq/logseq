@@ -455,7 +455,7 @@ blockquote {
     -webkit-app-region: no-drag;
   }
 
-  > .r > div:not(.ui__dropdown-trigger) a,
+  > .r > div a,
   button {
     opacity: 0.7;
     color: inherit;
@@ -2513,10 +2513,6 @@ a.page-title {
   .CodeMirror-hscrollbar {
     cursor: pointer;
   }
-}
-
-.cm-s-solarized.CodeMirror {
-  box-shadow: none;
 }
 
 .CodeMirror pre.CodeMirror-line,
