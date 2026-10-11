@@ -283,7 +283,11 @@ let article () =
 (* route view — cljs setups/setups-container :importer wraps the article in
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
-  column ~key:"importer" ~style_class:"cp__onboarding-setups"
+  Ui_components.with_props
+    [ Lui_protocol.ZIndex, Ui_components.iv 1
+    ; Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+    (column ~key:"importer" ~style_class:"cp__onboarding-setups"
+       ~grow:1. ~corner_radius:20
     [ column ~key:"imp-card"
         ~style_class:"inner-card"
         [ (* .inner-card > h1.ls-imp-title / > h2 key on
@@ -294,6 +298,6 @@ let view () : t =
         ; heading ~key:"imp-td" ~level:2 ~as_:`H2
             ~value:T.import_later []
         ; article () ]
-    ]
+    ])
 
 let body (_ms : Model.t Signal.signal) : t = article ()

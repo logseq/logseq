@@ -898,6 +898,7 @@ let journal_references_view (p : Model.page) : t =
         ~style_class:"references"
         [ box ~key:"jrfc" ~style_class:"ls-foldable-content"
             [ column ~key:"jrb" ~style_class:"ls-view-body" ~margin_top:4
+                ~min_width:0
                 (List.map references_row refs)
             ]
         ]

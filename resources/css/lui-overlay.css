@@ -95,10 +95,6 @@
 }
 
 /* cljs icon-component/get-node-icon-cp wrapper */
-.icon-cp-container {
-  display: flex;
-  align-items: center;
-}
 
 @keyframes lui-fade-zoom-in {
   from {
@@ -411,7 +407,6 @@
   min-width: 0;
 }
 
-
 /* ---- autocomplete (#ui__ac) ------------------------------------------ */
 
 #ui__ac-inner {
@@ -505,14 +500,8 @@
 
 /* ---- context menu rows ----------------------------------------------- */
 
-.ls-context-menu-content {
-  width: 280px;
-}
-
-/* block-tag popup is w-60 (240px) in cljs (was an inline width) */
-.ls-context-menu-content.ls-tag-menu {
-  width: 240px;
-}
+/* the 280px/240px widths moved onto the popover emitters as ~width
+   (page_menu.ml, popups_view.ml) */
 
 /* color swatch row + heading row inside the block context menu */
 .ls-cm-colors,
@@ -603,9 +592,6 @@
 
 /* child-brightens-on-parent-hover — a descendant relationship props
    can't express (no group-hover channel) */
-.cp__cmdk-hint-label {
-  opacity: 0.6;
-}
 
 .cp__cmdk-hint:hover .cp__cmdk-hint-label {
   opacity: 1;
@@ -733,9 +719,6 @@
 
 /* cljs dialog-confirm :content wrapper — div.ui__alert-dialog-main-content
    around p.opacity-60 (16px text, ~8px breathing room each side) */
-.ui__alert-dialog-main-content {
-  padding-block: 8px;
-}
 
 .ui__alert-dialog-main-content .ls-confirm-desc {
   font-size: 1rem;
@@ -957,9 +940,6 @@
    utility on cljs's dialog-content element beats shui.css's
    [data-align=top] top-20 rule. LUI's dialog-content carries no utility
    class, so restore the same effective centering here. */
-.ui__dialog-overlay[data-align="top"] .ui__dialog-content {
-  top: 50%;
-}
 
 /* cljs shui button :size :sm is h-7 rounded px-3 py-1 (28px, keeps the
    text-sm base size) — the kind's data-size=sm rule lands a larger
@@ -1109,10 +1089,6 @@
   padding-bottom: 1rem;
 }
 
-.ls-qa-title {
-  font-weight: 500;
-}
-
 .ls-qa-content {
   display: block;
   margin-left: -1.5rem;
@@ -1242,19 +1218,6 @@
   flex-direction: column;
 }
 
-.ls-editor-date-picker .ls-cal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.ls-editor-date-picker .ls-cal-selects {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
 .ls-editor-date-picker .ls-date-month-select {
   display: inline-flex;
   align-items: center;
@@ -1284,29 +1247,6 @@
   color: inherit;
 }
 
-.ls-editor-date-picker .ls-cal-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.ls-editor-date-picker .ls-cal-nav-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 2rem;
-  width: 2.25rem;
-  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
-  border-radius: 0.375rem;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-}
-
-.ls-editor-date-picker .ls-cal-nav-btn:hover {
-  background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
-}
-
 .ls-editor-date-picker table[role="grid"] {
   border-collapse: collapse;
   width: 276px;
@@ -1325,11 +1265,6 @@
   width: 2.25rem;
   height: 2.25rem;
   font-size: 0.875rem;
-}
-
-.ls-editor-date-picker .ls-cal-outside {
-  color: var(--lx-gray-07, var(--ls-secondary-text-color, #999));
-  opacity: 0.55;
 }
 
 .ls-editor-date-picker .ls-date-nlp {
@@ -1355,17 +1290,6 @@
   z-index: 901;
 }
 
-.ls-editor-date-picker .ls-date-month-option {
-  display: block;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.ls-editor-date-picker .ls-date-month-option:hover {
-  background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
-}
-
 /* ---- datetime picker (scheduled/deadline): two-column layout --------- */
 
 .ls-editor-date-picker.ls-cal-prop {
@@ -1377,14 +1301,6 @@
   display: flex;
   flex-direction: row;
   gap: 8px;
-}
-
-.ls-editor-date-picker .ls-time-picker {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .ls-editor-date-picker .ls-time-input {
@@ -1411,62 +1327,6 @@
   color: var(--ls-primary-text-color, inherit);
 }
 
-/* repeat panel — cljs property/value.cljs repeat-setting (w-64 p-4) */
-
-.ls-repeat-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 16rem;
-  flex: none;
-  padding: 0 0 0 8px;
-  border-left: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
-  font-size: 0.875rem;
-}
-
-.ls-repeat-head {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.ls-repeat-checkbox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #888));
-  border-radius: 3px;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  font-size: 0.75rem;
-  line-height: 1;
-}
-
-.ls-repeat-checkbox[data-checked] {
-  background: var(--lx-accent-09, var(--ls-link-text-color, hsl(var(--primary, #0f7b6c))));
-  border-color: transparent;
-  color: #fff;
-}
-
-.ls-repeat-frequency {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.ls-repeat-label {
-  flex: none;
-  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
-}
-
 .ls-repeat-frequency-input {
   height: 2rem;
   width: 3.5rem;
@@ -1477,51 +1337,6 @@
   background: transparent;
   font-size: 0.875rem;
   color: inherit;
-}
-
-.ls-repeat-select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  height: 2rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
-  border-radius: 0.375rem;
-  background: transparent;
-  font-size: 0.875rem;
-  cursor: pointer;
-  color: inherit;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ls-repeat-select:hover {
-  background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
-}
-
-.ls-repeat-next,
-.ls-repeat-when {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ls-repeat-when .ls-repeat-select {
-  width: 100%;
-}
-
-.ls-repeat-is {
-  display: flex;
-  flex-direction: row;
-  gap: 4px;
-}
-
-.ls-repeat-choice-menu .ls-date-month-option {
-  white-space: nowrap;
 }
 
 /* ---- property popup panes ---------------------------------------------- */
@@ -1557,10 +1372,6 @@
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
   font-size: 0.875rem;
-}
-
-.jtrigger {
-  cursor: pointer;
 }
 
 .ls-property-dialog {
@@ -1900,40 +1711,6 @@ select.form-select {
       var(--ls-secondary-background-color, hsl(var(--popover))));
 }
 
-.cp__emoji-icon-picker .pane-section {
-  padding-left: 0.5rem;
-  overflow-y: auto;
-  height: 100%;
-  color: var(--ls-color-icon-preset, inherit);
-}
-
-.cp__emoji-icon-picker .pane-section > .its,
-.cp__emoji-icon-picker .pane-section .icons-row {
-  display: flex;
-  gap: 0.25rem;
-  padding: 0.25rem 0;
-  flex-wrap: wrap;
-}
-
-.cp__emoji-icon-picker .pane-section > .its > button,
-.cp__emoji-icon-picker .pane-section .icons-row > button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  border-style: none;
-  background: none;
-  width: 2.25rem;
-  height: 2.25rem;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.cp__emoji-icon-picker .pane-section > .its > button:hover,
-.cp__emoji-icon-picker .pane-section .icons-row > button:hover {
-  background: var(--lx-gray-03, var(--ls-menu-hover-color, hsl(var(--muted))));
-}
-
 .cp__emoji-icon-picker .hd strong {
   font-size: 0.75rem;
   font-weight: 500;
@@ -1988,20 +1765,10 @@ select.form-select {
   padding: 0.125rem 0.25rem;
 }
 
-.ls-view-filter-value-item {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* ---- misc overlay helpers -------------------------------------------------- */
 
 /* page ⋯ menu (toolbar dots) / page context menu */
-.ls-dots-menu {
-  width: 16rem;
-}
+/* dots menu width (16rem) moved to ~width:256 on the page-menu popover */
 
 /* login dialog body — cljs login.css: mx-auto w-full max-w-[440px] px-1 */
 .cp__user-login {
@@ -2223,18 +1990,10 @@ select.form-select {
   padding: 0 0.25rem;
 }
 
-.ls-th-strong {
-  font-weight: 600;
-}
-
 .ls-desc {
   font-size: 0.875rem;
   opacity: 0.7;
   margin-bottom: 0;
-}
-
-.ls-dc {
-  display: contents;
 }
 
 /* LUI wraps the actual switch input in a label. Style the input so the
@@ -2480,14 +2239,6 @@ select.form-select {
   flex: 1;
 }
 
-.cp__onboarding-setups {
-  display: flex;
-  flex: 1;
-  z-index: 1;
-  overflow: hidden;
-  border-radius: 20px;
-}
-
 /* cljs onboarding/index.css centers the card on desktop */
 @media (min-width: 1024px) {
   .cp__onboarding-setups {
@@ -2557,11 +2308,6 @@ select.form-select {
   padding: 0.5rem;
 }
 
-.ls-strong {
-  font-weight: 500;
-}
-
-
 /* cljs tailwind preflight + export.cljs [:hr]: my-8 */
 .export hr {
   margin: 2rem 0;
@@ -2571,7 +2317,7 @@ select.form-select {
 
 /* cards (flashcards review modal) */
 .ls-cards-select {
-  position: relative;
+  /* position:relative moved to a prop; inline-flex can't be typed */
   display: inline-flex;
 }
 
@@ -2596,13 +2342,8 @@ select.form-select {
   text-align: left;
 }
 
-
 .ls-gap {
   gap: 0.5rem;
-}
-
-.ls-nowrap {
-  white-space: nowrap;
 }
 
 .ls-center {
@@ -2622,13 +2363,6 @@ select.form-select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.ls-card-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .ls-cards-col {
@@ -2692,21 +2426,6 @@ select.form-select {
   opacity: 0.8;
 }
 
-.ls-ep-col {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.ls-ep-tabs {
-  display: flex;
-  flex: 1;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .ls-icon-mini {
   transform: scale(0.75);
   opacity: 0.7;
@@ -2731,10 +2450,6 @@ select.form-select {
 /* cljs view-tab count is text-muted-foreground (gray-133) — the
    ls-secondary-text-color var resolves to the primary dark color in
    this theme, so muted-foreground must come first */
-.ls-count {
-  font-size: 0.75rem;
-  color: hsl(var(--muted-foreground), var(--ls-secondary-text-color));
-}
 
 .ls-view-tab {
   /* cljs shui/button base: inline-flex items-center gap-1 */
@@ -2746,10 +2461,6 @@ select.form-select {
   padding: 0;
 }
 
-.ls-dim {
-  opacity: 0.75;
-}
-
 /* view-head reveal is signal-driven (~opacity on the head hover/popup
    states) — the 300ms ease-in stays as decoration on the hook classes */
 .view-actions,
@@ -2757,34 +2468,7 @@ select.form-select {
   transition: opacity 300ms ease-in;
 }
 
-.ls-view-order-setting {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 0.5rem;
-}
-
-.ls-drag-row {
-  display: flex;
-  flex-direction: row;
-  gap: 0.25rem;
-  align-items: center;
-}
-
-.ls-col-name {
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-  white-space: nowrap;
-}
-
 /* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */
-.ls-sort-right {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-  align-items: center;
-}
 
 .ls-sort-order {
   display: inline-flex;
@@ -2859,29 +2543,6 @@ select.form-select {
   height: 1rem;
 }
 
-.ls-xs {
-  font-size: 0.75rem;
-}
-
-.ls-vf-col {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.875rem;
-}
-
-.ls-op-btn {
-  display: inline-flex;
-  justify-content: flex-start;
-  text-align: left;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  background: none;
-  border-style: none;
-  cursor: pointer;
-  color: inherit;
-}
-
 .ls-op-label {
   opacity: 0.75;
   font-weight: 400;
@@ -2902,41 +2563,6 @@ select.form-select {
   max-width: 100%;
 }
 
-.ls-vf-chip-prop,
-.ls-vf-chip-op,
-.ls-vf-chip-val,
-.ls-vf-chip-x {
-  background: none;
-  border-style: none;
-  cursor: pointer;
-  color: inherit;
-  font-size: 0.875rem;
-  border-radius: 0;
-}
-
-.ls-vf-chip-prop,
-.ls-vf-chip-op {
-  padding: 0 0.5rem;
-  border-right: 1px solid var(--lui-c-border);
-}
-
-.ls-vf-chip-prop {
-  opacity: 0.8;
-}
-
-.ls-vf-chip-val {
-  padding: 0 0.5rem;
-  border-right: 1px solid var(--lui-c-border);
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.ls-vf-chip-x {
-  padding: 0 0.25rem;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-}
-
 .filters-row {
   display: flex;
   flex-direction: row;
@@ -2945,16 +2571,6 @@ select.form-select {
   justify-content: space-between;
   flex-wrap: wrap;
   padding: 0.5rem 0;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.ls-vf-chips {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
   min-width: 0;
   max-width: 100%;
 }
@@ -2981,10 +2597,6 @@ select.form-select {
 .page-tabs > .w-full,
 .ui__tabs-content,
 .ui__tabs-content > .ml-1,
-.ls-view-body {
-  min-width: 0;
-}
-
 
 /* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
    kept in flow here so the rows list needs no top offset) —
@@ -3001,13 +2613,6 @@ select.form-select {
   /* cljs .ls-table-header is border-y bg-gray-01 */
   border-top: 1px solid hsl(var(--border));
   border-bottom: 1px solid hsl(var(--border));
-  background: var(--lx-gray-01, var(--ls-primary-background-color));
-}
-
-.sticky-columns {
-  position: sticky;
-  left: 0;
-  z-index: 8;
   background: var(--lx-gray-01, var(--ls-primary-background-color));
 }
 
@@ -3048,6 +2653,13 @@ select.form-select {
 
 .ls-table-resize-handle:active {
   opacity: 1;
+}
+
+/* position:sticky is not a LUI position value; background moved to a prop */
+.sticky-columns {
+  position: sticky;
+  left: 0;
+  z-index: 8;
 }
 
 /* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
@@ -3095,13 +2707,6 @@ select.form-select {
   min-height: 33px;
   max-height: 33px;
   overflow: hidden;
-}
-
-.ls-table-footer {
-  position: absolute;
-  left: 0;
-  bottom: 8px;
-  width: 100%;
 }
 
 .ls-table-rows div[data-viewport-type='window'] {
@@ -3244,12 +2849,6 @@ select.form-select {
   gap: 0.5rem;
 }
 
-.ls-query-count {
-  font-weight: 500;
-  opacity: 0.5;
-  font-size: 0.875rem;
-}
-
 /* cljs foldable-title: the fold caret span is .control-hide until the
    title is hovered (or the group is collapsed, which emits
    .control-show); cljs toggles the class on mouse-over — the :hover
@@ -3260,45 +2859,9 @@ select.form-select {
 
 /* cljs reference_filters.cljs filter-dialog — the include/exclude
    popup behind the linked-refs filter-cog */
-.ls-filters {
-  max-width: 500px;
-  min-width: 320px;
-}
-
-.ls-filters-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding-bottom: 0.5rem;
-}
-
-.ls-filters-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 2.5rem;
-  width: 2.5rem;
-  border-radius: 9999px;
-  background: var(--ls-tertiary-background-color, rgba(0, 0, 0, 0.06));
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-  flex-shrink: 0;
-}
-
-.ls-filters-title {
-  font-size: 1.125rem;
-  line-height: 1.5rem;
-  font-weight: 500;
-  margin: 0;
-}
 
 .ls-filters .cp__filters:empty {
   display: none;
-}
-
-.ls-filters-label {
-  margin-right: 0.25rem;
-  font-weight: 500;
-  padding: 0.25rem 0;
 }
 
 .cp__filters-input-panel {
@@ -3493,10 +3056,6 @@ select.form-select {
   -webkit-mask-position: center;
 }
 
-.link-block {
-  cursor: pointer;
-}
-
 /* property value-cell helpers */
 
 .property-value-inner {
@@ -3507,16 +3066,6 @@ select.form-select {
 .editor-wrapper {
   flex: 1;
   width: 100%;
-  min-width: 0;
-}
-
-.editor-inner {
-  flex: 1;
-  min-width: 0;
-}
-
-.jtrigger {
-  flex: 1;
   min-width: 0;
 }
 
@@ -3537,16 +3086,6 @@ select.form-select {
 
 .property-block-container {
   width: 100%;
-}
-
-.all-pane {
-  padding-bottom: 2.5rem;
-}
-
-.ls-ep-btn {
-  height: 1.75rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.25rem;
 }
 
 /* The vendored LUI platform stylesheet (lui.css) ships a shadcn oklch
@@ -3654,7 +3193,7 @@ html[data-theme=light] {
    the wrapper row exactly like prod's kbd.shui-shortcut-key spec, so
    neutralize the kit layer (padding/border/bg/font can't be typed
    props) */
-:is(.shui-shortcut-combo, .shui-shortcut-separate, .shui-shortcut-compact, .cp__cmdk-hints) .lui-kbd {
+:is(.shui-shortcut-combo, .shui-shortcut-separate, .shui-shortcut-compact) .lui-kbd {
   padding: 0;
   border: none;
   background: transparent;
@@ -3672,7 +3211,7 @@ html[data-theme=light] {
    min-w 20, centered) — the kit's px-1.5/h-5 rules target .lui-kbd and
    load after shui.css, so restate the prod values here; boxed keycaps
    (no .shui-shortcut-key) keep the chrome on their wrapper row */
-:is(.shui-shortcut-combo, .shui-shortcut-separate, .cp__cmdk-hints) .lui-kbd.shui-shortcut-key {
+:is(.shui-shortcut-combo, .shui-shortcut-separate) .lui-kbd.shui-shortcut-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3713,9 +3252,6 @@ html[data-theme=light] {
 /* date picker (cljs ui/datepicker): month grid inside the value popover —
    selected day = accent fill, adjacent-month cells dim; can't be
    expressed via typed props */
-.ls-cal {
-  padding: 4px;
-}
 .ls-cal-hd {
   justify-content: space-between;
 }
@@ -3793,21 +3329,12 @@ html[data-theme=light] {
   background: #fff;
   color: #1f2937;
 }
-.ls-cal-day {
-  color: var(--ls-primary-text-color);
-}
 
 /* datepicker repeat column (cljs repeat-setting: w-64 p-4 gap-4
    text-sm, muted labels, h-8 controls) */
 .ls-repeat-col {
   font-size: 0.875rem;
   min-width: 256px;
-}
-.ls-rep-muted {
-  color: var(--ls-secondary-text-color, #6b7280);
-}
-.ls-rep-cb {
-  min-width: 16px;
 }
 .ls-rep-num.lui-text-field input,
 .ls-rep-num input {
@@ -3819,12 +3346,6 @@ html[data-theme=light] {
   height: 32px;
   width: 100%;
   font-size: 0.875rem;
-}
-.ls-rep-wrap {
-  min-width: 0;
-}
-.ls-rep-menu {
-  padding: 4px;
 }
 
 .ls-repeat-col .ls-rep-muted {

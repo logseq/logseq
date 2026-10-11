@@ -610,6 +610,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
     ~icon:`plus ~size:`sm ~height:24 ~foreground:"muted-foreground"
     ~label:I.filter
     ?text:(if with_label then Some I.filter else None)
+    ~grow:1. ~min_width:0
     ~style_class:"jtrigger"
     ~on_press:(fun _ ->
       match Ui_services.dom_by_id id with

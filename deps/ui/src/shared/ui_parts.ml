@@ -97,7 +97,8 @@ let ghost_btn_cls ?(extra = "") () =
 let mock_text ~key : t = box ~key ~style_class:"mock-text" []
 
 let editor_inner ~key children : t =
-  row ~key ~style_class:"editor-inner block-editor" ~grow:1. children
+  row ~key ~style_class:"editor-inner block-editor" ~grow:1.
+    ~min_width:0 children
 
 (* cljs editor wrapper — flex container around the logseq-editor
    surface (Edit_view's .block-editor column + hidden .ed-input) *)

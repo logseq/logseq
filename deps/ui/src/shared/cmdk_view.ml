@@ -455,8 +455,9 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                              item_sig)
                         ((* cljs icon-component/get-node-icon-cp wraps
                             the glyph in .icon-cp-container *)
-                         box ~key:"iccp"
+                         row ~key:"iccp"
                            ~style_class:"icon-cp-container"
+                           ~cross:`center
                            [ icon
                                ~name:
                                  (reactive
@@ -684,7 +685,9 @@ let input_row svs st : t =
 let hint_button svs label keys =
   Ui_components.cmdk_hint_button ~key:("hb-" ^ label) ~label
     ~on_press:(fun _ -> ())
-    [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
+    [ Ui_components.with_props
+        [ Lui_protocol.Opacity, Ui_components.fv 0.6 ]
+        (text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label [])
     ; hint_shortcut svs keys ]
 
 (* cljs tip: random per mount between "Press / to filter search
