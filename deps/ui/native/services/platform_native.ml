@@ -535,7 +535,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
   (* platform-owned singletons: bundled icon table, app icon aliases and
      the build revision (LOGSEQ_REVISION baked by the app launcher) *)
   Icon_data.install ();
-  Icons.set_app_aliases [ ("new-page", "file-plus") ];
+  Icons.set_app_aliases
+    [ ("new-page", "file-plus"); ("h-auto", "arrow-autofit-height") ];
   (match Sys.getenv_opt "LOGSEQ_REVISION" with
    | Some r -> Version.set_revision r
    | None -> ())

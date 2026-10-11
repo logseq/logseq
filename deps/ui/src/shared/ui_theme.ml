@@ -113,7 +113,6 @@ let accent_bound =
   ; "tag-text-color"
   ; "tag-text-hover-color"
   ; "slide-background-color"
-  ; "block-highlight-color"
   ; "selection-background-color"
   ; "selection-text-color"
   ; "page-checkbox-color"
@@ -186,6 +185,9 @@ let mode_ls mode =
     ; "pie-bg-color", "#e1e1e1"
     ; "pie-fg-color", "#0a4a5d"
     ; "header-button-background", "rgba(15, 20, 25, 1)"
+    ; (* vars-classic :root literal, not an accent chain — emitted here so
+         --ls-block-highlight-color resolves on the native host *)
+      "block-highlight-color", "#c0e6fd"
     ]
   | Dark ->
     [ "active-primary-color", "#8ec2c2"
@@ -201,6 +203,7 @@ let mode_ls mode =
     ; "pie-bg-color", "#01303b"
     ; "pie-fg-color", "#0b5869"
     ; "header-button-background", "#dee4ea"
+    ; "block-highlight-color", "#0a3d4b"
     ]
 
 let colors mode =

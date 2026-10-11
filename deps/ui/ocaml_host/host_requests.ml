@@ -38,6 +38,10 @@ type env = {
   store : Lui_store.t;
   ui : Ui.t;
   rects : Rects.t;
+  (* live element rect (scroll-shifted, ancestor-clipped) — the rects
+     table only refills after each repaint, so a measure of a node
+     mounted this frame reads 0 through it *)
+  rect_of : int -> Lui_scene.rect;
   scale : unit -> float;
   measure : int -> string -> float * float;
   apply_batch : patch_batch -> unit;
@@ -391,7 +395,7 @@ let dom_op (e : env) (op : string) (body : string) =
   | "measure-node" ->
     (match target with
      | Some id ->
-       let r = Rects.get e.rects id in
+       let r = e.rect_of id in
        reply "node-rect"
          (`Assoc
             [ ("nodeId", `Int id)

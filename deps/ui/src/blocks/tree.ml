@@ -745,6 +745,18 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
+       (* .ls-block.selected paints --ls-block-highlight-color on web
+          (lui-core.css) — classes don't paint on native so the fill
+          rides a typed background signal; the matching `rounded` is
+          only visible while the fill shows *)
+       ~corner_radius:4
+       ~background_signal:
+         (Signal.map
+            (fun sel ->
+              if S.String_set.mem uuid sel then
+                "var(--ls-block-highlight-color)"
+              else "transparent")
+            (S.selected_sig ()))
        ~data_attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
@@ -797,6 +809,15 @@ and row_sig ~depth ~editable ~library ~virtualize scope
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
+       ~corner_radius:4
+       ~background_signal:
+         (Signal.map2
+            (fun b sel ->
+              let u = Option.value b.Model.block_uuid ~default:"" in
+              if S.String_set.mem u sel then
+                "var(--ls-block-highlight-color)"
+              else "transparent")
+            bs (S.selected_sig ()))
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
     [ reactive
         ~equal:

@@ -482,6 +482,32 @@ let () =
         (fun b -> ignore (Lui_host.apply_batch host b))
         (Patch_decode.batches_of_string s)
   in
+  (* on-demand rect with the same shift+clip math populate_rects bakes
+     into the cache — for measure-node replies that arrive between
+     repaints, when the cached entry is absent or stale *)
+  let rec live_rect id =
+    let base = engine_rect id in
+    let rec walk aid ((sx, sy), clip) =
+      match Lui_store.parent store aid with
+      | None -> ((sx, sy), clip)
+      | Some p ->
+        let clip =
+          if Ui.scrollable store p then
+            let pr = live_rect p in
+            if not (Lui_scene.rect_empty pr) then rect_intersect clip pr
+            else clip
+          else clip
+        in
+        walk p
+          ((sx +. Ui.scroll_offset_x ui p, sy +. Ui.scroll_offset ui p), clip)
+    in
+    let (sx, sy), clip = walk id ((0., 0.), base) in
+    rect_intersect
+      { base with
+        Lui_scene.x = base.Lui_scene.x -. sx;
+        Lui_scene.y = base.Lui_scene.y -. sy }
+      clip
+  in
   let populate_rects () =
     Hashtbl.reset rects;
     List.iter
@@ -1071,6 +1097,7 @@ let () =
     { Host_requests.store;
       ui;
       rects;
+      rect_of = live_rect;
       scale = (fun () -> !scale_cell);
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
       apply_batch = (fun b -> ignore (Lui_host.apply_batch host b));
