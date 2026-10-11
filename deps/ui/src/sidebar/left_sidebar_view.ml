@@ -655,7 +655,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
           Ui_components.sv
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
         (link ~url:"#" ~target:`self_ ~style_class:"link-item group"
-           ~height:32 ~padding_horizontal:8 ~corner_radius:6 ~cross:`center
+           ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
              [ ("data-lp-ref", lp_ref)
              ; ("data-lp-recent", if recent then "1" else "0")
