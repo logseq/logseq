@@ -152,6 +152,10 @@
                              [(insert-op s1) (insert-op s2)])]
         (is (= [x1 x2] (block-uuids ops)))
         (is (= {:sibling? true :keep-uuid? true} (get-in ops [0 1 2])))))
+    (testing "a 2nd insert finds no uuid left once the 1st took the only inserted block's: it keeps its own"
+      (is (= [x1 s2]
+             (block-uuids (forward-ops @conn (new-block-datoms 100 x1)
+                                       [(insert-op s1) (insert-op s2)])))))
     (testing "a page created in the same tx is not an inserted block"
       (testing "datom maps"
         (is (= [x1]
