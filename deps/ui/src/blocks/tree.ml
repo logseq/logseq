@@ -929,6 +929,19 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
             )
           ]
         []
+    ; (* web paints the 1px indent guide as .block-children's
+         border-left via stylesheet; native reads only typed props, so
+         it gets a dedicated 1px line at the same edge *)
+      (if Ui_services.env_native_block_controls () then
+         box ~key:("guide-" ^ uuid)
+           ~style_class:"block-children-indent-guide"
+           ~width:1
+           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))"
+           ~data_attrs:
+             [ ("style", "position:absolute;left:0;top:0;bottom:0;width:1px")
+             ]
+           []
+       else Logseq_el.nothing)
     ; (* cljs lazy-block-children: inside :virtualize? pages the
          .block-children div is a lazy mount boundary — an
          estimated-height placeholder until it nears the viewport *)
