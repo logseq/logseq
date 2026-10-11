@@ -231,8 +231,8 @@
                                          :description "Destination page UUID. Omit to append to today's journal."}
                                :status {:$ref "#/components/schemas/TaskStatusSelector"}
                                :priority {:$ref "#/components/schemas/TaskPrioritySelector"}
-                               :scheduled {:type "integer" :description "Scheduled date as YYYYMMDD."}
-                               :deadline {:type "integer" :description "Deadline date as YYYYMMDD."}}}
+                               :scheduled {:type "integer" :description "Scheduled date/time as a Unix timestamp in milliseconds."}
+                               :deadline {:type "integer" :description "Deadline date/time as a Unix timestamp in milliseconds."}}}
     "createTag" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
     "updateTag" {:required ["title"] :properties {:title {:type "string"} :name encrypted-name-schema}}
     "createProperty" {:required ["title"]

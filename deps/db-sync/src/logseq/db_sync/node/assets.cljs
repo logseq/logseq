@@ -1,6 +1,8 @@
 (ns logseq.db-sync.node.assets
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            ["node:stream" :refer [Readable]]
+            ["node:stream/promises" :refer [pipeline]]
             [promesa.core :as p]))
 
 (defn- ensure-dir! [dir]
@@ -16,37 +18,24 @@
 (defn- write-meta! [path meta]
   (.writeFile (.-promises fs) path (js/JSON.stringify meta) "utf8"))
 
-(defn- <read-chunks
-  [^js reader acc]
-  (p/let [result (.read reader)]
-    (if (.-done result)
-      acc
-      (<read-chunks reader (conj acc (.-value result))))))
+(defn- normalize-bytes [data]
+  (cond
+    (instance? js/Uint8Array data) data
+    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+    :else (js/Uint8Array. data)))
 
-(defn- <read-all-bytes
-  "Drains a web ReadableStream into a single Uint8Array."
-  [^js stream]
-  (p/let [reader (.getReader stream)
-          chunks (<read-chunks reader [])]
-    (let [total (reduce + 0 (map #(.-length ^js %) chunks))
-          out (js/Uint8Array. total)]
-      (reduce (fn [offset ^js chunk]
-                (.set out chunk offset)
-                (+ offset (.-length chunk)))
-              0 chunks)
-      out)))
-
-(defn- <normalize-bytes
-  "Resolves the put body to bytes. R2's `put` consumes streams, so the local
-  bucket drains a ReadableStream to keep stream-driven uploads working."
-  [data]
-  (if (and data (.-getReader data))
-    (<read-all-bytes data)
-    (p/resolved
-     (cond
-       (instance? js/Uint8Array data) data
-       (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-       :else (js/Uint8Array. data)))))
+(defn- write-body! [file-path body]
+  (let [staging-path (str file-path ".upload-" (random-uuid))]
+    (-> (p/let [_ (if (instance? js/ReadableStream body)
+                    (pipeline (.fromWeb Readable body)
+                              (.createWriteStream fs staging-path
+                                                  #js {:fd (.openSync fs staging-path "wx")}))
+                    (.writeFile (.-promises fs) staging-path (normalize-bytes body)))
+                _ (.rename (.-promises fs) staging-path file-path)]
+          nil)
+        (p/catch (fn [error]
+                   (p/let [_ (.rm (.-promises fs) staging-path #js {:force true})]
+                     (throw error)))))))
 
 (defn make-bucket [base-dir]
   (ensure-dir! base-dir)
@@ -69,8 +58,7 @@
                     metadata (or (aget opts "httpMetadata") #js {})
                     custom (or (aget opts "customMetadata") #js {})]
                 (ensure-dir! dir)
-                (p/let [data (<normalize-bytes body)
-                        _ (.writeFile (.-promises fs) file-path data)
+                (p/let [_ (write-body! file-path body)
                         _ (write-meta! meta-file #js {:contentType (aget metadata "contentType")
                                                       :contentEncoding (aget metadata "contentEncoding")
                                                       :cacheControl (aget metadata "cacheControl")

@@ -7,6 +7,7 @@
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.dispatch :as worker-dispatch]
+            [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
@@ -45,12 +46,13 @@
       (if (= method "OPTIONS")
         (assets-handler/handle request env)
         (if-let [{:keys [graph-id]} (assets-handler/parse-asset-path path)]
-          (if (admin-token-valid? request env)
-            (assets-handler/handle request env)
-            (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-              (if (.-ok access-resp)
-                (assets-handler/handle request env)
-                access-resp)))
+          (p/let [signed-download? (when (= method "GET") (asset-link/<valid-request? request env))]
+            (if (or signed-download? (admin-token-valid? request env))
+              (assets-handler/handle request env)
+              (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                (if (.-ok access-resp)
+                  (assets-handler/handle request env)
+                  access-resp))))
           (http/bad-request "invalid asset path")))
 
       (= method "OPTIONS")
