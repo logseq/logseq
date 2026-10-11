@@ -23,6 +23,14 @@ let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 let clamp_initial_rows ctx n =
   if n >= 0 && Lui_ui.host ctx = Lui_protocol.GPUIHost then min n 16 else n
 
+(* Only hosts with a native lazy spine (SwiftUI LazyVStack, the gpui
+   spine) can deliver "lazy-mount"/"virt-end" dom-events; on every
+   other host rows must mount eagerly. *)
+let lazy_spine ctx =
+  match Lui_ui.host ctx with
+  | Lui_protocol.GPUIHost | Lui_protocol.SwiftUIHost -> true
+  | _ -> false
+
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
@@ -115,7 +123,9 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     in
     let row_mount (it : 'a) : t =
       let k = key_of it in
-      if initial_rows < 0 || Hashtbl.mem eager k then
+      (* hosts without a lazy-mount spine (GenericHost/SDL) emit every
+         row eagerly — the spacer would otherwise latch at 0px forever *)
+      if initial_rows < 0 || not (lazy_spine ctx) || Hashtbl.mem eager k then
         box  [ render it ]
       else
         let near = near_of k in
@@ -191,7 +201,9 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   in
   let row_mount (item_sig : 'a Signal.signal) : t =
     let k = key (Signal.get item_sig) in
-    if initial_rows < 0 || Hashtbl.mem eager k then
+    (* hosts without a lazy-mount spine (GenericHost/SDL) emit every
+       row eagerly — the spacer would otherwise latch at 0px forever *)
+    if initial_rows < 0 || not (lazy_spine ctx) || Hashtbl.mem eager k then
       box  [ mount item_sig ]
     else
       let near = near_of k in

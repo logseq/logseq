@@ -497,6 +497,59 @@ let () =
              (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
       (Lui_store.preorder store)
   in
+  (* Swift/gpui spine contract stand-in: those hosts fire "lazy-mount"
+     on row spacers scrolling into view and "virt-end" when a virt list
+     nears its bottom. Here the layout rects already exist, so emit the
+     same dom-events for spacers inside the viewport band (overscan
+     margin below the edge) — rows mount in place, pagination works. *)
+  let lazy_fired : (int, unit) Hashtbl.t = Hashtbl.create 64 in
+  let virt_end_fired : (int, float) Hashtbl.t = Hashtbl.create 8 in
+  let attrs_has id needle =
+    match Lui_store.string_prop store id "attrs" with
+    | Some s -> (
+        let n = String.length s and m = String.length needle in
+        let rec found i =
+          i + m > n
+          || (String.sub s i m = needle || found (i + 1))
+        in
+        m = 0 || found 0)
+    | None -> false
+  in
+  let emit_dom_event name id =
+    if !debug then warn "  dom-event %s id=%d" name id;
+    Native_embed.platform_event
+      (Printf.sprintf "%s\n{\"nodeId\":%d}" name id)
+  in
+  let fire_viewport_events () =
+    let vh = float_of_int !win_h *. !scale_cell in
+    let edge = vh +. 768. in
+    List.iter
+      (fun id ->
+         let r = Rects.get rects id in
+         if attrs_has id "data-lazy-mount" then
+           if
+             (not (Hashtbl.mem lazy_fired id))
+             && r.Lui_scene.y < edge
+             && r.Lui_scene.y +. r.Lui_scene.h > -256.
+           then begin
+             Hashtbl.replace lazy_fired id ();
+             emit_dom_event "lazy-mount" id
+           end
+         else if attrs_has id "data-virt-count" then begin
+           let bottom = r.Lui_scene.y +. r.Lui_scene.h in
+           (* fire when the list's tail is within the band; refire only
+              after the tail advanced (pagination grew the list) *)
+           let prev =
+             Option.value (Hashtbl.find_opt virt_end_fired id)
+               ~default:(-1.)
+           in
+           if bottom < edge && bottom > prev then begin
+             Hashtbl.replace virt_end_fired id bottom;
+             emit_dom_event "virt-end" id
+           end
+         end)
+      (Lui_store.preorder store)
+  in
   (* SDL_SetTextInputRect works in window (logical) pixels. *)
   let set_ime_rect (r : Lui_scene.rect) =
     let s = !scale_cell in
@@ -758,6 +811,7 @@ let () =
     if dirty then begin
       ignore (Lui_host.repaint host);
       populate_rects ();
+      fire_viewport_events ();
       ignore (Lui_a11y.sync a11y);
       if !gl_live_cell then Sdl.gl_swap_window !win;
       Ui.frame_done ui;
