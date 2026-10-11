@@ -51,7 +51,7 @@ export function chatGptToolDescriptors() {
     {
       name: "search",
       title: "Discover Logseq operations",
-      description: "Search the Logseq DB graph OpenAPI document before making requests. For tasks, discover the dedicated /tasks operations: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. Use upload_asset for ChatGPT attachments and never encode an attachment as base64 in Code Mode. This API uses DB-version typed properties; never use legacy file-graph key:: value syntax. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
+      description: "Search the Logseq DB graph OpenAPI document before making requests. For tasks, discover the dedicated /tasks operations: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. Use upload_asset for ChatGPT attachments and never encode an attachment as base64 in Code Mode. On encrypted (E2EE) graphs, discover the /e2ee operations: every title you write must be an encrypted package from POST /e2ee/encrypt or the graph's AES key — plaintext returns 400. This API uses DB-version typed properties; never use legacy file-graph key:: value syntax. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
       inputSchema: {
         type: "object",
         properties: {
@@ -76,7 +76,7 @@ export function chatGptToolDescriptors() {
     {
       name: "execute",
       title: "Use Logseq",
-      description: "Read or change the user's non-encrypted Logseq DB graph through the semantic API. Use the dedicated /tasks operations for DB tasks: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. Use upload_asset for ChatGPT attachments and never encode an attachment as base64 in Code Mode. Use DB-version typed properties and property UUIDs or idents; never write legacy file-graph key:: value syntax into block titles. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
+      description: "Read or change the user's Logseq DB graph through the semantic API. Use the dedicated /tasks operations for DB tasks: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. Use upload_asset for ChatGPT attachments and never encode an attachment as base64 in Code Mode. Use DB-version typed properties and property UUIDs or idents; never write legacy file-graph key:: value syntax into block titles. On encrypted (E2EE) graphs every written title must be an encrypted package — call POST /e2ee/encrypt to produce ciphertext, and POST /e2ee/decrypt to read it back; plaintext titles are rejected with 400. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
       inputSchema: {
         type: "object",
         properties: {
@@ -100,7 +100,7 @@ export function chatGptToolDescriptors() {
     {
       name: "upload_asset",
       title: "Upload Logseq asset",
-      description: "Upload the original ChatGPT attachment, unchanged and without base64 re-encoding, to a non-encrypted Logseq DB graph and create its Asset block. Optionally append it to a page. The file must not exceed 100MB; its original name is preserved when available.",
+      description: "Upload the original ChatGPT attachment, unchanged and without base64 re-encoding, to a Logseq DB graph and create its Asset block. Optionally append it to a page. The file must not exceed 100MB; its original name is preserved when available. On encrypted (E2EE) graphs the title must be an encrypted package produced by the /e2ee operations.",
       inputSchema: {
         type: "object",
         properties: {
@@ -130,7 +130,7 @@ export function chatGptToolDescriptors() {
     {
       name: "get_asset_image",
       title: "Display Logseq image asset",
-      description: "Fetch an image asset up to 10MB from a non-encrypted Logseq DB graph and return it as image content that ChatGPT can display directly. Use this tool instead of getAsset when the user asks to view or display an image. It is read-only and does not download to local storage or modify the graph.",
+      description: "Fetch an image asset up to 10MB from a Logseq DB graph and return it as image content that ChatGPT can display directly. Use this tool instead of getAsset when the user asks to view or display an image. It is read-only and does not download to local storage or modify the graph.",
       inputSchema: {
         type: "object",
         properties: {
