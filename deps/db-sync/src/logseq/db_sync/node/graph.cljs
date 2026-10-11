@@ -17,6 +17,8 @@
               (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
               (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
               (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
+    (when-let [asset-link-secret (some-> js/process .-env (aget "ASSET_LINK_SECRET"))]
+      (aset env "ASSET_LINK_SECRET" asset-link-secret))
     (when (some? allow-unverified-jwt-claims)
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
     env))
