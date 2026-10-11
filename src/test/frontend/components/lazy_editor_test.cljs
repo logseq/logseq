@@ -38,31 +38,30 @@
             (fn [_module & [callback]]
               (when callback (.addCallback deferred callback))
               deferred))
-      (do
-        (-> (lazy-editor/load-code-editor!)
-            (p/then (fn [_]
-                      (reset! finished? true)
-                      (is @lazy-editor/loaded?)
-                      (is (identical? editor @editor-atom))))
-            (p/catch (fn [error]
-                       (reset! finished? true)
-                       (is false (str "Module registration was checked before load: " error))))
-            (p/finally (fn []
-                         (when-let [timer @registration-timer] (js/clearTimeout timer))
-                         (reset! editor-atom saved-editor)
-                         (reset! promise-atom saved-promise)
-                         (reset! lazy-editor/loaded? saved-loaded)
-                         (set! util/node-test? saved-node-test)
-                         (set! config/lsp-enabled? saved-lsp)
-                         (set! (.-load loader-object) saved-load)
-                         (done))))
-        (reset! registration-timer
-                (js/setTimeout
-                 (fn []
-                   (is (false? @finished?) "Pending module must not finish early")
-                   (lazy-editor/register-editor! editor)
-                   (.callback deferred nil))
-                 50))))))
+      (-> (lazy-editor/load-code-editor!)
+          (p/then (fn [_]
+                    (reset! finished? true)
+                    (is @lazy-editor/loaded?)
+                    (is (identical? editor @editor-atom))))
+          (p/catch (fn [error]
+                     (reset! finished? true)
+                     (is false (str "Module registration was checked before load: " error))))
+          (p/finally (fn []
+                       (when-let [timer @registration-timer] (js/clearTimeout timer))
+                       (reset! editor-atom saved-editor)
+                       (reset! promise-atom saved-promise)
+                       (reset! lazy-editor/loaded? saved-loaded)
+                       (set! util/node-test? saved-node-test)
+                       (set! config/lsp-enabled? saved-lsp)
+                       (set! (.-load loader-object) saved-load)
+                       (done))))
+      (reset! registration-timer
+              (js/setTimeout
+               (fn []
+                 (is (false? @finished?) "Pending module must not finish early")
+                 (lazy-editor/register-editor! editor)
+                 (.callback deferred nil))
+               50)))))
 
 (deftest editor-placeholder-preserves-the-rendered-height-test
   (is (= 8133
