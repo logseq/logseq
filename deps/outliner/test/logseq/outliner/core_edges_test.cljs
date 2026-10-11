@@ -383,6 +383,18 @@
       (let [[[_ tx]] (dedup db [(assoc (page-ref "Dec 16th, 2024") :block/type "journal")] #{})]
         (is (some :block/journal-day tx))))))
 
+(deftest get-top-level-blocks-puts-a-selection-in-page-order
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "p" :build/children [{:block/title "last child"}]}
+                         {:block/title "next"}]}])
+        f #'outliner-core/get-top-level-blocks
+        b #(db-test/find-block-by-content @conn %)
+        titles #(map :block/title %)]
+    (is (= ["p" "next"] (titles (f [(b "next") (b "p")] false))) "two siblings given back to front")
+    (is (= ["last child" "next"] (titles (f [(b "next") (b "last child")] false)))
+        "a last child and its parent's next sibling given back to front")))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
