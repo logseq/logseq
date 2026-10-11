@@ -1097,6 +1097,7 @@ let () =
     (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
        (id kind key class rect, indented) to the debug log. *)
     if Atomic.exchange dump_tree_flag false then begin
+      dbg "icons=%d" (Host_icons.count ());
       let rec out depth id =
         let r = Rects.get rects id in
         let fprop name =
@@ -1112,6 +1113,11 @@ let () =
         let extra =
           fprop "value" ^ fprop "grow" ^ fprop "role" ^ fprop "index"
           ^ fprop "offset" ^ fprop "height" ^ fprop "width"
+          ^ fprop "name" ^ fprop "icon" ^ fprop "font-size"
+          ^ fprop "font-weight" ^ fprop "opacity"
+          ^ (match Host_icons.resolved_name store id with
+             | Some s -> " ires=" ^ s
+             | None -> "")
         in
         dbg "%s%d %s key=%s class=%s%s %.0f,%.0f %.0fx%.0f"
           (String.make (2 * depth) ' ') id (Lui_store.kind store id)

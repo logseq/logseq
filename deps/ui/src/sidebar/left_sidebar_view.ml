@@ -388,15 +388,14 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
                 var(--ls-quaternary-background-color))" ]
            (row ~cross:`center ~corner_radius:6 ~height:32
               ~style_class:("item group" ^ act)
+              ~padding_horizontal:6
+              ?background:
+                (if active then
+                   Some "var(--lx-gray-04, var(--ls-quaternary-background-color))"
+                 else None)
               ~data_attrs:
                 [ ( "style"
-                  , "padding-left:6px;padding-right:2px"
-                    ^ if active
-                      then
-                        ";background-color:var(--lx-gray-04, \
-                         var(--ls-quaternary-background-color))"
-                      else "" )
-                ]
+                  , "padding-left:6px;padding-right:2px" ) ]
               ([ icon_ icon_name
                ; text ~grow:1. ~value:title [] ]
               @ tail @ [ more ]))) ]

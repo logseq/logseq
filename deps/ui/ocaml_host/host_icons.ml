@@ -33,8 +33,10 @@ let icon_name store id =
   | Some _ as n -> n
   | None -> Lui_store.string_prop store id "icon"
 
-(* App-pushed SVGs win; otherwise fall back to the builtin icon table
-   so icon-kind nodes (name only, no app-svg) still render. *)
+(* App-pushed SVGs win; then the builtin icon table; then the tabler
+   children table — mirroring the gpui host's app_svg fallback, which
+   builds the svg from the bundled tabler-children data for names the
+   app never pushes (nav icons, page icons, toolbar glyphs). *)
 let svg_of name =
   let name =
     if String.length name > 4 && String.sub name 0 4 = "app:" then
@@ -43,7 +45,23 @@ let svg_of name =
   in
   match Hashtbl.find_opt svgs name with
   | Some _ as s -> s
-  | None -> List.assoc_opt name Host_builtin_icons.all
+  | None -> (
+    match List.assoc_opt name Host_builtin_icons.all with
+    | Some _ as s -> s
+    | None -> (
+      match Icon_tabler_data.tabler_children name with
+      | [] -> None
+      | kids -> Some (Icons.svg_of_children ~size:24. name kids)))
+
+(* debug: resolution status for tree dumps — "ok:<name>" when an svg
+   matches, "miss:<name>" when nothing does. *)
+let resolved_name store id =
+  match icon_name store id with
+  | None -> None
+  | Some name -> (
+    match svg_of name with
+    | Some _ -> Some ("ok:" ^ name)
+    | None -> Some ("miss:" ^ name))
 
 let image_of store scale id r : Lui_scene.image option =
   match icon_name store id with

@@ -134,8 +134,9 @@ let topbar (ms : Model.t Signal.signal) : t list =
               (fun (m : Model.t) ->
                 (* while the sidebar is docked-open its own top row
                    hosts these buttons; the header mounts them only as
-                   the reopen path for the closed state *)
-                if m.Model.left_sidebar_open then spacer ~key:"lb-off" []
+                   the reopen path for the closed state. A box, not a
+                   spacer: spacer fills the row and starves head-r. *)
+                if m.Model.left_sidebar_open then box ~key:"lb-off" []
                 else
                   row ~key:"head-l-btns" ~cross:`center
                     [ left_menu_btn; search_btn ])
