@@ -150,12 +150,28 @@
 
 (deftest encrypted-assets-reject-plaintext-and-stream-canonical-packages-test
   (async done
-         (let [stored (atom {})
+         (let [original-fixed-stream (.-FixedLengthStream js/globalThis)
+               fixed-stream (fn [size]
+                              (let [received (atom 0)
+                                    stream (js/TransformStream.
+                                            #js {:transform
+                                                 (fn [chunk controller]
+                                                   (swap! received + (.-byteLength chunk))
+                                                   (when (> @received size)
+                                                     (throw (js/RangeError. "fixed-length overflow")))
+                                                   (.enqueue controller chunk))
+                                                 :flush
+                                                 (fn [_]
+                                                   (when-not (= size @received)
+                                                     (throw (js/RangeError. "fixed-length underflow"))))})]
+                                #js {:readable (.-readable stream) :writable (.-writable stream)}))
+               stored (atom {})
                bucket #js {:put (fn [key payload _]
                                   (p/let [buf (.arrayBuffer (js/Response. payload))]
                                     (swap! stored assoc key buf)
                                     #js {}))
                            :delete (fn [key] (swap! stored dissoc key) (p/resolved nil))}]
+           (aset js/globalThis "FixedLengthStream" fixed-stream)
            (-> (p/let [key (<key)
                        title (<encrypt key "Secret asset")
                        conn (sqlite-export/create-conn)
@@ -191,11 +207,16 @@
                            _ (aset malformed (.-length truncated-utf8) 195)
                            invalid-utf8 (<asset-upload ctx page-id title malformed 12
                                                        (apply str (repeat 64 "f")) nil)
+                           too-small (<asset-upload ctx page-id title package 0
+                                                    (apply str (repeat 64 "1")) nil)
                            wrong-size (<asset-upload ctx page-id title package 13
                                                      (apply str (repeat 64 "e")) nil)]
                      (is (= 400 (.-status invalid)))
                      (is (= 400 (.-status wrong-size)))
                      (is (= 400 (.-status invalid-utf8)))
+                     (is (= 400 (.-status too-small)))
                      (is (= count-before (count @stored))))))
                (p/catch #(is false (str %)))
-               (p/finally done)))))
+               (p/finally (fn []
+                            (aset js/globalThis "FixedLengthStream" original-fixed-stream)
+                            (done)))))))

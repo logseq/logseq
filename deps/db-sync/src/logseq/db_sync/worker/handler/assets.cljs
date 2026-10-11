@@ -92,6 +92,7 @@
   (let [prefix (atom "")
         prefix-ready? (atom false)
         cipher-length (atom 0)
+        max-cipher-length (* 4 (js/Math.ceil (/ (+ size 16) 3)))
         padding (atom 0)
         suffix (atom nil)
         decoder (js/TextDecoder.)
@@ -108,7 +109,8 @@
                          (invalid!))
                        (swap! cipher-length + (count data))
                        (swap! padding + (- (count data) pad))
-                       (when (> @padding 2) (invalid!))
+                       (when (or (> @padding 2) (> @cipher-length max-cipher-length))
+                         (invalid!))
                        (when end
                          (reset! suffix (subs text end))
                          (when-not (contains? #{"\"" "\"]"} @suffix) (invalid!))))))
