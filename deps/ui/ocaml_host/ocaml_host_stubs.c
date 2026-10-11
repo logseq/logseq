@@ -541,7 +541,7 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
           2L | 16L);
       ((void (*)(id, SEL, id, long, id))objc_msgSend)(
           frame, sel_registerName("addSubview:positioned:relativeTo:"),
-          effect, 1L /* NSWindowBelow */, cv);
+          effect, -1L /* NSWindowBelow */, cv);
       ((void (*)(id, SEL, int))objc_msgSend)(
           win, sel_registerName("setOpaque:"), 0);
     }
