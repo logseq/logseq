@@ -14,9 +14,13 @@ opam option --global 'wrap-remove-commands=[]'
 # Pin all three datascript packages at the same explicit version: the
 # melange/native opam files constrain datascript_ocaml with {= version},
 # and opam resolves unpinned versions inconsistently (~dev vs dev).
-opam pin add -y -n datascript_ocaml.dev git+https://github.com/logseq/datascript-ocaml.git#main
-opam pin add -y -n datascript-ocaml-melange.dev git+https://github.com/logseq/datascript-ocaml.git#main
-opam pin add -y -n datascript-ocaml-native.dev git+https://github.com/logseq/datascript-ocaml.git#main
+# Pin the exact SHA recorded in deps/db-worker/dune.lock: a floating #main
+# pin lets untested upstream commits leak into CI builds (Melange can only
+# run datascript code without native-only externals such as Marshal.*).
+DATASCRIPT_SHA=0561660e4894faee250d551ab2a32a6b5c25a5fb
+opam pin add -y -n datascript_ocaml.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
+opam pin add -y -n datascript-ocaml-melange.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
+opam pin add -y -n datascript-ocaml-native.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n persistent_sorted_set_ocaml git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main
 opam pin add -y -n melange-edn-core git+https://github.com/logseq/melange-edn.git#main
 opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn.git#main
