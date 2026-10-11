@@ -395,6 +395,34 @@
     (is (= ["last child" "next"] (titles (f [(b "next") (b "last child")] false)))
         "a last child and its parent's next sibling given back to front")))
 
+(deftest insert-blocks-pages-uuids-and-history
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Existing"} :blocks []}
+               {:page {:block/title "page1"} :blocks [{:block/title "target"}]}])
+        target (db-test/find-block-by-content @conn "target")
+        existing (db-test/find-page-by-title @conn "Existing")
+        insert (fn [blocks opts] (outliner-core/insert-blocks @conn blocks target (merge {:sibling? true} opts)))]
+    (testing "pasting a copied page links to the existing page instead of making another"
+      (let [{:keys [blocks]} (insert [{:block/uuid (random-uuid) :block/name "existing" :block/title "Existing"}] {:outliner-op :paste})]
+        (is (= (:db/id existing) (:block/link (first blocks))))
+        (is (= "" (:block/title (first blocks))))))
+    (testing "a map with a page name is inserted as a page, with no :block/page"
+      (let [{:keys [blocks]} (insert [{:block/uuid (random-uuid) :block/name "another" :block/title "another"}] {})]
+        (is (not (contains? (first blocks) :block/page)))))
+    (testing "without keep-uuid? an inserted block gets a new uuid"
+      (let [u (random-uuid)
+            {:keys [blocks]} (insert [{:block/uuid u :block/title "x"}] {})]
+        (is (not= u (:block/uuid (first blocks))))))
+    (testing "the insert's history carries the pages it creates in the refs"
+      (let [page-uuid (random-uuid)
+            {:keys [tx-meta]} (insert [{:block/uuid (random-uuid)
+                                        :block/title (str "[[" page-uuid "]]")
+                                        :block/refs [{:block/uuid page-uuid :block/type "page"
+                                                      :block/name "fresh page" :block/title "fresh page"}]}] {})
+            ref (first (:block/refs (first (get-in tx-meta [:outliner-ops 0 1 0]))))]
+        (is (= "fresh page" (:block/title ref)))
+        (is (some? (:block/tags ref)) "the page's tags from the page it creates")))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
