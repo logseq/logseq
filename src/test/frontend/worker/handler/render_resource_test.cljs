@@ -1431,6 +1431,28 @@
                     {:blocks [] :children []
                      :resources [[:block-display-properties deleted {:page-title? true}]]}
                     {}))))
+    (testing "a resource that checks other arguments fails on a bad one when its owner is gone"
+      (doseq [bad-key [[:block-reactions deleted "not-a-uuid"]
+                       [:page-membership deleted :quick-add "not-a-uuid"]
+                       [:page-membership deleted :no-such-kind]
+                       [:views deleted "not-a-keyword"]]]
+        (is (thrown? js/Error
+                     (render-engine/render-snapshots
+                      @conn
+                      {:blocks [] :children [] :resources [bad-key]}
+                      {}))
+            (pr-str bad-key))))
+    (testing "the same resources with good arguments render as nil when their owner is gone"
+      (doseq [good-key [[:block-reactions deleted (random-uuid)]
+                        [:page-membership deleted :class]
+                        [:views deleted :linked-references]]]
+        (is (= {:watch {:keys #{[:entity deleted]} :all? false} :value nil}
+               (get-in (render-engine/render-snapshots
+                        @conn
+                        {:blocks [] :children [] :resources [good-key]}
+                        {})
+                       [:slots [:resource good-key]]))
+            (pr-str good-key))))
     (testing "a failure about another entity than the key's owner is not taken for a deleted owner"
       (with-redefs [render-engine/resource-renderers
                     (assoc render-engine/resource-renderers :block-comment-summary
