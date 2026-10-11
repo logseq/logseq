@@ -9,8 +9,12 @@ let full_graph_name name = db_version_prefix ^ String.trim name
 
 let default_config = "{:feature/enable-git-auto-commit? false}"
 
+let boot_mark name =
+  Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
+
 let init_worker () =
   let* _ = Runtime.invoke1 "thread-api/init" (Wire.Array []) in
+  boot_mark "init-worker queued";
   (* cljs events.cljs :graph/sync-context — :dev? flips the
             worker's OUTLINER-PERF-LOGGING mirror used by e2e *)
   let* _ =
@@ -35,18 +39,25 @@ let init_worker () =
         (Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ])
     else Js.Promise.resolve Wire.Nil
   in
+  boot_mark "init-worker done";
   Js.Promise.resolve ()
 
 let list_graphs () =
   let* w = Runtime.invoke "thread-api/list-db" [] in
+  boot_mark "list-db replied";
   Js.Promise.resolve (Decode.repos_of_list_db w)
 
 let open_graph repo =
   (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
      repo changes *)
   Pdf_state.set_current None;
-  Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
-    (Wire.Map [])
+  boot_mark "create-or-open issued";
+  let* r =
+    Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
+      (Wire.Map [])
+  in
+  boot_mark "create-or-open replied";
+  Js.Promise.resolve r
 
 (* cljs events.cljs <build-search-index!: on graph open the frontend asks
    the worker to build blocks_fts; seed entities (Library etc.) only reach

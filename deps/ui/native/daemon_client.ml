@@ -268,7 +268,7 @@ let spawn_daemon (repo : string) : string =
             ("db-worker daemon did not publish a port (pid "
             ^ string_of_int pid ^ "); see " ^ log_path)
         else begin
-          Unix.sleepf 0.01;
+          Unix.sleepf 0.002;
           poll ()
         end
   in
@@ -527,13 +527,17 @@ let ensure_login_daemon (repo : string) : unit =
 
 let prewarm () : unit =
   match pick_prewarm_repo () with
-  | None -> ()
+  | None -> boot_mark "prewarm skipped (no repo)"
   | Some repo ->
       boot_mark ("prewarm " ^ repo);
       ignore (ensure_attached repo);
       ensure_login_daemon repo
 
-let () = ignore (Thread.create (fun () -> prewarm ()) ())
+(* prewarm on a real domain, not a systhread: the OCaml thread
+   scheduler cannot preempt long foreign calls (SDL window creation
+   blocks ~100ms), so a systhread spawn stalls until the first yield
+   and loses the whole point of overlapping the cold spawn. *)
+let () = ignore (Domain.spawn (fun () -> prewarm ()))
 
 (* ---------- ipc (was window.apis.doAction) ---------- *)
 
