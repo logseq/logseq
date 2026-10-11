@@ -14,10 +14,11 @@ opam option --global 'wrap-remove-commands=[]'
 # Pin all three datascript packages at the same explicit version: the
 # melange/native opam files constrain datascript_ocaml with {= version},
 # and opam resolves unpinned versions inconsistently (~dev vs dev).
-# Pin the exact SHA recorded in deps/db-worker/dune.lock: a floating #main
-# pin lets untested upstream commits leak into CI builds (Melange can only
-# run datascript code without native-only externals such as Marshal.*).
-DATASCRIPT_SHA=0561660e4894faee250d551ab2a32a6b5c25a5fb
+# Pin an explicit SHA, never a floating ref like #main: upstream commits
+# would leak into CI builds untested, and Melange can only run datascript
+# code free of native-only externals such as Marshal.*. Bump deliberately
+# when upstream lands wanted changes.
+DATASCRIPT_SHA=7acb4e8c324f9aee81e9feb936da75b49ee4c0ab
 opam pin add -y -n datascript_ocaml.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-melange.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-native.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
