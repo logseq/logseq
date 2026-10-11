@@ -58,7 +58,9 @@ let dialog_spec name =
                  (Float.min 1024.
                     (Ui_services.dom_viewport_width () -. 32.))) )
         ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1024
-        ; Lui_protocol.MaxWidthViewport, Lui_protocol.FloatValue 0.97 ] )
+        ; Lui_protocol.MaxWidthViewport, Lui_protocol.FloatValue 0.97
+        ; ( Lui_protocol.MaxHeightViewport
+          , Lui_protocol.FloatValue 0.75 ) ] )
   | "plugins" ->
       ( 24
       , "width:90vw;max-width:1246px;max-height:calc(100vh - 50px);\
