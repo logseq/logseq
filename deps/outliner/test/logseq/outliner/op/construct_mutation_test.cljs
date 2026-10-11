@@ -252,11 +252,14 @@
   (testing "an indent that becomes 2 moves, then a save: the inverse is the save's, then the 2 moves'"
     (let [conn (conn-with-blocks-a-b-c)
           [a b c] (map #(db-test/find-block-by-content @conn %) ["a" "b" "c"])
-          inverse (inverse-ops @conn
-                               [[(:db/id b) :block/parent (:db/id a) 1 true]
-                                [(:db/id c) :block/parent (:db/id a) 1 true]]
-                               {:outliner-ops [[:indent-outdent-blocks [[(:db/id b) (:db/id c)] true {}]]
-                                               [:save-block [{:block/uuid (:block/uuid a) :block/title "a2"} {}]]]})]
+          {forward :forward-outliner-ops inverse :inverse-outliner-ops}
+          (op-construct/derive-history-outliner-ops
+           @conn @conn
+           [[(:db/id b) :block/parent (:db/id a) 1 true]
+            [(:db/id c) :block/parent (:db/id a) 1 true]]
+           {:outliner-ops [[:indent-outdent-blocks [[(:db/id b) (:db/id c)] true {:logical-outdenting? true}]]
+                           [:save-block [{:block/uuid (:block/uuid a) :block/title "a2"} {}]]]})]
+      (is (= {:logical-outdenting? true :sibling? true} (get-in forward [0 1 2])))
       (is (= [:save-block :move-blocks :move-blocks] (map first inverse)))
       (is (= [(:block/uuid b) (:block/uuid c)] (map #(get-in % [1 0 0]) (rest inverse)))))))
 
@@ -323,9 +326,10 @@
     (testing "a block id that is no uuid, lookup or entity id is left as it is"
       (is (= [[:set-block-property [{:db/id (:db/id a)} :logseq.property/status "x"]]]
              (forward-ops @conn [] [[:set-block-property [{:db/id (:db/id a)} :logseq.property/status "x"]]]))))
-    (testing "a property id that is no ident or entity id is left as it is"
-      (is (= [[:remove-block-property [(:block/uuid a) "status"]]]
-             (forward-ops @conn [] [[:remove-block-property [(:block/uuid a) "status"]]]))))))
+    (testing "a property id that is no ident or entity id, such as a lookup, is left as it is"
+      (let [status-lookup [:block/uuid (:block/uuid (d/entity @conn :logseq.property/status))]]
+        (is (= [[:remove-block-property [(:block/uuid a) status-lookup]]]
+               (forward-ops @conn [] [[:remove-block-property [(:block/uuid a) status-lookup]]])))))))
 
 (deftest derive-history-outliner-ops-inverse-needs-every-block-and-a-target-test
   (let [conn (conn-with-blocks-a-b)
