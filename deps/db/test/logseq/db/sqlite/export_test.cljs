@@ -856,6 +856,23 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
+(deftest import-view-blocks-with-child-row
+  (testing "A view row whose parent block is also a row is exported and imported"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          rows (fn [db] (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content db %))) ["parent" "child"]))
+          export-map (sqlite-export/build-export @conn {:export-type :view-nodes :rows (rows @conn)})
+          titles (atom #{})
+          _ (walk/postwalk #(do (when (and (map? %) (:block/title %)) (swap! titles conj (:block/title %))) %)
+                           (mapcat :blocks (:pages-and-blocks export-map)))
+          conn2 (db-test/create-conn-with-import-map export-map)]
+      (is (= #{"parent" "child"} @titles) "Both rows are in the export")
+      (validate-db @conn2)
+      (is (some? (db-test/find-block-by-content @conn2 "child")) "The child row is imported"))))
+
 (deftest export-grouped-view-nodes-by-uuid
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
