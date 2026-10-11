@@ -801,9 +801,6 @@ html[data-theme=dark] {
         content: "📌 ";
       }
 
-      &.as-block {
-        @apply inline-block;
-      }
     }
 
     [data-hl-type=area] {
