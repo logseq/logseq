@@ -298,6 +298,66 @@
         {:keys [tx-data]} (outliner-core/insert-blocks @conn [src] (db-test/find-block-by-content @conn "target") {:sibling? true})]
     (is (not-any? #(and (map? %) (= (:db/id src) (:db/id %))) tx-data))))
 
+(deftest remove-tags-when-title-changed-cases
+  (let [f #'outliner-core/remove-tags-when-title-changed
+        u (random-uuid)
+        tag {:db/id 5 :block/uuid u}
+        block {:db/id 9 :block/raw-title (str "x #[[" u "]]") :block/tags [tag]}]
+    (is (= [[:db/retract 9 :block/tags 5]] (f block "x")) "an inline tag deleted from the title goes")
+    (is (empty? (f block (str "y #[[" u "]]"))) "an inline tag still in the title stays")
+    (is (empty? (f (assoc block :block/raw-title "x") "x")) "a tag that was never inline stays")
+    (is (nil? (f block nil)) "no new title, nothing to do")))
+
+(deftest fix-tag-ids-drops-a-tag-whose-ref-differs-only-in-case
+  (let [conn (db-test/create-conn)
+        m {:block/refs [{:block/name "foo" :block/title "Foo" :block/uuid (random-uuid)}]
+           :block/tags [{:block/name "foo" :block/title "foo"}]}]
+    (is (empty? (:block/tags (#'outliner-core/fix-tag-ids m @conn))))))
+
+(deftest inline-tag-disallowed-for-a-class-given-by-ident-alone
+  (let [conn (db-test/create-conn)]
+    (is (true? (#'outliner-core/inline-tag-disallowed? @conn {:db/ident :logseq.class/Page})))))
+
+(deftest leaf-property-values-take-no-child
+  (let [forbidden? #'outliner-core/leaf-property-value-forbidden-target?
+        url-many {:logseq.property/created-from-property {:logseq.property/type :url
+                                                          :db/cardinality :db.cardinality/many}}
+        default-block {:db/id 3}
+        default-value-block {:db/id 3 :block/parent {:logseq.property/default-value default-block}}]
+    (is (false? (boolean (forbidden? url-many true))) "a sibling of a URL value of a many-valued property is allowed")
+    (is (true? (boolean (forbidden? default-value-block false))) "a property's default value takes no child")
+    (is (false? (boolean (forbidden? {:db/id 4 :block/parent {:logseq.property/default-value default-block}} false)))
+        "another block under that property takes children")))
+
+(deftest a-block-moved-to-another-page-takes-its-children-along
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "from"}
+                :blocks [{:block/title "p" :build/children [{:block/title "c" :build/children [{:block/title "g"}]}]}]}
+               {:page {:block/title "to"} :blocks [{:block/title "t"}]}])
+        to (db-test/find-page-by-title @conn "to")]
+    (outliner-core/move-blocks! conn [(db-test/find-block-by-content @conn "p")] (db-test/find-block-by-content @conn "t") {:sibling? true})
+    (is (= #{(:db/id to)} (set (map #(:db/id (:block/page (db-test/find-block-by-content @conn %))) ["p" "c" "g"]))))))
+
+(deftest moving-property-values-up
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:many {:logseq.property/type :default :db/cardinality :many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b" :build/properties {:many #{"v1" "v2"}}}]}]})
+        values #(map :block/title (sort-by :block/order (:user.property/many (db-test/find-block-by-content @conn "b"))))
+        [first-value second-value] (values)]
+    (outliner-core/move-blocks-up-down! conn [(db-test/find-block-by-content @conn first-value)] true)
+    (is (= [first-value second-value] (values)) "the first value does not move up out of the property")
+    (is (= "b" (:block/title (:block/parent (db-test/find-block-by-content @conn first-value)))))))
+
+(deftest a-paste-through-insert-blocks!-keeps-its-op
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks [{:block/title "target"}]}])]
+    (outliner-core/insert-blocks! conn [{:block/uuid (random-uuid) :block/title "pic" :logseq.property.asset/type "png"}
+                                       {:block/uuid (random-uuid) :block/title "plain"}]
+                                  (db-test/find-block-by-content @conn "target") {:sibling? true :outliner-op :paste})
+    (is (nil? (db-test/find-block-by-content @conn "pic")))
+    (is (some? (db-test/find-block-by-content @conn "plain")))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
