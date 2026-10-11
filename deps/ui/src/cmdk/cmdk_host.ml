@@ -1,7 +1,7 @@
 (* Web implementation of the cmdk services seam — every op the shared
    cmdk_state/cmdk_view needs, wired to the browser app modules. The
    native twin (native/cmdk_host.ml) supplies the same record from the
-   gpui equivalents. *)
+   native equivalents. *)
 
 module Svs = Cmdk_services
 module D = Web_dom

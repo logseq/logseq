@@ -1831,7 +1831,8 @@ let multi_entries () =
 
 (* text-edit context menu — right-click inside .block-editor with a live
    model selection. One menu on every host: web drops the inconsistent
-   per-browser native menus, gpui gets the same edit commands *)
+   per-browser native menus, the native host gets the same edit
+   commands *)
 let edit_entries () =
   [ Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "edit-cut")
   ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "edit-copy")

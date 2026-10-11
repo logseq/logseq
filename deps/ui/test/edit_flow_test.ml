@@ -1,5 +1,5 @@
 (* Behavior regressions for the shared editing pipeline — the same
-   source compiles under Melange (test_main.js) and under the gpui
+   source compiles under Melange (test_main.js) and under the native
    native test entry. Scenarios drive the REAL call path:
 
      Editor_keys.apply_input ~-> Edit_input.handle ~-> Edit_model

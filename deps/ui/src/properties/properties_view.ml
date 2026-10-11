@@ -70,7 +70,8 @@ let on_keydown (ev : Ui_services.ev) =
 let overlays : t =
  fun context parent ->
   let vos = S.view_overlays context in
-  (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
+  (* cp__overlay-layer/cp__dialog-shell are inert on web; on the
+     native host the
      registered class dictionary makes the column a window-sized layer
      and centers the abspos overlay views by flex alignment. *)
   (column ~gap:0 ~style_class:"cp__overlay-layer cp__dialog-shell"

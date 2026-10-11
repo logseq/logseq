@@ -21,7 +21,7 @@ The Docker workflow builds the checked-out revision before packaging it.
 
 - `deps/ui/src/`: LUI components, editor behavior, routing, and application state.
 - `deps/ui/js_app/`: web application entry point.
-- `deps/ui/native/` and `deps/ui/gpui/`: native platform implementations.
+- `deps/ui/native/` and `deps/ui/ocaml_host/`: native platform implementations.
 - `deps/ui/test/`: UI tests compiled for Node.
 - `deps/db-worker/lib/`: database operations, rendering resources, search,
   publishing export, and sync behavior.

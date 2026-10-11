@@ -523,7 +523,7 @@ let test_shifted_pill_click ~env () =
   check "pill click reveals current reference" (cls_nodes h "ed-raw" <> [])
 
 (* scenarios portable across both runtimes — compiled under
-   Melange (test_main.js) and under the gpui native test entry *)
+   Melange (test_main.js) and under the native test entry *)
 let run ~env =
   test_emit_structure ~env ();
   test_incremental ();

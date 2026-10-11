@@ -1,5 +1,6 @@
 (* Ui_theme snapshot completeness contract — every token name that
-   still-live CSS (resources/css/theme/vars-classic.css) or gpui-kit
+   still-live CSS (resources/css/theme/vars-classic.css) or the native
+   kit
    theme slots rely on must exist in the shared snapshot, for BOTH
    variants, with literal values or explicit var(--ls-<name>) references.
    Runs under byte/native (task_native_test) and melange
@@ -129,7 +130,7 @@ let required_canonical =
   ; "--color-level-6"
   ]
 
-(* gpui-kit ThemeConfig slot keys the snapshot must fill (logseq_theme.rs
+(* native theme slot keys the snapshot must fill
    vocabulary — was the hardcoded LOGSEQ_THEME palette) *)
 let required_kit_slots =
   [ "background"

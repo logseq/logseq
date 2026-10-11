@@ -246,7 +246,8 @@ retained subtree instead of a `remove-child` + `drop-node` pair per
 member. The web store unlinks the subtree root from its retained parent
 and drops the whole subtree recursively (props, handlers, extension
 registrations); DOM apply detaches the root element once. `drop-node`
-stays strict (leaf + already-detached only). The gpui host, drive model,
+stays strict (leaf + already-detached only). The native host, drive
+model,
 Android/Kotlin and Apple/Swift stores treat it as a recursive drop —
 nodes created inside the same batch keep the per-node path so emit-time
 elision can still prune the op group.

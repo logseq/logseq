@@ -244,7 +244,8 @@ let commit_cal p =
    button, today carries data-today. The table kind emits
    table/tr/td plus role=grid/row/gridcell itself — the attrs here
    are the app contract on top; shui.css keeps the web paint via the
-   td[data-*] rules while the typed props carry it for gpui. *)
+   td[data-*] rules while the typed props carry it for the native
+   host. *)
 let rec cal_cell today p d =
   let focused = d = p.cd in
   let is_today =

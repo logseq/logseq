@@ -515,7 +515,7 @@
    keycap chrome, item rows and the hints bar for BOTH renderers.
    Kept here: only rules that can't be typed props.
 
-   gpui leftovers (accepted, per plan): letter-spacing, white-space
+   native leftovers (accepted, per plan): letter-spacing, white-space
    hints, user-select, ::selection, animations, the rotated arrow,
    descendant-hover chains, hsl()/css-var strings the host can't
    resolve, icon font-size, and the shortcut-row clip. */

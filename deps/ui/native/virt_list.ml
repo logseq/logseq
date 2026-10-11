@@ -16,19 +16,19 @@ let enabled_min ~virtualize ~min count =
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
-(* gpui's eager rows sit inside one shared taffy layout, so the Swift
+(* the native host's eager rows sit inside one shared taffy layout, so the Swift
    spine's 48-row warmup is far above its cold-start budget — a single
    viewport of eager rows keeps the first frame cheap; the lazy-mount
    sweep fills in the overscan margin right after paint *)
 let clamp_initial_rows ctx n =
-  if n >= 0 && Lui_ui.host ctx = Lui_protocol.GPUIHost then min n 16 else n
+  if n >= 0 && Lui_ui.host ctx = Lui_protocol.GenericHost then min n 16 else n
 
-(* Only hosts with a native lazy spine (SwiftUI LazyVStack, the gpui
-   spine) can deliver "lazy-mount"/"virt-end" dom-events; on every
+(* Only hosts with a native lazy spine (SwiftUI LazyVStack, the OCaml
+   host spine) can deliver "lazy-mount"/"virt-end" dom-events; on every
    other host rows must mount eagerly. *)
 let lazy_spine ctx =
   match Lui_ui.host ctx with
-  | Lui_protocol.GPUIHost | Lui_protocol.SwiftUIHost -> true
+  | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost -> true
   | _ -> false
 
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)

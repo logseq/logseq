@@ -617,10 +617,11 @@ let overlay (frame : frame Signal.signal) : t =
          (fun f -> List.mapi (fun i r -> (i, r)) f.Edit_input.selection)
          frame)
   in
-  (* GPUI paints the caret from the current glyph layout alongside the
-     input sink. Other hosts use the measured overlay rectangle. *)
+  (* The native host paints the caret from the current glyph layout
+     alongside the input sink. Other hosts use the measured overlay
+     rectangle. *)
   let caret =
-    if Lui_ui.host context = GPUIHost then []
+    if Lui_ui.host context = GenericHost then []
     else
      [ if_
          ~test:

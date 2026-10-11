@@ -92,7 +92,7 @@ let ghost_btn_cls ?(extra = "") () =
    against their nearest out-of-flow ancestor, so a content-sized host
    collapses them into a zero-width strip at the window center. The
    viewport props pin the cover the web positioner gives the layer via
-   inset:0 (and gpui gives via its class dictionary). *)
+   inset:0 (and the native host gives via its class dictionary). *)
 let viewport_cover (elem : t) : t =
  fun context parent ->
   let node = elem context parent in

@@ -1,6 +1,7 @@
 (* Views slice drive harness (Melange side): mounts the real
    Views_view.view against a scripted Worker_client and runs
-   Shared_scenarios_views — the same scenarios gpui/drive_test.ml runs
+   Shared_scenarios_views — the same scenarios a native drive harness
+   runs
    natively. The worker answers the views resource chain
    ([:views] -> view ents -> [:view-data] -> rows -> get-blocks ->
    get-all-properties) from mutable scenario state, so tests can change

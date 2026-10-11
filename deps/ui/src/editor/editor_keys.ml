@@ -203,7 +203,8 @@ let shortcut_key_str key =
 
 let shortcut_key ev = shortcut_key_str (ev_key ev)
 
-(* gpui folds a held shift into the key name for platform shortcuts —
+(* the native host folds a held shift into the key name for platform
+   shortcuts —
    cmd+shift+p arrives as {key="P", shift=false} and cmd+shift+/ as
    {key="?", shift=false}. With a modifier held, a shifted glyph
    (uppercase letter or shifted symbol) means the flag was folded away;
@@ -1228,7 +1229,7 @@ let queue_racing_key ev uuid =
   in
   S.pending_focus_actions := action :: !S.pending_focus_actions
 
-(* -- native block drag (gpui) --
+(* -- native block drag (native host) --
    The web path runs dnd-kit pointer sensors over HTML5 drag (Block_dnd);
    the native surface has no HTML5 drag, so the same drop contract is
    driven by document mousedown/mousemove/click on .bullet-container —

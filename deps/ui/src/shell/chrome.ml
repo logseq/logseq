@@ -987,7 +987,7 @@ let main_content (ms : Model.t Signal.signal) =
                               ms)
                          [ Page.region ms
                          ; (* pb-24 scroll breathing room as a typed
-                              spacer — keeps the gpui/backend-agnostic
+                              spacer — keeps the host/backend-agnostic
                               bottom gap without a stylesheet rule *)
                            box ~key:"cw-pad" ~height:96 []
                          ])

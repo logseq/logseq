@@ -1,4 +1,4 @@
-(* Native (gpui) implementation of the cmdk services seam — same record
+(* Native implementation of the cmdk services seam — same record
    as src/cmdk/cmdk_host.ml, wired to the native emulation modules
    (native/js.ml Promise/Json/Date, native/web_dom.ml element ops,
    native icon_picker/sidebar_state/plugin_host/fuzzy/dates). *)

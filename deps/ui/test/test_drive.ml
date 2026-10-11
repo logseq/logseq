@@ -291,7 +291,8 @@ let test_cmdk () =
   Shared_scenarios.palette (shared_host ());
   Shared_scenarios_cmdk.run (shared_host ())
 
-(* gpui can report a shift-held keystroke with the flag folded into the
+(* the native host can report a shift-held keystroke with the flag
+   folded into the
    key name ({key="P", shift=false}) — the mod+p binding must not fire
    off what the DOM would deliver as shiftKey=true *)
 let test_key_leaks () =
@@ -806,7 +807,7 @@ let sdk_ops_log : W.t list ref = ref []
 let sdk_tx_log : W.t list ref = ref []
 
 (* ---------- properties scenario wiring ----------
-   Mirrors the gpui host: Shared_scenarios_props drives the real
+   Mirrors the native host: Shared_scenarios_props drives the real
    properties modules; writes land on the recorded apply-outliner-ops
    payloads and every worker invoke is logged with its repo arg. *)
 

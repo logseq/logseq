@@ -1,5 +1,4 @@
-(* OCaml native host for the Logseq UI — the in-process twin of the
-   Rust host. One OCaml process: the logseq_ui_* app library runs
+(* OCaml native host for the Logseq UI. One OCaml process: the logseq_ui_* app library runs
    inside this binary (native_embed.ml's entries, no caml_startup, no
    patch-callback FFI); the SDL window loop feeds input through
    Lui_window.Ui and returns rendered frames through Lui_host.
@@ -503,7 +502,7 @@ let () =
              (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
       (Lui_store.preorder store)
   in
-  (* Swift/gpui spine contract stand-in: those hosts fire "lazy-mount"
+  (* Swift spine contract stand-in: the Swift host fires "lazy-mount"
      on row spacers scrolling into view and "virt-end" when a virt list
      nears its bottom. Here the layout rects already exist, so emit the
      same dom-events for spacers inside the viewport band (overscan
@@ -708,7 +707,7 @@ let () =
      Pointer events resolve their target through the same hit test the
      Input.* dispatch uses (deepest node under the cursor, in device
      px). Key events target the open menu, else the focused node — the
-     DOM activeElement — like the GPUI host's focus registry. *)
+     DOM activeElement — like a native host's focus registry. *)
   let json_escape s =
     let b = Buffer.create (String.length s + 8) in
     String.iter
@@ -762,7 +761,7 @@ let () =
   let dom_down_node = ref 0 in
   let dom_down_clicks = ref 0 in
   (* Same-hit free moves carry no new information — cap them the way
-     the GPUI host does (~25/s); drags emit every move. *)
+     native hosts do (~25/s); drags emit every move. *)
   let last_move_emit = ref (0, 0.) in
   let mods_fields (m : Input.mods) =
     [ ("shiftKey", jbool m.Input.shift)
@@ -834,7 +833,7 @@ let () =
   (* DOM KeyboardEvent.key/code for SDL scancodes. `key` is the
      unshifted name — letters stay lowercase under Shift while the
      produced glyph goes to `keyChar`; `code` is the physical position
-     name. Same contract the GPUI host emits. *)
+     name. Same contract native hosts emit. *)
   let named_dom_key = function
     | 57 -> "CapsLock"
     | n when n >= 58 && n <= 69 -> "F" ^ string_of_int (n - 57)

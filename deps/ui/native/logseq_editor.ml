@@ -1,7 +1,6 @@
 (* logseq-editor extension — native twin of
-   src/extension/logseq_editor.ml: adds the MacOS/SwiftUIHost and
-   MacOS/GPUIHost profiles so the sink node registers on the native
-   backends.
+   src/extension/logseq_editor.ml: adds the native profiles so the
+   sink node registers on the native backends.
 
    The OCaml half of the conduit is identical to web: the shared
    src/editor/edit_view.ml sink emits the `logseq-editor` node with
@@ -12,8 +11,8 @@
    Range to measure against — both channels are host services over
    the existing wires.
 
-   Host contract (implemented per native host — GPUI implements it in
-   platform/gpui's editor extension):
+   Host contract (implemented per native host — the OCaml host
+   implements it in ocaml_host/host_requests.ml):
 
    Events (host -> OCaml, via context.emit on the sink node):
      key         {key, shift, alt, meta, ctrl, repeat}
@@ -64,14 +63,14 @@ let web_profile =
   { Lui_protocol.profile_os = WebOS; Lui_protocol.profile_host = WebHost }
 
 
-let gpui_profile =
-  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
+let native_profile =
+  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GenericHost }
 
-let gpui_profiles =
-  [ gpui_profile
-  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+let native_profiles =
+  [ native_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
-    ; Lui_protocol.profile_host = GPUIHost
+    ; Lui_protocol.profile_host = GenericHost
     }
   ]
 
@@ -79,7 +78,7 @@ let gpui_profiles =
 
 let schema =
   Lui_extension.component identifier
-    (web_profile :: gpui_profiles)
+    (web_profile :: native_profiles)
     false (* standard_children *)
     []
     [ Lui_extension.property "block-id" Lui_extension.StringScalar true
@@ -417,7 +416,7 @@ let () =
     ; popup_pos
     ; container_rect
     ; invalidate
-    ; (* the gpui surface mirrors the model selection itself — there is
+    ; (* the native surface mirrors the model selection itself — there is
          no DOM selection to write, and its context menu is the LUI
          menu rather than an OS menu *)
       select_range = (fun _ _ _ -> ())

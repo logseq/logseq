@@ -69,10 +69,10 @@ badge, dialog, menu item, …) emit typed props through LUI. Platform
 adapters only translate those props — they own no second copy of the
 design.
 
-- GPUI consumes ONLY natively-expressible typed props — no CSS parsing,
-  no `var()`/`calc()` resolution. Decoration that cannot be expressed
-  natively stays adapter-side as `gpui/host/src/logseq_ext.rs`
-  hook-class registrations.
+- The native host consumes ONLY natively-expressible typed props — no
+  CSS parsing, no `var()`/`calc()` resolution. Decoration that cannot
+  be expressed natively stays adapter-side in `ocaml_host/` host
+  hooks.
 - Web keeps adapter-side leftovers in `resources/css/lui-overlay.css`
   behind the same semantic hook classes (`ui__*`, `cp__*`, `ls-*`):
   keyframe animations, `::selection`/`::first-letter`, `transform`,
@@ -150,7 +150,7 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 | web src | `src/` | Melange | web-only view/app code still migrating feature-by-feature; real browser boundary `src/core/web_dom.ml` |
 | web adapter | `web/` | Melange | `platform_web.ml` installs `Ui_services` ops via real browser APIs |
 | native adapter | `native/` | native | host services (`services/platform_native.ml`), lui/native widgets, C bridge, `native_embed` entry |
-| gpui | `gpui/` | Rust+OCaml | GPUI host; links same shared/native libraries |
+| ocaml host | `ocaml_host/` | OCaml+SDL | native host exe; links same shared/native libraries |
 
 Boundary gate: `scripts/check-shared-boundaries.sh` (wired into `dune runtest test/contracts` on Unix) rejects `Js.*`/`Webapi`/`Web_dom`/`Unix`/`Thread`/`Yojson`/`Platform.*` in `src/shared`+`src/contracts`+`subs`. Tracked exceptions (must shrink to zero): `subs/promise_ext.ml` (Js.Promise `let*` still opened by src files), `subs_state` promise↔task adapters.
 

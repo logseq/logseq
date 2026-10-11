@@ -1,5 +1,5 @@
 (* Native app entry — same assembly as js_app/main.ml but rendering
-   through a native LUI backend (GPUI). The C bridge calls the registered
+   through a native LUI backend. The C bridge calls the registered
    callbacks; every call returns the pending patch JSON which the bridge
    hands to the host's apply path. *)
 
@@ -105,7 +105,7 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
         else ident
     | None -> (
         (* standard kinds present the HTML tag their DOM twin would carry
-           (matching lui-gpui's dom_tag_of_kind) — delegated selectors
+           (matching the host's DOM tag naming) — delegated selectors
            like a[data-ref] / button.x match on it *)
         match kind with
         | Some Lui_protocol.Link -> "a"
@@ -365,7 +365,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
     match host_code with
     | 1 -> Lui_protocol.WebHost
     | 2 -> Lui_protocol.SwiftUIHost
-    | 6 -> Lui_protocol.GPUIHost
+    | 6 -> Lui_protocol.GenericHost
     | _ -> Lui_protocol.GenericHost
   in
   let backend =
@@ -434,7 +434,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   Host.set_wakeup (fun () -> wakeup ());
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
-  if host_kind = Lui_protocol.GPUIHost then
+  if host_kind = Lui_protocol.GenericHost then
     platform_request
       ("app-icons\n"
        ^ Js.Json.stringify

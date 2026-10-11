@@ -32,7 +32,7 @@ All view code in `deps/ui/src/**` and `deps/ui/native/**` is built from
    (`flex`, `gap-2`, `p-3`, `w-full`, `text-sm`, ...) are deleted, not
    preserved.
 5. **The extension channel is only for genuinely platform-specific
-   widgets** (editor surface, split/dock, gpui-table, pdf/media).
+   widgets** (editor surface, split/dock, pdf/media).
    Generic UI must not use extensions.
 
 ## Reactive API (the only reactive vocabulary)

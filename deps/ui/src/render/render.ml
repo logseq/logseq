@@ -435,10 +435,10 @@ let table_sep_row cells =
 let table_el ~self lines : t =
   let cell_el tag cell =
     (* cljs tr: every cell carries scope=col + .org-left; contents are
-       map-inline parsed. data-style is the gpui backend's inline-style
+       map-inline parsed. data-style is the native backend's inline-style
        channel (the web DOM ignores the attribute): the lui-core.css
        .classic-table cell border/padding + header fill are stylesheet
-       rules gpui cannot see *)
+       rules the native renderer cannot see *)
     D.el ~tag
       ~attrs:
         [ ("scope", "col")
@@ -626,8 +626,9 @@ let table_parts s =
 
 let table_el ~self (header, rows) : t =
   let cell tag c =
-    (* data-style: gpui inline-style channel — cell border/padding +
-       header fill live in lui-core.css rules gpui cannot see *)
+    (* data-style: native inline-style channel — cell border/padding +
+       header fill live in lui-core.css rules the native renderer
+       cannot see *)
     D.el ~tag
       ~attrs:
         [ ("scope", "col")

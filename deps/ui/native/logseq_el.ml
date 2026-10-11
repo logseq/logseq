@@ -3,7 +3,7 @@
    markup; rename if dom must die"). Native twin.
 
    Keeps the `logseq-<tag>` identifier family — the Apple host registers
-   these identifiers and the gpui renderer prefixes on "logseq-"; the
+   these identifiers and the native renderer prefixes on "logseq-"; the
    web twin emits the upstream `lui-dom-<tag>` family instead. Both twins
    expose the same API.
 
@@ -12,7 +12,7 @@
    Lui_elements kinds cover everything else.
 
    `logseq-dom` is a dedicated carrier identifier mounted once at the
-   root: the gpui host forwards window-level document events (keydown /
+   root: the native host forwards window-level document events (keydown /
    mousedown / click / contextmenu) to the nearest `logseq-*` extension
    ancestor, so a single invisible carrier at the root keeps document
    listeners and the emit_event bubble working after the generic element
@@ -23,16 +23,17 @@ open Lui_protocol
 let web_profile =
   { Lui_protocol.profile_os = WebOS; Lui_protocol.profile_host = WebHost }
 
-let gpui_profile =
-  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
+let native_profile =
+  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GenericHost }
 
-(* the GPUI host runs on all three desktop OSes — extension schemas must
-   list each (os, gpui) pair it can present or init rejects them *)
-let gpui_profiles =
-  [ gpui_profile
-  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+(* the native host runs on all three desktop OSes — extension schemas
+   must list each (os, native) pair it can present or init rejects
+   them *)
+let native_profiles =
+  [ native_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
-    ; Lui_protocol.profile_host = GPUIHost
+    ; Lui_protocol.profile_host = GenericHost
     }
   ]
 
@@ -62,7 +63,7 @@ let child_identifiers =
 
 let schema_of tag =
   Lui_extension.component (identifier tag)
-    (web_profile :: gpui_profiles)
+    (web_profile :: native_profiles)
     true (* standard_children *)
     child_identifiers (* raw elements nest freely *)
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
@@ -86,7 +87,7 @@ let carrier_identifier = "logseq-dom"
 
 let carrier_schema =
   Lui_extension.component carrier_identifier
-    (web_profile :: gpui_profiles) false []
+    (web_profile :: native_profiles) false []
     []
     [ Lui_extension.event "dom-event"
         [ Lui_extension.event_field "name" Lui_extension.StringScalar true
@@ -211,11 +212,13 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
       (StringValue (attrs_json attrs));
   (* delegated document click/contextmenu handlers (block edit, page-ref,
      bullet zoom, block context menu) need every raw element to emit
-     those dom-events — gpui only emits for names the element opted
+     those dom-events — the native host only emits for names the
+     element opted
      into, so opt in here. The apple host's mouse monitors emit click
      for every hit already; emit_event's 60ms coalescing window drops
      the duplicate. On web these bubble to document listeners; on
-     gpui emit_event fans out to window_listeners the same way. *)
+     native hosts emit_event fans out to window_listeners the same
+     way. *)
   let events =
     let toks = List.filter (( <> ) "") (String.split_on_char ' ' events) in
     let toks =
@@ -251,7 +254,7 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   Lui_elements.mount_children context node children;
   node
 
-(* the invisible carrier — mount once at the native root so the gpui
+(* the invisible carrier — mount once at the native root so the
    host's window observers always find a logseq-* extension ancestor to
    forward document keydown/mousedown/click/contextmenu through *)
 let carrier : Lui_elements.t =

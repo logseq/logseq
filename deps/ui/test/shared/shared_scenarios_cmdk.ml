@@ -70,7 +70,7 @@ let close_palette (h : ('m, 'a) Shared_scenarios.host) =
 
 (* ---- shared visual spec: emitted structure + typed props -------------
    The cmdk look is expressed through shared recipes + typed props +
-   Ui_theme tokens (one source for web and gpui). These assertions pin
+   Ui_theme tokens (one source for web and native). These assertions pin
    the emitted contract: recipe kinds, prop values bound to theme
    tokens, and the DOM hooks tests/commands depend on. *)
 

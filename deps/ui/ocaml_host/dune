@@ -4,8 +4,8 @@
 ; identical to native/dune; the native/*.ml files (the native platform
 ; twin: platform.ml, vdom.ml, logseq_el.ml, bridge, …) are copied
 ; from ../native so the two hosts can never drift. Only the library
-; name differs; host selection is the host_code the Rust host passes
-; to lui_ocaml_start (6 = native host).
+; name differs; host selection is the host_code passed to
+; Native_embed.initialize (6 = this host).
 
 (rule
  (copy ../native/asset_dom.ml asset_dom.ml))

@@ -2,7 +2,7 @@
 
    The app pushes one "theme-snapshot" envelope per mode
    ({mode, vars, kit}); `vars` is the resolved CSS custom-property
-   table — the same map the Rust host installs through
+   table — the same map the host installs through
    style::set_css_var. A later "ui-state" (or the appearance channel)
    picks the active mode. color_of resolves:
 

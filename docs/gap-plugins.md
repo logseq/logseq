@@ -119,5 +119,5 @@ experiments, debug namespaces + `logseq.sdk.core.version`).
 
 ## Verification
 
-- `cd deps/ui && OPAMSWITCH=5.5.0 opam exec -- dune build @all` — green (web + native + gpui targets; the native/gpui twin modules get no-op stubs).
+- `cd deps/ui && OPAMSWITCH=5.5.0 opam exec -- dune build @all` — green (web + native targets; the native twin modules get no-op stubs).
 - `node deps/ui/_build/default/test/ui_test/test/test_main.js` — 1546 checks, 0 failures.

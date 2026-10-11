@@ -1,5 +1,6 @@
 (* Platform-request service for the OCaml native host — the in-process
-   twin of the Rust host's handle_platform_request + domops.
+   host-side platform_request + dom-ops handlers — the OCaml host
+   answers them in-process.
 
    Envelopes arrive via Bridge as "name\npayload" strings from
    Host.enqueue. The "dom-op" envelope's payload is itself
@@ -7,7 +8,7 @@
    (measurement, scrolling, imperative mutation, focus) the app drives
    through Host.dom_op. Replies go back through
    Native_embed.platform_event, the same channel the C bridge's
-   lui_ocaml_platform_event feeds on the Rust host. *)
+   lui_ocaml_platform_event feeds to the host. *)
 
 open Lui_protocol
 open Lui_window

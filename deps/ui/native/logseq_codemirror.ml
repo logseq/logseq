@@ -1,6 +1,6 @@
 (* ported from deps/ui/src/extension/logseq_codemirror.ml — adds the
-   MacOS/SwiftUIHost and MacOS/GPUIHost profiles so logseq-codemirror
-   registers on the native backends *)
+   native profiles so logseq-codemirror registers on the native
+   backends *)
 (* logseq-codemirror extension — host-side CodeMirror embed.
 
    The web adapter owns the CodeMirror mount/unmount lifecycle (block
@@ -20,20 +20,20 @@ let web_profile =
   { Lui_protocol.profile_os = WebOS; Lui_protocol.profile_host = WebHost }
 
 
-let gpui_profile =
-  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
+let native_profile =
+  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GenericHost }
 
-let gpui_profiles =
-  [ gpui_profile
-  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+let native_profiles =
+  [ native_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
-    ; Lui_protocol.profile_host = GPUIHost
+    ; Lui_protocol.profile_host = GenericHost
     }
   ]
 
 let schema =
   Lui_extension.component identifier
-    (web_profile :: gpui_profiles)
+    (web_profile :: native_profiles)
     false (* interior is adapter-owned; no LUI children *)
     []
     [ Lui_extension.property "uuid" Lui_extension.StringScalar false None

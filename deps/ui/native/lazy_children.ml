@@ -61,7 +61,7 @@ let uuids_of_payload payload =
       with _ -> [])
 
 (* Journal-day rows mount through a plain keyed collection (no
-   virtualizer container), so on the gpui host each row is gated by the
+   virtualizer container), so on the native host each row is gated by the
    same near-viewport contract: a childless `.ls-virt-row` div with a
    min-height until the native spine reports it near the viewport. The
    container listens for one batched "lazy-mount" event carrying every
@@ -70,7 +70,7 @@ let uuids_of_payload payload =
    journals page and the web gate lives in the outer list. *)
 let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
  fun ctx parent ->
-  if Lui_ui.host ctx <> Lui_protocol.GPUIHost then
+  if Lui_ui.host ctx <> Lui_protocol.GenericHost then
     (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in

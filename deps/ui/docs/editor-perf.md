@@ -247,5 +247,5 @@ Still open (follow-ups):
 - Times are single-threaded V8 on Apple Silicon; absolute numbers
   shift with machine, relative structure doesn't.
 - `String.sub` cost is a Melange-runtime property: on the native
-  OCaml platforms (apple/gpui) the same scans are cheap, so `Bytes`
+  OCaml platforms (apple/native) the same scans are cheap, so `Bytes`
   units don't rescue this — the web surface is the one that pays.

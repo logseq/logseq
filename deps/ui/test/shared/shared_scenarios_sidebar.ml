@@ -3,7 +3,7 @@
    driven through the real Sidebar_state / Settings_view entries on a
    mounted app so the same file runs inside both the Melange stub-DOM
    suite (test/test_drive_sidebar.ml) and the native drive
-   (gpui/drive_test.ml).
+   (a native drive harness).
 
    "Restart" is exercised as the remount the runtime supports: closing
    and reopening the sidebar or the settings dialog remounts those

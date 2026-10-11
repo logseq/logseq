@@ -570,7 +570,8 @@ let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
 
 (* anchored-open helper for click triggers: measure the element and
    open the popover at its bottom-left (base-ui align=start). On
-   backends with async measurement (gpui) the first rect is still
+   backends with async measurement (the native host) the first rect is
+   still
    pending, so retry a few ticks rather than anchoring at 0,0. *)
 let open_for_anchor_el ?(remove = false) ?(phase = Prop_select)
     (anchor : Ui_services.el) target =

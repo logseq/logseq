@@ -17,7 +17,7 @@ Defined twice — web and native twins:
 | File | Lines | Notes |
 |---|---|---|
 | `src/extension/logseq_dom.ml` | 149–201 | web (`web_profile` = WebOS/WebHost) |
-| `native/logseq_dom.ml` | 154–217 | native twin adds `native_profile` (SwiftUI) + `gpui_profile`; `on_dom_event` additionally registers `Platform.register_dom_handler` and re-dispatches via `Platform.emit_event` |
+| `native/logseq_dom.ml` | 154–217 | native twin adds `native_profile` (SwiftUI + OCaml host); `on_dom_event` additionally registers `Platform.register_dom_handler` and re-dispatches via `Platform.emit_event` |
 
 Signature (both files):
 
@@ -41,7 +41,7 @@ these spellings):
 | `Logseq_dom.dom` qualified refs | 53 (incl. alias defs and comments) | `src/popups/popups_view.ml` (5), `native/chrome.ml` (11), `native/cmdk_view.ml` (9) |
 | `D.dom` refs | 13 | `src/virt/virt_list.ml` (3), `native/virt_list.ml` (4) |
 | `open Logseq_dom` | 1 | `src/cards/cards_view.ml:5` — all exports used unqualified there |
-| `dom` without `~` args | 2 | `gpui/drive_test.ml:533`, `test/test_drive.ml:460` (`Logseq_dom.dom [ … ]` mounts) |
+| `dom` without `~` args | 2 | `test/test_drive.ml:460` (`Logseq_dom.dom [ … ]` mounts) |
 | `on_dom_event` kwarg uses | 35 | ride along inside `dom ~` sites |
 
 Warning on the `D.` alias: `module D = Logseq_dom` and `module D = Web_dom`
@@ -65,9 +65,10 @@ pending `logseq-editor` surface work, `ui_parts.ml:44`).
 | `identifier` | `dom_adapter.ml:430`, `test/test_lui_apply.ml` (×4), `imperative_dom.ml` (via `tags`) | delete |
 | `tag_of_identifier`, `esc`, `string_of_wire`, `schema_of`, `child_identifiers` | internal only | delete |
 | `attrs_json` | `src/popups/popups_view.ml:18` (`attrs_v`) | delete (dies with its call site) |
-| `register` | `js_app/main.ml:46`, `native/native_embed.ml:324`, `gpui/drive_test.ml:58,527`, `test/test_lui_apply.ml:71`, `test/test_drive.ml:29,454` | delete |
+| `register` | `js_app/main.ml:46`, `native/native_embed.ml:324`, `test/test_lui_apply.ml:71`, `test/test_drive.ml:29,454` | delete |
 | `web_profile` | `test/test_drive.ml:36,457` | delete (harnesses can build the profile record inline) |
-| `native_profile`, `gpui_profile` | `gpui/drive_test.ml` (×2) | delete (same) |
+| `native_profile` lists | `native/logseq_el.ml`, `test/test_drive.ml` | keep |
+
 | `class_signal`, `attrs_signal`, `reactive_class`, `reactive_attrs`, `reactive_text` | `tree.ml`, `page.ml`, `render_inline.ml`, `virt_list.ml` (both twins), `export_view.ml`, `cmdk_view.ml` (both), `asset_dom.ml`, `native/chrome.ml`, `native/pdf.ml`, `popups_view.ml`, `render.ml` — all produce `wire_value` signals that only feed `dom`'s `~*_signal` params | die with the call sites that consume them |
 | `own` | `src/editor/edit_view.ml` (one use, for `extension_property_signal` on `logseq-editor`) | relocate — needed by surviving extension code; move next to the editor or into a surviving helper |
 | `trace_equal`, `dyn` | **zero** external consumers (ppx expands `reactive` to `Lui_elements.dyn` directly; `dyn` is banned in view code per the logseq-lui skill) | delete (already dead) |
@@ -101,8 +102,8 @@ references across ~25 files.
 | Host | Registration | Adapter |
 |---|---|---|
 | web | `js_app/main.ml:46` `Logseq_dom.register registry` | `src/extension/dom_adapter.ml` — `adapters` map (lines 427–434) consumed at `main.ml:51–52`; also carries the `logseq-em-emoji`, `logseq-katex`, `logseq-codemirror` adapters |
-| apple (SwiftUI/GPUI profiles) | `native/native_embed.ml:324` `Logseq_dom.register registry` | no OCaml-side adapter — `logseq-*` nodes cross the `apply_batch` → `platform_request` wire (`native_embed.ml:307–321`) and are rendered by the Swift host (`logseq/lui` `platform/native/Sources/LUIAppleBackend/LUIAppleExtension.swift`) or the gpui Rust renderer (`platform/gpui/crates/lui-gpui/src/extension.rs` routes `logseq-*` → `dom.rs`) |
-| gpui test harness | `gpui/drive_test.ml:58,527` | same Rust renderer |
+| apple (SwiftUI/native profiles) | `native/native_embed.ml:324` `Logseq_dom.register registry` | no OCaml-side adapter — `logseq-*` nodes cross the `apply_batch` → `platform_request` wire (`native_embed.ml:307–321`) and are rendered by the Swift host (`logseq/lui` `platform/native/Sources/LUIAppleBackend/LUIAppleExtension.swift`) or the OCaml host renderer (`ocaml_host/` routes `logseq-*` extension nodes) |
+| native test harness | `test/test_drive.ml` | same native renderer |
 | unit tests | `test/test_lui_apply.ml:71`, `test/test_drive.ml:29,454` | `test/stub_dom.ml` stub DOM + real adapters |
 
 `dom_adapter.ml` cannot be deleted wholesale: `Logseq_editor` reads
@@ -173,7 +174,7 @@ deleted exports still have consumers. Order accordingly:
 6. **Delete `render_dom.ml`'s `el`/`registered_tag`/`fallback_tag`**
    wrapper (or the whole file if `txt`/`text_of_class_signal` move too).
 7. **Remove registration sites**: `js_app/main.ml:46`,
-   `native_embed.ml:324`, `gpui/drive_test.ml`, `test_drive.ml`,
+   `native_embed.ml:324`, `test_drive.ml`,
    `test_lui_apply.ml`. Break if early: runtime `unknown extension
    identifier` at the first `logseq-*` mount.
 8. **Remove the web raw-text machinery** in `web_dom.ml`:
@@ -191,12 +192,12 @@ deleted exports still have consumers. Order accordingly:
 10. **Tests**: rework `test_lui_apply.ml` (registers the family, asserts
     `logseq-div`/`logseq-raw-text`/`logseq-svg` node kinds),
     `test_drive.ml` (mounts via `Logseq_dom.dom`/`web_profile`),
-    `gpui/drive_test.ml` (registers + `gpui_profile` + `dom` mount).
+    `test/test_drive.ml` (registers + `dom` mount).
     `edit_view_test.ml` only touches `logseq-editor` — survives.
     `stub_dom.ml:302` raw-text comment goes with the machinery.
 11. **Keep `Host.dom_op`** — §3 shows non-dom consumers. Delete nothing
     here.
-12. **Cross-repo cleanup (logseq/lui, follow-up)**: gpui `dom.rs`/
+12. **Cross-repo cleanup (logseq/lui, follow-up)**: the native `dom`/
     `extension.rs` `logseq-*` routing and `LUIAppleExtension.swift`'s
     `logseq-*` handling become dead once logseq stops emitting. Safe to
     leave until after; the host side tolerates a missing family.
@@ -215,9 +216,9 @@ Verified emitters of `logseq-<tag>` extension nodes outside the builder:
 | `native/logseq_katex.ml`, `native/logseq_emoji.ml`, `native/pdf.ml` | widget mounts via `dom ~tag` — counted in §1 but worth listing: on apple the family is the *only* transport for these (no separate schema) |
 | `native/native_embed.ml:77` | `ext_shallow_snapshot` decodes `logseq-*` identifiers back to tags for the host snapshot — consumer, not emitter; dies at step 9 |
 | `src/render/render_dom.ml` | `el` wraps `Logseq_dom.dom` with an unregistered-tag fallback (`data-tag` shim); its ~57 `D.el`/`Render_dom.el` call sites in `render*.ml`, `render_html.ml`, `render_state.ml`, `pdf_annotation.ml` (both) are `dom` emitters invisible to a `dom ~` grep |
-| `gpui/drive_test.ml`, `test/test_drive.ml` | mount calls `Logseq_dom.dom [ … ]` — no `~` spelled args |
+| `test/test_drive.ml` | mount calls `Logseq_dom.dom [ … ]` — no `~` spelled args |
 | `src/cards/cards_view.ml:5` | `open Logseq_dom` — `dom`/`nothing`/`fragment` used unqualified |
-| `web_dom.ml` raw-text machinery | `ensure_raw_text_observer`/`replace_all_raw_text`/`el_set_swap_text` keep `nothing`'s `<raw-text>` placeholder working on web (`tree.ml:487`); gpui handles `raw-text` in `dom.rs:349` natively; the native twin is a no-op stub (`editor_dom.ml:575`) |
+| `web_dom.ml` raw-text machinery | `ensure_raw_text_observer`/`replace_all_raw_text`/`el_set_swap_text` keep `nothing`'s `<raw-text>` placeholder working on web (`tree.ml:487`); the OCaml host handles `raw-text` natively; the native twin is a no-op stub (`editor_dom.ml:575`) |
 
 Also audited, stays: `logseq-editor`, `logseq-codemirror`,
 `logseq-em-emoji`, `logseq-katex` are dedicated extensions with their own
@@ -235,9 +236,9 @@ grep -rn 'D\.dom'        deps/ui/src deps/ui/apple | wc -l            → 13
 grep -rn 'Logseq_dom\.dom' deps/ui/src deps/ui/apple | wc -l          → 53
 grep -rn 'open Logseq_dom' deps/ui/src deps/ui/apple | wc -l          → 1
 grep -rn 'on_dom_event'  deps/ui/src deps/ui/apple | wc -l            → 35
-grep -rn 'Logseq_dom\.'  deps/ui/{src,apple,js_app,gpui,test}         → 176 (excl. the two module files)
+grep -rn 'Logseq_dom\.'  deps/ui/{src,apple,js_app,test}         → 176 (excl. the two module files)
 grep -rn 'Host\.dom_op'  deps/ui/apple deps/ui/src | wc -l            → 39 (9 files, 24 op names)
-grep -rn '"logseq-'      deps/ui/{src,apple,js_app,gpui,test} | wc -l → 30
+grep -rn '"logseq-'      deps/ui/{src,apple,js_app,test} | wc -l → 30
 ```
 
 ## Ready criteria
@@ -259,5 +260,5 @@ Before deleting the family machinery, all of these must hold:
       `nothing` no longer emits `raw-text`
 - [ ] emoji/katex/codemirror web adapters + `emit_*` helpers moved out of
       `dom_adapter.ml`
-- [ ] web melange build, apple build, `deps/ui` tests, and gpui drive test
+- [ ] web melange build, apple build, `deps/ui` tests, and native drive test
       all green; DOM-shape e2e parity assertions unaffected

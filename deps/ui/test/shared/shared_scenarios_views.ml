@@ -3,7 +3,7 @@
    (Wire, Worker_client, Views_view, Runtime) stays at the entry; this
    file speaks Drive.Model + selector language only, so the same checks
    run under Melange (test/views_drive.ml, wired from test_main.ml) and
-   natively (gpui/drive_test.ml).
+   natively (a native drive harness).
 
    The entry's scripted worker understands these intents:
    - views: (uuid, title, type-ident) — serves the [:views owner feature]

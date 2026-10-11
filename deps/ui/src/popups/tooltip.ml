@@ -150,7 +150,8 @@ let el : t =
          (Signal.value (s)))
         context parent
 
-(* mousemove rather than mouseover: gpui feeds document mousemove only
+(* mousemove rather than mouseover: the native host feeds document
+   mousemove only
    (no per-element enter/leave), and on web the armed_on guard makes
    the extra per-move calls no-ops — moving off the trigger hits the
    `None -> hide` arm the same way mouseout would. *)

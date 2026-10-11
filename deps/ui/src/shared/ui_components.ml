@@ -1,12 +1,13 @@
 (* Shared component recipes — ONE visual spec consumed by both the web
-   and gpui renderers (task 4 pilot: the cmdk palette). Recipes emit
+   and native renderers (task 4 pilot: the cmdk palette). Recipes emit
    kinds + typed props bound to Ui_theme tokens/var() chains; they own
-   the visual spec that used to live in lui-overlay.css and the gpui
-   class registrations in logseq_ext.rs.
+   the visual spec that used to live in lui-overlay.css and the native
+   host's class registrations.
 
    Colors are emitted as `var(--lx-*, fallback)` strings — the same
-   chains the deleted CSS used, so web resolution is unchanged; gpui
-   resolves the names it knows via its css-var/theme-slot table.
+   chains the deleted CSS used, so web resolution is unchanged; the
+   native host resolves the names it knows via its css-var/theme-slot
+   table.
    Mode-conditional values (state rings, keycap glow, the dark icon
    override) ride the snapshot `vars` --lx-cmdk-* tokens: their value
    differs per theme mode, so a static string could never express
@@ -374,7 +375,8 @@ let keycap_separator ~key : t =
 (* Combo: one boxed+glowing container wrapping all keys. Glow replaces
    the border like .shui-shortcut-combo.shui-shortcut-glow (border:none);
    the surviving stylesheet still paints the same chrome, so the typed
-   props below carry identical values for gpui, not a second paint. *)
+   props below carry identical values for the native host, not a
+   second paint. *)
 let shortcut_combo ~key ~glow children : t =
   with_props
     ([ ( P.BackgroundValue
@@ -535,7 +537,8 @@ let cmdk_empty ~key children : t =
 
 (* -- tooltip ---------------------------------------------------------- *)
 
-(* Popover surface — hsl() chains stay web-only (gpui leaves them
+(* Popover surface — hsl() chains stay web-only (the native host
+   leaves them
    unresolved: documented leftover). The fade-in animation and the
    rotated arrow transform remain CSS deco rules; pointer-events stays
    off so the bubble never steals hover from its own trigger. *)
@@ -682,7 +685,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
    4px radius, 14px/20px type; hover and active paint ride the
    `--lx-nav-active` mode token (black 10% light / white 8% dark —
    replaces the `.active`/`.dark .active` pair). The `.active` class
-   itself stays on the element via the caller's class_signal (gpui
+   itself stays on the element via the caller's class_signal (native
    hook). *)
 let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
     ~on_press () : t =
@@ -753,7 +756,7 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
 
 (* `.bottom-property-pill` — 24px rounded chip (key + ":" + value):
    gray-03 fill, inset 1px ring, nowrap. The class stays as the
-   gpui/web hook; visuals ride typed props. *)
+   native/web hook; visuals ride typed props. *)
 let property_pill ~key children : t =
   with_props
     [ ( P.Shadow
@@ -923,7 +926,7 @@ let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
 (* cljs .ui__button.ls-btn — the neutral card button used in dialog
    footers/bodies. ~variant stays: the kit data-variant paint loses to
    the inline declarations either way, so it only remains a semantic
-   attr + gpui fallback. *)
+   attr + native fallback. *)
 let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
     ~on_press =
   with_props
@@ -959,7 +962,8 @@ let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
 
    Web keeps position:fixed + left/top/translate centering through the
    documented data-attrs style pair (left:%/transform have no prop);
-   gpui anchors absolute children through the parent's flex centering —
+   the native host anchors absolute children through the parent's flex
+   centering —
    the same mechanism .cp__dialog-shell uses. *)
 let alert_dialog_overlay ~key children =
   with_props

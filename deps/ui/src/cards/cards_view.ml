@@ -48,7 +48,7 @@ let selector_row st =
            ~display:`inline_flex
         [ (* cljs shui/select-trigger: the select kind already renders
              role=combobox + its own ::after chevron on web and a native
-             picker on GPUI — no icon child needed *)
+             picker on the native host — no icon child needed *)
           select ~key:"selv" ~style_class:"ls-cards-select-value"
             ~text:(reactive selected_label
                      (Signal.value st.Cards_state.sel)
@@ -330,7 +330,8 @@ let modal st =
      scrim has no children, so every press on it is an overlay press —
      no payload target-class check needed. *)
   let opened_at = Ui_services.time_now () in
-  (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
+  (* cp__overlay-layer/cp__dialog-shell are inert on web; on the
+     native host the
      registered class dictionary makes the shell a window-sized layer
      and centers the content by flex alignment. On web the dialog kind
      portals itself out — the shell mounts empty there. *)

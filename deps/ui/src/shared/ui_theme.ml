@@ -156,7 +156,8 @@ let common_ls =
   ; "button-background", "hsl(200 98% 35%)"
   ]
 
-(* radix *-05 accent highlights — resolved to literals so GPUI (which
+(* radix *-05 accent highlights — resolved to literals so the native
+   host (which
    cannot parse hsl()/var() chains) gets the same colors as the web *)
 let highlight_ls =
   [ "highlight-color-gray", "#e8e8e8"
@@ -311,8 +312,8 @@ let components (c : colors) =
       }
   }
 
-(* gpui-kit ThemeConfig.colors slot map — the same palette the host's
-   logseq_theme.rs hardcoded, now delivered by the shared layer. *)
+(* Native theme slot map — the same palette the host hardcodes, now
+   delivered by the shared layer. *)
 let kit (c : colors) mode =
   [ "background", c.background
   ; "foreground", c.foreground
@@ -496,7 +497,8 @@ let level_vars mode =
    (state rings, keycap glow, the dark icon override, the chosen-row
    paint) can't ride a shared var chain — the chain resolves once.
    On web each --ls/- --lx var reference still resolves accent-aware
-   through colors.css; the literal fallbacks give gpui the classic
+   through colors.css; the literal fallbacks give the native host the
+   classic
    values through its existing css-var table. *)
 let cmdk_vars = function
   | Light ->

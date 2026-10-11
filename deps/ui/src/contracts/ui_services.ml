@@ -8,7 +8,7 @@ type storage = {
    custom-property table for the effective mode — canonical [--lx-*]
    names, [--ls-*] legacy aliases, and [--lui-*] semantic names, all
    literal values or var() references (never unresolved names). [kit]
-   maps gpui-kit theme slot names to literal color values for the
+   maps native theme slot names to literal color values for the
    native host; web ignores it. *)
 type theme_snapshot = {
   mode : string;

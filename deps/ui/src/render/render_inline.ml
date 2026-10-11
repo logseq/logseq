@@ -486,7 +486,7 @@ let timestamp_el seconds : t =
    backends never draw). try_html_tag pre-maps ins->u, s->del.
 
    The tag only styles on the DOM backend (UA rules). Emit the same
-   styling through the attrs `style` channel — the gpui declaration
+   styling through the attrs `style` channel — the native declaration
    decoder maps font-weight/font-style/text-decoration/background/
    color/padding/border-radius to native equivalents, so emphasis reads
    identically on native. *)

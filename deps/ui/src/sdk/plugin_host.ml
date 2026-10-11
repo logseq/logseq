@@ -138,7 +138,7 @@ let item_slot it =
 let inject_ui () =
   (* Js.Json.test keeps undefined/null out — classify maps undefined to
      JSONObject which would crash the property reads on hosts without the
-     plugin runtime (tests, gpui). *)
+     plugin runtime (tests, the native host). *)
   let setup =
     match Js.Json.test (lsplugin ()) Js.Json.Object with
     | true ->

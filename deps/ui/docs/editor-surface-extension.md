@@ -1,12 +1,14 @@
 # Editor surface: shared rich-text editor (Out-style)
 
-Status: draft. Feeds gpui-plan M4 (编辑体验) and the `TODO(component)`
+Status: draft. Feeds the native editor milestone and the
+`TODO(component)`
 keep-sites in `src/pages/page.ml`, `src/blocks/tree.ml`,
 `src/core/ui_parts.ml`, `src/core/web_dom.ml`.
 
 Supersedes the earlier "native widget per platform" sketch: the editor
 is **rendered by LUI nodes from shared OCaml** — the same view code runs
-on web/apple/gpui. Platform hosts provide only a text-input conduit and
+on web/apple/the OCaml host. Platform hosts provide only a text-input
+conduit and
 text measurement. This follows Out's split (`core/src` editing model +
 thin platform adapters), but for the db version and with the render side
 shared too, since deps/ui view code is already cross-platform OCaml.
@@ -43,7 +45,7 @@ shared too, since deps/ui view code is already cross-platform OCaml.
   is already a proper JS string, so `~units:U16` makes model offsets
   identical to DOM Range offsets and the conduit needs no byte↔UTF-16
   translation; native stays `Bytes` and translates at its own boundary
-  (NSString/gpui are UTF-16). The same offset value means different
+  (NSString is UTF-16). The same offset value means different
   things per platform, but offsets are view-local state — only text
   content crosses into the db.
 
@@ -60,7 +62,7 @@ platform conduit (the only per-platform code)
   web    — hidden input + DOM text measurement (Range.getClientRects
            works on real text nodes — no mock-text needed)
   apple  — UIKeyInput/NSTextInputClient conduit + TextKit measurement
-  gpui   — gpui text-input/IME handler + text layout measurement
+  ocaml  — OCaml host text-input/IME handler + text layout measurement
 ```
 
 ### Rendered structure (shared OCaml emits)
@@ -91,7 +93,7 @@ text-input/IME/measurement channel bound to one block editor:
   {x, y, h}` and `line-ranges`/`offset-at {x, y}` — implemented per
   platform on the rendered run nodes (web: Range.getClientRects /
   caretRangeFromPoint on the run text nodes; apple: TextKit
-  layoutManager; gpui: editor text layout)
+  layoutManager; OCaml host: editor text layout)
 
 Selection highlight and the caret blink are LUI-rendered (shared), so
 the conduit never draws text itself.
@@ -122,7 +124,8 @@ the conduit never draws text itself.
 3. Swap `editor_el` (tree.ml) and page-title editor (page.ml) to it;
    delete `Web_dom.textarea_of`/`build_mock_text`/`caret_popup_pos` and
    `Ui_parts.editor_*`.
-4. Apple conduit (UIKeyInput) + gpui conduit; keymap/model already
+4. Apple conduit (UIKeyInput) + OCaml host conduit; keymap/model
+   already
    shared so each is adapter-only work.
 5. M4 e2e: typing, IME (中文 composition), delimiter reveal, popup caret
    positioning, block select, split/merge.

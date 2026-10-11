@@ -205,8 +205,8 @@ LUI_EXPORT int32_t lui_ocaml_double_press(int64_t node) {
 
 /* Pointer-detail exports — mirrors upstream lui's
    platform/native/lui_ocaml_bridge.c LUI_POINTER_DETAIL_EXPORT block.
-   Required by lui-gpui (press_detail / context_menu_press are called from
-   kinds.rs); pointer_down/up/enter/leave round out the ABI. */
+   Required by external native hosts (press_detail / context_menu_press);
+   pointer_down/up/enter/leave round out the ABI. */
 static int dispatch_pointer_detail(const char *name, int64_t node,
                                    double x, double y, int32_t modifiers,
                                    int32_t button,

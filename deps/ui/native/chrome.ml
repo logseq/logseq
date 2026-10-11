@@ -18,14 +18,15 @@
 open Lui_elements
 
 (* the web twin mounts #skip-to-main (a11y skip link, CSS-hidden until
-   :focus) — dropped here: gpui has no tab-focus reveal and the button
+   :focus) — dropped here: the native host has no tab-focus reveal
+   and the button
    carries no handlers, so it would render as dead chrome *)
 
 (* ---- native topbar (web .cp__header parity) ----
 
    Single ~48px row matching the web shell: leading group [sidebar
    toggle, search], trailing group [rtc status, home, page-menu dots,
-   right-sidebar toggle]. The gpui `toolbar` kind renders in-canvas —
+   right-sidebar toggle]. The native `toolbar` kind renders in-canvas —
    two stacked placement toolbars produced doubled bars/borders — so
    one plain row is the parity form. rtc/plugin toolbar items keep
    hidden DOM mounts below so their emitters stay live. *)
@@ -228,7 +229,8 @@ let right_sidebar (ms : Model.t Signal.signal) =
                  [ Right_sidebar_view.render ms ]) ]))
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
-   is an overlay layer; on gpui it is the docked split's first pane —
+   is an overlay layer; on the native host it is the docked split's
+   first pane —
    the subtree stays mounted while closed (the split track owns the
    width), surface background via the `muted` token. The shade-mask is
    an overlay-mode affordance and doesn't exist in a docked layout. *)
@@ -245,7 +247,8 @@ let left_sidebar (ms : Model.t Signal.signal) =
              [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
                     (* web: --left-sidebar-bg-color = --lx-gray-02 (the
                        near-white mauve-02 tone, one step above the page);
-                       gpui `muted` is the matching surface tone. *)
+                       the native `muted` slot is the matching
+                       surface tone. *)
                     ~background:"muted"
                     ~style_class:"left-sidebar-inner as-container"
                [ row ~key:"ls-top" ~cross:`center ~gap:4
@@ -263,10 +266,10 @@ let left_sidebar (ms : Model.t Signal.signal) =
            ]
        ]))
 
-(* docked splits — gpui renders Split natively (h_resizable) and fires
+(* docked splits — the native renderer draws Split natively and fires
    ValueChanged on drag; the persisted fraction drives ProgressValue
    back. ~resize_duration/~resize_easing are ignored on this backend
-   (the gpui kit has no split animation today). *)
+   (the native kit has no split animation today). *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
   split ~key:"left-split" ~grow:1. ~gap:6

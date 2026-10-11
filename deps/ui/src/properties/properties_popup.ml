@@ -43,7 +43,8 @@ let open_at ?(cls = "") ~x ~y content =
   open_at_key ~key ~cls ~x ~y content;
   key
 
-(* On backends with async measurement (gpui) the anchor's first rect
+(* On backends with async measurement (the native host) the anchor's
+   first rect
    is still pending, so an element-anchored popup would mount at 0,0
    on first open. Retry a few ticks until the rect resolves — same
    pattern as Properties_dialog.open_for_anchor_el. *)

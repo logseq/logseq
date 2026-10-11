@@ -42,7 +42,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
    the element: the .lui-dialog base rule keeps only gap/pad/width/
    height for the dialog kinds emitted elsewhere (cards, views_popup,
    properties_menu, cmdk); padding repeats here so every named dialog
-   carries its own spec (gpui reads the same prop). Viewport/calc
+   carries its own spec (the native host reads the same prop).
+   Viewport/calc
    widths, px max-widths and the login centering have no prop on the
    modal kind — they ride the documented data-attrs style pair. *)
 let dialog_spec name =

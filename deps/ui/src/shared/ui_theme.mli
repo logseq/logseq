@@ -1,5 +1,5 @@
 (** Shared visual-design tokens — the single owner of Logseq's theme
-    values across web and native (GPUI) renderers.
+    values across web and native renderers.
 
     A [snapshot] is the fully resolved theme for one mode.
     [colors]/[components]/[typography]/[levels] are the typed semantic
@@ -14,7 +14,7 @@
       canonical [--lx-*] names holding a [var(--ls-<name>)] reference so the
       stylesheet's per-accent bindings keep resolving). [--lui-*]
       entries feed LUI's semantic color names.
-    - [kit] maps gpui-kit theme slot names ([ThemeConfig.colors] keys
+    - [kit] maps native theme slot names (the host's theme-slot keys
       such as ["muted.background"] or ["list.active.background"]) to
       literal values. The native host installs them as the mode's theme
       — never as unparsed CSS-var strings.
@@ -123,7 +123,7 @@ type snapshot = {
   vars : (string * string) list;
   (* Resolved CSS custom-property table (see module doc). *)
   kit : (string * string) list;
-  (* gpui-kit theme slot -> literal color. *)
+  (* native theme slot -> literal color. *)
 }
 
 (** The built-in classic Logseq theme (the only palette today).

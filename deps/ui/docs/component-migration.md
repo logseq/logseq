@@ -3,7 +3,7 @@
 Goal: all view code uses `Lui_elements` component kinds + typed props.
 The `dom`/`logseq-<tag>` DOM extension layer is deleted wholesale.
 Extensions only survive for genuinely platform-specific pieces (editor
-surface, split/dock, gpui-table, pdf/media).
+surface, split/dock, pdf/media).
 
 ## Shared visual ownership
 
@@ -18,10 +18,10 @@ second copy of the design.
 - Web: typed props land as real styles; `~style_class` keeps only
   app-semantic hook classes (`ui__*`, `cp__*`, `ls-*`) that e2e tests,
   imperative queries, or SDK callers select on.
-- GPUI: consumes ONLY natively-expressible typed props — no CSS
-  parsing, no `var()`/`calc()` resolution, no selector machinery.
+- Native host: consumes ONLY natively-expressible typed props — no
+  CSS parsing, no `var()`/`calc()` resolution, no selector machinery.
   Decoration that has no prop channel stays adapter-side as
-  `gpui/host/src/logseq_ext.rs` hook-class registrations.
+  `ocaml_host/` host hooks.
 - Web-only decoration with no prop channel (`::selection`, keyframe
   animations, font stacks, `transform`, breakpoints, `dvh` units,
   descendant-hover rules) stays adapter-side in
@@ -158,8 +158,9 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
 - other tabler names → `~name:(`app "<tabler-name>")`: the `app:`
   prefix goes through the app icon registry — on web the `app_icons`
   map fed to `Lui_web.create_with_extensions` (`Icons.app_icons ()`
-  generates svg data URIs from icon_tabler_data); on GPUI the Rust
-  host includes the same tabler-children.json; on Swift the tabler
+  generates svg data URIs from icon_tabler_data); on the OCaml host
+  the same tabler-children.json ships in `ocaml_host`; on Swift the
+  tabler
   ttf/svg assets
 - **`ti ti-*` font classes are deleted**: the icon kind renders
   svg/mask itself, and a font glyph would be double-rendered through
@@ -193,8 +194,8 @@ own editable surface inside the extension:
 - web: the extension still mounts the DOM structure internally
   (textarea + caret mirror); imperative_dom switches from class/id
   queries to direct indexing by extension node id
-- GPUI: a real editing control (gpui-component InputState editor or a
-  custom block editor surface)
+- OCaml native host: a real editing control (native text-input sink
+  or a custom block editor surface)
 - SwiftUI: native TextEditor/UITextView bridge
 
 `#ref`/`data-ref`/`.editor-inner`/`.mock-text`/`.block-editor` — the
@@ -218,7 +219,7 @@ by class/id become direct addressing by extension node id:
   `{node-id: n}` direct access on the editor extension node; each
   host dispatches the op to its own editing surface
 - `scroll-into-view`/`scroll-row-into-view` — already covered by the
-  dom-op channel (GPUI scroll_tracked + ScrollHandle implemented)
+  dom-op channel (native scroll tracking implemented)
 - `.editor-inner`/`.block-editor`/`editor-wrapper` classes — gone
   from the view layer; the web extension keeps the same class names
   on its internal DOM to feed `lui-editor.css`, native never consumes
@@ -236,7 +237,8 @@ logseq-editor (extension node, ~ref addressing)
 
 The DOM structure is identical to today — imperative DOM lookup
 changes how the editor is *found*, not what happens after; CSS,
-mirror, and caret logic are untouched. The native side (GPUI/SwiftUI)
+mirror, and caret logic are untouched. The native side (OCaml host/
+SwiftUI)
 reads from the same extension node: `focus`/selection ops → the
 native editing control; measure → node_bounds.
 

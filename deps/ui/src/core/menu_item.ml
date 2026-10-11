@@ -79,7 +79,7 @@ let dots_menu ~key ?(menu_cls = "") items : t =
 (* `.menu-link` chrome for the imperative <a> anchors the e2e contract
    requires (extension nodes admit no typed props — the inline style
    attr is their only paint channel). [chosen_signal] toggles the
-   .chosen class (e2e + gpui reg); [chosen_bg] additionally paints the
+   .chosen class (e2e + native reg); [chosen_bg] additionally paints the
    selected background inline — pass it only where no theme-scoped
    .chosen CSS rule is kept (autocomplete rows). [plain_bg] neutralizes
    the inherited .menu-link:hover background (cp__select rows paint

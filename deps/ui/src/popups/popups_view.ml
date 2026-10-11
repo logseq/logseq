@@ -1153,7 +1153,8 @@ let handle_contextmenu st (ev : Ui_services.ev) =
       | None -> (
           (* cljs: right-click inside a selection shows the selection menu;
              a single selected block gets its own block menu. On hosts with
-             no native context menu (gpui), any right-click inside a block
+             no native context menu (the native host), any right-click
+             inside a block
              row that isn't on an editable target opens the block menu —
              .bullet-container's hit area is too small to be the only entry *)
           match el.Ui_services.closest ".ls-block[data-blockid]" with
@@ -1170,7 +1171,8 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   (* right-click on selected text inside the editing
                      surface *)
                   if Ui_services.env_native_block_controls () then (
-                    (* gpui: no OS context menu — the LUI edit menu is
+                    (* the native host has no OS context menu — the LUI
+                       edit menu is
                        its native equivalent *)
                     ev.Ui_services.prevent_default ();
                     ev.Ui_services.stop_propagation ();
@@ -1202,7 +1204,8 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               | Some id, _
                 when Ui_services.env_native_block_controls ()
                      && el.Ui_services.closest ".block-editor" <> None ->
-                  (* gpui right-click inside the editing surface: the LUI
+                  (* the native host's right-click inside the editing
+                     surface: the LUI
                      menu is the native-menu equivalent — open it without
                      marking the block selected (a text selection may be
                      live, and a block select would hide it) *)

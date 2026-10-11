@@ -1,7 +1,7 @@
 /* C stubs for the OCaml native host executable.
 
    In-process twin of native/logseq_lui_bridge.c's outbound channel:
-   instead of bouncing to function pointers the Rust host installs,
+   instead of bouncing to function pointers the host installs,
    the wakeup and platform-request trampolines call back into OCaml
    through named values the Bridge module registers at startup. The
    js-name shims the linked library references (atob, require,
@@ -18,7 +18,7 @@
 
 /* OCaml-internal: native_embed.ml's `external wakeup` lands here. The
    host loop polls Bridge.pending_wakeup once per frame; a flag is all
-   the main thread needs (the Rust host's <=16ms pump cadence). */
+   the main thread needs (the host's <=16ms pump cadence). */
 CAMLprim void logseq_lui_wakeup(void) {
   const value *cb = caml_named_value("ocaml_host_wakeup");
   if (cb != NULL) {

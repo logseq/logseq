@@ -11,7 +11,7 @@ type storage = {
    emissions derived from it, never independent sources of truth.
    [vars] is the resolved CSS custom-property table for that mode:
    canonical [--lx-*] names plus [--ls-*] legacy aliases and [--lui-*]
-   semantic names. [kit] maps gpui-kit theme slot names to literal
+   semantic names. [kit] maps native theme slot names to literal
    color values for the native host; web ignores it. *)
 type theme_snapshot = {
   mode : string;

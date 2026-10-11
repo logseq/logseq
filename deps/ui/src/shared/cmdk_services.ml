@@ -3,7 +3,7 @@
    need (worker invokes, navigation effects, document access, editor and
    sidebar commands, pickers, dialogs) arrives through this record. Each
    runtime supplies one implementation: src/cmdk/cmdk_host.ml for the
-   browser, native/cmdk_host.ml for gpui.
+   browser, native/cmdk_host.ml for the native host.
 
    Storage and the raw navigation hash come from Ui_services directly;
    the ops here are the ones that need app modules the shared slice
