@@ -560,20 +560,19 @@ let shell (ms : Model.t Signal.signal) : t =
       "theme-container-inner ls-hl-colored h-full"
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
      )
-    (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-       ~style_class:"h-full"
-    [ (* invisible logseq-dom carrier: gives the gpui host a stable
-         extension ancestor to forward document events through *)
-      Logseq_el.carrier
-    ; (* horizontal shell: the docked split owns the right dock's track;
+    (* stack: the app row fills the frame as the in-flow first child;
+       overlays/help/not-found become shared-cell overlays (native:
+       absolute, edge-stretched) instead of in-flow document-tail
+       siblings a plain box would size to content *)
+    (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+    [ (* horizontal shell: the docked split owns the right dock's track;
          left-container grows inside the first pane (web: #app-container
          is display:flex row) *)
-      row ~key:"app" ~accessibility_identifier:"app-container"
-        ~style_class:"h-full"
+      row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ right_split ms st
             (column ~key:"left-container"
-               ~accessibility_identifier:"left-container"
-               ~style_class:"flex-1 h-full overflow-hidden"
+               ~accessibility_identifier:"left-container" ~grow:1.
+               ~min_height:0
                (topbar ms @ [ hidden_chrome ms; main_content ms st ]))
             (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
