@@ -158,28 +158,16 @@ let topbar (ms : Model.t Signal.signal) : t list =
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ Ui_parts.int_prop_signal Lui_protocol.MarginLeft ms
-          (* macOS: the header blends into the title bar (the host sets
-             fullSizeContentView); with the left sidebar closed its
-             buttons sit here and must clear the traffic-light controls
-             (~76px). With the sidebar open the sidebar's own top row
-             hosts them and the header shows only a spacer, so the
-             inset can relax. *)
+          (* NavigationSplitView detail toolbar: the row lives inside
+             the split's second pane, so while the sidebar is open its
+             leading buttons already start at the sidebar's right edge.
+             When the dock collapses the pane spans the window and the
+             buttons must clear the traffic-light controls (~76px) —
+             the host blends the title bar via fullSizeContentView. *)
           (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
           (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
              ~style_class:"cp__header-l"
-          [ reactive
-              ~equal:(fun (a : Model.t) (b : Model.t) ->
-                a.left_sidebar_open = b.left_sidebar_open)
-              (fun (m : Model.t) ->
-                (* while the sidebar is docked-open its own top row
-                   hosts these buttons; the header mounts them only as
-                   the reopen path for the closed state. A box, not a
-                   spacer: spacer fills the row and starves head-r. *)
-                if m.Model.left_sidebar_open then box ~key:"lb-off" []
-                else
-                  row ~key:"head-l-btns" ~cross:`center
-                    [ left_menu_btn; search_btn ])
-              ms ])
+          [ left_menu_btn; search_btn ])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
@@ -281,10 +269,15 @@ let left_sidebar (ms : Model.t Signal.signal) =
                        surface tone. *)
                     ~background:"muted"
                     ~style_class:"left-sidebar-inner as-container"
-               [ row ~key:"ls-top" ~cross:`center ~gap:4
-                   ~padding_horizontal:8 ~padding_vertical:4
+               [ (* NavigationSplitView sidebar semantics: the column
+                    spans the full window height, so its top strip sits
+                    in the title-bar zone where the host overlays the
+                    traffic-light controls. It stays empty drag space
+                    (the window is movable-by-background); the graph
+                    switcher starts below it. *)
+                 box ~key:"ls-top" ~height:52
                    ~style_class:"left-sidebar-top"
-                   [ left_menu_btn; search_btn ]
+                   ~data_attrs:[ ("data-window-titlebar", "true") ] []
                ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
                    [ box ~key:"ls-head"
                        ~style_class:"sidebar-header-container"
@@ -325,29 +318,24 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     ~on_resize:(Sidebar_state.on_right_split_resize st)
     first second
 
-let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
-  Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      "flex-1 flex"
-      ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
-    (row ~key:"main-container" ~accessibility_identifier:"main-container"
-       ~grow:1. ~min_height:0
-    [ left_split ms st
-        ((* #main-content-container is queried by graphs/recycle.ml —
+(* #main-content-container scroll — the detail column's page area.
+   The split's second pane wraps this in the titlebar column below. *)
+let main_scroll (ms : Model.t Signal.signal) : t =
+  (* #main-content-container is queried by graphs/recycle.ml —
             the id rides ~accessibility_identifier; the data-is-* attrs
             are imperative contracts (graphs_view, container.cljs hooks)
             carried by data_attrs_signal. On web this element is the page's
             vertical scroller (.scrollbar-spacing = overflow-y:auto) —
             emit the real scroll kind so pages taller than the window
             actually scroll. *)
-         Ui_parts.int_prop_signal Lui_protocol.PaddingVertical ms
-           (fun (m : Model.t) ->
-             (* cljs container.cljs: margin-less routes (journals/home/
-                all-pages) strip the container's py-8; named pages keep
-                the 32px top pad under the title *)
-             match m.route with
-             | Model.Journals | Model.Home | Model.All_pages -> 0
-             | _ -> 32)
+  Ui_parts.int_prop_signal Lui_protocol.PaddingVertical ms
+    (fun (m : Model.t) ->
+      (* cljs container.cljs: margin-less routes (journals/home/
+         all-pages) strip the container's py-8; named pages keep
+         the 32px top pad under the title *)
+      match m.route with
+      | Model.Journals | Model.Home | Model.All_pages -> 0
+      | _ -> 32)
         (scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
         ~accessibility_identifier:"main-content-container"
         ~style_class:"scrollbar-spacing"
@@ -410,7 +398,23 @@ let main_content (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
             ))
         ]
         ])
-    )])
+
+(* NavigationSplitView detail column — the left dock split's second
+   pane: titlebar row over the page scroll, sized by the persisted
+   sidebar fraction. *)
+let detail_column (ms : Model.t Signal.signal) : t =
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "flex-1 flex"
+      ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
+    (column ~key:"left-container"
+       ~accessibility_identifier:"left-container" ~grow:1.
+       ~min_height:0
+       ([ (* invisible logseq-dom carrier: hosts forward
+             document events through this extension node *)
+          Logseq_el.carrier ]
+        @ topbar ms
+        @ [ hidden_chrome ms; main_scroll ms ]))
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -631,18 +635,13 @@ let shell (ms : Model.t Signal.signal) : t =
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    [ (* horizontal shell: the docked split owns the right dock's track;
-         left-container grows inside the first pane (web: #app-container
-         is display:flex row) *)
+    [ (* horizontal shell: the docked splits own both side docks'
+         tracks — the left split's second pane is the detail column
+         (titlebar + page scroll), so the sidebar column spans the
+         full window height like NavigationSplitView *)
       row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ right_split ms st
-            (column ~key:"left-container"
-               ~accessibility_identifier:"left-container" ~grow:1.
-               ~min_height:0
-               ([ (* invisible logseq-dom carrier: hosts forward
-                     document events through this extension node *)
-                  Logseq_el.carrier ]
-                @ topbar ms @ [ hidden_chrome ms; main_content ms st ]))
+            (left_split ms st (detail_column ms))
             (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
