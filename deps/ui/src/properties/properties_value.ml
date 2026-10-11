@@ -704,7 +704,7 @@ let rep_select ~key ~value ~options ~on_pick : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
-  box ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1.0
+  box ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1.0 ~min_width:0
     [ select ~key:"s" ~text:value ~container_relative_frame:`horizontal
         ~style_class:"ls-select-trigger ls-rep-trigger"
         ~on_press:(fun _ ->
@@ -714,7 +714,7 @@ let rep_select ~key ~value ~options ~on_pick : t =
         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
            ~anchor_offset:2.0
            ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-           [ column ~key:"opts" ~style_class:"ls-rep-menu"
+           [ column ~key:"opts" ~style_class:"ls-rep-menu" ~padding:4
                (List.mapi
                   (fun i (id, label) ->
                     menu_item ~key:("o" ^ string_of_int i)
@@ -744,7 +744,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
             ~padding:16 ~width:256
             [ row ~key:"rpt" ~cross:`center ~gap:4
                 [ checkbox ~key:"cb" ~checked:r.repeated ~width:16
-                    ~style_class:"ls-rep-cb"
+                    ~style_class:"ls-rep-cb" ~min_width:16
                     ~on_toggle:(fun _ev ->
                       let on = not r.repeated in
                       Signal.set rep (Some { r with repeated = on });
@@ -770,6 +770,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
                     [] ]
             ; row ~key:"evr" ~cross:`center ~gap:8
                 [ text ~key:"evl" ~style_class:"ls-rep-muted"
+                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
                     ~value:(I18n.t "property.repeat/every") []
                 ; text_field ~key:"evi" ~width:56 ~height:32
                     ~style_class:"ls-rep-num"
@@ -793,6 +794,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
                         ~value:(W.Int id)) ]
             ; column ~key:"nxt" ~gap:4
                 [ text ~key:"nxl" ~style_class:"ls-rep-muted"
+                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
                     ~value:(I18n.t "property.repeat/next-date") []
                 ; rep_select ~key:"nxs"
                     ~value:
@@ -805,6 +807,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
                         ~value:(W.Int id)) ]
             ; column ~key:"whn" ~gap:8
                 [ text ~key:"whl" ~style_class:"ls-rep-muted"
+                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
                     ~value:(I18n.t "property.repeat/when") []
                 ; rep_select ~key:"whs"
                     ~value:(title_of_id r.whens r.when_id)
@@ -816,6 +819,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
                         ~value:(W.Int id)) ]
             ; row ~key:"is" ~gap:4
                 [ text ~key:"isl" ~style_class:"ls-rep-muted"
+                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
                     ~value:(I18n.t "property.repeat/is-label") []
                 ; text ~key:"isv" ~value:r.done_title [] ] ])
     (Signal.value rep)
@@ -836,6 +840,7 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
   let view = Signal.state sched (ty, tm) in
   let day_cell ~dim ~sel (y, m, d) : t =
     button ~variant:`ghost ~size:`sm ~style_class:"ls-cal-day"
+        ~foreground:"var(--ls-primary-text-color)"
       ~text:(string_of_int d)
       ~on_press:(fun _ -> on_pick y m d)
       ~data_attrs:
@@ -877,7 +882,7 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
     ~on_dismiss:(fun _ -> on_dismiss ())
     [ row ~key:"dp-row" ~cross:`start
         ~style_class:"ls-property-date-picker"
-        [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8
+        [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8 ~padding:4
         [ row ~key:"cal-hd" ~cross:`center ~style_class:"ls-cal-hd"
             [ row ~key:"cal-ttl" ~cross:`center ~gap:6
                 ~style_class:"ls-cal-fields"

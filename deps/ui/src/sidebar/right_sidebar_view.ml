@@ -217,8 +217,8 @@ let item_title (it : Sidebar_state.item) =
         | None ->
             (* cljs icon/get-node-icon: class pages default to "hash",
                plain pages to "file"; both inside .icon-cp-container *)
-            [ box ~key:"pt-ti" ~style_class:"icon-cp-container"
-                ~foreground:"inherit"
+            [ row ~key:"pt-ti" ~style_class:"icon-cp-container"
+                ~cross:`center ~foreground:"inherit"
                 [ (* cljs get-node-icon-cp merges {:size 14} for all
                      icons *)
                   icon_ ~size:14

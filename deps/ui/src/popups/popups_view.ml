@@ -94,7 +94,8 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
   in
   match it.S.ai_title_icon with
   | Some ic ->
-      row ~key ~style_class:"icon-cp-container" ~gap:4
+      row ~key ~style_class:"icon-cp-container" ~cross:`center
+        ~gap:4
         [ icon ~key:"ti" ~name:(Icons.name_ref ic) ~point_size:14
             ~style_class:"ui__icon" []
         ; hl ]
@@ -109,8 +110,8 @@ let node_icon_slot ~key (it : S.ac_item) : t =
     ~data_attrs:[ ("style", "flex-shrink:0") ]
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
-         [ box ~key:"cp" ~style_class:"icon-cp-container"
-             ~foreground:"inherit"
+         [ row ~key:"cp" ~style_class:"icon-cp-container"
+             ~cross:`center ~foreground:"inherit"
              [ icon ~key:"ni" ~name:(Icons.name_ref icn) ~point_size:14
                  ~style_class:"ui__icon" [] ] ]
      | Some (icn, false) ->

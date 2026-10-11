@@ -406,7 +406,7 @@ let keymap_binding ~key (b : Keymap_data.binding) =
   let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
   (* ls-dc is display:contents — the box is transparent on web, so the
      shortcut cells flow as direct children of the action wrap *)
-  box ~key ~style_class:"ls-dc"
+  box ~key ~style_class:"ls-dc" ~display:`contents
     [ box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
         [ row ~key:(key ^ "d") ~style_class:cls ~cross:`center
             ~accessibility_identifier:b.data
@@ -461,6 +461,7 @@ let command_key_of (title : string) : string =
 let keymap_th ~key ~collapsed ~on_press label =
   list_item ~key ~style_class:"th" ~on_press
     [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
+        ~font_weight:600
         ~value:(I18n.t (keymap_category label)) []
     ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~name:(if collapsed then `chevron_right else `chevron_down) []
     ]

@@ -278,7 +278,7 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
   popover ~key:"page-menu" ~at:(x, y)
     ~available_height:
       (if flip then atop -. 5. else inner_height -. y -. 5.)
-    ~role:`menu
+    ~role:`menu ~width:(if with_app_items then 256 else 280)
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"

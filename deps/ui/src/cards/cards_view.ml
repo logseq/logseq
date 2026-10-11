@@ -42,7 +42,9 @@ let selected_label sel decks =
 
 let selector_row st =
   row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
-    [ box ~key:"combo" ~style_class:"ls-cards-select"
+    [ Ui_components.with_props
+        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        (box ~key:"combo" ~style_class:"ls-cards-select"
         [ (* cljs shui/select-trigger: the select kind already renders
              role=combobox + its own ::after chevron on web and a native
              picker on GPUI — no icon child needed *)
@@ -52,7 +54,7 @@ let selector_row st =
                      (Signal.value st.Cards_state.decks))
             ~on_press:(fun _ -> Cards_state.toggle_opts st)
             []
-        ; opts_box st ]
+        ; opts_box st ])
     ; button ~key:"add" ~accessibility_identifier:"ls-cards-add"
         ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
         ~label:(t_ "flashcard/add-cards-query-tooltip")
@@ -60,6 +62,7 @@ let selector_row st =
         ~on_press:(fun _ -> Cards_state.add_cards_block st)
         []
     ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
+        ~white_space:"nowrap"
         ~value:(reactive
                   (fun (pos : int) (cards : int list) ->
                     let n = List.length cards in
@@ -151,7 +154,7 @@ let rec card_view st b phase =
      action row pins to the dialog bottom (cljs flex-1 min-h-0) *)
   column ~key:"card-cur" ~grow:1. ~style_class:"ls-card content"
     [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
-        ~style_class:"ls-card-scroll"
+        ~min_height:0 ~style_class:"ls-card-scroll"
         [ (* scroll lays its children out in a single grid cell — the
              crumbs row and the card must sit in ONE column or they
              render on top of each other *)

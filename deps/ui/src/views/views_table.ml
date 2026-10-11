@@ -1017,6 +1017,9 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                  [ (* cljs: .sticky-columns holds pinned cells, sibling
                       row holds the unpinned ones *)
                    row ~style_class:"sticky-columns"
+                     ~background:
+                       "var(--lx-gray-01, \
+                        var(--ls-primary-background-color))"
                      (List.map cell_wrap pinned)
                  ; row
                      (List.map cell_wrap free
@@ -1092,6 +1095,8 @@ let table_header inst cols : t =
            hsl(var(--border));will-change:transform;\
            transform:translate3d(0,0,0)" ) ]
     [ row ~style_class:"sticky-columns"
+        ~background:
+          "var(--lx-gray-01, var(--ls-primary-background-color))"
         (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
     ; row
         (List.map cell_item free

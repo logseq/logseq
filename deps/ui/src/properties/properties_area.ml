@@ -78,6 +78,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
      ~data_attrs:[ ("style", "position:relative;width:100%;min-width:0") ]
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
+         ~min_width:0
          ~style_class:"property-k flex select-none jtrigger w-full"
          ~foreground:"var(--ls-primary-text-color)"
          ~data_attrs:
@@ -283,6 +284,7 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
     ~margin_top:(if for_class then 0 else 8)
     [ button ~variant:`secondary ~size:`sm
         ~icon:(`app "plus")
+        ~grow:1. ~min_width:0
         ~style_class:"jtrigger flex"
         ~label:(I18n.t "property/add-new")
         ~text:(I18n.t "property/add-new")
