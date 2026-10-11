@@ -16,11 +16,37 @@
 (defn- write-meta! [path meta]
   (.writeFile (.-promises fs) path (js/JSON.stringify meta) "utf8"))
 
-(defn- normalize-bytes [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    :else (js/Uint8Array. data)))
+(defn- <read-chunks
+  [^js reader acc]
+  (p/let [result (.read reader)]
+    (if (.-done result)
+      acc
+      (<read-chunks reader (conj acc (.-value result))))))
+
+(defn- <read-all-bytes
+  "Drains a web ReadableStream into a single Uint8Array."
+  [^js stream]
+  (p/let [reader (.getReader stream)
+          chunks (<read-chunks reader [])]
+    (let [total (reduce + 0 (map #(.-length ^js %) chunks))
+          out (js/Uint8Array. total)]
+      (reduce (fn [offset ^js chunk]
+                (.set out chunk offset)
+                (+ offset (.-length chunk)))
+              0 chunks)
+      out)))
+
+(defn- <normalize-bytes
+  "Resolves the put body to bytes. R2's `put` consumes streams, so the local
+  bucket drains a ReadableStream to keep stream-driven uploads working."
+  [data]
+  (if (and data (.-getReader data))
+    (<read-all-bytes data)
+    (p/resolved
+     (cond
+       (instance? js/Uint8Array data) data
+       (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+       :else (js/Uint8Array. data)))))
 
 (defn make-bucket [base-dir]
   (ensure-dir! base-dir)
@@ -40,11 +66,11 @@
               (let [file-path (node-path/join base-dir key)
                     meta-file (meta-path file-path)
                     dir (node-path/dirname file-path)
-                    data (normalize-bytes body)
                     metadata (or (aget opts "httpMetadata") #js {})
                     custom (or (aget opts "customMetadata") #js {})]
                 (ensure-dir! dir)
-                (p/let [_ (.writeFile (.-promises fs) file-path data)
+                (p/let [data (<normalize-bytes body)
+                        _ (.writeFile (.-promises fs) file-path data)
                         _ (write-meta! meta-file #js {:contentType (aget metadata "contentType")
                                                       :contentEncoding (aget metadata "contentEncoding")
                                                       :cacheControl (aget metadata "cacheControl")
