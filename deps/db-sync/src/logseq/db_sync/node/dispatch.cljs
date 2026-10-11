@@ -6,6 +6,7 @@
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
+            [logseq.db-sync.worker.dispatch :as worker-dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
@@ -27,6 +28,11 @@
     (cond
       (= path "/health")
       (http/json-response :worker/health {:ok true})
+
+      ;; Semantic REST API (MCP/code-mode surface) — same dispatch as the worker.
+      (or (= path "/openapi.json")
+          (string/starts-with? path "/api/"))
+      (worker-dispatch/handle-worker-fetch request env)
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))

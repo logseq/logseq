@@ -75,10 +75,16 @@
    {:method "GET" :path "/api/v1/graphs/:graph-id/assets/:asset-block-id" :internal-path "/semantic/assets/:asset-block-id"
     :handler :semantic/assets-get :operation-id "getAsset" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/search" :internal-path "/semantic/search"
-    :handler :semantic/search :operation-id "searchGraph" :scope "logseq/read" :rate-class :read}])
+    :handler :semantic/search :operation-id "searchGraph" :scope "logseq/read" :rate-class :read}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/e2ee/public-keys" :internal-path "/e2ee/public-keys"
+    :handler :semantic/e2ee-public-keys :operation-id "getE2eePublicKeys" :scope "logseq/read" :rate-class :read :edge? true}
+   {:method "POST" :path "/api/v1/graphs/:graph-id/e2ee/encrypt" :internal-path "/e2ee/encrypt"
+    :handler :semantic/e2ee-encrypt :operation-id "encryptE2eeText" :scope "logseq/write" :rate-class :write :edge? true}
+   {:method "POST" :path "/api/v1/graphs/:graph-id/e2ee/decrypt" :internal-path "/e2ee/decrypt"
+    :handler :semantic/e2ee-decrypt :operation-id "decryptE2eeText" :scope "logseq/read" :rate-class :read :edge? true}])
 
 (def ^:private operation-docs
-  {"listGraphs" ["List available graphs" "Returns cursor-paginated non-E2EE graphs available to the authenticated user. Use the optional exact name filter to resolve a graph name to its UUID."]
+  {"listGraphs" ["List available graphs" "Returns cursor-paginated graphs available to the authenticated user, including E2EE-encrypted graphs flagged with graph-e2ee. Use the optional exact name filter to resolve a graph name to its UUID."]
    "listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
    "createPage" ["Create a page" "Creates a page block with the supplied title."]
    "listPageBlocks" ["List a page's blocks" "Returns a cursor-paginated list of the page's top-level blocks, including each selected block's descendant tree."]
@@ -113,7 +119,10 @@
    "listAssets" ["List assets" "Returns a cursor-paginated list of asset blocks with optional creation and update time filters."]
    "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum."]
    "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed URL for the asset block's R2 object. For an image asset, fetch or use the URL directly to display image content; it does not require an Authorization header."]
-   "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]})
+   "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]
+   "getE2eePublicKeys" ["List graph members' public keys" "Returns the RSA-OAEP public keys of every member of an E2EE graph, for encrypting content readable by all members. Only available on E2EE-encrypted graphs."]
+   "encryptE2eeText" ["Encrypt text for an E2EE graph" "Encrypts each supplied string into a value accepted by title fields on an E2EE graph. With 'key' (base64 raw 32-byte AES-GCM-256 graph key, obtained from GET /e2ee/graphs/:id/aes-key and unwrapped with the RSA private key) produces the canonical encrypted package; without 'key' produces an RSA-envelope package decryptable only by the graph's members."]
+   "decryptE2eeText" ["Decrypt text from an E2EE graph" "Decrypts each supplied canonical encrypted package back to plaintext. Requires 'key': the base64 raw 32-byte AES-GCM-256 graph key. Only available on E2EE-encrypted graphs."]})
 
 (defn- operation-routes [path-key]
   (->> operations
@@ -227,6 +236,16 @@
                                    :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
     "updateProperty" {:properties {:title {:type "string"} :type {:$ref "#/components/schemas/PropertyType"}
                                     :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
+    "encryptE2eeText" {:required ["texts"]
+                       :properties {:texts {:type "array" :minItems 1 :maxItems 100
+                                            :items {:type "string"}}
+                                    :key {:type "string"
+                                          :description "Base64 raw 32-byte AES-GCM-256 graph key. When omitted, encrypts to an RSA-envelope package for all graph members."}}}
+    "decryptE2eeText" {:required ["key" "texts"]
+                       :properties {:key {:type "string"
+                                          :description "Base64 raw 32-byte AES-GCM-256 graph key."}
+                                    :texts {:type "array" :minItems 1 :maxItems 100
+                                            :items {:type "string"}}}}
     nil))
 
 (defn- operation-parameters [{:keys [operation-id path]}]

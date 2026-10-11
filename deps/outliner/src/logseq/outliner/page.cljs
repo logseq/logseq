@@ -385,7 +385,8 @@
   [db title*
    {uuid' :uuid
     :keys [tags properties persist-op?
-           class? journal? today-journal? split-namespace? class-ident-namespace]
+           class? journal? today-journal? split-namespace? class-ident-namespace
+           encrypted-title?]
     :or   {properties               nil
            persist-op?              true}
     :as options}]
@@ -394,7 +395,8 @@
         class? (or class? (some (fn [t] (= :logseq.class/Tag (resolved-tag-ident db t))) resolved-tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
-        _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
+        _ (when-not encrypted-title?
+            (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}}))
         types (cond class?
                     #{:logseq.class/Tag}
                     (or journal? today-journal?)
@@ -462,6 +464,7 @@
                                            :page-uuid (when (uuid? uuid') uuid')
                                            :skip-existing-page-check? true})
             [page parents'] (if (and (not (:block/journal-day page))
+                                     (not encrypted-title?)
                                      (text/namespace-page? title)
                                      split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
@@ -470,8 +473,10 @@
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
-          ;; Don't validate journal names because they can have '/'
-          (when-not (or (contains? types :logseq.class/Journal)
+          ;; Don't validate journal names because they can have '/', nor
+          ;; encrypted titles which are opaque ciphertext packages
+          (when-not (or encrypted-title?
+                        (contains? types :logseq.class/Journal)
                         (contains? (set (:block/tags page)) :logseq.class/Journal))
             (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
             (doseq [parent parents']

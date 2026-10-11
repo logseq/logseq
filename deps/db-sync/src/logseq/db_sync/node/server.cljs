@@ -107,6 +107,21 @@
          (detach-ws! ctx socket)
          (log/error :db-sync/ws-error error))))
 
+(defn- local-do-namespace
+  "Durable Object namespace stand-in that forwards to the local graph context."
+  [registry deps]
+  #js {:idFromName (fn [graph-id] graph-id)
+       :get (fn [_do-id]
+              #js {:fetch (fn [request]
+                            (let [url (platform/request-url request)
+                                  graph-id (.get (.-searchParams url) "graph-id")]
+                              (sync-handler/handle-http
+                               (graph/get-or-create-graph registry deps graph-id)
+                               request)))})})
+
+(defn- unlimited-limiter []
+  #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
+
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
@@ -120,7 +135,10 @@
         env (doto (make-env cfg index-db assets-bucket)
               (aset "DB_SYNC_DELETE_GRAPH"
                     (fn [graph-id]
-                      (graph/delete-graph! registry deps graph-id))))
+                      (graph/delete-graph! registry deps graph-id)))
+              (aset "LOGSEQ_SYNC_DO" (local-do-namespace registry deps))
+              (aset "SEMANTIC_READ_RATE_LIMITER" (unlimited-limiter))
+              (aset "SEMANTIC_WRITE_RATE_LIMITER" (unlimited-limiter)))
         server (.createServer http
                               (fn [req res]
                                 (-> (p/let [request (platform-node/request-from-node req request-origin)
