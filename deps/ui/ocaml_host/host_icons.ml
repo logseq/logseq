@@ -33,11 +33,23 @@ let icon_name store id =
   | Some _ as n -> n
   | None -> Lui_store.string_prop store id "icon"
 
+(* App-pushed SVGs win; otherwise fall back to the builtin icon table
+   so icon-kind nodes (name only, no app-svg) still render. *)
+let svg_of name =
+  let name =
+    if String.length name > 4 && String.sub name 0 4 = "app:" then
+      String.sub name 4 (String.length name - 4)
+    else name
+  in
+  match Hashtbl.find_opt svgs name with
+  | Some _ as s -> s
+  | None -> List.assoc_opt name Host_builtin_icons.all
+
 let image_of store scale id r : Lui_scene.image option =
   match icon_name store id with
   | None -> None
   | Some name -> (
-      match Hashtbl.find_opt svgs name with
+      match svg_of name with
       | None -> None
       | Some src ->
         let w =
