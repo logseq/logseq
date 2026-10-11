@@ -1555,8 +1555,16 @@
                          (:db/id left-left))
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                    :up? up?}))))
+          (if (and (not sibling?)
+                   (:logseq.property/created-from-property first-block))
+            ;; a property value moved up past the first value: moving it into
+            ;; its parent would make it an ordinary child, so the first value
+            ;; moves down after it instead, and every value stays a value
+            (move-blocks conn [first-block-left-sibling] (last top-level-blocks)
+                         (merge opts {:sibling? true
+                                      :up? false}))
+            (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
+                                                                      :up? up?})))))
 
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
