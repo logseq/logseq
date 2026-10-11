@@ -507,7 +507,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   (* the delegated context-menu handler reads data-tag-uuid/id/title/
      priv off the chip root — they ride ~data_attrs *)
   Ui_components.with_props
-    [ Lui_protocol.DisplayValue, Ui_components.sv "flex"
+    [ (* cljs .block-tag is inline-flex; bare "flex" is not a valid
+         DisplayValue and crashes the host at mount *)
+      Lui_protocol.DisplayValue, Ui_components.sv "inline-flex"
     ; Lui_protocol.Position, Ui_components.sv "relative"
     ; Lui_protocol.CornerRadius, Ui_components.iv 4
     ; ( Lui_protocol.HoverBackground
