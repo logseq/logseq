@@ -305,7 +305,13 @@ let auto_backup ctx =
     ; (if not (Ui_services.files_dir_picker_supported ()) then
          box ~key:"ab-na"
            [ text ~key:"ab-na-s"
-               ~value:(T.t "export.backup/unsupported-desc") [] ]
+               (* the dict text embeds a cljs {{component}} link slot —
+                  native renders its inner caption plainly *)
+               ~value:
+                 (T.t "export.backup/unsupported-desc"
+                  |> I18n.replace_all "{{" ""
+                  |> I18n.replace_all "}}" "")
+               [] ]
        else
          let folder_sig = Signal.value ((folder_st ctx)) in
          Logseq_el.fragment
