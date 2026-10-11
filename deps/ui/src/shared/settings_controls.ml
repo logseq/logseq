@@ -141,9 +141,10 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
 
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
-    ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem") () =
+    ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem")
+    ?(min_height = 36) () =
   ignore for_;
-  Ui_components.form_row ~key ~col_gap
+  Ui_components.form_row ~key ~col_gap ~min_height
     ~label:
       (Ui_components.form_label ~key:(key ^ "-l") ~line_height:label_lh
          ~text:label ())
@@ -164,20 +165,30 @@ let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ()
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
-let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value") children =
+let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value")
+    ?(min_height = 36) children =
   ignore for_;
   ignore value_cls;
-  Ui_components.form_row ~key
+  Ui_components.form_row ~key ~min_height
     ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
     ~control:(column ~key:(key ^ "-r") ~cross:`stretch children)
     ()
 
 (* row: label | <a> solid button *)
-let edit_link_row ~key ~label ~button ~href ~for_ () =
-  action_row ~key ~for_ ~label
+let edit_link_row ~key ~label ~button ~href ~for_ ?(min_height = 36) () =
+  action_row ~key ~for_ ~label ~min_height
     ~actions:
-      [ link ~key:(key ^ "-a")
-          ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
-          ~url:href ~target:`self_ ~text:button []
+      [ Ui_components.with_props
+          [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+          ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+          (link ~key:(key ^ "-a")
+             ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
+             ~url:href ~target:`self_ ~text:button
+             ~background:"hsl(var(--primary) / 0.9)"
+             ~foreground:"hsl(var(--primary-foreground))"
+             ~height:28 ~padding_horizontal:12 ~padding_vertical:4
+             ~corner_radius:4
+             ~data_attrs:[ "style", "text-decoration:none" ]
+             [])
       ]
     ()

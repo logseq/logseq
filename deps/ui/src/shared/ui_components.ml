@@ -591,7 +591,7 @@ let ls_tooltip_keys ~key children : t =
    cljs `.it` carries `sm:items-start`, so cells top-align. The <640px
    stacked variant is a documented leftover (no breakpoint channel). *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
-    ?(col_gap = 24) ~control () : t =
+    ?(col_gap = 24) ?(min_height = 36) ~control () : t =
   (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
      columns — flex-grow with auto bases drifts with content width, so
      the cells carry explicit zero-basis flex ratios. .its nested inside
@@ -600,7 +600,8 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     Printf.sprintf "calc((100%% - %dpx) / 3)" (2 * col_gap)
   in
   row ~key ~style_class:"it" ~gap:col_gap ~min_width:0 ~cross:`start
-    ([ column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch
+    ~min_height
+    ([ column ~key:(key ^ "-lc") ~min_width:180 ~cross:`stretch
          ~gap:0
          ~data_attrs:
            [ "style"
@@ -608,7 +609,7 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
          ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
               (label :: label_extra) ]
           @ match desc with Some d -> [ d ] | None -> [])
-     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
+     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16 ~grow:1.
          ~data_attrs:
            [ "style"
            , Printf.sprintf "flex: %s; min-width: 0"
@@ -803,7 +804,8 @@ let plugin_card ~key ?(classes = "") child : t =
    list_item keeps the `selected` prop + kind hooks; the active ring
    rides the thumbnail's shadow signal. Per-side pads ride the
    documented data-attrs style pair. *)
-let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
+let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
+    ~selected_signal:selected
     ~on_press () : t =
   with_props
     [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
@@ -812,14 +814,15 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
           below — column keeps the label under the image instead of
           beside it; cljs li has no padding, i and strong are flush *)
-       [ column ~key:"c" ~cross:`start ~gap:0
+       [ column ~key:"c" ~cross:`start ~gap:0 ~min_height
            [ Ui_parts.class_signal selected
                (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-               (image ~key:"i" ~url:image_url ~alt:label ~width:92
-                  ~height:63 ~corner_radius:4
-                  ~data_attrs:
-                    [ "style", "height:63.25px;object-fit:cover" ]
-                  ~background:"var(--lx-gray-04, hsl(var(--muted)))" [])
+               (with_props [ P.Overflow, sv "hidden" ]
+                  (box ~key:"i" ~width:92 ~height:63 ~corner_radius:4
+                     ~border_width:1
+                     ~border_color:"var(--lx-gray-06, hsl(var(--border)))"
+                     ~background:"var(--lx-gray-04, hsl(var(--muted)))"
+                     [ thumbnail ]))
            ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
                ~line_height:"1rem" ~value:label ~text_alignment:`center
                ~data_attrs:

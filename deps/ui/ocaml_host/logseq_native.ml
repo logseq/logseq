@@ -485,6 +485,12 @@ let () =
                in
                Host_icons.image_of (Lui_host.store h) !scale_cell id r
              | None -> None);
+        image_in =
+          (fun id r ->
+             match !host_cell with
+             | Some h ->
+               Host_icons.image_of (Lui_host.store h) !scale_cell id r
+             | None -> None);
         shadow_of =
           (fun name -> Lui_theme.shadow_of !Theme_vars.mode name) }
   in
