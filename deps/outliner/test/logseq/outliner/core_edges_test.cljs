@@ -423,6 +423,32 @@
         (is (= "fresh page" (:block/title ref)))
         (is (some? (:block/tags ref)) "the page's tags from the page it creates")))))
 
+(deftest container-page-of-a-page-nested-under-a-block
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks [{:block/title "b1"}]}
+               {:page {:block/title "nested"} :blocks []}
+               {:page {:block/title "child page"} :blocks []}])
+        b1 (db-test/find-block-by-content @conn "b1")
+        page1 (db-test/find-page-by-title @conn "page1")
+        _ (d/transact! conn [[:db/add (:db/id (db-test/find-page-by-title @conn "nested")) :block/parent (:db/id b1)]
+                             [:db/add (:db/id (db-test/find-page-by-title @conn "child page")) :block/parent (:db/id page1)]])
+        f #'outliner-core/container-page-eid]
+    (is (nil? (f (db-test/find-page-by-title @conn "nested"))) "a page under a block is in no page")
+    (is (= (:db/id page1) (f (db-test/find-page-by-title @conn "child page"))))
+    (is (= (:db/id page1) (f b1)))))
+
+(deftest a-move-up-onto-a-collapsed-block-targets-the-block
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "p" :block/collapsed? true :build/children [{:block/title "c"}]}
+                         {:block/title "x"}]}])
+        p (db-test/find-block-by-content @conn "p")
+        x (db-test/find-block-by-content @conn "x")
+        [target sibling?] (#'outliner-core/get-target-block @conn [x] p
+                                                            {:outliner-op :move-blocks-up-down :up? true :sibling? false})]
+    (is (= "p" (:block/title target)))
+    (is (false? sibling?))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
