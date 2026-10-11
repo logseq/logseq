@@ -775,20 +775,6 @@ html[data-theme=dark] {
   }
 }
 
-.block-ref-wrap {
-  &[data-hl-type=area] {
-    display: block;
-
-    .block-ref {
-      display: block;
-      border: none;
-    }
-
-    .prefix-link > .hl-area {
-      cursor: alias;
-    }
-  }
-}
 
 .block-content {
   &[data-type=annotation] {
@@ -937,16 +923,6 @@ body.is-pdf-active {
   }
 }
 
-html.is-system-window {
-  .extensions__pdf-container {
-    width: 100vw;
-    height: 100vh;
-  }
-
-  .extensions__pdf-loader {
-    @apply w-full;
-  }
-}
 
 /* overrides for pdf_viewer.css from PDF.JS web viewer */
 
