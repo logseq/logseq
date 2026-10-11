@@ -728,4 +728,17 @@ let handle (envelope : string) =
              | _ -> ())
           | other -> log "platform request %s: %s" other payload))
 
-let drain () = List.iter handle (Bridge.take_requests ())
+let name_of req =
+  try String.sub req 0 (String.index req '\n') with _ -> "?"
+
+let drain () =
+  List.iter
+    (fun req ->
+       let t0 = Unix.gettimeofday () in
+       handle req;
+       let dt = Unix.gettimeofday () -. t0 in
+       if dt > 0.005 then
+         Daemon_client.boot_mark
+           (Printf.sprintf "hostreq %.0fms %s" (dt *. 1000.)
+              (name_of req)))
+    (Bridge.take_requests ())

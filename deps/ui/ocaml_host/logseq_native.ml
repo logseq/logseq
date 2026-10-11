@@ -32,6 +32,15 @@ external native_titlebar_blend : unit -> unit
 external native_register_fonts : string -> unit
   = "logseq_native_register_fonts"
 
+(* ocaml_host_stubs.c: an NSVisualEffectView with the .sidebar material
+   ordered below the content view in the window's frame view, tracking
+   the left sidebar column. x/y/w/h are window points in frame-view
+   coordinates (origin bottom-left, y already flipped); visible=false
+   hides it. *)
+external sidebar_vibrancy :
+  float -> float -> float -> float -> bool -> unit
+  = "logseq_native_sidebar_vibrancy"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -139,6 +148,7 @@ let input_of_event e =
   | _ -> None
 
 let () =
+  Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
   (try
@@ -160,7 +170,15 @@ let () =
   let env = try Sys.getenv "LUI_GPU" with Not_found -> "" in
   let use_cpu = env = "0" || env = "cpu" in
   let prefer_metal = not use_cpu && env <> "gl" && env <> "opengl" in
+  (* The embedded app's bootstrap (~70ms) is pure OCaml work — it
+     touches no SDL/Metal state. Run it on a spare domain while this
+     thread does window + renderer setup; joined below right before
+     the init patches are applied. *)
+  let init_d =
+    Domain.spawn (fun () -> Native_embed.initialize 1 0 "")
+  in
   sdl_ok (Sdl.init Sdl.Init.(video + events));
+  Daemon_client.boot_mark "sdl init";
   sdl_ok (Sdl.gl_set_attribute Sdl.Gl.context_major_version 3);
   sdl_ok (Sdl.gl_set_attribute Sdl.Gl.context_minor_version 3);
   sdl_ok
@@ -177,6 +195,7 @@ let () =
          (Sdl.create_window "logseq" ~w:width ~h:height
             (flags (not prefer_metal))))
   in
+  Daemon_client.boot_mark "window created";
   let metal =
     if prefer_metal then
       match Lui_metal.init_window (Sdl.unsafe_ptr_of_window !win) with
@@ -191,6 +210,7 @@ let () =
         None
     else None
   in
+  Daemon_client.boot_mark "window+gpu ctx";
   let gctx =
     if Option.is_some metal then None
     else match Sdl.gl_create_context !win with
@@ -298,12 +318,18 @@ let () =
                 warn "lui_gl.init failed: %s; falling back to noop" m;
                 (noop_renderer, false, None)))
   in
+  Daemon_client.boot_mark "renderer ready";
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
   let blit_cell = ref blit and gctx_cell = ref gctx in
+  (* Runs between the scene's seal and the active renderer, for
+     host-side display-list surgery — the sidebar vibrancy hook
+     installed further down is its only user. *)
+  let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let renderer_live =
     { Lui_host.name = "lui (resilient)";
       Lui_host.render =
         (fun s ->
+           !pre_render s;
            try (!renderer_cell).Lui_host.render s
            with _ -> noop_renderer.render s) }
   in
@@ -455,6 +481,26 @@ let () =
              match !host_cell with
              | Some h ->
                let r = engine_rect id in
+               let r =
+                 match Lui_store.string_prop (Lui_host.store h) id "icon"
+                 with
+                 | Some _ ->
+                   (* icon-prop slots (button, menu-item…) paint the
+                      whole image inside an <=18px slot — rasterizing at
+                      the host node's rect stretches the glyph *)
+                   let slot =
+                     Float.min 18.
+                       (Float.min r.Lui_scene.w r.Lui_scene.h)
+                   in
+                   { r with Lui_scene.w = slot; Lui_scene.h = slot }
+                 | None -> r
+               in
+               Host_icons.image_of (Lui_host.store h) !scale_cell id r
+             | None -> None);
+        image_in =
+          (fun id r ->
+             match !host_cell with
+             | Some h ->
                Host_icons.image_of (Lui_host.store h) !scale_cell id r
              | None -> None);
         shadow_of =
@@ -492,6 +538,7 @@ let () =
   in
   host_cell := Some host;
   let store = Lui_host.store host in
+  Daemon_client.boot_mark "host ready";
   Lui_host.set_hidden host (Some (fun id -> Ui.hidden ui store id));
   Lui_host.set_ctx_anchor host
     (Some (fun () -> Some (Ui.pointer ui)));
@@ -528,8 +575,58 @@ let () =
         Lui_scene.y = base.Lui_scene.y -. sy }
       clip
   in
+  (* macOS sidebar vibrancy: the left sidebar column is the node
+     classed cp__sidebar-left-layout; populate_rects records its id so
+     the render hook below can keep an NSVisualEffectView under the
+     content view glued to its rect and punch a transparent Hole over
+     it in the display list. *)
+  let sidebar_id_cell = ref (-1) in
+  let class_has cls tok =
+    List.exists (fun t -> t = tok) (String.split_on_char ' ' cls)
+  in
+  (* Splice a Hole covering [r] into the display list, right after the
+     last fill that backdrops the column (a fill inside [r] covering
+     most of it). The hole batch writes alpha 0 through everything
+     painted earlier, exposing the effect view below the content view;
+     ops after it — the sidebar's own content — repaint opaque on top.
+     With no backdrop found the hole goes first, which at least clears
+     the window background under the column. *)
+  let sidebar_hole (r : Lui_scene.rect) ops =
+    let covers (f : Lui_scene.fill_op) =
+      let a = f.Lui_scene.frect in
+      a.Lui_scene.x >= r.Lui_scene.x -. 2.
+      && a.Lui_scene.y >= r.Lui_scene.y -. 2.
+      && a.Lui_scene.x +. a.Lui_scene.w
+         <= r.Lui_scene.x +. r.Lui_scene.w +. 2.
+      && a.Lui_scene.y +. a.Lui_scene.h
+         <= r.Lui_scene.y +. r.Lui_scene.h +. 2.
+      && a.Lui_scene.w *. a.Lui_scene.h
+         >= 0.7 *. r.Lui_scene.w *. r.Lui_scene.h
+    in
+    let hole =
+      Lui_scene.Hole
+        { hrect = r;
+          hradii = (0., 0., 0., 0.);
+          hcontinuous = false;
+          hopacity = 1. }
+    in
+    let rec last_backdrop i acc = function
+      | [] -> acc
+      | Lui_scene.Fill f :: tl ->
+        last_backdrop (i + 1) (if covers f then i else acc) tl
+      | _ :: tl -> last_backdrop (i + 1) acc tl
+    in
+    let cut = last_backdrop 0 (-1) ops + 1 in
+    let rec splice i = function
+      | [] -> [ hole ]
+      | op :: tl ->
+        if i = cut then hole :: op :: tl else op :: splice (i + 1) tl
+    in
+    splice 0 ops
+  in
   let populate_rects () =
     Hashtbl.reset rects;
+    sidebar_id_cell := -1;
     List.iter
       (fun id ->
          let base = engine_rect id in
@@ -555,7 +652,12 @@ let () =
              Lui_scene.x = base.Lui_scene.x -. sx;
              Lui_scene.y = base.Lui_scene.y -. sy }
          in
-         Hashtbl.replace rects id (rect_intersect r clip))
+         Hashtbl.replace rects id (rect_intersect r clip);
+         if !sidebar_id_cell < 0 then
+           match Lui_store.string_prop store id "style-class" with
+           | Some c when class_has c "cp__sidebar-left-layout" ->
+             sidebar_id_cell := id
+           | _ -> ())
       (Lui_store.preorder store);
     List.iter
       (fun id ->
@@ -567,6 +669,43 @@ let () =
            Ui.set_scroll_cap_x ui id
              (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
       (Lui_store.preorder store)
+  in
+  (* Metal + macOS only: keep the .sidebar NSVisualEffectView frame
+     glued to the sidebar column and splice the hole into the display
+     list each render. engine_rect reads the layout just computed by
+     the repaint this render belongs to, so the frame never lags. *)
+  let () =
+    if Option.is_some metal then
+      pre_render :=
+        (fun (s : Lui_scene.t) ->
+         match !host_cell with
+         | None -> ()
+         | Some _ -> (
+           let id = !sidebar_id_cell in
+           let cls =
+             if id < 0 then ""
+             else
+               Option.value ~default:""
+                 (Lui_store.string_prop (store_of ()) id "style-class")
+           in
+           let r =
+             if id < 0 then Lui_scene.rect 0. 0. 0. 0.
+             else engine_rect id
+           in
+           if
+             id >= 0 && class_has cls "is-open"
+             && r.Lui_scene.w >= 4. && r.Lui_scene.h >= 4.
+           then begin
+             s.Lui_scene.ops <- sidebar_hole r s.Lui_scene.ops;
+             let sc = !scale_cell in
+             sidebar_vibrancy
+               (r.Lui_scene.x /. sc)
+               (float !win_h -. (r.Lui_scene.y +. r.Lui_scene.h) /. sc)
+               (r.Lui_scene.w /. sc)
+               (r.Lui_scene.h /. sc)
+               true
+           end
+           else sidebar_vibrancy 0. 0. 0. 0. false))
   in
   (* Swift spine contract stand-in: the Swift host fires "lazy-mount"
      on row spacers scrolling into view and "virt-end" when a virt list
@@ -873,7 +1012,21 @@ let () =
          emit_dom "click" node (fields ~detail:clicks);
          if clicks >= 2 then emit_dom "dblclick" node (fields ~detail:clicks)
        end
-     | Input.Right -> emit_dom "contextmenu" node (fields ~detail:0)
+     | Input.Right ->
+       (* contextmenu carries the hit node's live rect so document
+          listeners can anchor popups to the event target (element
+          center-x / bottom, the web anchor semantic) — element rect
+          queries on this host are fire-and-poll and can't answer
+          synchronously *)
+       let r = Rects.get rects node in
+       emit_dom "contextmenu" node
+         (pointer_fields ~x ~y ~button ~buttons:!dom_buttons ~mods
+            ~extra:
+              [ ( "detail"
+                , Printf.sprintf
+                    "{\"tx\":%.1f,\"ty\":%.1f,\"tw\":%.1f,\"th\":%.1f}"
+                    r.Lui_scene.x r.Lui_scene.y r.Lui_scene.w
+                    r.Lui_scene.h ) ])
      | _ -> ());
     dom_down_node := 0;
     dom_down_clicks := 0
@@ -1104,15 +1257,20 @@ let () =
   ignore (Lui_shell.set_window_title "logseq");
   (* platform_code 1 = MacOS, host_code 0 = the generic host
      profile (drives the app-icons push and host-gated views). *)
-  let init_patches = Native_embed.initialize 1 0 "" in
+  let init_patches = Domain.join init_d in
+  Daemon_client.boot_mark "app initialized";
   apply_patch_json init_patches;
-  ignore (Lui_host.repaint host);
+  Daemon_client.boot_mark "init patches applied";
+  (* No synchronous first paint: the frame loop repaints once after
+     draining the mailbox, so boot pumps are not each gated behind a
+     full layout+shaping+render pass. *)
   populate_rects ();
   Ui.set_measure ui
     (fun _store id s -> Text_engine.measure_text text_engine id s);
   Ui.set_content_rect ui engine_rect;
   let a11y = Lui_a11y.of_store store in
   (* Host_requests env: the dom-op/platform-request sink. *)
+  let host_req_repaint = ref false in
   Host_requests.install
     { Host_requests.store;
       ui;
@@ -1130,7 +1288,12 @@ let () =
              Sdl.start_text_input ();
              set_ime_rect (Rects.get rects id)
            end);
-      repaint = (fun () -> ignore (Lui_host.repaint host)) };
+      (* host requests mark dirty instead of repainting inline: the
+         loop already coalesces all pending work into one paint per
+         iteration — several boot-time ui-state/theme pushes would
+         otherwise each pay a full layout+shape+render. *)
+      repaint = (fun () -> host_req_repaint := true) };
+  Daemon_client.boot_mark "requests installed";
   (* appearance + window-size environment push — the app's
      prefers_dark and inner_width/inner_height resolve against these. *)
   let dark =
@@ -1140,9 +1303,12 @@ let () =
     ignore (Unix.close_process_in ic);
     String.trim out = "Dark"
   in
+  Daemon_client.boot_mark "dark read";
   Native_embed.platform_event
     (Printf.sprintf "appearance\n{\"dark\":%b}" dark);
+  Daemon_client.boot_mark "appearance pushed";
   push_window_size ();
+  Daemon_client.boot_mark "size pushed";
   (match
      List.find_opt
        (fun id -> Lui_store.bool_prop store id "autofocus")
@@ -1152,20 +1318,29 @@ let () =
      Ui.set_focused ui store id;
      Sdl.start_text_input ()
    | None -> ());
+  Daemon_client.boot_mark "autofocus";
   log "logseq_native: %dx%d drawable (scale %.2f), renderer=%s, icons=%d"
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
   let raises_left = ref 3 in
+  Daemon_client.boot_mark "loop";
   while not !quit do
     let t0 = perf_s () in
     (* See the raise_window note above: re-raise briefly after boot so a
        racing frontmost app cannot permanently steal input routing. *)
-    if !raises_left > 0 then begin
+    (* First raise_window call blocks ~70ms on macOS; defer the
+       boot-time re-raises until the journal frame has painted so
+       they run off the critical path. *)
+    if !raises_left > 0 && !frame >= 3 then begin
       decr raises_left;
+      Daemon_client.boot_mark "raise begin";
       Sdl.raise_window !win;
-      native_activate ()
+      Daemon_client.boot_mark "raise win";
+      native_activate ();
+      Daemon_client.boot_mark "raise end"
     end;
     drain_events ();
+    if !frame < 3 then Daemon_client.boot_mark "events drained";
     (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
        (id kind key class rect, indented) to the debug log. *)
     if Atomic.exchange dump_tree_flag false then begin
@@ -1227,37 +1402,60 @@ let () =
            sc.Lui_scene.ops)
     end;
     (* OCaml worker threads poke wakeup() when the app mailbox fills —
-       pump drains it on this entry thread; returned patches apply. *)
-    if Atomic.exchange Bridge.pending_wakeup false then begin
-      let r = Native_embed.pump () in
-      if !debug then warn "pump -> %d bytes" (String.length r);
-      apply_patch_json r
-    end;
+       pump drains it on this entry thread; returned patches apply.
+       Burst coalescing: each pump can enqueue more work (promise
+       continuations), so keep pumping until the mailbox is quiet
+       before paying for a repaint — otherwise every boot patch
+       serializes a full paint into the pump path. *)
+    let rec pump_all n =
+      if n > 0 && Atomic.exchange Bridge.pending_wakeup false then begin
+        let r = Native_embed.pump () in
+        if !debug then warn "pump -> %d bytes" (String.length r);
+        apply_patch_json r;
+        pump_all (n - 1)
+      end
+    in
+    pump_all 8;
+    if !frame < 3 then Daemon_client.boot_mark "pumps drained";
     (* platform_request envelopes the app emitted are serviced here. *)
     Host_requests.drain ();
     apply_actions (Ui.store_changed ui store);
     if Ui.focused ui <> 0 then
       apply_actions
         (Ui.handle ui store rects (Input.Caret (caret_rect ())));
-    let dirty = Ui.want_frame ui host in
+    let dirty = Ui.want_frame ui host || !host_req_repaint in
     if dirty then begin
+      host_req_repaint := false;
+      Daemon_client.boot_mark "paint begin";
       ignore (Lui_host.repaint host);
+      Daemon_client.boot_mark "paint done";
       if !debug then
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
       populate_rects ();
       fire_viewport_events ();
+      Daemon_client.boot_mark "viewport";
       ignore (Lui_a11y.sync a11y);
+      Daemon_client.boot_mark "a11y sync";
       if !gl_live_cell then Sdl.gl_swap_window !win;
       Ui.frame_done ui;
       incr frame
     end;
+    (let iter_ms = (perf_s () -. t0) *. 1000. in
+     if iter_ms > 20. then
+       Daemon_client.boot_mark (Printf.sprintf "iter %.0fms" iter_ms));
     if dirty && not vsync then begin
-      let remaining = 16.6 -. ((perf_s () -. t0) *. 1000.) in
+      (* Boot frames pace at ~2ms, not vsync: pacing sleeps delay the
+         wakeup-driven boot pumps behind every repaint. *)
+      let cap = if !frame < 60 then 2. else 16.6 in
+      let remaining = cap -. ((perf_s () -. t0) *. 1000.) in
       if remaining > 0.5 then
         Sdl.delay (Int32.of_int (int_of_float remaining))
     end
-    else if not dirty then Sdl.delay 4l
+    else if not dirty then
+      (* 1ms during boot: wakeup-driven pumps otherwise wait a 4ms
+         sleep per hop across the serialized invoke chain. *)
+      Sdl.delay (if !frame < 60 then 1l else 4l)
   done;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with

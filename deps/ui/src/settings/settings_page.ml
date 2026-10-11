@@ -89,7 +89,7 @@ let language_row ctx =
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  Ui_components.form_row ~key:"theme"
+  Ui_components.form_row ~key:"theme" ~min_height:96
     ~label:
       (Ui_components.form_label ~key:"theme-l"
          ~text_signal:
@@ -108,23 +108,31 @@ let theme_row ctx =
          ~text:"" ())
     ~control:
       (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
-         [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
+         [ box ~key:"theme-a" [ V.theme_modes_ul ~ctx ~st:mode ]
          ; row ~key:"theme-desc" ~cross:`center
              [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
          ])
     ()
 
 let font_button ~key ~label ~active ~on_click =
-  button ~key ~variant:`secondary ~selected:active ~label
+  button ~key ~variant:`secondary ~selected:active
+    ~label
+    ~height:40 ~padding_horizontal:16
+    ~border_width:(if active then 2 else 0)
+    ~border_color:"hsl(var(--primary))"
     ~style_class:
       (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
      ^ if active then " ls-active" else "")
     ~on_press:(fun _ -> on_click ())
-    [ column ~key:(key ^ "-s")
+    [ column ~key:(key ^ "-s") ~gap:0 ~cross:`stretch ~grow:1.
         ~style_class:
           ("ls-font ls-font-" ^ String.lowercase_ascii label)
-        [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample" ~value:"Ag" []
-        ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name" ~value:label []
+        [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample"
+            ~font_size:"0.875rem" ~line_height:"1.25rem" ~height:20
+            ~text_alignment:`center ~value:"Ag" []
+        ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name"
+            ~font_size:"0.6875rem" ~line_height:"1rem" ~height:16
+            ~text_alignment:`center ~value:label []
         ]
     ]
 
@@ -135,7 +143,7 @@ let editor_font_row () =
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
   C.it_row ~key:"font" ~for_:"font_family" ~label:T.editor_font
-    ~value_cls:"ls-it-value-col"
+    ~value_cls:"ls-it-value-col" ~min_height:76
     [ row ~key:"font-btns" ~style_class:"ls-row-gap"
         [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
     ; box ~key:"font-g" ~style_class:"ls-font-global"
@@ -200,19 +208,27 @@ let accent_swatch ~key ~modal ~current color =
 
 let accent_row ~modal =
   let current = S.current_accent () in
+  let names = "none" :: "logseq" :: color_names in
+  let swatch_row ~key cs =
+    row ~key ~gap:8 ~cross:`center
+      (List.mapi
+         (fun i c ->
+           accent_swatch ~key:(key ^ "-" ^ string_of_int i) ~modal ~current c)
+         cs)
+  in
   let swatches =
-    grid ~key:"acc-l" ~columns:8 ~gap:8
+    column ~key:"acc-l" ~gap:8
       ~style_class:
         ("cp__accent-colors-list-wrap"
        ^ if modal then " as-modal-picker" else "")
-      (List.mapi
-         (fun i c ->
-           accent_swatch ~key:("acc-" ^ string_of_int i) ~modal ~current c)
-         ("none" :: "logseq" :: color_names))
+      [ swatch_row ~key:"acc-r0" (List.filteri (fun i _ -> i < 8) names)
+      ; swatch_row ~key:"acc-r1" (List.filteri (fun i _ -> i >= 8) names)
+      ]
   in
-  column ~key:"acc"
+  column ~key:"acc" ~min_height:80
     [ C.action_row ~key:"acc-r" ~for_:"toggle_radix_theme"
         ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
+        ~min_height:60
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
@@ -374,14 +390,16 @@ let keymap_controls st =
     ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
     [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
         ~main:`space_between ~flex_wrap:`wrap
-        [ Ui_components.search_row ~key:"km-sw" ~height:26
-            ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
-            ~placeholder:T.keymap_search_placeholder
-            ~text_signal:(Signal.map (fun s -> s.km_query) (Signal.value st))
-            ~on_input:(function
-                | Lui_protocol.TextChanged (_, query) ->
-                    Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
-                | _ -> ()) ()
+        [ box ~key:"km-sw-w" ~grow:1. ~min_width:0
+            [ Ui_components.search_row ~key:"km-sw" ~height:26
+                ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
+                ~placeholder:T.keymap_search_placeholder
+                ~text_signal:(Signal.map (fun s -> s.km_query) (Signal.value st))
+                ~on_input:(function
+                    | Lui_protocol.TextChanged (_, query) ->
+                        Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
+                    | _ -> ()) ()
+            ]
         ; Ui_components.with_props
             [ ( Lui_protocol.HoverBackground
               , Ui_components.sv
@@ -486,11 +504,12 @@ let keymap_row ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
   list_item ~key ~style_class:"shortcut-row"
-    [ box ~key:(key ^ "l") 
-        [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
-            ~value:(I18n.t (command_key_of r.title)) []
-        ]
-    ; row ~key:(key ^ "a")  ~cross:`center
+    [ row ~key:(key ^ "r") ~cross:`center ~main:`space_between ~grow:1.
+        [ box ~key:(key ^ "l")
+            [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
+                ~value:(I18n.t (command_key_of r.title)) []
+            ]
+        ; row ~key:(key ^ "a") ~cross:`center ~gap:6
         (if r.unset then
            [ text ~key:(key ^ "u")
                 ~value:T.keymap_unset
@@ -503,6 +522,7 @@ let keymap_row ~key (r : Keymap_data.row) =
              (fun i b ->
                keymap_binding ~key:(key ^ "b" ^ string_of_int i) b)
              r.bindings)
+        ]
     ]
 
 let keymap_pane () : t =
@@ -610,9 +630,10 @@ let home_page_row ctx =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
   C.it_row ~key:"homep" ~for_:"default page" ~label:T.home_default_page
-    [ box ~key:"homep-w" ~style_class:"ls-select-wrap"
+    [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ input ~key:"homep-in"
-            ~accessibility_identifier:"home-default-page"
+            ~accessibility_identifier:"home-default-page" ~width:220
+            ~height:26
             ~style_class:"form-input is-small" ~text:current
             ~on_input:(fun ev ->
               match ev with
@@ -640,7 +661,7 @@ let switch_action_row ~key ~for_ ~label ~on ~on_toggle () =
 
 let features_pane ctx =
   column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
-    ~gap:16 ~padding:4 ~margin_bottom:32
+    ~gap:16 ~padding:4 ~margin_bottom:32 ~min_width:560
     [ home_page_row ctx
     ; C.action_row ~key:"plugs" ~for_:"plugin_system"
         ~label:T.plugins_label
@@ -678,7 +699,7 @@ let nav_item ~key (id, label, icn) =
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
-    (Ui_components.nav_item ~key ~data_id:id ~icon:(Icons.name_ref icn)
+    (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected_signal:
          (Signal.map (fun (s : S.t) -> s.tab = id) (S.signal ()))
@@ -742,7 +763,7 @@ let inner ~modal : t =
                          ~value:T.settings_title []
                      ]
                  ; list ~key:"aside-menu"
-                     ~style_class:"settings-menu" ~padding:0 ~gap:8
+                     ~style_class:"settings-menu" ~padding:0 ~gap:6
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)

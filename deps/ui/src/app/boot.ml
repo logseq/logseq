@@ -94,6 +94,9 @@ let ensure_today_journal repo =
 let published_boot : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> failwith "Publishing boot is not installed")
 
+let boot_mark name =
+  Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
+
 let run () =
   apply_storage_env ();
   (* emoji-mart: registers <em-emoji> + SearchIndex *)
@@ -109,20 +112,26 @@ let run () =
   (if Ui_services.env_publishing () then !published_boot () else
   (let* () = Graph.init_worker () in
   let* repos = Graph.list_graphs () in
+  boot_mark "list_graphs";
   let* repo =
     Runtime.send (Action.Repos_loaded repos);
+    boot_mark "repos_loaded";
     pick_graph repos
   in
+  boot_mark "picked";
   (* pick_graph may have just created the repo (fresh profile -> Demo);
      Repos_loaded fired before that create, so register it now — the
      header's local-graph-sync-btn checks m.repos membership *)
   if not (List.mem repo repos) then !Runtime.add_repo repo;
+  boot_mark "opening";
   let* _ = Graph.open_graph repo in
+  boot_mark "opened";
   let* repo =
     Graphs_meta.touch repo;
     Js.Promise.resolve repo
   in
   let* () = ensure_today_journal repo in
+  boot_mark "journal";
   Runtime.send (Action.Boot_graph_ready repo);
   Graph.build_search_index repo;
   (* initial route resolution (deep link or home) *)
@@ -133,6 +142,7 @@ let run () =
      first nav can go back. *)
   if Ui_services.nav_hash () = "" then
     Ui_services.nav_replace_hash "#/";
+  boot_mark "route";
   Js.Promise.resolve ()))
   |> Js.Promise.catch (fun err ->
          Ui_services.log_error ("boot failed", err);

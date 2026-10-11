@@ -6,15 +6,19 @@
 
 let dom = Logseq_el.el
 
-let item key label on_click = Menu_item.el ~key ~label ~on_click ()
-
-(* cljs dropdown-menu-item renders its :icon before the title *)
-let icon_item key label icon_name on_click =
+(* cljs ui__dropdown-menu-item: px-2 py-1.5, ~32px row *)
+let item key label on_click =
   Ui_components.with_props
-    [ Lui_protocol.MinHeight, Ui_components.iv 26 ]
-    (Menu_item.el ~key ~label
-       ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
-       ~on_click ())
+    [ Lui_protocol.MinHeight, Ui_components.iv 32
+    ; Lui_protocol.PaddingHorizontal, Ui_components.iv 8 ]
+    (Menu_item.el ~key ~label ~on_click ())
+
+(* cljs dropdown-menu-item renders its :icon before the title — the
+   kind's icon slot paints it at x+8 size 18 and shifts the label *)
+let icon_item key label icon_name on_click =
+  Menu_item.el ~key ~label
+    ~icon:(Icons.name_ref icon_name)
+    ~on_click ()
 
 let separator key = Menu_item.separator ~key ~mv:4 ~mh:(-4)
 

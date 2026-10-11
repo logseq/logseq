@@ -867,6 +867,12 @@ type daemon_opts =
   }
 
 let start_daemon (opts : daemon_opts) : daemon E.t =
+  let boot_t0 = Time.monotonic_now () in
+  let mark name =
+    Printf.eprintf "[dbw +%.3fs] %s\n%!"
+      (Time.diff_monotonic_ms boot_t0 (Time.monotonic_now ()) /. 1000.)
+      name
+  in
   let host = "127.0.0.1" in
   let port = 0 in
   let owner_source =
@@ -886,6 +892,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
   else
     let repo = opts.opt_repo in
     E.bind (Root_dir.ensure_root_dir opts.opt_root_dir) (fun root_dir ->
+        mark "root-dir";
         let storage =
           Graph_lifecycle.resolve_storage ~root:root_dir
             ~graphs_dir:
@@ -903,6 +910,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
              ?ticket:opts.opt_admission_ticket
              ?generation:opts.opt_graph_generation ())
           (fun admission_rt ->
+             mark "admit";
              admission := Some admission_rt;
              let root_dir = Graph_lifecycle.runtime_root admission_rt in
              let server_list_file_v = server_list_file_path root_dir in
@@ -914,6 +922,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                  (Db_worker_log.install ~root_dir ~storage:(Some storage)
                     ~repo ~log_level:opts.opt_log_level)
                  (fun _file_path ->
+                    mark "log install";
                     Worker_log.info "db-worker-node-version"
                       [ "build-time", Common_version.build_time ()
                       ; "revision", Common_version.revision () ];
@@ -935,6 +944,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                     Broadcast.set_post_fn (fun ~kind ~payload ->
                         handle_event kind payload);
                     Worker_core.init ();
+                    mark "worker-core";
                     let proxy =
                       { remote_invoke =
                           (fun method_str args_transit ->
@@ -945,6 +955,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                     in
                     proxy_cell := Some proxy;
                     E.bind (init_worker proxy) (fun _ ->
+                        mark "init-worker";
                         E.bind
                           (if owner_source = "cli" then
                              (* The CLI never sends create-or-open-db, so a
@@ -952,6 +963,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                              E.pure true
                            else !db_exists_fn ~repo)
                           (fun db_exists ->
+                             mark ("db-exists " ^ string_of_bool db_exists);
                              (* A not-yet-created graph is initialized by
                                 the first create-or-open-db call's opts
                                 (e.g. import datoms), so only eagerly open
@@ -968,9 +980,12 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                                             opts.opt_create_empty_db ]
                                 else E.pure "")
                                (fun _ ->
-                                  start_http_server ~proxy ~repo ~host ~port
-                                    ~owner_source ~root_dir
-                                    ~on_stopped:opts.opt_on_stopped))))
+                                  mark "db open";
+                                  E.map
+                                    (fun d -> mark "http up"; d)
+                                    (start_http_server ~proxy ~repo ~host
+                                       ~port ~owner_source ~root_dir
+                                       ~on_stopped:opts.opt_on_stopped)))))
              in
              let abort_startup (error : exn) : daemon E.t =
                E.bind

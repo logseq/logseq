@@ -536,7 +536,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
      the build revision (LOGSEQ_REVISION baked by the app launcher) *)
   Icon_data.install ();
   Icons.set_app_aliases
-    [ ("new-page", "file-plus"); ("h-auto", "arrow-autofit-height") ];
+    [ ("new-page", "file-plus"); ("h-auto", "arrow-autofit-height")
+    ; ("app-feature", "layout-grid") ];
   (match Sys.getenv_opt "LOGSEQ_REVISION" with
    | Some r -> Version.set_revision r
    | None -> ())

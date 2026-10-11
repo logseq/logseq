@@ -112,11 +112,65 @@ let lang_menu ~key st mst =
 (* cljs: .radix only when an accent color is stored — no CSS rules
    target it; dropped as dead. option_card carries the .mode-* thumbnail
    (as an <img> now, not a CSS background) + the active ring. *)
-let theme_item ~st mode label =
+(* Simplified stand-in for the mode-*-theme.png thumbnails on hosts
+   with no image painting — a mini app window: left sidebar strip plus
+   content lines, light/dark halves for "system". *)
+let theme_thumb_native ~key mode =
+  match mode with
+  | "dark" ->
+    box ~key ~background:"hsl(224, 18%, 10%)"
+      [ row ~key:(key ^ "-r") ~gap:0
+          [ box ~key:(key ^ "-sb") ~width:14 ~height:63
+              ~background:"hsl(224, 18%, 7%)" []
+          ; column ~key:(key ^ "-c") ~gap:6 ~padding:10
+              [ box ~key:(key ^ "-l1") ~width:36 ~height:5
+                  ~corner_radius:2 ~background:"hsl(0, 0%, 32%)" []
+              ; box ~key:(key ^ "-l2") ~width:28 ~height:5
+                  ~corner_radius:2 ~background:"hsl(0, 0%, 26%)" []
+              ]
+          ]
+      ]
+  | "system" ->
+    row ~key ~gap:0
+      [ box ~key:(key ^ "-l") ~width:46 ~height:63
+          ~background:"hsl(0, 0%, 97%)"
+          [ box ~key:(key ^ "-lsb") ~width:10 ~height:63
+              ~background:"hsl(0, 0%, 90%)" []
+          ]
+      ; box ~key:(key ^ "-d") ~width:46 ~height:63
+          ~background:"hsl(224, 18%, 10%)"
+          [ box ~key:(key ^ "-dsb") ~width:10 ~height:63
+              ~background:"hsl(224, 18%, 7%)" []
+          ]
+      ]
+  | _ ->
+    box ~key ~background:"hsl(0, 0%, 97%)"
+      [ row ~key:(key ^ "-r") ~gap:0
+          [ box ~key:(key ^ "-sb") ~width:14 ~height:63
+              ~background:"hsl(0, 0%, 90%)" []
+          ; column ~key:(key ^ "-c") ~gap:6 ~padding:10
+              [ box ~key:(key ^ "-l1") ~width:36 ~height:5
+                  ~corner_radius:2 ~background:"hsl(0, 0%, 80%)" []
+              ; box ~key:(key ^ "-l2") ~width:28 ~height:5
+                  ~corner_radius:2 ~background:"hsl(0, 0%, 85%)" []
+              ]
+          ]
+      ]
+
+let theme_item ~(ctx : Lui_ui.ui_context) ~st mode label =
+  let thumbnail =
+    match Lui_ui.host ctx with
+    | Lui_protocol.GenericHost -> theme_thumb_native ~key:("tt-" ^ mode) mode
+    | _ ->
+      image ~key:("tt-" ^ mode)
+        ~url:("../img/" ^ mode ^ "-theme.png") ~alt:label
+        ~width:92 ~height:63 ~corner_radius:4
+        ~data_attrs:[ "style", "height:63.25px;object-fit:cover" ] []
+  in
   C.class_signal (Signal.value st)
     (fun active -> if active = mode then "active" else "")
-    (Ui_components.option_card ~key:("tm-" ^ mode) ~mode
-       ~image_url:("../img/" ^ mode ^ "-theme.png") ~label
+    (Ui_components.option_card ~key:("tm-" ^ mode) ~mode ~thumbnail ~label
+       ~min_height:83
        ~selected_signal:
          (Signal.map (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
@@ -125,12 +179,12 @@ let theme_item ~st mode label =
          Runtime.flush ()) ())
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
-let theme_modes_ul ~st =
+let theme_modes_ul ~ctx ~st =
   row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
-    ~cross:`center
-    [ theme_item ~st "light" T.theme_light
-    ; theme_item ~st "dark" T.theme_dark
-    ; theme_item ~st "system" T.theme_system
+    ~cross:`center ~min_height:87
+    [ theme_item ~ctx ~st "light" T.theme_light
+    ; theme_item ~ctx ~st "dark" T.theme_dark
+    ; theme_item ~ctx ~st "system" T.theme_system
     ]
 
 (* shui select trigger + chevron; the popover mounts as a sibling so
@@ -176,7 +230,7 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:"ui__dialog-title" ~value:T.settings_title []
       ; column ~key:"st-theme" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-tl" ~value:T.theme_label []
-          ; theme_modes_ul ~st:mode
+          ; theme_modes_ul ~ctx ~st:mode
           ]
       ; column ~key:"st-lang" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-ll" ~value:T.language_label []

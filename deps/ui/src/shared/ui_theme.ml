@@ -113,6 +113,7 @@ let accent_bound =
   ; "tag-text-color"
   ; "tag-text-hover-color"
   ; "slide-background-color"
+  ; "block-highlight-color"
   ; "selection-background-color"
   ; "selection-text-color"
   ; "page-checkbox-color"
@@ -185,9 +186,6 @@ let mode_ls mode =
     ; "pie-bg-color", "#e1e1e1"
     ; "pie-fg-color", "#0a4a5d"
     ; "header-button-background", "rgba(15, 20, 25, 1)"
-    ; (* vars-classic :root literal, not an accent chain — emitted here so
-         --ls-block-highlight-color resolves on the native host *)
-      "block-highlight-color", "#c0e6fd"
     ]
   | Dark ->
     [ "active-primary-color", "#8ec2c2"
@@ -203,7 +201,6 @@ let mode_ls mode =
     ; "pie-bg-color", "#01303b"
     ; "pie-fg-color", "#0b5869"
     ; "header-button-background", "#dee4ea"
-    ; "block-highlight-color", "#0a3d4b"
     ]
 
 let colors mode =
@@ -532,6 +529,75 @@ let cmdk_vars = function
     ; "--lx-nav-active", "rgb(255 255 255 / 0.08)"
     ]
 
+(* shui/index.css + colors.css tokens the web stylesheet owns — the
+   shared component props reference hsl(var(--primary)),
+   hsl(var(--muted)), etc., so the native vars table carries the same
+   names as literal colors. The logseq accent's light values come from
+   colors.css [data-color=logseq], the generic shadcn set from
+   theme/index.css :root, and the dark set from colors.css's logseq dark
+   block. *)
+let shui_vars = function
+  | Light ->
+    [ "--background", "hsl(0, 0%, 100%)"
+    ; "--foreground", "hsl(222.2, 84%, 4.9%)"
+    ; "--card", "hsl(0, 0%, 100%)"
+    ; "--card-foreground", "hsl(222.2, 84%, 4.9%)"
+    ; "--popover", "hsl(0, 0%, 100%)"
+    ; "--popover-foreground", "hsl(222.2, 84%, 4.9%)"
+    ; "--primary", "hsl(200, 97%, 37%)"
+    ; "--primary-foreground", "hsl(255, 92%, 100%)"
+    ; "--secondary", "hsl(240, 4.8%, 95.9%)"
+    ; "--secondary-foreground", "hsl(222.2, 47.4%, 11.2%)"
+    ; "--muted", "hsl(210, 40%, 96.1%)"
+    ; "--muted-foreground", "hsl(0, 0%, 52.3%)"
+    ; "--accent", "hsl(200, 97%, 37%)"
+    ; "--accent-foreground", "hsl(255, 92%, 100%)"
+    ; "--destructive", "hsl(0, 84.2%, 60.2%)"
+    ; "--destructive-foreground", "hsl(210, 40%, 98%)"
+    ; "--border", "hsl(300, 1%, 92%)"
+    ; "--input", "hsl(0, 0%, 90.9%)" (* rx-gray-05 *)
+    ; "--ring", "hsl(200, 97%, 37%)"
+    ]
+  | Dark ->
+    [ "--background", "hsl(192, 100%, 11%)"
+    ; "--foreground", "hsl(0, 0%, 95%)"
+    ; "--card", "hsl(192, 100%, 10%)"
+    ; "--card-foreground", "hsl(0, 0%, 95%)"
+    ; "--popover", "hsl(192, 100%, 11%)"
+    ; "--popover-foreground", "hsl(0, 0%, 95%)"
+    ; "--primary", "hsl(200, 97%, 37%)"
+    ; "--primary-foreground", "hsl(255, 92%, 100%)"
+    ; "--secondary", "hsl(203, 50%, 20%)"
+    ; "--secondary-foreground", "hsl(0, 0%, 98%)"
+    ; "--muted", "hsl(192, 100%, 13%)"
+    ; "--muted-foreground", "hsl(0, 0%, 49.4%)"
+    ; "--accent", "hsl(192, 80%, 10%)"
+    ; "--accent-foreground", "hsl(255, 92%, 100%)"
+    ; "--destructive", "hsl(0, 62.8%, 30.6%)"
+    ; "--destructive-foreground", "hsl(210, 40%, 98%)"
+    ; "--border", "hsl(192, 100%, 14%)"
+    ; "--input", "hsl(203, 35%, 25%)"
+    ; "--ring", "hsl(200, 97%, 37%)"
+    ]
+
+(* colors.css binds --lx-gray-* onto the rx-gray steps (and
+   --lx-gray-*-alpha onto the matching alpha step); emit the same
+   bindings with the resolved per-mode literals. *)
+let lx_gray_vars radix =
+  let p = "--rx-gray" in
+  List.filter_map
+    (fun (k, v) ->
+      if
+        String.length k > String.length p
+        && String.sub k 0 (String.length p) = p
+      then
+        Some
+          ( "--lx-gray" ^ String.sub k (String.length p)
+              (String.length k - String.length p)
+          , v )
+      else None)
+    radix
+
 let snapshot mode =
   let c = colors mode in
   let cs = components c in
@@ -541,9 +607,14 @@ let snapshot mode =
   ; typography
   ; levels = levels mode
   ; vars =
-      ls_vars mode @ level_vars mode @ lui_vars c @ canonical_vars c cs
-        typography
-      @ cmdk_vars mode
+      (let radix =
+         match mode with
+         | Light -> Ui_theme_radix.light
+         | Dark -> Ui_theme_radix.dark
+       in
+       ls_vars mode @ level_vars mode @ lui_vars c @ canonical_vars c cs
+         typography
+       @ cmdk_vars mode @ shui_vars mode @ radix @ lx_gray_vars radix)
   ; kit = kit c mode
   }
 

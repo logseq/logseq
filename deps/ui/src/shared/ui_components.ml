@@ -263,11 +263,11 @@ let cmdk_item_header ~key children =
 let cmdk_item_main ~key children =
   row ~key ~cross:`start ~gap:12 children
 
-(* 16x20 rounded icon chip; the glyph
+(* 20x20 rounded icon chip (cljs w-5 h-5); the glyph
    color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
-    ~width:16 ~height:20 ~corner_radius:4
+    ~width:20 ~height:20 ~corner_radius:4
     ~background:
       "var(--lx-gray-05, var(--ls-tertiary-background-color, \
        hsl(var(--muted))))"
@@ -350,9 +350,10 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
   in
   with_props binds
     (row ~key ~main:`center ~cross:`center
-       ?height:(if boxed then Some 20 else None)
+       (* web kbd.shui-shortcut-key: h-5 + padding 2px 4px *)
+       ~height:20
        ?min_width:(if min_slot > 0 then Some min_slot else None)
-       ?padding_horizontal:(if boxed then Some 4 else None)
+       ~padding_horizontal:4
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ with_props
            [ P.FontSize, sv "var(--lx-text-header)"
@@ -397,7 +398,7 @@ let shortcut_combo ~key ~glow children : t =
          , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
-       ~gap:0 children)
+       ~height:20 ~gap:0 children)
 
 (* Separate: transparent container; the glow lives on each boxed key,
    matching .shui-shortcut-separate.shui-shortcut-glow kbd (no container
@@ -590,7 +591,7 @@ let ls_tooltip_keys ~key children : t =
    cljs `.it` carries `sm:items-start`, so cells top-align. The <640px
    stacked variant is a documented leftover (no breakpoint channel). *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
-    ?(col_gap = 24) ~control () : t =
+    ?(col_gap = 24) ?(min_height = 36) ~control () : t =
   (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
      columns — flex-grow with auto bases drifts with content width, so
      the cells carry explicit zero-basis flex ratios. .its nested inside
@@ -599,7 +600,8 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     Printf.sprintf "calc((100%% - %dpx) / 3)" (2 * col_gap)
   in
   row ~key ~style_class:"it" ~gap:col_gap ~min_width:0 ~cross:`start
-    ([ column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch
+    ~min_height
+    ([ column ~key:(key ^ "-lc") ~min_width:180 ~cross:`stretch
          ~gap:0
          ~data_attrs:
            [ "style"
@@ -607,7 +609,7 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
          ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
               (label :: label_extra) ]
           @ match desc with Some d -> [ d ] | None -> [])
-     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
+     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16 ~grow:1.
          ~data_attrs:
            [ "style"
            , Printf.sprintf "flex: %s; min-width: 0"
@@ -687,13 +689,23 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
    replaces the `.active`/`.dark .active` pair). The `.active` class
    itself stays on the element via the caller's class_signal (native
    hook). *)
-let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
+let nav_item ~key ~data_id ~icon:icon_ ~text ~selected_signal:selected
     ~on_press () : t =
+  (* cljs settings-menu-link: px-2 py-1.5 flex items-center; the ui/icon
+     svg is 18px followed by the strong label ~8px later (icon slot ends
+     at x+8+18, label at +34). The host paints the kind's own label at
+     padding-horizontal, so the leading icon rides as a positioned
+     child pulled back inside the label inset. *)
+  let icn_el =
+    with_props
+      [ P.MarginLeft, iv (-26); P.MarginTop, iv 1 ]
+      (Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_)
+  in
   with_props [ P.HoverBackground, sv "var(--lx-nav-active)" ]
     (with_props
        [ P.FontSize, sv "0.875rem"; P.LineHeight, sv "1.25rem" ]
-       (list_item ~key ~icon ~text ~corner_radius:4 ~min_height:0
-          ~padding_vertical:6 ~padding_horizontal:8 ~main:`start
+       (list_item ~key ~text ~corner_radius:4 ~min_height:0 ~height:32
+          ~padding_vertical:6 ~padding_horizontal:34 ~main:`start
           ~foreground:"inherit"
           ~style_class:"settings-menu-item"
           ~accessibility_identifier:data_id
@@ -703,7 +715,8 @@ let nav_item ~key ~data_id ~icon ~text ~selected_signal:selected
                (fun a ->
                  if a then "var(--lx-nav-active)" else "transparent")
                selected)
-          ~selected_signal:selected ~on_press []))
+          ~selected_signal:selected ~on_press:on_press
+          (icn_el :: [])))
 
 (* Pill/chip toggle — the `.shortcut-filter-pill` (9999 bordered) and
    `.secondary-tabs > button` (6px radius, 4/12 padding) shapes share one
@@ -791,7 +804,8 @@ let plugin_card ~key ?(classes = "") child : t =
    list_item keeps the `selected` prop + kind hooks; the active ring
    rides the thumbnail's shadow signal. Per-side pads ride the
    documented data-attrs style pair. *)
-let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
+let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
+    ~selected_signal:selected
     ~on_press () : t =
   with_props
     [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
@@ -800,14 +814,15 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
           below — column keeps the label under the image instead of
           beside it; cljs li has no padding, i and strong are flush *)
-       [ column ~key:"c" ~cross:`start ~gap:0
+       [ column ~key:"c" ~cross:`start ~gap:0 ~min_height
            [ Ui_parts.class_signal selected
                (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-               (image ~key:"i" ~url:image_url ~alt:label ~width:92
-                  ~height:63 ~corner_radius:4
-                  ~data_attrs:
-                    [ "style", "height:63.25px;object-fit:cover" ]
-                  ~background:"var(--lx-gray-04, hsl(var(--muted)))" [])
+               (with_props [ P.Overflow, sv "hidden" ]
+                  (box ~key:"i" ~width:92 ~height:63 ~corner_radius:4
+                     ~border_width:1
+                     ~border_color:"var(--lx-gray-06, hsl(var(--border)))"
+                     ~background:"var(--lx-gray-04, hsl(var(--muted)))"
+                     [ thumbnail ]))
            ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
                ~line_height:"1rem" ~value:label ~text_alignment:`center
                ~data_attrs:

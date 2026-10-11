@@ -559,8 +559,8 @@ let cm_color_row (st : S.t) : t =
       ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t "ui/remove-background")
       ~on_press:(fun _ -> run_cm_color st "")
-      [ box ~key:"bg" ~style_class:"heading-bg remove" ~width:20
-          ~height:20 ~corner_radius:9999 ~main:`center ~cross:`center
+      [ box ~key:"bg" ~style_class:"heading-bg remove" ~width:18
+          ~height:18 ~corner_radius:9999 ~main:`center ~cross:`center
           ~border_width:1
           ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
           [ text ~key:"t" ~value:"-" ~font_size:"10px" ~line_height:"1"
@@ -568,8 +568,11 @@ let cm_color_row (st : S.t) : t =
   in
   row ~key:"colors" ~style_class:"ls-cm-colors" ~main:`space_between
     ~cross:`center ~padding_vertical:4 ~padding_horizontal:8
-    [ row ~key:"colors-row" ~style_class:"ls-cm-colors-row" ~gap:4
-        ~margin_top:8
+    [ (* web: inner flex-1 mx-2 justify-between — fixed gaps overflow
+         the 238px lane; space-between fits the lane exactly *)
+      row ~key:"colors-row" ~style_class:"ls-cm-colors-row"
+        ~main:`space_between ~cross:`center ~grow:1.
+        ~margin_top:8 ~margin_horizontal:8
         (List.map swatch S.colors @ [ remove ]) ]
 ;;
 
@@ -595,14 +598,15 @@ let cm_heading_row (st : S.t) : t =
           (icon ~key:"ic" ~name:(Icons.name_ref ("h-" ^ n)) ~point_size:18
              ~style_class:"ui__icon" []))
   in
+  (* web: pt-1 px-2 pb-2 outer, inner flex-1 mx-2 — a data_attrs style
+     string is dead on the native host, so the padding rides typed
+     props (4 top / 8 sides / 8 bottom via inner margin_bottom) *)
   row ~key:"headings" ~style_class:"ls-cm-headings"
     ~main:`space_between ~cross:`center
-    ~data_attrs:
-      [ ( "style"
-        , "padding:0.25rem 0.5rem 0.5rem" ) ]
+    ~padding_vertical:4 ~padding_horizontal:8
     [ row ~key:"headings-row" ~style_class:"ls-cm-headings-row"
         ~main:`space_between ~cross:`center ~grow:1.
-        ~margin_horizontal:8
+        ~margin_horizontal:8 ~margin_bottom:4
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
               (icon ~key:"ic" ~name:(Icons.name_ref "h-auto") ~point_size:18
@@ -632,7 +636,10 @@ let cm_shortcut_el (binding, caps) : t =
                  ~value:(Ui_services.literal_text cap) ])
          caps)
   in
-  row ~key:"sc" ~style_class:"ls-cm-sc" ~main:`end_ ~grow:1.
+  (* web: ml-auto pl-2, content padded to px-2 — cross:center keeps the
+     keys centered in the now-32px row *)
+  row ~key:"sc" ~style_class:"ls-cm-sc" ~main:`end_ ~cross:`center ~grow:1.
+    ~margin_right:8
     ~data_attrs:[ ("style", "padding-left:0.5rem") ]
     [ (if combo then
          Ui_components.shortcut_combo ~key:"sc-box" ~glow:true cells
@@ -667,8 +674,9 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             ~text:label
             [ (* margin-left:auto doesn't translate — a grow row
                  ~main:`end_ pushes the chevron to the item's right
-                 edge on every host *)
-              row ~key:"chev-wrap" ~main:`end_ ~grow:1.
+                 edge on every host; px-2 keeps it 8px in *)
+              row ~key:"chev-wrap" ~main:`end_ ~cross:`center ~grow:1.
+                ~margin_right:8
                 [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
                     ~style_class:"ls-menu-chevron" [] ] ]
       | S.Ci_item (label, scut, cmd) ->
@@ -1114,7 +1122,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                     | Some r -> r
                     | None -> tuuid
                   in
-                  let ax, atop, abot = S.anchor_of_el el in
+                  let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm_tag st ~ax ~atop ~abot ~block_id:bid
                     ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
                     ~priv:(priv = Some "true")
@@ -1149,7 +1157,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               (* cljs popup-show! re-anchors the menu to the event
                  target element (centered, dropping from its bottom
                  edge), not the raw pointer *)
-              let ax, atop, abot = S.anchor_of_el el in
+              let ax, atop, abot = S.anchor_of_ev ev el in
               S.open_cm st ~ax ~atop ~abot ~block_id:id
                 ~multi:
                   (List.length (Ui_services.dom_selected_block_uuids ())
@@ -1203,7 +1211,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
-                  let ax, atop, abot = S.anchor_of_el el in
+                  let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
@@ -1217,7 +1225,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
-                  let ax, atop, abot = S.anchor_of_el el in
+                  let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
               | Some id, _
                 when Ui_services.env_native_block_controls ()
@@ -1227,7 +1235,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   if not (Editor_state.is_selected id) then
                     Editor_actions.select_single id;
                   close_cm_picker ();
-                  let ax, atop, abot = S.anchor_of_el el in
+                  let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
               | _ -> ())
           | None -> ()))
