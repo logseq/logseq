@@ -1534,6 +1534,19 @@
       :else
       top-level-blocks)))
 
+(defn- move-blocks-up!
+  "Moves `blocks` up to `target` (as its sibling or child). A property value
+  moved up past the first value would go into its parent and become an
+  ordinary child, so the first value moves down after `blocks` instead, and
+  every value stays a value."
+  [conn blocks target sibling? opts]
+  (let [first-block (first blocks)]
+    (if (and (not sibling?)
+             (:logseq.property/created-from-property first-block))
+      (move-blocks conn [(ldb/get-left-sibling first-block)] (last blocks)
+                   (merge opts {:sibling? true :up? false}))
+      (move-blocks conn blocks target (merge opts {:sibling? sibling? :up? true})))))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
@@ -1555,16 +1568,7 @@
                          (:db/id left-left))
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (if (and (not sibling?)
-                   (:logseq.property/created-from-property first-block))
-            ;; a property value moved up past the first value: moving it into
-            ;; its parent would make it an ordinary child, so the first value
-            ;; moves down after it instead, and every value stays a value
-            (move-blocks conn [first-block-left-sibling] (last top-level-blocks)
-                         (merge opts {:sibling? true
-                                      :up? false}))
-            (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                      :up? up?})))))
+          (move-blocks-up! conn top-level-blocks left-left sibling? opts)))
 
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
