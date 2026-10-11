@@ -614,7 +614,10 @@ let snapshot mode =
        in
        ls_vars mode @ level_vars mode @ lui_vars c @ canonical_vars c cs
          typography
-       @ cmdk_vars mode @ shui_vars mode @ radix @ lx_gray_vars radix)
+       @ cmdk_vars mode @ shui_vars mode @ radix @ lx_gray_vars radix
+       (* web colors.css: --left-sidebar-bg-color = --lx-gray-02 (bare
+          var name, not an --ls-/--lx- twin) *)
+       @ [ "--left-sidebar-bg-color", "var(--lx-gray-02)" ])
   ; kit = kit c mode
   }
 

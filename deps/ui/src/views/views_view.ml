@@ -159,9 +159,9 @@ let body_eq (a : V.vstate) (b : V.vstate) =
    .flex.flex-col.gap-2.grid > foldable(key="view") with the whole body
    inside ls-foldable-content *)
 let view_el inst : t =
-  box
-    [ column ~gap:8
-        [ column ~gap:8
+  box ~grow:1.
+    [ column ~gap:8 ~grow:1.
+        [ column ~gap:8 ~grow:1.
             [ Views_table.foldable inst ~key:"view"
                 ~title:(Views_head.render_head inst)
                 ~body:
