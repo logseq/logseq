@@ -280,26 +280,40 @@ let priority_icons =
   ]
 ;;
 
-(* `app:` icon registry — name -> data URI of the svg markup. The base
-   is the tabler-children table; `~ext` merges the runtime's extension
-   pack (the web's window.tablerIcons walked by js_app/icons_ext.ml);
-   custom app icons come last. Later entries win on a clash, mirroring
-   the web lookup order (ext pack over the table, custom over both). *)
-let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
+(* `app:` icon registry — name -> raw svg markup, ordered like the web
+   lookup: tabler-children table first, `~ext` (the web's
+   window.tablerIcons walked by js_app/icons_ext.ml) over it, custom
+   app icons last. Later entries win on a clash. Native hosts consume
+   this directly; web/svg-uri consumers go through [app_icons]. *)
+let app_icon_svgs ?(ext = []) () : (string * string) list =
   let base =
     Icon_tabler_data.tabler_names ()
     |> List.filter_map (fun name ->
            match Icon_tabler_data.tabler_children name with
            | [] -> None
            | kids ->
-               Some (name, data_uri_of_svg (svg_of_children ~size:24. name kids)))
+               Some (name, svg_of_children ~size:24. name kids))
   in
-  let custom =
-    List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) (custom_icons @ status_icons @ priority_icons)
+  base @ ext @ (custom_icons @ status_icons @ priority_icons)
+;;
+
+(* `app:` icon registry — name -> data URI of the svg markup. Same
+   source table and precedence as [app_icon_svgs]; here `~ext` entries
+   arrive already data-URI encoded (icons_ext.ml encodes them). *)
+let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
+  let enc = List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) in
+  let base =
+    Icon_tabler_data.tabler_names ()
+    |> List.filter_map (fun name ->
+           match Icon_tabler_data.tabler_children name with
+           | [] -> None
+           | kids ->
+               Some (name, svg_of_children ~size:24. name kids))
   in
   List.fold_left
     (fun m (k, v) -> Lui_protocol.String_map.add k v m)
-    Lui_protocol.String_map.empty (base @ ext @ custom)
+    Lui_protocol.String_map.empty
+    (enc base @ ext @ enc (custom_icons @ status_icons @ priority_icons))
 ;;
 
 let status_color name =
