@@ -130,6 +130,38 @@ let inherited_int store id name =
   in
   walk id
 
+(* String props inherit like font-size/weight. font-family values can
+   arrive as "var(--ls-font-family-code, monospace)" — the declared
+   default is the real family, so the fallback after the last comma is
+   the value (same convention as parse_len). *)
+let var_fallback s =
+  let n = String.length s in
+  if n > 4 && String.sub s 0 4 = "var(" then
+    match String.rindex_opt s ',' with
+    | Some comma ->
+      String.sub s (comma + 1) (n - comma - 1)
+      |> String.trim
+      |> fun t ->
+        if String.length t > 0 && t.[String.length t - 1] = ')' then
+          String.sub t 0 (String.length t - 1)
+        else t
+    | None -> s
+  else s
+
+let inherited_str store id name =
+  let rec walk id =
+    match Lui_store.prop store id name with
+    | Some (Lui_protocol.StringValue s) -> Some s
+    | Some _ -> None
+    | None -> (
+      match Lui_store.parent store id with
+      | Some pid when pid <> id -> walk pid
+      | _ -> None)
+  in
+  walk id
+
+let logged_family = ref false
+
 let font_of store id =
   let size =
     match inherited_num store id "font-size" with
@@ -150,7 +182,25 @@ let font_of store id =
        | "dialog" | "sheet" -> 600
        | _ -> 400)
   in
-  Lui_text.system ~weight ~italic:false ~size ()
+  (* The app declares font-family:"Inter" on the root (ui_theme.ml) and
+     var(--ls-font-family-code, monospace) on code surfaces. Unresolved
+     family → Inter, matching the web default; Lui_text.create expands
+     "monospace" to the system mono and falls back to the system font
+     for families CoreText can't match (i.e. Inter unregistered). *)
+  let families =
+    match inherited_str store id "font-family" with
+    | Some s -> [var_fallback s]
+    | None -> ["Inter"]
+  in
+  let f = Lui_text.create ~families ~weight ~italic:false ~size () in
+  (match Sys.getenv_opt "LOGSEQ_NATIVE_DEBUG", !logged_family with
+   | Some _, false ->
+     logged_family := true;
+     Printf.eprintf "font_of: families=[%s] resolved=%s size=%g weight=%d\n%!"
+       (String.concat "," families)
+       (Lui_text.family f) size weight
+   | _ -> ());
+  f
 
 (* ---- atlas upload ---- *)
 

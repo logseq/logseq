@@ -26,6 +26,12 @@ external native_activate : unit -> unit = "logseq_native_activate"
 external native_titlebar_blend : unit -> unit
   = "logseq_native_titlebar_blend"
 
+(* ocaml_host_stubs.c: registers every .ttf/.otf/.ttc in a directory
+   with CoreText so named families (Inter, bundled under assets/fonts)
+   resolve in Lui_text.create. *)
+external native_register_fonts : string -> unit
+  = "logseq_native_register_fonts"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -209,6 +215,20 @@ let () =
   Sdl.raise_window !win;
   native_activate ();
   native_titlebar_blend ();
+  (* Bundle the Inter family before the first Lui_text.create — the
+     app emits font-family:"Inter" (web parity) and the named lookup
+     falls back to the system font when the family is unregistered.
+     Candidates mirror daemon_bin's: bundled Resources, the in-tree
+     dune layout, and a repo-root CWD launch. *)
+  let font_dirs =
+    let exe_dir = Filename.dirname Sys.executable_name in
+    [ Filename.concat exe_dir "../Resources/fonts"
+    ; Filename.concat exe_dir "../../../assets/fonts"
+    ; Filename.concat (Sys.getcwd ()) "deps/ui/assets/fonts" ]
+  in
+  List.iter
+    (fun d -> if Sys.file_exists d then native_register_fonts d)
+    font_dirs;
   let drawable () = Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in

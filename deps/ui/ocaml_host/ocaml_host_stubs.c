@@ -170,4 +170,61 @@ CAMLprim void logseq_native_titlebar_blend(void) {
         w, sel_registerName("setMovableByWindowBackground:"), 1);
   }
 }
+/* Register every font file in a directory with CoreText so Lui_text's
+   named-family lookup (CTFontDescriptorCreateMatchingFontDescriptor)
+   resolves them. The app ships Inter as TTFs; without registration the
+   system has no "Inter" family and every glyph falls back to the system
+   font, breaking parity with the web build.
+
+   CoreText/CoreFoundation are already loaded into the process (lui_text
+   links them), so resolve the entry points lazily instead of growing
+   the link surface. */
+#include <dlfcn.h>
+#include <dirent.h>
+#include <string.h>
+
+CAMLprim void logseq_native_register_fonts(value dir_v) {
+  CAMLparam1(dir_v);
+  const char *dir = String_val(dir_v);
+  /* CFURLCreateFromFileSystemRepresentation(allocator, buffer,
+     bufLen, isDirectory) */
+  typedef void *(*url_create_fn)(const void *, const unsigned char *,
+                                 long, int);
+  typedef unsigned char (*register_fn)(void *, long, void **);
+  static url_create_fn url_create = NULL;
+  static register_fn reg = NULL;
+  static int looked_up = 0;
+  if (!looked_up) {
+    looked_up = 1;
+    url_create = (url_create_fn)dlsym(
+        RTLD_DEFAULT, "CFURLCreateFromFileSystemRepresentation");
+    reg = (register_fn)dlsym(RTLD_DEFAULT,
+                             "CTFontManagerRegisterFontsForURL");
+  }
+  if (url_create == NULL || reg == NULL) CAMLreturn0;
+  DIR *d = opendir(dir);
+  if (d == NULL) CAMLreturn0;
+  struct dirent *ent;
+  char path[4096];
+  while ((ent = readdir(d)) != NULL) {
+    const char *name = ent->d_name;
+    size_t n = strlen(name);
+    int ok_ext = n > 4 && (strcmp(name + n - 4, ".ttf") == 0 ||
+                           strcmp(name + n - 4, ".otf") == 0 ||
+                           strcmp(name + n - 4, ".ttc") == 0);
+    if (!ok_ext) continue;
+    int len = snprintf(path, sizeof path, "%s/%s", dir, name);
+    if (len <= 0 || (size_t)len >= sizeof path) continue;
+    void *url = url_create(NULL /* kCFAllocatorDefault */,
+                           (const unsigned char *)path,
+                           (long)strlen(path), 0 /* not a directory */);
+    if (url == NULL) continue;
+    reg(url, 1L /* kCTFontManagerScopeProcess */, NULL);
+    typedef void (*release_fn)(void *);
+    release_fn release = (release_fn)dlsym(RTLD_DEFAULT, "CFRelease");
+    if (release != NULL) release(url);
+  }
+  closedir(d);
+  CAMLreturn0;
+}
 #endif
