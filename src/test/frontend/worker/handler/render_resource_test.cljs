@@ -2164,16 +2164,16 @@
                      :resources [resource-key]}
             snapshot (fn []
                        (with-redefs [worker-state/get-datascript-conn (constantly conn)]
-                         (api test-repo request)))]
-        (let [before (get-in (snapshot) [:slots [:resource resource-key] :value :rows])
-              _ (d/transact! conn [{:block/name "external url"
-                                    :block/title "External URL"}])
-              after (get-in (snapshot) [:slots [:resource resource-key] :value :rows])]
-          (is (seq before))
-          (is (contains? (set before) page))
-          (is (every? uuid? before))
-          (is (= before after)
-              "A leftover :block/name entity without :block/uuid must not fail All Pages."))))))
+                         (api test-repo request)))
+            before (get-in (snapshot) [:slots [:resource resource-key] :value :rows])
+            _ (d/transact! conn [{:block/name "external url"
+                                  :block/title "External URL"}])
+            after (get-in (snapshot) [:slots [:resource resource-key] :value :rows])]
+        (is (seq before))
+        (is (contains? (set before) page))
+        (is (every? uuid? before))
+        (is (= before after)
+            "A leftover :block/name entity without :block/uuid must not fail All Pages.")))))
 
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
