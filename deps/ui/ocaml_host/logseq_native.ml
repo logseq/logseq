@@ -32,6 +32,15 @@ external native_titlebar_blend : unit -> unit
 external native_register_fonts : string -> unit
   = "logseq_native_register_fonts"
 
+(* ocaml_host_stubs.c: an NSVisualEffectView with the .sidebar material
+   ordered below the content view in the window's frame view, tracking
+   the left sidebar column. x/y/w/h are window points in frame-view
+   coordinates (origin bottom-left, y already flipped); visible=false
+   hides it. *)
+external sidebar_vibrancy :
+  float -> float -> float -> float -> bool -> unit
+  = "logseq_native_sidebar_vibrancy"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -300,10 +309,15 @@ let () =
   in
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
   let blit_cell = ref blit and gctx_cell = ref gctx in
+  (* Runs between the scene's seal and the active renderer, for
+     host-side display-list surgery — the sidebar vibrancy hook
+     installed further down is its only user. *)
+  let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let renderer_live =
     { Lui_host.name = "lui (resilient)";
       Lui_host.render =
         (fun s ->
+           !pre_render s;
            try (!renderer_cell).Lui_host.render s
            with _ -> noop_renderer.render s) }
   in
@@ -528,8 +542,58 @@ let () =
         Lui_scene.y = base.Lui_scene.y -. sy }
       clip
   in
+  (* macOS sidebar vibrancy: the left sidebar column is the node
+     classed cp__sidebar-left-layout; populate_rects records its id so
+     the render hook below can keep an NSVisualEffectView under the
+     content view glued to its rect and punch a transparent Hole over
+     it in the display list. *)
+  let sidebar_id_cell = ref (-1) in
+  let class_has cls tok =
+    List.exists (fun t -> t = tok) (String.split_on_char ' ' cls)
+  in
+  (* Splice a Hole covering [r] into the display list, right after the
+     last fill that backdrops the column (a fill inside [r] covering
+     most of it). The hole batch writes alpha 0 through everything
+     painted earlier, exposing the effect view below the content view;
+     ops after it — the sidebar's own content — repaint opaque on top.
+     With no backdrop found the hole goes first, which at least clears
+     the window background under the column. *)
+  let sidebar_hole (r : Lui_scene.rect) ops =
+    let covers (f : Lui_scene.fill_op) =
+      let a = f.Lui_scene.frect in
+      a.Lui_scene.x >= r.Lui_scene.x -. 2.
+      && a.Lui_scene.y >= r.Lui_scene.y -. 2.
+      && a.Lui_scene.x +. a.Lui_scene.w
+         <= r.Lui_scene.x +. r.Lui_scene.w +. 2.
+      && a.Lui_scene.y +. a.Lui_scene.h
+         <= r.Lui_scene.y +. r.Lui_scene.h +. 2.
+      && a.Lui_scene.w *. a.Lui_scene.h
+         >= 0.7 *. r.Lui_scene.w *. r.Lui_scene.h
+    in
+    let hole =
+      Lui_scene.Hole
+        { hrect = r;
+          hradii = (0., 0., 0., 0.);
+          hcontinuous = false;
+          hopacity = 1. }
+    in
+    let rec last_backdrop i acc = function
+      | [] -> acc
+      | Lui_scene.Fill f :: tl ->
+        last_backdrop (i + 1) (if covers f then i else acc) tl
+      | _ :: tl -> last_backdrop (i + 1) acc tl
+    in
+    let cut = last_backdrop 0 (-1) ops + 1 in
+    let rec splice i = function
+      | [] -> [ hole ]
+      | op :: tl ->
+        if i = cut then hole :: op :: tl else op :: splice (i + 1) tl
+    in
+    splice 0 ops
+  in
   let populate_rects () =
     Hashtbl.reset rects;
+    sidebar_id_cell := -1;
     List.iter
       (fun id ->
          let base = engine_rect id in
@@ -555,7 +619,12 @@ let () =
              Lui_scene.x = base.Lui_scene.x -. sx;
              Lui_scene.y = base.Lui_scene.y -. sy }
          in
-         Hashtbl.replace rects id (rect_intersect r clip))
+         Hashtbl.replace rects id (rect_intersect r clip);
+         if !sidebar_id_cell < 0 then
+           match Lui_store.string_prop store id "style-class" with
+           | Some c when class_has c "cp__sidebar-left-layout" ->
+             sidebar_id_cell := id
+           | _ -> ())
       (Lui_store.preorder store);
     List.iter
       (fun id ->
@@ -567,6 +636,43 @@ let () =
            Ui.set_scroll_cap_x ui id
              (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
       (Lui_store.preorder store)
+  in
+  (* Metal + macOS only: keep the .sidebar NSVisualEffectView frame
+     glued to the sidebar column and splice the hole into the display
+     list each render. engine_rect reads the layout just computed by
+     the repaint this render belongs to, so the frame never lags. *)
+  let () =
+    if Option.is_some metal then
+      pre_render :=
+        (fun (s : Lui_scene.t) ->
+         match !host_cell with
+         | None -> ()
+         | Some _ -> (
+           let id = !sidebar_id_cell in
+           let cls =
+             if id < 0 then ""
+             else
+               Option.value ~default:""
+                 (Lui_store.string_prop (store_of ()) id "style-class")
+           in
+           let r =
+             if id < 0 then Lui_scene.rect 0. 0. 0. 0.
+             else engine_rect id
+           in
+           if
+             id >= 0 && class_has cls "is-open"
+             && r.Lui_scene.w >= 4. && r.Lui_scene.h >= 4.
+           then begin
+             s.Lui_scene.ops <- sidebar_hole r s.Lui_scene.ops;
+             let sc = !scale_cell in
+             sidebar_vibrancy
+               (r.Lui_scene.x /. sc)
+               (float !win_h -. (r.Lui_scene.y +. r.Lui_scene.h) /. sc)
+               (r.Lui_scene.w /. sc)
+               (r.Lui_scene.h /. sc)
+               true
+           end
+           else sidebar_vibrancy 0. 0. 0. 0. false))
   in
   (* Swift spine contract stand-in: the Swift host fires "lazy-mount"
      on row spacers scrolling into view and "virt-end" when a virt list

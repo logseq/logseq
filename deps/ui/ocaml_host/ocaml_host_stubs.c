@@ -227,4 +227,131 @@ CAMLprim void logseq_native_register_fonts(value dir_v) {
   closedir(d);
   CAMLreturn0;
 }
+
+/* AppKit rects are passed/returned by value; the ABI shape is two
+   point/size structs of doubles. Declared locally so this file stays
+   plain C — Foundation headers require an Objective-C translation
+   unit. */
+typedef struct {
+  double x, y, w, h;
+} ls_nsrect;
+
+/* Clear opaqueness on a CALayer and any CAMetalLayer sublayers: the
+   sidebar hole needs the drawable's alpha channel to reach the window
+   server. SDL hosts the CAMetalLayer as the content view's own layer;
+   walk one level of sublayers too in case a driver nests it. */
+static void make_layers_transparent(id layer) {
+  if (layer == nil) return;
+  const char *name = object_getClassName(layer);
+  if (name != NULL) {
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        layer, sel_registerName("setOpaque:"), 0);
+  }
+  id sub = ((id (*)(id, SEL))objc_msgSend)(
+      layer, sel_registerName("sublayers"));
+  if (sub == nil) return;
+  unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(
+      sub, sel_registerName("count"));
+  for (unsigned long i = 0; i < count; i++) {
+    id l = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
+        sub, sel_registerName("objectAtIndex:"), i);
+    if (l == nil) continue;
+    const char *ln = object_getClassName(l);
+    if (ln != NULL && strstr(ln, "CAMetalLayer") != NULL) {
+      ((void (*)(id, SEL, int))objc_msgSend)(
+          l, sel_registerName("setOpaque:"), 0);
+    }
+  }
+}
+
+/* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
+   material composited BEHIND the SDL content view. SDL assumes the
+   content view IS its metal view (a subview inside it would draw above
+   the drawable), so the effect view goes into the window's frame view
+   as a sibling ordered below the content view, and the framebuffer
+   punches a transparent hole over the sidebar column so the material
+   shows through.
+
+   The host calls this once per layout while the metal renderer is
+   active. x/y/w/h are window points in the frame view's coordinate
+   space (origin bottom-left; the caller already flipped y).
+   visible=false hides the effect while the sidebar is collapsed. */
+CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
+                                              value vw, value vh,
+                                              value vvisible) {
+  CAMLparam5(vx, vy, vw, vh, vvisible);
+  static id effect = nil;
+  static int frame_init = 0;
+  static double lx = 0, ly = 0, lw = 0, lh = 0;
+  double x = Double_val(vx), y = Double_val(vy);
+  double w = Double_val(vw), h = Double_val(vh);
+  int visible = Int_val(vvisible) != 0;
+  Class cls = objc_getClass("NSApplication");
+  if (cls == Nil) CAMLreturn(Val_unit);
+  id app = ((id (*)(Class, SEL))objc_msgSend)(
+      cls, sel_registerName("sharedApplication"));
+  if (app == nil) CAMLreturn(Val_unit);
+  id windows =
+      ((id (*)(id, SEL))objc_msgSend)(app, sel_registerName("windows"));
+  if (windows == nil) CAMLreturn(Val_unit);
+  unsigned long count =
+      ((unsigned long (*)(id, SEL))objc_msgSend)(
+          windows, sel_registerName("count"));
+  for (unsigned long i = 0; i < count; i++) {
+    id win = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
+        windows, sel_registerName("objectAtIndex:"), i);
+    if (win == nil) continue;
+    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(
+        win, sel_registerName("styleMask"));
+    if (!(mask & 1L /* NSWindowStyleMaskTitled */)) continue;
+    id cv = ((id (*)(id, SEL))objc_msgSend)(
+        win, sel_registerName("contentView"));
+    if (cv == nil) continue;
+    id frame = ((id (*)(id, SEL))objc_msgSend)(
+        cv, sel_registerName("superview"));
+    if (frame == nil) continue;
+    if (effect == nil) {
+      Class effcls = objc_getClass("NSVisualEffectView");
+      if (effcls == Nil) break;
+      ls_nsrect r = {x, y, w, h};
+      effect = ((id (*)(id, SEL, ls_nsrect))objc_msgSend)(
+          ((id (*)(Class, SEL))objc_msgSend)(
+              effcls, sel_registerName("alloc")),
+          sel_registerName("initWithFrame:"), r);
+      if (effect == nil) break;
+      /* NSVisualEffectMaterialSidebar, BehindWindow, Active. */
+      ((void (*)(id, SEL, long))objc_msgSend)(
+          effect, sel_registerName("setMaterial:"), 7L);
+      ((void (*)(id, SEL, long))objc_msgSend)(
+          effect, sel_registerName("setBlendingMode:"), 0L);
+      ((void (*)(id, SEL, long))objc_msgSend)(
+          effect, sel_registerName("setState:"), 1L);
+      /* width+height sizable keeps it glued between layout updates. */
+      ((void (*)(id, SEL, long))objc_msgSend)(
+          effect, sel_registerName("setAutoresizingMask:"),
+          2L | 16L);
+      ((void (*)(id, SEL, id, long, id))objc_msgSend)(
+          frame, sel_registerName("addSubview:positioned:relativeTo:"),
+          effect, 1L /* NSWindowBelow */, cv);
+      ((void (*)(id, SEL, int))objc_msgSend)(
+          win, sel_registerName("setOpaque:"), 0);
+    }
+    /* SDL or a driver update may re-opaque the metal layer; keep it
+       transparent while the effect lives. */
+    id layer =
+        ((id (*)(id, SEL))objc_msgSend)(cv, sel_registerName("layer"));
+    make_layers_transparent(layer);
+    if (visible && (!frame_init || x != lx || y != ly || w != lw ||
+                    h != lh)) {
+      ls_nsrect r = {x, y, w, h};
+      ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(
+          effect, sel_registerName("setFrame:"), r);
+      lx = x; ly = y; lw = w; lh = h; frame_init = 1;
+    }
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        effect, sel_registerName("setHidden:"), visible ? 0 : 1);
+    break;
+  }
+  CAMLreturn(Val_unit);
+}
 #endif
