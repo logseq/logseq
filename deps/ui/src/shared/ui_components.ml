@@ -398,7 +398,7 @@ let shortcut_combo ~key ~glow children : t =
          , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
-       ~gap:0 children)
+       ~height:20 ~gap:0 children)
 
 (* Separate: transparent container; the glow lives on each boxed key,
    matching .shui-shortcut-separate.shui-shortcut-glow kbd (no container

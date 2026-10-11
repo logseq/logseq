@@ -1883,6 +1883,21 @@ let anchor_of_el (el : Ui_services.el) =
   let x, y, w, h = el.Ui_services.rect () in
   (x +. (w /. 2.), y, y +. h)
 
+(* contextmenu anchoring: the native host stamps the hit node's live
+   rect into the event's detail (tx/ty/tw/th) because element rect
+   queries there are fire-and-poll; other hosts fall back to the
+   event target's synchronous rect *)
+let anchor_of_ev (ev : Ui_services.ev) (el : Ui_services.el) =
+  let f s = Option.bind s float_of_string_opt in
+  match
+    ( f (ev.Ui_services.detail "tx")
+    , f (ev.Ui_services.detail "ty")
+    , f (ev.Ui_services.detail "tw")
+    , f (ev.Ui_services.detail "th") )
+  with
+  | Some x, Some y, Some w, Some h -> (x +. (w /. 2.), y, y +. h)
+  | _ -> anchor_of_el el
+
 let anchor_at_point ~x ~y = (x, y, y)
 
 let open_cm t ~ax ~atop ~abot ~block_id ~multi =

@@ -979,7 +979,21 @@ let () =
          emit_dom "click" node (fields ~detail:clicks);
          if clicks >= 2 then emit_dom "dblclick" node (fields ~detail:clicks)
        end
-     | Input.Right -> emit_dom "contextmenu" node (fields ~detail:0)
+     | Input.Right ->
+       (* contextmenu carries the hit node's live rect so document
+          listeners can anchor popups to the event target (element
+          center-x / bottom, the web anchor semantic) — element rect
+          queries on this host are fire-and-poll and can't answer
+          synchronously *)
+       let r = Rects.get rects node in
+       emit_dom "contextmenu" node
+         (pointer_fields ~x ~y ~button ~buttons:!dom_buttons ~mods
+            ~extra:
+              [ ( "detail"
+                , Printf.sprintf
+                    "{\"tx\":%.1f,\"ty\":%.1f,\"tw\":%.1f,\"th\":%.1f}"
+                    r.Lui_scene.x r.Lui_scene.y r.Lui_scene.w
+                    r.Lui_scene.h ) ])
      | _ -> ());
     dom_down_node := 0;
     dom_down_clicks := 0
