@@ -469,6 +469,20 @@ let () =
              match !host_cell with
              | Some h ->
                let r = engine_rect id in
+               let r =
+                 match Lui_store.string_prop (Lui_host.store h) id "icon"
+                 with
+                 | Some _ ->
+                   (* icon-prop slots (button, menu-item…) paint the
+                      whole image inside an <=18px slot — rasterizing at
+                      the host node's rect stretches the glyph *)
+                   let slot =
+                     Float.min 18.
+                       (Float.min r.Lui_scene.w r.Lui_scene.h)
+                   in
+                   { r with Lui_scene.w = slot; Lui_scene.h = slot }
+                 | None -> r
+               in
                Host_icons.image_of (Lui_host.store h) !scale_cell id r
              | None -> None);
         shadow_of =
