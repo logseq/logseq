@@ -80,6 +80,24 @@
     (is (< 1 (:block/updated-at (d/entity @conn (:db/id b1)))))
     (is (< 1 (:block/updated-at (d/entity @conn (:db/id page)))))))
 
+(deftest save-block-makes-a-new-inline-tag-a-class
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
+                                                :blocks [{:block/title "b1"}]}])
+        b1 (db-test/find-block-by-content @conn "b1")
+        ;; the ref map the editor's parser makes for #NewTag
+        tag (assoc (gp-block/page-name->map "NewTag" @conn true
+                                            date-time-util/default-journal-title-formatter)
+                   :block/tags [:logseq.class/Tag])
+        tag-uuid (:block/uuid tag)]
+    (outliner-core/save-block! conn {:db/id (:db/id b1)
+                                     :block/uuid (:block/uuid b1)
+                                     :block/title (str "b1 #[[" tag-uuid "]]")
+                                     :block/refs [tag]
+                                     :block/tags [tag]})
+    (let [tag-entity (d/entity @conn [:block/uuid tag-uuid])]
+      (is (some? (:db/ident tag-entity)))
+      (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends tag-entity)))))))
+
 (deftest collapsing-a-block-does-not-bump-its-updated-at
   (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
                                                 :blocks [{:block/title "b1" :build/children [{:block/title "c"}]}]}])
