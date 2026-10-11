@@ -1099,13 +1099,24 @@ let () =
     if Atomic.exchange dump_tree_flag false then begin
       let rec out depth id =
         let r = Rects.get rects id in
-        dbg "%s%d %s key=%s class=%s %.0f,%.0f %.0fx%.0f"
+        let extra =
+          match Lui_store.kind store id with
+          | "split" -> (
+            match Lui_store.prop store id "value" with
+            | Some (Lui_protocol.FloatValue v) ->
+              Printf.sprintf " value=%.4g" v
+            | Some _ -> " value=<non-float>"
+            | None -> " value=NONE")
+          | _ -> ""
+        in
+        dbg "%s%d %s key=%s class=%s%s %.0f,%.0f %.0fx%.0f"
           (String.make (2 * depth) ' ') id (Lui_store.kind store id)
           (Option.value (Lui_store.string_prop store id "key")
              ~default:"-")
           (Option.value
              (Lui_store.string_prop store id "style-class")
              ~default:"-")
+          extra
           r.Lui_scene.x r.Lui_scene.y r.Lui_scene.w r.Lui_scene.h;
         List.iter (out (depth + 1)) (Lui_store.child_ids store id)
       in

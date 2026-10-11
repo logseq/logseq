@@ -375,7 +375,8 @@ let overlays (ms : Model.t Signal.signal) =
      dispatch Dismiss to it (it stays mounted between overlays, so an
      outside press or Escape would otherwise vanish into it). *)
   Ui_parts.viewport_cover
-    (popover ~transition:Ui_components.popover_transition ~key:"overlays" ~style_class:"cp__overlays"
+    (Ui_parts.hit_transparent
+       (popover ~transition:Ui_components.popover_transition ~key:"overlays" ~style_class:"cp__overlays"
     ~background:"#00000000"
     ~data_attrs:[ ("data-overlay-layer", "true") ]
     [ (* popover takes only standard-kind children — the logseq-*
@@ -415,7 +416,7 @@ let overlays (ms : Model.t Signal.signal) =
           match m.Model.appearance with
           | Some pos -> Settings_page.appearance_body pos
           | None -> spacer ~key:"app-none" []) ms
-    ] ])
+    ] ]))
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)

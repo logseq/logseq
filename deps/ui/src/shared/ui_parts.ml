@@ -104,6 +104,17 @@ let viewport_cover (elem : t) : t =
   Lui_ui.height_viewport context node 1.;
   node
 
+(* pointer-events:none for a cover layer: on web the permanent overlay
+   layer is hit-transparent so empty regions let clicks fall through to
+   the app below; native hit-testing honours pointer-enabled=false the
+   same way while children that register handlers still get hit. *)
+let hit_transparent (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  ignore (standard_kind context node);
+  Lui_ui.bool_property context node Lui_wire_schema.PointerEnabled false;
+  node
+
 (* The imperative side queries .mock-text/.editor-inner/.block-editor by
    class, so the semantic classes stay on style_class; flex/grow layout
    moves to the kind's typed props. *)
