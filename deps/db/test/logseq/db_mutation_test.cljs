@@ -247,6 +247,19 @@
       (is (= preorder
              (map :block/title (ldb/sort-page-random-blocks @conn shuffled)))))))
 
+(deftest sort-page-random-blocks-keeps-given-order-of-siblings-sharing-an-order-test
+  (testing "siblings with the same :block/order (e.g. before db-sync fixes duplicate orders) stay in the order given"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "a"} {:block/title "b"} {:block/title "c"}]}]})
+          pick (fn [title] (db-test/find-block-by-content @conn title))
+          sorted-titles (fn [titles]
+                          (map :block/title (ldb/sort-page-random-blocks @conn (map pick titles))))]
+      (d/transact! conn [[:db/add (:db/id (pick "b")) :block/order (:block/order (pick "a"))]])
+      (is (= ["a" "b"] (sorted-titles ["a" "b"])))
+      (is (= ["b" "a" "c"] (sorted-titles ["c" "b" "a"]))))))
+
 (deftest get-alias-source-page-of-an-alias-of-2-pages-is-the-older-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
