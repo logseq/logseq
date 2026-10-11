@@ -80,7 +80,7 @@ plaintext. `GET .../e2ee/public-keys` lists member RSA keys.
 | Op | Behavior on e2ee |
 |---|---|
 | `searchGraph` | Runs, but only matches **ciphertext** substrings — plaintext keyword search is impossible (server can't read titles) |
-| `listPageReferences` | Always `[]` — refs come from `[[name]]` inside titles, which are ciphertext |
+| `listPageReferences` | Only returns client-authored refs — ref extraction is skipped for API writes on e2ee (`[[name]]` can't exist in ciphertext titles), and the API has no way to supply ref UUIDs, so agents cannot create references on e2ee |
 | Property values on `:db.type/ref` props | Plaintext titles can't resolve (`:block/title` holds ciphertext) → 400. Pass the entity **UUID** or the **ciphertext title** instead — both resolve |
 | `decryptE2eeText` | Canonical `[iv ct]` packages only; RSA-envelope packages → 400 |
 | Plaintext titles on any gated write | 400 by design |
