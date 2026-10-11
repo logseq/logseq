@@ -186,6 +186,34 @@
     (is (= "c2" (:block/title target)))
     (is (true? sibling?))))
 
+(deftest get-target-block-cases
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "t" :build/children [{:block/title "p" :build/children [{:block/title "c1"}]}]}
+                         {:block/title "x"}
+                         {:block/title "leaf"}
+                         {:block/title "l" :build/children [{:block/title "l1"} {:block/title "l2"}]}
+                         {:block/title "linked"}]}])
+        b #(db-test/find-block-by-content @conn %)
+        target (fn [blocks t opts]
+                 (let [[block sibling?] (#'outliner-core/get-target-block @conn blocks t opts)]
+                   [(:block/title block) sibling?]))]
+    (d/transact! conn [[:db/add (:db/id (b "linked")) :block/link (:db/id (b "l"))]])
+    (testing "a target given by its uuid alone"
+      (is (= ["leaf" true] (target [] {:block/uuid (:block/uuid (b "leaf"))}
+                                    {:outliner-op :insert-blocks :sibling? true}))))
+    (testing "a move up whose target is the first block's grandparent stays under it"
+      (is (= ["t" false] (target [(b "c1") (b "x")] (b "t")
+                                 {:outliner-op :move-blocks-up-down :up? true :sibling? false}))))
+    (testing "an insert at the top of a block goes in as its first child"
+      (is (= ["l" false] (target [] (b "l") {:outliner-op :insert-blocks :top? true :sibling? true}))))
+    (testing "an insert at the bottom of a block with no children goes in as its child"
+      (is (= ["leaf" false] (target [] (b "leaf") {:outliner-op :insert-blocks :bottom? true :sibling? false}))))
+    (testing "an indent onto a linked block goes after the last child of the block it links"
+      (is (= ["l2" true] (target [] (b "linked") {:outliner-op :indent-outdent-blocks :indent? true :sibling? false}))))
+    (testing "an outdent onto a linked block takes the linked block itself"
+      (is (= ["linked" true] (target [] (b "linked") {:outliner-op :indent-outdent-blocks :indent? false :sibling? true}))))))
+
 (deftest move-up-into-the-parent-of-the-first-moved-block
   ;; c1 is the first child of p, x comes after p: moving [c1 x] up with p as
   ;; the target goes before p, not into p after its last child
