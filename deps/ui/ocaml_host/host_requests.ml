@@ -592,9 +592,25 @@ let dom_op (e : env) (op : string) (body : string) =
                 [ ("block-id", `String bid)
                 ; ("height", `Float (scroll_height e ctx)) ])
          | "set-input-focus" ->
+           (* the conduit contract is a handshake: after the host moves
+              its text input onto the sink it pushes the "focus"/"blur"
+              extension event back — Edit_input.Focus folds into
+              Editor_state.focused_block, which is_focused reads to
+              consume the pending_focus arm. Without the event the
+              app's focus-retry loops forever. *)
            (match jbool_opt "focused" parsed with
-            | Some true -> e.focused_text_input ctx.sink
-            | Some false -> e.focused_text_input 0
+            | Some true -> (
+              e.focused_text_input ctx.sink;
+              List.iter e.apply_batch
+                (Patch_decode.batches_of_string
+                   (Native_embed.extension_event ctx.sink "logseq-editor"
+                      "focus" "{}")))
+            | Some false -> (
+              e.focused_text_input 0;
+              List.iter e.apply_batch
+                (Patch_decode.batches_of_string
+                   (Native_embed.extension_event ctx.sink "logseq-editor"
+                      "blur" "{}")))
             | None -> ())
          | _ -> ())))
   | other -> log "dom-op %s unsupported: %s" other body
