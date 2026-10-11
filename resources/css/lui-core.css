@@ -815,10 +815,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-
-  &.is-scrolled {
-    border-top: 1px solid var(--ls-tertiary-border-color);
-  }
 .cp__graphs-selector {
   /* LUI renders .lui-row.item, not a.item */
   > .item {
@@ -1139,11 +1135,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
             top: 4px;
           }
         }
-
-        &[data-popup-active] {
-          background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-          opacity: 1;
-        }
       }
     }
   }
@@ -1363,31 +1354,11 @@ h1.title {
   }
 }
 
-.ls-page-title .ls-page-title-actions:has(button[data-popup-active]) {
-  opacity: 1;
-}
-
 a.page-title {
   padding: 0 8px;
   margin-left: -8px;
   display: block;
   color: inherit;
-}
-
-.page-title-sizer-wrapper {
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-
-  :empty::before {
-    content: '\200b';
-  }
-
-  > .title {
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 
 /* ==================== Page properties panel ============================= */
@@ -1399,15 +1370,6 @@ a.page-title {
    2px below the block's own content row */
 
 .ls-properties-area {
-
-  .properties-panel-header {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.75rem;
-    line-height: 1rem;
-    font-weight: 500;
-    color: var(--ls-secondary-text-color);
-    border-bottom: 1px solid var(--ls-border-color);
-  }
 
   .property-pair.property-panel-row {
     display: grid;
@@ -1493,16 +1455,12 @@ a.page-title {
   }
 
   .property-pair.property-panel-row[data-property-type='node']
-    .property-value-panel.ls-block.property-value-container,
-  .property-pair.property-panel-row[data-property-type='node']
-    .property-value.property-value-panel-inner {
+    .property-value-panel.ls-block.property-value-container{
     align-items: center;
   }
 
   .property-pair.property-panel-row[data-property-type='checkbox']
-    .property-value-panel.ls-block.property-value-container,
-  .property-pair.property-panel-row[data-property-type='checkbox']
-    .property-value.property-value-panel-inner {
+    .property-value-panel.ls-block.property-value-container{
     align-items: center;
   }
 
@@ -1533,9 +1491,7 @@ a.page-title {
   }
 }
 
-    .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
-  .property-pair.property-panel-row[data-property-type='url']
-    .asset-image-fallback {
+    .property-value-panel a:not(.block-control):not(.bullet-link-wrap){
     overflow-wrap: anywhere;
     word-break: break-word;
     white-space: normal;
@@ -1575,28 +1531,6 @@ a.page-title {
     color: var(--ls-primary-text-color);
   }
 
-  .property-value.property-value-panel-inner {
-    padding-left: 0;
-    min-height: 20px;
-    width: 100%;
-    min-width: 0;
-    color: var(--ls-primary-text-color);
-  }
-
-  .property-value.property-value-panel-inner > .property-value-inner {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .property-value.property-value-panel-inner .jtrigger {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .property-value.property-value-panel-inner .select-item {
-    min-width: 0;
-  }
-
 
   /* cljs renders the key (.property-k anchor) and scalar values as
      plain inline text affordances — the ghost-button chrome must not
@@ -1629,11 +1563,6 @@ a.page-title {
     background-color: var(--ls-primary-background-color);
     box-shadow: inset 0 0 0 1px var(--ls-border-color);
   }
-
-  .property-value-panel:has(.property-value-panel-inner:hover)
-    .property-panel-edit-btn,
-  .property-value-panel:has(.property-value-panel-inner:focus-within)
-    .property-panel-edit-btn,
   .property-panel-edit-btn:focus-visible {
     opacity: 1;
     pointer-events: auto;
@@ -2352,8 +2281,7 @@ a.page-title {
    `b/strong`, `i/em`, `del/s`, `u/ins`, `mark`, `:not(pre) > code` and
    `sub/sup` UA + theme rules above. */
 .ed-bold,
-.ed-b,
-.ed-strong {
+.ed-b{
   font-weight: bolder;
 }
 
@@ -2426,13 +2354,11 @@ a.page-title {
   text-decoration: line-through;
 }
 
-.ed-u,
-.ed-ins {
+.ed-u{
   text-decoration: underline;
 }
 
-.ed-hl,
-.ed-mark {
+.ed-hl{
   background: var(--ls-page-mark-bg-color, #fef3ac);
   color: var(--ls-page-mark-color, #262626);
   padding: 0 4px;
@@ -2452,11 +2378,6 @@ a.page-title {
 
 .ed-sub {
   vertical-align: sub;
-  font-size: smaller;
-}
-
-.ed-sup {
-  vertical-align: super;
   font-size: smaller;
 }
 
@@ -2730,18 +2651,6 @@ a.tag {
   }
 }
 
-.block-ref-no-title {
-  border-bottom: 0.5px solid;
-  border-bottom-color: var(--ls-block-ref-link-text-color);
-  cursor: alias;
-  padding: 2px 5px;
-  display: block;
-
-  &:hover {
-    color: var(--ls-link-text-hover-color);
-  }
-}
-
 .embed-page {
   padding: 0.5rem;
   margin: 0.5rem 0;
@@ -2755,24 +2664,11 @@ a.tag {
   }
 }
 
-.block-marker {
-  padding: 2px 4px;
-  opacity: 0.7;
-  font-size: 85%;
-  margin: 0 2px 0 0;
-  font-weight: 650;
-  border: 0;
-}
-
 .done,
 .canceled,
 .cancelled {
   text-decoration: line-through;
   opacity: 0.7;
-}
-
-span.priority {
-  color: #6b7280;
 }
 
 .ui__checkbox:not([data-checked]),
@@ -2863,10 +2759,6 @@ button[role='checkbox'][data-state='unchecked'] {
 }
 
 .youtube-timestamp {
-
-  &-icon,
-  &-label {
-  }
 
   svg,
   .lui-icon {
@@ -2960,25 +2852,9 @@ button[role='checkbox'][data-state='unchecked'] {
     display: none;
   }
 }
-
-.lazy-visibility {
-  min-width: 1px;
-  min-height: 1px;
-}
-
-a.close svg,
 .rotating-arrow svg,
 .rotating-arrow .lui-icon {
   color: var(--ls-primary-text-color);
-}
-
-a.close {
-  color: var(--ls-primary-text-color);
-  opacity: 0.6;
-
-  &:hover {
-    opacity: 1;
-  }
 }
 
 /* cljs block.css — video embed shell geometry (embed macros render
@@ -3021,17 +2897,6 @@ a.close {
 .tweet-embed {
   border-radius: 0.5rem;
   overflow: hidden;
-}
-
-/* list-view group-by partition header (cljs .ml-6.text-sm.opacity-70) */
-.ls-view-partition-title {
-  margin-left: 1.5rem;
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
-  opacity: 0.7;
-}
-.ls-view-partition-title:hover {
-  opacity: 1;
 }
 
 /* grouped list view wrapper (cljs .flex.flex-col.border-t.pt-2.gap-2) */
