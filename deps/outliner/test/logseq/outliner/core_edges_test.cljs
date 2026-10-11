@@ -244,6 +244,60 @@
         (is (every? #(neg? (compare % (:block/order first-child)))
                     (orders [{:block/level 1}] t false false)))))))
 
+(deftest blocks-inserted-next-to-a-numbered-list-item-are-numbered
+  (let [f #'outliner-core/blocks-with-ordered-list-props
+        numbered {:logseq.property/order-list-type {:db/id 42}}
+        list-type #(let [v (:logseq.property/order-list-type %)] (if (map? v) (:db/id v) v))
+        u1 (random-uuid)
+        u2 (random-uuid)
+        blocks [{:block/uuid u1}
+                {:block/uuid u2 :logseq.property/order-list-type {:db/id 7}}
+                {:block/title "no uuid"}]]
+    (testing "as siblings of a numbered item: new blocks take its list type, a block with its own keeps it"
+      (is (= [42 7 nil] (map list-type (f blocks numbered true)))))
+    (testing "as siblings of a plain block nothing changes"
+      (is (= blocks (f blocks {:block/title "plain"} true))))
+    (testing "as children of a numbered item with no children nothing changes (the list type comes from the first child)"
+      (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"} :blocks [{:block/title "t"}]}])
+            t (db-test/find-block-by-content @conn "t")
+            _ (d/transact! conn [[:db/add (:db/id t) :logseq.property/order-list-type (:db/id (:block/page t))]])
+            t (d/entity @conn (:db/id t))]
+        (is (some? (list-type t)))
+        (is (= blocks (f blocks t false)))))
+    (testing "as children of a block whose first child is numbered: new blocks take that child's list type"
+      (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
+                                                    :blocks [{:block/title "t" :build/children [{:block/title "c"}]}]}])
+            c (db-test/find-block-by-content @conn "c")
+            type-id (:db/id (:block/page c))
+            _ (d/transact! conn [[:db/add (:db/id c) :logseq.property/order-list-type type-id]])
+            t (db-test/find-block-by-content @conn "t")]
+        (is (= type-id (list-type (first (f [{:block/uuid (random-uuid)}] t false)))))))))
+
+(deftest template-insert-points-refs-inside-the-template-at-the-new-blocks
+  (let [a-uuid (random-uuid)
+        b-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "template"}
+                :blocks [{:block/title "b" :block/uuid b-uuid}
+                         {:block/title (str "see [[" b-uuid "]]") :block/uuid a-uuid}]}
+               {:page {:block/title "page1"} :blocks [{:block/title "target"}]}])
+        _ (d/transact! conn [[:db/add [:block/uuid a-uuid] :block/refs [:block/uuid b-uuid]]])
+        a (d/entity @conn [:block/uuid a-uuid])
+        b (d/entity @conn [:block/uuid b-uuid])
+        target (db-test/find-block-by-content @conn "target")]
+    (is (= [b-uuid] (map :block/uuid (:block/refs a))))
+    (let [{:keys [blocks]} (outliner-core/insert-blocks @conn [b a] target {:sibling? true :insert-template? true})
+          [new-b new-a] blocks]
+      (is (not= b-uuid (:block/uuid new-b)))
+      (is (= (str "see [[" (:block/uuid new-b) "]]") (:block/title new-a))))))
+
+(deftest a-copied-block-does-not-take-the-source-db-id
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks [{:block/title "src"} {:block/title "target"}]}])
+        src (db-test/find-block-by-content @conn "src")
+        {:keys [tx-data]} (outliner-core/insert-blocks @conn [src] (db-test/find-block-by-content @conn "target") {:sibling? true})]
+    (is (not-any? #(and (map? %) (= (:db/id src) (:db/id %))) tx-data))))
+
 (deftest url-property-value-takes-no-child
   (let [forbidden? #'outliner-core/url-property-value-forbidden-target?
         url-value {:logseq.property/created-from-property {:logseq.property/type :url
