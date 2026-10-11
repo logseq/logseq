@@ -1586,10 +1586,11 @@
         [private-key set-private-key!] (hooks/use-state nil)
         reveal-private-key!
         (fn []
-          (let [private-key-promise (p/deferred)]
+          (let [private-key-promise (p/deferred)
+                encrypted-private-key (ldb/read-transit-str (:encrypted-private-key rsa-key-pair))]
             (shui/dialog-open!
              #(e2ee/e2ee-password-to-decrypt-private-key
-               (:encrypted-private-key rsa-key-pair) private-key-promise)
+               encrypted-private-key private-key-promise)
              {:auto-width? true
               :on-close (fn []
                           (p/reject! private-key-promise (ex-info "cancelled" {}))
