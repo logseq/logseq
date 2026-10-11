@@ -126,8 +126,16 @@ let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
-          ~style_class:"cp__header-l"
+      [ Ui_parts.int_prop_signal Lui_protocol.MarginLeft ms
+          (* macOS: the header blends into the title bar (the host sets
+             fullSizeContentView); with the left sidebar closed its
+             buttons sit here and must clear the traffic-light controls
+             (~76px). With the sidebar open the sidebar's own top row
+             hosts them and the header shows only a spacer, so the
+             inset can relax. *)
+          (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 76)
+          (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
+             ~style_class:"cp__header-l"
           [ reactive
               ~equal:(fun (a : Model.t) (b : Model.t) ->
                 a.left_sidebar_open = b.left_sidebar_open)
@@ -139,7 +147,7 @@ let topbar (ms : Model.t Signal.signal) : t list =
                 else
                   row ~key:"head-l-btns" ~cross:`center
                     [ left_menu_btn; search_btn ])
-              ms ]
+              ms ])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~gap:8 ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_btn ms; dots_btn; right_toggle_btn ms ] ]
@@ -233,9 +241,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
           ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
-             [ Ui_components.with_props
-                 [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
-                 (column ~key:"ls-inner" ~grow:1. ~min_height:0
+             [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
                     (* web: --left-sidebar-bg-color = --lx-gray-02 (the
                        near-white mauve-02 tone, one step above the page);
                        gpui `muted` is the matching surface tone. *)

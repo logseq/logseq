@@ -22,6 +22,11 @@ module Sdl = Tsdl.Sdl
    launch — see its comment. *)
 external native_activate : unit -> unit = "logseq_native_activate"
 
+(* ocaml_host_stubs.c: fullSizeContentView + transparent titlebar so
+   cp__header renders where the title bar sits. *)
+external native_titlebar_blend : unit -> unit
+  = "logseq_native_titlebar_blend"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -204,6 +209,7 @@ let () =
      foreign app was still coming to the front while we created it. *)
   Sdl.raise_window !win;
   native_activate ();
+  native_titlebar_blend ();
   let drawable () = Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in
@@ -1124,7 +1130,29 @@ let () =
           r.Lui_scene.x r.Lui_scene.y r.Lui_scene.w r.Lui_scene.h;
         List.iter (out (depth + 1)) (Lui_store.child_ids store id)
       in
-      List.iter (out 0) (Lui_store.root_ids store)
+      List.iter (out 0) (Lui_store.root_ids store);
+      (* scene ops in the sidebar band — catches paint-time offsets the
+         layout rects above cannot show *)
+      (match !host_cell with
+       | None -> ()
+       | Some h ->
+         let sc = Lui_host.scene h in
+         List.iteri
+           (fun i op ->
+             let r =
+               match op with
+               | Lui_scene.Fill f -> Some f.Lui_scene.frect
+               | Lui_scene.Push_clip c -> Some c.Lui_scene.crect
+               | Lui_scene.Shadow s -> Some s.Lui_scene.srect
+               | Lui_scene.Image im -> Some im.Lui_scene.irect2
+               | _ -> None
+             in
+             match r with
+             | Some r when r.Lui_scene.x < 420. && r.Lui_scene.w > 0.5 ->
+               dbg "scene[%d] %.0f,%.0f %.0fx%.0f" i r.Lui_scene.x
+                 r.Lui_scene.y r.Lui_scene.w r.Lui_scene.h
+             | _ -> ())
+           sc.Lui_scene.ops)
     end;
     (* OCaml worker threads poke wakeup() when the app mailbox fills —
        pump drains it on this entry thread; returned patches apply. *)

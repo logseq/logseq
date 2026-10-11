@@ -132,4 +132,42 @@ CAMLprim void logseq_native_activate(void) {
   SEL activate = sel_registerName("activateIgnoringOtherApps:");
   ((void (*)(id, SEL, int))objc_msgSend)(app, activate, 1);
 }
+
+/* Blend the app header into the title bar: content covers the full
+   window and the title bar becomes transparent and untitled, like
+   Electron's `titleBarStyle: hiddenInset`. The app's .cp__header row
+   renders where the title bar sits; the traffic-light buttons overlay
+   its left edge (the view reserves ~76px for them). */
+CAMLprim void logseq_native_titlebar_blend(void) {
+  Class nswin = objc_getClass("NSWindow");
+  Class cls = objc_getClass("NSApplication");
+  if (nswin == Nil || cls == Nil) return;
+  SEL shared = sel_registerName("sharedApplication");
+  id app = ((id (*)(Class, SEL))objc_msgSend)(cls, shared);
+  if (app == nil) return;
+  id windows =
+      ((id (*)(id, SEL))objc_msgSend)(app, sel_registerName("windows"));
+  if (windows == nil) return;
+  unsigned long count =
+      ((unsigned long (*)(id, SEL))objc_msgSend)(
+          windows, sel_registerName("count"));
+  for (unsigned long i = 0; i < count; i++) {
+    id w = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
+        windows, sel_registerName("objectAtIndex:"), i);
+    if (w == nil) continue;
+    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(
+        w, sel_registerName("styleMask"));
+    if (!(mask & 1L /* NSWindowStyleMaskTitled */)) continue;
+    ((void (*)(id, SEL, unsigned long))objc_msgSend)(
+        w, sel_registerName("setStyleMask:"),
+        mask | (1L << 15) /* NSWindowStyleMaskFullSizeContentView */);
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        w, sel_registerName("setTitlebarAppearsTransparent:"), 1);
+    ((void (*)(id, SEL, long))objc_msgSend)(
+        w, sel_registerName("setTitleVisibility:"),
+        1L /* NSWindowTitleHidden */);
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        w, sel_registerName("setMovableByWindowBackground:"), 1);
+  }
+}
 #endif
