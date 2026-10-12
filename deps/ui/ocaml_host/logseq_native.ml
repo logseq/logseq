@@ -41,6 +41,10 @@ external sidebar_vibrancy :
   float -> float -> float -> float -> bool -> unit
   = "logseq_native_sidebar_vibrancy"
 
+(* App theme → material appearance: the SDL window doesn't track the
+   app's own light/dark switch, so the host pushes it each frame. *)
+external sidebar_theme : bool -> unit = "logseq_native_sidebar_theme"
+
 (* ocaml_host_stubs.c: installs the real NSMenu main menu. Every item
    carries a command tag forwarded to the "ocaml_host_menu_command"
    named value registered below. *)
@@ -710,6 +714,7 @@ let () =
            then begin
              s.Lui_scene.ops <- sidebar_hole r s.Lui_scene.ops;
              let sc = !scale_cell in
+             sidebar_theme (!Theme_vars.mode = Lui_theme.Dark);
              sidebar_vibrancy
                (r.Lui_scene.x /. sc)
                (float !win_h -. (r.Lui_scene.y +. r.Lui_scene.h) /. sc)

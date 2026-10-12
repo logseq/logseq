@@ -455,6 +455,10 @@ static void make_layers_transparent(id layer) {
   if (name != NULL) {
     ((void (*)(id, SEL, int))objc_msgSend)(
         layer, sel_registerName("setOpaque:"), 0);
+    /* setOpaque:NO still leaves an opaque backgroundColor fill that
+       shows through the hole — NULL it too. */
+    ((void (*)(id, SEL, void *))objc_msgSend)(
+        layer, sel_registerName("setBackgroundColor:"), NULL);
   }
   id sub = ((id (*)(id, SEL))objc_msgSend)(
       layer, sel_registerName("sublayers"));
@@ -469,8 +473,19 @@ static void make_layers_transparent(id layer) {
     if (ln != NULL && strstr(ln, "CAMetalLayer") != NULL) {
       ((void (*)(id, SEL, int))objc_msgSend)(
           l, sel_registerName("setOpaque:"), 0);
+      ((void (*)(id, SEL, void *))objc_msgSend)(
+          l, sel_registerName("setBackgroundColor:"), NULL);
     }
   }
+}
+
+/* App theme (light/dark) drives the material's appearance pin — set
+   once per frame alongside sidebar_vibrancy. */
+static int vib_dark = 0;
+CAMLprim value logseq_native_sidebar_theme(value vdark) {
+  CAMLparam1(vdark);
+  vib_dark = Bool_val(vdark);
+  CAMLreturn(Val_unit);
 }
 
 /* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
@@ -544,7 +559,31 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
           effect, -1L /* NSWindowBelow */, cv);
       ((void (*)(id, SEL, int))objc_msgSend)(
           win, sel_registerName("setOpaque:"), 0);
+      /* A non-opaque window still fills behind the effect with its
+         backgroundColor; clear it or the material samples an opaque
+         dark base instead of the desktop. */
+      Class nscolor = objc_getClass("NSColor");
+      if (nscolor != Nil) {
+        id clear = ((id (*)(Class, SEL))objc_msgSend)(
+            nscolor, sel_registerName("clearColor"));
+        if (clear != nil)
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              win, sel_registerName("setBackgroundColor:"), clear);
+      }
     }
+      /* The material follows the app theme, not the window's
+         effective appearance (an SDL window doesn't track the app's
+         own light/dark switch). */
+      Class appcls = objc_getClass("NSAppearance");
+      if (appcls != Nil) {
+        id ap = ((id (*)(Class, SEL, id))objc_msgSend)(
+            appcls, sel_registerName("appearanceNamed:"),
+            menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua"
+                                : "NSAppearanceNameAqua"));
+        if (ap != nil)
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              effect, sel_registerName("setAppearance:"), ap);
+      }
     /* SDL or a driver update may re-opaque the metal layer; keep it
        transparent while the effect lives. */
     id layer =
