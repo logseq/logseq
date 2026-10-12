@@ -1563,6 +1563,12 @@ let () =
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
   let mem_mark = ref 0. in
+  (* LOGSEQ_MEM_TRACE=1: periodic GC/node-count line for leak hunts *)
+  let mem_trace =
+    match Sys.getenv_opt "LOGSEQ_MEM_TRACE" with
+    | Some ("" | "0") | None -> false
+    | Some _ -> true
+  in
   let raises_left = ref 3 in
   Daemon_client.boot_mark "loop";
   while not !quit do
@@ -1690,7 +1696,7 @@ let () =
      if iter_ms > 20. then
        Daemon_client.boot_mark (Printf.sprintf "iter %.0fms" iter_ms));
     (let now = perf_s () in
-     if now -. !mem_mark > 2.0 then begin
+     if mem_trace && now -. !mem_mark > 2.0 then begin
        mem_mark := now;
        let st = Gc.quick_stat () in
        Printf.eprintf
