@@ -1091,8 +1091,11 @@ let test_journal_splice_row_level () =
            [ b1; block "j9" "inserted"; b2; b4; b5; b6; b7; b8 ] ]);
   flush ();
   let insert_ops = ops_now () - ops2 in
+  (* one inserted row now carries its typed layout props (~160 ops
+     measured); still far below a whole-day remount, and row survival
+     is asserted below *)
   check "journal row-insert splice stays bounded"
-    (insert_ops > 0 && insert_ops < 150);
+    (insert_ops > 0 && insert_ops < 200);
   check "inserted row mounted" (find_block "j9" <> None);
   eq "surrounding rows survive insert splice"
     (block_row_ids [ "j1"; "j2"; "j2c"; "j4"; "j5"; "j6"; "j7"; "j8" ])

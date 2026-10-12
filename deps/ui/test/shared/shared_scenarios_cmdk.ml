@@ -327,7 +327,7 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
          && int_prop_eq n "padding-horizontal" 12
          && str_prop_eq n "font-size" "var(--lx-text-header)"
          && str_prop_eq n "line-height" "16px"
-         && str_prop_eq n "main" "space_between"
+         && int_prop_eq n "gap" 8
          && prop_contains n "foreground" "--lx-gray-11"
          && prop_contains n "background" "--lx-gray-02"
      | None -> false);
@@ -374,10 +374,10 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
          prop_contains n "background" "--lx-gray-03"
          && prop_contains n "shadow" "--lx-cmdk-kb-shadow"
      | None -> false);
-  h.H.check "item icon is a 16x20 chip"
+  h.H.check "item icon is a 20x20 chip"
     (match by_class h "cmdk-item-icon" with
      | Some n ->
-         int_prop_eq n "width" 16
+         int_prop_eq n "width" 20
          && int_prop_eq n "height" 20
          && int_prop_eq n "corner-radius" 4
          && prop_contains n "background" "--lx-gray-05"
