@@ -23,8 +23,11 @@ let block_count ctx app value count =
   id
 
 let validate ctx app =
+  let result = Client.validate app in
   Suite.equal ctx "Real worker graph validation has no errors with fix=false"
-    (Wire.get (Client.validate app) "errors") (Some Wire.Nil)
+    (Wire.get result "errors") (Some Wire.Nil);
+  Suite.equal ctx "Real worker graph validation has no invalid entity IDs"
+    (Wire.get result "invalid-entity-ids") (Some (Wire.Array []))
 
 let tests =
   [ Suite.test ~contract:Suite.Api ~covers:[source "editor-apis-test"]
