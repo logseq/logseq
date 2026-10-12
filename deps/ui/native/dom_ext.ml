@@ -562,6 +562,22 @@ let bounding_rect (el : element) : rect =
                 ~default:(Js.Json.JObject [])
           | None -> Js.Json.JObject []))
 
+(* A resolvable element (node-id or "#ref"/"ref-id" handle) whose rect
+   hasn't landed in the stores yet is pending — [bounding_rect] fires
+   the measure-node request, so polling this flips to false once the
+   host replies. Elements the host can't resolve never go pending: an
+   empty rect from them is a real zero, not "unmeasured". *)
+let rect_pending (el : element) : bool =
+  match prop "rect" el with
+  | Js.Json.JObject (_ :: _) -> false
+  | _ -> (
+      match num_prop "node-id" el, ref_key_of el with
+      | None, None -> false
+      | _ -> (
+          match bounding_rect el with
+          | Js.Json.JObject [] -> true
+          | _ -> false))
+
 (* <img> natural size — same fire-and-poll convention as rects: the
    "natural-size" dom-op makes the host measure the decoded image and
    reply with a "node-natural-size" event; callers read the pushed

@@ -623,14 +623,15 @@ let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
 let open_for_anchor_el ?(remove = false) ?(phase = Prop_select)
     (anchor : Ui_services.el) target =
   let rec open_measured tries_left =
-    let x, y, w, h = anchor.Ui_services.rect () in
-    if tries_left > 0 && x = 0. && y = 0. && w = 0. && h = 0. then
+    if tries_left > 0 && anchor.Ui_services.rect_pending () then
       ignore
         (Ui_services.timers_timeout
            (fun () -> open_measured (tries_left - 1)) 32)
-    else if x <> 0. || y <> 0. || w <> 0. || h <> 0. then
-      open_dialog ~remove ~phase ~anchor:(x, y +. h) target
-    else open_dialog ~remove ~phase target
+    else
+      let x, y, w, h = anchor.Ui_services.rect () in
+      if x <> 0. || y <> 0. || w <> 0. || h <> 0. then
+        open_dialog ~remove ~phase ~anchor:(x, y +. h) target
+      else open_dialog ~remove ~phase target
   in
   open_measured 4
 
@@ -701,16 +702,16 @@ let open_for_current () =
               with the same retry as open_for_anchor_el instead of
               anchoring at the pending (0,0,0,0) read *)
            let rec open_measured tries_left =
-             let rx, ry, rw, rh = blk.Ui_services.rect () in
-             if tries_left > 0 && rx = 0. && ry = 0. && rw = 0. && rh = 0.
-             then
+             if tries_left > 0 && blk.Ui_services.rect_pending () then
                ignore
                  (Ui_services.timers_timeout
                     (fun () -> open_measured (tries_left - 1))
                     32)
-             else if rx <> 0. || ry <> 0. || rw <> 0. || rh <> 0. then
-               open_dialog ~anchor:(rx +. 24., ry +. rh +. 4.) t
-             else open_dialog t
+             else
+               let rx, ry, rw, rh = blk.Ui_services.rect () in
+               if rx <> 0. || ry <> 0. || rw <> 0. || rh <> 0. then
+                 open_dialog ~anchor:(rx +. 24., ry +. rh +. 4.) t
+               else open_dialog t
            in
            open_measured 4
        | None -> open_dialog t)

@@ -183,6 +183,8 @@ let run () =
         ; edit_units = (fun () -> `U16)
         ; random_uuid = (fun () -> incr uuid_seq; Printf.sprintf "uuid-%d" !uuid_seq)
         ; open_url = (fun u -> opened_urls := u :: !opened_urls)
+        ; url_images = (fun () -> true)
+        ; paints_caret = (fun () -> false)
         ; menu_popup = (fun _ -> false)
         }
     ; dom =
@@ -193,6 +195,7 @@ let run () =
            ; closest = (fun _ -> None)
            ; attr = (fun _ -> None)
            ; rect = (fun () -> (0., 0., 0., 0.))
+           ; rect_pending = (fun () -> false)
            ; set_style = (fun _ _ -> ())
            ; add_class = (fun _ -> ())
            ; remove_class = (fun _ -> ())
@@ -448,6 +451,10 @@ let run () =
                          && not (Ui_services.env_native_drag ())
                          && not (Ui_services.env_native_block_controls ()));
   check "env css icons" (Ui_services.env_css_transform_icons ());
+  check "env capabilities"
+    (Ui_services.env_url_images () && not (Ui_services.env_paints_caret ()));
+  check "el rect_pending distinguishes pending from zero"
+    (not ((Ui_services.dom_root ()).Ui_services.rect_pending ()));
   let u1 = Ui_services.env_random_uuid () and u2 = Ui_services.env_random_uuid () in
   check "random_uuid distinct" (u1 <> u2 && String.length u1 > 0);
   Ui_services.env_open_url "https://x";

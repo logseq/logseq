@@ -117,6 +117,13 @@ type env = {
   edit_units : unit -> edit_units;
   random_uuid : unit -> string;
   open_url : string -> unit;
+  url_images : unit -> bool;
+  (* The host renders [image ~url] elements — bundled/remote bitmap
+     URLs resolve and paint. Hosts that raster only registered image
+     ids (native) answer false; views fall back to drawn placeholders. *)
+  paints_caret : unit -> bool;
+  (* The host paints the editor caret itself from its own glyph layout
+     (native); the shared overlay caret must not double-draw. *)
   menu_popup : Json.t -> bool;
   (* Hand an in-app menu spec to the host for a native popup; true
      means the host took it (it answers with a "native-menu-select"
@@ -183,6 +190,11 @@ type el = {
   closest : string -> el option;
   attr : string -> string option;
   rect : unit -> float * float * float * float;
+  rect_pending : unit -> bool;
+  (* True while the element's rect is still awaiting an async host
+     measurement — distinct from a genuinely measured zero rect, which
+     callers should treat as final instead of retrying. Synchronous
+     hosts (web) always answer false. *)
   set_style : string -> string -> unit;
   add_class : string -> unit;
   remove_class : string -> unit;
@@ -367,6 +379,8 @@ val env_css_transform_icons : unit -> bool
 val env_edit_units : unit -> edit_units
 val env_random_uuid : unit -> string
 val env_open_url : string -> unit
+val env_url_images : unit -> bool
+val env_paints_caret : unit -> bool
 val env_menu_popup : Json.t -> bool
 
 val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit

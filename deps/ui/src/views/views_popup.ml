@@ -128,11 +128,10 @@ let placement_state sched (anchor : U.el) ~align_end =
     Signal.state sched { px = 0.; py = 0.; p_above = false; p_end = false }
   in
   let rec place n =
-    let x, y, w, h = anchor.U.rect () in
-    if x = 0. && y = 0. && w = 0. && h = 0. then begin
-      if n > 0 then U.timers_later ~ms:32 (fun () -> place (n - 1))
-    end
+    if anchor.U.rect_pending () && n > 0 then
+      U.timers_later ~ms:32 (fun () -> place (n - 1))
     else begin
+      let x, y, w, h = anchor.U.rect () in
       let vh = U.dom_viewport_height () in
       let below = vh -. (y +. h) in
       let open_above = below < 280. && y > below in

@@ -223,6 +223,8 @@ let install ~request_flush ~dom ~timers ~files =
         ; edit_units = (fun () -> Platform.edit_units)
         ; random_uuid = Platform.random_uuid
         ; open_url = Platform.open_url
+        ; url_images = (fun () -> true)
+        ; paints_caret = (fun () -> false)
         ; menu_popup = (fun _ -> false)
         }
     ; dom
