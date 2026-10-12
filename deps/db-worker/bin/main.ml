@@ -3,23 +3,23 @@
    Runs the OCaml worker directly instead of the node
    db-worker-node.js bundle. The cljs daemon is
    single-threaded; here request handlers run on connection threads,
-   so worker invocations are serialized on a global mutex held until
+   so worker invocations acquire one global permit until
    the returned E.t settles — preserving the JS "one invoke at a
    time" semantics. *)
 
 module E = Db_worker_effect
 
-let invoke_mu = Mutex.create ()
+let invoke_permit = Semaphore.Binary.make true
 
 let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
   fun arg ->
-    Mutex.lock invoke_mu;
+    Semaphore.Binary.acquire invoke_permit;
     match
       (try `Task (f arg) with exn -> `Err exn)
     with
     | `Task task ->
-        E.finally task (fun () -> Mutex.unlock invoke_mu; E.pure ())
-    | `Err exn -> Mutex.unlock invoke_mu; raise exn
+        E.finally task (fun () -> Semaphore.Binary.release invoke_permit; E.pure ())
+    | `Err exn -> Semaphore.Binary.release invoke_permit; raise exn
 
 let () =
   (* parse_argv expects JS argv ([runtime, script, ...args]); native
