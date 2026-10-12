@@ -134,17 +134,22 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
           var(--lui-c-foreground)))"
        ?placeholder ?placeholder_signal ~text_signal:text ~on_input [])
 
-(* Results scroller — viewport-bounded like the cljs 65dvh block; the
-   56px bottom pad scrolls the last row clear of the hints bar (a
-   trailing spacer — scroll has no bottom-only padding prop). *)
-let cmdk_scroller ~key children =
+(* Results scroller — viewport-bounded like the cljs 65dvh block; owns
+   the column children stack into (scroll children share a grid cell —
+   multiple children need a single column root). [bottom_pad] scrolls
+   the last row clear of the hints bar (a trailing spacer — scroll has
+   no bottom-only padding prop). *)
+let cmdk_scroller ~key ~bottom_pad children =
   with_props
     [ Prop.min_height_viewport 0.65; Prop.max_height_viewport 0.65 ]
     ((* prod scroller sits on gray-02 (#f8f8f8 / #023643 dark), measured
         off the .search-results parent *)
      scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
        ~background:"var(--lx-gray-02, var(--rx-gray-02, #f8f8f8))"
-       (children @ [ spacer ~key:"scrollpad" ~height:56 ~width:1 [] ]))
+       [ column ~key:"scroller-body" ~grow:1.
+           (children
+           @ [ spacer ~key:"scrollpad" ~height:bottom_pad ~width:1 [] ])
+       ])
 
 (* -- cmdk groups ----------------------------------------------------- *)
 

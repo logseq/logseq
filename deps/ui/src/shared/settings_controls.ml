@@ -109,25 +109,13 @@ let checkbox_el ~key ~on ~on_checked =
       | _ -> ())
     []
 
-(* <label> takes no children in the kind schema — info icons etc. join
-   the label cell through form_row's label_extra slot instead *)
-let label_el ~key ~for_ ~text ?text_signal children =
-  ignore for_;
-  let l =
-    Ui_components.form_label ~key ?text_signal ~text ()
-  in
-  match children with
-  | [] -> l
-  | _ -> row ~key:(key ^ "-row") ~cross:`center ~gap:0 (l :: children)
-
 (* ---- rows ---- *)
 
 (* cljs `toggle` row: label | switch (+detail); info icons are extra
    label children in cljs. ~binding adds the show-brackets/wide-mode
    shortcut column (narrow switch wrap + right-aligned kbd cell). *)
-let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
+let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
     ?binding ~on ~on_checked () =
-  ignore for_;
   let control =
     row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
       ?max_width:(match binding with Some _ -> Some 320 | None -> None)
@@ -149,10 +137,9 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
     ~label_extra ~control ~side ()
 
 (* cljs row-with-button-action *)
-let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
+let action_row ~key ~label ?description ~actions ?(desc = [])
     ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem")
     ?(min_height = 36) () =
-  ignore for_;
   Ui_components.form_row ~key ~col_gap ~min_height
     ~label:
       (Ui_components.form_label ~key:(key ^ "-l") ~line_height:label_lh
@@ -174,18 +161,18 @@ let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ()
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
-let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value")
+let it_row ~key ~label ?(value_cls = "ls-it-value")
     ?(min_height = 36) children =
-  ignore for_;
-  ignore value_cls;
   Ui_components.form_row ~key ~min_height
     ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
-    ~control:(column ~key:(key ^ "-r") ~cross:`stretch children)
+    ~control:
+      (column ~key:(key ^ "-r") ~style_class:value_cls ~cross:`stretch
+         children)
     ()
 
 (* row: label | <a> solid button *)
-let edit_link_row ~key ~label ~button ~href ~for_ ?(min_height = 36) () =
-  action_row ~key ~for_ ~label ~min_height
+let edit_link_row ~key ~label ~button ~href ?(min_height = 36) () =
+  action_row ~key ~label ~min_height
     ~actions:
       [ Ui_components.with_props
           [ Ui_components.Prop.font_size "0.875rem"
