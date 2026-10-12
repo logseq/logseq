@@ -93,6 +93,30 @@ Lowest stable boundary: Real native retained selectors and SDL input with the is
 Planned retained tests: 1 generic additional native locator contract, no upstream parity claim and no per-group click workarounds.
 Reason: The parent explicitly requested the shared root fix and a generic regression; protect semantic target correctness without fake layout/input or speculative product cases.
 
+### Rendered native input and heading metadata
+
+TEST DECISION: USER-REQUIRED
+
+Claim: A real native Text_field's rendered placeholder must be available to semantic selectors.
+Stable project-owned contract: Native snapshots expose the actual typed LUI PlaceholderValue on input-kind nodes, without inventing or logging the field's value.
+Concrete regression risk: Property pickers render an input but `input[placeholder='Add or change property']` matches nothing; the property owner's original selected-value assertion cannot run through the native query path.
+Existing coverage searched: Native_embed.ext_shallow_snapshot, Lui_elements.text_field, Lui_protocol.PlaceholderValue and Properties_dialog.prop_select_view.
+Cheaper evidence considered: Source inspection proves the missing projection but not native selector transport; run a real dialog-opening regression.
+Lowest stable boundary: The actual native host retained tree and private SDL client.
+Planned retained tests: 1 additional native input-placeholder case, mapped to no upstream ID. The property owner retains Down+Enter and `Set <selected property>` source assertions.
+Reason: The parent explicitly requested the generic projection; do not patch the property author's owned suite or fabricate selection behavior here.
+
+TEST DECISION: USER-REQUIRED
+
+Claim: Native snapshots must preserve a rendered heading's real HeadingLevel/As semantics without claiming to have HTML h1/h2 elements.
+Stable project-owned contract: Expose the actual HeadingLevel integer and explicit As string from the mounted LUI node as snapshot metadata; absent props remain absent.
+Concrete regression risk: Commands/headings cases cannot distinguish rendered heading levels from generic `heading` nodes, and retagging them as HTML would fabricate coverage.
+Existing coverage searched: Lui_elements.heading/text prop writers, native runtime_properties, Render.wrap's h1..h6 implementation and Native_embed.ext_shallow_snapshot.
+Cheaper evidence considered: Schema inspection validates types but not that saved heading UI exposes both props via the real native host.
+Lowest stable boundary: A real saved native heading block, inspected through retained-tree snapshots.
+Planned retained tests: 1 additional native heading-semantics case, mapped to no upstream ID.
+Reason: The parent explicitly requested a source-derived read-only native contract and asked not to fabricate HTML or change the commands owner's test bodies.
+
 ## Alternatives considered
 
 ### Browser or reducer harness
