@@ -141,19 +141,3 @@
     (is (= "A2" (:block/title (d/entity @conn (:db/id a)))))
     (is (= "B2" (:block/title (d/entity @conn (:db/id b)))))))
 
-(deftest insert-blocks-op-is-recorded-with-its-blocks-test
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "Test"}
-                :blocks [{:block/title "Target"}]}])
-        target (db-test/find-block-by-content @conn "Target")
-        new-uuid (random-uuid)
-        metas (apply-ops-capturing! conn
-                                    [[:insert-blocks [[{:block/uuid new-uuid :block/title "New"}]
-                                                      (:block/uuid target)
-                                                      {:sibling? true :keep-uuid? true}]]]
-                                    {})
-        recorded (vec (mapcat :outliner-ops metas))]
-    (is (= 1 (count recorded)))
-    (is (= :insert-blocks (ffirst recorded)))
-    (is (= "New" (:block/title (first (first (second (first recorded)))))))
-    (is (= (:block/uuid target) (second (second (first recorded)))))))

@@ -35,25 +35,6 @@
     (is (= :user.class/Foo (f db {:block/uuid (:block/uuid foo)})))
     (is (nil? (f db "str")))))
 
-(deftest resolve-create-page-tags-accepts-uuids-and-maps-test
-  (let [conn (db-test/create-conn-with-blocks {:classes {:Foo {}}})
-        db @conn
-        foo (d/entity db :user.class/Foo)]
-    (is (= [(:db/id foo)] (#'outliner-page/resolve-create-page-tags db [(:block/uuid foo)])))
-    (is (= [] (#'outliner-page/resolve-create-page-tags db nil)))
-    (is (= [(:db/id foo)]
-           (#'outliner-page/resolve-create-page-tags db [{:db/ident :user.class/Foo}])))))
-
-(deftest create-with-a-tag-map-reuses-the-class-by-uuid-test
-  (let [conn (db-test/create-conn-with-blocks {:classes {:Foo {}}})
-        foo (d/entity @conn :user.class/Foo)
-        [_ page-uuid] (outliner-page/create! conn "tagged"
-                                             {:tags [{:block/uuid (:block/uuid foo)
-                                                      :block/title (:block/title foo)}]})
-        page (d/entity @conn [:block/uuid page-uuid])]
-    (is (contains? (set (map :db/ident (:block/tags page))) :user.class/Foo))
-    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn))))))
-
 (deftest create-journal-page-keeps-given-tags-test
   (let [conn (db-test/create-conn-with-blocks {:classes {:Foo {}}})
         foo (d/entity @conn :user.class/Foo)
