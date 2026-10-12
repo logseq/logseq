@@ -500,14 +500,14 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     in
     let select_col =
       Ui_components.with_props
-        [ Lui_protocol.MaxHeightViewport, Ui_components.fv 0.75 ]
+        [ Ui_components.Prop.max_height_viewport 0.75 ]
         (column ~key:("vpsel-" ^ string_of_int id)
            ~style_class:"cp__select cp__select-main"
            ~data_attrs:[ ("style", "width:fit-content") ]
            ([ Logseq_el.el ~attrs:[ ("class", "input-wrap"); ("style", "display:flex") ]
                 [ Ui_components.with_props
-                    [ Lui_protocol.FontSize, Ui_components.sv "16px"
-                    ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+                    [ Ui_components.Prop.font_size "16px"
+                    ; Ui_components.Prop.focus_shadow "none" ]
                     (input ~key:("vpsel-i" ^ string_of_int id)
                        ~style_class:"cp__select-input" ~placeholder
                        ~autofocus:true ~padding:16
@@ -531,11 +531,10 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
               [ Logseq_el.el
                   ~attrs:[ ("class", "cp__select-apply"); ("style", "padding:1rem") ]
                   [ Ui_components.with_props
-                      [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                      ; Lui_protocol.FontWeight, Ui_components.iv 500
-                      ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-                      ; Lui_protocol.HoverBackground
-                      , Ui_components.sv "hsl(var(--muted))" ]
+                      [ Ui_components.Prop.font_size "0.875rem"
+                      ; Ui_components.Prop.font_weight 500
+                      ; Ui_components.Prop.cursor `pointer
+                      ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
                       (button ~key:("vpsel-a" ^ string_of_int id)
                          ~style_class:"ui__button ls-btn-outline" ~text:I.apply
                          ~corner_radius:6 ~border_width:1
@@ -587,7 +586,7 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
                ~background:"var(--lx-red-03, rgb(220 60 70 / 0.15))"
                ~data_attrs:[ ("style", "flex-shrink:0") ]
                [ Ui_components.with_props
-                   [ Lui_protocol.FontSize, Ui_components.sv "1.25rem" ]
+                   [ Ui_components.Prop.font_size "1.25rem" ]
                    (box ~style_class:"ls-dialog-error"
                       ~foreground:
                         "var(--lx-red-10, \
@@ -604,11 +603,10 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
              ~gap:16
              ~data_attrs:[ ("style", "padding-top:1.5rem") ]
              [ Ui_components.with_props
-                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                 ; Lui_protocol.FontWeight, Ui_components.iv 500
-                 ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-                 ; Lui_protocol.HoverBackground
-                 , Ui_components.sv "hsl(var(--muted))" ]
+                 [ Ui_components.Prop.font_size "0.875rem"
+                 ; Ui_components.Prop.font_weight 500
+                 ; Ui_components.Prop.cursor `pointer
+                 ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
                  (button ~key:"cancel" ~style_class:"ui__button ls-btn-outline"
                     ~text:I.cancel
                     ~corner_radius:6 ~border_width:1
@@ -620,10 +618,10 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
                     ~padding_vertical:8 ~padding_horizontal:16
                     ~on_press:(fun _ -> close_entry id) [])
              ; Ui_components.with_props
-                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                 ; Lui_protocol.FontWeight, Ui_components.iv 500
-                 ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-                 ; Lui_protocol.HoverOpacity, Ui_components.fv 0.9 ]
+                 [ Ui_components.Prop.font_size "0.875rem"
+                 ; Ui_components.Prop.font_weight 500
+                 ; Ui_components.Prop.cursor `pointer
+                 ; Ui_components.Prop.hover_opacity 0.9 ]
                  (button ~key:"confirm" ~style_class:"ui__button ls-btn-primary"
                     ~text:confirm_label
                     ~corner_radius:6 ~border_width:0

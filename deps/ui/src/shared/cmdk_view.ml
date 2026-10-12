@@ -437,7 +437,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
            ~cursor:
              (reactive
                 (fun (it : S.item) ->
-                  if it.S.imouse then "pointer" else "default")
+                  if it.S.imouse then `pointer else `default)
                 item_sig)
            ~header
            ~main:
@@ -663,7 +663,7 @@ let hint_button svs label keys =
   Ui_components.cmdk_hint_button ~key:("hb-" ^ label) ~label
     ~on_press:(fun _ -> ())
     [ Ui_components.with_props
-        [ Lui_protocol.Opacity, Ui_components.fv 0.6 ]
+        [ Ui_components.Prop.opacity 0.6 ]
         (text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label [])
     ; hint_shortcut svs keys ]
 

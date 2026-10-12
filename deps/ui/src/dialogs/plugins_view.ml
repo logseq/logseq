@@ -65,7 +65,7 @@ let open_url_ = Ui_services.env_open_url
    (no handler) — kept as icon buttons for parity. *)
 let control_tabs ~key ~search_st ~cat_st ~nums =
   let ghost_btn id cls (ic : icon) caption =
-    Ui_components.with_props [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+    Ui_components.with_props [ Ui_components.Prop.cursor `pointer ]
       (button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
          ~style_class:("ui__button ls-icon-btn-md " ^ cls)
          ~width:32 ~height:32 ~min_width:32 ~min_height:32
@@ -73,7 +73,7 @@ let control_tabs ~key ~search_st ~cat_st ~nums =
          ~icon:ic ~label:caption [])
   in
   Ui_components.with_props
-    [ Lui_protocol.Position, Lui_protocol.StringValue "relative" ]
+    [ Ui_components.Prop.position `relative ]
     (row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
        ~main:`space_between ~cross:`center
        ~data_attrs:[ "style", "padding-bottom: 12px" ]
@@ -106,7 +106,7 @@ let empty_item key =
    MaxHeightViewport *)
 let list_wrap ~key children =
   Ui_components.with_props
-    [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.8 ]
+    [ Ui_components.Prop.max_height_viewport 0.8 ]
     (column ~key ~style_class:"cp__plugins-item-lists"
        ~data_attrs:
          [ "style", "height: calc(100vh - 320px); overflow-y: auto" ]
@@ -144,7 +144,7 @@ let market_card ~stats ~search_st pkg =
     (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (Ui_components.with_props
-           [ Lui_protocol.Cursor, Lui_protocol.StringValue "pointer" ]
+           [ Ui_components.Prop.cursor `pointer ]
            (box ~key:"l" ~style_class:"l link-block"
               [ row ~key:"ic" ~style_class:"plugin-icon" ~width:40
                   ~height:40 ~corner_radius:6 ~main:`center ~cross:`center
@@ -155,16 +155,15 @@ let market_card ~stats ~search_st pkg =
              ~main:`space_between
              ~data_attrs:[ "style", "padding-top: 6px" ]
              [ Ui_components.with_props
-                 [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
-                 ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+                 [ Ui_components.Prop.font_size "1.25rem"
+                 ; Ui_components.Prop.font_weight 700 ]
                  (text ~key:"t" ~style_class:"l link-block" ~value:title
                     ~on_press:open_readme [])
              ; row ~key:"flag" ~style_class:"flag is-top" ~cross:`center
                  ~gap:6
                  ([ (* cljs flag icon opens the plugin readme dialog *)
                     Ui_components.with_props
-                      [ Lui_protocol.Cursor
-                      , Lui_protocol.StringValue "pointer" ]
+                      [ Ui_components.Prop.cursor `pointer ]
                       (button ~key:"doc" ~variant:`ghost ~size:`icon
                          ~width:18 ~height:18 ~min_width:18 ~min_height:18
                          ~icon:(`app "book") ~label:"Readme"
@@ -177,14 +176,13 @@ let market_card ~stats ~search_st pkg =
                          ~target:`blank ~icon:(`app "brand-github")
                          ~label:"GitHub" [] ])) ]
          ; Ui_components.with_props
-             [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.7 ]
+             [ Ui_components.Prop.opacity 0.7 ]
              (paragraph ~key:"desc" ~style_class:"desc"
                 ~font_size:"0.75rem"
                 ~value:(jstr pkg "description") [])
          ; box ~key:"flag-meta"
              [ Ui_components.with_props
-                 [ Lui_protocol.FontSize
-                 , Lui_protocol.StringValue "0.75rem" ]
+                 [ Ui_components.Prop.font_size "0.75rem" ]
                  (row ~style_class:"ls-pl-meta"
                     ~main:`space_between
                     ~data_attrs:[ "style", "padding-right: 8px" ]
@@ -307,7 +305,7 @@ let installed_card (pl : Js.Json.t) =
     (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (Ui_components.with_props
-           [ Lui_protocol.Cursor, Lui_protocol.StringValue "pointer" ]
+           [ Ui_components.Prop.cursor `pointer ]
            (box ~key:"l" ~style_class:"l link-block"
               [ row ~key:"ic" ~style_class:"plugin-icon" ~width:40
                   ~height:40 ~corner_radius:6 ~main:`center ~cross:`center
@@ -315,25 +313,24 @@ let installed_card (pl : Js.Json.t) =
                   [ icon ~name:(`app "puzzle") [] ] ]))
     ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
         [ Ui_components.with_props
-            [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
-            ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+            [ Ui_components.Prop.font_size "1.25rem"
+            ; Ui_components.Prop.font_weight 700 ]
             (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
                ~data_attrs:[ "style", "padding-top: 6px" ]
                [ text ~key:"t" ~style_class:"l link-block" ~value:name
                    ~on_press:open_readme []
                ; Ui_components.with_props
-                   [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.5 ]
+                   [ Ui_components.Prop.opacity 0.5 ]
                    (text ~key:"v" ~style_class:"ls-pl-status"
                       ~font_size:"0.75rem" ~padding_horizontal:4
                       ~value:version []) ])
         ; Ui_components.with_props
-            [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.7 ]
+            [ Ui_components.Prop.opacity 0.7 ]
             (paragraph ~key:"desc" ~style_class:"desc"
                ~font_size:"0.75rem" ~value:desc [])
         ; box ~key:"flag"
             [ Ui_components.with_props
-                [ Lui_protocol.FontSize
-                , Lui_protocol.StringValue "0.75rem" ]
+                [ Ui_components.Prop.font_size "0.75rem" ]
                 (row ~style_class:"ls-pl-meta" ~main:`space_between
                    ~data_attrs:[ "style", "padding-right: 8px" ]
                    [ text ~key:"a" ~value:(jstr web_pkg "author") []
@@ -345,11 +342,9 @@ let installed_card (pl : Js.Json.t) =
                 [ box ~key:"de"
                     [ icon ~key:"g" ~name:`settings []
                     ; Ui_components.with_props
-                        [ Lui_protocol.Position
-                        , Lui_protocol.StringValue "absolute"
-                        ; Lui_protocol.ZIndex, Lui_protocol.IntValue 20
-                        ; ( Lui_protocol.Shadow
-                          , Lui_protocol.StringValue
+                        [ Ui_components.Prop.position `absolute
+                        ; Ui_components.Prop.z_index 20
+                        ; ( Ui_components.Prop.shadow
                               "0 4px 6px -1px rgb(0 0 0 / 0.1)" ) ]
                         (list ~key:"m" ~style:`plain
                            ~style_class:"menu-list"
@@ -588,8 +583,7 @@ let desc_h2 key title =
    html-content styling; visuals ride typed props. *)
 let desc_item ~key ~label ~control =
   Ui_components.with_props
-    [ Lui_protocol.FontSize
-    , Lui_protocol.StringValue "0.875rem" ]
+    [ Ui_components.Prop.font_size "0.875rem" ]
     (row ~key ~cross:`center ~gap:8
        ~padding_vertical:6 [ label; control ])
 
@@ -745,8 +739,7 @@ let code_mode_wrap owner pid code_mode =
       [ ( "style"
         , "padding: 4px 4px 4px 12px; margin: 0 0 32px -4px" ) ]
     [ Ui_components.with_props
-        [ Lui_protocol.FontFamily
-        , Ui_components.sv "var(--ls-font-family-code, monospace)" ]
+        [ Ui_components.Prop.font_family "var(--ls-font-family-code, monospace)" ]
         (textarea ~key:"ta" ~style_class:"form-input ls-mono"
            ~text_signal:(Signal.value code_txt)
            ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
@@ -823,17 +816,15 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                     ~value:(t "plugin/no-settings-schema") [] ]
               else
                 [ Ui_components.with_props
-                    [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.9 ]
+                    [ Ui_components.Prop.opacity 0.9 ]
                     (heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
                        ~font_size:"1.25rem"
                        ~data_attrs:
                          [ "style", "padding: 4px 8px 0" ]
                        ~value:("ID: " ^ pid) [])
                 ; Ui_components.with_props
-                    [ ( Lui_protocol.MinHeightViewport
-                      , Lui_protocol.FloatValue 0.3 )
-                    ; ( Lui_protocol.MaxHeightViewport
-                      , Lui_protocol.FloatValue 0.7 ) ]
+                    [ ( Ui_components.Prop.min_height_viewport 0.3 )
+                    ; ( Ui_components.Prop.max_height_viewport 0.7 ) ]
                     (column ~key:"in"
                        ~style_class:"cp__plugins-settings-inner" ~gap:8
                        ~data_attrs:[ "style", "overflow-y: auto" ]
@@ -856,10 +847,8 @@ let settings_body (_ms : Model.t Signal.signal) : t =
             in
             column ~key:"ps"
               [ Ui_components.with_props
-                  [ ( Lui_protocol.MinHeightViewport
-                    , Lui_protocol.FloatValue 0.55 )
-                  ; ( Lui_protocol.MaxHeightViewport
-                    , Lui_protocol.FloatValue 0.75 ) ]
+                  [ ( Ui_components.Prop.min_height_viewport 0.55 )
+                  ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
                   (column ~key:"si"
                      ~style_class:"cp__settings-inner no-aside"
                      [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16

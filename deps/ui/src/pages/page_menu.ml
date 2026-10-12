@@ -164,7 +164,7 @@ let user_item () : Lui_elements.t =
       [ ("style", "width:100%")
       ; ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (column ~key:"u-span"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center

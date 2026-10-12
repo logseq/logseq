@@ -521,8 +521,8 @@ let ac_popover (st : S.t) : t =
                           | None -> false)
                         vs))
                 (Ui_components.with_props
-                   [ P.FontSize, Ui_components.sv "0.875rem"
-                   ; P.LineHeight, Ui_components.sv "20px" ]
+                   [ Ui_components.Prop.font_size "0.875rem"
+                   ; Ui_components.Prop.line_height "20px" ]
                    (row ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
                       ~cross:`center ~gap:8 ~opacity:0.5
                       ~data_attrs:
@@ -622,7 +622,7 @@ let cm_color_row (st : S.t) : t =
    literal-comma class quirk is dropped — it is unreachable CSS *)
 let cm_heading_btn (st : S.t) key title value icn : t =
   Ui_components.with_props
-    [ P.Cursor, Ui_components.sv "pointer" ]
+    [ Ui_components.Prop.cursor `pointer ]
     (button ~key ~variant:`ghost ~size:`icon ~width:30 ~height:30
        ~style_class:"ls-cm-heading-btn"
        ~label:title

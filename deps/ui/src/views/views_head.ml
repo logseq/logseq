@@ -90,7 +90,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
      opacity signal *)
   Ui_parts.float_prop_signal Lui_protocol.Opacity current_sig
     (fun cur -> if cur then 1. else 0.75)
-    (Ui_components.with_props [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+    (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
     (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~style_class:"ls-view-tab"
        ~height:24 ~min_height:24
@@ -262,8 +262,8 @@ let sorting_popup inst anchor =
                             ls-sort-order stays a hook for the .ti/svg
                             icon-size rules *)
                          Ui_components.with_props
-                           [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                           ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+                           [ Ui_components.Prop.font_size "0.875rem"
+                           ; Ui_components.Prop.white_space `nowrap ]
                            (button ~variant:`ghost ~height:32
                               ~padding_horizontal:8
                               ~style_class:"ls-sort-order"
@@ -280,8 +280,7 @@ let sorting_popup inst anchor =
                                   []
                               ; icon_el "chevron-down" ])
                        ; Ui_components.with_props
-                           [ Lui_protocol.HoverBackground
-                           , Ui_components.sv "hsl(var(--muted))" ]
+                           [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
                            (button ~variant:`ghost ~size:`sm ~height:32
                               ~padding_horizontal:4 ~corner_radius:4
                               ~style_class:"ls-sort-x"
@@ -301,9 +300,8 @@ let sorting_popup inst anchor =
               ((* cljs: ghost button, muted, pl-3, trash icon + label —
                   the asymmetric padding has no prop channel *)
                Ui_components.with_props
-                 [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                 ; Lui_protocol.HoverBackground
-                   , Ui_components.sv "hsl(var(--muted))" ]
+                 [ Ui_components.Prop.font_size "0.875rem"
+                 ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
                  (button ~variant:`ghost ~grow:1. ~main:`start
                     ~corner_radius:4 ~style_class:"ls-sort-delete"
                     ~foreground:
@@ -418,7 +416,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
           let query = Signal.state sched "" in
           let qsig = (Signal.value (query)) in
           (Ui_components.with_props
-             [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+             [ Ui_components.Prop.font_size "0.875rem" ]
              (column ~gap:4
              (column ~style_class:"cp__select cp__select-main"
                 [ D.el ~style_class:"input-wrap"
@@ -673,8 +671,8 @@ let search_items inst : t list =
            clear control — with the manual x ghost_btn below that made
            two *)
         Ui_components.with_props
-          [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-          ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+          [ Ui_components.Prop.font_size "0.875rem"
+          ; Ui_components.Prop.focus_shadow "none" ]
           (input ~accessibility_identifier:input_id
              ~placeholder:I.type_to_search ~text:(V.get inst).V.input
              ~width:220 ~height:28 ~autofocus:true ~border_width:0
@@ -735,14 +733,14 @@ let filter_chip inst idx (f : V.filter_clause) : t =
       ~data_attrs:[ ("style", "max-width:100%") ]
     [ (* per-side borders ride the data_attrs style channel *)
       Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.DisabledOpacity, Ui_components.fv 0.8 ]
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.disabled_opacity 0.8 ]
         (button ~text:prop_title ~disabled:true ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid var(--lui-c-border)") ]
            [])
     ; Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+        [ Ui_components.Prop.font_size "0.875rem" ]
         (button ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid var(--lui-c-border)") ]
@@ -833,7 +831,7 @@ let filters_row inst : t =
                 (* ls-vf-logic keeps its class for the .75->1 opacity
                    hooks; the box chrome migrated to props *)
                 Ui_components.with_props
-                  [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+                  [ Ui_components.Prop.font_size "0.875rem" ]
                   (select ~style_class:"ls-vf-logic"
                      ~height:24 ~padding_horizontal:8
                      ~background:"transparent" ~border_width:1
@@ -928,11 +926,10 @@ let ref_filter_dialog inst anchor =
       in
       let ref_button title count_opt =
         Ui_components.with_props
-          [ Lui_protocol.FontSize, Ui_components.sv "0.75rem" ]
+          [ Ui_components.Prop.font_size "0.75rem" ]
           ((* ls-ref-btn keeps its class as the imperative hook *)
            Ui_components.with_props
-             [ ( Lui_protocol.HoverBorder
-               , Ui_components.sv
+             [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     var(--muted-foreground))" ) ]
              (button ~variant:`ghost ~border_width:1 ~corner_radius:6
@@ -1052,7 +1049,7 @@ let ref_filter_dialog inst anchor =
              [ icon ~name:(Views_table.icon_of "search")
                  ~style_class:"ls-icon-search" []
              ; Ui_components.with_props
-                 [ Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+                 [ Ui_components.Prop.focus_shadow "none" ]
                  (input ~style_class:"cp__filters-input"
                     ~grow:1. ~background:"transparent" ~border_width:0
                     ~data_attrs:
@@ -1101,7 +1098,7 @@ let refs_filter_btn inst : t =
 let render_head inst : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
-    Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+    Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
       (row ~style_class:"ls-view-head" ~gap:8 ~cross:`center
          ~main:`space_between ~height:28 ~min_width:0 ~grow:1.
       [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
@@ -1146,7 +1143,7 @@ let render_head inst : t =
            else 0.75)
          (Signal.value (hover)) popup_open)
   in
-  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+  Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
     (row
     ~on_pointer_enter:(fun _ -> Signal.set hover true; Runtime.flush ())
     ~on_pointer_leave:(fun _ ->
@@ -1169,7 +1166,7 @@ let render_head inst : t =
                  []
            | _ -> tabs_el inst ~op) ]
     ; Ui_components.with_props
-        [ Lui_protocol.Transition, Ui_components.sv "opacity 300ms ease-in" ]
+        [ Ui_components.Prop.transition "opacity 300ms ease-in" ]
         (Ui_components.flat_toolbar ~key:"actions" ~cls:"view-actions"
            ~label:"View actions" ~opacity_signal:op
         ((match inst.V.kind with

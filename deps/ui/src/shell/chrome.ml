@@ -40,8 +40,8 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
   Ui_components.with_props
-    [ P.Opacity, Ui_components.fv 0.7
-    ; P.HoverOpacity, Ui_components.fv 1. ]
+    [ Ui_components.Prop.opacity 0.7
+    ; Ui_components.Prop.hover_opacity 1. ]
     (button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
        ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
@@ -506,7 +506,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
           ; row ~key:"rtc-ind" ~cross:`center ~gap:4
               ~style_class:"cp__rtc-sync-indicator"
               [ Ui_components.with_props
-                  [ P.Position, Ui_components.sv "relative" ]
+                  [ Ui_components.Prop.position `relative ]
                   (button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
                      ~style_class:cls ~label:"rtc sync"
                      ~icon:(`app "cloud")
@@ -766,11 +766,11 @@ let right_sidebar (ms : Model.t Signal.signal) =
       "cp__right-sidebar "
       ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_components.with_props
-       [ P.ZIndex, Ui_components.iv 9 (* --ls-z-index-level-1 *)
-       ; P.HeightViewport, Ui_components.fv 1.
-       ; P.Position, Ui_components.sv "relative"
-       ; P.UserSelect, Ui_components.sv "none"
-       ; P.Overflow, Ui_components.sv "hidden" ]
+       [ Ui_components.Prop.z_index 9 (* --ls-z-index-level-1 *)
+       ; Ui_components.Prop.height_viewport 1.
+       ; Ui_components.Prop.position `relative
+       ; Ui_components.Prop.user_select `none
+       ; Ui_components.Prop.overflow `hidden ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
           ~style_class:"cp__right-sidebar closed"
           ~data_attrs:[ ("style", "container-type:inline-size;min-width:0") ]
@@ -1067,10 +1067,10 @@ let help_item key title icon_name act =
   Ui_parts.pressable
     ~on_press:(fun _ -> act ())
     (Ui_components.with_props
-       [ P.UserSelect, Ui_components.sv "none"
-       ; P.Cursor, Ui_components.sv "pointer"
-       ; P.FontSize, Ui_components.sv "0.875rem"
-       ; P.HoverBackground, Ui_components.sv "hsl(var(--muted))" ]
+       [ Ui_components.Prop.user_select `none
+       ; Ui_components.Prop.cursor `pointer
+       ; Ui_components.Prop.font_size "0.875rem"
+       ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
        (row ~key ~cross:`center ~gap:8 ~padding_vertical:4
           ~padding_horizontal:16
           [ row ~key:(key ^ "-i") ~cross:`center ~opacity:0.4
@@ -1146,21 +1146,21 @@ let help_menu_popup : t =
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
     [ Ui_components.with_props
-        [ P.Position, Ui_components.sv "fixed"
-        ; P.InsetBottom, Ui_components.fv 16.
-        ; P.InsetRight, Ui_components.fv 32.
-        ; P.ZIndex, Ui_components.iv 999
-        ; P.Opacity, Ui_components.fv 0.7
-        ; P.HoverOpacity, Ui_components.fv 1. ]
+        [ Ui_components.Prop.position `fixed
+        ; Ui_components.Prop.inset_bottom 16.
+        ; Ui_components.Prop.inset_right 32.
+        ; Ui_components.Prop.z_index 999
+        ; Ui_components.Prop.opacity 0.7
+        ; Ui_components.Prop.hover_opacity 1. ]
         (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
            [ Ui_parts.pressable
                ~on_press:(fun _ ->
                  Runtime.send Action.Help_toggle; Runtime.flush ())
                (Ui_components.with_props
-                  [ P.UserSelect, Ui_components.sv "none"
-                  ; P.Cursor, Ui_components.sv "pointer" ]
+                  [ Ui_components.Prop.user_select `none
+                  ; Ui_components.Prop.cursor `pointer ]
                   (Ui_components.with_props
-                     [ P.FontWeight, Ui_components.iv 700 ]
+                     [ Ui_components.Prop.font_weight 700 ]
                      (row ~key:"help-inner" ~main:`center ~cross:`center
                         ~width:32 ~height:32 ~corner_radius:16
                         ~background:
@@ -1180,9 +1180,9 @@ let help_area (ms : Model.t Signal.signal) : t =
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
   Ui_components.with_props
-    [ P.Position, Ui_components.sv "fixed"
-    ; P.Inset, Ui_components.fv 0.
-    ; P.ZIndex, Ui_components.iv 99999 ]
+    [ Ui_components.Prop.position `fixed
+    ; Ui_components.Prop.inset 0.
+    ; Ui_components.Prop.z_index 99999 ]
     (column ~key:"nf-full" ~main:`center ~cross:`center
        ~background:"var(--ls-primary-background-color)"
        ~data_attrs:[ ("style", "min-height:100vh") ]
@@ -1234,8 +1234,8 @@ let shell (ms : Model.t Signal.signal) : t =
                        sidebar is open *)
                     if m.right_sidebar_open then "hidden" else "visible")
                   (Ui_components.with_props
-                     [ P.HeightViewport, Ui_components.fv 1.
-                     ; P.Position, Ui_components.sv "relative" ]
+                     [ Ui_components.Prop.height_viewport 1.
+                     ; Ui_components.Prop.position `relative ]
                      (column ~key:"left-container"
                         ~accessibility_identifier:"left-container"
                         ~grow:1.

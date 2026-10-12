@@ -276,7 +276,7 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
             ~data_attrs:[ ("style", "user-select:none") ] []
         ]
     ; Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+        [ Ui_components.Prop.font_size "0.875rem" ]
         (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
            ~style_class:"bottom-property-content property-value-container"
            ~data_attrs:
@@ -288,7 +288,7 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
   Ui_components.with_props
-    [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+    [ Ui_components.Prop.font_size "0.875rem" ]
     (column ~gap:4 ~grow:1.0
        ~min_width:0 ~style_class:"positioned-properties block-below"
        ~data_attrs:[ ("style", "overflow-x:hidden;width:100%") ]
@@ -451,7 +451,7 @@ let block_left_chips ~uuid : t =
                           content instead, else the chip eats the whole
                           block-row and crushes the title *)
                        Ui_components.with_props
-                         [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
+                         [ Ui_components.Prop.grow 0. ]
                          (V.view ~positioned:true ~hover:None ctx r) ])
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
@@ -482,7 +482,7 @@ let block_right_chips ~uuid : t =
                    row ~gap:2 ~cross:`center
                      ~style_class:"property-value-inner"
                      [ Ui_components.with_props
-                         [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
+                         [ Ui_components.Prop.grow 0. ]
                          (V.view ~positioned:true ~hover:None ctx r) ])
                  d.right))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
@@ -517,7 +517,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
      a 24px ghost text button, 12px text, 8px horizontal padding *)
   let add_btn ?a11y text on_press =
     Ui_components.with_props
-      [ Lui_protocol.FontSize, Ui_components.sv "12px" ]
+      [ Ui_components.Prop.font_size "12px" ]
       (button ~variant:`ghost ~size:`sm ~text_alignment:`start
          ~style_class:"as-ghost" ~height:24 ~padding_horizontal:8
          ~padding_vertical:0
@@ -529,8 +529,8 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
        title wrapper's top edge) — out of flow so it never shifts the
        title text; the wrapper's relative position anchors it *)
     (Ui_components.with_props
-       [ Lui_protocol.Position, Ui_components.sv "absolute"
-       ; Lui_protocol.InsetTop, Ui_components.fv (-20.) ]
+       [ Ui_components.Prop.position `absolute
+       ; Ui_components.Prop.inset_top (-20.) ]
        (row ~key:"pta" ~accessibility_identifier:anchor_id
        ~cross:`center ~gap:8
        ~style_class:"ls-page-title-actions"
@@ -639,7 +639,7 @@ let class_schema_row prop =
 let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
   column ~gap:4 ~margin_top:8
     [ Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
+        [ Ui_components.Prop.font_size "0.875rem" ]
         (column ~gap:2 ~style_class:"property-key"
         ~min_width:160 ~min_height:28 ~main:`center
         ~data_attrs:[ ("style", "font-size:15px") ]

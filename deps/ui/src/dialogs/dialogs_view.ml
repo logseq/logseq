@@ -52,34 +52,32 @@ let dialog_spec name =
       ( 0
       , "box-sizing:border-box;width:min(1024px, calc(100vw - 2rem));\
          max-width:min(64rem, calc(100vw - 2rem));overflow:hidden"
-      , [ ( Lui_protocol.WidthValue
-          , Lui_protocol.IntValue
+      , [ ( Ui_components.Prop.width
               (int_of_float
                  (Float.min 1024.
                     (Ui_services.dom_viewport_width () -. 32.))) )
-        ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1024
-        ; Lui_protocol.MaxWidthViewport, Lui_protocol.FloatValue 0.97
-        ; ( Lui_protocol.MaxHeightViewport
-          , Lui_protocol.FloatValue 0.75 ) ] )
+        ; Ui_components.Prop.max_width 1024
+        ; Ui_components.Prop.max_width_viewport 0.97
+        ; ( Ui_components.Prop.max_height_viewport 0.75 ) ] )
   | "plugins" ->
       ( 24
       , "width:90vw;max-width:1246px;max-height:calc(100vh - 50px);\
          overflow-y:hidden"
-      , [ Lui_protocol.WidthViewport, Lui_protocol.FloatValue 0.9
-        ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1246
-        ; Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.94 ] )
+      , [ Ui_components.Prop.width_viewport 0.9
+        ; Ui_components.Prop.max_width 1246
+        ; Ui_components.Prop.max_height_viewport 0.94 ] )
   | "sync-server" | "publish-server" ->
-      (24, "max-width:42rem", [ Lui_protocol.MaxWidth, Lui_protocol.IntValue 672 ])
+      (24, "max-width:42rem", [ Ui_components.Prop.max_width 672 ])
   | "plugin-readme" ->
       ( 24
       , "max-height:86vh;overflow:auto"
-      , [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.86 ] )
+      , [ Ui_components.Prop.max_height_viewport 0.86 ] )
   | "export-page" ->
       ( 24
       , "max-height:80vh;overflow-y:auto"
-      , [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.8 ] )
+      , [ Ui_components.Prop.max_height_viewport 0.8 ] )
   | "new-graph" | "add-graph" ->
-      (24, "max-width:500px", [ Lui_protocol.MaxWidth, Lui_protocol.IntValue 500 ])
+      (24, "max-width:500px", [ Ui_components.Prop.max_width 500 ])
   | "login" ->
       ( 24
       , "padding-top:0;width:auto;max-width:none;align-items:center"

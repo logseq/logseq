@@ -239,12 +239,12 @@ let right_sidebar (ms : Model.t Signal.signal) =
       "cp__right-sidebar "
       ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_components.with_props
-       [ Lui_protocol.HeightViewport, Ui_components.fv 1. ]
+       [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
        ~min_height:0
        ~style_class:"cp__right-sidebar closed"
           [ Ui_components.with_props
-              [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+              [ Ui_components.Prop.overflow `hidden ]
               (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
                  ~background:"muted"
                  [ Right_sidebar_view.render ms ]) ]))
@@ -261,7 +261,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
       "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
     (Ui_components.with_props
-       [ Lui_protocol.HeightViewport, Ui_components.fv 1. ]
+       [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
           ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch

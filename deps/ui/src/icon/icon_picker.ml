@@ -198,19 +198,18 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
        .its/.icons-row button chrome moved to the typed props *)
     let cell ?font_size ?fg ?ff ~cls ~key ~label ~tooltip ~on_press child : t =
       Ui_components.with_props
-        ([ ( P.HoverBackground
-           , P.StringValue
+        ([ ( Ui_components.Prop.hover_background
                "var(--lx-gray-03, var(--ls-menu-hover-color, \
                   hsl(var(--muted))))" )
          ]
          @ (match fg with
-            | Some c -> [ P.ForegroundValue, P.StringValue c ]
+            | Some c -> [ Ui_components.Prop.foreground c ]
             | None -> [])
          @ (match ff with
-            | Some f -> [ P.FontFamily, P.StringValue f ]
+            | Some f -> [ Ui_components.Prop.font_family f ]
             | None -> [])
          @ (match font_size with
-            | Some fz -> [ P.FontSize, P.StringValue fz ]
+            | Some fz -> [ Ui_components.Prop.font_size fz ]
             | None -> []))
         (button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
            ~padding:0 ~corner_radius:9999 ~label ~tooltip ~on_press
@@ -283,7 +282,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
      flex-wrap, which the native layout engine ignores — a single
      unwrapped row shrink-compresses every cell to a few px *)
   let pane_section label (items : t list) : t =
-    Ui_components.with_props [ P.Overflow, P.StringValue "auto" ]
+    Ui_components.with_props [ Ui_components.Prop.overflow `auto ]
       (column ~grow:1.
          ~data_attrs:[ ("style", "padding-left: 0.5rem") ]
          (box ~style_class:"hd"
@@ -435,8 +434,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
 
   (Ui_components.with_props
-     [ P.Position, P.StringValue "relative"
-     ; P.Overflow, P.StringValue "hidden" ]
+     [ Ui_components.Prop.position `relative
+     ; Ui_components.Prop.overflow `hidden ]
      (* fixed height: the picker is a shrink-to-fit popover and the
        scroll body contributes no intrinsic height — without an explicit
        height the layer collapses to header+footer chrome. Web clamps
@@ -457,7 +456,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                    hsl(var(--border))))" ) ]
             ([ box ~key:"tabs" ~grow:1.
                  [ Ui_components.with_props
-                     [ P.CornerRadius, P.IntValue 8 ]
+                     [ Ui_components.Prop.corner_radius 8 ]
                      (row ~gap:2 ~padding:2
                         ~background:
                           "var(--lx-gray-03, var(--ls-tertiary-background-color, \
@@ -481,8 +480,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
               ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
               (box ~key:"pal"
                  [ Ui_components.with_props
-                     [ P.Position, P.StringValue "relative"
-                     ; P.Overflow, P.StringValue "hidden" ]
+                     [ Ui_components.Prop.position `relative
+                     ; Ui_components.Prop.overflow `hidden ]
                      (button ~style_class:(btn_outline_sm ^ " color-picker")
                         ~height:28 ~width:24 ~padding_vertical:4
                         ~padding_horizontal:12 ~corner_radius:4
@@ -530,8 +529,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                     [ if_
                         ~test:(reactive (fun s -> s.q <> "") sv)
                         (Ui_components.with_props
-                           [ Lui_protocol.Opacity
-                           , Lui_protocol.FloatValue 0.5 ]
+                           [ Ui_components.Prop.opacity 0.5 ]
                            (button ~key:"x" ~variant:`ghost ~padding:8
                               ~on_press:(fun _ -> reset_q ())
                               [ Icons.icon ~size:14. "x" ]))

@@ -393,10 +393,10 @@ let submit_btn ~key label on_submit =
    carried) *)
 let action_link ~key ctx text_ tab =
   Ui_components.with_props
-    [ Lui_protocol.Cursor, Ui_components.sv "pointer"
-    ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-    ; Lui_protocol.Opacity, Ui_components.fv 0.8
-    ; Lui_protocol.TextDecoration, Ui_components.sv "underline" ]
+    [ Ui_components.Prop.cursor `pointer
+    ; Ui_components.Prop.hover_opacity 1.
+    ; Ui_components.Prop.opacity 0.8
+    ; Ui_components.Prop.text_decoration "underline" ]
     (text ~key ~style_class:"ls-auth-link" ~value:text_
        ~font_size:"0.875rem"
        ~on_press:(fun _ -> set_tab ctx tab)

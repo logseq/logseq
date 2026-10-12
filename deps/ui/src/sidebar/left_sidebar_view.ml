@@ -274,12 +274,11 @@ let repos_menu st =
         close ();
         act ())
       (Ui_components.with_props
-         [ P.Cursor, Ui_components.sv "pointer"
-         ; P.FontSize, Ui_components.sv "0.875rem"
-         ; P.FontWeight, Ui_components.iv 500
-         ; P.HoverOpacity, Ui_components.fv 0.9
-         ; P.HoverBackground,
-           Ui_components.sv
+         [ Ui_components.Prop.cursor `pointer
+         ; Ui_components.Prop.font_size "0.875rem"
+         ; Ui_components.Prop.font_weight 500
+         ; Ui_components.Prop.hover_opacity 0.9
+         ; Ui_components.Prop.hover_background
              "var(--lx-gray-03, \
               var(--ls-tertiary-background-color, hsl(var(--muted))))" ]
          (row ~key ~cross:`center ~gap:6 ~padding_horizontal:12
@@ -298,8 +297,8 @@ let repos_menu st =
         [ (if n_repos <= 1 then Logseq_el.nothing
            else
              Ui_components.with_props
-               [ P.FontSize, Ui_components.sv "0.875rem"
-               ; P.FontWeight, Ui_components.iv 500 ]
+               [ Ui_components.Prop.font_size "0.875rem"
+               ; Ui_components.Prop.font_weight 500 ]
                (row ~key:"hd" ~main:`space_between ~cross:`center
                   ~padding:8 ~opacity:0.5
                   [ text ~key:"h4" ~value:I18n.switch_to
@@ -385,14 +384,13 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
   box ~key ~style_class:(class_ ^ act)
     [ Ui_parts.pressable ~on_press:(fun _ -> on_click ())
         (Ui_components.with_props
-           [ P.Cursor, Ui_components.sv "pointer"
-           ; P.FontSize, Ui_components.sv "0.875rem"
-           ; P.FontWeight, Ui_components.iv 500
-           ; P.LineHeight, Ui_components.sv "1rem"
-           ; P.Opacity, Ui_components.fv 0.8
-           ; P.HoverOpacity, Ui_components.fv 1.
-           ; P.HoverBackground,
-             Ui_components.sv
+           [ Ui_components.Prop.cursor `pointer
+           ; Ui_components.Prop.font_size "0.875rem"
+           ; Ui_components.Prop.font_weight 500
+           ; Ui_components.Prop.line_height "1rem"
+           ; Ui_components.Prop.opacity 0.8
+           ; Ui_components.Prop.hover_opacity 1.
+           ; Ui_components.Prop.hover_background
                "var(--lx-gray-04, \
                 var(--ls-quaternary-background-color))" ]
            (row ~cross:`center ~corner_radius:6 ~height:32
@@ -412,8 +410,8 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
                 [ ( "style"
                   , "padding-left:6px;padding-right:2px" ) ]
               ([ Ui_components.with_props
-                   [ Lui_protocol.MarginLeft, Ui_components.iv 4
-                   ; Lui_protocol.MarginRight, Ui_components.iv 8 ]
+                   [ Ui_components.Prop.margin_left 4
+                   ; Ui_components.Prop.margin_right 8 ]
                    (icon_ icon_name)
                ; text ~grow:1. ~value:title [] ]
               @ tail @ [ more ]))) ]
@@ -513,15 +511,14 @@ let nav_group ms st =
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
         [ Ui_components.with_props
-            [ P.InsetTop, Ui_components.fv (-4.)
-            ; P.ZIndex, Ui_components.iv 2
-            ; P.UserSelect, Ui_components.sv "none"
-            ; P.Cursor, Ui_components.sv "default"
+            [ Ui_components.Prop.inset_top (-4.)
+            ; Ui_components.Prop.z_index 2
+            ; Ui_components.Prop.user_select `none
+            ; Ui_components.Prop.cursor `default
             ; (* no resting fill — section headers stay dim so the
                  list content pops; hover still gets the web's
                  gray-04 affordance *)
-              ( P.HoverBackground
-              , Ui_components.sv "var(--lx-gray-04, var(--rx-gray-04))" ) ]
+              ( Ui_components.Prop.hover_background "var(--lx-gray-04, var(--rx-gray-04))" ) ]
             (row ~key:"nav-hd" ~cross:`center ~main:`space_between
                ~data_attrs_signal:
                  (Signal.constant ctx.Lui_ui.ui_scheduler
@@ -538,9 +535,9 @@ let nav_group ms st =
                  [ ("style", "padding-left:8px;padding-right:4px") ]
                [ box ~key:"nav-name" ~style_class:"a" ~margin_left:4
                    [ Ui_components.with_props
-                       [ P.FontSize, Ui_components.sv "0.875rem"
-                       ; P.LineHeight, Ui_components.sv "1.25rem"
-                       ; P.FontWeight, Ui_components.iv 500 ]
+                       [ Ui_components.Prop.font_size "0.875rem"
+                       ; Ui_components.Prop.line_height "1.25rem"
+                       ; Ui_components.Prop.font_weight 500 ]
                        (row ~cross:`center ~grow:1. ~opacity:0.4
                           ~style_class:"wrap-th"
                           [ (* web .wrap-th > .lui-text: sm:text-xs
@@ -560,13 +557,12 @@ let nav_group ms st =
                        ~on_press:(fun _ ->
                          Sidebar_state.toggle_menu st "nav-edit")
                        (Ui_components.with_props
-                          [ P.Position, Ui_components.sv "relative"
-                          ; P.InsetTop, Ui_components.fv (-2.)
-                          ; P.Opacity, Ui_components.fv 0.8 ]
+                          [ Ui_components.Prop.position `relative
+                          ; Ui_components.Prop.inset_top (-2.)
+                          ; Ui_components.Prop.opacity 0.8 ]
                           (row ~style_class:"as-edit"
                              [ Ui_components.with_props
-                                 [ Lui_protocol.MarginLeft
-                                 , Ui_components.iv 7 ]
+                                 [ Ui_components.Prop.margin_left 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
@@ -619,8 +615,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
      still feed the document-level contextmenu handler in
      sidebar_state. *)
   Ui_components.with_props
-    ([ Lui_protocol.FontWeight, Ui_components.iv 500 ]
-     @ if recent then [ Lui_protocol.UserSelect, Ui_components.sv "none" ] else [])
+    ([ Ui_components.Prop.font_weight 500 ]
+     @ if recent then [ Ui_components.Prop.user_select `none ] else [])
     (column ~key ~style_class:li_class
        ~on_press_detail:(fun ev ->
       match ev with
@@ -662,11 +658,10 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                  | title -> title)
       | _ -> ())
     [ Ui_components.with_props
-        [ P.Position, Ui_components.sv "relative"
-        ; P.Opacity, Ui_components.fv 0.8
-        ; P.HoverOpacity, Ui_components.fv 1.
-        ; P.HoverBackground,
-          Ui_components.sv
+        [ Ui_components.Prop.position `relative
+        ; Ui_components.Prop.opacity 0.8
+        ; Ui_components.Prop.hover_opacity 1.
+        ; Ui_components.Prop.hover_background
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
         (link ~url:"#" ~target:`self_ ~style_class:"link-item group"
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
@@ -688,20 +683,17 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
            its class hooks (sidebar-page-actions, ls-icon-dots) still
            reach the row's target_class check *)
         ; Ui_components.with_props
-            [ P.Position, Ui_components.sv "absolute"
-            ; P.InsetTop, Ui_components.fv 0.
-            ; P.Cursor, Ui_components.sv "pointer"
-            ; P.UserSelect, Ui_components.sv "none"
-            ; P.Opacity, Ui_components.fv 0.4
-            ; P.HoverOpacity, Ui_components.fv 0.8
-            ; P.PressedOpacity, Ui_components.fv 1.
-            ; P.DisabledOpacity, Ui_components.fv 0.5
-            ; ( P.HoverBackground
-              , Ui_components.sv "hsl(var(--secondary) / 0.7)" )
-            ; ( P.HoverForeground
-              , Ui_components.sv "hsl(var(--secondary-foreground))" )
-            ; ( P.FocusShadow
-              , Ui_components.sv "0 0 0 2px hsl(var(--ring))" ) ]
+            [ Ui_components.Prop.position `absolute
+            ; Ui_components.Prop.inset_top 0.
+            ; Ui_components.Prop.cursor `pointer
+            ; Ui_components.Prop.user_select `none
+            ; Ui_components.Prop.opacity 0.4
+            ; Ui_components.Prop.hover_opacity 0.8
+            ; Ui_components.Prop.pressed_opacity 1.
+            ; Ui_components.Prop.disabled_opacity 0.5
+            ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
+            ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
+            ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
             (button ~variant:`ghost ~size:`icon
                ~label:(t "ui/show-more")
                ~height:28 ~padding_vertical:4 ~corner_radius:4
@@ -736,12 +728,11 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                ~on_press:(fun _ ->
                  Sidebar_state.toggle_group_collapsed st class_)
                (Ui_components.with_props
-                  [ P.InsetTop, Ui_components.fv (-4.)
-                  ; P.ZIndex, Ui_components.iv 2
-                  ; P.UserSelect, Ui_components.sv "none"
-                  ; P.Cursor, Ui_components.sv "pointer"
-                  ; ( P.HoverBackground
-                    , Ui_components.sv
+                  [ Ui_components.Prop.inset_top (-4.)
+                  ; Ui_components.Prop.z_index 2
+                  ; Ui_components.Prop.user_select `none
+                  ; Ui_components.Prop.cursor `pointer
+                  ; ( Ui_components.Prop.hover_background
                         "var(--lx-gray-04, var(--rx-gray-04))" ) ]
                   (row ~key:(key ^ "-hd") ~cross:`center
                         ~main:`space_between ~height:32 ~corner_radius:6
@@ -754,9 +745,9 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                        ]
                      [ box ~key:(key ^ "-a") ~style_class:"a" ~margin_left:4
                          [ Ui_components.with_props
-                             [ P.FontSize, Ui_components.sv "0.875rem"
-                             ; P.LineHeight, Ui_components.sv "1.25rem"
-                             ; P.FontWeight, Ui_components.iv 500 ]
+                             [ Ui_components.Prop.font_size "0.875rem"
+                             ; Ui_components.Prop.line_height "1.25rem"
+                             ; Ui_components.Prop.font_weight 500 ]
                              (row ~cross:`center ~grow:1. ~opacity:0.4
                                 ~style_class:"wrap-th"
                                 [ (* web .wrap-th > .lui-text:
@@ -882,10 +873,10 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
            otherwise falls back to this button's required aria-label,
            and master shows no tooltip on the selector *)
         [ Ui_components.with_props
-            [ P.Position, Ui_components.sv "relative"
-            ; P.Overflow, Ui_components.sv "hidden"
-            ; P.Opacity, Ui_components.fv 0.9
-            ; P.PressedOpacity, Ui_components.fv 0.7 ]
+            [ Ui_components.Prop.position `relative
+            ; Ui_components.Prop.overflow `hidden
+            ; Ui_components.Prop.opacity 0.9
+            ; Ui_components.Prop.pressed_opacity 0.7 ]
             (button ~key:"gsel-a" ~variant:`ghost ~grow:1.
                ~label:(t "graph.switch/select-prompt")
                ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:6
@@ -930,7 +921,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                             ]
                           ~value_signal:(Signal.map name_of ms) ~grow:1. []
                       ; Ui_components.with_props
-                          [ P.MarginRight, Ui_components.iv (-4) ]
+                          [ Ui_components.Prop.margin_right (-4) ]
                           (icon_ ~size:18 "selector"
                              ~attrs:[ ("style", "margin-right:0") ]) ] ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
@@ -940,7 +931,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  Ui_components.with_props [ P.Position, Ui_components.sv "relative" ]
+  Ui_components.with_props [ Ui_components.Prop.position `relative ]
     (column ~key:"ls-contents" ~gap:4 ~padding_horizontal:12
        ~padding_vertical:4
        ~style_class:"sidebar-contents-container"

@@ -46,13 +46,12 @@ let version_row () =
   C.action_row ~key:"ver" ~for_:"current-version" ~label:T.current_version
     ~actions:
       [ Ui_components.with_props
-          [ Lui_protocol.Position, Lui_protocol.StringValue "relative" ]
+          [ Ui_components.Prop.position `relative ]
           (row ~key:"ver-a" ~style_class:"cp__settings-app-updater"
              ~cross:`center ~min_height:20
              ~data_attrs:[ "style", "margin-bottom: -5px" ]
              [ Ui_components.with_props
-                 [ ( Lui_protocol.Position
-                   , Lui_protocol.StringValue "relative" ) ]
+                 [ ( Ui_components.Prop.position `relative ) ]
                  (row ~key:"ver-c" ~style_class:"ctls" ~cross:`center
                     [ row ~key:"ver-i" ~style_class:"ls-ver-wrap"
                         ~cross:`center ~gap:16 ~flex_wrap:`wrap
@@ -60,11 +59,11 @@ let version_row () =
                         ; text ~key:"ver-v" ~style_class:"ls-ver-text"
                             ~value:version []
                         ; Ui_components.with_props
-                            [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                            ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
-                            ; Lui_protocol.TextDecoration, Ui_components.sv "underline"
-                            ; Lui_protocol.Opacity, Ui_components.fv 0.7
-                            ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                            [ Ui_components.Prop.font_size "0.875rem"
+                            ; Ui_components.Prop.line_height "1.25rem"
+                            ; Ui_components.Prop.text_decoration "underline"
+                            ; Ui_components.Prop.opacity 0.7
+                            ; Ui_components.Prop.hover_opacity 1. ]
                             (link ~key:"ver-cl" ~style_class:"fade-link"
                                ~url:"https://docs.logseq.com/#/page/changelog"
                                ~text:T.changelog [])
@@ -400,8 +399,7 @@ let keymap_controls st =
                     Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }) ()
             ]
         ; Ui_components.with_props
-            [ ( Lui_protocol.HoverBackground
-              , Ui_components.sv
+            [ ( Ui_components.Prop.hover_background
                   "var(--lx-gray-04, var(--ls-quaternary-background-color, \
                    hsl(var(--accent))))" ) ]
             (button ~key:"km-kb"
@@ -756,10 +754,8 @@ let inner ~modal : t =
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
-          [ ( Lui_protocol.MinHeightViewport
-            , Lui_protocol.FloatValue 0.55 )
-          ; ( Lui_protocol.MaxHeightViewport
-            , Lui_protocol.FloatValue 0.75 ) ]
+          [ ( Ui_components.Prop.min_height_viewport 0.55 )
+          ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
           (inner_box
              [ column ~key:"settings-aside"
                  ~style_class:"settings-aside"
@@ -831,10 +827,9 @@ let appearance_body (_x, y) : t =
           ~on_press:(fun _ ->
             Runtime.send (Action.Appearance_set None))
           (Ui_components.with_props
-             [ Lui_protocol.Position
-             , Lui_protocol.StringValue "fixed"
-             ; Lui_protocol.Inset, Lui_protocol.FloatValue 0.
-             ; Lui_protocol.ZIndex, Lui_protocol.IntValue 40 ]
+             [ Ui_components.Prop.position `fixed
+             ; Ui_components.Prop.inset 0.
+             ; Ui_components.Prop.z_index 40 ]
              (box ~key:"appearance-backdrop" []))
         (* cljs PopupContent right-anchors the appearance panel:
            ~620px wide, right edge ~32px from the viewport edge *)

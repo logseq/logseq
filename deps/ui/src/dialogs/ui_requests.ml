@@ -88,12 +88,12 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
           (Logseq_el.own ctx
              (Signal.map (fun v -> v <> "") (Signal.value value)))
         (Ui_components.with_props
-           [ Lui_protocol.Position, Ui_components.sv "absolute"
-           ; Lui_protocol.InsetRight, Ui_components.fv 4.
-           ; Lui_protocol.InsetTop, Ui_components.fv 6.
-           ; Lui_protocol.Opacity, Ui_components.fv 0.6
-           ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-           ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+           [ Ui_components.Prop.position `absolute
+           ; Ui_components.Prop.inset_right 4.
+           ; Ui_components.Prop.inset_top 6.
+           ; Ui_components.Prop.opacity 0.6
+           ; Ui_components.Prop.hover_opacity 1.
+           ; Ui_components.Prop.cursor `pointer ]
            (button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password

@@ -1186,8 +1186,8 @@ let closed_value_view ~positioned ctx row : t =
   let show_text = not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
   (column ~gap:0 ~grow:1.0
      [ Ui_components.with_props
-         [ Lui_protocol.HoverBackground, Ui_components.sv "var(--lx-gray-03)"
-         ; Lui_protocol.HoverForeground, Ui_components.sv "inherit" ]
+         [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
+         ; Ui_components.Prop.hover_foreground "inherit" ]
          (button ~variant:`ghost ~label ~height:24 ~min_height:24
             ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
             ~style_class:"pv-closed-value"
@@ -1417,7 +1417,7 @@ and block_value_wrap (inner : t) : t =
                 ~data_attrs:[ ("style", "display:flex;flex-direction:row;\
                   align-items:center") ]
                 [ Ui_components.with_props
-                    [ Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+                    [ Ui_components.Prop.pressed_opacity 0.3 ]
                     (box ~style_class:"block-control"
                        ~min_width:22 ~min_height:22 ~opacity:0.4
                        ~data_attrs:
@@ -1442,7 +1442,7 @@ and url_view ctx row : t =
   if url = "" then scalar_edit_cell ctx row
   else
     (Ui_components.with_props
-         [ Lui_protocol.TextDecoration, Ui_components.sv "none" ]
+         [ Ui_components.Prop.text_decoration "none" ]
          (link ~url ~target:`blank ~style_class:"external-link"
          ~data_attrs:
            [ ("data-type", "url")
