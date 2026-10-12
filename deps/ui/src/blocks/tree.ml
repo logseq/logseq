@@ -527,43 +527,53 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
          ; ("data-tag-priv", if priv then "true" else "false")
          ; ("style", "display:inline-flex;padding-left:8px;padding-right:4px") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
-        [ (* the link kind renders a real <a> so a.hash-symbol css keeps
-             matching; href="#" is the cljs decorative-anchor convention *)
-          Ui_components.with_props
-            [ Lui_protocol.Opacity, Ui_components.fv 0.7
-            ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-            ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-            ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
-            (link ~key:("th-" ^ key)
-               ~url:"#" ~target:`self_
-               ~style_class:"hash-symbol" ~text:"#" []
-               |> Ui_components.with_props
-                    [ Lui_protocol.UserSelect, Ui_components.sv "none" ])
-        ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
-           else
-             (* the 'x' press needs a pressable kind — link is not one,
-                so it renders as text; .block-tag:hover reveals it *)
-             Ui_parts.pressable
-               ~on_press:(fun _ ->
-                 ignore
-                   (Outliner_ops.apply_and_refresh
-                      [ Outliner_ops.op "delete-property-value"
-                          [ Wire.Uuid owner_uuid
-                          ; Wire.Keyword "block/tags"
-                          ; Wire.Int dbid ] ]))
-               (Ui_components.with_props
-                  [ Lui_protocol.UserSelect, Ui_components.sv "none"
-                  ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-                  ; (* .block-tag:hover reveals the x on the web; the
-                       closest per-element channel keeps it hidden at
-                       rest and reveals it under the pointer *)
-                    Lui_protocol.Opacity, Ui_components.fv 0.
-                  ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
-                  (text ~key:("tx-" ^ key)
-                     ~style_class:"tag-x"
-                     ~data_attrs:
-                       [ ("aria-label", I18n.t "block/remove-this-tag") ]
-                     ~value:"x" [])))
+        [ (* the web keeps the chip '#tag' at rest and swaps the leading
+             # for the remove-x only on .block-tag:hover — no layout
+             channel here can express that, so the # and x stack: the x
+             overlays the # and contributes no flow width, giving the
+             same rest-state geometry *)
+          stack ~key:("hx-" ^ key)
+            [ (* the link kind renders a real <a> so a.hash-symbol css
+                 keeps matching; href="#" is the cljs decorative-anchor
+                 convention *)
+              Ui_components.with_props
+                [ Lui_protocol.Opacity, Ui_components.fv 0.7
+                ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+                ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
+                ; Lui_protocol.FontWeight, Ui_components.iv 400 ]
+                (link ~key:("th-" ^ key)
+                   ~url:"#" ~target:`self_
+                   ~style_class:"hash-symbol"
+                   ~foreground:
+                     "var(--lx-accent-11, var(--ls-tag-text-color))"
+                   ~text:"#" []
+                   |> Ui_components.with_props
+                        [ Lui_protocol.UserSelect, Ui_components.sv "none" ])
+            ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
+               else
+                 (* the 'x' press needs a pressable kind — link is not one,
+                    so it renders as text; .block-tag:hover reveals it *)
+                 Ui_parts.pressable
+                   ~on_press:(fun _ ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          [ Outliner_ops.op "delete-property-value"
+                              [ Wire.Uuid owner_uuid
+                              ; Wire.Keyword "block/tags"
+                              ; Wire.Int dbid ] ]))
+                   (Ui_components.with_props
+                      [ Lui_protocol.UserSelect, Ui_components.sv "none"
+                      ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                      ; (* .block-tag:hover reveals the x on the web; the
+                           closest per-element channel keeps it hidden at
+                           rest and reveals it under the pointer *)
+                        Lui_protocol.Opacity, Ui_components.fv 0.
+                      ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                      (text ~key:("tx-" ^ key)
+                         ~style_class:"tag-x"
+                         ~data_attrs:
+                           [ ("aria-label", I18n.t "block/remove-this-tag") ]
+                         ~value:"x" []))) ]
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           Ui_components.with_props
@@ -580,8 +590,10 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
             (* a.tag is an inline text run on the web — it never wraps
-               mid-word inside the chip *)
-            [ text ~key:"ts" ~value:tag ~white_space:"nowrap" [] ])
+               mid-word inside the chip; the child text gets the tag
+               color itself — the anchor's accent doesn't cascade *)
+            [ text ~key:"ts" ~value:tag ~white_space:"nowrap"
+                ~foreground:"var(--lx-accent-11, var(--ls-tag-text-color))" [] ])
         ] ])
 
 let tags_el uuid (b : Model.block) : t =
