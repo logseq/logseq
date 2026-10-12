@@ -56,7 +56,9 @@ let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
         let consumed = R.read t !read_buffer ~off:!pending_off ~len:!pending_len in
         pending_off := !pending_off + consumed;
         pending_len := !pending_len - consumed;
-        if consumed = 0 then read_more () else read_loop ()
+        if consumed = 0 && R.next_read_operation t = `Read
+        then read_more ()
+        else read_loop ()
     | `Read -> read_more ()
     | `Yield ->
         let p, u = Promise.create () in
