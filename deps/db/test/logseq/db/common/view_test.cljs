@@ -812,14 +812,6 @@
                                                      :sorting [{:id :user.property/score :asc? false}]})]
     (is (= ["With score" "Without score"] (result-titles conn result)))))
 
-(defn- find-title-id
-  [conn title]
-  (d/q '[:find ?e .
-         :in $ ?title
-         :where [?e :block/title ?title]]
-       @conn
-       title))
-
 (defn- grouped-row-titles-by-key
   [conn result]
   (into {}
@@ -835,8 +827,8 @@
               :properties {:user.property/score {:logseq.property/type :number}})
         view-id (create-view-id conn :query-result)
         option {:view-feature-type :query-result
-                :query-entity-ids [(find-title-id conn "undated")
-                                   (find-title-id conn "dated")]}
+                :query-entity-ids [(title-id conn "undated")
+                                   (title-id conn "dated")]}
         asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? true}]))
         desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? false}]))]
     (is (= ["dated" "undated"] (result-titles conn asc)))
@@ -892,9 +884,9 @@
         options [{:view-feature-type :class-objects
                   :view-for-id class-id}
                  {:view-feature-type :query-result
-                  :query-entity-ids [(find-title-id conn "num")
-                                     (find-title-id conn "txt")
-                                     (find-title-id conn "none")]}]]
+                  :query-entity-ids [(title-id conn "num")
+                                     (title-id conn "txt")
+                                     (title-id conn "none")]}]]
     (doseq [option options
             [prop valued] [[:user.property/scores "num"]
                            [:user.property/labels "txt"]]
@@ -926,7 +918,7 @@
                            :user.property/p2 {:logseq.property/type :number}})
         class-id (:db/id (d/entity @conn :user.class/Topic))
         view-id (create-view-id conn :class-objects :view-for-id class-id)
-        query-ids (mapv #(find-title-id conn %)
+        query-ids (mapv #(title-id conn %)
                         ["both" "p1-low" "p1-high" "p2-low" "p2-high" "neither"])
         options [{:view-feature-type :class-objects
                   :view-for-id class-id}
