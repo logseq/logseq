@@ -7004,12 +7004,95 @@ let test_three_clients_single_repo_sim () =
           assert_checksum_cache_aligned_bang seed server
             [ repo_a, conn_a; repo_b, conn_b; repo_c, conn_c ]))
 
+(* Regression: a burst of Enters on a synced graph leaves every insert
+   pending; as each upload's journal echo lands, apply_remote_txs must
+   NOT rebuild the display projection — the echo is a verbatim own-echo
+   whose facts the display already holds. Before the verbatim-confirm
+   gate each echo replayed the whole pending queue (40 echoes replayed
+   39+38+…+1 = 780 entries), which is what stalled the worker on rapid
+   Enter presses. *)
+let test_rapid_enter_burst_rebuild_cost () =
+  let base_uuid = Uuid_gen.uuid () in
+  let conn = create_remote_conn () in
+  let ops_conn = new_client_ops_db () in
+  let client = make_client repo_a in
+  let server = make_server () in
+  with_test_repos
+    [ repo_a, { conn; ops_conn = Some ops_conn } ]
+    (fun () ->
+      Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+      Sync_client_op.update_local_tx repo_a 0;
+      ensure_base_page_bang conn base_uuid;
+      let c =
+        { repo = repo_a; conn; client; online = true; gen_uuid = None }
+      in
+      (* flush the seed tx so the burst starts from a clean watermark *)
+      ignore (sync_client_bang server c);
+      let confirm_oldest () =
+        let local_t =
+          Option.value (Sync_client_op.get_local_tx repo_a) ~default:0
+        in
+        match Sync_apply.pending_tx_rows repo_a ~limit:1 () with
+        | [] -> ()
+        | row :: _ -> (
+            let entries, _drops =
+              build_upload_plan ~repo:repo_a ~server conn [ row ]
+            in
+            let accepted, t = server_upload_bang server local_t entries in
+            if accepted then begin
+              (* mirror the upload-ack path: acked ids move to
+                 discarded_overlay_tx_ids until the projection rebuilds *)
+              client.discarded_overlay_tx_ids :=
+                row.Sync_client_op.tx_id :: !(client.discarded_overlay_tx_ids);
+              ignore
+                (Sync_apply.mark_pending_txs_false ~rebuild:false repo_a
+                   [ row.Sync_client_op.tx_id ]);
+              let echo = server_pull_entries server local_t in
+              await_unit
+                (Sync_replay.apply_remote_txs repo_a client echo);
+              Sync_client_op.update_local_tx repo_a t
+            end)
+      in
+      (match ent_at_uuid (db_of_conn conn) base_uuid with
+       | Some base ->
+           Sync_replay.debug_reset ();
+           (* burst: all Enters land as pending before the first echo
+              catches up *)
+           let burst = 40 in
+           for i = 1 to burst do
+             create_block_bang conn base (Printf.sprintf "b%d" i)
+               (Uuid_gen.uuid ())
+           done;
+           for _ = 1 to burst do
+             confirm_oldest ()
+           done;
+           check "pending queue drained"
+             (List.length (Sync_apply.pending_tx_rows repo_a ()) = 0);
+           check "verbatim own echoes never rebuilt the projection"
+             (!Sync_replay.debug_rebuild_count = 0);
+           check "no pending entries were replayed"
+             (!Sync_replay.debug_replay_entries = 0);
+           (* the projection still holds every burst block, in order *)
+           let titles =
+             match ent_at_uuid (db_of_conn conn) base_uuid with
+             | Some ent ->
+                 Ldb.sort_by_order (Ldb.ref_ents ent "block/_parent")
+                 |> List.filter_map ent_title_value
+             | None -> []
+           in
+           check "all burst blocks present in order"
+             (titles
+              = List.init burst (fun i -> Printf.sprintf "b%d" (burst - i)))
+       | None -> check "base page exists" false))
+
 (* ---------- alcotest registration ---------- *)
 
 let () =
   Alcotest.run "db-worker"
     [ ( "db-sync-sim"
-      , [ Alcotest.test_case "rng-uuid-deterministic-test" `Quick
+      , [ Alcotest.test_case "rapid-enter-burst-rebuild-cost" `Quick
+            test_rapid_enter_burst_rebuild_cost
+        ; Alcotest.test_case "rng-uuid-deterministic-test" `Quick
             test_rng_uuid_deterministic
         ; Alcotest.test_case "invalid-tx-repro-callback-test" `Quick
             test_invalid_tx_repro_callback
