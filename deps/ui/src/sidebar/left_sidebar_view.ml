@@ -60,9 +60,11 @@ let menu_sc caps =
         ~style_class:"shui-shortcut-combo shui-shortcut-glow"
         (List.mapi
            (fun i cap ->
-             kbd ~key:("k" ^ string_of_int i)
-               ~style_class:"shui-shortcut-key" ~value:(Ui_services.literal_text cap)
-               [])
+             Ui_components.with_props
+               [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
+               (kbd ~key:("k" ^ string_of_int i)
+                  ~style_class:"shui-shortcut-key" ~value:(Ui_services.literal_text cap)
+                  []))
            caps) ]
 ;;
 
@@ -365,8 +367,10 @@ let shortcut_hint hov binding =
             ~style_class:"shui-shortcut-separate shui-shortcut-glow"
             (List.map
                (fun k ->
-                 kbd ~style_class:"shui-shortcut-key shui-key-boxed"
-                   ~value:(Ui_services.literal_text (String.uppercase_ascii k)) [])
+                 Ui_components.with_props
+                   [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
+                   (kbd ~style_class:"shui-shortcut-key shui-key-boxed"
+                      ~value:(Ui_services.literal_text (String.uppercase_ascii k)) []))
                keys) ] ]
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the

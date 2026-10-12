@@ -520,7 +520,13 @@ let () =
                Host_icons.image_of (Lui_host.store h) !scale_cell id r
              | None -> None);
         shadow_of =
-          (fun name -> Lui_theme.shadow_of !Theme_vars.mode name) }
+          (fun name ->
+            (* shadow strings carry raw css vars like --kbd-glow-*;
+               the theme-var table resolves them, the token palette
+               can't *)
+            Lui_theme.shadow_of
+              ~resolve:(fun _mode s -> Theme_vars.color_of s)
+              !Theme_vars.mode name) }
   in
   (* logseq-em-emoji is a leaf extension element whose glyph travels in
      its "text" prop (mirrored in the attrs data-emoji for web parity):

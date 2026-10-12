@@ -110,9 +110,11 @@ let rating_btn st i (r, label_key, sc, color) =
            ~on_press:(fun _ -> Cards_state.rate st r)
            [ row ~key:"inner" ~gap:4 ~cross:`center
                [ text ~value:(t_ label_key) []
-               ; kbd ~style_class:"shui-shortcut-key"
-                   ~data_attrs:[ ("style", "transform:scale(0.9)") ]
-                   ~value:sc [] ] ])
+               ; Ui_components.with_props
+                   [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
+                   (kbd ~style_class:"shui-shortcut-key"
+                      ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                      ~value:sc []) ] ])
     ; text ~key:"due" ~style_class:"ls-desc"
         ~value:(reactive
                   (fun (ls : string list) ->
@@ -223,9 +225,11 @@ let rec card_view st b phase =
                    [ text ~value:(if np = "show-answer"
                                   then t_ "flashcard.review/show-answers"
                                   else t_ "flashcard.review/show-clozes") []
-                   ; kbd ~style_class:"shui-shortcut-key"
-                       ~data_attrs:[ ("style", "transform:scale(0.9)") ]
-                       ~value:"s" [] ] ])
+                   ; Ui_components.with_props
+                       [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
+                       (kbd ~style_class:"shui-shortcut-key"
+                          ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                          ~value:"s" []) ] ])
            else rating_buttons st)
         ]
     ]

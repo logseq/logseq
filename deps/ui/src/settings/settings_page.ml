@@ -453,13 +453,17 @@ let keymap_binding ~key (b : Keymap_data.binding) =
                         ~style_class:"shui-shortcut-separator" []
                     ]
                   else [])
-                 @ [ kbd
-                       ~key:(key ^ "k" ^ string_of_int i)
-                       ~style_class:
-                         (if b.kind = "separate" then
-                            "shui-shortcut-key shui-key-boxed"
-                          else "shui-shortcut-key")
-                       ~value:(Ui_services.literal_text k) []
+                 @ [ Ui_components.with_props
+                       [ Lui_protocol.BackgroundValue
+                       , Ui_components.sv "transparent"
+                       ]
+                       (kbd
+                          ~key:(key ^ "k" ^ string_of_int i)
+                          ~style_class:
+                            (if b.kind = "separate" then
+                               "shui-shortcut-key shui-key-boxed"
+                             else "shui-shortcut-key")
+                          ~value:(Ui_services.literal_text k) [])
                    ])
                b.keys)
         ]

@@ -499,12 +499,20 @@ let ac_popover (st : S.t) : t =
                      row ~key:"scw"
                        [ box ~key:"sc"
                            ~style_class:"shui-shortcut-combo shui-shortcut-glow"
-                           [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"
-                               ~value:(Ui_services.literal_text "\xe2\x8c\x98") []
+                           [ Ui_components.with_props
+                               [ Lui_protocol.BackgroundValue
+                               , Ui_components.sv "transparent"
+                               ]
+                               (kbd ~key:"k0" ~style_class:"shui-shortcut-key"
+                                  ~value:(Ui_services.literal_text "\xe2\x8c\x98") [])
                            ; text ~key:"sep1"
                                ~style_class:"shui-shortcut-separator" []
-                           ; kbd ~key:"k1" ~style_class:"shui-shortcut-key"
-                               ~value:(Ui_services.literal_text "\xe2\x8f\x8e") [] ] ]
+                           ; Ui_components.with_props
+                               [ Lui_protocol.BackgroundValue
+                               , Ui_components.sv "transparent"
+                               ]
+                               (kbd ~key:"k1" ~style_class:"shui-shortcut-key"
+                                  ~value:(Ui_services.literal_text "\xe2\x8f\x8e") []) ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ])

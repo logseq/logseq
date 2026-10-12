@@ -361,6 +361,10 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
            ; P.LineHeight, sv "16px"
            ; P.LetterSpacing, fv (-0.5)
            ; P.WhiteSpace, sv "nowrap"
+           ; (* the wrapper owns the keycap chrome — web kbd.shui-shortcut-key
+                has no intrinsic box; suppress the kind default's muted
+                chip + hairline so the translucent gray-06 fill shows *)
+             P.BackgroundValue, sv "transparent"
            ]
            (kbd
               ~style_class:(if boxed then "" else "shui-shortcut-key")
