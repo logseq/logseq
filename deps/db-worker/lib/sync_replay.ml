@@ -1335,7 +1335,7 @@ let pending_tx_unresolvable db ~created (items : Wire.t list) : bool =
     items
 
 let replay_pending_entry repo (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) : unit =
+    (local_tx : Sync_client_op.pending_tx_row) : unit =
   let db = Conn.db conn in
   match normalize_tx_data_for_rebase local_tx.tx with
   | _ :: _ as tx_data ->
@@ -1366,7 +1366,7 @@ let replay_pending_entry repo (conn : conn)
    upload-time rebase pass decides whether its ops still produce a tx.
    Nothing here marks entries failed, so a single pass suffices. *)
 let replay_pending_txs repo (conn : conn) : unit =
-  let pending = pending_txs repo () in
+  let pending = pending_tx_rows repo () in
   if pending <> [] then begin
     (* replayed txs must not re-enter the client-ops queue — the flag
        suppresses enqueue for this pass *)
@@ -1374,7 +1374,7 @@ let replay_pending_txs repo (conn : conn) : unit =
     Sync_state.pending_replay := true;
     (try
        List.iter
-         (fun (local_tx : Sync_client_op.local_tx_entry) ->
+         (fun (local_tx : Sync_client_op.pending_tx_row) ->
             try replay_pending_entry repo conn local_tx
             with e ->
               Worker_log.warn "db-sync/pending-replay-deferred"
@@ -2503,13 +2503,14 @@ let apply_remote_txs_once repo (client : Sync_state.client)
                match Wire.get "tx-id" tx with
                | Some (Wire.Uuid id | Wire.String id) -> id :: acc
                | _ -> acc)
-            !(client.discarded_overlay_tx_ids) remote_txs in
-        let removed_items = List.fold_left
-            (fun acc id ->
+            !(client.discarded_overlay_tx_ids) remote_txs
+          |> Sync_state.SSet.of_list in
+        let removed_items = Sync_state.SSet.fold
+            (fun id acc ->
                match Sync_client_op.get_local_tx_entry repo id with
                | Some row -> List.rev_append (tx_items_of row.tx) acc
                | None -> acc)
-            [] removed_ids in
+            removed_ids [] in
         let changed_items =
           List.fold_left
             (fun acc tx -> List.rev_append
