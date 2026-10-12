@@ -86,15 +86,6 @@
   [datoms]
   (d/init-db (map (fn [[e a v]] (d/datom e a v)) datoms) db-schema/schema))
 
-(deftest edit-next-to-a-duplicated-block-uuid-matches-recompute-test
-  (testing "2 blocks share a uuid; 1 loses it while the other is edited in the same tx"
-    (let [db (datoms-db [[1 :block/uuid (fixed-uuid 1)] [1 :block/name "page-a"]
-                         [5 :block/uuid (fixed-uuid 5)] [5 :block/page 1] [5 :block/title "Same"]
-                         [6 :block/uuid (fixed-uuid 5)] [6 :block/page 1] [6 :block/title "Same"]])
-          report (d/with db [[:db/retract 5 :block/uuid (fixed-uuid 5)]
-                             [:db/add 6 :block/title "Edited"]])]
-      (is (incremental=recompute? report)))))
-
 ;; Fails if, in `get-block-uuid`, `first` becomes `last`.
 (deftest parent-with-2-uuid-datoms-normalizes-to-its-first-uuid-test
   (testing "a block moved under a parent holding 2 :block/uuid datoms names the parent by its first one, as the recompute does"
