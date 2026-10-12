@@ -1,6 +1,12 @@
 open Yojson.Safe.Util
 let contract_name = function Suite.Desktop -> "desktop" | Suite.Api -> "api" | Suite.Helper -> "helper"
 
+let scope_exclusions =
+  [ "ocaml-e2e/test/test_graph_navigation_basic.ml::graph-view-mode-settings-test",
+    "User excluded Graph View from native desktop test scope."
+  ; "ocaml-e2e/test/test_graph_navigation_basic.ml::graph-time-travel-playback-test",
+    "User excluded Graph View from native desktop test scope." ]
+
 let () =
   Printexc.record_backtrace true;
   let root = ref ".." and coverage = ref false and inventory_only = ref false
@@ -16,6 +22,10 @@ let () =
   let manifest = Yojson.Safe.from_file (Filename.concat repo "native-e2e/upstream.json") in
   let cases = manifest |> member "cases" |> to_list in
   let lookup = List.map (fun c -> (c |> member "id" |> to_string), c) cases in
+  List.iter (fun (id, _) ->
+      if not (List.mem_assoc id lookup) then failwith ("Unknown scope exclusion " ^ id)) scope_exclusions;
+  let excluded id = List.mem_assoc id scope_exclusions in
+  let effective = List.filter (fun (id, _) -> not (excluded id)) lookup in
   let mappings = Hashtbl.create 512 and names = Hashtbl.create 512 in
   let tests = List.concat_map (fun (file, definitions) ->
       List.map (fun (definition : Suite.test) ->
@@ -36,12 +46,16 @@ let () =
               if upstream |> member "contract" |> to_string <> contract then failwith ("Contract mismatch " ^ id);
               Hashtbl.add mappings id identity) definition.covers;
           file, definition) definitions) Registry.suites in
-  let pending = List.filter (fun (id, _) -> not (Hashtbl.mem mappings id)) lookup in
+  let tests = List.filter (fun (_, (definition : Suite.test)) ->
+      not (List.exists excluded definition.covers)) tests in
+  let pending = List.filter (fun (id, _) -> not (Hashtbl.mem mappings id)) effective in
   let additional_count = List.fold_left (fun count (_, (definition : Suite.test)) ->
       if definition.additional then count + 1 else count) 0 tests in
   let parity_count = List.length tests - additional_count in
-  Printf.printf "Coverage declarations: %d/%d; pending: %d; parity native cases: %d; additional native cases: %d\n%!"
-    (Hashtbl.length mappings) (List.length cases) (List.length pending) parity_count additional_count;
+  Printf.printf "Coverage declarations: %d/%d; pending: %d; excluded: %d; canonical: %d; parity native cases: %d; additional native cases: %d\n%!"
+    parity_count (List.length effective) (List.length pending) (List.length scope_exclusions)
+    (List.length cases) parity_count additional_count;
+  List.iter (fun (id, reason) -> Printf.printf "EXCLUDED %s: %s\n%!" id reason) scope_exclusions;
   let report_missing () =
     if !coverage then
       List.iter (fun (id, _) -> Printf.eprintf "MISSING %s\n" id) pending in
@@ -95,6 +109,9 @@ let () =
               "error", (match error with None -> `Null | Some e -> `String e)]) selected in
   Yojson.Safe.to_file (Filename.concat base "results.json")
     (`Assoc ["results", `List results; "pending", `Int (List.length pending);
+             "canonical_cases", `Int (List.length cases); "effective_target", `Int (List.length effective);
+             "excluded", `List (List.map (fun (id, reason) ->
+                 `Assoc ["id", `String id; "reason", `String reason]) scope_exclusions);
              "declared_parity_cases", `Int parity_count; "declared_additional_cases", `Int additional_count]);
   Printf.printf "Results: %s\n%!" base;
   report_missing ();

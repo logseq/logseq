@@ -109,6 +109,19 @@ zero executed assertions or desktop claims with zero SDL input. A complete parit
 claim requires **both** complete mapping and passing runtime, not inventory-only.
 These guards cannot prove semantic equivalence of assertions: review each port.
 
+The canonical inventory and its source hashes retain all 249 registrations.
+The user explicitly excluded Graph View; the effective target is 247. Only these
+two registrations are excluded, via the explicit `scope_exclusions` table:
+
+| Excluded registration | Reason |
+| --- | --- |
+| `ocaml-e2e/test/test_graph_navigation_basic.ml::graph-view-mode-settings-test` | User excluded Graph View. |
+| `ocaml-e2e/test/test_graph_navigation_basic.ml::graph-time-travel-playback-test` | User excluded Graph View. |
+
+Exclusions are reported separately in CLI output and `results.json`, never as
+passes or missing mappings. Registered definitions for these IDs still undergo
+mapping validation but do not execute. No other registration is excluded.
+
 Native-only or justified master-missing cases must explicitly use the additional
 marker, with no `covers`. For example, the existing smoke is declared as:
 
