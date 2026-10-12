@@ -72,6 +72,16 @@
                (state/pub-event! [:graph/switch graph {:persist? false}])))
            (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success)))))))
 
+(defn <restore-date-formatter!
+  "Load the graph's persisted journal title format into UI state.
+
+  Must finish before journals or Settings render so :ui/date-formatter is not
+  left at the default after startup or a graph switch."
+  [repo]
+  (p/let [date-formatter (db-async/<get-date-formatter repo)]
+    (state/set-date-formatter! repo date-formatter)
+    date-formatter))
+
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
@@ -80,8 +90,7 @@
    (when-not (true? (:file-graph-import? opts))
      (state/set-db-restoring! true))
    (db-restore/restore-graph! repo opts)
-   (p/let [date-formatter (db-async/<get-date-formatter repo)]
-     (state/set-date-formatter! repo date-formatter))
+   (<restore-date-formatter! repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
