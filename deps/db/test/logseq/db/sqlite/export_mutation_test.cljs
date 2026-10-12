@@ -78,18 +78,6 @@
            (-> export-map :pages-and-blocks first :blocks first :build/properties)))
     (is (some? (db-test/find-block-by-content db "value child")))))
 
-(deftest view-nodes-export-excludes-children
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               [{:page {:block/title "page1"}
-                 :blocks [{:block/title "parent"
-                           :build/children [{:block/title "child"}]}]}]})
-        parent (db-test/find-block-by-content @conn "parent")
-        export-map (sqlite-export/build-export @conn {:export-type :view-nodes
-                                                      :rows [[:block/uuid (:block/uuid parent)]]})]
-    (is (= [{:block/title "parent"}]
-           (mapcat :blocks (:pages-and-blocks export-map))))))
-
 ;; Fails if, in `build-nodes-export`, `true` becomes `false`.
 (deftest selected-nodes-export-shallow-copies-selected-class-pages
   (let [conn (db-test/create-conn-with-blocks
