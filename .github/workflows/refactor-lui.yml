@@ -14,8 +14,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  # lui feat/ml-backend commit validated locally
-  LUI_REF: '00ba17765ad652179b383afbfa8f3eccc71648de'
+  LUI_REF: 'feat/ml-backend'
 
 jobs:
   ubuntu:
@@ -47,6 +46,13 @@ jobs:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
           dune-cache: true
 
+      - name: Checkout lui at LUI_REF
+        id: lui
+        run: |
+          git clone --branch "$LUI_REF" https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
+
       - name: Restore opam switch cache
         id: opam-cache
         uses: actions/cache/restore@v4
@@ -54,7 +60,7 @@ jobs:
           path: |
             ~/.opam
             _opam
-          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ env.LUI_REF }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
+          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
           restore-keys: |
             ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
 
@@ -62,13 +68,6 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-
-      - name: Checkout lui at LUI_REF
-        run: |
-          rm -rf "$RUNNER_TEMP/lui"
-          git clone https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
-          git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
-          echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
       - name: opam deps (db-worker + ui)
         run: |
@@ -116,3 +115,49 @@ jobs:
 
       - name: CSS build
         run: pnpm gulp:build
+
+  native-host:
+    name: Native host (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev
+
+      - name: macOS system deps
+        if: runner.os == 'macOS'
+        run: brew install pkg-config sqlite3 sdl2 sdl2_ttf libffi gmp
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Checkout LUI native backend
+        run: |
+          git clone --branch "$LUI_REF" https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git -C "$RUNNER_TEMP/lui" rev-parse HEAD
+          echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
+
+      - name: Native dependencies
+        run: |
+          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
+          (cd deps/ui && sh scripts/install-opam-deps.sh)
+          opam install -y uri
+
+      - name: Build native worker
+        working-directory: deps/db-worker
+        run: opam exec -- dune build bin/main.exe
+
+      - name: Build native host and check text backend
+        working-directory: deps/ui
+        run: |
+          opam exec -- dune build ocaml_host/logseq_native.exe
+          opam exec -- dune runtest ocaml_host

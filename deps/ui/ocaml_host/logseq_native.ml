@@ -16,6 +16,7 @@
 open Lui_window
 
 module Sdl = Tsdl.Sdl
+module Lui_shell = Host_platform.Shell
 
 (* ocaml_host_stubs.c: NSApplication activation for a bare-binary
    launch — see its comment. *)
@@ -166,11 +167,14 @@ let () =
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
-  (* in-app menus render as real NSMenu popups on this host;
-     LOGSEQ_NATIVE_MENUS=0 keeps the LUI overlay menus *)
-  (match Sys.getenv_opt "LOGSEQ_NATIVE_MENUS" with
-   | None -> Unix.putenv "LOGSEQ_NATIVE_MENUS" "1"
-   | Some _ -> ());
+  (* AppKit popups are macOS-only. Linux uses the same LUI overlay
+     menus as the other non-AppKit hosts. *)
+  (match Host_platform.is_macos, Sys.getenv_opt "LOGSEQ_NATIVE_MENUS" with
+   | true, None -> Unix.putenv "LOGSEQ_NATIVE_MENUS" "1"
+   | false, Some value when value <> "0" ->
+     failwith "LOGSEQ_NATIVE_MENUS is only supported on macOS"
+   | false, _ -> Unix.putenv "LOGSEQ_NATIVE_MENUS" "0"
+   | true, Some _ -> ());
   (try
      if Sys.getenv "LOGSEQ_NATIVE_TREEDUMP" <> "" then
        Sys.set_signal Sys.sigusr1
@@ -189,13 +193,17 @@ let () =
   in
   let env = try Sys.getenv "LUI_GPU" with Not_found -> "" in
   let use_cpu = env = "0" || env = "cpu" in
-  let prefer_metal = not use_cpu && env <> "gl" && env <> "opengl" in
+  let software_window = use_cpu && not Host_platform.is_macos in
+  let prefer_metal =
+    Host_platform.is_macos && not use_cpu && env <> "gl" && env <> "opengl"
+  in
   (* The embedded app's bootstrap (~70ms) is pure OCaml work — it
      touches no SDL/Metal state. Run it on a spare domain while this
      thread does window + renderer setup; joined below right before
      the init patches are applied. *)
   let init_d =
-    Domain.spawn (fun () -> Native_embed.initialize 1 0 "")
+    Domain.spawn
+      (fun () -> Native_embed.initialize Host_platform.platform_code 0 "")
   in
   sdl_ok (Sdl.init Sdl.Init.(video + events));
   Daemon_client.boot_mark "sdl init";
@@ -213,7 +221,7 @@ let () =
     ref
       (sdl_ok
          (Sdl.create_window "logseq" ~w:width ~h:height
-            (flags (not prefer_metal))))
+            (flags (not prefer_metal && not software_window))))
   in
   Daemon_client.boot_mark "window created";
   let metal =
@@ -232,7 +240,7 @@ let () =
   in
   Daemon_client.boot_mark "window+gpu ctx";
   let gctx =
-    if Option.is_some metal then None
+    if Option.is_some metal || software_window then None
     else match Sdl.gl_create_context !win with
     | Ok c ->
       sdl_ok (Sdl.gl_make_current !win c);
@@ -269,8 +277,10 @@ let () =
   List.iter
     (fun d -> if Sys.file_exists d then native_register_fonts d)
     font_dirs;
-  native_install_menus ();
-  let drawable () = Sdl.gl_get_drawable_size !win
+  if Host_platform.is_macos then native_install_menus ();
+  let drawable () =
+    if software_window then Sdl.get_window_size !win
+    else Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in
   let scale = Float.max 0.01 (float dw /. float width) in
@@ -279,6 +289,14 @@ let () =
       Lui_host.render =
         (fun s ->
            Bytes.create (s.Lui_scene.width * s.Lui_scene.height * 4)) }
+  in
+  let unavailable_renderer message =
+    if Host_platform.is_macos then begin
+      warn "%s" message;
+      (noop_renderer, false, None)
+    end
+    else failwith
+        (message ^ "; verify the graphics driver or select LUI_GPU=cpu")
   in
   let cpu_renderer b =
     let rr = Lui_raster.Renderer.create () in
@@ -317,14 +335,12 @@ let () =
         if use_cpu then
           match Lui_blit.create !win ~w:dw ~h:dh with
           | Error m ->
-            warn "lui_blit.create failed: %s" m;
-            (noop_renderer, false, None)
+            unavailable_renderer ("lui_blit.create failed: " ^ m)
           | Ok b -> (cpu_renderer b, false, Some b)
         else
           match gctx with
           | None ->
-            warn "no GL context; using no-op loop renderer";
-            (noop_renderer, false, None)
+            unavailable_renderer "No OpenGL context"
           | Some _ -> (
               match Lui_gl.init () with
               | Ok gl ->
@@ -336,8 +352,7 @@ let () =
                          Bytes.empty) }
                 , true, None )
               | Error m ->
-                warn "lui_gl.init failed: %s; falling back to noop" m;
-                (noop_renderer, false, None)))
+                unavailable_renderer ("lui_gl.init failed: " ^ m)))
   in
   Daemon_client.boot_mark "renderer ready";
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
@@ -351,8 +366,10 @@ let () =
       Lui_host.render =
         (fun s ->
            !pre_render s;
-           try (!renderer_cell).Lui_host.render s
-           with _ -> noop_renderer.render s) }
+           if Host_platform.is_macos then
+             try (!renderer_cell).Lui_host.render s
+             with _ -> noop_renderer.render s
+           else (!renderer_cell).Lui_host.render s) }
   in
   let host_cell = ref None in
   let rects = Rects.create () in
@@ -765,7 +782,8 @@ let () =
              (Float.max 0. (b -. t -. cr.Lui_scene.h));
            Ui.set_scroll_cap_x ui id
              (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
-      (Lui_store.preorder store)
+      (Lui_store.preorder store);
+    Ui.notify_layout ui
   in
   (* Metal + macOS only: keep the .sidebar NSVisualEffectView frame
      glued to the sidebar column and splice the hole into the display
@@ -1302,7 +1320,8 @@ let () =
        on the second dispatch, so drop an identical
        (scancode, shift, down) meta event inside a short window. *)
     let dupe =
-      if mods.Input.meta && not (mods.Input.ctrl || mods.Input.alt)
+      if Host_platform.is_macos && mods.Input.meta
+         && not (mods.Input.ctrl || mods.Input.alt)
       then
         let now = Unix.gettimeofday () in
         let dupe =
@@ -1327,8 +1346,12 @@ let () =
          on_paste) hang off those, not the keydown; a paste event
          carries the OS clipboard as clipboardData.text like the
          browser's *)
-      if down && (not repeat) && mods.Input.meta
-         && not (mods.Input.ctrl || mods.Input.alt || mods.Input.shift)
+      let primary_shortcut =
+        if Host_platform.is_macos then mods.Input.meta && not mods.Input.ctrl
+        else mods.Input.ctrl && not mods.Input.meta
+      in
+      if down && (not repeat) && primary_shortcut
+         && not (mods.Input.alt || mods.Input.shift)
       then
         (match dom_key scancode with
          | "c" -> emit_dom "copy" target []
@@ -1495,8 +1518,8 @@ let () =
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name "Logseq";
   ignore (Lui_shell.set_window_title "Logseq");
-  (* platform_code 1 = MacOS, host_code 0 = the generic host
-     profile (drives the app-icons push and host-gated views). *)
+  (* The selected platform and generic host profile drive the app's
+     shortcuts, app-icons push and host-gated views. *)
   let init_patches = Domain.join init_d in
   Daemon_client.boot_mark "app initialized";
   apply_patch_json init_patches;
@@ -1536,16 +1559,11 @@ let () =
   Daemon_client.boot_mark "requests installed";
   (* appearance + window-size environment push — the app's
      prefers_dark and inner_width/inner_height resolve against these. *)
-  let dark =
-    let ic = Unix.open_process_in
-             "defaults read -g AppleInterfaceStyle 2>/dev/null" in
-    let out = try input_line ic with End_of_file -> "" in
-    ignore (Unix.close_process_in ic);
-    String.trim out = "Dark"
-  in
-  Daemon_client.boot_mark "dark read";
-  Native_embed.platform_event
-    (Printf.sprintf "appearance\n{\"dark\":%b}" dark);
+  Option.iter
+    (fun dark ->
+       Native_embed.platform_event
+         (Printf.sprintf "appearance\n{\"dark\":%b}" dark))
+    (Host_platform.prefers_dark ());
   Daemon_client.boot_mark "appearance pushed";
   push_window_size ();
   Daemon_client.boot_mark "size pushed";
@@ -1573,6 +1591,7 @@ let () =
   Daemon_client.boot_mark "loop";
   while not !quit do
     let t0 = perf_s () in
+    Lui_shell.pump ();
     (* See the raise_window note above: re-raise briefly after boot so a
        racing frontmost app cannot permanently steal input routing. *)
     (* First raise_window call blocks ~70ms on macOS; defer the

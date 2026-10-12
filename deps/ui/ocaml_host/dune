@@ -4,8 +4,32 @@
 ; identical to native/dune; the native/*.ml files (the native platform
 ; twin: platform.ml, vdom.ml, logseq_el.ml, bridge, …) are copied
 ; from ../native so the two hosts can never drift. Only the library
-; name differs; host selection is the host_code passed to
-; Native_embed.initialize (6 = this host).
+; name differs; the SDL host uses the generic host profile with the
+; operating system selected below.
+
+(rule
+ (target host_platform.ml)
+ (enabled_if (= %{system} macosx))
+ (action (copy host_platform.macos.ml.in %{target})))
+
+(rule
+ (target host_platform.ml)
+ (enabled_if (= %{system} linux))
+ (action (copy host_platform.linux.ml.in %{target})))
+
+(rule
+ (target host_c_flags.sexp)
+ (action
+  (with-stdout-to %{target}
+   (bash
+    "case '%{system}' in linux) flags=$(pkg-config --cflags fontconfig) || exit; printf '(%s)' \"$flags\";; *) printf '()';; esac"))))
+
+(rule
+ (target host_link_flags.sexp)
+ (action
+  (with-stdout-to %{target}
+   (bash
+    "case '%{system}' in macosx) printf '(-cclib -lobjc)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
 
 (rule
  (copy ../native/asset_dom.ml asset_dom.ml))
@@ -346,7 +370,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine))
+ (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine host_platform host_platform_test))
  (modes native)
  (libraries
    lui
@@ -367,11 +391,25 @@
    str)
  (preprocess
   (pps lui.ppx)))
+
+(library
+ (name logseq_ocaml_host_platform)
+ (wrapped false)
+ (modules host_platform)
+ (libraries lui.text lui.text_pango lui.shell lui.shell_linux unix)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(test
+ (name host_platform_test)
+ (modules host_platform_test)
+ (libraries logseq_ocaml_host_platform)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
 (executable
  (name logseq_native)
  (modules logseq_native native_embed bridge patch_decode host_requests
    theme_vars host_icons text_engine)
- (libraries logseq_ui_ocamlhost
+ (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform
    lui
    lui.store
    lui.scene
@@ -380,9 +418,11 @@
    lui.window
    lui.layout
    lui.shell
+   lui.shell_linux
    lui.a11y
    lui.ime
    lui.text
+   lui.text_pango
    lui.gl
    lui.metal
    lui.raster
@@ -396,7 +436,8 @@
    threads.posix)
  (foreign_stubs
   (language c)
-  (names ocaml_host_stubs))
- (link_flags (:standard -cclib -lobjc))
+  (names ocaml_host_stubs)
+  (flags (:standard (:include host_c_flags.sexp))))
+ (link_flags (:standard (:include host_link_flags.sexp)))
  (modes native)
- (enabled_if (= %{system} macosx)))
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
