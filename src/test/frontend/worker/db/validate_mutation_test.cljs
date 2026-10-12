@@ -62,6 +62,7 @@
   (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
     (apply worker-db-validate/validate-db conn args)))
 
+;; Fails if, in `block-missing-uuid?`, `and` becomes `or`.
 (deftest fix-invalid-blocks-retracts-titled-orphan-that-has-uuid
   (let [conn (create-db-graph-conn)
         id (add! conn {:block/uuid (random-uuid) :block/title "orphan"})]
@@ -95,6 +96,7 @@
     (is (nil? (:block/name (d/entity @conn id))))
     (is (= "b" (:block/title (d/entity @conn id))))))
 
+;; Fails if, in `fix-invalid-blocks!`, `nil?` becomes `some?`.
 (deftest fix-invalid-blocks-retracts-untagged-external-url-block
   (let [conn (create-db-graph-conn)
         page-id (add-page! conn "p")
@@ -108,6 +110,7 @@
     (fix-invalid-blocks! conn :block [id])
     (is (gone? conn id))))
 
+;; Fails if, in `fix-invalid-blocks!`, `not` becomes `identity`.
 (deftest fix-invalid-blocks-keeps-block-whose-created-by-ref-is-an-entity
   (let [conn (create-db-graph-conn)
         page-id (add-page! conn "p")
@@ -123,6 +126,7 @@
     (is (not (gone? conn id)))
     (is (= page-id (:db/id (:logseq.property/created-by-ref (d/entity @conn id)))))))
 
+;; Fails if, in `fix-invalid-blocks!`, `and` becomes `or`.
 (deftest fix-invalid-blocks-removes-page-tag-from-property-only
   (let [conn (create-db-graph-conn)
         id (add! conn {:block/uuid (random-uuid)
@@ -136,6 +140,7 @@
     (fix-invalid-blocks! conn :property [id])
     (is (= #{:logseq.class/Property} (tag-idents (d/entity @conn id))))))
 
+;; Fails if, in `fix-invalid-blocks!`, `and` becomes `or` or `nil?` becomes `some?`.
 (deftest fix-invalid-blocks-removes-page-tag-from-class-and-keeps-its-ident-and-extends
   (let [conn (create-db-graph-conn)
         id (add! conn {:block/uuid (random-uuid)
@@ -152,6 +157,7 @@
       (is (= :user.class/Robot (:db/ident class)))
       (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends class)))))))
 
+;; Fails if, in `fix-invalid-blocks!`, `=` becomes `not=` or `nil?` becomes `some?`.
 (deftest fix-invalid-blocks-puts-description-block-under-its-property
   (let [conn (create-db-graph-conn)
         property-id (add! conn {:block/uuid (random-uuid)
@@ -172,6 +178,7 @@
       (is (= property-id (:db/id (:block/page block))))
       (is (= property-id (:db/id (:block/parent block)))))))
 
+;; Fails if, in `fix-invalid-blocks!`, `when` becomes `when-not` or `if` becomes `if-not`.
 (deftest fix-invalid-blocks-replaces-class-used-as-property-by-same-titled-property
   (let [conn (create-db-graph-conn)
         class-id (add! conn {:block/uuid (random-uuid)
@@ -229,6 +236,8 @@
     (is (nil? (:hide? page)))
     (is (nil? (:public? page)))))
 
+;; Fails if, in `fix-non-closed-values!`, `if` becomes `if-not`, `when-not` becomes `when`, `or` becomes `and` or `=` becomes `not=`.
+;; Fails if, in `validate-db`, `when` becomes `when-not`.
 (deftest validate-db-retracts-non-closed-values-and-keeps-closed-ones
   (let [conn (create-db-graph-conn)
         page-id (add-page! conn "p")
@@ -253,6 +262,7 @@
            (:db/ident (:logseq.property/status (d/entity @conn valid-id)))))
     (is (nil? (:logseq.property/status (d/entity @conn invalid-id))))))
 
+;; Fails if, in `fix-extends-cardinality!`, `when` becomes `when-not` or `not=` becomes `=`.
 (deftest fix-extends-cardinality-makes-extends-cardinality-many
   (let [conn (create-db-graph-conn)]
     (d/transact! conn [[:db/add :logseq.property.class/extends :db/cardinality :db.cardinality/one]])
@@ -260,12 +270,14 @@
     (is (= :db.cardinality/many
            (:db/cardinality (d/entity @conn :logseq.property.class/extends))))))
 
+;; Fails if, in `fix-icon-wrong-type!`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest fix-icon-wrong-type-retracts-ref-value-type
   (let [conn (create-db-graph-conn)]
     (d/transact! conn [[:db/add :logseq.property/icon :db/valueType :db.type/ref]])
     (#'worker-db-validate/fix-icon-wrong-type! conn)
     (is (nil? (:db/valueType (d/entity @conn :logseq.property/icon))))))
 
+;; Fails if, in `fix-num-prefix-db-idents!`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest fix-num-prefix-db-idents-renames-property-its-values-and-hidden-columns
   (let [conn (create-db-graph-conn)
         num-ident (keyword "user.property" "1foo")
@@ -304,6 +316,7 @@
     (is (= #{:user.property/NUM-1foo}
            (set (:logseq.property.table/hidden-columns (d/entity @conn view-id)))))))
 
+;; Fails if, in `fix-missing-internal-page-parent-orders!`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest fix-missing-internal-page-parent-orders-orders-child-page-as-a-repair
   (let [conn (create-db-graph-conn)
         parent-id (add-page! conn "parent")
@@ -321,6 +334,7 @@
       (is (not= 1 (:block/tx-id child))
           "A repair stamps every entity it changes with a new revision"))))
 
+;; Fails if, in `fix-missing-internal-page-parent-orders!`, `true` becomes `false`.
 (deftest validate-db-orders-child-page-that-also-misses-updated-at
   ;; the order repair runs before the other repairs, so it must not be rejected
   ;; for the entity's other, still unrepaired, problems
@@ -338,6 +352,7 @@
     (is (= 3 (:block/updated-at child)))
     (is (empty? (:errors result)))))
 
+;; Fails if, in `validate-db`, `if` becomes `if-not`.
 (deftest validate-db-notifies-valid-graph
   (let [conn (create-db-graph-conn)
         notifications (atom [])]
