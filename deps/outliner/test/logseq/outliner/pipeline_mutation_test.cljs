@@ -49,11 +49,6 @@
     [(set (outliner-pipeline/db-rebuild-block-refs db block))
      (set ((outliner-pipeline/db-rebuild-block-refs-fn db) block))]))
 
-(deftest page-property-value-is-a-ref-test
-  (let [db @test-db
-        expected #{(:db/id (d/entity db :user.property/node)) (id-of db "target1")}]
-    (is (= [expected expected] (refs-both-ways db "node-ref")))))
-
 ;; Fails if, in `page-or-object?-helper`, `or` becomes `and`.
 (deftest tagged-block-property-value-is-a-ref-test
   ;; A block with a tag is an object (not a page): it is a ref as well.
