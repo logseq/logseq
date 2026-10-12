@@ -67,6 +67,52 @@ let spawn_cli_from entrypoint ?(env = [||]) args =
     (Array.append [| entrypoint |] args)
     [%obj { encoding = "utf8"; env = clone_env env }]
 
+external spawn_sync_in :
+  string ->
+  string array ->
+  < encoding : string ; env : string Js.Dict.t ; cwd : string > Js.t ->
+  spawn_result = "spawnSync"
+[@@mel.module "child_process"]
+
+let () =
+  test "skill show finds SKILL.md packaged beside app.asar" (fun () ->
+      (* electron-builder extraResources puts the skill in Resources/, the
+         desktop CLI runs from Resources/app.asar/js/ *)
+      let resources = temp_dir "logseq-cli-skill-resources-" in
+      let elsewhere = temp_dir "logseq-cli-skill-cwd-" in
+      let cli_path =
+        Node.Path.join [| resources; "app.asar"; "js"; "logseq-cli.js" |]
+      in
+      try
+        mkdir_p (Filename.dirname cli_path);
+        write_cli_wrapper cli_path;
+        let skill_dir =
+          Node.Path.join [| resources; ".agents"; "skills"; "logseq-cli" |]
+        in
+        mkdir_p skill_dir;
+        write_file
+          (Node.Path.join [| skill_dir; "SKILL.md" |])
+          "---\nname: logseq-cli\n---\n\n# Packaged skill\n";
+        let result =
+          spawn_sync_in Node.Process.argv.(0)
+            [| cli_path; "skill"; "show" |]
+            [%obj
+              {
+                encoding = "utf8";
+                env = clone_env [| ("HOME", elsewhere) |];
+                cwd = elsewhere;
+              }]
+        in
+        remove_tree resources;
+        remove_tree elsewhere;
+        ignore (expect_exit_zero "skill show beside app.asar" result);
+        expect_named_contains "packaged skill" result##stdout
+          "# Packaged skill"
+      with exn ->
+        remove_tree resources;
+        remove_tree elsewhere;
+        fail_test (Printexc.to_string exn))
+
 let with_password_fixture scenario run =
   let root = temp_dir "logseq-cli-password-" in
   let config_path = Node.Path.join [| root; "cli.edn" |] in
