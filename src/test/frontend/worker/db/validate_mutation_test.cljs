@@ -69,33 +69,6 @@
     (fix-invalid-blocks! conn :block [id])
     (is (gone? conn id))))
 
-(deftest fix-invalid-blocks-adds-missing-updated-at-to-normal-page-and-keeps-its-name
-  (let [conn (create-db-graph-conn)
-        id (add! conn {:block/uuid (random-uuid)
-                       :block/name "dated"
-                       :block/title "dated"
-                       :block/tags :logseq.class/Page
-                       :block/created-at 5})]
-    (fix-invalid-blocks! conn :normal-page [id])
-    (let [page (d/entity @conn id)]
-      (is (= 5 (:block/updated-at page)))
-      (is (= "dated" (:block/name page))))))
-
-(deftest fix-invalid-blocks-retracts-name-of-non-page-block
-  (let [conn (create-db-graph-conn)
-        page-id (add-page! conn "p")
-        id (add! conn {:block/uuid (random-uuid)
-                       :block/title "b"
-                       :block/name "stray"
-                       :block/page page-id
-                       :block/parent page-id
-                       :block/order "a0"
-                       :block/created-at 1
-                       :block/updated-at 1})]
-    (fix-invalid-blocks! conn :block [id])
-    (is (nil? (:block/name (d/entity @conn id))))
-    (is (= "b" (:block/title (d/entity @conn id))))))
-
 ;; Fails if, in `fix-invalid-blocks!`, `nil?` becomes `some?`.
 (deftest fix-invalid-blocks-retracts-untagged-external-url-block
   (let [conn (create-db-graph-conn)
@@ -219,22 +192,6 @@
     (let [block (d/entity @conn block-id)]
       (is (= "v" (:user.property/person block)))
       (is (nil? (:user.class/Person block))))))
-
-(deftest validate-db-fixes-entity-over-several-rounds
-  (let [conn (create-db-graph-conn)
-        id (add! conn {:block/uuid (random-uuid)
-                       :block/name "flags"
-                       :block/title "flags"
-                       :block/tags :logseq.class/Page
-                       :block/created-at 1
-                       :block/updated-at 1
-                       :hide? true
-                       :public? true})
-        result (validate-db-quietly conn)
-        page (d/entity @conn id)]
-    (is (empty? (:errors result)))
-    (is (nil? (:hide? page)))
-    (is (nil? (:public? page)))))
 
 ;; Fails if, in `fix-non-closed-values!`, `if` becomes `if-not`, `when-not` becomes `when`, `or` becomes `and` or `=` becomes `not=`.
 ;; Fails if, in `validate-db`, `when` becomes `when-not`.

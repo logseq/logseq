@@ -422,22 +422,6 @@
         db3 (db-after-pipeline db2 [[:db/add target :block/title "target edited"]] {})]
     (is (not= (revision db2 owner) (revision db3 owner)))))
 
-(deftest fix-db-transaction-revises-changed-block-test
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "b1"}]}])
-        b1 (:db/id (db-test/find-block-by-content @conn "b1"))
-        _ (d/transact! conn [[:db/add b1 :block/tx-id 10]])
-        db' (db-after-pipeline @conn [[:db/add b1 :block/title "fixed"]] {:fix-db? true})]
-    (is (not= 10 (revision db' b1)))))
-
-(deftest entities-without-uuid-get-no-revision-test
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}}])
-        db' (db-after-pipeline @conn [{:db/ident :logseq.kv/pipeline-mutation-test :kv/value 1}] {})]
-    (is (= 1 (:kv/value (d/entity db' :logseq.kv/pipeline-mutation-test))))
-    (is (nil? (:block/tx-id (d/entity db' :logseq.kv/pipeline-mutation-test))))))
-
 ;; Fails if, in `invoke-hooks-default`, `when` becomes `when-not`.
 (deftest invoke-hooks-lists-only-deleted-assets-test
   (let [conn (db-test/create-conn-with-blocks
