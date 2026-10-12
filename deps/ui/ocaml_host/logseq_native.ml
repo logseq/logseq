@@ -888,6 +888,162 @@ let () =
     end
   in
   let quit = ref false in
+  let automation = Automation.start () in
+  let sdk_requests = Hashtbl.create 8 in
+  let sdk_lock = Mutex.create () in
+  let with_sdk_lock f =
+    Mutex.lock sdk_lock;
+    Fun.protect ~finally:(fun () -> Mutex.unlock sdk_lock) f
+  in
+  let sdk_sequence = ref 0 in
+  let automation_handle request =
+    let open Yojson.Safe.Util in
+    let field name = member name request in
+    let str name = to_string (field name) in
+    let int name = to_int (field name) in
+    let push event =
+      match Sdl.push_event event with
+      | Ok true -> `Null
+      | Ok false -> failwith "SDL rejected automation input"
+      | Error (`Msg message) -> failwith message
+    in
+    let snapshot selector =
+      Native_embed.with_entry_lock (fun () ->
+          let own_text = Hashtbl.create 256 in
+          Native_embed.collect_elements () |> List.iter (fun el ->
+              let json = Yojson.Safe.from_string (Js.Json.stringify el) in
+              Hashtbl.add own_text (json |> member "node-id" |> to_number |> int_of_float)
+                (json |> member "text" |> to_string));
+          let text_cache = Hashtbl.create 256 in
+          let rec text_content node =
+            match Hashtbl.find_opt text_cache node with
+            | Some text -> text
+            | None ->
+              let text = Hashtbl.find own_text node ^
+                (Lui_store.children (store_of ()) node
+                 |> List.map (fun child -> text_content (Lui_store.node_id child))
+                 |> String.concat "") in
+              Hashtbl.add text_cache node text;
+              text
+          in
+          let elements =
+            match selector with
+            | None -> Native_embed.collect_elements ()
+            | Some sel -> Dom_ext.doc_query_selector_all sel
+          in
+          `List
+            (List.map
+               (fun element ->
+                  let json = Yojson.Safe.from_string (Js.Json.stringify element) in
+                  let node = json |> member "node-id" |> to_number |> int_of_float in
+                  let r = shifted_rect node in
+                  let s = !scale_cell in
+                  let rect =
+                    `Assoc [ "x", `Float (r.Lui_scene.x /. s);
+                             "y", `Float (r.Lui_scene.y /. s);
+                             "width", `Float (r.Lui_scene.w /. s);
+                             "height", `Float (r.Lui_scene.h /. s) ]
+                  in
+                  `Assoc (("rect", rect) :: ("text-content", `String (text_content node)) :: to_assoc json))
+               elements))
+    in
+    match str "op" with
+    | "status" ->
+      `Assoc [ "pid", `Int (Unix.getpid ()); "protocol", `Int 1;
+               "focused", `Int (Ui.focused ui); "caret", `Int (Ui.caret ui);
+               "shadow", `String (Ui.shadow ui); "scale", `Float !scale_cell;
+               "renderer", `String (!renderer_cell).Lui_host.name;
+               "width", `Int !win_w; "height", `Int !win_h ]
+    | "snapshot" -> snapshot None
+    | "query" -> snapshot (Some (str "selector"))
+    | "clipboard_read" ->
+      (match Sdl.get_clipboard_text () with
+       | Ok value -> `String value
+       | Error (`Msg message) -> failwith message)
+    | "clipboard_write" ->
+      (match Sdl.set_clipboard_text (str "text") with
+       | Ok () -> `Null
+       | Error (`Msg message) -> failwith message)
+    | "sdk-call" ->
+      if with_sdk_lock (fun () -> Hashtbl.length sdk_requests) >= 32 then failwith "Too many pending SDK requests";
+      let methods =
+        match str "namespace" with
+        | "api" -> Sdk_api.api_methods
+        | "sdk.ui" -> Sdk_api.sdk_ui_methods
+        | "sdk.utils" -> Sdk_api.sdk_utils_methods
+        | "sdk.assets" -> Sdk_api.sdk_assets_methods
+        | "sdk.experiments" -> Sdk_api.sdk_experiments_methods
+        | "sdk.debug" -> Sdk_api.sdk_debug_methods
+        | other -> invalid_arg ("Unknown production SDK namespace: " ^ other)
+      in
+      let call = match List.assoc_opt (str "method") methods with
+        | Some fn -> fn
+        | None -> invalid_arg ("Unknown production SDK method: " ^ str "method") in
+      let args = field "args" |> to_list in
+      if List.length args > 4 then invalid_arg "Production SDK methods accept at most four arguments";
+      let args = Array.of_list (List.map (fun arg -> Js.Json.parseExn (Yojson.Safe.to_string arg)) args) in
+      let arg i = if i < Array.length args then args.(i) else Js.Json.null in
+      incr sdk_sequence;
+      let token = !sdk_sequence in
+      with_sdk_lock (fun () -> Hashtbl.add sdk_requests token None);
+      ignore (Native_embed.with_entry_lock (fun () ->
+          call (arg 0) (arg 1) (arg 2) (arg 3)
+          |> Js.Promise.then_ (fun value ->
+              with_sdk_lock (fun () -> Hashtbl.replace sdk_requests token (Some (`Assoc ["ok", `Bool true; "value", Yojson.Safe.from_string (Js.Json.stringify value)])));
+              Js.Promise.resolve ())
+          |> Js.Promise.catch (fun error ->
+              with_sdk_lock (fun () -> Hashtbl.replace sdk_requests token (Some (`Assoc ["ok", `Bool false; "error", `String (Printexc.to_string error)])));
+              Js.Promise.resolve ())));
+      `Int token
+    | "sdk-result" ->
+      let token = int "token" in
+      with_sdk_lock (fun () -> match Hashtbl.find_opt sdk_requests token with
+       | None -> invalid_arg "Unknown SDK request token"
+       | Some None -> `Null
+       | Some (Some result) -> Hashtbl.remove sdk_requests token; result)
+    | "input" ->
+      let event = Sdl.Event.create () in
+      (match str "kind" with
+       | "key" ->
+         let down = field "down" |> to_bool in
+         Sdl.Event.set event Sdl.Event.typ (if down then Sdl.Event.key_down else Sdl.Event.key_up);
+         Sdl.Event.set event Sdl.Event.keyboard_scancode (int "scancode");
+         Sdl.Event.set event Sdl.Event.keyboard_keymod (int "modifiers");
+         Sdl.Event.set event Sdl.Event.keyboard_repeat 0;
+         Sdl.Event.set event Sdl.Event.keyboard_state (if down then Sdl.pressed else Sdl.released)
+       | "text" ->
+         let value = str "text" in
+         if String.length value > 31 then invalid_arg "SDL text input chunk exceeds 31 UTF-8 bytes";
+         Sdl.Event.set event Sdl.Event.typ Sdl.Event.text_input;
+         Sdl.Event.set event Sdl.Event.text_input_text value
+       | "move" ->
+         Sdl.Event.set event Sdl.Event.typ Sdl.Event.mouse_motion;
+         Sdl.Event.set event Sdl.Event.mouse_motion_x (int "x");
+         Sdl.Event.set event Sdl.Event.mouse_motion_y (int "y");
+         Sdl.Event.set event Sdl.Event.mouse_motion_xrel (int "dx");
+         Sdl.Event.set event Sdl.Event.mouse_motion_yrel (int "dy")
+       | "button" ->
+         let down = field "down" |> to_bool in
+         Sdl.set_mod_state (int "modifiers");
+         Sdl.Event.set event Sdl.Event.typ (if down then Sdl.Event.mouse_button_down else Sdl.Event.mouse_button_up);
+         Sdl.Event.set event Sdl.Event.mouse_button_x (int "x");
+         Sdl.Event.set event Sdl.Event.mouse_button_y (int "y");
+         Sdl.Event.set event Sdl.Event.mouse_button_button (int "button");
+         Sdl.Event.set event Sdl.Event.mouse_button_clicks (int "clicks");
+         Sdl.Event.set event Sdl.Event.mouse_button_state (if down then Sdl.pressed else Sdl.released)
+       | "wheel" ->
+         Sdl.set_mod_state (int "modifiers");
+         Sdl.Event.set event Sdl.Event.typ Sdl.Event.mouse_wheel;
+         Sdl.Event.set event Sdl.Event.mouse_wheel_x (int "x");
+         Sdl.Event.set event Sdl.Event.mouse_wheel_y (int "y")
+       | other -> invalid_arg ("Unknown input kind: " ^ other));
+      push event
+    | "quit" ->
+      let event = Sdl.Event.create () in
+      Sdl.Event.set event Sdl.Event.typ Sdl.Event.quit;
+      push event
+    | other -> invalid_arg ("Unknown automation operation: " ^ other)
+  in
   let rec apply_actions acts = List.iter (function
     | Dispatch ev ->
       let name =
@@ -1692,6 +1848,7 @@ let () =
       Ui.frame_done ui;
       incr frame
     end;
+    Automation.service automation automation_handle;
     (let iter_ms = (perf_s () -. t0) *. 1000. in
      if iter_ms > 20. then
        Daemon_client.boot_mark (Printf.sprintf "iter %.0fms" iter_ms));
@@ -1721,6 +1878,7 @@ let () =
          sleep per hop across the serialized invoke chain. *)
       Sdl.delay (if !frame < 60 then 1l else 4l)
   done;
+  Automation.close automation;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with
    | Some c -> Sdl.gl_delete_context c
