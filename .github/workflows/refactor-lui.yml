@@ -121,7 +121,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        os: [ubuntu-22.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -134,6 +134,15 @@ jobs:
       - name: macOS system deps
         if: runner.os == 'macOS'
         run: brew install pkg-config sqlite3 sdl2 sdl2_ttf libffi gmp
+
+      - name: Select macOS SDK for LUI Metal
+        if: runner.os == 'macOS'
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
 
       - uses: ocaml/setup-ocaml@v3
         with:

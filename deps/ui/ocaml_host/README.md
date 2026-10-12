@@ -18,6 +18,13 @@ dependencies. Record `git -C "$LUI_SOURCE" rev-parse HEAD` with build logs.
 Linux needs the development packages listed in the workflow, including
 Pango, Cairo, Fontconfig, SDL2, SDL2_ttf, OpenGL, SQLite, libffi, and GMP.
 On macOS, install `pkg-config sqlite3 sdl2 sdl2_ttf libffi gmp` with Homebrew.
+Select Xcode 16.2 or a newer supported SDK before installing the OCaml
+dependencies. The current LUI Metal backend uses `MTLCompileOptions.mathMode`,
+which is absent from Xcode 15.4's SDK. CI runs on macOS 15 with Xcode 16.2
+(macOS 15.2 SDK); it does not establish compatibility with older macOS
+runtimes. Set `DEVELOPER_DIR` to the selected Xcode's `Contents/Developer`
+directory and check `xcodebuild -version` and
+`xcrun --sdk macosx --show-sdk-version`.
 
 From the repository root, with the OCaml switch selected:
 
