@@ -80,41 +80,38 @@ let selector_row st =
     ]
 
 (* cljs rating->shortcut / btn-with-shortcut colors *)
+(* cljs per-rating classes set --primary (primary-red/purple/logseq/
+   green); the native class dict lacks them, so the tint hexes are
+   spelled out — bg = color @ 5%, border = color, fg stays dark *)
 let ratings =
-  [ ("again", "flashcard.rating/again", "1", "primary-red")
-  ; ("hard", "flashcard.rating/hard", "2", "primary-purple")
-  ; ("good", "flashcard.rating/good", "3", "primary-logseq")
-  ; ("easy", "flashcard.rating/easy", "4", "primary-green")
+  [ ("again", "flashcard.rating/again", "1", "primary-red", "#e5484d")
+  ; ("hard", "flashcard.rating/hard", "2", "primary-purple", "#8e4ec6")
+  ; ("good", "flashcard.rating/good", "3", "primary-logseq", "#3b82f6")
+  ; ("easy", "flashcard.rating/easy", "4", "primary-green", "#30a46c")
   ]
 
 (* cljs btn-with-shortcut: outline sm button with per-rating --primary
    tint (bg-primary/5 border-primary), interior [label][kbd shortcut];
    ~label feeds aria (LUI renders ~text after children, so the visible
    order lives in the children) *)
-let rating_btn st i (r, label_key, sc, color) =
+let rating_btn st i (r, label_key, sc, style, hex) =
   let id = "card-" ^ r in
   row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
-    [ Ui_components.with_props
-        [ ( Lui_protocol.HoverBackground
-          , Ui_components.sv "hsl(var(--primary) / 0.1)" )
-        ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-        ; Lui_protocol.Opacity, Ui_components.fv 0.9 ]
-        (button ~key:"b" ~accessibility_identifier:id
-           ~padding_horizontal:8 ~padding_vertical:4
-           ~background:"hsl(var(--primary) / 0.05)"
-           ~border_color:"hsl(var(--primary))" ~border_width:1
-           ~style_class:(id ^ " " ^ color)
-           ~label:(t_ label_key)
-           ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
-           ~variant:`outline ~size:`sm
-           ~on_press:(fun _ -> Cards_state.rate st r)
-           [ row ~key:"inner" ~gap:4 ~cross:`center
-               [ text ~value:(t_ label_key) []
-               ; Ui_components.with_props
-                   [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
-                   (kbd ~style_class:"shui-shortcut-key"
-                      ~data_attrs:[ ("style", "transform:scale(0.9)") ]
-                      ~value:sc []) ] ])
+    [ button ~key:"b" ~accessibility_identifier:id
+        ~padding_horizontal:8 ~padding_vertical:4
+        ~background:(hex ^ "0d")
+        ~border_color:hex ~border_width:1
+        ~foreground:"rgb(23,23,23)"
+        ~style_class:(id ^ " " ^ style)
+        ~label:(t_ label_key)
+        ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
+        ~variant:`secondary ~size:`sm
+        ~on_press:(fun _ -> Cards_state.rate st r)
+        [ row ~key:"inner" ~gap:4 ~cross:`center
+            [ text ~value:(t_ label_key) []
+            ; kbd ~style_class:"shui-shortcut-key"
+                ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                ~value:sc [] ] ]
     ; text ~key:"due" ~style_class:"ls-desc"
         ~value:(reactive
                   (fun (ls : string list) ->
@@ -140,7 +137,7 @@ let info_btn st =
                ~anchor_alignment:`start
                ~on_dismiss:(fun _ -> Cards_state.toggle_info st)
                (List.map
-                  (fun (_, label_key, _, _) ->
+                  (fun (_, label_key, _, _, _) ->
                     let desc_key = label_key ^ "-desc" in
                     column ~key:("info-" ^ label_key) ~padding:16
                       [ text ~font_weight:500
@@ -203,20 +200,15 @@ let rec card_view st b phase =
             ]
         ]
     ; box ~key:"actions" ~style_class:"ls-card-actions"
-        ~margin_top:32
+        ~margin_top:32 ~main:`start ~cross:`start
         ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
         [ (if np = "show-cloze" || np = "show-answer" then
-             Ui_components.with_props
-               [ ( Lui_protocol.HoverBackground
-                 , Ui_components.sv "hsl(var(--primary) / 0.1)" )
-               ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-               ; Lui_protocol.Opacity, Ui_components.fv 0.9 ]
-               (button ~key:"answers" ~accessibility_identifier:"card-answers"
-                  ~padding_horizontal:8 ~padding_vertical:4
-                  ~background:"hsl(var(--primary) / 0.05)"
-                  ~border_color:"hsl(var(--primary))" ~border_width:1
-                  ~style_class:"card-answers"
-               ~variant:`outline ~size:`sm
+             (* cljs card-answers is a compact secondary sm button with
+                a kbd shortcut hint — no accent fill/border *)
+             button ~key:"answers" ~accessibility_identifier:"card-answers"
+               ~padding_horizontal:8 ~padding_vertical:4
+               ~style_class:"card-answers"
+               ~variant:`secondary ~size:`sm
                ~label:(if np = "show-answer" then t_ "flashcard.review/show-answers"
                        else t_ "flashcard.review/show-clozes")
                ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "s")
@@ -225,11 +217,9 @@ let rec card_view st b phase =
                    [ text ~value:(if np = "show-answer"
                                   then t_ "flashcard.review/show-answers"
                                   else t_ "flashcard.review/show-clozes") []
-                   ; Ui_components.with_props
-                       [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
-                       (kbd ~style_class:"shui-shortcut-key"
-                          ~data_attrs:[ ("style", "transform:scale(0.9)") ]
-                          ~value:"s" []) ] ])
+                   ; kbd ~style_class:"shui-shortcut-key"
+                       ~data_attrs:[ ("style", "transform:scale(0.9)") ]
+                       ~value:"s" [] ] ]
            else rating_buttons st)
         ]
     ]
@@ -344,7 +334,10 @@ let modal st =
          outside/Escape dismiss; ls-dialog-flashcards keeps the
          per-dialog CSS hooks. The opening click's 400ms debounce
          guards the modal from the same-press dismiss. *)
+      (* cljs ui__dialog-content: w-full max-w-2xl/lg:max-w-3xl →
+         min(85%, 980px); fixed 980 approximates the desktop case *)
       dialog ~key:"cards-dlg" ~style_class:"ls-dialog-flashcards"
+        ~width:980
         ~on_dismiss:(fun _ ->
           if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)
