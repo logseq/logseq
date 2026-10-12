@@ -56,13 +56,16 @@ and handles unexpected failure."
                                            :page-name page-name
                                            :db-graph-mode? true})]
       (map (fn [block]
-             (let [block (standalone-display-block block)]
+             (let [block (standalone-display-block block)
+                   ;; Only a heading is saved from the parsed properties. Others (e.g. an
+                   ;; Org :PROPERTIES: drawer typed in a block) stay in the block's text.
+                   ;; Markdown headings go up to 6; mldoc reports `####### x` as size 7.
+                   heading (get-in block [:block/properties :heading])
+                   heading (when (or (true? heading) (and (integer? heading) (<= 1 heading 6)))
+                             heading)]
                (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
-                 (:block/properties block)
-                 (merge (update-keys (:block/properties block)
-                                     (fn [k]
-                                       (or ({:heading :logseq.property/heading} k)
-                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
+                 heading
+                 (assoc :logseq.property/heading heading))))
            blocks))
     (catch :default e
       (log/error :exception e)

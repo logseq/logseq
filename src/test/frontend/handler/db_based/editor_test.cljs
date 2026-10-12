@@ -55,6 +55,17 @@
                            :logseq.property.node/display-type]))
           (str "Preserves content for " display-type)))))
 
+(deftest wrap-parse-block-text-that-parses-to-other-properties-test
+  (testing "an Org property drawer typed in a block is saved as text"
+    (let [title ":PROPERTIES:\n:x: 1\n:END:"]
+      (is (= {:block/title title}
+             (select-keys (db-editor-handler/wrap-parse-block {:block/title title})
+                          [:block/title :logseq.property/heading])))))
+  (testing "seven hashes are not a heading"
+    (is (= {:block/title "####### seven"}
+           (select-keys (db-editor-handler/wrap-parse-block {:block/title "####### seven"})
+                        [:block/title :logseq.property/heading])))))
+
 (deftest wrap-parse-block-markdown-hashtag-link-test
   (testing "markdown link targets cached from hashtag autocomplete are saved as refs"
     (let [tag-uuid #uuid "5c6cd067-c602-4955-96b8-74b62e08113c"
