@@ -579,16 +579,22 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
     }
       /* The material follows the app theme, not the window's
          effective appearance (an SDL window doesn't track the app's
-         own light/dark switch). */
+         own light/dark switch). BehindWindow materials resolve
+         their tint from the view's effective appearance, so pin
+         the appearance on the effect AND its window — the window
+         default is Aqua and can override the view pin. */
       Class appcls = objc_getClass("NSAppearance");
       if (appcls != Nil) {
         id ap = ((id (*)(Class, SEL, id))objc_msgSend)(
             appcls, sel_registerName("appearanceNamed:"),
             menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua"
                                 : "NSAppearanceNameAqua"));
-        if (ap != nil)
+        if (ap != nil) {
           ((void (*)(id, SEL, id))objc_msgSend)(
               effect, sel_registerName("setAppearance:"), ap);
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              win, sel_registerName("setAppearance:"), ap);
+        }
       }
     /* SDL or a driver update may re-opaque the metal layer; keep it
        transparent while the effect lives. */
