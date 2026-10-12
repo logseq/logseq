@@ -15,7 +15,7 @@ env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
   # lui feat/ml-backend commit validated locally
-  LUI_REF: '00ba1776'
+  LUI_REF: '00ba17765ad652179b383afbfa8f3eccc71648de'
 
 jobs:
   ubuntu:
@@ -51,7 +51,9 @@ jobs:
         id: opam-cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.opam
+          path: |
+            ~/.opam
+            _opam
           key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ env.LUI_REF }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
           restore-keys: |
             ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
@@ -61,10 +63,10 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
-      - name: Pin lui @ ${{ env.LUI_REF }}
+      - name: Checkout lui at LUI_REF
         run: |
           rm -rf "$RUNNER_TEMP/lui"
-          git clone --filter=blob:none https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git clone https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
           git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
@@ -79,7 +81,9 @@ jobs:
         uses: actions/cache/save@v4
         if: steps.opam-cache.outputs.cache-hit != 'true'
         with:
-          path: ~/.opam
+          path: |
+            ~/.opam
+            _opam
           key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: JS deps (db-worker, ui)
