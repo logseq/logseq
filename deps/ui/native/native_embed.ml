@@ -263,7 +263,7 @@ let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
             walk parent (shallow_of rt parent :: acc) (depth + 1)
         | None -> acc
     in
-    walk node [] 0
+    List.rev (walk node [] 0)
   in
   match shallow_of rt node with
   | Js.Json.JObject kvs ->

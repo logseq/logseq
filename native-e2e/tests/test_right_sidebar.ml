@@ -103,4 +103,58 @@ let tests =
             Suite.equal ctx "Content list is the native scroll owner"
               (element app content |> member "tag" |> to_string) "scroll";
             validate_graph ctx app))
+  ; Suite.test
+      ~covers:["ocaml-e2e/test/test_right_sidebar.ml::same-block-updates-in-main-and-right-sidebar"]
+      "same-block-updates-in-main-and-right-sidebar" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            create_page app "Sidebar live source";
+            let page_name = title app in
+            let initial_title = "sidebar live block before" in
+            let updated_title = "sidebar live block after" in
+            let property_name = "sidebar-live-property" in
+            let initial_value = "sidebar property before" in
+            let updated_value = "sidebar property after" in
+            let block = Client.sdk_call app "append_block_in_page"
+              [`String initial_title;
+               `Assoc ["properties", `Assoc [property_name, `String initial_value]]] in
+            let uuid = block |> member "uuid" |> to_string in
+            let main_block = ".ls-page-blocks #ls-block-" ^ uuid in
+            let sidebar_block = ".cp__right-sidebar #ls-block-" ^ uuid in
+            ignore (Client.wait_for ~text:initial_title app
+              (main_block ^ " .block-title-wrap"));
+            ignore (Client.sdk_call app "open_in_right_sidebar" [`String uuid]);
+            ignore (Client.wait_for app sidebar_block);
+            let breadcrumbs = Client.wait_for ~text:page_name app
+              ".cp__right-sidebar .sidebar-item-header .breadcrumb" in
+            Suite.check ctx "Sidebar breadcrumb contains the current source page"
+              (breadcrumbs <> []);
+            Suite.equal ctx "One UUID has main and sidebar instances"
+              (List.length (Client.query app ("#ls-block-" ^ uuid))) 2;
+            ignore (Client.sdk_call app "update_block"
+              [`String uuid; `String updated_title]);
+            ignore (Client.sdk_call app "upsert_block_property"
+              [`String uuid; `String property_name; `String updated_value]);
+            List.iter (fun block_selector ->
+              let title_elements = Client.wait_for ~text:updated_title app
+                (block_selector ^ " .block-title-wrap") in
+              Suite.check ctx "View renders the updated block title"
+                (List.exists (fun el -> Client.text_content el = updated_title) title_elements);
+              let property_elements = Client.wait_for ~text:property_name app
+                (block_selector ^ " .property-k") in
+              Suite.check ctx "View renders the property key"
+                (List.exists (fun el -> Client.text_content el = property_name) property_elements);
+              let value_elements = Client.wait_for ~text:updated_value app
+                (block_selector ^ " .property-value-container") in
+              Suite.check ctx "View renders the updated property value"
+                (List.exists (fun el -> Client.text_content el = updated_value) value_elements))
+              [main_block; sidebar_block];
+            Suite.check ctx "Neither view retains the old title"
+              (not (Client.query app ("#ls-block-" ^ uuid ^ " .block-title-wrap")
+                |> List.exists (fun el -> Client.text_content el = initial_title)));
+            Suite.equal ctx "Worker retains one block with the updated title"
+              (Client.q ~inputs:[Wire.Uuid uuid] app
+                "[:find ?title :in $ ?uuid :where [?b :block/uuid ?uuid] [?b :block/title ?title]]")
+              (Wire.Set [Wire.Array [Wire.String updated_title]]);
+            validate_graph ctx app;
+            ignore (Client.screenshot ~name:"sidebar-live-block.png" app)))
   ]
