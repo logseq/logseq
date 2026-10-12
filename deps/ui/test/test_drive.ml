@@ -187,6 +187,7 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   { session = s
   ; check
   ; keydown = (fun ~meta key -> Stub_dom.keydown ~meta key)
+  ; command = Cmdk_state.dispatch_id
   ; toggle_sidebar = (fun () -> click_sel "prop:accessibility-identifier=\"left-menu\"")
   ; storage_get = Ui_services.storage_get
   ; open_settings = (fun () -> Dialogs_state.open_ "settings")

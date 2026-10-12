@@ -92,8 +92,9 @@ let theme_row ctx =
   Ui_components.form_row ~key:"theme" ~min_height:96
     ~label:
       (Ui_components.form_label ~key:"theme-l"
+         ~text:""
          ~text_signal:
-           (Signal.map
+           (reactive
               (fun m ->
                 let effective =
                   if m = "system" then
@@ -105,7 +106,7 @@ let theme_row ctx =
                   (if effective = "dark" then T.theme_light
                    else T.theme_dark))
               (Signal.value mode))
-         ~text:"" ())
+         ())
     ~control:
       (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
          [ box ~key:"theme-a" [ V.theme_modes_ul ~ctx ~st:mode ]
@@ -703,8 +704,7 @@ let nav_item ~key (id, label, icn) =
       else "settings-menu-item")
     (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
-       ~selected_signal:
-         (Signal.map (fun (s : S.t) -> s.tab = id) (S.signal ()))
+       ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
        ~on_press:(fun _ -> S.set_tab id) ())
 
 let pane_of ~modal ctx tab =

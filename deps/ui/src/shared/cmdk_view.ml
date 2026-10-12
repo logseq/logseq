@@ -312,7 +312,7 @@ let hl_span key (item_sig : S.item Signal.signal)
          item_sig)
     [ keyed
         ~source:
-          (Signal.map
+          (reactive
              (fun it ->
                hl_segments ~query:it.S.iq ~text:(title_of it)
                |> List.filter (fun (_, s) -> s <> "")
@@ -358,10 +358,10 @@ let row_data_attrs (it : S.item) =
    isc change *)
 let shortcut_slot svs (item_sig : S.item Signal.signal) : t =
   if_
-    ~test:(Signal.map (fun (it : S.item) -> it.S.isc <> "") item_sig)
+    ~test:(reactive (fun (it : S.item) -> it.S.isc <> "") item_sig)
     (Ui_components.shortcut_slot ~key:"sc-row"
        ~opacity:
-         (Signal.map
+         (reactive
             (fun (it : S.item) -> if it.S.ihl then 1. else 0.9)
             item_sig)
        [ reactive
@@ -374,45 +374,6 @@ let shortcut_slot svs (item_sig : S.item Signal.signal) : t =
    mousemove dispatch; [data-cmdk-item][data-hoverable][data-highlighted]
    [data-kb-highlighted] is the lui-overlay.css row contract (and the
    e2e locator) *)
-(* state-channel signals bound on the item column: kb highlight paints
-   the chosen-row tokens; a mouse hover paints the same bg plus the
-   light ring (cleared in dark via the --lx-cmdk-* tokens) *)
-let item_bg item_sig =
-  Signal.map
-    (fun (it : S.item) ->
-      if it.S.ihl && not it.S.imouse then
-        "var(--lx-gray-03, var(--lx-cmdk-chosen-bg))"
-      else "transparent")
-    item_sig
-
-let item_shadow item_sig =
-  Signal.map
-    (fun (it : S.item) ->
-      if it.S.ihl && not it.S.imouse then "var(--lx-cmdk-kb-shadow)"
-      else "none")
-    item_sig
-
-let item_hover_bg item_sig =
-  Signal.map
-    (fun (it : S.item) ->
-      if it.S.imouse then "var(--lx-gray-03, var(--lx-cmdk-chosen-bg))"
-      else "transparent")
-    item_sig
-
-let item_hover_ring item_sig =
-  Signal.map
-    (fun (it : S.item) ->
-      if it.S.imouse then
-        if it.S.ihl then "var(--lx-cmdk-hover-ring-hl)"
-        else "var(--lx-cmdk-hover-ring)"
-      else "none")
-    item_sig
-
-let item_cursor item_sig =
-  Signal.map
-    (fun (it : S.item) -> if it.S.imouse then "pointer" else "default")
-    item_sig
-
 let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
   (* header presence is fixed per item (baked at item build); the
      one-time read picks the 2px top spacer vs the 6px pad *)
@@ -425,7 +386,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                  (fun it -> Option.value ~default:"" it.S.header)
              ; if_
                  ~test:
-                   (Signal.map
+                   (reactive
                       (fun (it : S.item) -> it.S.ibadge = S.Header_badge)
                       item_sig)
                  (badge_el svs "hb")
@@ -438,20 +399,53 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
          native tree — on_press routes row clicks to the item directly *)
       Ui_parts.pressable
         ~on_press:(fun _ -> S.run_item st (Signal.get item_sig))
-        (Ui_components.cmdk_item_row ~key:"item"
-           ~data_attrs:(Signal.map row_data_attrs item_sig)
-           ~background:(item_bg item_sig)
-           ~shadow:(item_shadow item_sig)
-           ~hover_background:(item_hover_bg item_sig)
-           ~hover_ring:(item_hover_ring item_sig)
-           ~cursor:(item_cursor item_sig)
+        ((* state-channel signals bound on the item column: kb highlight
+            paints the chosen-row tokens; a mouse hover paints the same
+            bg plus the light ring (cleared in dark via the --lx-cmdk-*
+            tokens) *)
+         Ui_components.cmdk_item_row ~key:"item"
+           ~data_attrs:(reactive row_data_attrs item_sig)
+           ~background:
+             (reactive
+                (fun (it : S.item) ->
+                  if it.S.ihl && not it.S.imouse then
+                    "var(--lx-gray-03, var(--lx-cmdk-chosen-bg))"
+                  else "transparent")
+                item_sig)
+           ~shadow:
+             (reactive
+                (fun (it : S.item) ->
+                  if it.S.ihl && not it.S.imouse then
+                    "var(--lx-cmdk-kb-shadow)"
+                  else "none")
+                item_sig)
+           ~hover_background:
+             (reactive
+                (fun (it : S.item) ->
+                  if it.S.imouse then
+                    "var(--lx-gray-03, var(--lx-cmdk-chosen-bg))"
+                  else "transparent")
+                item_sig)
+           ~hover_ring:
+             (reactive
+                (fun (it : S.item) ->
+                  if it.S.imouse then
+                    if it.S.ihl then "var(--lx-cmdk-hover-ring-hl)"
+                    else "var(--lx-cmdk-hover-ring)"
+                  else "none")
+                item_sig)
+           ~cursor:
+             (reactive
+                (fun (it : S.item) ->
+                  if it.S.imouse then "pointer" else "default")
+                item_sig)
            ~header
            ~main:
              (Ui_components.cmdk_item_main ~key:"main"
                 [ Ui_components.cmdk_icon_chip ~key:"icon"
                     [ if_
                         ~test:
-                          (Signal.map
+                          (reactive
                              (fun (it : S.item) -> it.S.iicon <> "")
                              item_sig)
                         ((* cljs icon-component/get-node-icon-cp wraps
@@ -471,14 +465,14 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                         [ hl_span "label" item_sig (fun it -> it.S.ititle)
                         ; if_
                             ~test:
-                              (Signal.map
+                              (reactive
                                  (fun (it : S.item) ->
                                    it.S.ibadge = S.Text_badge)
                                  item_sig)
                             (badge_el svs "tb")
                         ; if_
                             ~test:
-                              (Signal.map
+                              (reactive
                                  (fun (it : S.item) -> it.S.info <> None)
                                  item_sig)
                             (Ui_components.cmdk_info_text ~key:"info"
@@ -549,22 +543,17 @@ let group_header svs (st : S.t) (g : S.group) : t =
     ]
 
 let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
-  let items_sig =
-    Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
-  in
-  (* the bottom hairline mirrors :last-child's missing border — a group
-     is last when its gid closes the view's group list *)
-  let last_sig =
-    Signal.map2
-      (fun (v : S.view) (g : S.group) ->
-        match List.rev v.S.groups with
-        | last :: _ -> last.S.gid = g.S.gid
-        | [] -> true)
-      (Signal.value st.S.vs) group_sig
-  in
   Ui_components.cmdk_group ~key:"group"
     ~kind:(gid_name (Signal.get group_sig).S.gid)
-    ~last:last_sig
+    (* the bottom hairline mirrors :last-child's missing border — a group
+       is last when its gid closes the view's group list *)
+    ~last:
+      (reactive
+         (fun (v : S.view) (g : S.group) ->
+           match List.rev v.S.groups with
+           | last :: _ -> last.S.gid = g.S.gid
+           | [] -> true)
+         (Signal.value st.S.vs) group_sig)
     ~pad:(if (Signal.get group_sig).S.gid = S.G_create then 0 else 4)
     [ reactive
         ~equal:(fun (a : S.group) b ->
@@ -579,7 +568,9 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
           else group_header svs st g)
         group_sig
     ; column ~key:"results" ~style_class:"search-results"
-        [ keyed ~source:items_sig ~key:S.item_dom_key
+        [ keyed
+            ~source:(reactive (fun (g : S.group) -> g.S.gitems) group_sig)
+            ~key:S.item_dom_key
             ~cmp:Stdlib.compare
             ~mount:(fun item_sig -> item_row svs st item_sig)
         ]
@@ -589,11 +580,11 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
 
 let groups_body svs st : t =
  fun ctx parent ->
-  let groups_sig =
-    Signal.map (fun (v : S.view) -> v.S.groups)
-      (Signal.value (st.S.vs))
-  in
-  (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
+  (keyed
+     ~source:
+       (reactive (fun (v : S.view) -> v.S.groups)
+          (Signal.value (st.S.vs)))
+     ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
      ~mount:(fun g -> group_el svs st g))
     ctx parent
@@ -756,14 +747,16 @@ let hints svs st : t =
         [ Ui_components.cmdk_hints_row ~key:"hints-row"
             [ Ui_components.cmdk_hints_label ~key:"hint-label"
                 ~value:(svs.Svs.i18n "cmdk.tip/label")
-            ; reactive (tip_el svs)
-                (Signal.map
-                   (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
-                   (Signal.value (st.S.vs)))
+            ; reactive
+                (fun (v : S.view) ->
+                  tip_el svs (v.S.filter <> None, v.S.tip))
+                (Signal.value (st.S.vs))
             ]
         ]
     ; (* the hint bar's shape is the action variant, not the item's
-         identity — remount only when the variant flips *)
+         identity — remount only when the variant flips; ~equal compares
+         the derived source value (the highlighted item), so the item
+         projection stays a separate signal *)
       reactive
         ~equal:(fun (a : S.item option) b ->
           hint_variant a = hint_variant b)
@@ -884,12 +877,13 @@ let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
     { Svs.key = handle_keydown st
     ; click = handle_click st
     ; mousemove = handle_mousemove st };
-  let open_sig =
-    Signal.map (fun (v : S.view) -> v.S.open_) (Signal.value (st.S.vs))
-  in
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
   box ~key:"cmdk_view"
-    [ if_ ~test:open_sig (modal_shell services st) ]
+    [ if_
+        ~test:
+          (reactive (fun (v : S.view) -> v.S.open_)
+             (Signal.value (st.S.vs)))
+        (modal_shell services st) ]
     context parent

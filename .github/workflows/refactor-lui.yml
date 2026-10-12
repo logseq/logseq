@@ -15,7 +15,8 @@ env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
   # lui feat/ml-backend commit validated locally
-  LUI_REF: '00ba17765ad652179b383afbfa8f3eccc71648de'
+  # placeholder_signal (lui#202) — repoint to feat/ml-backend once merged
+  LUI_REF: 'e9c9c31982bd5fc9e784cda0bfa72c55b1b0fe74'
 
 jobs:
   ubuntu:
