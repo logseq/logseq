@@ -152,13 +152,12 @@
                   [(group-label :nodes)          :nodes         (visible-items :nodes)]]
 
                  include-slash?
-                 [(when-not node-exists?
-                    [(group-label :create)       :create        (create-items input)])
-
-                  [(group-label :current-page)   :current-page  (visible-items :current-page)]
+                 [[(group-label :current-page)   :current-page  (visible-items :current-page)]
                   [(group-label :nodes)          :nodes         (visible-items :nodes)]
                   [(group-label :files)          :files         (visible-items :files)]
-                  [(group-label :filters)        :filters       (visible-items :filters)]]
+                  [(group-label :filters)        :filters       (visible-items :filters)]
+                  (when-not node-exists?
+                    [(group-label :create)       :create        (create-items input)])]
 
                  filter-group
                  [(when (= filter-group :nodes)
@@ -171,14 +170,14 @@
 
                  :else
                  (->>
-                  [(when-not node-exists?
-                     [(group-label :create)         :create         (create-items input)])
-                   [(group-label :current-page)     :current-page   (visible-items :current-page)]
+                  [[(group-label :current-page)     :current-page   (visible-items :current-page)]
                    [(group-label :nodes)            :nodes          (visible-items :nodes)]
                    [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
                    [(group-label :commands)         :commands       (visible-items :commands)]
                    [(group-label :files)            :files          (visible-items :files)]
-                   [(group-label :filters)          :filters        (visible-items :filters)]]
+                   [(group-label :filters)          :filters        (visible-items :filters)]
+                   (when-not node-exists?
+                     [(group-label :create)         :create         (create-items input)])]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]

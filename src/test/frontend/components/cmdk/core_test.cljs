@@ -15,6 +15,31 @@
    [logseq.shui.ui :as shui]
    [promesa.core :as p]))
 
+(deftest existing-matches-precede-page-creation-test
+  (let [page {:result-type :page
+              :source-block {:page? true :block.temp/original-title "car"}}
+        alias-target {:page? true :block.temp/original-title "vehicle"}
+        alias {:result-type :page :alias alias-target :source-block alias-target}
+        namespaced-page {:result-type :page
+                         :source-block {:page? true :block.temp/original-title "transport/car"}}]
+    (doseq [[input filter-group results expected-groups expected-action]
+            [["c" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [alias]}} [:nodes :create] :open]
+             ["transport/ca" nil {:nodes {:items [namespaced-page]}} [:nodes :create] :open]
+             ["ca" :nodes {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:current-page {:items [page]}} [:current-page :create] :open]
+             ["carr" nil {} [:create] :create]
+             ["transport/carr" nil {} [:create] :create]]]
+      (testing (str "Default action for " input " with filter " filter-group)
+        (let [state {::cmdk/input (atom input)
+                     ::cmdk/filter (atom (when filter-group {:group filter-group}))
+                     ::cmdk/results (atom results)}
+              items (vec (mapcat last (cmdk/state->results-ordered state)))]
+          (is (= expected-groups (mapv :group items)))
+          (is (= expected-action (cmdk/state->action state (first items)))))))))
+
 (deftest shift-open-page-uses-page-action-test
   (async done
     (let [page-id #uuid "11111111-1111-1111-1111-111111111111"
