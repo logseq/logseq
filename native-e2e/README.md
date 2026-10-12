@@ -159,6 +159,11 @@ it waits for the real daemon, native renderer and the default graph page title
 before returning. This prevents early SDK calls from racing repo activation.
 Native selectors preserve quoted attribute values containing whitespace, commas
 and brackets; queries still use the production native retained-tree matcher.
+Standard inputs expose `attrs.placeholder` only from their mounted LUI
+`PlaceholderValue`. Snapshots also expose actual `HeadingLevel` as the numeric
+`heading-level` field and explicit `As` as the string `as` field, when present.
+These are read-only native semantic props, not fabricated HTML: the native
+`tag=heading` remains unchanged. No input value or new protocol logging is added.
 `Client.click` polls a semantic node identity and rectangle until stable for
 200 ms, then rechecks after the real SDL pointer move. It emits one button
 down/up pair only at the settled target, or times out after 15 seconds; it never
