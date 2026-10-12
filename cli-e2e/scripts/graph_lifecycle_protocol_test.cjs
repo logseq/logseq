@@ -459,6 +459,52 @@ test('an absent graph does not run client configuration cleanup', async t => {
   assert.equal(committed, false);
 });
 
+for (const [label, contents] of [
+  ['empty', ''], ['unparsable', 'not-json'], ['missing PID', '{"lock-id":"x"}'],
+  ['non-integer PID', '{"pid":"123","lock-id":"x"}'], ['non-positive PID', '{"pid":0,"lock-id":"x"}'],
+]) {
+  test(`a server-list lock with ${label} contents is replaced as stale`, async t => {
+    const root = fixture(t);
+    const lockFile = path.join(root, 'server-list.lock');
+    fs.writeFileSync(lockFile, contents);
+    const result = await lifecycle.deleteGraph(storage(root), 'demo');
+    assert.equal(result.existed, false);
+    assert.equal(fs.existsSync(lockFile), false);
+  });
+}
+
+test('a server-list lock held by a live process is retained until timeout', async t => {
+  const root = fixture(t);
+  const lockFile = path.join(root, 'server-list.lock');
+  const contents = JSON.stringify({ pid: process.pid, 'lock-id': 'live' });
+  fs.writeFileSync(lockFile, contents);
+  await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /Timed out acquiring server-list lock/);
+  assert.equal(fs.readFileSync(lockFile, 'utf8'), contents);
+});
+
+test('an unreadable server-list lock fails without being removed', async t => {
+  const root = fixture(t);
+  const lockFile = path.join(root, 'server-list.lock');
+  fs.mkdirSync(lockFile);
+  await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), { code: 'EISDIR' });
+  assert.equal(fs.statSync(lockFile).isDirectory(), true);
+});
+
+test('an interrupted server-list lock write does not publish a partial lock', async t => {
+  const root = fixture(t);
+  const lockFile = path.join(root, 'server-list.lock');
+  const writeFileSync = fs.writeFileSync;
+  t.after(() => { fs.writeFileSync = writeFileSync; });
+  fs.writeFileSync = (file, data, options) => {
+    if (typeof file !== 'string' || !file.startsWith(lockFile)) return writeFileSync(file, data, options);
+    writeFileSync(file, '', options);
+    throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+  };
+  await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), { code: 'ENOSPC' });
+  fs.writeFileSync = writeFileSync;
+  assert.deepEqual(fs.readdirSync(root).filter(name => name.startsWith('server-list.lock')), []);
+});
+
 test('a queued retry cannot commit against a recreated generation', async t => {
   const root = fixture(t);
   await lifecycle.createGraph(storage(root), 'demo');
