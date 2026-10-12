@@ -169,8 +169,9 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
     ])
     context parent
 
-(* hidden-properties toggle row — `p a` parity *)
-let toggle_row : t =
+(* hidden-properties toggle row — `p a` parity. Fresh element each
+   render so the label + chevron follow the current [S.show_hidden]. *)
+let toggle_row () : t =
   let label =
     I18n.t
       (if !S.show_hidden then "property/collapse-hidden-properties"
@@ -237,16 +238,25 @@ let can_toggle_hidden (ctx : V.ctx) ~below_rows =
       | None -> false)
 
 (* panel rows + hidden rows (when toggled) + the toggle row itself —
-   class pages host hidden props in the class section instead *)
+   class pages host hidden props in the class section instead.
+   [has_hidden]: while expanded the worker merges hidden rows into
+   [d.rows] (carrying logseq.property/hide?) and leaves [d.hidden]
+   empty — count both shapes or the toggle would disappear on expand. *)
 let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
     (d : S.area_data) : t list =
+  let has_hidden =
+    d.hidden <> []
+    || List.exists
+         (fun r -> D.row_hidden r || D.row_hide_empty r)
+         d.rows
+  in
   List.map (panel_row ctx ~owner_is_tag ~owner_title) d.rows
   @ (if owner_is_tag then []
      else
        (if !S.show_hidden && d.hidden <> [] then
           List.map (panel_row ctx ~owner_is_tag ~owner_title) d.hidden
         else [])
-       @ (if can_toggle && d.hidden <> [] then [ toggle_row ] else []))
+       @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
 
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
   column ~gap:0 ~corner_radius:6 ~style_class:"properties-panel"
