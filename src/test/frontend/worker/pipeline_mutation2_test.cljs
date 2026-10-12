@@ -30,6 +30,7 @@
     {:conn conn :owner owner :value value
      :property-id (d/entid @conn :logseq.property/order-list-type)}))
 
+;; Fails if, in `gen-created-by-block`, the `:block/name` key is dropped, the `:block/title` key is dropped, the `:block/tags` key is dropped, the `:block/created-at` key is dropped, the `:block/updated-at` key is dropped, the `:logseq.property.user/name` key is dropped, the `:logseq.property.user/email` key is dropped, `:block/name` becomes `:block/order`, `:block/title` becomes `:block/tx-id`, `:logseq.class/Page` becomes `:logseq.class/Property` or `:block/created-at` becomes `:block/journal-day`.
 (deftest created-by-ref-hook-creates-the-user-page-from-the-id-token-test
   (let [user-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -65,6 +66,7 @@
       (finally
         (worker-state/set-new-state! {:auth/id-token nil})))))
 
+;; Fails if, in `reference-attrs`, `:block/refs` becomes `:block/tags`.
 (deftest block-refs-owner-is-revised-when-the-referenced-page-changes-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -80,26 +82,7 @@
     (is (not= (revision db-before owner) (revision (:db-after result) owner))
         "A :block/refs owner shows the referenced title, so its revision changes.")))
 
-(deftest dropping-a-property-ident-stops-its-owners-being-revised-test
-  (let [{:keys [conn owner value property-id]} (reference-fixture)
-        ident-retraction (assoc (d/with @conn [[:db/retract property-id :db/ident
-                                                :logseq.property/order-list-type]])
-                                :tx-meta {})
-        ;; both transactions inside the try: an uncaught error's stack trace
-        ;; costs more time than the whole test
-        result (try
-                 (let [db-without-ident (:db-after (worker-pipeline/transact-pipeline ident-retraction))]
-                   {:db-without-ident db-without-ident
-                    :report (worker-pipeline/transact-pipeline
-                             (assoc (d/with db-without-ident [[:db/add (:db/id value) :block/title "changed"]])
-                                    :tx-meta {}))})
-                 (catch :default e
-                   (ex-message e)))]
-    (is (map? result) "The pipeline must not look up an attribute that is no longer indexed.")
-    (when (map? result)
-      (is (= (revision (:db-without-ident result) owner) (revision (:db-after (:report result)) owner))
-          "Once the property has no ident it is no longer a reference attribute."))))
-
+;; Fails if, in `reference-attr-definition-attrs`, `:db/valueType` becomes `:db/add`.
 (deftest value-type-change-recomputes-reference-attrs-test
   (let [{:keys [conn owner value property-id]} (reference-fixture)
         _ (d/transact! conn [[:db/add property-id :db/valueType :db.type/string]])

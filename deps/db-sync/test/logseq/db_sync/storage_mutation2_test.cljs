@@ -7,6 +7,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]))
 
+;; Fails if, in `duplicate-column-error?`, the `string/lower-case` step is dropped or the `.-message` step is dropped.
 (deftest duplicate-column-error-test
   (let [duplicate-column-error? #'storage/duplicate-column-error?]
     (testing "the message is compared lower-cased"
@@ -18,6 +19,7 @@
       (is (false? (duplicate-column-error? (js/Error. "duplicate column name: other") "outliner_op")))
       (is (false? (duplicate-column-error? (js/Error. "no such table: outliner_op") "outliner_op"))))))
 
+;; Fails if, in `set-initial-checksum!`, the `:type` key is dropped, the `:existing-checksum` key is dropped, the `:snapshot-checksum` key is dropped, `:db-sync/stale-snapshot-checksum` becomes `:db-sync/skip-checksum-update?`, the `:t` key is dropped or `:db-sync/snapshot-checksum-after-tx-log` becomes `:db-sync/stale-snapshot-checksum`.
 (deftest set-initial-checksum-errors-carry-context-test
   (let [ex-data-of (fn [f] (try (f) nil (catch :default e (ex-data e))))]
     (testing "an existing different checksum is not overwritten"
@@ -45,6 +47,7 @@
   [name]
   {:block/uuid (random-uuid) :block/name name :block/title name})
 
+;; Fails if, in `append-tx-for-tx-report`, `:db-sync/skip-tx-log?` becomes `:db-sync/snapshot-checksum-after-tx-log`, the `vec` step is dropped or `:db-sync/skip-checksum-update?` becomes `:db-sync/skip-tx-log?`.
 (deftest tx-report-listener-honours-tx-meta-test
   (let [sql (test-sql/make-sql)
         conn (storage/open-conn sql)

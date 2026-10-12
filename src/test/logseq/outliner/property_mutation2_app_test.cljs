@@ -14,6 +14,7 @@
        (map :db/ident)
        (remove #{:block/tags})))
 
+;; Fails if, in `get-block-positioned-properties`, the `(concat own-properties)` step is dropped or the `distinct` step is dropped.
 (deftest positioned-properties-include-own-and-class-properties-once
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {:build/class-properties [:p1 :shared]}}
@@ -29,6 +30,7 @@
     (is (= #{:user.property/own :user.property/shared :user.property/p1} (set idents)))
     (is (= 3 (count idents)))))
 
+;; Fails if, in `property-with-position?`, `:logseq.property/hide-empty-value` becomes `:logseq.property/hide?` or `:logseq.property/hide?` becomes `:logseq.property/icon`.
 (deftest hidden-properties-are-not-positioned
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {:build/class-properties [:shown :hide-empty :hidden]}}
@@ -42,6 +44,7 @@
                         :logseq.property/hide-empty-value true}])
     (is (= [:user.property/shown] (positioned-idents @conn b1-id)))))
 
+;; Fails if, in `tag-class-page?`, the body becomes `nil`.
 (deftest tag-class-pages-leave-out-properties-of-their-own-tags
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:m {:build/class-properties [:owner]}
@@ -52,6 +55,7 @@
     (is (contains? (set (map :db/ident (:block/tags (d/entity @conn k-id)))) :user.class/m))
     (is (not (contains? (set (positioned-idents @conn k-id)) :user.property/owner)))))
 
+;; Fails if, in `tag-class-page?`, `:logseq.class/Tag` becomes `:logseq.class/Task`.
 (deftest task-subclass-blocks-position-their-empty-class-properties
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:project {:build/class-extends [:logseq.class/Task]
@@ -62,6 +66,7 @@
         b1-id (:db/id (db-test/find-block-by-content @conn "b1"))]
     (is (contains? (set (positioned-idents @conn b1-id)) :user.property/owner))))
 
+;; Fails if, in `get-block-positioned-properties`, the `(ldb/sort-by-order)` step is dropped.
 (deftest positioned-properties-are-sorted-by-property-order
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}

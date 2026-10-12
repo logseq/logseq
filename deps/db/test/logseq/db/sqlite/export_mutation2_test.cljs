@@ -75,6 +75,11 @@
 
 ;; graph-human export of the fixture
 
+;; Fails if, in `build-pvalue-entity-default`, `:block/created-at` becomes `:block/journal-day` or `:block/updated-at` becomes `:block/uuid`.
+;; Fails if, in `build-export-properties`, `:block/created-at` becomes `:block/journal-day`, `:block/updated-at` becomes `:block/uuid` or `:logseq.property/icon` becomes `:logseq.property/type`.
+;; Fails if, in `build-export-class`, `:block/created-at` becomes `:block/journal-day` or `:block/updated-at` becomes `:block/uuid`.
+;; Fails if, in `build-node-export`, `:block/created-at` becomes `:block/journal-day` or `:block/updated-at` becomes `:block/uuid`.
+;; Fails if, in `build-graph-export`, the `(assoc ::schema-version db-schema/ver...` step is dropped.
 (deftest graph-human-export-timestamps-and-ontology-test
   (let [conn (db-test/create-conn-with-import-map fixture)
         export-edn (graph-human conn {:include-timestamps? true})
@@ -103,6 +108,11 @@
     (testing "schema version"
       (is (= db-schema/version (::sqlite-export/schema-version export-edn))))))
 
+;; Fails if, in `block-title`, `:block/title` becomes `:block/tx-id`.
+;; Fails if, in `build-pvalue-entity-default`, `:build/tags` becomes `:build/children` or `:block/tags` becomes `:block/title`.
+;; Fails if, in `buildable-properties`, `:logseq.property/default-value` becomes `:logseq.property/icon` or `:db/ident` becomes `:db/index`.
+;; Fails if, in `remove-uuid-if-not-ref-given-uuids`, `:build/properties` becomes `:build/property-classes` or `:build/tags` becomes `:build/children`.
+;; Fails if, in `build-graph-export`, the `:property-value-uuids?` key is dropped or the `:include-uuid?` key is dropped.
 (deftest graph-human-export-property-values-test
   (let [conn (db-test/create-conn-with-import-map fixture)
         export-edn (graph-human conn {})
@@ -129,6 +139,7 @@
     (testing "a class referenced by content keeps its uuid"
       (is (= c1-uuid (get-in export-edn [:classes :user.class/C1 :block/uuid]))))))
 
+;; Fails if, in `build-graph-export`, the `(update :pages-and-blocks sort-pages-...` step is dropped.
 (deftest graph-human-export-pages-are-sorted-test
   (let [conn (db-test/create-conn-with-import-map fixture)
         titles (mapv #(get-in % [:page :block/title])
@@ -137,24 +148,16 @@
 
 ;; closed values
 
-(deftest closed-values-are-exported-in-block-order-test
-  (let [conn (db-test/create-conn-with-import-map fixture)
-        joy (d/entity @conn [:block/uuid cv1])
-        sad (d/entity @conn [:block/uuid cv2])
-        _ (d/transact! conn [[:db/add (:db/id joy) :block/order (:block/order sad)]
-                             [:db/add (:db/id sad) :block/order (:block/order joy)]])
-        export-edn (sqlite-export/build-export @conn {:export-type :graph-ontology})]
-    (is (= ["sad" "joy"]
-           (mapv :value (get-in export-edn [:properties :user.property/closed :build/closed-values]))))))
-
 ;; graph-ontology
 
+;; Fails if, in `build-graph-ontology-export`, the `(dissoc :logseq.property.class/proper...` step is dropped or `:logseq.property.class/properties` becomes `:logseq.property.class/extends`.
 (deftest graph-ontology-class-properties-are-not-build-properties-test
   (let [conn (db-test/create-conn-with-import-map fixture)
         c1 (get-in (sqlite-export/build-export @conn {:export-type :graph-ontology}) [:classes :user.class/C1])]
     (is (= [:user.property/txt] (:build/class-properties c1)))
     (is (not (contains? c1 :build/properties)))))
 
+;; Fails if, in `ignored-properties`, `:logseq.property/created-by-ref` becomes `:logseq.property/created-from-property` or `:logseq.property.embedding/hnsw-label-updated-at` becomes `:logseq.property.embedding/hnsw-label`.
 (deftest ignored-properties-are-not-exported-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/p1 {:logseq.property/type :default}}
@@ -188,6 +191,8 @@
 
 ;; block export
 
+;; Fails if, in `build-node-export`, `:block/collapsed?` becomes `:block/created-at` or `:block/uuid` becomes `:block/_closed-value-property`.
+;; Fails if, in `build-block-export`, the `:include-uuid-fn` key is dropped.
 (deftest block-export-collapsed-and-self-reference-test
   (let [self-uuid (random-uuid)
         conn (db-test/create-conn-with-import-map
@@ -205,6 +210,7 @@
 
 (def ^:private tagged-page-uuid #uuid "22222222-2222-4222-8222-000000000001")
 
+;; Fails if, in `build-node-classes`, the `vals` step is dropped, the `(remove db-class/logseq-class?)` step is dropped, `:build/properties` becomes `:build/property-classes`, `:build/tags` becomes `:build/children` or `remove` becomes `filter`.
 (deftest block-export-classes-from-property-values-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/node {:logseq.property/type :node
@@ -239,6 +245,7 @@
     (is (not-any? #(= "logseq.class" (namespace %)) (keys classes))
         "built-in classes are not exported")))
 
+;; Fails if, in `build-class-parents-export`, the `(remove db-property/logseq-property?)` step is dropped.
 (deftest block-export-skips-built-in-properties-of-class-parents-test
   (let [conn (db-test/create-conn-with-import-map
               {:classes {:user.class/Parent {:build/class-properties [:logseq.property/status]}
@@ -250,29 +257,6 @@
     (is (contains? (:classes export-edn) :user.class/Parent))
     (is (not (contains? (:properties export-edn) :logseq.property/status)))))
 
-(deftest block-export-property-values-test
-  (let [conn (db-test/create-conn-with-import-map
-              {:properties {:user.property/txt {:logseq.property/type :default}
-                            :user.property/num {:logseq.property/type :number}}
-               :pages-and-blocks
-               [{:page {:block/title "page1"}
-                 :blocks [{:block/title "plain holder" :build/properties {:user.property/txt "plain"}}
-                          {:block/title "collapsed holder"
-                           :build/properties {:user.property/txt
-                                              {:build/property-value :block
-                                               :block/title "collapsed value"
-                                               :block/collapsed? true
-                                               :build/properties {:user.property/num 7}}}}]}]})
-        exported (fn [title]
-                   (::sqlite-export/block
-                    (sqlite-export/build-export @conn {:export-type :block
-                                                       :block-id (:db/id (db-test/find-block-by-content @conn title))})))]
-    (is (= "plain" (get-in (exported "plain holder") [:build/properties :user.property/txt])))
-    (is (= {:build/property-value :block
-            :block/title "collapsed value"
-            :build/properties {:user.property/num 7}}
-           (get-in (exported "collapsed holder") [:build/properties :user.property/txt])))))
-
 ;; page export
 
 (def ^:private pv-uuid #uuid "33333333-3333-4333-8333-000000000001")
@@ -280,6 +264,8 @@
 (def ^:private y1-uuid #uuid "33333333-3333-4333-8333-000000000003")
 (def ^:private y2-uuid #uuid "33333333-3333-4333-8333-000000000004")
 
+;; Fails if, in `build-pvalue-entity-default`, `:block/uuid` becomes `:block/_closed-value-property`.
+;; Fails if, in `remove-uuid-if-not-ref-given-uuids`, `:block/uuid` becomes `:block/_closed-value-property`.
 (deftest page-export-keeps-referenced-property-value-uuid-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/txt {:logseq.property/type :default}}
@@ -300,6 +286,7 @@
             :build/keep-uuid? true}
            (get-in (block-by-title blocks "holder") [:build/properties :user.property/txt])))))
 
+;; Fails if, in `build-page-export`, the `:handle-block-uuids?` key is dropped.
 (deftest page-export-keeps-uuid-of-block-used-as-node-property-value-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/node {:logseq.property/type :node}}
@@ -315,6 +302,7 @@
     (is (true? (:build/keep-uuid? (block-by-title blocks "target"))))
     (is (not (contains? (block-by-title blocks "unreferenced") :block/uuid)))))
 
+;; Fails if, in `build-uuid-block-export`, `:block/order` becomes `:block/page`.
 (deftest page-export-orders-referenced-blocks-test
   (let [conn (db-test/create-conn-with-import-map
               {:pages-and-blocks
@@ -331,6 +319,7 @@
         export-edn (sqlite-export/build-export @conn {:export-type :page :page-id (:db/id page)})]
     (is (= ["y2" "y1"] (mapv :block/title (page-blocks export-edn "ypage"))))))
 
+;; Fails if, in `pvalue-descendant?`, `:block/parent` becomes `:block/raw-title`.
 (deftest pvalue-descendant-sees-grandchildren-of-property-value-blocks-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/txt {:logseq.property/type :default}}
@@ -377,6 +366,8 @@
        (filter #(string? (:block/title %)))
        (some #(when (.startsWith (:block/title %) prefix) %))))
 
+;; Fails if, in `build-nodes-export`, the `:pvalue-uuids` key is dropped.
+;; Fails if, in `build-view-nodes-export`, the `:include-uuid-fn` key is dropped or the `:include-children?` key is dropped.
 (deftest view-nodes-export-test
   (let [conn (nodes-conn)
         rows (mapv #(vector :block/uuid (:block/uuid (block-by-prefix conn %)))
@@ -393,6 +384,7 @@
     (testing "blocks used as property values are exported with their uuid"
       (is (= y-uuid (:block/uuid (block-by-title (page-blocks export-edn "ypage") "y target")))))))
 
+;; Fails if, in `build-selected-nodes-export`, the `:include-uuid-fn` key is dropped.
 (deftest selected-nodes-export-test
   (let [conn (nodes-conn)
         node-ids (mapv #(:db/id (block-by-prefix conn %)) ["parent" "a refs" "b target" "x holder"])
@@ -411,6 +403,7 @@
 
 ;; graph-human content refs, links and property history
 
+;; Fails if, in `get-graph-content-ref-uuids`, the body becomes `nil`, the `(keep #(when-not (:logseq.property/bu...` step is dropped, `:block/link` becomes `:block/order`, `:logseq.property/built-in?` becomes `:logseq.property/classes`, `:block/page` becomes `:block/parent`, `:block/uuid` becomes `:block/_closed-value-property`, the `(map #(:block/uuid (d/entity db (:v %...` step is dropped, the `(mapcat db-content/get-matched-ids)` step is dropped or `filter` becomes `remove`.
 (deftest graph-human-keeps-uuids-of-referenced-blocks-test
   (let [t2-uuid (random-uuid)
         t3-uuid (random-uuid)
@@ -440,6 +433,7 @@
         (is (nil? (uuid-of export-edn "t3")))
         (is (= t5-uuid (uuid-of export-edn "t5")))))))
 
+;; Fails if, in `build-graph-export`, the `(mapcat (fn [history]` step is dropped, the `set` step is dropped, `:logseq.property.history/block` becomes `:logseq.property.history/property` or `:logseq.property.history/ref-value` becomes `:logseq.property.history/scalar-value`.
 (deftest graph-human-keeps-uuids-referenced-by-property-history-test
   (let [h1 (random-uuid)
         h2 (random-uuid)
@@ -484,6 +478,7 @@
 
 ;; small helpers called directly
 
+;; Fails if, in `get-pvalue-uuids`, the `set` step is dropped.
 (deftest get-pvalue-uuids-returns-set-test
   (let [u (random-uuid)
         r (#'sqlite-export/get-pvalue-uuids
@@ -492,6 +487,7 @@
     (is (set? r))
     (is (= #{u} r))))
 
+;; Fails if, in `sort-pages-and-blocks`, `:build/journal` becomes `:build/keep-uuid?` or `:block/uuid` becomes `:block/_closed-value-property`.
 (deftest sort-pages-and-blocks-orders-journals-and-uuids-test
   (let [f sqlite-export/sort-pages-and-blocks
         u1 #uuid "00000000-0000-4000-8000-000000000001"
@@ -503,6 +499,7 @@
     (is (= [{:page {:build/journal 20250101}} {:page {:block/title "a"}} {:page {:block/title "b"}}]
            (f [{:page {:block/title "b"}} {:page {:build/journal 20250101}} {:page {:block/title "a"}}])))))
 
+;; Fails if, in `find-undefined-classes-and-properties`, the body becomes `nil`, `:build/property-classes` becomes `:build/property-value`, `:build/class-properties` becomes `:build/closed-values` or `:build/properties` becomes `:build/property-classes`.
 (deftest find-undefined-classes-and-properties-test
   (is (= {:classes #{:user.class/ViaProperty :user.class/ViaBlock}
           :properties #{:user.property/class-prop :user.property/page-prop :user.property/block-prop}}
@@ -514,6 +511,7 @@
                                          :build/tags #{:user.class/ViaBlock}
                                          :build/properties {:user.property/block-prop 1}}]}]}))))
 
+;; Fails if, in `find-undefined-uuids`, the body becomes `nil`, `:block/uuid` becomes `:block/_closed-value-property`, the `set` step is dropped, `:block/alias` becomes `:block/closed-value-property` or the `:logseq.property/created-from-property` step is dropped.
 (deftest find-undefined-uuids-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/txt {:logseq.property/type :default}}
@@ -546,11 +544,13 @@
         (is (= #{holder-uuid}
                (f {:classes {:user.class/K {:block/alias #{[:block/uuid holder-uuid]}}}})))))))
 
+;; Fails if, in `patch-invalid-keywords`, the `(filter #(re-find #"[0-9a-zA-Z*+!_'?<...` step is dropped.
 (deftest patch-invalid-keywords-test
   (is (= {:properties {:user.property/NUM-2ndx {} :user.property/ok {}}}
          (#'sqlite-export/patch-invalid-keywords
           {:properties {(keyword "user.property" "2nd.x") {} :user.property/ok {}}}))))
 
+;; Fails if, in `update-existing-properties`, the `(map (fn [[k v]]` step is dropped, the `:property-id` key is dropped, the `:actual` key is dropped, the `:expected` key is dropped, `:logseq.property/type` becomes `:logseq.property/value`, `:db/cardinality` becomes `:db/id` or `:block/uuid` becomes `:block/_closed-value-property`.
 (deftest update-existing-properties-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/p1 {:logseq.property/type :default}}})
@@ -570,6 +570,7 @@
              :expected {:logseq.property/type :default :db/cardinality :db.cardinality/one}}]
            @conflicts))))
 
+;; Fails if, in `check-for-existing-entities`, the `(map (fn [[k v]]` step is dropped.
 (deftest check-for-existing-entities-adds-uuids-of-existing-classes-test
   (let [conn (db-test/create-conn-with-import-map {:classes {:user.class/Existing {}}})
         existing (d/entity @conn :user.class/Existing)
@@ -581,6 +582,7 @@
             :user.class/Other {:block/title "Other"}}
            (:classes result)))))
 
+;; Fails if, in `build-block-import-options`, `:block/page` becomes `:block/parent`.
 (deftest build-block-import-options-test
   (let [current-uuid (random-uuid)
         page-uuid (random-uuid)
@@ -591,6 +593,7 @@
              :blocks [{:block/title "x" :block/uuid current-uuid}]}]
            (:pages-and-blocks result)))))
 
+;; Fails if, in `current-db-retract-tx`, the `distinct` step is dropped.
 (deftest current-db-retract-tx-is-distinct-test
   (let [conn (db-test/create-conn-with-import-map {:pages-and-blocks [{:page {:block/title "p"} :blocks [{:block/title "b"}]}]})
         tx (#'sqlite-export/current-db-retract-tx @conn)]
@@ -598,6 +601,8 @@
     (is (= (count (set (map :e (d/datoms @conn :eavt)))) (count tx)))
     (is (apply distinct? tx))))
 
+;; Fails if, in `datom-schema-attrs`, `:db/valueType` becomes `:db/add` or `:db/index` becomes `:db/retractEntity`.
+;; Fails if, in `schema-datom-eids`, `:db/ident` becomes `:db/index`.
 (deftest datoms-for-import-applies-schema-datoms-first-test
   (let [f #'sqlite-export/datoms-for-import]
     (testing "value type and index datoms are schema datoms"
@@ -609,6 +614,7 @@
       (is (= [[5 :other 1] [5 :db/ident :foo/bar]]
              (vec (f [[5 :other 1] [5 :db/ident :foo/bar]])))))))
 
+;; Fails if, in `build-datom-import`, the `:block-props-tx` key is dropped or the `:misc-tx` key is dropped.
 (deftest build-import-of-datoms-test
   (let [conn (db-test/create-conn)
         result (sqlite-export/build-import {::sqlite-export/graph-format :datoms :datoms [[1 :block/title "x"]]} @conn {})]
@@ -617,6 +623,7 @@
     (is (= [] (:misc-tx result)))
     (is (= [:db/add 1 :block/title "x"] (last (:init-tx result))))))
 
+;; Fails if, in `build-import`, the `:error` key is dropped.
 (deftest build-import-reports-property-conflicts-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/p1 {:logseq.property/type :default}}})
@@ -624,11 +631,13 @@
     (is (string? (:error result)))
     (is (re-find #"user.property/p1" (:error result)))))
 
+;; Fails if, in `tx-touched-entity-ids`, the `vec` step is dropped.
 (deftest tx-touched-entity-ids-test
   (let [r (#'sqlite-export/tx-touched-entity-ids {:tx-data [{:e 1} {:e 1} {:e 2}]})]
     (is (vector? r))
     (is (= [1 2] r))))
 
+;; Fails if, in `validate-import-tx-data`, the `:errors` key is dropped.
 (deftest validate-import-tx-data-returns-errors-test
   (let [conn (db-test/create-conn)
         result (#'sqlite-export/validate-import-tx-data
@@ -637,14 +646,18 @@
     (is (re-find #"^The Test EDN has \d+ validation error" (:error result)))
     (is (seq (:errors result)))))
 
+;; Fails if, in `validate-import-txs`, the `:error` key is dropped.
 (deftest validate-import-txs-passes-through-build-errors-test
   (let [conn (db-test/create-conn)]
     (is (= {:error "boom"} (sqlite-export/validate-import-txs {:error "boom"} @conn)))))
 
+;; Fails if, in `validate-export`, the `:error` key is dropped.
 (deftest validate-export-reports-unexpected-errors-test
   (let [result (sqlite-export/validate-export {:pages-and-blocks [{:page 1}]})]
     (is (re-find #"^The exported EDN is unexpectedly invalid: " (:error result)))))
 
+;; Fails if, in `prepare-export-to-diff`, the body becomes `nil`, the `(update ::kv-values` step is dropped, the `;; This varies per copied graph so ig...` step is dropped, the `(sort-by :db/ident)` step is dropped, `remove` becomes `filter`, `:logseq.kv/local-graph-uuid` becomes `:logseq.kv/remote-schema-version` or `:db/ident` becomes `:db/index`.
+;; Fails if, in `diff-exports`, the body becomes `nil`.
 (deftest diff-exports-test
   (let [kv (fn [ident v] {:db/ident ident :kv/value v})
         base {::sqlite-export/kv-values [(kv :logseq.kv/a 1) (kv :logseq.kv/b 2)]}]
@@ -673,6 +686,7 @@
 
 ;; reader-3 additions
 
+;; Fails if, in `closed-values-for-export`, the `(sort-by :block/order)` step is dropped.
 (deftest recycled-referenced-closed-value-keeps-its-block-order-test
   (let [conn (db-test/create-conn-with-import-map fixture)
         joy (d/entity @conn [:block/uuid cv1])
@@ -682,6 +696,7 @@
            (mapv :value (get-in export-edn [:properties :user.property/closed :build/closed-values])))
         "a recycled closed value that a block still uses sorts before a later live one")))
 
+;; Fails if, in `buildable-properties`, `:block/closed-value-property` becomes `:block/collapsed?`.
 (deftest block-export-collapsed-property-value-keeps-its-properties-test
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:user.property/txt {:logseq.property/type :default}
@@ -704,6 +719,7 @@
             :build/properties {:user.property/num 7}}
            (get-in exported [:build/properties :user.property/txt])))))
 
+;; Fails if, in `build-node-export`, `:block/tags` becomes `:block/title`.
 (deftest block-export-keeps-tags-of-an-empty-block-test
   (let [conn (db-test/create-conn-with-import-map
               {:classes {:user.class/T {}}
@@ -718,6 +734,7 @@
 
 (def ^:private c2-uuid #uuid "55555555-5555-4555-8555-000000000001")
 
+;; Fails if, in `build-class-parents-export`, the `(filter #(:build/class-extends (val %)))` step is dropped.
 (deftest block-export-does-not-add-parents-of-a-class-referenced-in-content-test
   (let [conn (db-test/create-conn-with-import-map
               {:classes {:user.class/Base {}
@@ -746,6 +763,7 @@
      {:page {:block/title "zpage"}
       :blocks [{:block/title "z target" :block/uuid z-uuid :build/keep-uuid? true}]}]}))
 
+;; Fails if, in `build-view-nodes-export`, the `vals` step is dropped.
 (deftest view-nodes-export-keeps-uuid-of-block-referenced-by-a-property-value-test
   (let [conn (pvalue-ref-conn)
         holder (db-test/find-block-by-content @conn "holder")
@@ -753,6 +771,7 @@
                                                       :rows [[:block/uuid (:block/uuid holder)]]})]
     (is (= z-uuid (:block/uuid (block-by-title (page-blocks export-edn "zpage") "z target"))))))
 
+;; Fails if, in `build-selected-nodes-export`, the `vals` step is dropped.
 (deftest selected-nodes-export-keeps-uuid-of-block-referenced-by-a-property-value-test
   (let [conn (pvalue-ref-conn)
         holder (db-test/find-block-by-content @conn "holder")

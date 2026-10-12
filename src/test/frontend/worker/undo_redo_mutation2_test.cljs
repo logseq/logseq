@@ -92,6 +92,10 @@
                                item))
                            op))))))
 
+;; Fails if, in `set-pending-editor-info!`, the body becomes `nil`.
+;; Fails if, in `take-pending-editor-info!`, the body becomes `nil`.
+;; Fails if, in `undo-redo-result`, `:block/title` becomes `:block/tx-id`, `:block/uuid` becomes `:block/title` or the `:block-content` key is dropped.
+;; Fails if, in `get-debug-state`, the `:pending-editor-info` key is dropped.
 (deftest pending-editor-info-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)
@@ -109,6 +113,8 @@
         (is (= [info] (:editor-cursors result)))
         (is (= "child" (:block-content result)))))))
 
+;; Fails if, in `record-editor-info!`, the body becomes `nil`.
+;; Fails if, in `gen-undo-ops!`, the `vec` step is dropped.
 (deftest record-editor-info-and-block-content-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)
@@ -125,6 +131,8 @@
       (is (= [info] (:editor-cursors redo-result)))
       (is (= "edited" (:block-content redo-result))))))
 
+;; Fails if, in `gen-undo-ops!`, `filter` becomes `remove`.
+;; Fails if, in `referenced-history-tx-ids`, the body becomes `nil`, the `(mapcat identity)` step is dropped, the `(keep (fn [item]` step is dropped, the `set` step is dropped or `:db-sync/tx-id` becomes `:db-sync/forward-outliner-ops`.
 (deftest history-entry-ids-and-referenced-tx-ids-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)
@@ -139,6 +147,9 @@
     (is (= #{tx-id-1 tx-id-2} (worker-undo-redo/referenced-history-tx-ids test-repo)))
     (is (= #{} (worker-undo-redo/referenced-history-tx-ids "other-repo")))))
 
+;; Fails if, in `undo-redo-action-meta`, the body becomes `nil`, `:db-sync/tx-id` becomes `:db-sync/forward-outliner-ops`, the `(dissoc :db-sync/tx-id)` step is dropped, the `(assoc` step is dropped or `:db-sync/source-tx-id` becomes `:db-sync/tx-id`.
+;; Fails if, in `push-opposite-op!`, `:db-sync/normalized-tx-data` becomes `:db-sync/reversed-tx-data` or `:db-sync/reversed-tx-data` becomes `:db-sync/source-tx-id`.
+;; Fails if, in `process-db-op`, `:db-sync/tx-id` becomes `:db-sync/forward-outliner-ops`.
 (deftest synced-graph-history-action-meta-and-sanitized-redo-entry-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)
@@ -185,6 +196,7 @@
       (is (false? (:undo? (:tx-meta call))))
       (is (true? (:redo? (:tx-meta call)))))))
 
+;; Fails if, in `replay-recorded-datoms!`, the `:db-sync/keys` key is dropped, the `:outliner-op` key is dropped, the `:local-tx?` key is dropped, the `:persist-op?` key is dropped, the `:undo?` key is dropped, the `:redo?` key is dropped, the `:db-sync/tx-id` key is dropped, the `:db-sync/source-tx-id` key is dropped, the `:db-sync/forward-outliner-ops` key is dropped, the `:db-sync/inverse-outliner-ops` key is dropped, `:db-sync/tx-id` becomes `:db-sync/forward-outliner-ops`, `:db-sync/inverse-outliner-ops` becomes `:db-sync/keys` or `not` becomes `identity`.
 (deftest local-graph-replay-tx-meta-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)
@@ -215,6 +227,7 @@
       (is (= [[:fwd]] (:db-sync/forward-outliner-ops redo-meta)))
       (is (= [[:inv]] (:db-sync/inverse-outliner-ops redo-meta))))))
 
+;; Fails if, in `replay-recorded-datoms!`, the `:undo?` key is dropped.
 (deftest local-graph-replay-that-throws-is-refused-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         block-uuid (child-uuid conn)]
