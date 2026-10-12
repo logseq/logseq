@@ -31,14 +31,14 @@ transport/persistence slice; **later** means not covered by that slice.
 | 10 | `db-worker-node-parse-args-ignores-host-and-port` (440) | P: unsupported CLI flags do not change repo/root | 749; real parser, omits JS nil-field assertions | executed real child with ignored legacy flags; host/port/repo observed via health |
 | 11 | `db-worker-node-parse-args-ignores-auth-token` (452) | P: ignore deprecated auth-token flag | 765; real parser | executed with ignored auth-token; no direct nil-field parser assertion |
 | 12 | `db-worker-node-parse-args-ignores-rtc-ws-url` (460) | P: ignore deprecated websocket flag | 776; real parser | executed with ignored rtc-ws-url; no direct nil-field parser assertion |
-| 13 | `db-worker-node-parse-args-recognizes-create-empty-db` (468) | P: recognize empty-graph flag | 788; real parser | later |
+| 13 | `db-worker-node-parse-args-recognizes-create-empty-db` (468) | P: recognize empty-graph flag | 788; real parser | executed CLI flag and resulting empty graph; original direct parser boolean assertion remains in Fest |
 | 14 | `db-worker-node-parse-args-ignores-server-list-file` (476) | P: ignore deprecated registry flag | 802; real parser | executed real child; legacy path unused, default registry published |
 | 15 | `db-worker-node-parse-args-recognizes-version` (486) | P: recognize version flag | 819; real parser | later |
 | 16 | `db-worker-node-main-version-exits-early-without-repo` (493) | P: version/exit 0 without opening graph | 826; seam for process exit/start | executed; actual exit 0, revision stdout, no graph/registry |
 | 17 | `db-worker-node-main-missing-root-dir-prints-error-and-exits-1` (526) | P: missing root produces error and exit 1 | 846; seam for process exit/start | executed; actual exit 1, empty stdout, required error stderr |
 | 18 | `db-worker-node-main-missing-repo-prints-error-and-exits-1` (554) | P: missing repo produces error and exit 1 | 873; seam for process exit/start | executed; actual exit 1, empty stdout, required error stderr |
 | 19 | `db-worker-node-owner-source-cli-is-published` (582) | P: `/healthz` publishes `owner-source=cli` | 899; real | selected |
-| 20 | `db-worker-node-owner-source-electron-is-published` (602) | P: `/healthz` publishes `owner-source=electron` | 912; real | later; no Electron host required for daemon assertion |
+| 20 | `db-worker-node-owner-source-electron-is-published` (602) | P: `/healthz` publishes `owner-source=electron` | 912; real | executed real daemon health assertion; no Electron host/orchestration claim |
 | 21 | `db-worker-node-handle-event-encodes-sse-json-payload` (622) | P: SSE `data:` JSON contains Transit payload; original calls `handle-event` directly | 928; seam for sink; real encoder | selected for emitted production event; not direct synthetic event |
 | 22 | `db-worker-node-handle-event-preserves-namespaced-type` (640) | P: namespaced event type and Transit payload survive SSE; original uses synthetic `db-worker/ui-request` | 950; seam for sink; real encoder | selected for production `thread-api/set-ui-state`; synthetic kind remains separate |
 | 23 | `db-worker-node-help-documents-required-root-dir-and-omits-server-list-file` (658) | P: public help flags and ANSI styling | 972; mixed stdout/color seams | executed plain CLI help; forced ANSI/TTY assertion remains later |
@@ -50,9 +50,9 @@ transport/persistence slice; **later** means not covered by that slice.
 | 29 | `db-worker-node-stop-retains-publication-until-process-exit` (813) | P: registry publication persists at stop; same PID remains in original in-process test | 1145; seam invoke/db-exists, real registry | later; process-exit timing differs |
 | 30 | `db-worker-node-repo-error-handles-keyword-methods` (836) | P: missing/mismatched repo rejection and repo-less method exemptions; cljs keyword method accepted | 1176; real pure validator, methods translated to strings | selected for HTTP repo errors; keyword-method equivalence later |
 | 31 | `db-worker-node-set-context-does-not-trigger-repo-mismatch` (864) | P: context/sync configuration is exempt from repo mismatch | 1276; real | later; no real RTC server in this case |
-| 32 | `db-worker-node-create-empty-startup-skips-built-in-initial-data` (889) | P: empty graph lacks library page | 1309; real | later |
-| 33 | `db-worker-node-sync-status-requires-repo-and-returns-structured-status` (913) | P: structured sync state and missing-repo error | 1327; real but no server | later; server-backed RTC separate |
-| 34 | `db-worker-node-sync-start-and-status-invoke-path` (944) | P: sync remains inactive without WS config | 1363; real but no server | later; no claim of real RTC |
+| 32 | `db-worker-node-create-empty-startup-skips-built-in-initial-data` (889) | P: empty graph lacks library page | 1309; real | executed real empty daemon and original Library query |
+| 33 | `db-worker-node-sync-status-requires-repo-and-returns-structured-status` (913) | P: structured sync state and missing-repo error | 1327; real but no server | executed original missing-repo/status-key assertions over native HTTP; server-backed RTC separate |
+| 34 | `db-worker-node-sync-start-and-status-invoke-path` (944) | P: sync remains inactive without WS config | 1363; real but no server | executed original nil start/inactive status with no WS; no claim of real RTC |
 | 35 | `db-worker-node-daemon-smoke-test` (971) | P: health/readyz, registry, lock, invoke Transit, typed transact/query | 1403; real *in-process* | selected with real child PID; publication-at-stop requires separate assertion |
 | 36 | `db-worker-node-vector-search-finds-outline-context-after-rebuild` (1048) | P: semantic vector search after rebuild | 1494; conditional `darwin` plus embeddings URL, otherwise true/skip | later; never count optional skip as verified |
 | 37 | `db-worker-node-import-edn` (1124) | P: export/import graph EDN between repos | 1562; real | later |
@@ -62,13 +62,13 @@ transport/persistence slice; **later** means not covered by that slice.
 | 41 | `db-worker-node-import-db-binary-accepts-raw-request-body` (1367) | P: octet-stream POST import from raw SQLite bytes | 1821; real Node Buffer transport | selected; native byte string preserves exact bytes |
 | 42 | `db-worker-node-export-client-ops-db-binary` (1431) | P: client-ops binary has SQLite header | 1877; real | selected |
 | 43 | `db-worker-node-backup-db-sqlite` (1455) | P: backup path exists and bytes import into second graph | 1908; real | selected; backup generated by endpoint only |
-| 44 | `db-worker-node-accepts-prefix-equivalent-repo-test` (1518) | P: `demo` and `logseq_db_demo` match | 1969; real | later |
+| 44 | `db-worker-node-accepts-prefix-equivalent-repo-test` (1518) | P: `demo` and `logseq_db_demo` match | 1969; real | executed original bare/prefixed repo create-or-open HTTP 200/ok assertion |
 | 45 | `db-worker-node-repo-mismatch-test` (1540) | P: mismatched repo returns HTTP 409/code | 1990; real | selected |
 | 46 | `db-worker-node-lock-prevents-multiple-daemons` (1562) | P: another owner cannot acquire same graph | 2010; real but same PID | executed; competing executable exits 1/repo-locked, first owner remains ready |
 | 47 | `db-worker-node-ownership-covers-import-backup-and-reopen` (1584) | P: ownership persists across mutate/reopen until stop | 2030; real within one PID | executed lifetime via real child contenders after import/backup/close/reopen; original direct lock-file assertion not reproduced |
 | 48 | `db-worker-node-mutations-require-retained-ownership` (1614) | P: lost ownership rejects mutating methods | 2081; injected ownership failure, real HTTP | later; production lock loss reproduction only |
 | 49 | `db-worker-node-desktop-and-cli-share-same-graph-daemon` (1640) | O: actual Electron/CLI reuse path belongs to orchestrator | 2129; real daemon but inline imitation, not real Electron/CLI | later; native UI/CLI integration owner |
-| 50 | `db-worker-node-validation-error-returns-400` (1691) | P: invalid outliner tag assignment maps to HTTP 400, not 500 | 2183; real | later; use original invalid operation |
+| 50 | `db-worker-node-validation-error-returns-400` (1691) | P: invalid outliner tag assignment maps to HTTP 400, not 500 | 2183; real | executed original Journal tag operation, typed fixture and HTTP 400/ok=false/message assertions |
 | 51 | `db-worker-node-query-validate-error-returns-400-with-invalid-query-code` (1741) | P: invalid query returns 400/code/message | 2240; real | selected |
 | 52 | `db-worker-node-opening-graph-does-not-run-maintenance` (1769) | P: cold reopen retains `graph-last-gc-at=0` | 2272; real same PID | selected; actual different PID and typed graph values |
 | 53 | `close-bound-repo-releases-db-after-sync-stop-fails` (1799) | P: close DB despite sync-stop failure, propagate error | 2306; injected invoke failure | later; no fake successful sync or RTC server |
