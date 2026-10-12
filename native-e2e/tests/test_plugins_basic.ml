@@ -171,4 +171,82 @@ let tests =
                   (Client.sdk_call app "get_property" [str name]) `Null)
               ["default"; "number"; "date"; "datetime"; "checkbox"; "url";
                "node"; "json"; "string"];
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "insert-block-with-properties"]
+      "insert-block-with-properties" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let name = "insert-block-properties-test" in
+            new_page app name;
+            let properties = `Assoc
+                [ "x1", `Bool true; "x2", str "https://logseq.com"; "x3", `Int 1
+                ; "x4", `List [`Int 1]; "x5", `Assoc ["foo", str "bar"]
+                ; "x6", str "Page x"; "x7", `List [str "Page y"; str "Page z"]
+                ; "x8", str "some content" ] in
+            let schema = `Assoc
+                ["x6", `Assoc ["type", str "page"]
+                ; "x7", `Assoc ["type", str "page"]] in
+            let block = Client.sdk_call app "insert_block"
+                [str name; str "b1";
+                 `Assoc ["properties", properties; "schema", schema]] in
+            let field key = member (":plugin.property._test_plugin/" ^ key) block in
+            let get value = Client.sdk_call app "get_block" [value] in
+            Suite.equal ctx "Inferred checkbox is true" (field "x1") (`Bool true);
+            Suite.equal ctx "URL property resolves to its exact block title"
+              (member "title" (get (field "x2"))) (str "https://logseq.com");
+            Suite.equal ctx "Number property resolves to its exact value"
+              (member ":logseq.property/value" (get (field "x3"))) (`Int 1);
+            Suite.equal ctx "Many-number property preserves its first value"
+              (member ":logseq.property/value" (get (field "x4" |> to_list |> List.hd))) (`Int 1);
+            Suite.equal ctx "JSON property is serialized exactly"
+              (field "x5") (str "{\"foo\":\"bar\"}");
+            Suite.equal ctx "Explicit page schema resolves the first page name"
+              (member "name" (get (field "x6"))) (str "page x");
+            Suite.equal ctx "Explicit page schema preserves many page names"
+              (`List (field "x7" |> to_list |> List.map (fun value -> member "name" (get value))))
+              (`List [str "page y"; str "page z"]);
+            let text_block = get (field "x8") in
+            Suite.equal ctx "Text property resolves to its exact block title"
+              (member "title" text_block) (str "some content");
+            Suite.check ctx "Text property block belongs to a page"
+              (member "page" text_block <> `Null);
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "update-block-with-properties"]
+      "update-block-with-properties" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let name = "update-block-properties-test" in
+            new_page app name;
+            let block = Client.sdk_call app "insert_block" [str name; str "b1"] in
+            let properties = `Assoc
+                [ "y1", `Bool true; "y2", str "https://logseq.com"; "y3", `Int 1
+                ; "y4", `List [`Int 1]; "y5", `Assoc ["foo", str "bar"]
+                ; "y6", str "Page x"; "y7", `List [str "Page y"; str "Page z"]
+                ; "y8", str "some content" ] in
+            let schema = `Assoc
+                ["y6", `Assoc ["type", str "page"]
+                ; "y7", `Assoc ["type", str "page"]] in
+            ignore (Client.sdk_call app "update_block"
+                      [str (uuid block); str "b1-new-content";
+                       `Assoc ["properties", properties; "schema", schema]]);
+            let updated = Client.sdk_call app "get_block" [str (uuid block)] in
+            let field key = member (":plugin.property._test_plugin/" ^ key) updated in
+            let get value = Client.sdk_call app "get_block" [member "id" value] in
+            Suite.equal ctx "Updated inferred checkbox is true" (field "y1") (`Bool true);
+            Suite.equal ctx "Updated URL property resolves to its exact block title"
+              (member "title" (get (field "y2"))) (str "https://logseq.com");
+            Suite.equal ctx "Updated number property resolves to its exact value"
+              (member ":logseq.property/value" (get (field "y3"))) (`Int 1);
+            Suite.equal ctx "Updated many-number property preserves its first value"
+              (member ":logseq.property/value" (get (field "y4" |> to_list |> List.hd))) (`Int 1);
+            Suite.equal ctx "Updated JSON property is serialized exactly"
+              (field "y5") (str "{\"foo\":\"bar\"}");
+            Suite.equal ctx "Updated explicit page schema resolves the first page name"
+              (member "name" (get (field "y6"))) (str "page x");
+            Suite.equal ctx "Updated explicit page schema preserves many page names"
+              (`List (field "y7" |> to_list |> List.map (fun value -> member "name" (get value))))
+              (`List [str "page y"; str "page z"]);
+            let text_block = get (field "y8") in
+            Suite.equal ctx "Updated text property resolves to its exact block title"
+              (member "title" text_block) (str "some content");
+            Suite.check ctx "Updated text property block belongs to a page"
+              (member "page" text_block <> `Null);
             validate ctx app)) ]
