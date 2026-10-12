@@ -41,7 +41,10 @@ let selected_label sel decks =
     | None -> t_ "flashcard/all-cards"
 
 let selector_row st =
+  (* cljs header row: flex flex-row items-center gap-2 — the fixed 32px
+     height keeps the select, + button and n/N text on one center line *)
   row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
+    ~height:32 ~gap:8
     [ Ui_components.with_props
         [ Lui_protocol.Position, Ui_components.sv "relative" ]
         (box ~key:"combo" ~style_class:"ls-cards-select"
