@@ -285,6 +285,8 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
           | Some id when not retryable ->
               (* Keep accepted edits visible until their journal echo
                  arrives; that pull also removes the rejected overlay. *)
+              if successful_tx_ids <> [] then
+                client.discarded_overlay_tx_ids := id :: !(client.discarded_overlay_tx_ids);
               ignore
                 (Sync_apply.mark_failed_txs
                    ~rebuild:(successful_tx_ids = []) repo [ id ])
@@ -384,59 +386,19 @@ let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
   require_non_negative remote_tx (context ~repo ~typ:"tx/batch/ok" ());
   Sync_apply.ack_upload_response repo client;
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
-  (* master's batch-ok is bookkeeping only: the local tx already is the
-     conn's confirmed state. The equivalent here replays each acked
-     entry's stored normalized .tx — the payload the server ingested —
-     onto the server conn. The display already shows those facts, so
-     nothing republishes and no journal pull is needed. *)
-  let confirm_txs =
-    List.filter_map
-      (fun tx_id ->
-         match Sync_client_op.get_local_tx_entry repo tx_id with
-         | Some entry ->
-             Some
-               (Wire.Map
-                  (List.filter_map Fun.id
-                     [ Some (Wire.keyword "tx-id", Wire.String entry.tx_id)
-                     ; Option.map
-                         (fun op ->
-                            (Wire.keyword "outliner-op", Wire.keyword op))
-                         entry.outliner_op
-                     ; Some (Wire.keyword "tx-data", entry.tx) ]))
-         | None ->
-             Worker_log.warn "db-sync/batch-ok-missing-local-tx"
-               [ "repo", repo; "tx-id", tx_id ];
-             None)
-      !(client.inflight)
-  in
+  (* ACK clears the outbox only. Apply the server's journal from the current
+     watermark: upload chunks and sanitized transactions can differ from the
+     stored local operation. The display stays visible until that pull lands. *)
   ignore
     (Sync_apply.mark_pending_txs_false ~rebuild:false repo
        !(client.inflight));
   client.inflight := [];
   Sync_util.clear_last_sync_error client;
-  let confirmed =
-    try
-      Sync_replay.confirm_local_txs repo confirm_txs;
-      true
-    with e ->
-      (* the journal still holds the verbatim rows — pull them *)
-      Worker_log.warn "db-sync/batch-ok-local-confirm-failed"
-        [ "repo", repo; "error", Printexc.to_string e ];
-      request_pull client
-        (Option.value (Sync_client_op.get_local_tx repo) ~default:0);
-      false
-  in
-  (* advance the watermark only once those rows are on the server conn —
-     a stale ack must also never regress it *)
-  let local_tx =
-    Option.value (Sync_client_op.get_local_tx repo) ~default:0
-  in
-  if confirmed && remote_tx_n > local_tx then
-    Sync_client_op.update_local_tx repo remote_tx_n;
   broadcast_rtc_state client;
   let local_tx =
     Option.value (Sync_client_op.get_local_tx repo) ~default:0
   in
+  request_pull client local_tx;
   verify_sync_checksum repo client local_tx remote_tx_n remote_checksum
     (context ~repo ~typ:"tx/batch/ok" ());
   Sync_apply.enqueue_flush_pending repo client

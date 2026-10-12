@@ -7958,6 +7958,12 @@ let test_tx_batch_ok_removes_acked_pending_txs () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
+          (* journal truth: local-tx advances only when the journal echo
+             lands — the batch-ok requests a pull of the own window *)
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8014,6 +8020,10 @@ let test_tx_batch_ok_removes_only_inflight_acked_pending_txs () =
             (List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
                (Sync_apply.pending_txs test_repo ())
              = [ unacked_tx_id ]);
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8046,6 +8056,11 @@ let test_tx_batch_ok_does_not_anchor_remote_checksum () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "checksum", Wire.String remote_checksum
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1);
           check "local checksum stays"
@@ -8163,9 +8178,157 @@ let test_pending_op_not_written_to_server_conn () =
                "block/title"
              <> Some (String "pending edit"))))
 
-(* pending model: the ack itself confirms the edit — the stored .tx
-   replays onto the server conn, so a later pull of the same window is
-   a plain no-op echo. *)
+(* Exercise the same sanitize/transact/journal boundary as server ingest. *)
+let journal_uploaded_entry server t entry =
+  let op = wire_get_str "outliner-op" entry in
+  let delete = op = Some "delete-blocks" || op = Some "delete-page" in
+  let items =
+    uploaded_tx_of entry
+    |> List.map Ds_wire.value_of_transit
+    |> Db_sync_tx_sanitize.sanitize_tx (Datascript.db server)
+         ~drop_missing_retract_ops:(delete || op = Some "fix")
+         ~drop_ops_targeting_retracted_entities:delete
+         ~retract_touched_descendants:delete
+    |> List.map Ds_wire.transit_of_value
+  in
+  let report = Db_transact.transact server items [ "op", Keyword "apply-client-tx" ] in
+  let journal = match report with
+    | Some r -> Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data
+    | None -> []
+  in
+  wire_map
+    (List.filter_map Fun.id
+       [ Some ("t", Wire.Int t)
+       ; Some ("tx", Wire.String (Transit_codec.to_string (Wire.Array journal)))
+       ; Option.map (fun id -> "tx-id", id) (Wire.get "tx-id" entry)
+       ; Option.map (fun op -> "outliner-op", op) (Wire.get "outliner-op" entry) ])
+
+let pull_journal client t rows =
+  Sync_handle_message.handle_message test_repo client
+    (msg_json [ "type", Wire.String "pull/ok"; "t", Wire.Int t
+              ; "txs", Wire.Array rows ])
+
+let with_remote_upload f =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, child2, child3 = setup_parent_child () in
+      (* Renderer replacements require the transaction stamps present in real graphs. *)
+      raw_transact_string conn
+        (List.map (fun (e : entity) -> db_add (Wire.Int e.id) "block/tx-id"
+             (Wire.Int (Datascript.db conn).max_tx)) [ parent; child1; child2; child3 ]);
+      mark_graph_remote conn;
+      let server = Datascript.conn_from_db (Datascript.db conn) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let confirmed = Option.get (Sync_state.server_conn test_repo) in
+          let client, sent = sent_client () in
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          f display confirmed server client sent parent child1 child2 child3))
+
+let test_batch_ack_chunk_waits_for_journal () =
+  with_remote_upload (fun display confirmed server client sent _parent child1 _c2 _c3 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let tail_uuid = fresh_uuid () in
+      let items =
+        List.init 5000 (fun _ -> db_add child_ref "block/title" (Wire.String "chunk edit"))
+        @ [ db_add (Wire.String tail_uuid) "block/uuid" (Wire.Uuid tail_uuid)
+          ; db_add (Wire.String tail_uuid) "block/title" (Wire.String "tail") ]
+      in
+      raw_transact_string display [ db_add (Wire.Int child1.id) "block/title" (Wire.String "chunk edit") ];
+      let tx_id = (List.hd (Sync_apply.pending_txs test_repo ())).tx_id in
+      Sync_client_op.update_local_tx_resolved test_repo tx_id (Wire.Array items);
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let entry = payload_tx_entry (List.hd !sent) in
+      check "intermediate chunk has no id" (Wire.get "tx-id" entry = None);
+      let row = journal_uploaded_entry server 1 entry in
+      Sync_handle_message.handle_message test_repo client
+        (msg_json [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
+      check "ack waits for journal" (Sync_client_op.get_local_tx test_repo = Some 0);
+      pull_journal client 1 [ row ];
+      check "journal advances watermark" (Sync_client_op.get_local_tx test_repo = Some 1);
+      check "chunk reaches confirmed conn"
+        (Ldb.value (Option.get (ent_by_block_uuid (Datascript.db confirmed) (ent_block_uuid child1))) "block/title"
+         = Some (String "chunk edit")))
+
+let test_batch_ack_preserves_upload_cycle_drop () =
+  with_remote_upload (fun _display confirmed server client sent _parent child1 child2 _c3 ->
+      raw_transact_string confirmed [ db_add (Wire.Int child2.id) "block/parent" (Wire.Int child1.id) ];
+      raw_transact_string server [ db_add (Wire.Int child2.id) "block/parent" (Wire.Int child1.id) ];
+      let tx_id = fresh_uuid () in
+      seed_client_op_txs test_repo
+        [ seed_tx ~outliner_op:"move-blocks" ~tx_data_v:(Wire.Array
+            [ db_add (block_uuid_lookup (entity_block_uuid child1)) "block/parent" (block_uuid_lookup (entity_block_uuid child2))
+            ; db_add (block_uuid_lookup (entity_block_uuid child1)) "block/title" (Wire.String "cycle edit") ]) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let entry = payload_tx_entry (List.hd !sent) in
+      check "cycle edge removed from upload"
+        (not (List.exists (fun item -> Sync_apply.tx_item_attr item = kw "block/parent") (uploaded_tx_of entry)));
+      let row = journal_uploaded_entry server 1 entry in
+      Sync_handle_message.handle_message test_repo client
+        (msg_json [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
+      check "ack does not restore cycle"
+        (Option.map (fun (e : entity) -> e.id) (Ldb.ref_ent (Option.get (Ldb.ent_of_id (Datascript.db confirmed) child1.id)) "block/parent")
+         <> Some child2.id);
+      pull_journal client 1 [ row ];
+      check "journal does not restore cycle"
+        (Option.map (fun (e : entity) -> e.id) (Ldb.ref_ent (Option.get (Ldb.ent_of_id (Datascript.db confirmed) child1.id)) "block/parent")
+         <> Some child2.id))
+
+let test_batch_ack_keeps_server_descendant_deletions () =
+  with_remote_upload (fun _display confirmed server client sent parent child1 _c2 _c3 ->
+      let tx_id = fresh_uuid () in
+      seed_client_op_txs test_repo
+        [ seed_tx ~outliner_op:"delete-blocks" ~tx_data_v:(Wire.Array
+            [ db_retract_entity (block_uuid_lookup (entity_block_uuid parent)) ]) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let row = journal_uploaded_entry server 1 (payload_tx_entry (List.hd !sent)) in
+      check "server removed child" (ent_by_block_uuid (Datascript.db server) (ent_block_uuid child1) = None);
+      Sync_handle_message.handle_message test_repo client
+        (msg_json [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
+      pull_journal client 1 [ row ];
+      check "confirmed child removed" (ent_by_block_uuid (Datascript.db confirmed) (ent_block_uuid child1) = None))
+
+let test_own_journal_keeps_display_and_pending_edit () =
+  with_remote_upload (fun display confirmed server client sent _parent child1 _c2 _c3 ->
+      raw_transact_string display [ db_add (Wire.Int child1.id) "block/title" (Wire.String "uploaded edit") ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let row = journal_uploaded_entry server 1 (payload_tx_entry (List.hd !sent)) in
+      raw_transact_string display [ db_add (Wire.Int child1.id) "block/title" (Wire.String "later pending edit") ];
+      let before = Datascript.db display in
+      with_broadcast_capture (fun broadcasts ->
+          Sync_handle_message.handle_message test_repo client
+            (msg_json [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
+          pull_journal client 1 [ row ];
+          check "own echo preserves display snapshot" (Datascript.db display == before);
+          check "own echo publishes no render delta"
+            (not (List.exists (fun (kind, _) -> kind = "sync-db-changes") !broadcasts)));
+      check "confirmed upload" (Ldb.value (Option.get (Ldb.ent_of_id (Datascript.db confirmed) child1.id)) "block/title" = Some (String "uploaded edit"));
+      check "later edit preserved" (Ldb.value (Option.get (Ldb.ent_of_id (Datascript.db display) child1.id)) "block/title" = Some (String "later pending edit")))
+
+let test_empty_own_journal_removes_discarded_overlay () =
+  with_remote_upload (fun display confirmed _server client _sent _parent child1 _c2 _c3 ->
+      let before_title = Ldb.value child1 "block/title" in
+      raw_transact_string display [ db_add (Wire.Int child1.id) "block/title" (Wire.String "discarded edit") ];
+      let row = List.hd (Sync_apply.pending_txs test_repo ()) in
+      client.inflight := [ row.tx_id ];
+      Sync_handle_message.handle_message test_repo client
+        (msg_json [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
+      with_broadcast_capture (fun broadcasts ->
+          pull_journal client 1
+            [ wire_map [ "t", Wire.Int 1; "tx-id", Wire.String row.tx_id
+                       ; "tx", Wire.String (Transit_codec.to_string (Wire.Array [])) ] ];
+          check "empty confirmation removes discarded overlay"
+            (Ldb.value (Option.get (Ldb.ent_of_id (Datascript.db display) child1.id)) "block/title" = before_title);
+          let payload = List.assoc "sync-db-changes" !broadcasts in
+          let delta = Option.get (Wire.get "delta" (broadcast_data payload)) in
+          let block = List.assoc (Wire.Uuid (ent_block_uuid child1))
+              (Wire.as_map (Option.get (Wire.get "blocks" delta))) in
+          check "discarded overlay removal publishes the restored title"
+            (Wire.get "block/title" block = Option.map Ds_wire.transit_of_value before_title));
+      check "confirmed data stays unchanged"
+        (Ldb.value (Option.get (Ldb.ent_of_id (Datascript.db confirmed) child1.id)) "block/title" = before_title))
+
+(* Acknowledgement clears the outbox; only the journal confirms graph facts. *)
 let test_tx_batch_ok_applies_op_to_server_conn () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -8191,20 +8354,12 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
-          check "local tx 1"
-            (Sync_client_op.get_local_tx test_repo = Some 1);
-          check "server conn has edit"
+          check "server conn awaits echo"
             (Ldb.value
                (Option.get
                   (Ldb.ent_of_id (Datascript.db server_conn) child1.id))
                "block/title"
-             = Some (String "acked edit"));
-          check "display keeps edit"
-            (Ldb.value
-               (Option.get
-                  (Ldb.ent_of_id (Datascript.db display) child1.id))
-               "block/title"
-             = Some (String "acked edit"));
+             <> Some (String "acked edit"));
           let echo_tx =
             Transit_codec.to_string
               (Wire.Array
@@ -8219,10 +8374,10 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                      [ wire_map
                          [ "t", Wire.Int 1
                          ; "tx", Wire.String echo_tx ] ] ) ]);
-          check "late echo harmless"
+          check "server conn has edit"
             (Ldb.value
                (Option.get
-                  (Ldb.ent_of_id (Datascript.db display) child1.id))
+                  (Ldb.ent_of_id (Datascript.db server_conn) child1.id))
                "block/title"
              = Some (String "acked edit"))))
 
@@ -15927,6 +16082,11 @@ let () =
         ; Alcotest.test_case
             "pending-op-not-written-to-server-conn" `Quick
             test_pending_op_not_written_to_server_conn
+        ; Alcotest.test_case "empty-own-journal-removes-discarded-overlay" `Quick test_empty_own_journal_removes_discarded_overlay
+        ; Alcotest.test_case "batch-ack-chunk-waits-for-journal" `Quick test_batch_ack_chunk_waits_for_journal
+        ; Alcotest.test_case "batch-ack-preserves-upload-cycle-drop" `Quick test_batch_ack_preserves_upload_cycle_drop
+        ; Alcotest.test_case "batch-ack-keeps-server-descendant-deletions" `Quick test_batch_ack_keeps_server_descendant_deletions
+        ; Alcotest.test_case "own-journal-keeps-display-and-pending-edit" `Quick test_own_journal_keeps_display_and_pending_edit
         ; Alcotest.test_case
             "tx-batch-ok-applies-op-to-server-conn" `Quick
             test_tx_batch_ok_applies_op_to_server_conn
