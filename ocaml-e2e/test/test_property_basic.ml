@@ -220,12 +220,30 @@ let () =
            ".ls-view-body")
     in
     let* () = Ls_page.goto_page env owner_page in
-    let* () =
-      Pw.click env
-        (Printf.sprintf ".property-pair:has-text('%s') > .ls-block"
+    let* _ =
+      E2e_assert.is_visible env
+        (Printf.sprintf
+           ".property-pair:has-text('%s'):has-text('Initial value')"
            property_name)
     in
-    let* () = Util.input env "Updated value" in
+    (* The value cell is a full-width row, but .block-content is only as
+       wide as the text. Clicking the .ls-block center hits the
+       tabindex=-1 property-block-container and never opens the editor. *)
+    let* () =
+      Pw.click_l
+        (Playwright.locator_first
+           (Ls_locator.filter env
+              ~has_text:"Initial value"
+              ".property-pair .property-value .block-content"))
+    in
+    let* () = Util.wait_editor_visible env in
+    let* () =
+      Pw.fill env
+        (Printf.sprintf
+           ".property-pair:has-text('%s') .editor-wrapper textarea"
+           property_name)
+        "Updated value"
+    in
     let* () = Keyboard.esc env in
     let* _ =
       E2e_assert.is_visible env
