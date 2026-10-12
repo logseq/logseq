@@ -1,5 +1,5 @@
 let tests =
-  [ Suite.test "native-boot-create-edit-persist-smoke" (fun ctx ->
+  [ Suite.test ~additional:true "native-boot-create-edit-persist-smoke" (fun ctx ->
         Suite.with_app ctx (fun app ->
             let name = "Native Harness Smoke" in
             Suite.check ctx "Real daemon is ready" (let _, _, repo = Client.daemon app in repo = "logseq_db_Demo");

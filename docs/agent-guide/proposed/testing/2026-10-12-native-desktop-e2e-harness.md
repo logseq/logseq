@@ -19,6 +19,19 @@ Reason: The user explicitly requires all upstream cases, exclusive five-group ow
 
 Use an environment-opt-in private Unix socket, serviced on the SDL main loop, accepting a closed input/query protocol. Events enter SDL's existing event queue, never reducers. Inventory and test metadata are separate from execution evidence. Missing or duplicate mappings fail strict validation.
 
+### Explicit additional-case provenance follow-up
+
+TEST DECISION: USER-REQUIRED
+
+Claim: The requested additional-case marker must distinguish justified native-only coverage from upstream parity mappings.
+Stable project-owned contract: An unmapped test requires explicit additional provenance; parity and additional counts are separate and existing coverage/runtime guards remain strict.
+Concrete regression risk: Additional tests could inflate parity totals, or unmarked unmapped tests could silently evade coverage validation.
+Existing coverage searched: native-e2e/suite.ml, runner.ml, test_smoke.ml and README.md.
+Cheaper evidence considered: Compilation plus temporary additive suite probes can validate the metadata contract without new product cases.
+Lowest stable boundary: The real OCaml runner with automatically discovered temporary modules and the existing real native smoke.
+Planned retained tests: 0 new product cases; mark the existing smoke only. Remove all scratch probes before handoff.
+Reason: The user explicitly requested metadata/runner changes and targeted rejection/acceptance validation. Do not add speculative product coverage or change inventory contract categories before coordinated audit.
+
 ## Alternatives considered
 
 ### Browser or reducer harness

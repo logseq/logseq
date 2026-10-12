@@ -21,7 +21,9 @@ let () =
           let identity = file ^ "::" ^ definition.name in
           if Hashtbl.mem names identity then failwith ("Duplicate native case " ^ identity);
           Hashtbl.add names identity ();
-          if definition.covers = [] && file <> "native-e2e/tests/test_smoke.ml" then
+          if definition.additional && definition.covers <> [] then
+            failwith ("Additional case cannot claim upstream coverage " ^ identity);
+          if definition.covers = [] && not definition.additional then
             failwith ("Unmapped native case " ^ identity);
           List.iter (fun id ->
               if Hashtbl.mem mappings id then failwith ("Duplicate upstream mapping " ^ id);
@@ -32,8 +34,11 @@ let () =
               Hashtbl.add mappings id identity) definition.covers;
           file, definition) definitions) Registry.suites in
   let pending = List.filter (fun (id, _) -> not (Hashtbl.mem mappings id)) lookup in
-  Printf.printf "Coverage declarations: %d/%d; pending: %d; additive native cases: %d\n%!"
-    (Hashtbl.length mappings) (List.length cases) (List.length pending) (List.length tests);
+  let additional_count = List.fold_left (fun count (_, (definition : Suite.test)) ->
+      if definition.additional then count + 1 else count) 0 tests in
+  let parity_count = List.length tests - additional_count in
+  Printf.printf "Coverage declarations: %d/%d; pending: %d; parity native cases: %d; additional native cases: %d\n%!"
+    (Hashtbl.length mappings) (List.length cases) (List.length pending) parity_count additional_count;
   if !coverage && pending <> [] then begin
     List.iter (fun (id, _) -> Printf.eprintf "MISSING %s\n" id) pending;
     exit 2
@@ -75,9 +80,12 @@ let () =
       Option.iter (Printf.eprintf "%s\n%!") error;
       `Assoc ["file", `String file; "name", `String definition.name;
               "covers", `List (List.map (fun s -> `String s) definition.covers);
+              "additional", `Bool definition.additional;
               "passed", `Bool (error = None); "assertions", `Int (Suite.assertions ctx);
               "inputs", `Int (Suite.inputs ctx); "artifacts", `String artifacts;
               "error", (match error with None -> `Null | Some e -> `String e)]) selected in
-  Yojson.Safe.to_file (Filename.concat base "results.json") (`Assoc ["results", `List results; "pending", `Int (List.length pending)]);
+  Yojson.Safe.to_file (Filename.concat base "results.json")
+    (`Assoc ["results", `List results; "pending", `Int (List.length pending);
+             "declared_parity_cases", `Int parity_count; "declared_additional_cases", `Int additional_count]);
   Printf.printf "Results: %s\n%!" base;
   if List.exists (fun r -> not (r |> member "passed" |> to_bool)) results then exit 1

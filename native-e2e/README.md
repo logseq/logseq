@@ -97,10 +97,26 @@ explicit reviewed `inventory.exe --write <repo>` regeneration.
 
 The strict `--coverage` gate exits 2 for any missing mapping. Duplicate IDs,
 unknown IDs, wrong ownership, wrong helper/desktop contract and unmapped tests
-(except the scaffold smoke) fail in all modes. Runtime fails tests with zero
-executed assertions or desktop claims with zero SDL input. A complete parity
+without explicit additional provenance fail in all modes. Runtime fails tests with
+zero executed assertions or desktop claims with zero SDL input. A complete parity
 claim requires **both** complete mapping and passing runtime, not inventory-only.
 These guards cannot prove semantic equivalence of assertions: review each port.
+
+Native-only or justified master-missing cases must explicitly use the additional
+marker, with no `covers`. For example, the existing smoke is declared as:
+
+```ocaml
+Suite.test ~additional:true "native-boot-create-edit-persist-smoke" run_smoke
+```
+
+Here `run_smoke` denotes the existing real host/daemon smoke body; there is no
+filename exception. Explain the justification in the suite's documentation. This is
+provenance, not permission to add speculative product cases. Marked additional
+tests cannot claim upstream IDs and cannot satisfy the 249-case parity gate.
+Unmarked zero-covers tests are rejected. All identity, assertion and desktop
+input guards still apply to additional cases. Output reports declared parity
+and additional native-case counts separately; result JSON records `additional`
+per case and `declared_parity_cases`/`declared_additional_cases` for the registry.
 
 ## OCaml client/fixture contract
 
@@ -140,6 +156,10 @@ clients close. Settings and socket directories remain private per app.
   It is for original API-specific cases, fixtures and oracles, not reducer
   dispatch or a substitute for UI interaction. Unknown methods/namespaces fail.
   JSON is transport only; the client, runner, fixtures and cases are OCaml.
+  Some original plugin tests exercise SDK actions rather than UI actions.
+  Those need a separately audited API test contract with real SDK-call evidence;
+  do not fabricate SDL input or relabel them as pure helpers. Coordinate category
+  changes with the parent/assets owner; the 249-case manifest is unchanged here.
 - Lifecycle: `reload` restarts only the host with the same settings/daemon;
   `restart ()` restarts host and owned daemon, preserving the isolated disk graph.
   Cleanup verifies daemon executable/root ownership before sending signals,

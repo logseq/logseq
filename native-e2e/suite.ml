@@ -2,8 +2,8 @@ type contract = Desktop | Helper
 type context =
   { repo : string; artifacts : string; mutable assertions : int;
     mutable inputs : int; mutable apps : Client.t list; mutable next_app : int }
-type test = { name : string; covers : string list; contract : contract; run : context -> unit }
-let test ?(covers = []) ?(contract = Desktop) name run = { name; covers; contract; run }
+type test = { name : string; covers : string list; additional : bool; contract : contract; run : context -> unit }
+let test ?(covers = []) ?(additional = false) ?(contract = Desktop) name run = { name; covers; additional; contract; run }
 let context ~repo ~artifacts = { repo; artifacts; assertions = 0; inputs = 0; apps = []; next_app = 0 }
 let check ctx message condition =
   ctx.assertions <- ctx.assertions + 1;
