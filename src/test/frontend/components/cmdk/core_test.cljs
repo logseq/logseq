@@ -15,6 +15,64 @@
    [logseq.shui.ui :as shui]
    [promesa.core :as p]))
 
+(deftest existing-matches-precede-page-creation-test
+  (let [page {:result-type :page
+              :source-block {:page? true :block.temp/original-title "car"}}
+        alias-target {:page? true :block.temp/original-title "vehicle"}
+        alias {:result-type :page :alias alias-target :source-block alias-target}
+        another-page {:result-type :page
+                      :source-block {:page? true :block.temp/original-title "cart"}}
+        block {:result-type :block :source-block {:block/title "hello"}}
+        another-block {:result-type :block :source-block {:block/title "hello again"}}
+        command {:source-command {:id :test-command}}
+        file {:file-path "car.pdf"}
+        filter-item {:filter {:group :nodes}}
+        namespaced-page {:result-type :page
+                         :source-block {:page? true :block.temp/original-title "transport/car"}}]
+    (doseq [[input filter-group results expected-groups expected-action]
+            [["c" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [alias]}} [:nodes :create] :open]
+             ["transport/ca" nil {:nodes {:items [namespaced-page]}} [:nodes :create] :open]
+             ["ca" :nodes {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:current-page {:items [page]}} [:current-page :create] :open]
+             ["ca" nil {:nodes {:items [page another-page]}
+                        :commands {:items [command]}
+                        :files {:items [file]}}
+              [:nodes :create :nodes :commands :files] :open]
+             ["car" nil {:nodes {:items [alias another-page]}}
+              [:nodes :create :nodes] :open]
+             ["transport/ca" nil {:nodes {:items [namespaced-page another-page]}
+                                  :files {:items [file]}}
+              [:nodes :create :nodes :files] :open]
+             ["ca" :nodes {:nodes {:items [page another-page]}}
+              [:nodes :create :nodes] :open]
+             ["hello" nil {:nodes {:items [block another-block]}
+                           :commands {:items [command]}
+                           :filters {:items [filter-item]}}
+              [:nodes :create :nodes :commands :filters] :open]
+             ["ca" nil {:current-page {:items [block another-block]}
+                        :nodes {:items [page another-page]}}
+              [:current-page :current-page :nodes :create :nodes] :open]
+             ["carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]
+             ["transport/carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]]]
+      (testing (str "Default action for " input " with filter " filter-group)
+        (let [state {::cmdk/input (atom input)
+                     ::cmdk/filter (atom (when filter-group {:group filter-group}))
+                     ::cmdk/results (atom results)
+                     ::cmdk/highlighted-item (atom nil)
+                     ::cmdk/all-items-cache (atom [])
+                     ::cmdk/focus-source (atom :keyboard)
+                     ::cmdk/scroll-container-ref (atom nil)}
+              items (vec (mapcat last (cmdk/state->results-ordered state)))]
+          (reset! (::cmdk/all-items-cache state) items)
+          (is (= expected-groups (mapv :group items)))
+          (is (= expected-action (cmdk/state->action state)))
+          (when-let [creation-index (some #(when (:source-create %) (:item-index %)) items)]
+            (cmdk/move-highlight state creation-index)
+            (is (= :create (cmdk/state->action state)))))))))
+
 (deftest shift-open-page-uses-page-action-test
   (async done
     (let [page-id #uuid "11111111-1111-1111-1111-111111111111"
