@@ -293,10 +293,10 @@ let body (_ms : Model.t Signal.signal) : t =
                         ~on_submit:(fun _ -> submit ())
                         [] ]
                 ; Ui_components.with_props
-                    [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                    ; Lui_protocol.FontWeight, Ui_components.iv 500
-                    ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-                    ; Lui_protocol.HoverOpacity, Ui_components.fv 0.9 ]
+                    [ Ui_components.Prop.font_size "0.875rem"
+                    ; Ui_components.Prop.font_weight 500
+                    ; Ui_components.Prop.cursor `pointer
+                    ; Ui_components.Prop.hover_opacity 0.9 ]
                     (button ~key:"collab-invite-btn"
                        ~style_class:"ui__button ls-btn-primary"
                        ~text:(T.t "collaboration/invite")

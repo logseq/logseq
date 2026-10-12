@@ -168,7 +168,7 @@ let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
              actions
          (* cljs renders the desc cell unconditionally *)
          ; Ui_components.with_props
-             [ Lui_protocol.FontSize, Lui_protocol.StringValue "0.875rem" ]
+             [ Ui_components.Prop.font_size "0.875rem" ]
              (row ~key:(key ^ "-desc") ~cross:`center desc)
          ])
     ()
@@ -188,8 +188,8 @@ let edit_link_row ~key ~label ~button ~href ~for_ ?(min_height = 36) () =
   action_row ~key ~for_ ~label ~min_height
     ~actions:
       [ Ui_components.with_props
-          [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-          ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+          [ Ui_components.Prop.font_size "0.875rem"
+          ; Ui_components.Prop.line_height "1.25rem" ]
           (link ~key:(key ^ "-a")
              ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
              ~url:href ~target:`self_ ~text:button

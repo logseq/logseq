@@ -249,8 +249,7 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
             ~style_class:"ls-imp-field" ~gap:2 ~grow:1.
             [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
             ; Ui_components.with_props
-                [ Lui_protocol.ForegroundValue
-                , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+                [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
                 (text ~key:(id ^ "-d") ~as_:`Small ~value:desc []) ]
         ]
     ; Logseq_el.el ~key:(id ^ "-i") ~tag:"input"
@@ -287,13 +286,12 @@ let article () =
         [ (* .importer .c h1/h2 key on the heading tags — ~as_ retags
              the heading element so the CSS contract holds *)
           Ui_components.with_props
-            [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
-            ; Lui_protocol.FontWeight, Lui_protocol.IntValue 600 ]
+            [ Ui_components.Prop.font_size "1.25rem"
+            ; Ui_components.Prop.font_weight 600 ]
             (heading ~key:"imp-h" ~level:1 ~as_:`H1
                ~value:T.import_title [])
         ; Ui_components.with_props
-            [ Lui_protocol.ForegroundValue
-            , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+            [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
             (heading ~key:"imp-d" ~level:2 ~as_:`H2
                ~value:T.import_desc []) ]
     ; column ~key:"imp-l" ~style_class:"d" ~gap:12 (items ()) ]
@@ -302,19 +300,18 @@ let article () =
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
   Ui_components.with_props
-    [ Lui_protocol.ZIndex, Ui_components.iv 1
-    ; Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+    [ Ui_components.Prop.z_index 1
+    ; Ui_components.Prop.overflow `hidden ]
     (column ~key:"importer" ~style_class:"cp__onboarding-setups"
        ~grow:1. ~corner_radius:20 ~cross:`center ~padding:48
     [ Ui_components.with_props
-        [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.75rem"
-        ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+        [ Ui_components.Prop.font_size "1.75rem"
+        ; Ui_components.Prop.font_weight 700 ]
         (heading ~key:"imp-th" ~level:1 ~as_:`H1
            ~style_class:"ls-imp-title"
            ~value:T.import_existing_notes [])
     ; Ui_components.with_props
-        [ Lui_protocol.ForegroundValue
-        , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+        [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
         (heading ~key:"imp-td" ~level:2 ~as_:`H2
            ~value:T.import_later [])
     ; column ~key:"imp-card"

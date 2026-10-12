@@ -53,9 +53,9 @@ let toast_item (t : Model.toast) : t =
                    ~width:20 ~height:20
                    ~foreground:(toast_icon_color kind) []
                ; Ui_components.with_props
-                   [ Lui_protocol.FontSize, Lui_protocol.StringValue "0.875rem"
-                   ; Lui_protocol.LineHeight, Lui_protocol.StringValue "1.25rem"
-                   ; Lui_protocol.Opacity, Lui_protocol.FloatValue 0.9 ]
+                   [ Ui_components.Prop.font_size "0.875rem"
+                   ; Ui_components.Prop.line_height "1.25rem"
+                   ; Ui_components.Prop.opacity 0.9 ]
                    (text ~key:"ti-desc" ~grow:1.
                       ~foreground:"var(--ls-primary-text-color)"
                       ~value:t.toast_text [])

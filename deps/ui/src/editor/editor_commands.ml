@@ -260,9 +260,8 @@ let rec cal_cell today p d =
         else [])
        @ if is_today then [ ("data-today", "true") ] else [])
     [ Ui_components.with_props
-        [ P.FontSize, sv "0.875rem"
-        ; ( P.HoverBackground
-          , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
                 hsl(var(--muted))))" ) ]
         (button ~style_class:"ui__calendar-day" ~variant:`ghost
            ~width:36 ~height:36 ~padding:0 ~corner_radius:6
@@ -298,10 +297,9 @@ and out_cell y m d =
     ~style_class:"ui__calendar-cell" ~height:40 ~padding:0
     ~text_alignment:`center
     [ Ui_components.with_props
-        [ P.FontSize, sv "0.875rem"
-        ; P.Opacity, fv 0.55
-        ; ( P.HoverBackground
-          , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.opacity 0.55
+        ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
                 hsl(var(--muted))))" ) ]
         (button ~style_class:"ui__calendar-day" ~variant:`ghost
            ~width:36 ~height:36 ~padding:0 ~corner_radius:6
@@ -592,13 +590,12 @@ let commit_time v =
    pressing it anchors a [role=menu] under the button *)
 let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
   Ui_components.with_props
-    [ P.FontSize, sv "0.875rem"
-    ; P.Cursor, sv "pointer"
-    ; P.WhiteSpace, sv "nowrap"
-    ; P.Overflow, sv "hidden"
-    ; P.TextOverflow, sv "ellipsis"
-    ; ( P.HoverBackground
-      , sv "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
+    [ Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.cursor `pointer
+    ; Ui_components.Prop.white_space `nowrap
+    ; Ui_components.Prop.overflow `hidden
+    ; Ui_components.Prop.text_overflow `ellipsis
+    ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
     (button ~variant:`ghost ~cross:`center ~main:`space_between
        ~grow:1. ~min_width:0 ~height:32 ~padding_horizontal:8
        ~border_width:1
@@ -704,9 +701,8 @@ let time_row ps : t =
     ~data_attrs:[ ("style", "margin-top: 8px") ]
     [ time_input ps
     ; Ui_components.with_props
-        [ P.FontSize, sv "0.8125rem"
-        ; P.HoverForeground
-          , sv "var(--ls-primary-text-color, inherit)" ]
+        [ Ui_components.Prop.font_size "0.8125rem"
+        ; Ui_components.Prop.hover_foreground "var(--ls-primary-text-color, inherit)" ]
         (button ~key:"now" ~style_class:"ls-time-now" ~variant:`ghost
            ~padding_horizontal:4 ~padding_vertical:0
            ~foreground:
@@ -722,12 +718,12 @@ let time_row ps : t =
 
 let menu_view (m : popup_menu) : t =
   Ui_components.with_props
-    [ P.Position, sv "absolute"
-    ; P.InsetLeft, fv m.mx
-    ; P.InsetTop, fv m.my
-    ; P.ZIndex, iv 901
-    ; P.Overflow, sv "auto"
-    ; P.Shadow, sv "0 4px 12px rgb(0 0 0 / 0.15)" ]
+    [ Ui_components.Prop.position `absolute
+    ; Ui_components.Prop.inset_left m.mx
+    ; Ui_components.Prop.inset_top m.my
+    ; Ui_components.Prop.z_index 901
+    ; Ui_components.Prop.overflow `auto
+    ; Ui_components.Prop.shadow "0 4px 12px rgb(0 0 0 / 0.15)" ]
     (box ~key:"menu" ~style_class:m.mclass ~max_height:256
        ~background:
          "var(--lx-popover-bg, var(--ls-primary-background-color, #fff))"
@@ -739,10 +735,9 @@ let menu_view (m : popup_menu) : t =
        (List.mapi
           (fun i (label, pick) ->
             Ui_components.with_props
-              [ P.FontSize, sv "0.875rem"
-              ; P.WhiteSpace, sv "nowrap"
-              ; ( P.HoverBackground
-                , sv "var(--lx-gray-03, var(--ls-menu-hover-color, \
+              [ Ui_components.Prop.font_size "0.875rem"
+              ; Ui_components.Prop.white_space `nowrap
+              ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
                       #f2f2f2))" ) ]
               (menu_item ~key:(string_of_int i)
                  ~padding_vertical:6 ~padding_horizontal:12
@@ -786,7 +781,7 @@ let repeat_panel ps : t =
                   "logseq.property.repeat/checked-property" (W.Int id) ])
     | _ -> ()
   in
-  Ui_components.with_props [ P.FontSize, sv "0.875rem" ]
+  Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
     (column ~key:"rpt" ~gap:16 ~width:256
        ~data_attrs:
          [ ( "style"
@@ -796,7 +791,7 @@ let repeat_panel ps : t =
        [ row ~key:"head" ~cross:`center ~gap:4
            ~data_attrs:[ ("style", "margin-bottom: 4px") ]
            [ Ui_components.with_props
-               [ P.FontSize, sv "0.75rem"; P.LineHeight, sv "1" ]
+               [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "1" ]
                (* no [role="checkbox"]: the web focus layer strips [role]
                   from non-tab buttons; [aria-checked] + [data-checked]
                   carry the state *)
@@ -911,8 +906,7 @@ let repeat_panel ps : t =
    .ls-cal-nav-btn); the hover paint is the variant's accent *)
 let nav_btn ~key ~label ~on_press children : t =
   Ui_components.with_props
-    [ ( P.HoverBackground
-      , sv "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
+    [ ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
     (button ~key ~variant:`ghost ~height:32 ~width:36 ~padding:0
        ~border_width:1
        ~border_color:
@@ -924,9 +918,9 @@ let cal_head ps : t =
     ~data_attrs:[ ("style", "margin-bottom: 0.75rem") ]
     [ row ~key:"selects" ~cross:`center ~gap:4
         [ Ui_components.with_props
-            [ P.FontSize, sv "0.875rem"
-            ; P.FontWeight, P.IntValue 500
-            ; P.WhiteSpace, sv "nowrap" ]
+            [ Ui_components.Prop.font_size "0.875rem"
+            ; Ui_components.Prop.font_weight 500
+            ; Ui_components.Prop.white_space `nowrap ]
             (button ~key:"msel" ~style_class:"ls-date-month-select"
                ~variant:`ghost ~main:`start ~height:32 ~min_width:96
                ~padding_horizontal:12 ~border_width:1
@@ -982,7 +976,7 @@ let rpt_open po =
 
 let cal_body ps (p : popup) : t =
   Ui_components.with_props
-    [ P.Shadow, sv "0 8px 24px rgb(0 0 0 / 0.18)" ]
+    [ Ui_components.Prop.shadow "0 8px 24px rgb(0 0 0 / 0.18)" ]
     (column ~key:"cal"
        ~style_class:
          ("ls-editor-date-picker"

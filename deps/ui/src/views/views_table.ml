@@ -175,7 +175,7 @@ let column_size (c : V.column) =
 
 let inner_cell children =
   (* .ls-table-cell > div: height:100% has no prop channel *)
-  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+  Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
     (row ~cross:`center ~padding_horizontal:8 ~min_width:0
        ~data_attrs:[ ("style", "height:100%") ] children)
 
@@ -366,7 +366,7 @@ let select_cell inst ~row_uuid ~blk : t =
   row ~cross:`center
     [ (* cljs label.jtrigger[data-table-row-select] — e2e clicks it
          through row.locator("[data-table-row-select]") *)
-      Ui_components.with_props [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+      Ui_components.with_props [ Ui_components.Prop.cursor `pointer ]
       (row ~cross:`center ~main:`center ~width:32 ~height:32
         ~min_width:0 ~grow:1.
         ~style_class:"jtrigger"
@@ -444,7 +444,7 @@ let prop_cell ~blk (c : V.column) : t =
       let href = Option.value (Wr.ref_uuid v) ~default:t_ in
       inner_cell
         [ Ui_components.with_props
-            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            [ Ui_components.Prop.position `relative ]
             (link ~style_class:"page-ref" ~text:t_
                ~data_attrs:
                  [ ("data-uuid", href); ("tabindex", "0")
@@ -489,7 +489,7 @@ let prop_cell ~blk (c : V.column) : t =
                       @ if tuuid <> "" then [ ("data-tag-uuid", tuuid) ]
                         else [])
                    [ Ui_components.with_props
-                       [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                       [ Ui_components.Prop.position `relative ]
                        (link ~style_class:"tag" ~text:("#" ^ t_)
                        ~data_attrs:
                          ([ ("tabindex", "0"); ("draggable", "true")
@@ -502,7 +502,7 @@ let prop_cell ~blk (c : V.column) : t =
               (if i > 0 then [ text ~value:"," [] ] else [])
               @ [ box
                     [ Ui_components.with_props
-                        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                        [ Ui_components.Prop.position `relative ]
                         (link ~style_class:"page-ref" ~text:t_
                         ~data_attrs:
                           ([ ("tabindex", "0"); ("draggable", "true")
@@ -516,7 +516,7 @@ let prop_cell ~blk (c : V.column) : t =
       inner_cell
         [ box ~style_class:"property-value-inner" ~min_width:0
             [ Ui_components.with_props
-                [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                [ Ui_components.Prop.cursor `pointer ]
                 (row ~cross:`center ~grow:1. ~gap:4 ~min_width:0
                    ~style_class:"jtrigger multi-values" item_els) ] ]
   | W.Bool b when c.V.c_type = "checkbox" ->
@@ -525,7 +525,7 @@ let prop_cell ~blk (c : V.column) : t =
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
   (* the cljs `title` tooltip and tabindex have no component props *)
-  Ui_components.with_props [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+  Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
   (box ~style_class:"ls-table-cell" ~width:(column_size c)
     ~min_width:(column_size c) ~height:32
     [ (match c.V.c_id with
@@ -715,9 +715,9 @@ let header_cell inst (c : V.column) : t =
   match c.V.c_id with
   | "select" ->
       Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
-        ; Lui_protocol.FontWeight, Ui_components.iv 500 ]
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.line_height "1.25rem"
+        ; Ui_components.Prop.font_weight 500 ]
         (box ~style_class:"ls-table-header-cell" ~width:(column_size c)
            ~min_width:(column_size c) ~foreground:fg
            ~data_attrs:[ ("style", "border-right:0") ]
@@ -741,11 +741,11 @@ let header_cell inst (c : V.column) : t =
       in
       Ui_parts.pressable ~on_press:(fun _ -> menu ())
         (Ui_components.with_props
-           [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-           ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem"
-           ; Lui_protocol.FontWeight, Ui_components.iv 500
-           ; Lui_protocol.Cursor, Ui_components.sv "pointer"
-           ; Lui_protocol.Position, Ui_components.sv "relative" ]
+           [ Ui_components.Prop.font_size "0.875rem"
+           ; Ui_components.Prop.line_height "1.25rem"
+           ; Ui_components.Prop.font_weight 500
+           ; Ui_components.Prop.cursor `pointer
+           ; Ui_components.Prop.position `relative ]
            (box ~style_class:"ls-table-header-cell"
               ~accessibility_identifier:(header_cell_id inst c)
               ~width:(column_size c) ~min_width:(column_size c)
@@ -753,7 +753,7 @@ let header_cell inst (c : V.column) : t =
               ~data_attrs:
                 [ ("style", "border-right:1px solid hsl(var(--border))") ]
               [ Ui_components.with_props
-                  [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+                  [ Ui_components.Prop.overflow `hidden ]
                   (header_button inst c)
               ; (* resize-handle stays a hook — the opacity 0/.7/1 state
                    ladder can't ride props (inline opacity beats :where
@@ -1018,7 +1018,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
            (fun sel ->
              if sel then "hsl(var(--muted))" else "transparent")
            (Ui_components.with_props
-              [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+              [ Ui_components.Prop.overflow `hidden ]
               (row ~cross:`stretch ~height:33 ~min_height:33
                  ~max_height:33 ~transition:"background-color 150ms"
                  ~accessibility_identifier:("ls-block-" ^ row_uuid)
@@ -1030,9 +1030,9 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                  [ (* cljs: .sticky-columns holds pinned cells, sibling
                       row holds the unpinned ones *)
                    Ui_components.with_props
-                     [ Lui_protocol.Position, Ui_components.sv "sticky"
-                     ; Lui_protocol.InsetLeft, Ui_components.fv 0.
-                     ; Lui_protocol.ZIndex, Ui_components.iv 8 ]
+                     [ Ui_components.Prop.position `sticky
+                     ; Ui_components.Prop.inset_left 0.
+                     ; Ui_components.Prop.z_index 8 ]
                      (row ~style_class:"sticky-columns"
                         ~background:
                           "var(--lx-gray-01, \
@@ -1112,9 +1112,9 @@ let table_header inst cols : t =
            hsl(var(--border));will-change:transform;\
            transform:translate3d(0,0,0)" ) ]
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "sticky"
-        ; Lui_protocol.InsetLeft, Ui_components.fv 0.
-        ; Lui_protocol.ZIndex, Ui_components.iv 8 ]
+        [ Ui_components.Prop.position `sticky
+        ; Ui_components.Prop.inset_left 0.
+        ; Ui_components.Prop.z_index 8 ]
         (row ~style_class:"sticky-columns"
            ~background:
              "var(--lx-gray-01, var(--ls-primary-background-color))"
@@ -1161,9 +1161,9 @@ let add_row_footer inst : t =
   if has_add_object then
     (* .ls-table-footer: absolute bottom strip; width:100% has no prop *)
     Ui_components.with_props
-      [ Lui_protocol.Position, Ui_components.sv "absolute"
-      ; Lui_protocol.InsetLeft, Ui_components.fv 0.
-      ; Lui_protocol.InsetBottom, Ui_components.fv 8. ]
+      [ Ui_components.Prop.position `absolute
+      ; Ui_components.Prop.inset_left 0.
+      ; Ui_components.Prop.inset_bottom 8. ]
       (box ~data_attrs:[ ("style", "width:100%") ]
       [ Ui_parts.pressable
           ~on_press:(fun _ -> (V.ops ()).V.o_add_object inst)
@@ -1179,12 +1179,12 @@ let table_el inst (s : V.vstate) : t =
   box ~style_class:"ls-table" ~grow:1.
     [ (* .ls-table-rows font sweep migrated to props *)
       Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.line_height "1.25rem" ]
         (scroll ~orientation:`horizontal ~grow:1.
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
-            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            [ Ui_components.Prop.position `relative ]
             (box
             [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
                  the header inside the same relative box — overlay carries
@@ -1212,12 +1212,12 @@ let grouped_table inst ~rows : t =
   let cols = visible_columns s in
   box ~style_class:"ls-table"
     [ Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.line_height "1.25rem" ]
         (scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
-            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            [ Ui_components.Prop.position `relative ]
             (box
             [ overlay
                 [ table_header inst cols
@@ -1314,9 +1314,9 @@ let foldable inst ~key ~title ~(body : t) : t =
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
                     (Ui_components.with_props
-                       [ Lui_protocol.Cursor, Ui_components.sv "pointer"
-                       ; Lui_protocol.Opacity, Ui_components.fv 0.5
-                       ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                       [ Ui_components.Prop.cursor `pointer
+                       ; Ui_components.Prop.opacity 0.5
+                       ; Ui_components.Prop.hover_opacity 1. ]
                        (box ~style_class:"ls-foldable-title-control block-control"
                        ~width:14 ~height:16 ~margin_left:(-27)
                        [ (* cljs foldable-caret: span.control-show only

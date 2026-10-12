@@ -284,12 +284,12 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             | _ -> "" )
         ])
     [ Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.LineHeight, Ui_components.sv "1.42857"
-        ; Lui_protocol.Cursor, Ui_components.sv "default"
-        ; Lui_protocol.UserSelect, Ui_components.sv "none"
-        ; Lui_protocol.Opacity, Ui_components.fv 0.4
-        ; Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.line_height "1.42857"
+        ; Ui_components.Prop.cursor `default
+        ; Ui_components.Prop.user_select `none
+        ; Ui_components.Prop.opacity 0.4
+        ; Ui_components.Prop.pressed_opacity 0.3 ]
         (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
            ~url:"#" ~target:`self_
            ~accessibility_identifier:("control-" ^ uuid)
@@ -429,7 +429,7 @@ let content_el uuid (b : Model.block) : t =
     [ row ~key:("bci-" ^ uuid)
          ~main:`space_between
         [ Ui_components.with_props
-            [ Lui_protocol.FlexWrap, Ui_components.sv "wrap" ]
+            [ Ui_components.Prop.flex_wrap `wrap ]
             (row ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
                ~main:`space_between ~cross:`center ~grow:1.
                ~data_attrs:[ ("style", "width:100%") ]
@@ -548,10 +548,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
     (* the delegated context-menu handler reads data-tag-uuid/id/title/
        priv off the chip root — they ride ~data_attrs *)
     (Ui_components.with_props
-       [ Lui_protocol.Position, Ui_components.sv "relative"
-       ; Lui_protocol.CornerRadius, Ui_components.iv 4
-       ; ( Lui_protocol.HoverBackground
-         , Ui_components.sv "var(--lx-gray-03)" ) ]
+       [ Ui_components.Prop.position `relative
+       ; Ui_components.Prop.corner_radius 4
+       ; ( Ui_components.Prop.hover_background "var(--lx-gray-03)" ) ]
        (row ~key:("tag-" ^ key) ~cross:`center
           ~style_class:"block-tag"
           ~on_pointer_enter:enter ~on_pointer_leave:leave
@@ -576,9 +575,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                 (Signal.value hov)
                 (fun h -> if h then 0. else 0.7)
                 (Ui_components.with_props
-                   [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-                   ; Lui_protocol.FontWeight, Ui_components.iv 400
-                   ; Lui_protocol.UserSelect, Ui_components.sv "none" ]
+                   [ Ui_components.Prop.font_size "0.875rem"
+                   ; Ui_components.Prop.font_weight 400
+                   ; Ui_components.Prop.user_select `none ]
                    (link ~key:("th-" ^ key)
                       ~url:"#" ~target:`self_
                       ~style_class:"hash-symbol"
@@ -604,8 +603,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       (Signal.value hov)
                       (fun h -> if h then 0.7 else 0.)
                       (Ui_components.with_props
-                         [ Lui_protocol.UserSelect, Ui_components.sv "none"
-                         ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                         [ Ui_components.Prop.user_select `none
+                         ; Ui_components.Prop.cursor `pointer ]
                          (text ~key:("tx-" ^ key)
                             ~style_class:"tag-x"
                             ~on_pointer_enter:enter
@@ -617,11 +616,11 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           Ui_components.with_props
-            [ Lui_protocol.Opacity, Ui_components.fv 0.7
-            ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
-            ; Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-            ; Lui_protocol.FontWeight, Ui_components.iv 400
-            ; Lui_protocol.Position, Ui_components.sv "relative" ]
+            [ Ui_components.Prop.opacity 0.7
+            ; Ui_components.Prop.hover_opacity 1.
+            ; Ui_components.Prop.font_size "0.875rem"
+            ; Ui_components.Prop.font_weight 400
+            ; Ui_components.Prop.position `relative ]
             (link ~key:("ta-" ^ key)
                ~url:"#" ~target:`self_
                ~style_class:"tag"
@@ -1279,7 +1278,7 @@ let embed_more_el (name : string) : t =
     ~on_press:(fun _ ->
       Runtime.send (Action.Navigate_to (Model.Page name)))
     (Ui_components.with_props
-       [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+       [ Ui_components.Prop.cursor `pointer ]
        (row ~key:"embed-more"
           ~style_class:"ls-block"
           ~transition:"transform 0.3s ease"

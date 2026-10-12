@@ -9,8 +9,8 @@ let dom = Logseq_el.el
 (* cljs ui__dropdown-menu-item: px-2 py-1.5, ~32px row *)
 let item key label on_click =
   Ui_components.with_props
-    [ Lui_protocol.MinHeight, Ui_components.iv 32
-    ; Lui_protocol.PaddingHorizontal, Ui_components.iv 8 ]
+    [ Ui_components.Prop.min_height 32
+    ; Ui_components.Prop.padding_horizontal 8 ]
     (Menu_item.el ~key ~label ~on_click ())
 
 (* cljs dropdown-menu-item renders its :icon before the title — the

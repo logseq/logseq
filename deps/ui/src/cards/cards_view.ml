@@ -46,7 +46,7 @@ let selector_row st =
   row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
     ~height:32 ~gap:8
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (box ~key:"combo" ~style_class:"ls-cards-select"
            ~display:`inline_flex
         [ (* cljs shui/select-trigger: the select kind already renders
@@ -60,7 +60,7 @@ let selector_row st =
             []
         ; opts_box st ])
     ; Ui_components.with_props
-        [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+        [ Ui_components.Prop.cursor `pointer ]
         (button ~key:"add" ~accessibility_identifier:"ls-cards-add"
            ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
            ~padding_horizontal:4
@@ -194,8 +194,8 @@ let rec card_view st b phase =
                         (List.concat_map
                            (fun c ->
                              [ Ui_components.with_props
-                                 [ Lui_protocol.Opacity, Ui_components.fv 0.7
-                                 ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+                                 [ Ui_components.Prop.opacity 0.7
+                                 ; Ui_components.Prop.hover_opacity 1. ]
                                  (text ~style_class:"breadcrumb-item"
                                     ~value:c [])
                              ; text ~value:"/" ~padding_horizontal:4 [] ])

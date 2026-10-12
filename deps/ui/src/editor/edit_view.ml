@@ -399,33 +399,28 @@ let frag_binds cls =
     (fun t ->
       match t with
       | "ed-code" ->
-          [ ( P.FontFamily
-            , Ui_components.sv
+          [ ( Ui_components.Prop.font_family
                 "MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
                  'COURIER NEW', monospace" )
-          ; P.FontSize, Ui_components.sv "0.9em"
-          ; ( P.BackgroundValue
-            , Ui_components.sv
+          ; Ui_components.Prop.font_size "0.9em"
+          ; ( Ui_components.Prop.background
                 "var(--lx-gray-06, var(--ls-page-inline-code-bg-color))"
             )
-          ; ( P.ForegroundValue
-            , Ui_components.sv
+          ; ( Ui_components.Prop.foreground
                 "var(--lx-gray-11, var(--ls-page-inline-code-color))" )
-          ; P.LineHeight, Ui_components.sv "1.45"
-          ; P.PaddingVertical, Ui_components.iv 3
-          ; P.PaddingHorizontal, Ui_components.iv 5 ]
+          ; Ui_components.Prop.line_height "1.45"
+          ; Ui_components.Prop.padding_vertical 3
+          ; Ui_components.Prop.padding_horizontal 5 ]
       | "ed-hl" ->
-          [ ( P.BackgroundValue
-            , Ui_components.sv "var(--ls-page-mark-bg-color, #fef3ac)" )
-          ; ( P.ForegroundValue
-            , Ui_components.sv "var(--ls-page-mark-color, #262626)" )
-          ; P.PaddingVertical, Ui_components.iv 0
-          ; P.PaddingHorizontal, Ui_components.iv 4
-          ; P.CornerRadius, Ui_components.iv 4 ]
+          [ ( Ui_components.Prop.background "var(--ls-page-mark-bg-color, #fef3ac)" )
+          ; ( Ui_components.Prop.foreground "var(--ls-page-mark-color, #262626)" )
+          ; Ui_components.Prop.padding_vertical 0
+          ; Ui_components.Prop.padding_horizontal 4
+          ; Ui_components.Prop.corner_radius 4 ]
       | "ed-strike" ->
-          [ P.TextDecoration, Ui_components.sv "line-through" ]
+          [ Ui_components.Prop.text_decoration "line-through" ]
       | t when List.mem t accent_ref_tokens ->
-          [ P.ForegroundValue, Ui_components.sv accent_fg ]
+          [ Ui_components.Prop.foreground accent_fg ]
       | _ -> [])
     (String.split_on_char ' ' cls)
 
@@ -453,8 +448,7 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
             @ if accent_ref (Signal.sample frag_s).cls
               then []
               else
-                [ ( Lui_protocol.ForegroundValue
-                  , Ui_components.sv "var(--ls-secondary-text-color)" )
+                [ ( Ui_components.Prop.foreground "var(--ls-secondary-text-color)" )
                 ])
            (text ~value:(reactive (fun f -> f.text) frag_s)
               ~style_class:"ed-r ed-delim" []))
@@ -466,8 +460,7 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
             @ if accent_ref (Signal.sample frag_s).cls
               then []
               else
-                [ ( Lui_protocol.BackgroundValue
-                  , Ui_components.sv "var(--ls-tertiary-background-color)"
+                [ ( Ui_components.Prop.background "var(--ls-tertiary-background-color)"
                   )
                 ])
            (text ~value:(reactive (fun f -> f.text) frag_s)
@@ -475,8 +468,8 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
   | Frag_pill when List.mem "ed-block-ref" (String.split_on_char ' ' (Signal.sample frag_s).cls) ->
       let f = Signal.sample frag_s in
       Ui_components.with_props
-        [ ( Lui_protocol.ForegroundValue, Ui_components.sv accent_fg )
-        ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+        [ ( Ui_components.Prop.foreground accent_fg )
+        ; Ui_components.Prop.cursor `pointer ]
         (row ~style_class:("ed-r ed-pill" ^ cls_suffix f)
            [ Render_inline.page_ref ~refs:[] ~self:"" f.display ])
   | Frag_pill ->
@@ -486,16 +479,15 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
         (fun f -> "ed-r ed-pill" ^ cls_suffix f)
         (Ui_components.with_props
            (frag_binds (Signal.sample frag_s).cls
-            @ [ Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+            @ [ Ui_components.Prop.cursor `pointer ]
             @ if accent_ref (Signal.sample frag_s).cls
               then []
               else
-                [ ( Lui_protocol.BackgroundValue
-                  , Ui_components.sv "var(--ls-tertiary-background-color)"
+                [ ( Ui_components.Prop.background "var(--ls-tertiary-background-color)"
                   )
-                ; Lui_protocol.CornerRadius, Ui_components.iv 4
-                ; Lui_protocol.PaddingVertical, Ui_components.iv 0
-                ; Lui_protocol.PaddingHorizontal, Ui_components.iv 4 ])
+                ; Ui_components.Prop.corner_radius 4
+                ; Ui_components.Prop.padding_vertical 0
+                ; Ui_components.Prop.padding_horizontal 4 ])
            (text
               ~value:(reactive (fun f -> f.display) frag_s)
               ~style_class:"ed-r ed-pill"
@@ -530,10 +522,10 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
     f.start_off
   in
   (Ui_components.with_props
-     [ Lui_protocol.DisplayValue, Ui_components.sv "block"
-     ; Lui_protocol.Position, Ui_components.sv "relative"
-     ; Lui_protocol.ZIndex, Ui_components.iv 1
-     ; Lui_protocol.UserSelect, Ui_components.sv "text" ]
+     [ Ui_components.Prop.display `block
+     ; Ui_components.Prop.position `relative
+     ; Ui_components.Prop.z_index 1
+     ; Ui_components.Prop.user_select `text ]
      (row ~style_class:"ed-line"
         [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
             ~mount:(frag_view ~on_input ~start_off_of) ]))
@@ -552,9 +544,9 @@ let clamp_nonneg v = if v < 0 then 0 else v
 
 let ed_pos_wrap () =
   Ui_components.with_props
-    [ Lui_protocol.Position, Ui_components.sv "absolute"
-    ; Lui_protocol.InsetLeft, Ui_components.fv 0.
-    ; Lui_protocol.InsetTop, Ui_components.fv 0. ]
+    [ Ui_components.Prop.position `absolute
+    ; Ui_components.Prop.inset_left 0.
+    ; Ui_components.Prop.inset_top 0. ]
     (row ~style_class:"ed-pos" [])
 
 let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
@@ -567,9 +559,8 @@ let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) rect_s);
   let bar =
     (Ui_components.with_props
-       [ ( Lui_protocol.BackgroundValue
-         , Ui_components.sv "var(--ls-block-highlight-color)" )
-       ; Lui_protocol.CornerRadius, Ui_components.iv 2 ]
+       [ ( Ui_components.Prop.background "var(--ls-block-highlight-color)" )
+       ; Ui_components.Prop.corner_radius 2 ]
        (row ~style_class:"ed-sel" []))
       context (Some wrap)
   in
@@ -597,11 +588,10 @@ let caret_view (frame : frame Signal.signal) : t =
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) r_s);
   let bar =
     (Ui_components.with_props
-       [ ( Lui_protocol.BackgroundValue
-         , Ui_components.sv
+       [ ( Ui_components.Prop.background
              "var(--ls-caret-color, var(--ls-primary-text-color))" )
-       ; Lui_protocol.Position, Ui_components.sv "relative"
-       ; Lui_protocol.ZIndex, Ui_components.iv 2 ]
+       ; Ui_components.Prop.position `relative
+       ; Ui_components.Prop.z_index 2 ]
        (row ~style_class:"ed-caret" ~width:2 []))
       context (Some wrap)
   in
@@ -632,9 +622,9 @@ let overlay (frame : frame Signal.signal) : t =
      ]
   in
   (Ui_components.with_props
-     [ Lui_protocol.Position, Ui_components.sv "absolute"
-     ; Lui_protocol.Inset, Ui_components.fv 0.
-     ; Lui_protocol.PointerEnabled, Ui_components.bv false ]
+     [ Ui_components.Prop.position `absolute
+     ; Ui_components.Prop.inset 0.
+     ; Ui_components.Prop.pointer_enabled false ]
      (column ~style_class:"ed-overlay"
         (keyed ~source:sel_s ~key:fst ~cmp:Int.compare
            ~mount:sel_rect_view

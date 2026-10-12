@@ -99,10 +99,9 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
     if tag then (fun x -> x)
     else
       Ui_components.with_props
-        [ ( Lui_protocol.HoverForeground
-          , Ui_components.sv
+        [ ( Ui_components.Prop.hover_foreground
               "var(--lx-accent-11, var(--ls-link-text-hover-color))" )
-        ; Lui_protocol.Position, Ui_components.sv "relative" ]
+        ; Ui_components.Prop.position `relative ]
   in
   match uuid_sig with
   | None ->
@@ -373,7 +372,7 @@ let name_uuid_state context name =
 
 let external_link href label_els =
   Ui_components.with_props
-    [ Lui_protocol.TextDecoration, Ui_components.sv "none" ]
+    [ Ui_components.Prop.text_decoration "none" ]
     (link ~url:href ~target:`blank ~style_class:"external-link"
        label_els)
 
@@ -385,7 +384,7 @@ let block_ref_anchor uuid : t =
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = Signal.map (fun (title, _, _) -> title) (Signal.value st) in
   Ui_components.with_props
-    [ Lui_protocol.Position, Ui_components.sv "relative" ]
+    [ Ui_components.Prop.position `relative ]
     (link ~url:"#" ~target:`self_ ~style_class:"page-ref"
        ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
        ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
@@ -472,8 +471,7 @@ let timestamp_el seconds : t =
  fun context parent ->
   Render_libs.ensure ();
   Ui_components.with_props
-    [ ( Lui_protocol.HoverForeground
-      , Ui_components.sv
+    [ ( Ui_components.Prop.hover_foreground
           "var(--lx-accent-12, var(--ls-link-text-hover-color))" ) ]
     (link ~url:"#" ~target:`self_ ~style_class:"youtube-timestamp"
        ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
@@ -1459,7 +1457,7 @@ and resolved_ref ~refs ~self uuid : t =
           ~data_attrs:[ ("data-ref", uuid) ] []
       else if title = uuid then
         Ui_components.with_props
-          [ Lui_protocol.Position, Ui_components.sv "relative" ]
+          [ Ui_components.Prop.position `relative ]
           (link ~url:"#" ~target:`self_
              ~style_class:"page-ref broken"
              ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
@@ -1476,11 +1474,10 @@ and resolved_ref ~refs ~self uuid : t =
           [ bracket "[["
           ; preview_link
               (Ui_components.with_props
-                 [ ( Lui_protocol.HoverForeground
-                   , Ui_components.sv
+                 [ ( Ui_components.Prop.hover_foreground
                        "var(--lx-accent-11, \
                         var(--ls-link-text-hover-color))" )
-                 ; Lui_protocol.Position, Ui_components.sv "relative" ]
+                 ; Ui_components.Prop.position `relative ]
                  (link ~url:"#" ~target:`self_
                     ~style_class:"page-ref"
                     ~foreground:
@@ -1504,7 +1501,7 @@ and resolved_tag_ref ~refs ~self uuid : t =
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = (Signal.value st) in
   (Ui_components.with_props
-     [ Lui_protocol.Position, Ui_components.sv "relative" ]
+     [ Ui_components.Prop.position `relative ]
      (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
       (reactive

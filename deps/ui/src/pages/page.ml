@@ -116,7 +116,7 @@ let block_page_breadcrumb (page : Model.page) : t list =
   | [] -> []
   | parents ->
       [ Ui_components.with_props
-          [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
+          [ Ui_components.Prop.overflow `hidden ]
           (row ~key:"bc" ~min_width:0 ~padding_vertical:8
              ~cross:`center
              ~style_class:"breadcrumb block-parents"
@@ -409,7 +409,7 @@ let title_content (page : Model.page) : t =
       ; ("style", "width: 100%;display:inline;cursor:pointer") ]
     [ row ~key:"pt-bci" ~main:`space_between
         [ Ui_components.with_props
-            [ Lui_protocol.FlexWrap, Ui_components.sv "wrap" ]
+            [ Ui_components.Prop.flex_wrap `wrap ]
             (row ~key:"pt-bh" ~style_class:"block-head-wrap"
                ~main:`space_between ~cross:`center ~grow:1.
                ~data_attrs:[ ("style", "width:100%") ]
@@ -552,7 +552,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     [ (* flex-1: cljs .ls-block was the flex child directly; the wrapper
          must fill .ls-page-title's row axis or the title collapses *)
       Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (box ~key:"pt-inner" ~grow:1.
         [ (* TODO(component): .ls-block title row keeps the imperative
              block attr contract (blockid/containerid/data-… attrs) and
@@ -625,7 +625,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                             if collapsable_title () then
                               toggle_title_collapse ())
                           (Ui_components.with_props
-                             [ Lui_protocol.PressedOpacity, Ui_components.fv 0.3 ]
+                             [ Ui_components.Prop.pressed_opacity 0.3 ]
                              (Ui_parts.prop_signal Lui_protocol.Cursor
                                 (Signal.value caret_hover)
                                 (fun h -> if h then "pointer" else "default")
@@ -679,11 +679,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                             @ [ column ~key:"pt-col3" ~grow:1. ~cross:`stretch
                                 ~min_width:0
                                 [ Ui_components.with_props
-                                    [ Lui_protocol.FontSize,
-                                      Ui_components.sv
+                                    [ Ui_components.Prop.font_size
                                         "var(--ls-page-title-size, 32px)"
-                                    ; Lui_protocol.FontWeight,
-                                      Ui_components.iv 500 ]
+                                    ; Ui_components.Prop.font_weight 500 ]
                                     (box ~key:"pt-wrap" ~grow:1.
                                        ~foreground:
                                          "var(--lx-gray-12, \
@@ -703,9 +701,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                  (* the title-actions
                                                     row anchors
                                                     absolutely here *)
-                                                 [ Lui_protocol.Position
-                                                 , Ui_components.sv
-                                                     "relative" ]
+                                                 [ Ui_components.Prop.position `relative ]
                                                  (column ~key:"pt-cw" ~gap:8
                                                  ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
@@ -874,7 +870,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     ~min_height:60 ~margin_left:(-20)
     ~data_attrs:[ ("style", "overflow:hidden") ]
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner"
            ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
@@ -1150,7 +1146,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 ~min_height:60 ~margin_top:16 ~margin_left:(-20)
                 ~data_attrs:[ ("style", "overflow:hidden") ]
                 [ Ui_components.with_props
-                    [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                    [ Ui_components.Prop.position `relative ]
                     (box ~key:"page-blocks-inner"
                        ~style_class:"page-blocks-inner"
                        ~data_attrs:
@@ -1427,7 +1423,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     ~min_height:60 ~margin_top:16 ~margin_left:(-20)
     ~data_attrs:[ ("style", "overflow:hidden") ]
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (box ~key:"page-blocks-inner"
            ~style_class:"page-blocks-inner"
            ~data_attrs:

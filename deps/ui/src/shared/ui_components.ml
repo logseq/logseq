@@ -35,48 +35,41 @@ let popover_transition =
 let block_transition =
   "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
 
+(* Typed prop binds — see Ui_parts.Prop. *)
+module Prop = Ui_parts.Prop
+
 (* Post-mount static binds for props with no constructor argument
    (overflow, shadow, cursor, user-select, font-* on container kinds).
    Same wrap pattern as Ui_parts.pressable. *)
-let with_props binds (elem : t) : t =
+let with_props (binds : Prop.t list) (elem : t) : t =
  fun ctx parent ->
   let node = elem ctx parent in
   ignore (Ui_parts.standard_kind ctx node);
-  List.iter
-    (fun (prop, value) ->
-      match value with
-      | P.StringValue s -> Lui_ui.string_property ctx node prop s
-      | P.IntValue i -> Lui_ui.int_property ctx node prop i
-      | P.FloatValue f -> Lui_ui.float_property ctx node prop f
-      | P.BoolValue b -> Lui_ui.bool_property ctx node prop b)
-    binds;
+  List.iter (Prop.set ctx node) binds;
   node
 
 (* shui ghost-button interaction/layout contract as typed props —
    pairs with Ui_parts.ghost_btn_cls's semantic classes *)
 let ghost_wrap el =
   with_props
-    [ P.WhiteSpace, sv "nowrap"; P.Cursor, sv "pointer"
-    ; P.UserSelect, sv "none"; P.FontSize, sv "0.875rem"
-    ; P.FontWeight, iv 500
-    ; P.HoverBackground, sv "hsl(var(--secondary) / 0.7)"
-    ; P.HoverForeground, sv "hsl(var(--secondary-foreground))"
-    ; P.FocusShadow, sv
+    [ Prop.white_space `nowrap; Prop.cursor `pointer
+    ; Prop.user_select `none; Prop.font_size "0.875rem"
+    ; Prop.font_weight 500
+    ; Prop.hover_background "hsl(var(--secondary) / 0.7)"
+    ; Prop.hover_foreground "hsl(var(--secondary-foreground))"
+    ; Prop.focus_shadow
         "0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--background))"
-    ; P.DisabledOpacity, fv 0.5; P.PressedOpacity, fv 0.8
-    ; P.Transition, sv "background-color 0.15s, color 0.15s" ]
+    ; Prop.disabled_opacity 0.5; Prop.pressed_opacity 0.8
+    ; Prop.transition "background-color 0.15s, color 0.15s" ]
     el
 
-(* Post-mount reactive string-prop binds (state channels + cursor on
-   the cmdk item rows). *)
-let with_signal_props binds (elem : t) : t =
+(* Post-mount reactive binds (state channels + cursor on the cmdk item
+   rows). *)
+let with_signal_props (binds : Prop.s list) (elem : t) : t =
  fun ctx parent ->
   let node = elem ctx parent in
   ignore (Ui_parts.standard_kind ctx node);
-  List.iter
-    (fun (prop, source) ->
-      Lui_ui.string_property_signal ctx node prop source)
-    binds;
+  List.iter (Prop.set_signal ctx node) binds;
   node
 
 (* -- cmdk frame ------------------------------------------------------ *)
@@ -84,7 +77,7 @@ let with_signal_props binds (elem : t) : t =
 (* Rounded clip column inside the dialog host; the host keeps
    placement via .ls-dialog-cmdk. *)
 let cmdk_modal ~key children =
-  with_props [ P.Overflow, sv "hidden" ]
+  with_props [ Prop.overflow `hidden ]
     (column ~key ~gap:0 ~cross:`stretch ~corner_radius:8
        ~style_class:"cp__cmdk__modal" children)
 
@@ -93,7 +86,7 @@ let cmdk_modal ~key children =
    overlay children like the tooltip arrow. *)
 let cmdk_palette ~key ~sidebar children =
   with_props
-    [ P.Position, sv "relative"; P.UserSelect, sv "none" ]
+    [ Prop.position `relative; Prop.user_select `none ]
     (column ~key ~style_class:"cp__cmdk" ~cross:`stretch ~grow:1.
        ~corner_radius:(if sidebar then 0 else 8)
        ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
@@ -104,8 +97,7 @@ let cmdk_palette ~key ~sidebar children =
    keeps its full 54px of content (border-box would eat 1px). *)
 let cmdk_input_row ~key children =
   with_props
-    [ ( P.Shadow
-      , sv
+    [ ( Prop.shadow
           "inset 0 -1px 0 0 var(--ls-border-color, \
            hsl(var(--border)))" )
     ]
@@ -121,10 +113,10 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
     | _ -> ()
   in
   with_props
-    [ P.FontSize, sv "var(--lx-text-input)"
-    ; P.LineHeight, sv "1.75rem"
-    ; P.BorderWidth, iv 0
-    ; P.FocusShadow, sv "none"
+    [ Prop.font_size "var(--lx-text-input)"
+    ; Prop.line_height "1.75rem"
+    ; Prop.border_width 0
+    ; Prop.focus_shadow "none"
     ]
     ((* .lui-input ships h-10 + :focus-visible ring-2 that no typed prop
         reaches (the channel lands on --lui-focus-shadow, consumed only
@@ -147,7 +139,7 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
    trailing spacer — scroll has no bottom-only padding prop). *)
 let cmdk_scroller ~key children =
   with_props
-    [ P.MinHeightViewport, fv 0.65; P.MaxHeightViewport, fv 0.65 ]
+    [ Prop.min_height_viewport 0.65; Prop.max_height_viewport 0.65 ]
     ((* prod scroller sits on gray-02 (#f8f8f8 / #023643 dark), measured
         off the .search-results parent *)
      scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
@@ -179,7 +171,7 @@ let cmdk_group ~key ~kind ~last_signal ~pad children =
    the "show more" link fades in on hover (its own hover channel). *)
 let cmdk_group_header ~key children =
   with_props
-    [ P.FontSize, sv "var(--lx-text-header)"; P.LineHeight, sv "16px" ]
+    [ Prop.font_size "var(--lx-text-header)"; Prop.line_height "16px" ]
     (row ~key ~style_class:"cp__cmdk-group-header" ~cross:`center
        ~gap:8 ~height:32 ~padding_horizontal:12
        ~background:
@@ -195,7 +187,7 @@ let cmdk_group_header ~key children =
 let cmdk_group_title ~key ~value ~on_press : t =
   row ~key ~gap:0
     [ spacer ~key:"i" ~width:2 ~height:1 []
-    ; with_props [ P.UserSelect, sv "none"; P.Cursor, sv "pointer" ]
+    ; with_props [ Prop.user_select `none; Prop.cursor `pointer ]
         (text ~key:"t" ~style_class:"cp__cmdk-group-title" ~font_weight:700
            ~value ~on_press [])
     ]
@@ -210,10 +202,10 @@ let cmdk_group_count ~key ~value : t =
 let cmdk_group_more ~key ~on_press children : t =
   Ui_parts.pressable ~on_press
     (with_props
-       [ P.Opacity, fv 0.5
-       ; P.HoverOpacity, fv 0.9
-       ; P.UserSelect, sv "none"
-       ; P.Cursor, sv "pointer"
+       [ Prop.opacity 0.5
+       ; Prop.hover_opacity 0.9
+       ; Prop.user_select `none
+       ; Prop.cursor `pointer
        ]
        (row ~key ~min_width:110
           [ row ~key:"i"
@@ -227,20 +219,21 @@ let cmdk_group_more ~key ~on_press children : t =
    dual-track is gone. The header's -4px pull becomes a relative inset
    on the header row — same pixels as the deleted negative margin. *)
 let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
-    ~hover_background_signal ~hover_ring_signal ~cursor_signal ~header ~main
-    : t =
+    ~hover_background_signal ~hover_ring_signal
+    ~(cursor_signal : [ `default | `pointer | `text ] Signal.signal)
+    ~header ~main : t =
   let children =
     (match header with Some h -> [ h ] | None -> [])
     @ [ main ]
   in
   with_signal_props
-    [ P.Shadow, shadow_signal
-    ; P.HoverBackground, hover_background_signal
-    ; P.HoverShadow, hover_ring_signal
-    ; P.Cursor, cursor_signal
+    [ Prop.s_shadow shadow_signal
+    ; Prop.s_hover_background hover_background_signal
+    ; Prop.s_hover_shadow hover_ring_signal
+    ; Prop.s_cursor cursor_signal
     ]
     (with_props
-       [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.25rem" ]
+       [ Prop.font_size "var(--lx-text-row)"; Prop.line_height "1.25rem" ]
        (column ~key ~gap:2 ~cross:`stretch ~padding_vertical:6
           ~padding_horizontal:12 ~corner_radius:8
           ~data_attrs_signal ~background_signal children))
@@ -249,12 +242,12 @@ let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
    type, single-line ellipsis. *)
 let cmdk_item_header ~key children =
   with_props
-    [ P.FontSize, sv "var(--lx-text-header)"
-    ; P.FontWeight, iv 300
-    ; P.LineHeight, sv "16px"
-    ; P.Overflow, sv "hidden"
-    ; P.Position, sv "relative"
-    ; P.InsetTop, fv (-4.)
+    [ Prop.font_size "var(--lx-text-header)"
+    ; Prop.font_weight 300
+    ; Prop.line_height "16px"
+    ; Prop.overflow `hidden
+    ; Prop.position `relative
+    ; Prop.inset_top (-4.)
     ]
     (row ~key ~style_class:"breadcrumb" ~cross:`center
        ~gap:8 ~min_width:0
@@ -285,7 +278,7 @@ let cmdk_item_body ~key children =
     ~cross:`stretch children
 
 let cmdk_main_text ~key children =
-  with_props [ P.FontWeight, iv 500; P.Overflow, sv "hidden" ]
+  with_props [ Prop.font_weight 500; Prop.overflow `hidden ]
     (row ~key ~style_class:"cp__cmdk-item-main-text" ~cross:`center
        ~gap:4 ~min_width:0
        ~foreground:
@@ -298,7 +291,7 @@ let cmdk_main_text ~key children =
    to their own line). Small gray text like the deleted
    .cp__cmdk-item-info rule. *)
 let cmdk_info_text ~key children =
-  with_props [ P.FontSize, sv "var(--lx-text-header)" ]
+  with_props [ Prop.font_size "var(--lx-text-header)" ]
     (row ~key ~style_class:"cp__cmdk-item-info" ~cross:`center ~gap:0
        ~min_width:0
        ~foreground:
@@ -335,23 +328,20 @@ let cmdk_badge ~key ~value : t =
 let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
   let binds =
     (if boxed then
-       [ ( P.BackgroundValue
-         , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
-       ; P.CornerRadius, iv 4
+       [ ( Prop.background "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+       ; Prop.corner_radius 4
        ]
        @
        (* glow replaces the 1px border (.shui-shortcut-*.shui-shortcut-glow
           kbd{box-shadow:…;border:none}) *)
        if glow then
-         [ ( P.Shadow
-           , sv
+         [ ( Prop.shadow
                "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
                 var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
          ]
        else
-         [ P.BorderWidth, iv 1
-         ; ( P.BorderColorValue
-           , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+         [ Prop.border_width 1
+         ; ( Prop.border_color "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
          ]
      else [])
   in
@@ -363,20 +353,20 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
        ~padding_horizontal:4
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ with_props
-           [ P.FontSize, sv "var(--lx-text-header)"
-           ; P.FontWeight, iv 400
-           ; P.LineHeight, sv "16px"
-           ; P.LetterSpacing, fv (-0.5)
-           ; P.WhiteSpace, sv "nowrap"
+           [ Prop.font_size "var(--lx-text-header)"
+           ; Prop.font_weight 400
+           ; Prop.line_height "16px"
+           ; Prop.letter_spacing (-0.5)
+           ; Prop.white_space `nowrap
            ; (* the wrapper owns the keycap chrome — web kbd.shui-shortcut-key
                 has no intrinsic box; suppress the kind default's muted
                 chip + hairline so the translucent gray-06 fill shows *)
-             P.BackgroundValue, sv "transparent"
+             Prop.background "transparent"
            ; (* the kbd kind's text placement reserves 6/2 ink inset
                 which would stack on the wrapper's padding — zero it so
                 each key measures glyph + wrapper px-1, matching web *)
-             P.PaddingHorizontal, iv 0
-           ; P.PaddingVertical, iv 0
+             Prop.padding_horizontal 0
+           ; Prop.padding_vertical 0
            ]
            (kbd
               ~style_class:(if boxed then "" else "shui-shortcut-key")
@@ -396,22 +386,19 @@ let keycap_separator ~key : t =
    second paint. *)
 let shortcut_combo ~key ~glow children : t =
   with_props
-    ([ ( P.BackgroundValue
-       , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
-     ; P.CornerRadius, iv 4
+    ([ ( Prop.background "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+     ; Prop.corner_radius 4
      ]
      @
      if glow then
-       [ P.BorderWidth, iv 0
-       ; ( P.Shadow
-         , sv
+       [ Prop.border_width 0
+       ; ( Prop.shadow
              "var(--kbd-glow-top) 0px 1px 0px 0px inset, \
               var(--kbd-glow-bottom) 0px -1px 0px 0px inset" )
        ]
      else
-       [ P.BorderWidth, iv 1
-       ; ( P.BorderColorValue
-         , sv "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
+       [ Prop.border_width 1
+       ; ( Prop.border_color "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
        ~height:20 ~gap:0 children)
@@ -430,7 +417,7 @@ let shortcut_chord ~key children : t =
 (* "then" separator between chord groups — 10px at 45% opacity like
    cljs shui-shortcut-chord-sep. *)
 let chord_separator ~key : t =
-  with_props [ P.Opacity, fv 0.45 ]
+  with_props [ Prop.opacity 0.45 ]
     (text ~key ~font_size:"0.625rem"
        ~value:"then" [])
 
@@ -450,7 +437,7 @@ let shortcut_compact ~key children : t =
 let shortcut_slot ~key ~opacity_signal children : t =
   row ~key ~style_class:"shui-shortcut-row" ~cross:`center ~gap:4
     ~height:20 ~min_height:20 ~max_height:20 ~opacity_signal
-    [ with_props [ P.Overflow, sv "hidden" ]
+    [ with_props [ Prop.overflow `hidden ]
         (box ~key:"sc-cells" ~height:20 ~max_height:20 children) ]
 
 (* -- cmdk hints bar --------------------------------------------------- *)
@@ -459,8 +446,7 @@ let shortcut_slot ~key ~opacity_signal children : t =
    row's bottom one. *)
 let cmdk_hints_bar ~key children =
   with_props
-    [ ( P.Shadow
-      , sv
+    [ ( Prop.shadow
           "inset 0 1px 0 0 var(--lx-gray-05, var(--ls-border-color, \
            hsl(var(--border))))" )
     ]
@@ -475,7 +461,7 @@ let cmdk_hints_bar ~key children =
    4px of vertical pad around the 24px line *)
 let cmdk_hints_inner ~key children =
   with_props
-    [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.5rem" ]
+    [ Prop.font_size "var(--lx-text-row)"; Prop.line_height "1.5rem" ]
     (box ~key ~padding_vertical:2
        children)
 
@@ -492,23 +478,23 @@ let cmdk_hints_label ~key ~value : t =
 
 (* The tip line brightens on hover (own hover channel). *)
 let cmdk_tip ~key children : t =
-  with_props [ P.Opacity, fv 0.5; P.HoverOpacity, fv 1.0 ]
+  with_props [ Prop.opacity 0.5; Prop.hover_opacity 1.0 ]
     (row ~key ~cross:`center ~gap:4 children)
 
 (* Right-aligned action hints group — the -6px bleed-out under the bar's
    6px pad becomes a relative inset like the item header's. *)
 let cmdk_hints_group ~key children : t =
-  with_props [ P.Position, sv "relative"; P.InsetRight, fv (-6.) ]
+  with_props [ Prop.position `relative; Prop.inset_right (-6.) ]
     (row ~key ~cross:`center ~gap:8
        children)
 
 (* Flat 28px hint button — dims to 0.8 on hover via its own channel. *)
 let cmdk_hint_button ~key ~label ~on_press children : t =
   with_props
-    [ P.FontSize, sv "var(--lx-text-header)"
-    ; P.Opacity, fv 0.4
-    ; P.HoverOpacity, fv 0.8
-    ; P.Cursor, sv "pointer"
+    [ Prop.font_size "var(--lx-text-header)"
+    ; Prop.opacity 0.4
+    ; Prop.hover_opacity 0.8
+    ; Prop.cursor `pointer
     ]
     (button ~key ~label ~on_press ~height:28 ~min_height:28 ~padding:0
        ~style_class:"cp__cmdk-hint" ~background:"transparent"
@@ -523,9 +509,9 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
 (* "Search only: <group>" filter chip. *)
 let cmdk_search_only ~key children : t =
   with_props
-    [ P.FontSize, sv "var(--lx-text-header)"
-    ; P.FontWeight, iv 500
-    ; P.LineHeight, sv "1rem"
+    [ Prop.font_size "var(--lx-text-header)"
+    ; Prop.font_weight 500
+    ; Prop.line_height "1rem"
     ]
     (column ~key ~opacity:0.7
        ~padding_vertical:4 ~padding_horizontal:12 children)
@@ -543,7 +529,7 @@ let cmdk_search_only_name ~key ~value : t =
     ]
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
-  with_props [ P.Cursor, sv "pointer" ]
+  with_props [ Prop.cursor `pointer ]
     (button ~key ~icon:`x ~size:`icon ~label ~on_press
        ~background:"transparent"
        ~border_width:0 ~padding:4 [])
@@ -561,10 +547,9 @@ let cmdk_empty ~key children : t =
    off so the bubble never steals hover from its own trigger. *)
 let tooltip_content ~key ~at ~arrow_x ~above children : t =
   with_props
-    [ P.ZIndex, iv 50
-    ; P.PointerEnabled, P.BoolValue false
-    ; ( P.Shadow
-      , sv
+    [ Prop.z_index 50
+    ; Prop.pointer_enabled false
+    ; ( Prop.shadow
           "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ]
@@ -576,15 +561,15 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
        ~border_color:"var(--lui-c-border)" ~background:"hsl(var(--popover))"
        ~foreground:"hsl(var(--popover-foreground))"
        ([ with_props
-            [ P.FontSize, sv "0.75rem"; P.LineHeight, sv "16px" ]
+            [ Prop.font_size "0.75rem"; Prop.line_height "16px" ]
             (column ~key:"tip" ~gap:6 children)
         ; with_props
-            ([ P.Position, sv "absolute"
-             ; P.PointerEnabled, P.BoolValue false
-             ; P.InsetLeft, fv arrow_x
+            ([ Prop.position `absolute
+             ; Prop.pointer_enabled false
+             ; Prop.inset_left arrow_x
              ]
-            @ if above then [ P.InsetBottom, fv (-4.) ]
-              else [ P.InsetTop, fv (-4.) ])
+            @ if above then [ Prop.inset_bottom (-4.) ]
+              else [ Prop.inset_top (-4.) ])
             (box ~key:"arrow" ~style_class:"ui__tooltip-arrow" ~width:8
                ~height:8 ~border_width:1
                ~border_color:"hsl(var(--border))"
@@ -595,7 +580,7 @@ let ls_tooltip_col ~key children : t =
   column ~key ~cross:`start ~gap:4 children
 
 let ls_tooltip_keys ~key children : t =
-  with_props [ P.Opacity, fv 0.8 ]
+  with_props [ Prop.opacity 0.8 ]
     (row ~key ~cross:`center ~gap:1
        children)
 
@@ -645,10 +630,10 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
    Inside a flex-col label cell cljs uses leading-5 (20px). *)
 let form_label ~key ?(line_height = "1.75rem") ?text_signal ~text () : t =
   with_props
-    [ P.FontSize, sv "0.875rem"
-    ; P.FontWeight, iv 500
-    ; P.LineHeight, sv line_height
-    ; P.Opacity, fv 0.7
+    [ Prop.font_size "0.875rem"
+    ; Prop.font_weight 500
+    ; Prop.line_height line_height
+    ; Prop.opacity 0.7
     ]
     (match text_signal with
      | Some s -> label ~key ~value_signal:s []
@@ -679,21 +664,21 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
     | P.TextChanged (_, q) -> on_text q
     | _ -> ()
   in
-  with_props [ P.Position, sv "relative" ]
+  with_props [ Prop.position `relative ]
     (row ~key ~cross:`center ~gap:0
        ~min_width:0
        ([ with_props
-            [ P.Position, sv "absolute"
-            ; P.InsetLeft, fv (if pad_left >= 32 then 10. else 8.)
-            ; P.Opacity, fv 0.5
-            ; P.PointerEnabled, P.BoolValue false
+            [ Prop.position `absolute
+            ; Prop.inset_left (if pad_left >= 32 then 10. else 8.)
+            ; Prop.opacity 0.5
+            ; Prop.pointer_enabled false
             ]
             (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ])
         ; with_props
-            ([ P.FontSize, sv font_size ]
+            ([ Prop.font_size font_size ]
             @
             if borderless then
-              [ P.BorderWidth, iv 0; P.FocusShadow, sv "none" ]
+              [ Prop.border_width 0; Prop.focus_shadow "none" ]
             else [])
             (search_field ~key:"in" ~grow:1. ~min_width:0 ~height
                ?background ~placeholder ?autofocus ~text_signal:text
@@ -720,12 +705,12 @@ let nav_item ~key ~data_id ~icon:icon_ ~text ~selected_signal:selected
      child pulled back inside the label inset. *)
   let icn_el =
     with_props
-      [ P.MarginLeft, iv (-26); P.MarginTop, iv 1 ]
+      [ Prop.margin_left (-26); Prop.margin_top 1 ]
       (Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_)
   in
-  with_props [ P.HoverBackground, sv "var(--lx-nav-active)" ]
+  with_props [ Prop.hover_background "var(--lx-nav-active)" ]
     (with_props
-       [ P.FontSize, sv "0.875rem"; P.LineHeight, sv "1.25rem" ]
+       [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem" ]
        (list_item ~key ~text ~corner_radius:4 ~min_height:0 ~height:32
           ~padding_vertical:6 ~padding_horizontal:34 ~main:`start
           ~foreground:"inherit"
@@ -753,10 +738,10 @@ let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
          hsl(var(--muted))))") ~on_toggle () : t =
   reactive ~equal:( = ) (fun c ->
     with_props
-      [ P.Cursor, sv "pointer"
-      ; P.FontSize, sv font_size
-      ; P.Opacity, fv (if c then 1. else off_opacity)
-      ; P.HoverOpacity, fv 1.
+      [ Prop.cursor `pointer
+      ; Prop.font_size font_size
+      ; Prop.opacity (if c then 1. else off_opacity)
+      ; Prop.hover_opacity 1.
       ]
       (toggle_button ~key ~variant:`ghost ~text ~checked:c ~on_toggle
          ~min_height:0 ~height:(pad_v * 2 + 14) ~padding_vertical:pad_v
@@ -776,10 +761,10 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
     ?(opacity = 1.) ?hover_opacity ?border_color ?border_width ?label
     ?style_class children : t =
   with_props
-    ([ P.Cursor, sv "pointer"; P.Opacity, fv opacity ]
+    ([ Prop.cursor `pointer; Prop.opacity opacity ]
     @
     match hover_opacity with
-    | Some o -> [ P.HoverOpacity, fv o ]
+    | Some o -> [ Prop.hover_opacity o ]
     | None -> [])
     (button ~key ~variant:`ghost ~width:size ~height:size ~min_width:size
        ~min_height:size ~padding:0 ~corner_radius:9999 ~background
@@ -794,11 +779,10 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
    native/web hook; visuals ride typed props. *)
 let property_pill ~key children : t =
   with_props
-    [ ( P.Shadow
-      , sv "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
-    ; P.FontSize, sv "0.875rem"
-    ; P.LineHeight, sv "20px"
-    ; P.Overflow, sv "hidden"
+    [ ( Prop.shadow "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
+    ; Prop.font_size "0.875rem"
+    ; Prop.line_height "20px"
+    ; Prop.overflow `hidden
     ]
     (row ~key ~style_class:"bottom-property-pill"
        ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
@@ -812,7 +796,7 @@ let property_pill ~key children : t =
    whole card body arrives as a single child. position:relative keeps
    the gear menu's absolute `.menu-list` anchored to the card. *)
 let plugin_card ~key ?(classes = "") child : t =
-  with_props [ P.Position, sv "relative" ]
+  with_props [ Prop.position `relative ]
     (card ~key ~style_class:("cp__plugins-item-card" ^ classes)
        ~corner_radius:8 ~padding:12 ~min_width:256 ~border_width:1
        ~border_color:
@@ -830,7 +814,7 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
     ~selected_signal:selected
     ~on_press () : t =
   with_props
-    [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
+    [ Prop.hover_opacity 1.; Prop.cursor `pointer; Prop.opacity 0.9 ]
     (list_item ~key ~on_press ~selected_signal:selected
        ~min_height:0 ~width:100 ~padding_vertical:0 ~padding_horizontal:0
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
@@ -839,7 +823,7 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
        [ column ~key:"c" ~cross:`start ~gap:0 ~min_height
            [ Ui_parts.class_signal selected
                (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-               (with_props [ P.Overflow, sv "hidden" ]
+               (with_props [ Prop.overflow `hidden ]
                   (box ~key:"i" ~width:92 ~height:63 ~corner_radius:4
                      ~border_width:1
                      ~border_color:"var(--lx-gray-06, hsl(var(--border)))"
@@ -862,10 +846,9 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
 let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     ?(data_attrs = []) items : t =
   with_props
-    [ ( P.Shadow
-      , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+    [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
-    ; P.FontSize, sv "0.875rem" ]
+    ; Prop.font_size "0.875rem" ]
     (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
@@ -877,8 +860,7 @@ let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
 let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     children : t =
   with_props
-    [ ( P.Shadow
-      , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+    [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" ) ]
     (popover ~transition:popover_transition ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
@@ -891,13 +873,11 @@ let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
    is the .ui__popover-content/.ui__dropdown-menu-content shadow,
    [sub_card_shadow] the deeper .ui__dropdown-menu-sub-content variant. *)
 let card_shadow =
-  ( P.Shadow
-  , sv "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+  ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
   )
 
 let sub_card_shadow =
-  ( P.Shadow
-  , sv "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / \
+  ( Prop.shadow "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / \
         0.1)" )
 
 (* Floating dialog close — the .ui__dialog-close spec (absolute
@@ -906,11 +886,11 @@ let sub_card_shadow =
    the containing block. *)
 let dialog_close ~key ~label ~on_press : t =
   with_props
-    [ P.Position, sv "absolute"
-    ; P.InsetTop, fv 16.
-    ; P.InsetRight, fv 16.
-    ; P.Opacity, fv 0.7
-    ; P.HoverOpacity, fv 1. ]
+    [ Prop.position `absolute
+    ; Prop.inset_top 16.
+    ; Prop.inset_right 16.
+    ; Prop.opacity 0.7
+    ; Prop.hover_opacity 1. ]
     (button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
        ~corner_radius:4 ~icon:`x ~label ~on_press [])
 
@@ -926,8 +906,7 @@ let dialog_close ~key ~label ~on_press : t =
 let action_bar_capsule ~key ?(cls = "") ?border_color ?border_width
     child : t =
   with_props
-    [ ( P.Shadow
-      , sv "0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, \
+    [ ( Prop.shadow "0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, \
            0.08)" ) ]
     (box ~key ~style_class:cls ~background:"hsl(var(--popover))"
        ?border_color ?border_width ~corner_radius:6 [ child ])
@@ -967,8 +946,8 @@ let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
 let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
     ~on_press =
   with_props
-    [ P.FontSize, sv "0.875rem"; P.FontWeight, iv 500
-    ; P.Cursor, sv "pointer"; P.HoverBackground, sv "hsl(var(--muted))" ]
+    [ Prop.font_size "0.875rem"; Prop.font_weight 500
+    ; Prop.cursor `pointer; Prop.hover_background "hsl(var(--muted))" ]
     (button ~key ?size ~variant ~text ~autofocus
        ~style_class:"ui__button ls-btn"
        ~corner_radius:6 ~border_width:1
@@ -981,8 +960,8 @@ let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
 let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
     ~on_press =
   with_props
-    [ P.FontSize, sv "0.875rem"; P.FontWeight, iv 500
-    ; P.Cursor, sv "pointer"; P.HoverOpacity, fv 0.9 ]
+    [ Prop.font_size "0.875rem"; Prop.font_weight 500
+    ; Prop.cursor `pointer; Prop.hover_opacity 0.9 ]
     (button ~key ?size ~variant ~text ~autofocus
        ~style_class:"ui__button ls-btn-primary"
        ~corner_radius:6 ~border_width:0
@@ -1004,7 +983,7 @@ let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
    the same mechanism .cp__dialog-shell uses. *)
 let alert_dialog_overlay ~key children =
   with_props
-    [ P.Position, sv "fixed"; P.Inset, fv 0.; P.ZIndex, iv 999 ]
+    [ Prop.position `fixed; Prop.inset 0.; Prop.z_index 999 ]
     (column ~key ~grow:1. ~main:`center ~cross:`center
        ~style_class:"ui__alert-dialog-overlay"
        ~background:
@@ -1013,9 +992,8 @@ let alert_dialog_overlay ~key children =
 
 let alert_dialog_content ~key ~data_attrs children =
   with_props
-    [ P.Position, sv "fixed"; P.ZIndex, iv 999
-    ; ( P.Shadow
-      , sv "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
+    [ Prop.position `fixed; Prop.z_index 999
+    ; ( Prop.shadow "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
             rgb(0 0 0 / 0.1)" ) ]
     (column ~key ~gap:16 ~padding:24 ~max_width:512 ~corner_radius:8
        ~border_width:1 ~border_color:"var(--lui-c-border)"

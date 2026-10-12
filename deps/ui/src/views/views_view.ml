@@ -536,8 +536,8 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
   Logseq_el.el ~style_class:"block-title-wrap"
     ~attrs:[ ("style", "padding:8px") ]
     [ Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "16px"
-        ; Lui_protocol.FocusShadow, Ui_components.sv "none" ]
+        [ Ui_components.Prop.font_size "16px"
+        ; Ui_components.Prop.focus_shadow "none" ]
         (input ~style_class:"cp__select-input" ~padding:6
            ~data_attrs:[ ("style", "width:100%"); ("type", "text") ]
            ~text:v.Wr.vtitle ~autofocus:true ~submit_on_enter:true

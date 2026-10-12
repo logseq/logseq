@@ -62,11 +62,11 @@ let topbar st =
   in
   fun ctx parent ->
     Ui_components.with_props
-    [ P.InsetTop, Ui_components.fv 0.
-    ; P.InsetLeft, Ui_components.fv 0.
-    ; P.InsetRight, Ui_components.fv 0.
-    ; P.ZIndex, Ui_components.iv 999
-    ; P.UserSelect, Ui_components.sv "none" ]
+    [ Ui_components.Prop.inset_top 0.
+    ; Ui_components.Prop.inset_left 0.
+    ; Ui_components.Prop.inset_right 0.
+    ; Ui_components.Prop.z_index 999
+    ; Ui_components.Prop.user_select `none ]
     (row ~key:"rs-topbar" ~main:`space_between ~cross:`center
        ~data_attrs_signal:
          (Signal.constant ctx.Lui_ui.ui_scheduler
@@ -191,8 +191,8 @@ let breadcrumb crumbs =
     | c :: rest ->
         loop
           (Ui_components.with_props
-             [ Lui_protocol.Opacity, Ui_components.fv 0.7
-             ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+             [ Ui_components.Prop.opacity 0.7
+             ; Ui_components.Prop.hover_opacity 1. ]
              (text ~key:("bc-" ^ c)
                 ~style_class:"breadcrumb-item" ~value:c [])
            :: text ~key:("bcsep-" ^ c) ~value:"/" ~padding_horizontal:4 []
@@ -205,8 +205,8 @@ let breadcrumb crumbs =
       row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center
         ~data_attrs:[ ("style", "margin:0;text-align:left") ]
         (Ui_components.with_props
-           [ Lui_protocol.Opacity, Ui_components.fv 0.7
-           ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+           [ Ui_components.Prop.opacity 0.7
+           ; Ui_components.Prop.hover_opacity 1. ]
            (text ~key:("bc-" ^ first)
               ~style_class:"breadcrumb-item" ~value:first [])
          :: List.rev (loop [] rest))
@@ -539,7 +539,7 @@ let item_body st idx (it : Sidebar_state.item) =
         ~data_attrs:
           [ ("style", "position:relative;margin:0 12px 20px") ]
         [ Ui_components.with_props
-            [ Lui_protocol.Position, Ui_components.sv "relative" ]
+            [ Ui_components.Prop.position `relative ]
             (column ~key:("inner-" ^ it.key) ~gap:16
                ~style_class:"page-inner"
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
@@ -568,7 +568,7 @@ let item_body st idx (it : Sidebar_state.item) =
                  [ (* data-cid is read by editor_actions' [data-cid]
                       closest queries *)
                    Ui_components.with_props
-                     [ Lui_protocol.Position, Ui_components.sv "relative" ]
+                     [ Ui_components.Prop.position `relative ]
                      (box ~key:("pbin-" ^ it.key)
                         ~style_class:"page-blocks-inner"
                      ~data_attrs:[ ("data-cid", "sidebar") ]
@@ -603,7 +603,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
     ~accessibility_identifier:("sbi-" ^ it.Sidebar_state.key)
     ~data_attrs:[ ("style", "position:relative") ]
     [ Ui_components.with_props
-        [ Lui_protocol.Position, Ui_components.sv "relative" ]
+        [ Ui_components.Prop.position `relative ]
         (column ~key:("wrap-" ^ it.key) ~grow:1.
         [ item_header st idx it
         ; item_body st idx it
