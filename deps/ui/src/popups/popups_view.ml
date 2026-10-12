@@ -96,7 +96,7 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
   | Some ic ->
       row ~key ~style_class:"icon-cp-container" ~cross:`center
         ~gap:4
-        [ icon ~key:"ti" ~name:(Icons.name_ref ic) ~point_size:14
+        [ icon ~key:"ti" ~name:(Icons.app_ref_of_id ic) ~point_size:14
             ~style_class:"ui__icon" []
         ; hl ]
   | None -> hl
@@ -112,10 +112,10 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, true) ->
          [ row ~key:"cp" ~style_class:"icon-cp-container"
              ~cross:`center ~foreground:"inherit"
-             [ icon ~key:"ni" ~name:(Icons.name_ref icn) ~point_size:14
+             [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
                  ~style_class:"ui__icon" [] ] ]
      | Some (icn, false) ->
-         [ icon ~key:"ni" ~name:(Icons.name_ref icn) ~point_size:14
+         [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
              ~style_class:"ui__icon" [] ]
      | None -> [])
 ;;

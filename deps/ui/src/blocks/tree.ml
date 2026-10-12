@@ -203,8 +203,11 @@ let icon_el uuid (icon : Model.icon) : t =
       [ Logseq_emoji.el ~key:("ice-" ^ uuid) ~name:icon.icon_id () ]
   else
     (* tabler icon via the app registry — the icon kind renders its own
-       svg/mask; the ti/ti-* font classes would double-render *)
-    Lui_elements.icon ~key:("ic-" ^ uuid) ~name:(`app icon.icon_id)
+       svg/mask; the ti/ti-* font classes would double-render. The stored
+       id is the display name with spaces stripped (cljs icon-cp), so map
+       it back through the picker's pair table for the registry slug *)
+    Lui_elements.icon ~key:("ic-" ^ uuid)
+      ~name:(Icons.app_ref_of_id icon.icon_id) ~point_size:14
       ~style_class:("ui__icon ls-icon-" ^ icon.icon_id)
       []
 

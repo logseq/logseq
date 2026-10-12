@@ -112,6 +112,27 @@ let name_ref name : Lui_elements.icon =
       | None -> `app n)
 ;;
 
+(* stored icon ids are the display name with spaces stripped (cljs
+   icon-cp), and display order does not always kebab back to the
+   registry name ("24 Hours" -> "hours-24"), so map the id back through
+   the compiled (display, kebab) pair table *)
+let app_ref_of_id =
+  let table =
+    lazy
+      (let t = Hashtbl.create (Array.length Icon_picker_names.items) in
+       Array.iter
+         (fun (display, kebab_name) ->
+           Hashtbl.replace t
+             (String.concat "" (String.split_on_char ' ' display))
+             kebab_name)
+         Icon_picker_names.items;
+       t)
+  in
+  fun id : Lui_elements.icon ->
+    match Hashtbl.find_opt (Lazy.force table) id with
+    | Some kebab_name -> `app kebab_name
+    | None -> name_ref id
+
 (* extension-pack icon names — the imperative icon path in web_dom.ml
    still falls back to `tie tie-*` font classes for these *)
 let tie_names =

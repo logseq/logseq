@@ -116,12 +116,11 @@ let block_page_breadcrumb (page : Model.page) : t list =
   | [] -> []
   | parents ->
       [ Ui_components.with_props
-          [ Lui_protocol.Overflow, Ui_components.sv "hidden"
-          ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+          [ Lui_protocol.Overflow, Ui_components.sv "hidden" ]
           (row ~key:"bc" ~min_width:0 ~padding_vertical:8
              ~cross:`center
              ~style_class:"breadcrumb block-parents"
-             ~data_attrs:[ ("style", "max-width:100%") ]
+             ~data_attrs:[ ("style", "max-width:100%;white-space:nowrap") ]
           [ Lui_element_combine.breadcrumb_trail ~key:"bct"
               ~items:
                 (List.map

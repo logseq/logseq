@@ -378,13 +378,16 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          (fun (id, n) -> item_btn (Emoji_item (id, n)))
                          (Emoji_mart.all_emojis ())) ]) ]
       | Tab_icon ->
+          (* browse cap: the unfiltered table is ~6200 icons — a single
+             render of the full grid stalls the frame for seconds, so the
+             tab shows the same first-100 bound the search uses *)
           column ~gap:4 ~grow:1.
             [ pane_section
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
                 (List.map
                    (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                   (icon_items ())) ])
+                   (take 100 (icon_items ()))) ])
     else
       let icons =
         if s.tab = Tab_emoji then []

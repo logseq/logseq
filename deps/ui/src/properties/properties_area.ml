@@ -276,13 +276,13 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
             ~data_attrs:[ ("style", "user-select:none") ] []
         ]
     ; Ui_components.with_props
-        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
-        ; Lui_protocol.WhiteSpace, Ui_components.sv "nowrap" ]
+        [ Lui_protocol.FontSize, Ui_components.sv "0.875rem" ]
         (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
            ~style_class:"bottom-property-content property-value-container"
            ~data_attrs:
-             [ ("style", "position:relative;min-width:0;overflow:hidden;\
-                flex-shrink:0") ]
+             [ ( "style"
+               , "position:relative;min-width:0;overflow:hidden;\
+                  flex-shrink:0;white-space:nowrap" ) ]
            [ V.view ~hover:None ctx prow ])
     ]
 
