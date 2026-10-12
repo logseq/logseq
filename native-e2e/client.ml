@@ -238,9 +238,15 @@ let invoke_fixture ?repo app method_name args =
 let read ?repo app method_name args =
   let allowed = ["thread-api/q"; "thread-api/pull"; "thread-api/get-blocks";
                  "thread-api/get-page-blocks-tree"; "thread-api/get-block-parents";
-                 "thread-api/get-all-pages"; "thread-api/get-page-route-info"] in
+                 "thread-api/get-all-pages"; "thread-api/get-page-route-info";
+                 "thread-api/get-display-properties"; "thread-api/get-property-closed-values";
+                 "thread-api/get-bidirectional-properties"] in
   if not (List.mem method_name allowed) then invalid_arg ("Not a read oracle: " ^ method_name);
   invoke_fixture ?repo app method_name args
+let validate ?repo app =
+  let _, _, actual = daemon ?repo app in
+  invoke_fixture ~repo:actual app "thread-api/validate-db"
+    [Wire.String actual; Wire.Map [Wire.kw "fix", Wire.Bool false]]
 let q ?repo ?(inputs = []) app query =
   let _, _, actual = daemon ?repo app in
   read ~repo:actual app "thread-api/q" [Wire.String actual; Wire.Array (Wire.String query :: inputs)]
@@ -257,7 +263,8 @@ let start app =
   if app.closed || app.pid <> None then invalid_arg "Invalid app start state";
   List.iter (fun path -> if not (Sys.file_exists path) then failwith ("Missing build prerequisite: " ^ path)) [host app; daemon_bin app];
   let variables = ["LOGSEQ_ROOT_DIR", app.root; "LOGSEQ_UI_STATE_DIR", app.settings;
-                   "LOGSEQ_DB_WORKER_BIN", daemon_bin app; "LOGSEQ_NATIVE_E2E_SOCKET", app.socket; "LOGSEQ_BOOT_TRACE", "1"] in
+                   "LOGSEQ_DB_WORKER_BIN", daemon_bin app; "LOGSEQ_NATIVE_E2E_SOCKET", app.socket;
+                   "LOGSEQ_NO_LOGIN_DAEMON", "1"; "LOGSEQ_BOOT_TRACE", "1"] in
   let variables = match Sys.getenv_opt "LOGSEQ_NATIVE_SDL_PREFIX" with
     | None -> variables
     | Some prefix ->

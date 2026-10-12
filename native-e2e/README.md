@@ -123,6 +123,9 @@ per case and `declared_parity_cases`/`declared_additional_cases` for the registr
 `client.mli` and `suite.mli` are the public interfaces. `Suite.with_app` creates
 and starts a real app, captures failure evidence, and closes it in `Fun.protect`.
 Nested calls create simultaneous clients with separate daemon roots/settings.
+Every start/reload/restart forces `LOGSEQ_NO_LOGIN_DAEMON=1` in the host's
+environment, overriding caller values. Fixtures must not install per-root login
+LaunchAgents that outlive their deleted graph roots.
 `Client.create/start/close` is the lower-level lifecycle interface; always protect
 `close`. Optional `root` shares an explicitly caller-owned graph root for RTC or
 multi-client scenarios; the caller must remove that external root after all
@@ -150,6 +153,12 @@ clients close. Settings and socket directories remain private per app.
   is explicit arbitrary worker setup transport; it must never replace the UI
   operation under test. Encoding reuses project `Wire` and native `Transit`
   verbatim; no cache-string or storage-format transformations.
+  The property read allowlist includes `thread-api/get-display-properties`,
+  `thread-api/get-property-closed-values` and `thread-api/get-bidirectional-properties`.
+  `validate ?repo app : Wire.t` always sends `[repo, {:fix false}]` to the real
+  `thread-api/validate-db`. Assert a non-nil result, nil `errors`, and empty
+  `invalid-entity-ids` in the returned map as appropriate. Unrestricted
+  `validate-db` is **not** a read oracle: omitted options default to repair/mutation.
 - SDK: `sdk_call ?namespace` uses closed `Api | Ui | Utils | Assets | Experiments
   | Debug` namespaces and invokes the same production `Sdk_api` registry as
   `window.logseq.api`/`sdk.*`, with at most four JSON arguments and async polling.
