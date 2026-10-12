@@ -305,6 +305,26 @@
                                       :logseq.property.code/lang])
                      @actual-blocks)))))))
 
+(deftest-async paste-text-parseable-makes-quote-blocks
+  (let [actual-blocks (atom nil)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      db-async/<get-block-page-info
+      (fn [& _] (p/resolved {:db/id 1 :block/name "paste target"}))
+      editor-handler/paste-blocks (fn [blocks _opts]
+                                    (reset! actual-blocks blocks)
+                                    (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-text-parseable
+                 :markdown
+                 "- > a quote\n  > second line\n- not > a quote")]
+        (is (= [{:block/title "a quote\nsecond line"
+                 :logseq.property.node/display-type :quote}
+                {:block/title "not > a quote"}]
+               (mapv #(select-keys % [:block/title :logseq.property.node/display-type])
+                     @actual-blocks))
+            "a block of > lines, as the text export writes a quote block, pastes back as a quote block")))))
+
 (deftest-async paste-text-parseable-preserves-og-copied-heading-page-refs
   (let [actual-blocks (atom nil)
         date-page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

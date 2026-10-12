@@ -14,6 +14,17 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
+(defn- quote-display-block
+  "A block whose every line starts with `>` (Markdown quote, as the text export
+  writes a quote block) becomes a quote block of the unquoted lines."
+  [block]
+  (let [lines (some-> (:block/title block) string/trim string/split-lines)]
+    (if (and (seq lines) (every? #(re-find #"^>( |$)" %) lines))
+      (assoc block
+             :block/title (string/join "\n" (map #(string/replace-first % #"^> ?" "") lines))
+             :logseq.property.node/display-type :quote)
+      block)))
+
 (defn- standalone-display-block
   [block]
   (let [raw-title (:block/title block)
@@ -42,7 +53,7 @@
                :logseq.property.node/display-type :math)
 
         block)
-      block)))
+      (quote-display-block block))))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
