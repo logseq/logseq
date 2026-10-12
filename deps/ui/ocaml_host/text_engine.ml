@@ -3,7 +3,7 @@
    Renamed to text_engine for this host.
 *)
 
-(* CoreText-backed text engine for the window host: turns the paint
+(* Platform text engine for the window host: turns the paint
    pipeline's text_ops requests into glyph ops on the scene's shared
    atlases and measures leaf text for the layout stub.
 
@@ -13,6 +13,8 @@
    scale so Retina text stays sharp. *)
 
 open Lui_scene
+
+module Lui_text = Host_platform.Text
 
 (* Cache key for one rasterized glyph in an atlas. *)
 type glyph_key = {
@@ -247,13 +249,13 @@ let slot_of t run_font gid sub shade scale scene =
   | None ->
     let n = Lui_text.subpixel_positions ~scale run_font in
     let dx = if n <= 1 then 0. else float sub /. float n in
-    let colored = Lui_text.is_color run_font in
     let slot =
       match
         Lui_text.rasterize ~scale ~dx
           ~shade:(float shade /. 8.) run_font gid
       with
       | Some b when b.Lui_text.w > 0 && b.Lui_text.h > 0 ->
+        let colored = b.Lui_text.color in
         let atlas =
           if colored then scene.color_atlas else scene.mask_atlas
         in
@@ -292,7 +294,8 @@ let emit_glyph t scene ~scale ~pen ~baseline ~font ~gid ~g_y ~fg =
         gcolored = s.sl_colored;
         gsubpixel = false; gthin = false }
     in
-    scene.glyphs <- scene.glyphs @ [ gl ];
+    (* Lui_paint seals the frame by reversing this accumulator. *)
+    scene.glyphs <- gl :: scene.glyphs;
     true
 
 let text_ops t id r fg s =

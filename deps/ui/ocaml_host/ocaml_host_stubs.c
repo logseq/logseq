@@ -1884,4 +1884,62 @@ CAMLprim value logseq_native_menu_popup(value spec_v) {
   CAMLreturn(Val_int(sel));
 }
 
+#elif defined(__linux__)
+
+#include <fontconfig/fontconfig.h>
+
+/* SDL and the window manager own activation and decorations on Linux.
+   AppKit-only chrome has no corresponding work on this host. */
+CAMLprim value logseq_native_activate(value unit) {
+  (void)unit;
+  return Val_unit;
+}
+
+CAMLprim value logseq_native_titlebar_blend(value unit) {
+  (void)unit;
+  return Val_unit;
+}
+
+CAMLprim value logseq_native_register_fonts(value directory) {
+  CAMLparam1(directory);
+  FcConfig *config = FcConfigGetCurrent();
+  if (config == NULL ||
+      !FcConfigAppFontAddDir(config, (const FcChar8 *)String_val(directory))) {
+    caml_failwith("logseq_native: unable to register bundled fonts");
+  }
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_sidebar_theme(value dark) {
+  (void)dark;
+  return Val_unit;
+}
+
+CAMLprim value logseq_native_sidebar_vibrancy(value x, value y, value w,
+                                            value h, value visible) {
+  (void)x;
+  (void)y;
+  (void)w;
+  (void)h;
+  (void)visible;
+  return Val_unit;
+}
+
+/* Linux renders menus through LUI. These entry points must never be
+   reached when the host advertises its Linux capabilities. */
+CAMLprim value logseq_native_install_menus(value unit) {
+  (void)unit;
+  caml_failwith("logseq_native: AppKit menus require macOS");
+}
+
+CAMLprim value logseq_native_app_op(value tag) {
+  (void)tag;
+  caml_failwith("logseq_native: AppKit application actions require macOS");
+}
+
+CAMLprim value logseq_native_menu_popup(value spec) {
+  (void)spec;
+  caml_failwith("logseq_native: AppKit menu popups require macOS");
+}
+
 #endif

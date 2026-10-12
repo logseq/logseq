@@ -464,6 +464,7 @@ let login_agent_label (repo : string) : string =
   ^ String.sub (sha256_hex (root_dir () ^ "|" ^ repo)) 0 8
 
 let ensure_login_daemon (repo : string) : unit =
+  if Platform_native.is_mac () then
   match Sys.getenv_opt "LOGSEQ_NO_LOGIN_DAEMON" with
   | Some _ -> ()
   | None -> (
