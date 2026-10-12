@@ -172,7 +172,8 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
       | Some ic ->
           [ row ~key:"ic" ~style_class:"ls-ac-ic" ~cross:`center ~gap:4
               ~min_width:0
-              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~style_class:"ui__icon" []
+              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~point_size:14
+                  ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
       | None -> [ text ~key:"t" ~value:txt [] ])
@@ -335,43 +336,76 @@ let ac_inner (st : S.t) : t =
     if it.S.ai_key = S.empty_key then ac_empty_placeholder (S.get st)
     else ac_item_static st it
   in
-  scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
-    ~style_class:"hide-scrollbar"
-    ~data_attrs:
-      [ ("style", "position:relative;-webkit-overflow-scrolling:touch") ]
-    ~data_attrs_signal:
-      (Logseq_el.own context
-         (Signal.map
-            (fun (v : S.view) ->
-              match v.S.ac with
-              | Some a ->
-                  (* the popup-ref scoped max-heights — slash popup
-                     flipped to top-side clamps tighter *)
-                  [ ( "style"
-                    , "max-height:min(calc(var(--available-height, "
-                      ^ (match a.S.kind, a.S.flip with
-                         | S.Slash, Some _ -> "460px) - 60px), 460px"
-                         | _ -> "480px) - 20px), 480px")
-                      ^ ")" ) ]
-              | None -> [])
-            (Signal.value (st.S.vs))))
-    [ column ~key:"ac-col"
-        [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
-            ~mount:(fun u_sig ->
-          (* the key fingerprints the unit fully, so sampling once is
-             stable *)
-          match Signal.sample u_sig with
-          | AItem it -> row it
-          | AGroup g ->
-              box ~key:("grp" ^ g.g_key)
-                (text ~key:"ghdr"
-                   ~style_class:"ui__ac-group-name" ~padding:8
-                   ~font_size:"0.75rem" ~font_weight:500
-                   ~foreground:"hsl(var(--popover-foreground) / 0.2)"
-                   ~value:(Option.value ~default:"" g.g_hdr)
-                   []
-                 :: List.map row g.g_items)) ] ]
-    context parent
+  (* web clamps ac-inner through the inline style's
+     --available-height expression; the native host ignores attrs-carried
+     style, so the same bound goes out as the wire max-height prop *)
+  let max_height_sig =
+    Logseq_el.own context
+      (Signal.map
+         (fun (v : S.view) ->
+           match v.S.ac with
+           | Some a ->
+               let avail =
+                 match a.S.flip with
+                 | Some (_, avail') -> avail'
+                 | None ->
+                     Ui_services.dom_viewport_height () -. a.S.y -. 5.
+               in
+               int_of_float
+                 (Float.min
+                    (avail -.
+                       (match a.S.kind, a.S.flip with
+                        | S.Slash, Some _ -> 60.
+                        | _ -> 20.))
+                    (match a.S.kind, a.S.flip with
+                     | S.Slash, Some _ -> 460.
+                     | _ -> 480.))
+           | None -> 0)
+         (Signal.value (st.S.vs)))
+  in
+  let node =
+    scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
+      ~style_class:"hide-scrollbar"
+      ~data_attrs:
+        [ ("style", "position:relative;-webkit-overflow-scrolling:touch") ]
+      ~data_attrs_signal:
+        (Logseq_el.own context
+           (Signal.map
+              (fun (v : S.view) ->
+                match v.S.ac with
+                | Some a ->
+                    (* the popup-ref scoped max-heights — slash popup
+                       flipped to top-side clamps tighter *)
+                    [ ( "style"
+                      , "max-height:min(calc(var(--available-height, "
+                        ^ (match a.S.kind, a.S.flip with
+                           | S.Slash, Some _ -> "460px) - 60px), 460px"
+                           | _ -> "480px) - 20px), 480px")
+                        ^ ")" ) ]
+                | None -> [])
+              (Signal.value (st.S.vs))))
+      [ column ~key:"ac-col"
+          [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
+              ~mount:(fun u_sig ->
+            (* the key fingerprints the unit fully, so sampling once is
+               stable *)
+            match Signal.sample u_sig with
+            | AItem it -> row it
+            | AGroup g ->
+                box ~key:("grp" ^ g.g_key)
+                  (text ~key:"ghdr"
+                     ~style_class:"ui__ac-group-name" ~padding_horizontal:8
+                     ~padding_vertical:4
+                     ~font_size:"0.75rem" ~font_weight:500
+                     ~foreground:"hsl(var(--popover-foreground) / 0.2)"
+                     ~value:(Option.value ~default:"" g.g_hdr)
+                     []
+                   :: List.map row g.g_items)) ] ]
+      context parent
+  in
+  ignore (Ui_parts.standard_kind context node);
+  Lui_ui.int_property_signal context node P.MaxHeight max_height_sig;
+  node
 ;;
 
 (* cljs base-ui anchors the popup at a 1x1 rect at the caret point, so

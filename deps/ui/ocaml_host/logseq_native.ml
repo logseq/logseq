@@ -580,7 +580,9 @@ let () =
   let apply_patch_json (s : string) =
     if s <> "" then begin
       List.iter
-        (fun b -> ignore (Lui_host.apply_batch host b))
+        (fun b ->
+          ignore
+            (Lui_host.apply_batch host (Host_requests.expand_style_attrs b)))
         (Patch_decode.batches_of_string s);
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
@@ -1495,7 +1497,7 @@ let () =
           fprop "value" ^ fprop "grow" ^ fprop "role" ^ fprop "index"
           ^ fprop "offset" ^ fprop "height" ^ fprop "width"
           ^ fprop "orientation" ^ fprop "flex-wrap"
-          ^ fprop "name" ^ fprop "icon" ^ fprop "font-size"
+          ^ fprop "name" ^ fprop "icon" ^ fprop "text" ^ fprop "font-size"
           ^ fprop "font-weight" ^ fprop "opacity" ^ fprop "margin-left"
           ^ (match Host_icons.resolved_name store id with
              | Some s -> " ires=" ^ s

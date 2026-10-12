@@ -319,6 +319,124 @@ let prop_of_name (name : string) : property option =
     (fun p -> Lui_wire_schema.property_name p = name)
     Lui_wire_schema.all_properties
 
+(* The extension "attrs" prop carries an opaque JSON object whose
+   "style" key holds a CSS declaration string — the only paint/layout
+   channel extension nodes have. The native layout and paint pipelines
+   read typed props by name, so the declarations that map onto them are
+   mirrored here: parsing "padding:0.375rem 0.5rem" yields
+   (prop "padding", "6 8"). Only the subset the pipelines consume is
+   translated; everything else stays opaque. *)
+let css_px (s : string) : float option =
+  let s = String.trim s in
+  let n = String.length s in
+  let f k = float_of_string_opt (String.trim (String.sub s 0 (n - k))) in
+  if n > 3 && String.sub s (n - 3) 3 = "rem" then Option.map (( *. ) 16.) (f 3)
+  else if n > 2 && String.sub s (n - 2) 2 = "px" then f 2
+  else if n > 2 && String.sub s (n - 2) 2 = "pt" then
+    Option.map (( *. ) (96. /. 72.)) (f 2)
+  else if n > 2 && String.sub s (n - 2) 2 = "em" then Option.map (( *. ) 16.) (f 2)
+  else float_of_string_opt s
+
+(* One CSS length token → the string the flex length parser accepts:
+   px/rem/em flatten to px numbers, percent passes through, the rest is
+   left verbatim ("auto" resolves to Auto, unknown units to Unset). *)
+let css_len_tok tok =
+  match css_px tok with
+  | Some v ->
+    if Float.is_integer v then Printf.sprintf "%d" (int_of_float v)
+    else Printf.sprintf "%g" v
+  | None -> tok
+
+let css_shorthand s =
+  String.split_on_char ' ' s
+  |> List.filter (fun t -> String.trim t <> "")
+  |> List.map css_len_tok |> String.concat " "
+
+let css_float name s =
+  match css_px s with
+  | Some v -> Some (name, FloatValue v)
+  | None -> None
+
+let css_str name s = Some (name, StringValue s)
+
+(* The declaration table: css name → (prop name, translator). *)
+let style_decl name value =
+  let lower = String.lowercase_ascii name in
+  match lower with
+  | "padding" -> css_str "padding" (css_shorthand value)
+  | "padding-top" | "padding-right" | "padding-bottom" | "padding-left"
+  | "padding-horizontal" | "padding-vertical" ->
+    css_str lower (css_len_tok value)
+  | "margin" -> css_str "margin" (css_shorthand value)
+  | "margin-top" | "margin-right" | "margin-bottom" | "margin-left"
+  | "margin-horizontal" | "margin-vertical" ->
+    css_str lower (css_len_tok value)
+  | "width" | "height" | "min-width" | "min-height" | "max-width"
+  | "max-height" ->
+    css_str lower (css_len_tok value)
+  | "gap" | "row-gap" | "column-gap" -> css_str lower (css_len_tok value)
+  | "font-size" | "font-weight" | "line-height" | "letter-spacing" ->
+    css_float lower value
+  | "opacity" -> css_float "opacity" value
+  | "border-radius" -> css_float "corner-radius" value
+  | "background" | "background-color" -> css_str "background" value
+  | "box-shadow" -> css_str "shadow" value
+  | "display" -> (
+    match String.lowercase_ascii (String.trim value) with
+    | "flex" | "inline-flex" -> css_str "orientation" "horizontal"
+    | "none" -> css_str "display" "none"
+    | _ -> None)
+  | "flex-direction" -> (
+    match String.lowercase_ascii (String.trim value) with
+    | "row" -> css_str "orientation" "horizontal"
+    | "column" -> css_str "orientation" "vertical"
+    | _ -> None)
+  | "flex-wrap" -> css_str "flex-wrap" (String.trim value)
+  | "justify-content" -> css_str "main" (String.trim value)
+  | "align-items" -> css_str "cross" (String.trim value)
+  | _ -> None
+
+let style_props_of (style : string) : (string * wire_value) list =
+  String.split_on_char ';' style
+  |> List.filter_map (fun decl ->
+         match String.index_opt decl ':' with
+         | Some i ->
+           let name =
+             String.sub decl 0 i |> String.trim |> String.lowercase_ascii
+           and value =
+             String.sub decl (i + 1) (String.length decl - i - 1)
+             |> String.trim
+           in
+           if name = "" || value = "" then None
+           else style_decl name value
+         | None -> None)
+
+(* Derived props for one attrs JSON payload. *)
+let style_derived_props (raw : string) : (string * wire_value) list =
+  match (try J.from_string raw with Yojson.Json_error _ -> `Null) with
+  | `Assoc kvs -> (
+    match List.assoc_opt "style" kvs with
+    | Some (`String style) -> style_props_of style
+    | _ -> [])
+  | _ -> []
+
+(* Expand a batch: every extension "attrs" write also writes the props
+   its embedded style maps onto, so layout/paint see them without the
+   callers knowing about the wire encoding. *)
+let expand_style_attrs (b : patch_batch) : patch_batch =
+  let extra =
+    List.concat_map
+      (fun op ->
+        match op with
+        | SetExtensionProp (id, "attrs", StringValue raw) ->
+          List.map
+            (fun (name, v) -> SetExtensionProp (id, name, v))
+            (style_derived_props raw)
+        | _ -> [])
+      b.ops
+  in
+  if extra = [] then b else { b with ops = b.ops @ extra }
+
 let set_named (e : env) (id : int) (name : string) (v : wire_value) =
   let op =
     if is_extension e id then SetExtensionProp (id, name, v)
@@ -327,7 +445,7 @@ let set_named (e : env) (id : int) (name : string) (v : wire_value) =
       | Some p -> SetProp (id, p, v)
       | None -> SetExtensionProp (id, name, v)
   in
-  e.apply_batch { generation = 0; ops = [ op ] }
+  e.apply_batch (expand_style_attrs { generation = 0; ops = [ op ] })
 
 let attrs_of (e : env) (id : int) : (string * string) list =
   match Lui_store.string_prop e.store id "attrs" with
