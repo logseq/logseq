@@ -281,8 +281,7 @@ let fallback_tag = function _ -> "span"
 
 (* The [style] attr is a web DOM contract that native hosts
    parse-ignore; decode the declarations the typed props cover into
-   extension props so emphasis/code/mark read the same on native.
-   font-style (italic) has no channel and stays unstyled for now. *)
+   extension props so emphasis/code/mark read the same on native. *)
 let px_of (s : string) =
   let n = String.length s in
   let stop =
@@ -305,8 +304,7 @@ let px_of (s : string) =
    property setters. Extension nodes admit no typed props themselves
    (common_property_supported whitelists standard kinds only), so [el]
    mounts the declared style on a [row] wrapping the element's
-   children: text styling inherits through it to the run. font-style
-   (italic) has no channel and stays unstyled for now. *)
+   children: text styling inherits through it to the run. *)
 let style_setters attrs =
   match List.assoc_opt "style" attrs with
   | None -> []
@@ -349,6 +347,10 @@ let style_setters attrs =
               Some
                 (fun c n ->
                   Lui_ui.string_property c n FontFamily value)
+            | "font-style" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n FontStyle value)
             | "font-size" ->
               Some
                 (fun c n ->

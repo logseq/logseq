@@ -192,7 +192,12 @@ let font_of store id =
     | Some s -> [var_fallback s]
     | None -> ["Inter"]
   in
-  let f = Lui_text.create ~families ~weight ~italic:false ~size () in
+  let italic =
+    match inherited_str store id "font-style" with
+    | Some "italic" | Some "oblique" -> true
+    | _ -> false
+  in
+  let f = Lui_text.create ~families ~weight ~italic ~size () in
   (match Sys.getenv_opt "LOGSEQ_NATIVE_DEBUG", !logged_family with
    | Some _, false ->
      logged_family := true;
