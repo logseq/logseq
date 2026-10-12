@@ -627,21 +627,15 @@ let inner st =
        ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
        ~style_class:"cp__right-sidebar-inner"
        ~data_attrs:[ ("style", "width:100%;height:100%;padding-top:0") ]
-    [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
+    [ column ~key:"rs-col" ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
-        [ column ~key:"rs-col" ~grow:1.
-            [ topbar st
-            ; reactive
+        [ topbar st
+        ; scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
+            ~style_class:"sidebar-item-list scrollbar-spacing"
+            [ reactive
                 (fun items ->
-                  column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
+                  column ~key:"rs-items" ~padding_horizontal:8
                     ~margin_left:4 ~margin_top:(-8)
-                    ~style_class:"sidebar-item-list scrollbar-spacing"
-                    ~data_attrs:
-                      [ ( "style"
-                        , "margin-left:4px;margin-top:-8px;\
-                           padding-bottom:150px;height:calc(100vh - 48px)"
-                        )
-                      ]
                     (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator"
                        ~height:8
                        (* cljs container.css .sidebar-drop-indicator: the
@@ -649,7 +643,8 @@ let inner st =
                           first item header lands below the sticky topbar
                           instead of clipping under it *)
                        []
-                     :: List.mapi (sidebar_item st) items))
+                     :: List.mapi (sidebar_item st) items
+                     @ [ spacer ~key:"rs-bottom-space" ~height:150 [] ]))
                 (Signal.value st.Sidebar_state.items) ] ]
     ])
 
