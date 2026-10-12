@@ -1,5 +1,7 @@
 (ns logseq.db-sync.node-server-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["ws" :as ws]
+            [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [logseq.db-sync.node.server :as node-server]
             [logseq.db-sync.platform.node :as platform-node]
             [logseq.db-sync.worker.auth :as auth]
@@ -26,6 +28,47 @@
                                  (if (= "AbortError" (.-name error))
                                    (resolve timeout-sentinel)
                                    (reject error))))))))}))
+
+(defn- ws-upgrade-outcome
+  "Opens a websocket to `path` with `token`; resolves :open, [:status n] for an
+  HTTP answer, :closed when the server drops the socket, :timeout after timeout-ms."
+  [base-url path token timeout-ms]
+  (js/Promise.
+   (fn [resolve]
+     (let [url (str (string/replace base-url #"^http" "ws") path)
+           ^js client (new (.-WebSocket ws) url #js {:headers #js {"authorization" (str "Bearer " token)}})
+           settled (atom false)
+           settle! (fn [outcome]
+                     (when (compare-and-set! settled false true)
+                       (resolve outcome)))
+           timer (js/setTimeout #(do (settle! :timeout) (.terminate client)) timeout-ms)]
+       (.on client "open" (fn [] (js/clearTimeout timer) (settle! :open) (.close client)))
+       (.on client "unexpected-response" (fn [_req ^js res]
+                                           (js/clearTimeout timer)
+                                           (settle! [:status (.-statusCode res)])
+                                           (.destroy (.-socket res))))
+       (.on client "error" (fn [_error] (js/clearTimeout timer) (settle! :closed)))
+       (.on client "close" (fn [& _] (js/clearTimeout timer) (settle! :closed)))))))
+
+(deftest node-server-answers-ws-upgrade-when-auth-claims-rejects-test
+  (async done
+         (let [stop-server! (atom nil)]
+           (-> (p/with-redefs [auth/auth-claims
+                               (fn [_request _env]
+                                 (p/rejected (ex-info "jwks" {})))]
+                 (p/let [{:keys [base-url stop!]} (node-server/start! {:port 0
+                                                                       :data-dir (str "tmp/db-sync-node-server-test/" (random-uuid))})
+                         _ (reset! stop-server! stop!)
+                         outcome (ws-upgrade-outcome base-url "/sync/graph-x" "test.token.sig" 1500)]
+                   (is (= [:status 500] outcome)
+                       "an upgrade whose auth fails is answered, not left open")))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally (fn []
+                            ;; stop! only when the socket was answered: an open
+                            ;; one keeps the server from closing
+                            (if-let [stop! @stop-server!]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
 
 (deftest node-server-env-passes-the-admin-token-test
   (let [penv (.-env js/process)
