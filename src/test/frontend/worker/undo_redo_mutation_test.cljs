@@ -78,6 +78,7 @@
   (some #(when (= ::worker-undo-redo/db-transact (first %)) (second %))
         (last (get (worker-undo-redo/get-debug-state test-repo) stack))))
 
+;; Fails if, in `set-pending-editor-info!`, `if` becomes `if-not`.
 (deftest set-pending-editor-info-goes-into-next-entry-test
   (let [alpha (block-uuid "alpha")
         info (cursor alpha)]
@@ -90,6 +91,7 @@
       (worker-undo-redo/set-pending-editor-info! test-repo nil)
       (is (nil? (:pending-editor-info (worker-undo-redo/get-debug-state test-repo)))))))
 
+;; Fails if, in `undo-redo-aux`, `first` becomes `last`.
 (deftest ui-state-entry-with-editor-info-returns-ui-state-str-test
   (testing "record-editor-info! appends to the newest entry, a ui-state entry included; undo and redo still return its ui-state string"
     (let [ui-state-str "{:old-state {}, :new-state {:route-data {:to :page}}}"
@@ -99,6 +101,7 @@
       (is (= ui-state-str (:ui-state-str (worker-undo-redo/undo test-repo))))
       (is (= ui-state-str (:ui-state-str (worker-undo-redo/redo test-repo)))))))
 
+;; Fails if, in `undo-redo-action-meta`, `not` becomes `identity`.
 (deftest synced-graph-history-action-tx-meta-test
   (testing "on a synced graph undo and redo go to the worker history action, marked undo and redo"
     (mark-graph-synced!)
@@ -112,6 +115,7 @@
         (is (= [tx-id true true false] ((juxt :tx-id :undo? (comp :undo? :tx-meta) (comp :redo? :tx-meta)) undo-call)))
         (is (= [false false true] ((juxt :undo? (comp :undo? :tx-meta) (comp :redo? :tx-meta)) redo-call)))))))
 
+;; Fails if, in `gen-undo-ops!`, `and` becomes `or` or `nil?` becomes `some?`.
 (deftest added-and-retracted-ids-test
   (let [alpha (block-uuid "alpha")
         beta-id (:db/id (d/entity @(conn) [:block/uuid (block-uuid "beta")]))
