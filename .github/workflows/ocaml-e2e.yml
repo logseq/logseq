@@ -247,6 +247,7 @@ jobs:
         with:
           name: e2e-logs-${{ matrix.shard }}
           path: ocaml-e2e/.parallel-logs/
+          include-hidden-files: true
           retention-days: 1
 
   success:
