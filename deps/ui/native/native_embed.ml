@@ -74,13 +74,15 @@ let attrs_parse_cache : (int, string * Js.Json.t) Hashtbl.t =
    runtime_extension_properties, but plain elements only have the
    standard table. Without this fallback a selector like #cmdk-input can
    never match a standard input node. *)
-let std_prop_string (rt : Lui_runtime.application) node prop =
+let std_prop (rt : Lui_runtime.application) node prop =
   match Hashtbl.find_opt rt.Lui_runtime.runtime_properties node with
-  | Some map -> (
-      match Lui_protocol.Property_map.find_opt prop map with
-      | Some (Lui_protocol.StringValue s) -> Some s
-      | _ -> None)
+  | Some map -> Lui_protocol.Property_map.find_opt prop map
   | None -> None
+
+let std_prop_string rt node prop =
+  match std_prop rt node prop with
+  | Some (Lui_protocol.StringValue s) -> Some s
+  | _ -> None
 
 let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   let props =
@@ -179,6 +181,13 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
               |> push "href" Lui_protocol.UrlValue
           | _ -> kvs
         in
+        let kvs =
+          match std_prop_string rt node Lui_protocol.PlaceholderValue with
+          | Some placeholder ->
+              ("placeholder", Js.Json.JString placeholder)
+              :: List.remove_assoc "placeholder" kvs
+          | None -> kvs
+        in
         Js.Json.JObject kvs
     | other -> other
   in
@@ -197,8 +206,20 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
         | None -> acc_id)
     | _ -> acc_id
   in
+  let semantics =
+    let heading =
+      match std_prop rt node Lui_protocol.HeadingLevel with
+      | Some (Lui_protocol.IntValue level) ->
+          [ "heading-level", Js.Json.JNumber (float_of_int level) ]
+      | None -> []
+      | Some _ -> invalid_arg "Invalid rendered HeadingLevel"
+    in
+    match std_prop_string rt node Lui_protocol.As with
+    | Some tag -> ("as", Js.Json.JString tag) :: heading
+    | None -> heading
+  in
   Js.Json.JObject
-    [ ("tag", Js.Json.JString tag)
+    ([ ("tag", Js.Json.JString tag)
     ; ( "class"
       , Js.Json.JString
           (Option.value
@@ -218,7 +239,7 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
           (Option.value
              (prop_string "text" Lui_protocol.TextValue)
              ~default:"") )
-    ]
+    ] @ semantics)
 
 (* Snapshot caches — collecting the doc walks every extension node and
    parses each node's "attrs" JSON, and the query paths (selector lookups,
