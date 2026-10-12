@@ -193,7 +193,10 @@ let body_rm_class c =
 
 (* ---------- url / hash routing ---------- *)
 
-let hash_ref = ref ""
+let hash_ref =
+  ref (Option.value ~default:"" (local_storage_get "native-last-route"))
+
+let remember_hash hash = local_storage_set "native-last-route" hash
 
 (* in-memory navigation history — the native app has no browser
    history, so back/forward is a pair of hash stacks. [set_location_hash]
@@ -214,6 +217,7 @@ let set_location_hash s =
     if !hash_ref <> "" then back_stack := !hash_ref :: !back_stack;
     fwd_stack := [];
     hash_ref := s;
+    remember_hash s;
     notify_hash ()
   end
 
@@ -267,7 +271,9 @@ let hash_query_param name =
           name
     | None -> None
 
-let replace_url_fragment hash = hash_ref := hash
+let replace_url_fragment hash =
+  hash_ref := hash;
+  remember_hash hash
 
 let history_back () =
   match !back_stack with
@@ -276,6 +282,7 @@ let history_back () =
       fwd_stack := !hash_ref :: !fwd_stack;
       back_stack := t;
       hash_ref := h;
+      remember_hash h;
       notify_hash ()
 
 let history_forward () =
@@ -285,6 +292,7 @@ let history_forward () =
       back_stack := !hash_ref :: !back_stack;
       fwd_stack := t;
       hash_ref := h;
+      remember_hash h;
       notify_hash ()
 
 (* ---------- semantic theme/nav/doc service impls ---------- *)
