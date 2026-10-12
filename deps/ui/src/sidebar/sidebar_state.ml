@@ -141,12 +141,12 @@ let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 (* ~240px / ~460px against a 1440px viewport, expressed as ratios *)
 let left_fraction_min = 0.167
 let left_fraction_max = 0.32
-(* app.logseq.com ships ~246px — px semantics, so the default is its
-   1440px-viewport ratio *)
-let left_fraction_default = 0.171
+(* app.logseq.com ships 246px / 480px docks — px semantics, so the
+   defaults are the 1434px-track ratios that floor to those px *)
+let left_fraction_default = 0.1716
 let right_fraction_min = 0.167
 let right_fraction_max = 0.5
-let right_fraction_default = 0.4
+let right_fraction_default = 0.3375
 
 let fraction_of_storage ~key ~default =
   match Ui_services.storage_get key with

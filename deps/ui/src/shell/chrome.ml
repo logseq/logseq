@@ -683,17 +683,9 @@ let header (ms : Model.t Signal.signal) =
       ]
     [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
         ~data_attrs:[ ("style", "padding-left:8px;height:100%") ]
-        [ Ui_parts.class_signal ms
-            (fun (m : Model.t) ->
-              (* always mounted: hiding via a CSS transition-delay lets
-                 the sidebar's own top row clip out before these fade
-                 in, so a toggle never shows both copies at once *)
-              if m.Model.left_sidebar_open then "head-l-btns is-hidden"
-              else "head-l-btns")
-            (row ~key:"head-l-btns" ~cross:`center
-               ~transition:
-                 "visibility 0s linear 0.28s, opacity 0.12s linear 0.28s"
-               [ left_menu_button (); search_button () ]) ]
+        [ row ~key:"head-l-btns" ~cross:`center
+            ~style_class:"head-l-btns"
+            [ left_menu_button (); search_button () ] ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
         ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]
@@ -832,11 +824,8 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                      var(--lx-gray-03, \
                      var(--ls-tertiary-background-color));z-index:3" )
                 ]
-           [ row ~key:"ls-top" ~height:52 ~padding_horizontal:8
-               ~style_class:"left-sidebar-top"
-               [ row ~key:"ls-top-pair" ~cross:`center ~margin_top:8
-                   [ left_menu_button ~key:"ls-top-menu-btn" ()
-                   ; search_button ~key:"ls-top-search-btn" () ] ]
+           [ row ~key:"ls-top" ~height:52 ~style_class:"left-sidebar-top"
+               []
            ; box ~key:"ls-wrap" ~style_class:"wrap"
                ~data_attrs:
                  [ ( "style"
