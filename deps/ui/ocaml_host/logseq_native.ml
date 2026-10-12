@@ -444,6 +444,62 @@ let () =
         text_ops =
           (fun id r fg s ->
              let ops = Text_engine.text_ops text_engine id r fg s in
+             let ops =
+               match !host_cell with
+               | None -> ops
+               | Some h -> (
+                 let store = Lui_host.store h in
+                 match
+                   Text_engine.inherited_str store id "text-decoration"
+                 with
+                 | None -> ops
+                 | Some deco ->
+                   let pad =
+                     (Lui_paint.text_placement_of store id).tp_pad_x
+                     *. !scale_cell
+                   in
+                   let mw, mh =
+                     Text_engine.measure_text text_engine id s
+                   in
+                   let fill y =
+                     Lui_scene.Fill
+                       { frect =
+                           Lui_scene.rect (r.Lui_scene.x +. pad) y mw 2.;
+                         fradii = (0., 0., 0., 0.);
+                         fcontinuous = false;
+                         fcolor = fg;
+                         fpaint = Lui_scene.Solid;
+                         fcolor2 = fg;
+                         fgradient = (0., 0., 0., 0.);
+                         fborder = (0., 0., 0., 0.);
+                         fborder_color = Lui_scene.color 0 0 0 0;
+                         fdashed = false;
+                         fwide = 0;
+                         fopacity = 1. }
+                   in
+                   ops
+                   @ (String.split_on_char ' ' deco
+                     |> List.filter_map (fun tok ->
+                            match String.trim tok with
+                            | "underline" ->
+                              Some
+                                (fill
+                                   (r.Lui_scene.y
+                                    +. (r.Lui_scene.h +. mh) /. 2.
+                                    -. 2.))
+                            | "line-through" ->
+                              Some
+                                (fill
+                                   (r.Lui_scene.y
+                                    +. (r.Lui_scene.h -. mh) /. 2.
+                                    +. mh *. 0.55))
+                            | "overline" ->
+                              Some
+                                (fill
+                                   (r.Lui_scene.y
+                                    +. (r.Lui_scene.h -. mh) /. 2.))
+                            | _ -> None)))
+             in
              let marked = Ui.marked ui in
              if marked = "" || id <> Ui.focused ui then ops
              else begin
