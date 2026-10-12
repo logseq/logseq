@@ -19,13 +19,12 @@
    - id-ref->title-ref / content-id-ref->page tests: none exist in
      deps/db test dirs
 
+   Additional native process coverage:
+   - src/test/frontend/worker/db_worker_node_test.cljs (53 deftests):
+     the native daemon in bin/main.exe now exposes real HTTP, SSE and
+     graph-lifecycle admission; see DAEMON-TRANSPORT-CONTRACTS.md for
+     the source-to-native semantic inventory and remaining gaps.
    Whole-file drops (no native counterpart):
-   - src/test/frontend/worker/db_worker_node_test.cljs (52 deftests):
-     drives the cljs db-worker-node daemon — logseq.cli.server HTTP
-     /v1/invoke + /v1/events SSE and the @logseq/graph-lifecycle npm
-     module. There is no OCaml daemon/server to port it against;
-     VERIFY-CLJS.md covers those tests by loading the melange build
-     into the cljs daemon harness instead.
    - src/test/frontend/worker/a_test_env.cljs: js/globalThis
      (self/importScripts/postMessage) shims — N/A natively.
 
@@ -3955,6 +3954,7 @@ let () =
     ; "render-resource", Test_render_resource_native.cases
     ; "render-affected-keys", Test_render_affected_keys_native.cases
     ; "db-worker", Test_db_worker_native.cases
+    ; "daemon-http", Test_daemon_native.cases
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases
     ; "shared-service", Test_shared_service_native.cases
