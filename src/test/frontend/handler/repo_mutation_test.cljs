@@ -14,6 +14,7 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+;; Fails if, in `demo-only-repo?`, `some?` becomes `nil?` or `=` becomes `not=`.
 (deftest removable-repo?-demo-graph-test
   (let [demo {:url config/demo-repo}
         other {:url "logseq_db_other"}]
@@ -26,6 +27,7 @@
       (is (true? (repo-handler/removable-repo? other [other])))
       (is (true? (repo-handler/removable-repo? other [demo other]))))))
 
+;; Fails if, in `remove-repo!`, `first` becomes `last`.
 (deftest removing-current-repo-switches-to-the-first-remaining-graph-test
   (async done
          (let [repo {:url "logseq_db_current"}
@@ -50,6 +52,7 @@
                   (is false (str error))))
                (p/finally done)))))
 
+;; Fails if, in `create-db`, `when-not` becomes `when`.
 (deftest new-db-creates-today-journal-only-for-a-new-graph-test
   (async done
          (let [events (atom [])]

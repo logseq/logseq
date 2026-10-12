@@ -29,6 +29,7 @@
                (set (map #(if (map? %) (:block/name %) %) (:block/refs result)))))
         @shown))))
 
+;; Fails if, in `warn-missing-uuid-refs!`, `when` becomes `when-not`, `=` becomes `not=`, `first` becomes `last` or `nil?` becomes `some?`.
 (deftest saving-a-block-ref-warns-only-when-the-referenced-block-is-missing-test
   (async done
     (-> (p/let [when-present (warnings-for-saved-refs #{ref-uuid})
@@ -39,6 +40,7 @@
         (p/catch (fn [e] (is (nil? e))))
         (p/finally (fn [& _] (done))))))
 
+;; Fails if, in `save-file!`, `=` becomes `not=`.
 (deftest saving-custom-css-applies-the-style-test
   (async done
     (let [added (atom 0)]
@@ -53,6 +55,7 @@
           (p/catch (fn [e] (is (nil? e))))
           (p/finally (fn [& _] (done)))))))
 
+;; Fails if, in `markdown-hashtag-link-target`, `and` becomes `or`.
 (deftest only-a-hashtag-link-target-refs-the-cached-tag-test
   (let [tag-uuid #uuid "5c6cd067-c602-4955-96b8-74b62e08113c"
         tag-page {:db/id 12

@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [logseq.common.util :as common-util]))
 
+;; Fails if, in `tag-valid?`, `when` becomes `when-not` or `not` becomes `identity`.
 (deftest tag-valid?-test
   (is (true? (common-util/tag-valid? "foo bar")))
   (is (true? (common-util/tag-valid? "foo/bar")))
@@ -10,6 +11,7 @@
   (is (nil? (common-util/tag-valid? nil)))
   (is (nil? (common-util/tag-valid? :foo))))
 
+;; Fails if, in `wrapped-by`, `>=` becomes `>`, `last` becomes `first` or `first` becomes `last`.
 (deftest wrapped-by-quotes?-test
   (testing "the shortest wrapped string is the 2 quote characters"
     (is (true? (common-util/wrapped-by-quotes? "\"\"")))
@@ -20,16 +22,19 @@
     (is (false? (common-util/wrapped-by-quotes? "\"foo")))
     (is (false? (common-util/wrapped-by-quotes? "foo\"")))))
 
+;; Fails if, in `safe-page-name-sanity-lc`, `if` becomes `if-not`.
 (deftest safe-page-name-sanity-lc-test
   (is (= "foo bar" (common-util/safe-page-name-sanity-lc "Foo Bar")))
   (is (nil? (common-util/safe-page-name-sanity-lc nil)))
   (is (= 1 (common-util/safe-page-name-sanity-lc 1))))
 
+;; Fails if, in `get-file-ext`, `and` becomes `or`.
 (deftest get-file-ext-test
   (is (= "md" (common-util/get-file-ext "pages/Foo.MD")))
   (is (false? (common-util/get-file-ext "pages/foo")))
   (is (false? (common-util/get-file-ext nil))))
 
+;; Fails if, in `safe-read-string`, `when` becomes `when-not`.
 (deftest safe-read-string-log-error?-test
   (let [logged (atom [])
         console-error (.-error js/console)]
@@ -49,6 +54,7 @@
       (finally
         (set! (.-error js/console) console-error)))))
 
+;; Fails if, in `get-page-title`, `or` becomes `and`.
 (deftest get-page-title-test
   (is (= "Foo" (common-util/get-page-title {:block/title "Foo" :block/name "foo"})))
   (is (= "foo" (common-util/get-page-title {:block/name "foo"}))))

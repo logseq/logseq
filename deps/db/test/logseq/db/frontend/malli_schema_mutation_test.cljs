@@ -4,6 +4,7 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `empty-placeholder-value?`, `and` becomes `or`.
 (deftest ref-property-value-that-is-not-the-empty-placeholder-is-validated-test
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:due {:logseq.property/type :date}}

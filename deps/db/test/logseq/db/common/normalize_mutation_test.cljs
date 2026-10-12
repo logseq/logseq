@@ -29,6 +29,7 @@
   [{:keys [db-after db-before tx-data]}]
   (vec (db-normalize/normalize-tx-data db-after db-before tx-data)))
 
+;; Fails if, in `remove-retract-entity-ref`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest normalize-tx-data-drops-ref-retracts-of-a-deleted-block-test
   (let [page-uuid (random-uuid)
         block-uuid (random-uuid)
@@ -40,6 +41,7 @@
     (is (not-any? #(and (= 5 (count %)) (= [:block/uuid block-uuid] (nth % 3))) normalized)
         "the retractEntity covers the ref to the deleted block: no separate datom for it")))
 
+;; Fails if, in `remove-conflict-datoms`, `first` becomes `last`.
 (deftest remove-conflict-datoms-keeps-the-last-datom-of-an-eavt-test
   (let [added (d/datom 1 :block/title "x" 5 true)
         retracted (d/datom 1 :block/title "x" 5 false)]
@@ -47,6 +49,7 @@
     (is (= [false] (mapv :added (db-normalize/remove-conflict-datoms [added retracted]))))
     (is (= [true] (mapv :added (db-normalize/remove-conflict-datoms [retracted added]))))))
 
+;; Fails if, in `remove-conflict-datoms`, `first` becomes `last`.
 (deftest normalize-tx-data-add-then-retract-of-a-title-in-one-tx-test
   (let [page-uuid (random-uuid)
         block-uuid (random-uuid)
@@ -58,6 +61,8 @@
     (is (not-any? #(and (= :db/add (first %)) (= "new" (nth % 3))) normalized)
         "the title added and retracted in one tx is not added on the other side")))
 
+;; Fails if, in `retract-entity-match-keys`, `=` becomes `not=` or `first` becomes `last`.
+;; Fails if, in `reorder-retract-entity`, `>=` becomes `>`.
 (deftest reorder-retract-entity-on-rebase-4-tuples-test
   ;; normalize-tx-data-for-rebase (frontend.worker.sync.apply-txs) drops the t
   ;; of each 5-tuple before calling reorder-retract-entity
@@ -71,6 +76,7 @@
            (vec (db-normalize/reorder-retract-entity [other-datom retract uuid-add title-add])))
         "the recreated block's retract comes first, then the recreated block's datoms")))
 
+;; Fails if, in `retract-entity-match-keys`, `=` becomes `not=` or `first` becomes `last`.
 (deftest reorder-retract-entity-moves-tempid-datoms-of-a-retracted-block-test
   (let [deleted-uuid (random-uuid)
         other-uuid (random-uuid)
@@ -80,6 +86,7 @@
     (is (= [tempid-datom other-datom retract]
            (vec (db-normalize/reorder-retract-entity [other-datom tempid-datom retract]))))))
 
+;; Fails if, in `ref-value-type?`, `or` becomes `and`.
 (deftest normalize-tx-data-resolves-ref-value-of-a-property-deleted-in-the-tx-test
   (let [page-uuid (random-uuid)
         block-uuid (random-uuid)
@@ -99,6 +106,7 @@
     (is (every? #(= [:block/uuid page-uuid] (nth % 3)) p-datoms)
         "a ref value is sent as a lookup, not as a local eid")))
 
+;; Fails if, in `normalize-datom`, `and` becomes `or`.
 (deftest normalize-datom-drops-datom-of-entity-without-uuid-or-ident-test
   (let [conn (db-test/create-conn)
         e (get-in (d/transact! conn [{:db/id -1 :block/title "no id"}]) [:tempids -1])

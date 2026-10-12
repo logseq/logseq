@@ -6,6 +6,7 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.tree :as otree]))
 
+;; Fails if, in `blocks->vec-tree-data`, `not` becomes `identity`.
 (deftest blocks->vec-tree-data-drops-root-tx-id-when-root-included
   (let [root {:db/id 1 :block/tx-id 5}
         child {:db/id 2
@@ -43,6 +44,8 @@
   (let [b1 (d/entity db [:block/uuid b1-uuid])]
     [b1 (first (:block/_parent b1))]))
 
+;; Fails if, in `get-root-and-page`, `if` becomes `if-not`, `true` becomes `false` or `false` becomes `true`.
+;; Fails if, in `blocks->vec-tree`, `if` becomes `if-not`.
 (deftest blocks->vec-tree-by-root-id-kind
   (let [db @tree-db
         page (d/entity db [:block/uuid page-uuid])
@@ -62,6 +65,8 @@
         (is (= 1 (:block/level b1')))
         (is (= 2 (:block/level (first (:block/children b1')))))))))
 
+;; Fails if, in `tree`, `or` becomes `and`.
+;; Fails if, in `non-consecutive-blocks->vec-tree`, `or` becomes `and`.
 (deftest non-consecutive-blocks->vec-tree-keeps-default-level
   (let [blocks [{:db/id 2 :block/title "top" :block/order "a0" :block/parent {:db/id 1}}
                 {:db/id 3 :block/title "child" :block/order "a0" :block/parent {:db/id 2}}]]
