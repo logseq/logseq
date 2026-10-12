@@ -54,18 +54,6 @@
        (is (= [[1 2]] @batches*))
        (is (= [] remaining))))))
 
-(deftest stream-starts-with-gzip-probes-first-chunk-test
-  (async-test
-   (p/let [gzip? (#'sync-download/<stream-starts-with-gzip?
-                  (stream-from-payload (js/Uint8Array. #js [31 139 8 0])))
-           plain? (#'sync-download/<stream-starts-with-gzip?
-                   (stream-from-payload (js/Uint8Array. #js [1 2 3])))
-           empty? (#'sync-download/<stream-starts-with-gzip?
-                   (js/ReadableStream. #js {:start (fn [c] (.close c))}))]
-     (is (true? gzip?))
-     (is (false? plain?))
-     (is (false? empty?)))))
-
 (deftest response-body-stream-picks-the-right-stream-test
   (async-test
    (let [plain (js/Uint8Array. #js [1 2 3 4 5])

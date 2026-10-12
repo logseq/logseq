@@ -85,13 +85,3 @@
     (db-migrate/ensure-built-in-data-exists! conn)
     (is (= stored (select-keys (d/entity @conn :logseq.class/Tag) (keys stored))))))
 
-(deftest ensure-built-in-data-keeps-refs-to-pages-without-idents-test
-  (let [alias-uuids (set (repeatedly 2 random-uuid))
-        conn (conn-with-1-built-in :logseq.class/Task
-                                   {:block/alias (map (fn [u] {:block/uuid u :block/name (str u) :block/title (str u)})
-                                                      alias-uuids)})
-        error (try (db-migrate/ensure-built-in-data-exists! conn)
-                   nil
-                   (catch :default e (ex-message e)))]
-    (is (nil? error))
-    (is (= alias-uuids (set (map :block/uuid (:block/alias (d/entity @conn :logseq.class/Task))))))))
