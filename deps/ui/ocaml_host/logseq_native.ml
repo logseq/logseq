@@ -987,7 +987,11 @@ let () =
       let token = !sdk_sequence in
       with_sdk_lock (fun () -> Hashtbl.add sdk_requests token None);
       ignore (Native_embed.with_entry_lock (fun () ->
-          call (arg 0) (arg 1) (arg 2) (arg 3)
+          let result =
+            try call (arg 0) (arg 1) (arg 2) (arg 3)
+            with error -> Js.Promise.reject error
+          in
+          result
           |> Js.Promise.then_ (fun value ->
               with_sdk_lock (fun () -> Hashtbl.replace sdk_requests token (Some (`Assoc ["ok", `Bool true; "value", Yojson.Safe.from_string (Js.Json.stringify value)])));
               Js.Promise.resolve ())
