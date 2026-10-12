@@ -1367,6 +1367,8 @@ let replay_pending_entry repo (conn : conn)
    Nothing here marks entries failed, so a single pass suffices. *)
 let replay_pending_txs repo (conn : conn) : unit =
   let pending = pending_tx_rows repo () in
+  Sync_state.replayed_pending_count :=
+    !Sync_state.replayed_pending_count + List.length pending;
   if pending <> [] then begin
     (* replayed txs must not re-enter the client-ops queue — the flag
        suppresses enqueue for this pass *)
@@ -2381,6 +2383,170 @@ let finish_apply_remote_txs repo (client : Sync_state.client)
   >>= fun () ->
   download_missing_remote_assets_for_owner repo client remote_asset_tx_data
 
+(* A journal batch whose rows are all own echoes carrying exactly the
+   stored pending facts leaves the display projection already equal to
+   server-state ⊕ pending-overlay — the replay would emit an empty delta
+   anyway. Detecting that upfront turns an O(pending) replay+rebind per
+   echo into an item-key comparison, which is what made rapid typing
+   bursts stall the worker: each keystroke's echo replayed every pending
+   entry. *)
+
+(* fact key for one normalized tx item: sign + asserted (subject, attr,
+   value) key. Items outside add/retract/cas fact shape (retractEntity,
+   map forms, …) can't be proven identical to their stored counterpart —
+   None fails the gate and keeps the full rebuild. *)
+let echo_item_fact_key (db : db) (item : Wire.t) : string option =
+  match item with
+  | Wire.Array (op :: e :: Wire.Keyword a :: v :: _)
+  | Wire.List (op :: e :: Wire.Keyword a :: v :: _)
+    when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" ->
+      Some
+        ((if tx_item_add item then "A" else "R")
+         ^ asserted_key_of_item db e a v)
+  | Wire.Array (op :: e :: Wire.Keyword a :: _ :: nv :: _)
+  | Wire.List (op :: e :: Wire.Keyword a :: _ :: nv :: _)
+    when op = Wire.keyword "db/cas" ->
+      Some ("A" ^ asserted_key_of_item db e a nv)
+  | _ -> (
+      match item with
+      | Wire.Tagged ("datascript/Datom", rep)
+      | Wire.Array [ Wire.Symbol "datascript/Datom"; rep ]
+      | Wire.List [ Wire.Symbol "datascript/Datom"; rep ] -> (
+          match rep with
+          | Wire.Array [ e; Wire.Keyword a; v; Wire.Int tx ]
+          | Wire.List [ e; Wire.Keyword a; v; Wire.Int tx ] ->
+              Some
+                ((if tx > 0 then "A" else "R")
+                 ^ asserted_key_of_item db e a v)
+          | _ -> None)
+      | _ -> None)
+
+let fact_key_set (db : db) (items : Wire.t list) : Sync_state.SSet.t option =
+  List.fold_left
+    (fun acc item ->
+      match acc, echo_item_fact_key db item with
+      | Some s, Some k -> Some (Sync_state.SSet.add k s)
+      | _ -> None)
+    (Some Sync_state.SSet.empty) items
+
+(* resolve a tx-item subject to a display eid: bare uuid strings and
+   [:block/uuid u] lookup-refs seek :block/uuid; int eids pass through *)
+let subject_eid_of_item (db : db) (e : Wire.t) : int option =
+  match e with
+  | Wire.Int i when i > 0 -> Some i
+  | Wire.Int64 i -> Some (Datascript.Util.int64_to_int_exn "eid" i)
+  | _ -> Option.bind (entity_pos_uuid e) (Db_view.uuid_to_eid db)
+
+(* the journaled facts must already sit on the display: a pending entry
+   deferred during an earlier replay stays queued while its facts are
+   absent, so row-shape equality alone can't prove the overlay is up.
+   adds must be present, retracts absent — key-equality on the subject's
+   bounded eavt slice keeps this cheap *)
+let fact_reflected_on_display (display_db : db) (item : Wire.t) : bool =
+  match item with
+  | ( Wire.Array (op :: e :: Wire.Keyword a :: v :: _)
+    | Wire.List (op :: e :: Wire.Keyword a :: v :: _) )
+    when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" -> (
+      match subject_eid_of_item display_db e with
+      | Some eid ->
+          let datoms =
+            Seq.filter
+              (fun (d : datom) -> d.a = a)
+              (Datascript.datoms display_db Eavt ~e:eid ())
+            |> List.of_seq
+          in
+          let key = asserted_key_of_item display_db e a v in
+          let exact =
+            List.exists
+              (fun (d : datom) ->
+                 asserted_key_of_datom display_db d = Some key)
+              datoms
+          in
+          if tx_item_add item then
+            (* card-one slots a later pending tx overwrote still count —
+               the pending overlay re-asserts its value on every replay *)
+            exact || (not (Ldb.many_attr display_db a)) && datoms <> []
+          else not exact
+      | None -> not (tx_item_add item))
+  | _ -> false
+
+(* true when every journaled row in remote_txs is an own echo whose items
+   are fact-identical to the stored pending entry, and every overlay
+   dropped since the last rebuild was verified by such an echo. Stored
+   items key against the display db (their int eids live there),
+   journaled items against the server db.
+
+   A tx-id is only confirmable while its overlay still sits on the
+   display: pending entries and ack-discarded overlays qualify; anything
+   else — foreign txs, failed entries whose overlay was already dropped,
+   retransmitted echoes of long-confirmed txs — forces the rebuild path. *)
+let verbatim_confirm_batch repo ~(server_db : db) ~(display_db : db)
+    ~(local_txs : Sync_client_op.pending_tx_row list)
+    ~(pending_ids : Sync_state.SSet.t) ~(discarded_ids : string list)
+    ~(removed_ids : Sync_state.SSet.t)
+    (remote_txs : Wire.t list) : bool =
+  let discarded = Sync_state.SSet.of_list discarded_ids in
+  let confirmable id =
+    Sync_state.SSet.mem id pending_ids || Sync_state.SSet.mem id discarded
+  in
+  let journaled : (string, Wire.t list) Hashtbl.t = Hashtbl.create 8 in
+  let foreign =
+    List.exists
+      (fun tx ->
+        match Wire.get "tx-id" tx with
+        | Some (Wire.Uuid id | Wire.String id) when confirmable id ->
+            let items =
+              tx_items_of
+                (Option.value (Wire.get "tx-data" tx)
+                   ~default:(Wire.Array []))
+            in
+            Hashtbl.replace journaled id
+              (items
+               @ Option.value (Hashtbl.find_opt journaled id) ~default:[]);
+            false
+        | _ -> true)
+      remote_txs
+  in
+  if foreign then false
+  else
+    let stored_items tx_id =
+      match
+        List.find_opt
+          (fun (r : Sync_client_op.pending_tx_row) -> r.tx_id = tx_id)
+          local_txs
+      with
+      | Some r -> Some (tx_items_of r.tx)
+      | None -> (
+          match Sync_client_op.get_local_tx_entry repo tx_id with
+          | Some e -> Some (tx_items_of e.tx)
+          | None -> None)
+    in
+    (* every overlay removed since the last rebuild must have its echo
+       verified in this batch — an unverified drop means the projection
+       may still carry state the server never confirmed *)
+    let removed_verified =
+      Sync_state.SSet.fold
+        (fun id acc -> acc && Hashtbl.mem journaled id)
+        removed_ids true
+    in
+    removed_verified
+    && Hashtbl.fold
+         (fun id items acc ->
+           acc
+           && List.for_all (fact_reflected_on_display display_db) items
+           &&
+           match stored_items id with
+           | Some stored -> (
+               match
+                 ( fact_key_set display_db
+                     (normalize_tx_data_for_rebase (Wire.Array stored))
+                 , fact_key_set server_db items )
+               with
+               | Some a, Some b -> Sync_state.SSet.equal a b
+               | _ -> false)
+           | None -> false)
+         journaled true
+
 (* Remote txs land on the server conn only; the display projection is
    then rebuilt from confirmed state with the pending queue replayed
    forward. No reverse step — nothing local ever enters the base. *)
@@ -2505,27 +2671,42 @@ let apply_remote_txs_once repo (client : Sync_state.client)
                | _ -> acc)
             !(client.discarded_overlay_tx_ids) remote_txs
           |> Sync_state.SSet.of_list in
-        let removed_items = Sync_state.SSet.fold
-            (fun id acc ->
-               match Sync_client_op.get_local_tx_entry repo id with
-               | Some row -> List.rev_append (tx_items_of row.tx) acc
-               | None -> acc)
-            removed_ids [] in
-        let changed_items =
-          List.fold_left
-            (fun acc tx -> List.rev_append
-                (tx_items_of (Option.value (Wire.get "tx-data" tx) ~default:(Wire.Array []))) acc)
-            removed_items remote_txs
-          |> fun items -> List.fold_left
-              (fun acc (row : Sync_client_op.pending_tx_row) ->
-                 List.rev_append (tx_items_of row.tx) acc) items local_txs
+        let jump_tx_data =
+          match tx_report with
+          | Some r -> r.tx_data
+          | None -> []
         in
-        rebuild_display ~changed_items repo
-          ~jump_tx_data:
-            (match tx_report with
-             | Some r -> r.tx_data
-             | None -> []);
-        client.discarded_overlay_tx_ids := [];
+        (match Sync_state.server_conn repo with
+         | Some server_conn
+           when verbatim_confirm_batch repo ~server_db:(Conn.db server_conn)
+                  ~display_db:(Conn.db display_conn) ~local_txs ~pending_ids
+                  ~discarded_ids:!(client.discarded_overlay_tx_ids)
+                  ~removed_ids remote_txs ->
+             (* every journaled row is a verbatim own echo: the display
+                already holds server-state ⊕ pending-overlay — rebuilding
+                would emit an empty delta after an O(pending) replay per
+                echo (quadratic under typing bursts). Skip the replay;
+                the dup-order fix pass still runs on the display conn. *)
+             client.discarded_overlay_tx_ids := [];
+             fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
+         | _ ->
+             let removed_items = Sync_state.SSet.fold
+                 (fun id acc ->
+                    match Sync_client_op.get_local_tx_entry repo id with
+                    | Some row -> List.rev_append (tx_items_of row.tx) acc
+                    | None -> acc)
+                 removed_ids [] in
+             let changed_items =
+               List.fold_left
+                 (fun acc tx -> List.rev_append
+                     (tx_items_of (Option.value (Wire.get "tx-data" tx) ~default:(Wire.Array []))) acc)
+                 removed_items remote_txs
+             |> fun items -> List.fold_left
+                 (fun acc (row : Sync_client_op.pending_tx_row) ->
+                    List.rev_append (tx_items_of row.tx) acc) items local_txs
+             in
+             rebuild_display ~changed_items repo ~jump_tx_data;
+             client.discarded_overlay_tx_ids := []);
         !remote_tx_results
       with e ->
         Worker_log.error "db-sync/apply-remote-txs-inner-error"

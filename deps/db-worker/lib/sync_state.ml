@@ -275,6 +275,10 @@ let outliner_perf_logging : bool ref = ref false
    stored checksum past confirmed state. *)
 let pending_replay : bool ref = ref false
 
+(* pending entries replayed onto the display projection since the last
+   reset — sim tests assert verbatim own echoes never trigger a replay *)
+let replayed_pending_count : int ref = ref 0
+
 (* RTC graph server conn: storage-backed, confirmed state only. The
    registered Worker_state.datascript_conn on a remote graph is the
    display projection (server state + pending ops replayed forward). *)
