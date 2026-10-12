@@ -1,4 +1,5 @@
 open Yojson.Safe.Util
+let contract_name = function Suite.Desktop -> "desktop" | Suite.Api -> "api" | Suite.Helper -> "helper"
 
 let () =
   Printexc.record_backtrace true;
@@ -25,11 +26,13 @@ let () =
             failwith ("Additional case cannot claim upstream coverage " ^ identity);
           if definition.covers = [] && not definition.additional then
             failwith ("Unmapped native case " ^ identity);
+          if not definition.additional && List.length definition.covers <> 1 then
+            failwith ("Parity case must cover exactly one upstream registration " ^ identity);
           List.iter (fun id ->
               if Hashtbl.mem mappings id then failwith ("Duplicate upstream mapping " ^ id);
               let upstream = match List.assoc_opt id lookup with Some c -> c | None -> failwith ("Unknown upstream " ^ id) in
               if upstream |> member "target_file" |> to_string <> file then failwith ("Ownership violation " ^ id);
-              let contract = if definition.contract = Suite.Desktop then "desktop" else "helper" in
+              let contract = contract_name definition.contract in
               if upstream |> member "contract" |> to_string <> contract then failwith ("Contract mismatch " ^ id);
               Hashtbl.add mappings id identity) definition.covers;
           file, definition) definitions) Registry.suites in
@@ -72,17 +75,21 @@ let () =
           definition.run ctx;
           if Suite.assertions ctx = 0 then failwith "Vacuous native test: no executed contract assertion";
           if definition.contract = Suite.Desktop && Suite.inputs ctx = 0 then failwith "Desktop claim without production SDL input";
+          if definition.contract = Suite.Api && (Suite.sdk_calls ctx = 0 || Suite.real_apps ctx = 0) then
+            failwith "Api claim without a real app and completed production SDK call";
           None
         with exn -> Some (Printexc.to_string exn ^ "\n" ^ Printexc.get_backtrace ())) in
       Suite.cleanup ctx; active := None;
-      Printf.printf "%s %s assertions=%d inputs=%d\n%!" (if error = None then "PASS" else "FAIL")
-        definition.name (Suite.assertions ctx) (Suite.inputs ctx);
+      Printf.printf "%s %s contract=%s assertions=%d inputs=%d sdk_calls=%d\n%!" (if error = None then "PASS" else "FAIL")
+        definition.name (contract_name definition.contract) (Suite.assertions ctx) (Suite.inputs ctx) (Suite.sdk_calls ctx);
       Option.iter (Printf.eprintf "%s\n%!") error;
       `Assoc ["file", `String file; "name", `String definition.name;
               "covers", `List (List.map (fun s -> `String s) definition.covers);
               "additional", `Bool definition.additional;
+              "contract", `String (contract_name definition.contract);
               "passed", `Bool (error = None); "assertions", `Int (Suite.assertions ctx);
-              "inputs", `Int (Suite.inputs ctx); "artifacts", `String artifacts;
+              "inputs", `Int (Suite.inputs ctx); "sdk_calls", `Int (Suite.sdk_calls ctx);
+              "real_apps", `Int (Suite.real_apps ctx); "artifacts", `String artifacts;
               "error", (match error with None -> `Null | Some e -> `String e)]) selected in
   Yojson.Safe.to_file (Filename.concat base "results.json")
     (`Assoc ["results", `List results; "pending", `Int (List.length pending);

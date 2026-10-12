@@ -7,8 +7,8 @@ exception Timeout of string
 type t =
   { repo : string; artifacts : string; directory : string; root : string;
     settings : string; socket : string; mutable pid : int option;
-    mutable log_fd : Unix.file_descr option; mutable inputs : int;
-    on_input : unit -> unit; mutable closed : bool }
+    mutable log_fd : Unix.file_descr option; mutable inputs : int; mutable sdk_calls : int;
+    on_input : unit -> unit; on_sdk_call : unit -> unit; mutable closed : bool }
 
 let rec mkdir path =
   if not (Sys.file_exists path) then (mkdir (Filename.dirname path); Unix.mkdir path 0o700)
@@ -37,7 +37,7 @@ let poll ?(timeout = 15.) description check =
       loop ()
   in loop ()
 
-let create ?root ?(on_input = fun () -> ()) ~repo ~artifacts ~label () =
+let create ?root ?(on_input = fun () -> ()) ?(on_sdk_call = fun () -> ()) ~repo ~artifacts ~label () =
   let directory = Filename.temp_file "ln-e2e-" "" in
   Unix.unlink directory;
   Unix.mkdir directory 0o700;
@@ -46,12 +46,13 @@ let create ?root ?(on_input = fun () -> ()) ~repo ~artifacts ~label () =
   let artifacts = Filename.concat artifacts label in
   mkdir root; mkdir settings; mkdir artifacts;
   { repo; artifacts; directory; root; settings; socket = Filename.concat directory "host.sock";
-    pid = None; log_fd = None; inputs = 0; on_input; closed = false }
+    pid = None; log_fd = None; inputs = 0; sdk_calls = 0; on_input; on_sdk_call; closed = false }
 
 let root app = app.root
 let settings app = app.settings
 let artifacts app = app.artifacts
 let input_count app = app.inputs
+let sdk_calls app = app.sdk_calls
 let host app = Filename.concat app.repo "deps/ui/_build/default/ocaml_host/logseq_native.exe"
 let daemon_bin app = Filename.concat app.repo "deps/db-worker/_build/default/bin/main.exe"
 
@@ -240,7 +241,7 @@ let read ?repo app method_name args =
                  "thread-api/get-page-blocks-tree"; "thread-api/get-block-parents";
                  "thread-api/get-all-pages"; "thread-api/get-page-route-info";
                  "thread-api/get-display-properties"; "thread-api/get-property-closed-values";
-                 "thread-api/get-bidirectional-properties"] in
+                 "thread-api/get-bidirectional-properties"; "thread-api/db-sync-status"] in
   if not (List.mem method_name allowed) then invalid_arg ("Not a read oracle: " ^ method_name);
   invoke_fixture ?repo app method_name args
 let validate ?repo app =
@@ -256,8 +257,14 @@ let sdk_call ?(namespace = Api) app method_name args =
   let token = request app "sdk-call" ["namespace", `String namespace; "method", `String method_name; "args", `List args] |> to_int in
   let response = poll "production SDK result" (fun () ->
       match request app "sdk-result" ["token", `Int token] with `Null -> None | value -> Some value) in
-  if response |> member "ok" |> to_bool then member "value" response
-  else failwith (response |> member "error" |> to_string)
+  let ok = response |> member "ok" |> to_bool in
+  let value =
+    if ok then (match List.assoc_opt "value" (to_assoc response) with
+        | Some value -> value | None -> failwith "SDK result missing value")
+    else `String (response |> member "error" |> to_string) in
+  app.sdk_calls <- app.sdk_calls + 1;
+  app.on_sdk_call ();
+  if ok then value else failwith (to_string value)
 
 let start app =
   if app.closed || app.pid <> None then invalid_arg "Invalid app start state";
@@ -287,7 +294,8 @@ let start app =
         failwith ("Host exited during boot: " ^ (match exit with Unix.WEXITED c -> string_of_int c | Unix.WSIGNALED s -> "signal " ^ string_of_int s | Unix.WSTOPPED s -> "stopped " ^ string_of_int s))));
   if (Unix.stat app.socket).Unix.st_perm <> 0o600 then failwith "Unsafe automation socket permissions";
   if status app |> member "renderer" |> to_string = "noop" then failwith "No native renderer";
-  ignore (daemon app)
+  ignore (daemon app);
+  ignore (wait_for ~timeout:45. app ".ls-page-title .block-title-wrap")
 
 let stop_daemons app =
   let path = Filename.concat app.root "server-list" in
