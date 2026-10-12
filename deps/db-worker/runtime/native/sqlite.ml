@@ -82,8 +82,8 @@ let open_db_pool ~name ~path =
 let close t =
   with_lock t (fun () ->
       if not t.closed then begin
-        ignore (Sqlite3.db_close t.handle);
-        t.closed <- true
+        if Sqlite3.db_close t.handle then t.closed <- true
+        else raise (Sqlite_error ("close: " ^ Sqlite3.errmsg t.handle))
       end);
   let empty_names = ref [] in
   Hashtbl.iter
