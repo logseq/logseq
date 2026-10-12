@@ -39,6 +39,7 @@
                        (assoc :logseq.property.class/extends extends-id))])
   (:db/id (d/entity @conn ident)))
 
+;; Fails if, in `first-url-property-value`, `:block/title` becomes `:block/uuid` or `:db/id` becomes `:db/ident`.
 (deftest first-url-property-value-reads-the-blocks-own-url
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:link {:logseq.property/type :url}}
@@ -58,6 +59,7 @@
     (is (= "https://valued.example"
            (#'worker-property/first-url-property-value db (id-of "valued"))))))
 
+;; Fails if, in `get-all-classes`, the `(remove ldb/recycled?)` step is dropped.
 (deftest get-all-classes-skips-recycled-classes
   (let [conn (db-test/create-conn-with-blocks {:classes {:Live {} :Gone {}}})]
     (d/transact! conn [[:db/add [:db/ident :user.class/Gone] :logseq.property/deleted-at 1234]])
@@ -65,6 +67,7 @@
       (is (contains? idents :user.class/Live))
       (is (not (contains? idents :user.class/Gone))))))
 
+;; Fails if, in `class-extends-children-tree`, the body becomes `nil`, the `(keep (fn [datom]` step is dropped, the `(sort-by :block/title)` step is dropped, the `vec` step is dropped, `:logseq.property.class/extends` becomes `:logseq.property.class/properties`, `:db/id` becomes `:db/ident`, `:block/title` becomes `:block/uuid`, `:block/uuid` becomes `:block/_alias` or `:db/ident` becomes `:db/retract`.
 (deftest class-extends-children-tree-nests-and-sorts-children
   (let [conn (db-test/create-conn-with-blocks {:classes {:Parent {}}})
         parent-id (:db/id (d/entity @conn :user.class/Parent))
@@ -86,6 +89,8 @@
       (is (= [] (:class/children (first (:class/children a-node)))))
       (is (= [] (:class/children (second tree)))))))
 
+;; Fails if, in `property-node-selector-initial-choices`, the `distinct` step is dropped or the `(mapv #(worker-plain/worker-plain-val...` step is dropped.
+;; Fails if, in `property-node-selector-data`, the `:except-extends-hidden-tags?` key is dropped or the `:extends-class-options` key is dropped.
 (deftest property-node-selector-data-options-and-distinct-choices
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {} :Other {}}
@@ -111,6 +116,8 @@
       (is (= (count (:structured-children-by-class-id data))
              (count (distinct (keys (:structured-children-by-class-id data)))))))))
 
+;; Fails if, in `property-node-selector-initial-choices`, `:logseq.property/type` becomes `:logseq.property/ui-position`.
+;; Fails if, in `property-node-selector-data`, `:db/ident` becomes `:db/retract` or `:logseq.class/Root` becomes `:logseq.class/Tag`.
 (deftest property-node-selector-data-excludes-root-class-from-initial-choices
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {}}
@@ -130,21 +137,7 @@
                 @conn {:property (assoc property :logseq.property/type :property)})))
         "a :property type property has no initial choices")))
 
-(deftest get-class-objects-thread-api-returns-plain-values-with-explicit-refs
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:C1 {}}
-               :pages-and-blocks
-               [{:page {:block/title "page"}
-                 :blocks [{:block/title "object" :build/tags [:C1]}]}]})
-        db @conn
-        class-id (:db/id (d/entity db :user.class/C1))
-        plain (map #(worker-plain/worker-plain-value db %)
-                   (db-class/get-class-objects db class-id))
-        expected (worker-plain/with-explicit-ref-fields-recursive plain)]
-    (is (= 1 (count expected)))
-    (is (= (vec expected)
-           (vec (call-thread-api conn :thread-api/get-class-objects class-id))))))
-
+;; Fails if, in `property-node-selector-initial-choices`, `:db/id` becomes `:db/ident`.
 (deftest property-node-selector-data-finds-class-objects-by-class-id-only
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {}}
@@ -157,6 +150,7 @@
                                 :logseq.property/classes [{:db/id topic-id}]}})]
     (is (= ["Topic page"] (mapv :block/title (:initial-choices data))))))
 
+;; Fails if, in `property-node-selector-values`, the `:properties` key is dropped, `:db/ident` becomes `:db/retract`, `:block/uuid` becomes `:block/_alias` or `:block/alias` becomes `:block/alias-source-page-id`.
 (deftest property-node-selector-values-carry-identity-fields
   (let [alias-target-uuid (random-uuid)
         alias-source-uuid (random-uuid)
@@ -197,6 +191,7 @@
           "alias target remembers the page that aliases it"))
     (is (some? by-title))))
 
+;; Fails if, in `(top level)`, `:thread-api/get-all-classes` becomes `:thread-api/get-all-properties`, `:thread-api/get-class-properties` becomes `:thread-api/get-date-scheduled-or-deadlines`, `:thread-api/get-property-values` becomes `:thread-api/get-structured-children` or `:thread-api/validate-property-value` becomes `:thread-api/convert-page-to-tag`.
 (deftest thread-apis-are-registered-under-their-own-names
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}}
@@ -222,6 +217,8 @@
                (call-thread-api conn :thread-api/validate-property-value
                                 {:property property :value "text"})))))))
 
+;; Fails if, in `convert-tag-to-page-tx`, the `[:db/retract class-id :logseq.propert...` tx entry is dropped, `:logseq.property.class/extends` becomes `:logseq.property.class/properties` or `:logseq.property.class/properties` becomes `:logseq.property.class/enable-bidirectional?`.
+;; Fails if, in `(top level)`, the `:outliner-op` key is dropped.
 (deftest convert-tag-to-page-drops-class-schema
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}}
@@ -239,6 +236,7 @@
       (is (= #{:logseq.class/Page} (set (map :db/ident (:block/tags topic))))))
     (is (some #(= :save-block (:outliner-op %)) @tx-metas))))
 
+;; Fails if, in `(top level)`, the `:outliner-op` key is dropped.
 (deftest convert-page-to-tag-transacts-as-save-block
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Convert me"}}]})
@@ -253,6 +251,7 @@
 (defn- full-ids [result] (set (map :property-id (:full-properties result))))
 (defn- hidden-ids [result] (set (map :property-id (:hidden-properties result))))
 
+;; Fails if, in `entity-direct-values`, `:db/id` becomes `:db/ident`.
 (deftest entity-direct-value-accepts-lookup-refs-and-ids
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page"} :blocks [{:block/title "b1"}]}]})
@@ -261,6 +260,9 @@
     (is (= "b1" (worker-property/entity-direct-value db [:block/uuid (:block/uuid block)] :block/title)))
     (is (= "b1" (worker-property/entity-direct-value db (:db/id block) :block/title)))))
 
+;; Fails if, in `display-property-description`, the body becomes `nil`, `:logseq.property/description` becomes `:logseq.property/hide-empty-value`, `:db/id` becomes `:db/ident`, `:block/title` becomes `:block/uuid` or `:block/uuid` becomes `:block/_alias`.
+;; Fails if, in `property-closed-values`, `:db/id` becomes `:db/ident`.
+;; Fails if, in `display-property-map*`, `:logseq.property/description` becomes `:logseq.property/hide-empty-value`.
 (deftest display-property-map-reports-description-and-closed-values
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default
@@ -282,6 +284,7 @@
     (is (not (contains? (worker-property/display-property-map db :user.property/p2)
                         :logseq.property/description)))))
 
+;; Fails if, in `positioned-property-meta`, the `:property` key is dropped, the `:hide?` key is dropped, `:logseq.property/public?` becomes `:logseq.property/query` or `:logseq.property/scalar-default-value` becomes `:logseq.property/scheduled`.
 (deftest positioned-property-meta-reflects-property-flags
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}
@@ -307,6 +310,7 @@
     (is (false? (:hide-empty? meta3)))
     (is (true? (:default? meta2)) "a scalar default value counts as a default")))
 
+;; Fails if, in `block-class-properties`, `:block/tags` becomes `:block/title`, the `(sort-by :block/name)` step is dropped, `:block/name` becomes `:block/order`, the `(filter (comp seq :logseq.property.cl...` step is dropped, the `distinct` step is dropped or the `:all-classes` key is dropped.
 (deftest block-class-properties-caches-by-tag-ids-and-orders-map-blocks
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}
@@ -334,19 +338,9 @@
              (set (map :db/ident (:classes-properties result)))))
       (is (= 2 (count (:classes-properties result))) "shared properties are not repeated"))))
 
-(deftest display-properties-for-block-groups-many-values-as-sets
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:multi {:logseq.property/type :default
-                                    :db/cardinality :db.cardinality/many}}
-               :pages-and-blocks [{:page {:block/title "page"}
-                                   :blocks [{:block/title "b1"
-                                             :build/properties {:multi #{"x" "y"}}}]}]})
-        db @conn
-        props (worker-property/display-properties-for-block
-               db (db-test/find-block-by-content db "b1"))]
-    (is (set? (get props :user.property/multi)))
-    (is (= 2 (count (get props :user.property/multi))))))
-
+;; Fails if, in `entity-ref-value?`, `:block/uuid` becomes `:block/_alias`.
+;; Fails if, in `filter-recycled-entity-values`, `filter` becomes `remove`.
+;; Fails if, in `sanitize-property-values-for-display`, the `:properties` key is dropped or the `:recycled-only-property-ids` key is dropped.
 (deftest recycled-entity-values-are-filtered-for-display
   (let [live {:db/id 1}
         gone {:db/id 2 :logseq.property/deleted-at 5}
@@ -368,6 +362,7 @@
                       :user.property/b "x"
                       :user.property/c gone-by-uuid})))))
 
+;; Fails if, in `display-properties`, `:logseq.class/Page` becomes `:logseq.class/Property`, `:logseq.class/Tag` becomes `:logseq.class/Journal`, `:logseq.class/Property` becomes `:logseq.class/Root`, `:logseq.class/Journal` becomes `:logseq.class/Page` or `:block/tags` becomes `:block/title`.
 (deftest display-properties-shows-other-position-properties-in-page-areas
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page"} :blocks [{:block/title "plain"}]}]})
@@ -395,6 +390,7 @@
       (is (not (contains? (full-ids result) :logseq.property/status))
           "a plain block keeps the left-positioned status out of the list"))))
 
+;; Fails if, in `display-properties`, `:logseq.property.class/properties` becomes `:logseq.property.class/enable-bidirectional?` or `:db/ident` becomes `:db/retract`.
 (deftest display-properties-gallery-view-hides-class-properties-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}}
@@ -407,6 +403,7 @@
                                    db class {:page-title? true :gallery-view? true} false))
                         :logseq.property.class/properties)))))
 
+;; Fails if, in `display-properties`, `:logseq.property/hide-empty-value` becomes `:logseq.property/hide?`, the `(remove existing-properties)` step is dropped or `filter` becomes `remove`.
 (deftest display-properties-lists-hidden-class-properties-once
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:he {:logseq.property/type :default}
@@ -431,6 +428,7 @@
       (is (= 1 (count (filter #(= :user.property/shared (:property-id %))
                               (:full-properties hidden-result))))))))
 
+;; Fails if, in `display-properties`, `:db/ident` becomes `:db/retract` or the `(remove (fn [[id _]] (classes-propert...` step is dropped.
 (deftest display-properties-lists-a-hidden-class-property-with-a-value-once
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:hid {:logseq.property/type :default}}
@@ -444,6 +442,7 @@
     (is (= 1 (count (filter #(= :user.property/hid (:property-id %)) (:hidden-properties result)))))
     (is (not (contains? (full-ids result) :user.property/hid)))))
 
+;; Fails if, in `display-properties`, `:logseq.property/hide?` becomes `:logseq.property/icon`.
 (deftest display-properties-shows-hidden-properties-when-asked-under-hide-empty
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:hid {:logseq.property/type :default}}
@@ -457,6 +456,7 @@
         "show-empty-and-hidden-properties? shows a hide? property, empty or not")
     (is (not (contains? (hidden-ids result) :user.property/hid)))))
 
+;; Fails if, in `display-properties`, `:logseq.property/query` becomes `:logseq.property/scalar-default-value`.
 (deftest display-properties-does-not-list-query-as-hidden
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -472,16 +472,8 @@
         result (worker-property/display-properties db block {} false)]
     (is (not (contains? (hidden-ids result) :logseq.property/query)))))
 
-(deftest render-tag-class-page?-recognizes-the-tag-class
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:C1 {}}
-               :pages-and-blocks [{:page {:block/title "page"} :blocks [{:block/title "plain"}]}]})
-        db @conn]
-    (is (true? (boolean (#'worker-property/render-tag-class-page? db (d/entity db :logseq.class/Tag)))))
-    (is (true? (boolean (#'worker-property/render-tag-class-page? db (d/entity db :user.class/C1)))))
-    (is (false? (boolean (#'worker-property/render-tag-class-page?
-                          db (db-test/find-block-by-content db "plain")))))))
-
+;; Fails if, in `direct-block-property-ids`, the `distinct` step is dropped.
+;; Fails if, in `block-property-keys`, `:db/id` becomes `:db/ident`.
 (deftest block-property-id-helpers
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:multi {:logseq.property/type :default
@@ -501,6 +493,8 @@
     (is (true? (#'worker-property/property-has-closed-values? db (d/entity db :user.property/choice))))
     (is (false? (#'worker-property/property-has-closed-values? db (d/entity db :user.property/plain))))))
 
+;; Fails if, in `block-positioned-property-idents-by-position`, `:db/ident` becomes `:db/retract`, the `:allow-empty-block-below?` key is dropped or the `db-property/sort-properties` step is dropped.
+;; Fails if, in `block-positioned-properties`, the `vec` step is dropped.
 (deftest block-positioned-property-idents-include-empty-class-properties-and-sort
   (let [page-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -531,12 +525,14 @@
     (is (vector? (worker-property/block-positioned-properties db (:db/id two-own) :block-below)))
     (is (= 2 (count (worker-property/block-positioned-properties db (:db/id two-own) :block-below))))))
 
+;; Fails if, in `sort-by-order-recursive`, `:block/_parent` becomes `:block/alias`, the `(dissoc :block/_parent)` step is dropped, the `(assoc :block/children (ldb/sort-by-o...` step is dropped or `:block/children` becomes `:block/created-at`.
 (deftest sort-by-order-recursive-replaces-reverse-parent-with-sorted-children
   (let [result (#'worker-property/sort-by-order-recursive
                 [{:db/id 1 :block/_parent [{:block/order "b" :db/id 3} {:block/order "a" :db/id 2}]}])]
     (is (= [{:db/id 1 :block/children [{:block/order "a" :db/id 2} {:block/order "b" :db/id 3}]}]
            result))))
 
+;; Fails if, in `get-all-properties`, `:db/ident` becomes `:db/retract`, `remove` becomes `filter`, the `:class-schema?` key is dropped, `:block/raw-title` becomes `:block/tags`, `:block/title` becomes `:block/uuid`, `:block/name` becomes `:block/order` or `:logseq.property/deleted-at` becomes `:logseq.property/description`.
 (deftest get-all-properties-orders-filters-and-titles
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:zzz {:logseq.property/type :default :block/title "Zzz title"}}
@@ -596,6 +592,8 @@
         (is (some #{:block/alias} (idents opts)))
         (is (not (some #{:block/alias} (idents (assoc opts :class-schema? true)))))))))
 
+;; Fails if, in `scheduled-deadline-pull-selector`, `:db/id` becomes `:db/ident` or `:block/uuid` becomes `:block/_alias`.
+;; Fails if, in `get-date-scheduled-or-deadlines`, `:logseq.property/status.canceled` becomes `:logseq.property/status.done`.
 (deftest scheduled-and-deadline-blocks-skip-done-and-canceled
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page"}

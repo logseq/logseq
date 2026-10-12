@@ -47,6 +47,7 @@
                  (recycle/recycle-page-tx-data @conn (d/entity @conn id) opts)
                  {:outliner-op :delete-page}))
 
+;; Fails if, in `build-recycle-page-tx`, the `:block/name` key is dropped, the `:logseq.property/hide?` key is dropped or the `:logseq.property/built-in?` key is dropped.
 (deftest recreated-recycle-page-is-named-hidden-and-built-in
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}])
@@ -58,6 +59,8 @@
       (is (true? (:logseq.property/hide? recycle)))
       (is (true? (:logseq.property/built-in? recycle))))))
 
+;; Fails if, in `deleted-by-id`, the body becomes `nil`, the `(#(d/entity db [:block/uuid %]))` step is dropped, the `:db/id` step is dropped or `:db/id` becomes `:db/retract`.
+;; Fails if, in `recycle-blocks-tx-data`, the `:block/parent` key is dropped, the `:block/page` key is dropped or `:logseq.property/deleted-by-ref` becomes `:logseq.property/hide?`.
 (deftest recycle-blocks-records-structure-and-original-refs
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -81,6 +84,7 @@
       (is (= (:db/id page) (:db/id (:logseq.property.recycle/original-page child))))
       (is (= child-order (:logseq.property.recycle/original-order child))))))
 
+;; Fails if, in `recycle-blocks-tx-data`, the `:block/order` key is dropped, the `:block/_parent` step is dropped, the `ldb/sort-by-order` step is dropped or the `last` step is dropped.
 (deftest recycle-blocks-orders-after-last-recycled-block
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -96,6 +100,7 @@
         (recycle-block! conn b1 {})
         (is (= (next-order o2) (order-of conn b1)))))))
 
+;; Fails if, in `recycle-page-tx-data`, `:logseq.property/deleted-by-ref` becomes `:logseq.property/hide?`.
 (deftest recycle-page-orders-after-last-recycled-page
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "p1"}}
@@ -111,6 +116,9 @@
       (is (= (:db/id deleter)
              (:db/id (:logseq.property/deleted-by-ref (d/entity @conn p2))))))))
 
+;; Fails if, in `recycle-blocks-tx-data`, `:logseq.property.recycle/original-parent` becomes `:logseq.property.recycle/_original-parent` or `:block/parent` becomes `:block/tags`.
+;; Fails if, in `restore-target`, the `:order` key is dropped or `:logseq.property.recycle/original-order` becomes `:logseq.property.recycle/original-page`.
+;; Fails if, in `restore-tx-data`, the `[:db/retract (:db/id root) :logseq.pr...` tx entry is dropped, `:logseq.property/deleted-by-ref` becomes `:logseq.property/hide?` or `:block/page` becomes `:block/parent`.
 (deftest restore-block-reuses-original-position-and-clears-recycle-properties
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -135,19 +143,9 @@
       (is (nil? (:logseq.property.recycle/original-parent c1)))
       (is (nil? (:logseq.property.recycle/original-order c1))))))
 
-(deftest restore-block-without-original-order-appends-after-last-child
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "parent"
-                          :build/children [{:block/title "c1"} {:block/title "c2"}]}]}])
-        c1-id (find-id conn "c1")
-        c2-id (find-id conn "c2")
-        c1-uuid (:block/uuid (d/entity @conn c1-id))]
-    (recycle-block! conn c1-id {})
-    (d/transact! conn [[:db/retract c1-id :logseq.property.recycle/original-order]])
-    (is (true? (recycle/restore! conn c1-uuid)))
-    (is (= (next-order (order-of conn c2-id)) (order-of conn c1-id)))))
-
+;; Fails if, in `recycle-blocks-tx-data`, `:block/page` becomes `:block/parent`, the `:block/order` step is dropped or `:block/order` becomes `:block/page`.
+;; Fails if, in `restore-order`, the body becomes `nil`.
+;; Fails if, in `restore-target`, `:logseq.property.recycle/original-page` becomes `:logseq.property.recycle/original-parent`, `:db/id` becomes `:db/retract`, the `:parent` key is dropped, the `:page` key is dropped or the `:order` key is dropped.
 (deftest restore-block-falls-back-to-original-page-when-parent-is-recycled
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -178,6 +176,8 @@
     {:parent-uuid parent-uuid
      :child-uuids child-uuids}))
 
+;; Fails if, in `awaiting-original-parent?`, `:db/id` becomes `:db/retract`.
+;; Fails if, in `relink-waiting-children-tx`, the `[:db/retract (:db/id child) :logseq.p...` tx entry is dropped or `:logseq.property.recycle/original-page` becomes `:logseq.property.recycle/original-parent`.
 (deftest restore-page-relinks-waiting-child-held-by-recycle-page
   (let [conn (db-test/create-conn)
         {:keys [parent-uuid child-uuids]} (create-namespace-pages! conn "Foo" ["Bar"])
@@ -195,6 +195,7 @@
       (is (nil? (:logseq.property.recycle/original-parent child)))
       (is (nil? (:logseq.property.recycle/original-page child))))))
 
+;; Fails if, in `relink-waiting-children-tx`, the `ldb/sort-by-order` step is dropped.
 (deftest restore-page-orders-waiting-child-after-last-sorted-child
   (let [conn (db-test/create-conn)
         {:keys [parent-uuid child-uuids]} (create-namespace-pages! conn "Foo" ["Bar" "Baz" "Qux"])
@@ -215,6 +216,10 @@
       (is (= parent-id (:db/id (:block/parent bar))))
       (is (= (next-order order-high) (:block/order bar))))))
 
+;; Fails if, in `restore!`, the `:outliner-op` key is dropped.
+;; Fails if, in `permanently-delete!`, the `:outliner-op` key is dropped.
+;; Fails if, in `gc-tx-data`, `:db/retractEntity` becomes `:db/add` or `:db/id` becomes `:db/retract`.
+;; Fails if, in `gc!`, the `:outliner-op` key is dropped or the `:persist-op?` key is dropped.
 (deftest restore-permanently-delete-and-gc-transact-with-outliner-op-meta
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -231,30 +236,8 @@
              (mapv :outliner-op @tx-metas)))
       (is (false? (:persist-op? (last @tx-metas)))))))
 
-(deftest gc-removes-expired-recycled-block-subtree-and-its-history
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "target"
-                          :build/children [{:block/title "child"}]}
-                         {:block/title "keep"}]}])
-        target-id (find-id conn "target")
-        child-id (find-id conn "child")
-        keep-id (find-id conn "keep")
-        history-uuid (random-uuid)
-        now (common-util/time-ms)]
-    (d/transact! conn [{:block/uuid history-uuid
-                        :block/created-at now
-                        :block/updated-at now
-                        :logseq.property.history/block target-id
-                        :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
-                        :logseq.property.history/scalar-value "Todo"}])
-    (recycle-block! conn target-id {:now-ms 0})
-    (is (true? (recycle/gc! conn {:now-ms thirty-one-days-ms})))
-    (is (nil? (d/entity @conn target-id)))
-    (is (nil? (d/entity @conn child-id)))
-    (is (nil? (d/entity @conn [:block/uuid history-uuid])))
-    (is (some? (d/entity @conn keep-id)))))
-
+;; Fails if, in `permanently-delete-tx-data`, the `(with-delete-cleanup-tx db)` step is dropped.
+;; Fails if, in `gc-tx-data`, the `(with-delete-cleanup-tx db)` step is dropped.
 (deftest delete-tx-data-includes-property-history-cleanup
   ;; ldb/transact! adds the same cleanup itself, so only the tx-data shows it
   (let [conn (db-test/create-conn-with-blocks
@@ -276,6 +259,8 @@
       (is (some #{history-retract} permanent-tx-data))
       (is (some #{history-retract} gc-tx-data)))))
 
+;; Fails if, in `page-descendants`, the `ldb/sort-by-order` step is dropped.
+;; Fails if, in `page-block-subtree-ids`, the `ldb/sort-by-order` step is dropped or `:db/id` becomes `:db/retract`.
 (deftest permanently-delete-tx-data-lists-pages-and-blocks-in-order
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "P"}

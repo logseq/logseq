@@ -16,6 +16,7 @@
                         :block/updated-at 2}])
     (:db/id (d/entity @conn [:block/uuid uuid']))))
 
+;; Fails if, in `bookkeeping-attrs`, `:block/created-at` becomes `:block/name`.
 (deftest validate-tx-report-skips-entities-with-only-bookkeeping-changes
   (let [conn (db-test/create-conn)
         eid (add-invalid-block! conn)
@@ -28,6 +29,7 @@
     (is (true? (first (db-validate/validate-tx-report (report (d/datoms db :eavt eid :block/updated-at)) {})))
         "A change of :block/updated-at alone is not validated")))
 
+;; Fails if, in `validate-db`, the `:entities` key is dropped or the `:errors` key is dropped.
 (deftest validate-db-reports-datom-count-entities-and-errors
   (let [conn (db-test/create-conn)
         valid (db-validate/validate-db @conn)]
@@ -43,6 +45,8 @@
       (is (seq (:errors (first (:errors invalid))))
           "Each error entry carries the humanized malli errors"))))
 
+;; Fails if, in `validate-db`, `:block.temp/load-status` becomes `:block.temp/has-children?` or `:block.temp/has-children?` becomes `:block.temp/load-status`.
+;; Fails if, in `validate-local-db!`, `:block.temp/load-status` becomes `:block.temp/has-children?` or `:block.temp/has-children?` becomes `:block.temp/load-status`.
 (deftest validate-db-ignores-temp-ui-attributes
   (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "page1"}
                                                 :blocks [{:block/title "b1"}]}])
@@ -52,6 +56,7 @@
     (is (not (contains? (db-validate/validate-db @conn) :errors)))
     (is (nil? (db-validate/validate-local-db! @conn)))))
 
+;; Fails if, in `entity-datoms`, the body becomes `nil`.
 (deftest validate-local-db-returns-errors-of-invalid-entities
   (let [conn (db-test/create-conn)]
     (is (nil? (db-validate/validate-local-db! @conn)))
@@ -64,6 +69,7 @@
       (is (nil? (db-validate/validate-local-db! @conn :entity-ids [library-id]))
           "Only the given entities are validated"))))
 
+;; Fails if, in `graph-counts`, the body becomes `nil`, `:block/tags` becomes `:block/updated-at`, `:logseq.class/Tag` becomes `:logseq.class/Property`, `:logseq.class/Property` becomes `:logseq.class/Tag`, the `:entities` key is dropped, the `:pages` key is dropped, the `;;` key is dropped, the `:classes` key is dropped, the `:properties` key is dropped, the `:property-pairs` key is dropped, `filter` becomes `remove`, `:block/name` becomes `:block/page`, `:block/page` becomes `:block/properties`, the `db-property/properties` step is dropped or the `(dissoc :block/tags)` step is dropped.
 (deftest graph-counts-counts-entities-pages-blocks-and-tagged-objects
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:C1 {}}

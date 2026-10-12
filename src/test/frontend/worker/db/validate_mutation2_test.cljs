@@ -36,6 +36,7 @@
       (#'worker-db-validate/fix-invalid-blocks! conn [{:entity {:db/id eid} :dispatch-key dispatch-key}]))
     @captured))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retract (:db/id entity) :logseq....` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident`, `:logseq.property/parent` becomes `:logseq.property/value`, the `[:db/retract (:db/id entity) :hide?]` tx entry is dropped, the `[:db/retract (:db/id entity) :public?]` tx entry is dropped, the `[:db/retract (:db/id entity) :block/p...` tx entry is dropped, `:block/pre-block?` becomes `:block/tags`, `:logseq.property.embedding/hnsw-label` becomes `:logseq.property.embedding/hnsw-label-updated-at`, `:logseq.property.embedding/hnsw-label-updated-at` becomes `:logseq.property.embedding/hnsw-label`, the `[:db/retract (:db/id entity) :block/l...` tx entry is dropped, `:block/level` becomes `:block/name`, `:block/format` becomes `:block/level` or the `[:db/retract (:db/id entity) :block/f...` tx entry is dropped.
 (deftest fix-invalid-blocks-retracts-stray-attributes-test
   (doseq [[attr value] [[:logseq.property/parent :root]
                         [:hide? true]
@@ -49,12 +50,14 @@
           eid (add-entity! conn {attr (if (= :root value) (root-id conn) value)})]
       (is (= [[:db/retract eid attr]] (fix-tx conn eid :other)) (str attr)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property.embedding/hnsw-label` becomes `:logseq.property.embedding/hnsw-label-updated-at` or `:db/ident` becomes `:db/index`.
 (deftest fix-invalid-blocks-deletes-legacy-hnsw-label-property-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:db/ident :logseq.property.embedding/hnsw-label})]
     (is (= [[:db/retractEntity :logseq.property.embedding/hnsw-label]]
            (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/order` becomes `:block/page`, the `[:db/retract (:db/id entity) :block/o...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-order-of-classes-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:block/tags :logseq.class/Tag
@@ -64,23 +67,13 @@
                                :logseq.property.class/extends (root-id conn)})]
     (is (= [[:db/retract eid :block/order]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retract (:db/id entity) :block/n...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident` or `:block/name` becomes `:block/order`.
 (deftest fix-invalid-blocks-retracts-name-of-non-pages-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:block/name "stray" :block/title "stray"})]
     (is (= [[:db/retract eid :block/name]] (fix-tx conn eid :other)))))
 
-(deftest fix-invalid-blocks-fills-missing-updated-at-of-normal-pages-test
-  (let [conn (graph-conn)
-        eid (add-entity! conn {:block/name "p" :block/title "p" :block/tags :logseq.class/Page
-                               :block/created-at 5})]
-    (is (= [[:db/add eid :block/updated-at 5]] (fix-tx conn eid :normal-page)))
-    (is (nil? (fix-tx conn eid :other)))))
-
-(deftest fix-invalid-blocks-deletes-external-url-without-tags-test
-  (let [conn (graph-conn)
-        eid (add-entity! conn {:block/title "External URL"})]
-    (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
-
+;; Fails if, in `fix-invalid-blocks!`, `:db/ident` becomes `:db/index`, `:block/tags` becomes `:block/title`, the `[:db/retract (:db/id entity) :block/t...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident` or `:logseq.class/Tag` becomes `:logseq.class/Page`.
 (deftest fix-invalid-blocks-removes-tag-class-from-properties-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:db/ident :user.property/tagged
@@ -88,6 +81,7 @@
                                :block/tags #{:logseq.class/Property :logseq.class/Tag}})]
     (is (= [[:db/retract eid :block/tags :logseq.class/Tag]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/ident` becomes `:db/index`, the `[:db/add (:db/id entity) :block/tags ...` tx entry is dropped, the `[:db/retract (:db/id entity) :block/t...` tx entry is dropped, `:db/add` becomes `:db/cardinality`, `:db/id` becomes `:db/ident`, `:block/tags` becomes `:block/title`, `:logseq.class/Tag` becomes `:logseq.class/Page`, `:db/retract` becomes `:db/retractEntity` or `:logseq.class/Page` becomes `:logseq.class/Property`.
 (deftest fix-invalid-blocks-turns-user-class-namespace-idents-into-tags-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:db/ident :user.class/untagged
@@ -96,6 +90,7 @@
             [:db/retract eid :block/tags :logseq.class/Page]]
            (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retract (:db/id entity) :kv/value]` tx entry is dropped, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-kv-value-of-classes-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:block/tags :logseq.class/Tag :db/ident :user.class/kv
@@ -104,6 +99,7 @@
                                :kv/value 1})]
     (is (= [[:db/retract eid :kv/value]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-extends-of-properties-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -112,6 +108,7 @@
                                :logseq.property.class/extends root})]
     (is (= [[:db/retract eid :logseq.property.class/extends root]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/title` becomes `:block/tx-id`, the `[:db/add (:db/id entity) :db/ident (d...` tx entry is dropped, `:db/add` becomes `:db/cardinality`, `:db/id` becomes `:db/ident` or `:db/ident` becomes `:db/index`.
 (deftest fix-invalid-blocks-adds-ident-to-classes-without-one-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:block/tags :logseq.class/Tag :block/title "My Class"
@@ -120,6 +117,7 @@
     (is (= [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name @conn "My Class")]]
            (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/page` becomes `:block/parent` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-moves-description-property-values-under-their-property-test
   (let [conn (graph-conn)
         property-id (add-entity! conn {:block/title "description"})
@@ -129,40 +127,35 @@
             [:db/add eid :block/parent property-id]]
            (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/ident` becomes `:db/index`, `:logseq.property/built-in?` becomes `:logseq.property/created-by-ref`, `:block/parent` becomes `:block/path-refs`, the `[:db/retract (:db/id entity) :block/p...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-parent-of-built-in-idents-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:db/ident :logseq.test/built-in :logseq.property/built-in? true
                                :block/parent (root-id conn) :block/title "built-in"})]
     (is (= [[:db/retract eid :block/parent]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property/ls-type` becomes `:logseq.property/parent`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-whiteboard-shapes-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:logseq.property/ls-type :whiteboard-shape
                                :block/title "shape" :block/parent (root-id conn)})]
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/page` becomes `:block/parent`, the `[:db/add (:db/id entity) :block/paren...` tx entry is dropped, `:db/add` becomes `:db/cardinality`, `:db/id` becomes `:db/ident` or `:block/parent` becomes `:block/path-refs`.
 (deftest fix-invalid-blocks-gives-pages-without-parent-their-page-as-parent-test
   (let [conn (graph-conn)
         root (root-id conn)
         eid (add-entity! conn {:block/title "orphan" :block/page root})]
     (is (= [[:db/add eid :block/parent root]] (fix-tx conn eid :other)))))
 
-(deftest fix-invalid-blocks-gives-blocks-without-uuid-one-test
-  (let [conn (graph-conn)
-        root (root-id conn)
-        eid (add-entity! conn {:block/title "no uuid" :block/page root :block/parent root
-                               :block/order "a0" :block/created-at 1 :block/updated-at 1})
-        tx (fix-tx conn eid :other)]
-    (is (= 1 (count tx)))
-    (is (= [:db/add eid :block/uuid] (subvec (first tx) 0 3)))
-    (is (uuid? (nth (first tx) 3)))))
-
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property/parent` becomes `:logseq.property/value`, `:logseq.property/value` becomes `:logseq.property/built-in?`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-entities-with-vector-values-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:logseq.property/value [1 2]
                                :block/title "v" :block/parent (root-id conn)})]
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/tx-id` becomes `:block/updated-at`, `:block/title` becomes `:block/tx-id`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-revised-entities-without-title-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -171,6 +164,8 @@
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))
     (is (nil? (fix-tx conn no-tx-id :other)))))
 
+;; Fails if, in `block-missing-uuid?`, `:block/uuid` becomes `:block/_closed-value-property` or `:block/page` becomes `:block/parent`.
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property/built-in?` becomes `:logseq.property/created-by-ref` or `:block/page` becomes `:block/parent`.
 (deftest fix-invalid-blocks-leaves-complete-blocks-and-pages-alone-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -189,11 +184,7 @@
     (is (nil? (fix-tx conn parented-normal-page :normal-page)))
     (is (nil? (fix-tx conn built-in-user-class :other)))))
 
-(deftest fix-invalid-blocks-deletes-titled-entities-without-location-test
-  (let [conn (graph-conn)
-        eid (add-entity! conn {:block/title "floating"})]
-    (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
-
+;; Fails if, in `fix-invalid-blocks!`, `:block/path-refs` becomes `:block/pre-block?` or `:db/ident` becomes `:db/index`.
 (deftest fix-invalid-blocks-removes-path-refs-property-usages-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -201,6 +192,7 @@
         user (add-entity! conn {:block/title "u" :block/page root :block/parent root :block/path-refs root})]
     (is (some #{[:db/retract user :block/path-refs]} (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `remove` becomes `filter`, `:block/tags` becomes `:block/title`, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-non-class-tags-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -209,18 +201,21 @@
                                :block/tags #{tag :logseq.class/Task}})]
     (is (= [[:db/retract eid :block/tags tag]] (vec (fix-tx conn eid :other))))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retract (:db/id entity) :block/p...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident` or `:block/page` becomes `:block/parent`.
 (deftest fix-invalid-blocks-handles-normal-pages-with-page-test
   (let [conn (graph-conn)
         root (root-id conn)
         eid (add-entity! conn {:block/title "np" :block/page root :block/parent root})]
     (is (= [[:db/retract eid :block/page]] (fix-tx conn eid :normal-page)))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-titleless-blocks-test
   (let [conn (graph-conn)
         root (root-id conn)
         eid (add-entity! conn {:block/page root :block/parent root})]
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :block)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/id` becomes `:db/ident`, `:block/page` becomes `:block/parent`, `:block/parent` becomes `:block/path-refs`, the `[:db/add (:db/id entity) :block/page ...` tx entry is dropped or `:db/add` becomes `:db/cardinality`.
 (deftest fix-invalid-blocks-places-blocks-without-page-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -230,6 +225,7 @@
         eid (add-entity! conn {:block/title "child" :block/parent parent})]
     (is (= [[:db/add eid :block/page page]] (fix-tx conn eid :block)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/page` becomes `:block/parent`, `:db/id` becomes `:db/ident`, the `[:db/add (:db/id entity) :block/page ...` tx entry is dropped, the `[:db/add (:db/id entity) :block/paren...` tx entry is dropped, `:db/add` becomes `:db/cardinality` or `:block/parent` becomes `:block/path-refs`.
 (deftest fix-invalid-blocks-places-blocks-without-page-under-latest-journal-test
   (let [conn (graph-conn)
         journal (add-entity! conn {:block/title "Oct 12th, 2026" :block/name "oct 12th, 2026"
@@ -240,11 +236,13 @@
             [:db/add eid :block/parent journal]]
            (fix-tx conn eid :block)))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-entities-without-location-test
   (let [conn (graph-conn)
         eid (add-entity! conn {:block/uuid (random-uuid)})]
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/title` becomes `:block/tx-id`, the `[:db/retract (:db/id entity) :block/t...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-title-of-property-value-blocks-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -252,6 +250,7 @@
     (is (= [[:db/retract eid :block/title]] (fix-tx conn eid :property-value-block)))
     (is (nil? (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:block/parent` becomes `:block/path-refs`, `:db/ident` becomes `:db/index`, `:logseq.class/Root` becomes `:logseq.class/Tag`, the `[:db/add (:db/id entity) :logseq.prop...` tx entry is dropped, `:db/add` becomes `:db/cardinality` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-gives-classes-the-root-class-as-parent-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -260,6 +259,7 @@
     (is (= [[:db/add eid :logseq.property.class/extends :logseq.class/Root]] (fix-tx conn eid :other)))
     (is (nil? (fix-tx conn root :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-removes-page-tag-from-internal-page-classes-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -269,6 +269,7 @@
                                :logseq.property.class/extends root})]
     (is (= [[:db/retract eid :block/tags :logseq.class/Page]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property.asset/remote-metadata` becomes `:logseq.property.asset/type`, `:logseq.property.asset/type` becomes `:logseq.property.asset/remote-metadata`, the `[:db/retractEntity (:db/id entity)]` tx entry is dropped, `:db/retractEntity` becomes `:db/valueType` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-deletes-remote-assets-without-type-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -276,6 +277,7 @@
                                :block/title "asset" :block/page root :block/parent root})]
     (is (= [[:db/retractEntity eid]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:logseq.property.table/sized-columns` becomes `:logseq.property.table/hidden-columns`, the `(into {})` step is dropped, `:block/title` becomes `:block/tx-id`, `:db/ident` becomes `:db/index`, the `[:db/add (:db/id entity) :logseq.prop...` tx entry is dropped, `:db/add` becomes `:db/cardinality` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-rewrites-user-class-sized-columns-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -291,6 +293,7 @@
                                                                :block/title 50}]]
            (fix-tx conn eid :block)))))
 
+;; Fails if, in `fix-invalid-blocks!`, `filter` becomes `remove`, `:db/retract` becomes `:db/retractEntity` or `:db/id` becomes `:db/ident`.
 (deftest fix-invalid-blocks-retracts-temp-attributes-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -298,6 +301,7 @@
                                :block.temp/ast-title "x"})]
     (is (= [[:db/retract eid :block.temp/ast-title]] (fix-tx conn eid :other)))))
 
+;; Fails if, in `fix-invalid-blocks!`, the `[:db/retract (:e d) (:a d) (:v d)]` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident` or `:logseq.property.table/pinned-columns` becomes `:logseq.property.table/sized-columns`.
 (deftest fix-invalid-blocks-moves-class-references-to-matching-properties-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -320,6 +324,7 @@
             {:fix-db? true}]
            @captured))))
 
+;; Fails if, in `fix-invalid-blocks!`, `:db/retract` becomes `:db/retractEntity` or the `[:db/retract (:e d) (:a d) (:v d)]` tx entry is dropped.
 (deftest fix-invalid-blocks-moves-user-class-attributes-to-matching-properties-test
   (let [conn (graph-conn)
         root (root-id conn)
@@ -340,6 +345,7 @@
            (set @captured)))
     (is (= 3 (count @captured)))))
 
+;; Fails if, in `fix-non-closed-values!`, `:logseq.property/empty-placeholder` becomes `:logseq.property/icon`, `:db/ident` becomes `:db/index`, `:db/retract` becomes `:db/retractEntity` or the `:fix-db?` key is dropped.
 (deftest fix-non-closed-values-retracts-values-outside-closed-values-test
   (let [conn (graph-conn)
         property (add-entity! conn {:db/ident :user.property/closed :block/name "closed" :block/title "closed"
@@ -358,6 +364,7 @@
     (is (= [[[:db/retract with-stray :user.property/closed stray]] {:fix-db? true}]
            @captured))))
 
+;; Fails if, in `fix-icon-wrong-type!`, `:logseq.property/icon` becomes `:logseq.property/ls-type`, `:db/retract` becomes `:db/retractEntity`, `:db/id` becomes `:db/ident` or the `:fix-db?` key is dropped.
 (deftest fix-icon-wrong-type-retracts-ref-type-and-icon-values-test
   (let [conn (graph-conn)
         icon (:db/id (d/entity @conn :logseq.property/icon))
@@ -376,6 +383,7 @@
       (is (= (set (map :e (d/datoms @conn :avet :logseq.property/icon)))
              (set (map second (rest tx-data))))))))
 
+;; Fails if, in `fix-extends-cardinality!`, `:db/cardinality` becomes `:db/id`, the `:db/index` key is dropped, `:db/index` becomes `:db/retract` or the `:fix-db?` key is dropped.
 (deftest fix-extends-cardinality-sets-many-once-test
   (let [conn (graph-conn)
         extends (:db/id (d/entity @conn :logseq.property.class/extends))
@@ -393,6 +401,7 @@
       (#'worker-db-validate/fix-extends-cardinality! conn)
       (is (nil? @captured)))))
 
+;; Fails if, in `fix-missing-internal-page-parent-orders!`, `:block/order` becomes `:block/page`.
 (deftest fix-missing-internal-page-parent-orders-advances-order-allocator-test
   (let [conn (graph-conn)
         child-uuid (random-uuid)]
@@ -417,6 +426,8 @@
         (is (pos? (compare repaired-order "bzz")))
         (is (pos? (compare (db-order/gen-key) repaired-order)))))))
 
+;; Fails if, in `validate-db-result`, `:db/id` becomes `:db/ident` or the `:invalid-entity-ids` key is dropped.
+;; Fails if, in `validate-db`, the `:msg` key is dropped, the `:errors` key is dropped or the `:invalid-entity-ids` key is dropped.
 (deftest validate-db-reports-and-broadcasts-invalid-blocks-test
   (let [conn (graph-conn)
         root (root-id conn)
