@@ -9,6 +9,7 @@
 
 (def ^:private test-repo "page-mutation-test")
 
+;; Fails if, in `(top level)`, `seq` becomes `empty?`.
 (deftest page-exists?-thread-api-test
   (let [page-exists? (get @thread-api/*thread-apis :thread-api/page-exists?)
         conn (d/create-conn db-schema/schema)

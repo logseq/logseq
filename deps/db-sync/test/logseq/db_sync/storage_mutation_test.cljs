@@ -25,17 +25,20 @@
                  (throw error))
                nil)})
 
+;; Fails if, in `duplicate-column-error?`, `or` becomes `and`.
 (deftest init-schema-ignores-duplicate-outliner-op-column-thrown-as-string-test
   ;; A non-Error throwable: its message is the thrown value itself.
   (is (nil? (storage/init-schema!
              (sql-failing-outliner-op-migration "SqliteError: duplicate column name: outliner_op")))))
 
+;; Fails if, in `duplicate-column-error?`, `and` becomes `or`.
 (deftest init-schema-rethrows-duplicate-column-error-for-another-column-test
   (is (thrown-with-msg? js/Error #"duplicate column name: other_column"
                         (storage/init-schema!
                          (sql-failing-outliner-op-migration
                           (js/Error. "duplicate column name: other_column"))))))
 
+;; Fails if, in `append-tx-for-tx-report`, `or` becomes `and`.
 (deftest empty-transaction-appends-no-tx-log-entry-test
   (let [sql (memory-sql)
         conn (storage/open-conn sql)]

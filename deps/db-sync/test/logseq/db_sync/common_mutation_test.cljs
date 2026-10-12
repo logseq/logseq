@@ -15,6 +15,7 @@
                     (swap! calls assoc :prepare-sql sql)
                     stmt)}))
 
+;; Fails if, in `<d1-run`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest d1-run-binds-args-test
   (async done
          (let [with-args (atom {})
