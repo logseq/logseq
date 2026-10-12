@@ -54,18 +54,21 @@
         expected #{(:db/id (d/entity db :user.property/node)) (id-of db "target1")}]
     (is (= [expected expected] (refs-both-ways db "node-ref")))))
 
+;; Fails if, in `page-or-object?-helper`, `or` becomes `and`.
 (deftest tagged-block-property-value-is-a-ref-test
   ;; A block with a tag is an object (not a page): it is a ref as well.
   (let [db @test-db
         expected #{(:db/id (d/entity db :user.property/node)) (id-of db "task-obj")}]
     (is (= [expected expected] (refs-both-ways db "object-ref")))))
 
+;; Fails if, in `db-rebuild-block-refs-fn`, `=` becomes `not=`.
 (deftest every-value-of-a-many-property-is-a-ref-test
   (let [db @test-db
         expected #{(:db/id (d/entity db :user.property/nodes))
                    (id-of db "target1") (id-of db "target2")}]
     (is (= [expected expected] (refs-both-ways db "many-ref")))))
 
+;; Fails if, in `build-journal-refs-for-datetime-properties`, `and` becomes `or`.
 (deftest plugin-datetime-property-makes-no-journal-ref-test
   (let [db @test-db
         journal-id (:e (first (d/datoms db :avet :block/journal-day 20260908)))
@@ -75,6 +78,7 @@
       (is (= journal-id (outliner-pipeline/get-journal-day-from-long db timestamp))))
     (is (= [expected expected] (refs-both-ways db "plugin-datetime")))))
 
+;; Fails if, in `db-rebuild-block-refs-fn`, `and` becomes `or`.
 (deftest private-built-in-property-value-is-not-a-ref-test
   (let [db @test-db]
     (is (= (id-of db "target1")
