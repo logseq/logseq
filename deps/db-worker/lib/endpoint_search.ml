@@ -178,6 +178,16 @@ let ensure_active_search_index_build repo build_id =
   | Some id when id = build_id -> ()
   | _ -> raise (Stale_index_build (repo, build_id))
 
+let with_active_search_index_build repo build_id f =
+  E.catch
+    (E.bind (E.pure ()) (fun () ->
+         ensure_active_search_index_build repo build_id;
+         f ()))
+    (fun exn ->
+       E.bind (E.pure ()) (fun () ->
+           ensure_active_search_index_build repo build_id;
+           E.error exn))
+
 (* ---- report-search-index-progress! ---- *)
 
 let report_search_index_progress repo (payload : Wire.t) : unit E.t =
@@ -491,7 +501,8 @@ let schedule_fts_rowid_migration repo search_db : unit =
               E.async (fun () ->
                   E.finally
                     (E.catch
-                       (lt_migrate_fts_to_rowid repo search_db build_id)
+                       (with_active_search_index_build repo build_id (fun () ->
+                            lt_migrate_fts_to_rowid repo search_db build_id))
                        (fun exn ->
                           (match exn with
                            | Stale_index_build _ -> ()
@@ -797,7 +808,8 @@ let search_build_blocks_indice_in_worker args : Wire.t E.t =
                   E.bind (E.sleep 0.) (fun () ->
                       E.finally
                         (E.catch
-                           (lt_build_blocks_index repo search_db conn build_id)
+                           (with_active_search_index_build repo build_id (fun () ->
+                                lt_build_blocks_index repo search_db conn build_id))
                            (fun exn ->
                               (match exn with
                                | Stale_index_build _ -> ()
