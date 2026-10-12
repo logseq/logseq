@@ -252,6 +252,33 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         | row, rest -> row :: chunks n rest)
   in
 
+  (* Windowed grid: the first [eager_rows] rows mount immediately; the
+     rest mount in groups of [group_rows] behind Lazy_children
+     placeholders sized to the group height, so the ~6200-icon table
+     only mounts what scrolls near the viewport instead of being
+     truncated. Row = 36px cell + 2x4px vertical padding. *)
+  let row_h = 44. and eager_rows = 8 and group_rows = 6 in
+  let grid_rows label items =
+    let rows =
+      List.map (fun r -> row ~gap:4 ~padding_vertical:4 r) (chunks 9 items)
+    in
+    let rec split i acc = function
+      | [] -> (List.rev acc, [])
+      | rest when i = 0 -> (List.rev acc, rest)
+      | x :: tl -> split (i - 1) (x :: acc) tl
+    in
+    let eager, rest = split eager_rows [] rows in
+    let groups = chunks group_rows rest in
+    eager
+    @ List.mapi
+        (fun i grp ->
+          let key = Printf.sprintf "ig-%s-%d" label i in
+          Lazy_children.lazy_children ~key ~uuid:key
+            ~min_height:(row_h *. float_of_int (List.length grp))
+            ~render:(fun () -> column ~gap:0 grp))
+        groups
+  in
+
   (* items are chunked into rows of 9: the web fallback relied on
      flex-wrap, which the native layout engine ignores — a single
      unwrapped row shrink-compresses every cell to a few px *)
@@ -264,11 +291,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                 ~font_size:"0.75rem" ~font_weight:500
                 ~foreground:"var(--lx-gray-07, var(--muted-foreground))"
                 [] ]
-          :: [ column ~gap:0
-               (List.map
-                  (fun row_items ->
-                    row ~gap:4 ~padding_vertical:4 row_items)
-                  (chunks 9 items)) ]))
+          :: [ column ~gap:0 (grid_rows label items) ]))
   in
 
   let used_item_btns () : t list =
@@ -378,16 +401,15 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          (fun (id, n) -> item_btn (Emoji_item (id, n)))
                          (Emoji_mart.all_emojis ())) ]) ]
       | Tab_icon ->
-          (* browse cap: the unfiltered table is ~6200 icons — a single
-             render of the full grid stalls the frame for seconds, so the
-             tab shows the same first-100 bound the search uses *)
+          (* the unfiltered table is ~6200 icons: pane_section windows
+             the grid (lazy row groups) instead of capping it *)
           column ~gap:4 ~grow:1.
             [ pane_section
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
                 (List.map
                    (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                   (take 100 (icon_items ()))) ])
+                   (icon_items ())) ])
     else
       let icons =
         if s.tab = Tab_emoji then []
