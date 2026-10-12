@@ -643,6 +643,11 @@ let inner st =
                         )
                       ]
                     (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator"
+                       ~height:8
+                       (* cljs container.css .sidebar-drop-indicator: the
+                          8px lead-in offsets the list's mt-[-8px] so the
+                          first item header lands below the sticky topbar
+                          instead of clipping under it *)
                        []
                      :: List.mapi (sidebar_item st) items))
                 (Signal.value st.Sidebar_state.items) ] ]
