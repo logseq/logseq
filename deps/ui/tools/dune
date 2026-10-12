@@ -1,18 +1,22 @@
 (executable
  (name dict_gen)
+ (modules dict_gen)
  (modes native))
 
 (executable
  (name emoji_gen)
+ (modules emoji_gen)
  (modes native)
  (libraries yojson))
 
 (executable
  (name icon_names_gen)
+ (modules icon_names_gen)
  (modes native)
  (libraries yojson))
 
 (executable
  (name version_gen)
+ (modules version_gen)
  (modes native)
  (libraries yojson))
