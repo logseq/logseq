@@ -61,7 +61,14 @@ let take_pending_edit ~block_uuid ~ident =
 let active_editor : (string * string * string) option ref = ref None
 
 let row_key ctx row =
-  (ctx.block_uuid, D.row_ident row |> Option.value ~default:"")
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  let value_uuid =
+    if D.row_many row then
+      Option.bind (D.getf row "value") D.ref_uuid
+    else None
+  in
+  let key = match value_uuid with Some uuid -> ident ^ ":" ^ uuid | None -> ident in
+  (ctx.block_uuid, key)
 
 let add_active_edit ctx row =
   let block_uuid, ident = row_key ctx row in
@@ -1321,6 +1328,26 @@ let rec view ?(positioned = false) ~(hover : bool Signal.state option)
   else if ident = "logseq.property/icon" then icon_view ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ctx row'
   else
+    match D.row_value row', row' with
+    | (W.Set (_ :: _ as values) | W.List (_ :: _ as values)
+      | W.Array (_ :: _ as values)), W.Map fields
+      when D.row_many row'
+           && List.mem ty [ "default"; "url"; "number"; "string" ] ->
+        column ~gap:2 ~grow:1.0
+          (List.map
+             (fun value ->
+               let single =
+                 W.Map
+                   (List.map
+                      (fun (key, field) ->
+                        match key with
+                        | W.Keyword "value" | W.String "value" -> (key, value)
+                        | _ -> (key, field))
+                      fields)
+               in
+               view ~positioned ~hover ctx single)
+             values)
+    | _ ->
     match ty with
     | "checkbox" -> checkbox_view ctx row'
     | "number" -> scalar_edit_cell ctx row'

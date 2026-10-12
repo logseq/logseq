@@ -420,4 +420,61 @@ let tests =
             Suite.equal ctx "Node property classes equal both supplied tag DB IDs"
               (member ":logseq.property/classes" property |> to_list |> List.sort compare)
               (List.sort compare ids);
-            validate ctx app)) ]
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "insert-batch-blocks-test"]
+      "insert-batch-blocks-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let node ?(properties = []) ?(children = []) title =
+              `Assoc (["content", str title]
+                      @ (if properties = [] then [] else ["properties", `Assoc properties])
+                      @ (if children = [] then [] else ["children", `List children])) in
+            let batch with_properties =
+              let leaf_properties =
+                if with_properties then
+                  ["z3", str "Page 1"; "z4", `List [str "Page 2"; str "Page 3"]]
+                else [] in
+              let root_properties =
+                if with_properties then ["z1", str "test"; "z2", `Bool true] else [] in
+              [ node ~properties:root_properties
+                  ~children:[node "b1.1" ~children:
+                               [node "b1.1.1" ~properties:leaf_properties; node "b1.1.2"];
+                             node "b1.2"] "b1";
+                node "b2" ] in
+            let page_contents () =
+              Client.query app
+                ".ls-page-blocks .block-title-wrap, .ls-page-blocks .pv-scalar"
+              |> List.map Client.text_content |> List.filter (fun text -> text <> "") in
+            let expect_contents expected =
+              ignore (Client.poll "Native batch block/value text order matches source" (fun () ->
+                  if page_contents () = expected then Some () else None));
+              Suite.equal ctx "Native UI preserves exact source batch block/value text order"
+                (page_contents ()) expected in
+            let page = "insert batch blocks" in
+            new_page app page;
+            let page_obj = Client.sdk_call app "get_block" [str page] in
+            let result = Client.sdk_call app "insert_batch_block"
+                [str (uuid page_obj); `List (batch false)] in
+            let titles = ["b1"; "b1.1"; "b1.1.1"; "b1.1.2"; "b1.2"; "b2"] in
+            expect_contents titles;
+            Suite.equal ctx "SDK batch result is flattened in source hierarchy order"
+              (result |> to_list |> List.map (fun block -> member "title" block |> to_string))
+              titles;
+            let page = "insert batch blocks with properties" in
+            new_page app page;
+            let page_obj = Client.sdk_call app "get_block" [str page] in
+            let result = Client.sdk_call app "insert_batch_block"
+                [str (uuid page_obj); `List (batch true);
+                 `Assoc ["schema", `Assoc ["z3", str "page"; "z4", str "page"]]] in
+            let refs = Client.wait_for ~text:"Page 3" app
+                ".ls-page-blocks .pv-scalar" in
+            Suite.check ctx "Source-required Page 3 property value is rendered with positive dimensions"
+              (List.exists (fun el ->
+                   let r = Client.rect el in
+                   Client.text_content el = "Page 3" && r.width > 0. && r.height > 0.) refs);
+            expect_contents ["b1"; "test"; "b1.1"; "b1.1.1"; "Page 1"; "Page 2";
+                             "Page 3"; "b1.1.2"; "b1.2"; "b2"];
+            Suite.equal ctx "Batch root retains source boolean property"
+              (result |> to_list |> List.hd |> member ":plugin.property._test_plugin/z2")
+              (`Bool true);
+            validate ctx app;
+            ignore (Client.screenshot app ~name:"sdk-batch-properties.png"))) ]
