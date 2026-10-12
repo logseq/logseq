@@ -75,4 +75,81 @@ let tests =
             Suite.equal ctx "Append stays at page root after nested sibling inserts"
               parent_id page_id;
             validate ctx app;
-            ignore (Client.screenshot app ~name:"sdk-appended-root.png"))) ]
+            ignore (Client.screenshot app ~name:"sdk-appended-root.png")));
+    Suite.test ~contract:Suite.Api ~covers:[source "block-properties-test"]
+      "block-properties-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let name = "test-block-properties-apis" in
+            new_page app name;
+            let block = Client.sdk_call app "append_block_in_page"
+                [str name; str "block-in-page-0";
+                 `Assoc ["properties", `Assoc ["new-p1", `Int 1]]] in
+            let id = block_count ctx app block 1 in
+            let prop1 = Client.sdk_call app "get_block_property" [str id; str "new-p1"] in
+            let props1 = Client.sdk_call app "get_block_properties" [str id; str "new-p1"] in
+            let props2 = Client.sdk_call app "get_page_properties" [str name] in
+            ignore (Client.wait_for ~text:"new-p1" app ".property-k");
+            Suite.equal ctx "Initial number property value" (member "value" prop1) (`Int 1);
+            Suite.equal ctx "Initial property plugin ident" (member "ident" prop1)
+              (str ":plugin.property._test_plugin/new-p1");
+            Suite.equal ctx "Block properties expose the initial number"
+              (member ":plugin.property._test_plugin/new-p1" props1) (`Int 1);
+            Suite.equal ctx "Page properties include the Page tag"
+              (member ":block/tags" props2) (`List [str "Page"]);
+            let json_value = `Assoc ["a", `Int 1; "b", `List [`Int 2; `Int 3]] in
+            ignore (Client.sdk_call app "upsert_block_property" [str id; str "p2"; str "p2"]);
+            ignore (Client.sdk_call app "upsert_block_property" [str id; str "p3"; `Bool true]);
+            ignore (Client.sdk_call app "upsert_block_property" [str id; str "p4"; json_value]);
+            let prop2 = Client.sdk_call app "get_block_property" [str id; str "p2"] in
+            let prop3 = Client.sdk_call app "get_block_property" [str id; str "p3"] in
+            let prop4 = Client.sdk_call app "get_block_property" [str id; str "p4"] in
+            ignore (Client.wait_for ~text:"p2" app ".property-k");
+            Suite.equal ctx "String property value" (member "value" prop2) (str "p2");
+            Suite.equal ctx "Checkbox property is true" prop3 (`Bool true);
+            Suite.equal ctx "JSON object property retains its object and array" prop4 json_value;
+            ignore (Client.sdk_call app "remove_block_property" [str id; str "p4"]);
+            ignore (Client.poll "Removed JSON property disappears from the native UI" (fun () ->
+                if Client.query app ".property-k"
+                   |> List.exists (fun el -> Client.text_content el = "p4")
+                then None else Some ()));
+            Suite.check ctx "Removed property is absent in rendered properties"
+              (Client.query app ".property-k"
+               |> List.for_all (fun el -> Client.text_content el <> "p4"));
+            ignore (Client.sdk_call app "upsert_block_property" [str id; str "p3"; `Bool false]);
+            ignore (Client.sdk_call app "upsert_block_property" [str id; str "p2"; str "p2-updated"]);
+            let values = Client.wait_for ~text:"p2-updated" app
+                ("#ls-block-" ^ id ^ " .property-block-container") in
+            Suite.check ctx "Updated property text is rendered in its owning native block"
+              (List.exists (fun el ->
+                   let rect = Client.rect el in
+                   Client.text_content el = "p2-updated" && rect.width > 0. && rect.height > 0.) values);
+            let props = Client.sdk_call app "get_block_properties" [str id] in
+            Suite.equal ctx "Updated checkbox property is false"
+              (member ":plugin.property._test_plugin/p3" props) (`Bool false);
+            Suite.equal ctx "Updated string property value"
+              (member ":plugin.property._test_plugin/p2" props) (str "p2-updated");
+            validate ctx app;
+            ignore (Client.screenshot app ~name:"sdk-block-properties.png")));
+    Suite.test ~contract:Suite.Api ~covers:[source "property-upsert-test"]
+      "property-upsert-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let check_property name typ cardinality =
+              let property = Client.sdk_call app "get_property" [str name] in
+              Suite.equal ctx (name ^ " type") (member "type" property) (str typ);
+              Suite.equal ctx (name ^ " cardinality") (member "cardinality" property)
+                (str (":db.cardinality/" ^ cardinality))
+            in
+            ignore (Client.sdk_call app "upsert_property" [str "test-property-1"]);
+            check_property "test-property-1" "default" "one";
+            ignore (Client.sdk_call app "upsert_property"
+                      [str "test-property-2"; `Assoc ["type", str "number"; "cardinality", str "one"]]);
+            check_property "test-property-2" "number" "one";
+            ignore (Client.sdk_call app "upsert_property"
+                      [str "test-property-3"; `Assoc ["type", str "number"; "cardinality", str "many"]]);
+            check_property "test-property-3" "number" "many";
+            ignore (Client.sdk_call app "upsert_property"
+                      [str "test-property-3"; `Assoc ["type", str "default"]]);
+            let property = Client.sdk_call app "get_property" [str "test-property-3"] in
+            Suite.equal ctx "Existing property's type changes to default"
+              (member "type" property) (str "default");
+            validate ctx app)) ]
