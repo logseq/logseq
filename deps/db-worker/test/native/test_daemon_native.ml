@@ -134,25 +134,22 @@ let server_port root pid =
   |> List.find_map (fun (entry : Server_list.entry) ->
          if entry.pid = pid then Some entry.port else None)
 
-let wait_exit daemon =
+let wait_status daemon =
   let deadline = Unix.gettimeofday () +. 10. in
   let rec loop () =
     match Unix.waitpid [ Unix.WNOHANG ] daemon.pid with
     | 0, _ when Unix.gettimeofday () < deadline ->
         Thread.delay 0.01;
         loop ()
-    | 0, _ -> failwith "native daemon did not exit after shutdown"
-    | _, Unix.WEXITED 0 -> daemon.stopped <- true
+    | 0, _ -> failwith "native worker process did not exit"
     | _, status ->
         daemon.stopped <- true;
-        failwith
-          (Printf.sprintf "native daemon exited abnormally: %s"
-             (match status with
-              | Unix.WEXITED code -> string_of_int code
-              | Unix.WSIGNALED code -> "signal " ^ string_of_int code
-              | Unix.WSTOPPED code -> "stopped " ^ string_of_int code))
+        status
   in
   loop ()
+
+let wait_exit daemon =
+  check "native daemon exits successfully" (wait_status daemon = Unix.WEXITED 0)
 
 let stop daemon =
   if not daemon.stopped then begin
@@ -185,17 +182,19 @@ let with_processes f =
       if !succeeded then remove_tree storage_root
       else Printf.eprintf "Native daemon failure artifacts: %s\n%!" storage_root)
 
-let start root children ~repo ?(owner = "cli") () =
-  let storage =
-    Graph_lifecycle.resolve_storage ~root
-      ~graphs_dir:(Filename.concat root "graphs")
-  in
-  await (Graph_lifecycle.create_graph ~storage ~repo);
+let launch root children ~repo args =
   let bin = executable () in
+  let prefix = Filename.concat root ("daemon-" ^ Uuid_gen.uuid ()) in
+  let stdout_path = prefix ^ ".stdout.log" in
+  let stderr_path = prefix ^ ".stderr.log" in
   let output =
-    Unix.openfile
-      (Filename.concat root ("daemon-" ^ Uuid_gen.uuid () ^ ".log"))
+    Unix.openfile stdout_path
       [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_EXCL ] 0o600
+  in
+  let error =
+    try Unix.openfile stderr_path
+          [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_EXCL ] 0o600
+    with exn -> Unix.close output; raise exn
   in
   let environment =
     Unix.environment ()
@@ -207,17 +206,39 @@ let start root children ~repo ?(owner = "cli") () =
     Array.of_list
       (("HOME=" ^ root) :: "LOGSEQ_NO_LOGIN_DAEMON=1" :: vars)
   in
-  let argv =
-    [| bin; "--root-dir"; root; "--repo"; repo; "--owner-source"; owner
-     ; "--log-level"; "error" |]
-  in
+  let argv = Array.of_list (bin :: args) in
   let pid =
-    try Unix.create_process_env bin argv environment output output output
-    with e -> Unix.close output; raise e
+    try Unix.create_process_env bin argv environment Unix.stdin output error
+    with e -> Unix.close output; Unix.close error; raise e
   in
   Unix.close output;
+  Unix.close error;
   let daemon = { root; repo; pid; port = 0; stopped = false } in
   children := daemon :: !children;
+  daemon, stdout_path, stderr_path
+
+let run_command root children args =
+  let child, stdout_path, stderr_path = launch root children ~repo:"" args in
+  let status = wait_status child in
+  let read path =
+    let channel = open_in_bin path in
+    Fun.protect ~finally:(fun () -> close_in channel)
+      (fun () -> In_channel.input_all channel)
+  in
+  status, read stdout_path, read stderr_path
+
+let start root children ~repo ?(owner = "cli") ?(legacy_flags = []) () =
+  let storage =
+    Graph_lifecycle.resolve_storage ~root
+      ~graphs_dir:(Filename.concat root "graphs")
+  in
+  await (Graph_lifecycle.create_graph ~storage ~repo);
+  let daemon, _, _ =
+    launch root children ~repo
+      ([ "--root-dir"; root; "--repo"; repo; "--owner-source"; owner
+       ; "--log-level"; "error" ] @ legacy_flags)
+  in
+  let pid = daemon.pid in
   let deadline = Unix.gettimeofday () +. 20. in
   let rec wait_port () =
     match server_port root pid with
@@ -622,6 +643,97 @@ let test_different_pid_persistence () =
       (last_gc_at = Wire.Int 0 || last_gc_at = Wire.Int64 0L);
     stop daemon_b)
 
+let test_cli_process_exits () =
+  with_processes (fun root children ->
+    let status, stdout, stderr = run_command root children [ "--version" ] in
+    check "version exits zero without graph args" (status = Unix.WEXITED 0);
+    check "version prints revision" (contains_text stdout "Revision:");
+    check "version has no stderr" (stderr = "");
+    let status, stdout, stderr = run_command root children [ "--help" ] in
+    check "help exits zero without graph args" (status = Unix.WEXITED 0);
+    check "help documents required root" (contains_text stdout "--root-dir");
+    check "help omits deprecated registry flag"
+      (not (contains_text stdout "--server-list-file"));
+    check "help has no stderr" (stderr = "");
+    List.iter
+      (fun (args, message) ->
+        let status, stdout, stderr = run_command root children args in
+        check "missing argument exits one" (status = Unix.WEXITED 1);
+        check "missing argument has no stdout" (stdout = "");
+        check "missing argument reports on stderr" (contains_text stderr message))
+      [ [ "--repo"; "logseq_db_missing_root" ], "root-dir is required"
+      ; [ "--root-dir"; root ], "repo is required" ];
+    check "early exits do not initialize graph storage"
+      (not (Sys.file_exists (Filename.concat root "graphs")));
+    check "early exits do not publish daemon"
+      (not (Sys.file_exists (Server_list.path root))))
+
+let test_cli_ignores_legacy_flags () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_legacy_" ^ Uuid_gen.uuid () in
+    let daemon =
+      start root children ~repo
+        ~legacy_flags:
+          [ "--host"; "127.0.0.2"
+          ; "--port"; "not-a-port"
+          ; "--auth-token"; "unused"
+          ; "--rtc-ws-url"; "unused"
+          ; "--server-list-file"; Filename.concat root "legacy-list.json" ]
+        ()
+    in
+    let health = json_body (http daemon ~method_:"GET" ~path:"/healthz" ()) in
+    check "deprecated arguments keep admitted repo"
+      (get_string "repo" health = repo);
+    check "deprecated host still binds loopback"
+      (get_string "host" health = "127.0.0.1");
+    check "deprecated port does not alter listener"
+      (Wire.get "port" health = Some (Wire.Int daemon.port));
+    check "deprecated registry path is not used"
+      (not (Sys.file_exists (Filename.concat root "legacy-list.json")));
+    check "deprecated flags keep CLI owner"
+      (get_string "owner-source" health = "cli");
+    let title = "Legacy Flags Do Not Change Graph" in
+    transact daemon repo [ page ~uuid:(Uuid_gen.uuid ()) ~title ~time:(now ()) ];
+    check "legacy flags do not intercept typed worker invocation"
+      (contains_row (query daemon repo title_query [ str title ]));
+    stop daemon)
+
+let test_cross_pid_ownership () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_ownership_" ^ Uuid_gen.uuid () in
+    let owner = start root children ~repo () in
+    let assert_contended () =
+      let status, _, stderr =
+        run_command root children
+          [ "--root-dir"; root; "--repo"; repo; "--owner-source"; "cli"
+          ; "--log-level"; "error" ]
+      in
+      check "second native PID cannot acquire live graph" (status = Unix.WEXITED 1);
+      check "contender reports repo-locked" (contains_text stderr "repo-locked");
+      let health = json_body (http owner ~method_:"GET" ~path:"/healthz" ()) in
+      check "original owner remains ready" (get_string "status" health = "ready");
+      check "original owner PID retained" (Wire.get "pid" health = Some (Wire.Int owner.pid))
+    in
+    assert_contended ();
+    let title = "Owned Across Import and Reopen" in
+    transact owner repo [ page ~uuid:(Uuid_gen.uuid ()) ~title ~time:(now ()) ];
+    let binary = invoke owner "thread-api/export-db-binary" [ str repo ] in
+    ignore (sqlite_bytes binary);
+    ignore (invoke owner "thread-api/import-db-binary" [ str repo; binary ]);
+    let backup = Filename.concat root "owned-backup.sqlite" in
+    ignore (invoke owner "thread-api/backup-db-sqlite" [ str repo; str backup ]);
+    check "owned backup exists" (Sys.file_exists backup);
+    ignore (invoke owner "thread-api/close-db" [ str repo ]);
+    assert_contended ();
+    ignore (invoke owner "thread-api/create-or-open-db" [ str repo; Wire.Map [] ]);
+    assert_imported_page owner repo title;
+    assert_contended ();
+    stop owner;
+    let next_owner = start root children ~repo () in
+    check "shutdown releases ownership to different PID" (next_owner.pid <> owner.pid);
+    assert_imported_page next_owner repo title;
+    stop next_owner)
+
 let cases =
   [ Alcotest.test_case "native-daemon-http-invoke-transit-and-errors" `Quick
       test_http_invocation
@@ -630,4 +742,10 @@ let cases =
   ; Alcotest.test_case "native-daemon-binary-roundtrips" `Quick
       test_binary_roundtrips
   ; Alcotest.test_case "native-daemon-different-pid-persistence" `Quick
-      test_different_pid_persistence ]
+      test_different_pid_persistence
+  ; Alcotest.test_case "native-daemon-cli-process-exits" `Quick
+      test_cli_process_exits
+  ; Alcotest.test_case "native-daemon-ignores-legacy-flags" `Quick
+      test_cli_ignores_legacy_flags
+  ; Alcotest.test_case "native-daemon-cross-pid-ownership" `Quick
+      test_cross_pid_ownership ]
