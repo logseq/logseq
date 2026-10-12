@@ -1446,6 +1446,7 @@ let () =
         let extra =
           fprop "value" ^ fprop "grow" ^ fprop "role" ^ fprop "index"
           ^ fprop "offset" ^ fprop "height" ^ fprop "width"
+          ^ fprop "orientation" ^ fprop "flex-wrap"
           ^ fprop "name" ^ fprop "icon" ^ fprop "font-size"
           ^ fprop "font-weight" ^ fprop "opacity" ^ fprop "margin-left"
           ^ (match Host_icons.resolved_name store id with
