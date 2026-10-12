@@ -303,10 +303,121 @@ let tests =
               ; ":logseq.class/Code-block"; ":logseq.class/Card"
               ; ":logseq.class/Quote-block"; ":logseq.class/Cards" ] in
             Suite.check ctx "Native SDK returns every source-required built-in class"
-              (List.for_all (fun ident -> List.mem (str ident) idents) builtins)));
+              (List.for_all (fun ident -> List.mem (str ident) idents) builtins);
+            validate ctx app));
     Suite.test ~contract:Suite.Api ~covers:[source "get-all-properties-test"]
       "get-all-properties-test" (fun ctx ->
         Suite.with_app ctx (fun app ->
             let properties = Client.sdk_call app "get_all_properties" [] |> to_list in
             Suite.check ctx "Worker exposes at least twenty built-in properties"
-              (List.length properties >= 20))) ]
+              (List.length properties >= 20);
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "get-tag-objects-test"]
+      "get-tag-objects-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let name = "tag objects test" in
+            new_page app name;
+            ignore (Client.sdk_call app "insert_block"
+                      [str name; str "task 1";
+                       `Assoc ["properties", `Assoc ["logseq.property/status", str "Doing"]]]);
+            let tasks = Client.sdk_call app "get_tag_objects" [str "logseq.class/Task"]
+                        |> to_list in
+            Suite.equal ctx "Status Doing classifies exactly one SDK block as Task"
+              (List.length tasks) 1;
+            Suite.equal ctx "Task query returns the source-required title"
+              (member "title" (List.hd tasks)) (str "task 1");
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "create-and-get-tag-test"]
+      "create-and-get-tag-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let tag = Client.sdk_call app "create_tag" [str "book1"] in
+            let named = Client.sdk_call app "get_tag" [str "book1"] in
+            let ident = ":plugin.class._test_plugin/book1" in
+            let identified = Client.sdk_call app "get_tag" [str ident] in
+            let by_uuid = Client.sdk_call app "get_tag" [str (uuid tag)] in
+            Suite.equal ctx "Created plugin tag has its scoped identifier"
+              (member "ident" tag) (str ident);
+            Suite.equal ctx "Tag lookup by title preserves its identifier"
+              (member "ident" named) (str ident);
+            Suite.equal ctx "Tag lookup by identifier returns the title"
+              (member "title" identified) (str "book1");
+            Suite.equal ctx "Tag lookup by UUID returns the title"
+              (member "title" by_uuid) (str "book1");
+            let tag_properties = `List
+                [ `Assoc ["name", str "prop1"]
+                ; `Assoc ["name", str "prop2"; "schema", `Assoc ["type", str "number"]]
+                ; `Assoc ["name", str "prop3"; "schema", `Assoc ["type", str "checkbox"]] ] in
+            let with_props = Client.sdk_call app "create_tag"
+                [str "tag-with-props"; `Assoc ["tagProperties", tag_properties]] in
+            Suite.equal ctx "Tag has all three requested property schemas"
+              (member ":logseq.property.class/properties" with_props |> to_list |> List.length) 3;
+            let create name = Client.sdk_call app "create_tag" [str name] in
+            let first = create "tag1" in
+            let second = create "tag2" in
+            let third = create "tag3" in
+            let id1 = member "id" first and id2 = member "id" second
+            and id3 = member "id" third in
+            ignore (Client.sdk_call app "add_tag_extends" [id1; id2]);
+            let extended = Client.sdk_call app "get_tag" [id1] in
+            Suite.equal ctx "Tag extends the first DB ID"
+              (member ":logseq.property.class/extends" extended) (`List [id2]);
+            ignore (Client.sdk_call app "add_tag_extends" [id1; id3]);
+            let extended = Client.sdk_call app "get_tag" [id1] in
+            Suite.equal ctx "Tag preserves both extension DB IDs in source order"
+              (member ":logseq.property.class/extends" extended) (`List [id2; id3]);
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "get-tags-by-name-test"]
+      "get-tags-by-name-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let create name = Client.sdk_call app "create_tag" [str name] in
+            let find name = Client.sdk_call app "get_tags_by_name" [str name] |> to_list in
+            let product = create "product" in
+            let result = find "product" in
+            Suite.equal ctx "Exact tag name returns exactly one tag" (List.length result) 1;
+            let found = List.hd result in
+            Suite.equal ctx "Exact tag lookup returns the created UUID"
+              (member "uuid" found) (member "uuid" product);
+            Suite.equal ctx "Exact tag lookup returns the created title"
+              (member "title" found) (member "title" product);
+            ignore (create "TestTag123");
+            let lower = find "testtag123" and upper = find "TESTTAG123"
+            and mixed = find "TeStTaG123" in
+            List.iter (fun (name, tags) ->
+                Suite.equal ctx (name ^ " search finds one normalized tag")
+                  (List.length tags) 1)
+              ["Lowercase", lower; "Uppercase", upper; "Mixed case", mixed];
+            Suite.equal ctx "Lowercase and uppercase resolve the same UUID"
+              (uuid (List.hd lower)) (uuid (List.hd upper));
+            Suite.equal ctx "Lowercase and mixed case resolve the same UUID"
+              (uuid (List.hd lower)) (uuid (List.hd mixed));
+            Suite.equal ctx "Missing tag search returns an empty array"
+              (find "NonExistentTag12345") [];
+            new_page app "regular-page";
+            Suite.equal ctx "Ordinary page is excluded from tag lookup"
+              (find "regular-page") [];
+            ignore (create "category");
+            ignore (create "Category");
+            let similar = find "category" in
+            Suite.check ctx "Case-normalized similar names return at least one tag"
+              (List.length similar >= 1);
+            let found = List.hd similar in
+            Suite.check ctx "Normalized tag has a string UUID"
+              (match member "uuid" found with `String _ -> true | _ -> false);
+            Suite.check ctx "Normalized tag has a string title"
+              (match member "title" found with `String _ -> true | _ -> false);
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "set-property-node-tags"]
+      "set-property-node-tags" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let name = "node-tags-property" in
+            ignore (Client.sdk_call app "upsert_property"
+                      [str name; `Assoc ["type", str "node"]]);
+            let first = Client.sdk_call app "create_tag" [str "Tag A"] in
+            let second = Client.sdk_call app "create_tag" [str "Tag B"] in
+            let ids = [member "id" first; member "id" second] in
+            ignore (Client.sdk_call app "set_property_node_tags" [str name; `List ids]);
+            let property = Client.sdk_call app "get_property" [str name] in
+            Suite.equal ctx "Node property classes equal both supplied tag DB IDs"
+              (member ":logseq.property/classes" property |> to_list |> List.sort compare)
+              (List.sort compare ids);
+            validate ctx app)) ]
