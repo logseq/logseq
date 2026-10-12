@@ -553,16 +553,7 @@ let cm_color_row (st : S.t) : t =
      vars aren't defined on the native host so the concrete values
      carry the same paint *)
   let swatch c =
-    let hex =
-      match c with
-      | "yellow" -> "#eab308"
-      | "red" -> "#ef4444"
-      | "pink" -> "#ec4899"
-      | "green" -> "#22c55e"
-      | "blue" -> "#3b82f6"
-      | "purple" -> "#a855f7"
-      | _ -> "#6b7280"
-    in
+    let hex = S.color_hex c in
     Ui_components.color_swatch ~key:("color-" ^ c) ~size:30
       ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t ("color/" ^ c))
@@ -1426,6 +1417,18 @@ let handle_mousedown _st (ev : Ui_services.ev) =
       ev.Ui_services.prevent_default ()
   | _ -> ()
 
+(* the host's NSMenu popup reports the picked spec tag through a
+   "native-menu-select" document event; the tag maps back to the same
+   action the LUI row would have run *)
+let handle_native_menu_select (st : S.t) (ev : Ui_services.ev) =
+  match ev.Ui_services.detail "tag" with
+  | Some s -> (
+      match int_of_string_opt s with
+      | Some tag -> S.cm_native_dispatch st tag
+      | None -> ())
+  | None -> ()
+;;
+
 let install_listeners context st =
   Ui_services.dom_on_document_event ~capture:true "keydown"
     (handle_keydown st);
@@ -1438,6 +1441,8 @@ let install_listeners context st =
   Ui_services.dom_on_document_event "mousemove" (handle_mousemove st);
   Ui_services.dom_on_document_event ~capture:true "ls:block-picker"
     (handle_block_picker st);
+  Ui_services.dom_on_document_event "native-menu-select"
+    (handle_native_menu_select st);
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
@@ -1456,7 +1461,13 @@ let render (_ms : Model.t Signal.signal) : t =
   in
   let cm_open =
     Logseq_el.own context
-      (Signal.map (fun (v : S.view) -> v.S.cm <> None)
+      (Signal.map
+         (fun (v : S.view) ->
+           (* a host-painted menu keeps cm in state (the reply needs the
+              block context) but never mounts the LUI popover *)
+           match v.S.cm with
+           | Some c -> not c.S.native
+           | None -> false)
          (Signal.value (st.S.vs)))
   in
   let body =

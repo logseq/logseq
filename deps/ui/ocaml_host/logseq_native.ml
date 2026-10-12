@@ -166,6 +166,11 @@ let () =
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
+  (* in-app menus render as real NSMenu popups on this host;
+     LOGSEQ_NATIVE_MENUS=0 keeps the LUI overlay menus *)
+  (match Sys.getenv_opt "LOGSEQ_NATIVE_MENUS" with
+   | None -> Unix.putenv "LOGSEQ_NATIVE_MENUS" "1"
+   | Some _ -> ());
   (try
      if Sys.getenv "LOGSEQ_NATIVE_TREEDUMP" <> "" then
        Sys.set_signal Sys.sigusr1

@@ -385,6 +385,76 @@ let rect_json (e : env) (r : Lui_scene.rect) : J.t =
 let reply (name : string) (j : J.t) =
   Native_embed.platform_event (name ^ "\n" ^ J.to_string j)
 
+(* ---------- native menu popup ---------- *)
+
+(* ocaml_host_stubs.c: runs a real NSMenu modally at the spec's anchor
+   and returns the picked item tag (-1 on dismiss). The JSON shape
+   comes from popups_state's cm_native_spec. *)
+external native_menu_popup : string -> int = "logseq_native_menu_popup"
+
+let b64_alphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+let b64_of_string (s : string) : string =
+  let n = String.length s in
+  let out = Buffer.create (((n + 2) / 3) * 4) in
+  let put = Buffer.add_char out in
+  let i = ref 0 in
+  while !i < n do
+    let c0 = Char.code s.[!i] in
+    let c1 = if !i + 1 < n then Char.code s.[!i + 1] else 0 in
+    let c2 = if !i + 2 < n then Char.code s.[!i + 2] else 0 in
+    put b64_alphabet.[c0 lsr 2];
+    put b64_alphabet.[((c0 land 0x03) lsl 4) lor (c1 lsr 4)];
+    put
+      (if !i + 1 < n then
+         b64_alphabet.[((c1 land 0x0f) lsl 2) lor (c2 lsr 6)]
+       else '=');
+    put (if !i + 2 < n then b64_alphabet.[c2 land 0x3f] else '=');
+    i := !i + 3
+  done;
+  Buffer.contents out
+
+(* spec "icon" names → rasterized premultiplied RGBA for the C side's
+   NSImage build: same svg source + foreground tint + Lui_svg raster
+   the paint path uses, at 2x the 18pt menu slot *)
+let menu_icon_rgba name =
+  match Host_icons.svg_of name with
+  | None -> None
+  | Some src0 -> (
+      let src =
+        match Theme_vars.color_of "foreground" with
+        | Some { Lui_scene.r; g; b; _ } ->
+            Host_icons.with_color src0
+              (Printf.sprintf "rgb(%d,%d,%d)" r g b)
+        | None -> src0
+      in
+      match Lui_svg.render src ~w:36 ~h:36 with
+      | Ok img ->
+          Some
+            ( b64_of_string (Bytes.unsafe_to_string img.Lui_scene.ipix)
+            , img.Lui_scene.iw
+            , img.Lui_scene.ih )
+      | Error _ -> None)
+
+let rec menu_spec_icons (j : J.t) : J.t =
+  match j with
+  | `Assoc kvs ->
+      let kvs = List.map (fun (k, v) -> k, menu_spec_icons v) kvs in
+      (match List.assoc_opt "icon" kvs with
+       | Some (`String name) -> (
+           match menu_icon_rgba name with
+           | Some (rgba, w, h) ->
+               `Assoc
+                 (kvs
+                 @ [ "icon_rgba", `String rgba
+                   ; "icon_w", `Int w
+                   ; "icon_h", `Int h ])
+           | None -> `Assoc kvs)
+       | _ -> `Assoc kvs)
+  | `List xs -> `List (List.map menu_spec_icons xs)
+  | v -> v
+
 (* ---------- dom-op dispatch ---------- *)
 
 let dom_op (e : env) (op : string) (body : string) =
@@ -717,6 +787,15 @@ let handle (envelope : string) =
                 in
                 dom_op e op body
               | None -> ())
+          | "native-menu-popup" ->
+            (match J.from_string payload with
+             | `Assoc _ as spec ->
+               let spec = menu_spec_icons spec in
+               let s = J.to_string spec in
+               let tag = native_menu_popup s in
+               reply "native-menu-select"
+                 (`Assoc [ "detail", `Assoc [ "tag", `Int tag ] ])
+             | _ -> ())
           | "save-file" ->
             ignore (Lui_shell.save_dialog ())
           | "open-file-picker" ->

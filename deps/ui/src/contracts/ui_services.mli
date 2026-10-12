@@ -117,6 +117,10 @@ type env = {
   edit_units : unit -> edit_units;
   random_uuid : unit -> string;
   open_url : string -> unit;
+  menu_popup : Json.t -> bool;
+  (* Hand an in-app menu spec to the host for a native popup; true
+     means the host took it (it answers with a "native-menu-select"
+     document event carrying the chosen tag, or -1 on dismiss). *)
 }
 
 type timers = {
@@ -363,6 +367,7 @@ val env_css_transform_icons : unit -> bool
 val env_edit_units : unit -> edit_units
 val env_random_uuid : unit -> string
 val env_open_url : string -> unit
+val env_menu_popup : Json.t -> bool
 
 val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_on_window_event : string -> (ev -> unit) -> unit

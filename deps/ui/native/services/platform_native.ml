@@ -9,6 +9,17 @@ let host_request : (string -> unit) ref = ref (fun _ -> ())
 
 let request_host name payload = !host_request (name ^ "\n" ^ payload)
 
+(* In-app menus rendered as real NSMenu popups (experiment). The OCaml
+   host opts in by exporting LOGSEQ_NATIVE_MENUS=1 unless the user
+   pinned =0 — other native hosts leave it unset and keep the LUI
+   overlay menus, so an unsupported host never sees the request. *)
+let native_menu_popup (spec : Json.t) : bool =
+  match Sys.getenv_opt "LOGSEQ_NATIVE_MENUS" with
+  | Some "1" ->
+      request_host "native-menu-popup" (Json.stringify spec);
+      true
+  | _ -> false
+
 (* ---------- persisted ui state (localStorage equivalent) ---------- *)
 
 let app_support_dir =
@@ -526,6 +537,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; edit_units = (fun () -> `Bytes)
         ; random_uuid = Host.random_uuid
         ; open_url = Host.open_url
+        ; menu_popup = native_menu_popup
         }
     ; dom
     ; timers

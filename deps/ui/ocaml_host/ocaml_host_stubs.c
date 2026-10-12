@@ -46,7 +46,7 @@ static const char b64_alphabet[] =
 static int b64_val(char c) {
   const char *p = b64_alphabet;
   while (*p && *p != c) p++;
-  return *p == c ? -1 : (int)(p - b64_alphabet);
+  return *p == c ? (int)(p - b64_alphabet) : -1;
 }
 
 /* Same base64 decode as the bridge copy — used by transit/img data on
@@ -616,4 +616,1272 @@ done:
   objc_autoreleasePoolPop(pool);
   CAMLreturn(Val_unit);
 }
+
+/* ============ in-app native NSMenu popup (experiment) ============
+
+   The app serializes its overlay menus to a JSON spec (see
+   popups_state's cm_native_spec) and hands it here through the
+   "native-menu-popup" host request; we build a real NSMenu whose items
+   carry custom views drawing the Logseq chrome (18px tabler icons,
+   color dots, right-aligned kbd keycaps, group headers, composite
+   swatch/heading rows) and run it modally through
+   +[NSMenu popUpContextMenu:withEvent:forView:]. The picked
+   tag (or -1 on dismiss) is returned to OCaml, which emits
+   "native-menu-select" — the same host→app event channel the menubar
+   uses.
+
+   Items with custom views lose key equivalents (AppKit ignores them);
+   the LUI overlay didn't have any either. A menu taller than the
+   spec's max_h falls into the single-scroll-item layout: one
+   NSMenuItem whose view is an NSScrollView holding every row — clicks
+   land on the row views themselves (each keeps its own spec tag) and
+   a "sub" row re-pops a fresh NSMenu where the row sat. */
+
+#include <caml/signals.h>
+#include <math.h>
+#include <string.h>
+
+extern void *objc_autoreleasePoolPush(void);
+extern void objc_autoreleasePoolPop(void *);
+
+/* ---- minimal JSON reader for the host-generated spec ---- */
+
+typedef struct {
+  double x, y;
+} mp_pt;
+
+typedef struct jsv jsv;
+struct jsv {
+  int t; /* 'o','a','s','n','b','0' null */
+  char *s;
+  double n;
+  jsv **k;
+  int nk;
+};
+
+static void js_ws(const char **p) {
+  while (**p == ' ' || **p == '\t' || **p == '\n' || **p == '\r')
+    (*p)++;
+}
+
+static jsv *js_new(int t) {
+  jsv *v = calloc(1, sizeof(jsv));
+  v->t = t;
+  return v;
+}
+
+static void js_push(jsv *o, jsv *kid) {
+  o->k = realloc(o->k, sizeof(jsv *) * (o->nk + 1));
+  o->k[o->nk++] = kid;
+}
+
+static void js_utf8(char **b, int *n, int *cap, unsigned cp) {
+  if (*n + 4 >= *cap) {
+    *cap += 64;
+    *b = realloc(*b, *cap);
+  }
+  if (cp < 0x80) (*b)[(*n)++] = (char)cp;
+  else if (cp < 0x800) {
+    (*b)[(*n)++] = (char)(0xc0 | (cp >> 6));
+    (*b)[(*n)++] = (char)(0x80 | (cp & 63));
+  } else if (cp < 0x10000) {
+    (*b)[(*n)++] = (char)(0xe0 | (cp >> 12));
+    (*b)[(*n)++] = (char)(0x80 | ((cp >> 6) & 63));
+    (*b)[(*n)++] = (char)(0x80 | (cp & 63));
+  } else {
+    (*b)[(*n)++] = (char)(0xf0 | (cp >> 18));
+    (*b)[(*n)++] = (char)(0x80 | ((cp >> 12) & 63));
+    (*b)[(*n)++] = (char)(0x80 | ((cp >> 6) & 63));
+    (*b)[(*n)++] = (char)(0x80 | (cp & 63));
+  }
+}
+
+static unsigned js_hex4(const char **p) {
+  unsigned v = 0;
+  for (int i = 0; i < 4; i++) {
+    char c = **p;
+    v <<= 4;
+    if (c >= '0' && c <= '9') v += c - '0';
+    else if (c >= 'a' && c <= 'f') v += c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F') v += c - 'A' + 10;
+    if (*p) (*p)++;
+  }
+  return v;
+}
+
+static jsv *js_parse(const char **p);
+
+static char *js_string(const char **p) {
+  (*p)++; /* opening quote */
+  char *b = malloc(64);
+  int n = 0, cap = 64;
+  while (**p && **p != '"') {
+    char c = **p;
+    if (c == '\\') {
+      (*p)++;
+      c = **p;
+      switch (c) {
+      case 'n': js_utf8(&b, &n, &cap, '\n'); break;
+      case 't': js_utf8(&b, &n, &cap, '\t'); break;
+      case 'r': js_utf8(&b, &n, &cap, '\r'); break;
+      case 'b': js_utf8(&b, &n, &cap, '\b'); break;
+      case 'f': js_utf8(&b, &n, &cap, '\f'); break;
+      case 'u': {
+        (*p)++;
+        js_utf8(&b, &n, &cap, js_hex4(p));
+        continue;
+      }
+      default: js_utf8(&b, &n, &cap, (unsigned char)c); break;
+      }
+      (*p)++;
+    } else {
+      if (n + 1 >= cap) {
+        cap += 64;
+        b = realloc(b, cap);
+      }
+      b[n++] = c;
+      (*p)++;
+    }
+  }
+  if (**p == '"') (*p)++;
+  if (n + 1 >= cap) {
+    cap += 1;
+    b = realloc(b, cap);
+  }
+  b[n] = 0;
+  return b;
+}
+
+static jsv *js_parse(const char **p) {
+  js_ws(p);
+  char c = **p;
+  if (c == '{') {
+    jsv *o = js_new('o');
+    (*p)++;
+    js_ws(p);
+    while (**p && **p != '}') {
+      jsv *kv = js_new('s');
+      kv->s = js_string(p);
+      js_ws(p);
+      if (**p == ':') (*p)++;
+      js_push(o, kv);
+      js_push(o, js_parse(p));
+      js_ws(p);
+      if (**p == ',') {
+        (*p)++;
+        js_ws(p);
+      }
+    }
+    if (**p == '}') (*p)++;
+    return o;
+  }
+  if (c == '[') {
+    jsv *a = js_new('a');
+    (*p)++;
+    js_ws(p);
+    while (**p && **p != ']') {
+      js_push(a, js_parse(p));
+      js_ws(p);
+      if (**p == ',') {
+        (*p)++;
+        js_ws(p);
+      }
+    }
+    if (**p == ']') (*p)++;
+    return a;
+  }
+  if (c == '"') {
+    jsv *s = js_new('s');
+    s->s = js_string(p);
+    return s;
+  }
+  if (!strncmp(*p, "true", 4)) {
+    *p += 4;
+    jsv *v = js_new('b');
+    v->n = 1;
+    return v;
+  }
+  if (!strncmp(*p, "false", 5)) {
+    *p += 5;
+    return js_new('b');
+  }
+  if (!strncmp(*p, "null", 4)) {
+    *p += 4;
+    return js_new('0');
+  }
+  jsv *v = js_new('n');
+  v->n = strtod(*p, (char **)p);
+  return v;
+}
+
+static void js_free(jsv *v) {
+  if (!v) return;
+  for (int i = 0; i < v->nk; i++) js_free(v->k[i]);
+  free(v->k);
+  free(v->s);
+  free(v);
+}
+
+static jsv *js_get(jsv *o, const char *key) {
+  if (!o || o->t != 'o') return NULL;
+  for (int i = 0; i + 1 < o->nk; i += 2)
+    if (o->k[i]->t == 's' && o->k[i]->s && !strcmp(o->k[i]->s, key))
+      return o->k[i + 1];
+  return NULL;
+}
+
+static const char *js_str(jsv *o, const char *key) {
+  jsv *v = js_get(o, key);
+  return (v && v->t == 's') ? v->s : NULL;
+}
+
+static double js_num(jsv *o, const char *key, double d) {
+  jsv *v = js_get(o, key);
+  return (v && (v->t == 'n' || v->t == 'b')) ? v->n : d;
+}
+
+static int js_bool(jsv *o, const char *key, int d) {
+  jsv *v = js_get(o, key);
+  return (v && v->t == 'b') ? (int)v->n : d;
+}
+
+/* ---- ObjC runtime conveniences ---- */
+
+static id mp_alloc(const char *cls) {
+  return menu_alloc(objc_getClass(cls));
+}
+
+static id mp_new(const char *cls) {
+  /* +new lives on the class object, not an instance */
+  return ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass(cls),
+                                       sel_registerName("new"));
+}
+
+static id mp_str(const char *s) { return menu_nsstr(s ? s : ""); }
+
+static void mp_set(id v, const void *key, id val) {
+  objc_setAssociatedObject(v, key, val, 1 /* retain nonatomic */);
+}
+
+static id mp_get(id v, const void *key) {
+  return objc_getAssociatedObject(v, key);
+}
+
+static char k_mp_kind, k_mp_label, k_mp_caps, k_mp_icon, k_mp_dot,
+    k_mp_cells, k_mp_tag, k_mp_subspec, k_mp_hover, k_mp_hotcell,
+    k_mp_ta;
+
+static id mp_num(long v) {
+  return ((id(*)(id, SEL, long))objc_msgSend)(
+      (id)objc_getClass("NSNumber"), sel_registerName("numberWithLong:"),
+      v);
+}
+
+static id mp_font(double sz) {
+  id f = ((id(*)(id, SEL, id, double))objc_msgSend)(
+      (id)objc_getClass("NSFont"), sel_registerName("fontWithName:size:"),
+      mp_str("Inter"), sz);
+  if (f == nil)
+    f = ((id(*)(id, SEL, double))objc_msgSend)(
+        (id)objc_getClass("NSFont"), sel_registerName("menuFontOfSize:"),
+        sz);
+  return f;
+}
+
+static id mp_attr(id font, id color) {
+  static id attr_font = NULL, attr_color = NULL;
+  if (attr_font == NULL) {
+    attr_font = *(id *)dlsym(RTLD_DEFAULT, "NSFontAttributeName");
+    attr_color =
+        *(id *)dlsym(RTLD_DEFAULT, "NSForegroundColorAttributeName");
+  }
+  id objs[2] = {font, color};
+  id keys[2] = {attr_font, attr_color};
+  return ((id(*)(id, SEL, id *, id *, unsigned long))objc_msgSend)(
+      (id)objc_getClass("NSDictionary"),
+      sel_registerName("dictionaryWithObjects:forKeys:count:"), objs,
+      keys, 2UL);
+}
+
+static id mp_label_color(void) {
+  return ((id(*)(id, SEL))objc_msgSend)(
+      (id)objc_getClass("NSColor"), sel_registerName("labelColor"));
+}
+
+static id mp_dim_color(void) {
+  return ((id(*)(id, SEL))objc_msgSend)(
+      (id)objc_getClass("NSColor"),
+      sel_registerName("secondaryLabelColor"));
+}
+
+static id mp_alpha(id color, double a) {
+  return ((id(*)(id, SEL, double))objc_msgSend)(
+      color, sel_registerName("colorWithAlphaComponent:"), a);
+}
+
+static id mp_white(double w, double a) {
+  return ((id(*)(id, SEL, double, double))objc_msgSend)(
+      (id)objc_getClass("NSColor"),
+      sel_registerName("colorWithWhite:alpha:"), w, a);
+}
+
+static id mp_hex_color(const char *hex) {
+  if (hex == NULL || hex[0] != '#') return nil;
+  unsigned v = (unsigned)strtoul(hex + 1, NULL, 16);
+  return ((id(*)(id, SEL, double, double, double, double))objc_msgSend)(
+      (id)objc_getClass("NSColor"),
+      sel_registerName("colorWithSRGBRed:green:blue:alpha:"),
+      ((v >> 16) & 255) / 255.0, ((v >> 8) & 255) / 255.0,
+      (v & 255) / 255.0, 1.0);
+}
+
+static double mp_text_w(id s, id attrs) {
+  typedef struct {
+    double w, h;
+  } sz;
+  sz r = ((sz(*)(id, SEL, id))objc_msgSend)(
+      s, sel_registerName("sizeWithAttributes:"), attrs);
+  return r.w;
+}
+
+static void mp_draw(id s, double x, double y, id attrs) {
+  struct {
+    double x, y;
+  } pt = {x, y};
+  ((void (*)(id, SEL, typeof(pt), id))objc_msgSend)(
+      s, sel_registerName("drawAtPoint:withAttributes:"), pt, attrs);
+}
+
+static id mp_icon(jsv *o) {
+  const char *b64 = js_str(o, "icon_rgba");
+  int w = (int)js_num(o, "icon_w", 0), h = (int)js_num(o, "icon_h", 0);
+  if (b64 == NULL || w <= 0 || h <= 0) return nil;
+  mlsize_t n = strlen(b64);
+  unsigned char *px = malloc(w * h * 4);
+  int pad = 0;
+  unsigned acc = 0, bits = 0;
+  mlsize_t oi = 0;
+  for (mlsize_t i = 0; i < n && oi < (mlsize_t)(w * h * 4); i++) {
+    char c = b64[i];
+    if (c == '=') {
+      pad++;
+      continue;
+    }
+    int v = b64_val(c);
+    if (v < 0) continue;
+    acc = (acc << 6) | (unsigned)v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      px[oi++] = (unsigned char)((acc >> bits) & 0xff);
+    }
+  }
+  (void)pad;
+  if (oi < (mlsize_t)(w * h * 4)) {
+    free(px);
+    return nil;
+  }
+  id rep = ((id(*)(id, SEL, unsigned char **, long, long, long, long,
+                   int, int, id, long, long))objc_msgSend)(
+      mp_alloc("NSBitmapImageRep"),
+      sel_registerName("initWithBitmapDataPlanes:pixelsWide:pixelsHigh:"
+                       "bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:"
+                       "colorSpaceName:bytesPerRow:bitsPerPixel:"),
+      NULL, (long)w, (long)h, 8L, 4L, 1, 0,
+      mp_str("NSDeviceRGBColorSpace"), (long)(w * 4), 32L);
+  if (rep == nil) {
+    free(px);
+    return nil;
+  }
+  unsigned char *dst = ((unsigned char *(*)(id, SEL))objc_msgSend)(
+      rep, sel_registerName("bitmapData"));
+  memcpy(dst, px, (size_t)(w * h * 4));
+  free(px);
+  typedef struct {
+    double w, h;
+  } sz;
+  sz s = {w / 2.0, h / 2.0};
+  id img = ((id(*)(id, SEL, sz))objc_msgSend)(
+      mp_alloc("NSImage"), sel_registerName("initWithSize:"), s);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      img, sel_registerName("addRepresentation:"), rep);
+  ((void (*)(id, SEL))objc_msgSend)(rep, sel_registerName("release"));
+  return img;
+}
+
+/* ---- the row view ----
+
+   One NSView subclass renders every spec row kind: "i" selectable
+   item, "s" submenu parent (chevron), "h" group header, "r" composite
+   cell row, "l" separator line. Highlight comes from a tracking area
+   (uniform across standalone items and scroll-item rows) OR'd with
+   the enclosing item's highlighted state for standalone items. */
+
+static long mp_sel = -1;
+static jsv *mp_repop = NULL;
+static double mp_repop_x = 0, mp_repop_y = 0;
+static id mp_current_menu = NULL;
+
+static int mp_responds(id o, const char *sel) {
+  return o != nil &&
+         ((int (*)(id, SEL, SEL))objc_msgSend)(
+             o, sel_registerName("respondsToSelector:"),
+             sel_registerName(sel));
+}
+
+static void mp_cancel(id self) {
+  (void)self;
+  id menu = mp_current_menu;
+  if (menu == nil) return;
+  ((void (*)(id, SEL))objc_msgSend)(
+      menu, sel_registerName("cancelTracking"));
+  ((void (*)(id, SEL))objc_msgSend)(
+      menu, sel_registerName("cancelTrackingWithoutAnimation"));
+}
+
+static int mp_flag(id v, const void *key) {
+  id n = mp_get(v, key);
+  return n != nil &&
+         ((int (*)(id, SEL))objc_msgSend)(n, sel_registerName("intValue"));
+}
+
+static void mp_set_flag(id v, const void *key, int b) {
+  mp_set(v, key, b ? mp_num(1) : nil);
+}
+
+static long mp_cell_tag(id self, double x) {
+  id cells = mp_get(self, &k_mp_cells);
+  if (cells == nil) return -1;
+  unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+      cells, sel_registerName("count"));
+  if (n == 0) return -1;
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R b = ((R(*)(id, SEL))objc_msgSend)(self, sel_registerName("bounds"));
+  double pad = 14.0, cw = 30.0;
+  double gap = 8.0;
+  if (n > 1)
+    gap = fmax(4.0, (b.w - 2 * pad - n * cw) / (double)(n - 1));
+  double cx = pad;
+  for (unsigned long i = 0; i < n; i++) {
+    if (x >= cx - 2 && x <= cx + cw + 2) {
+      id cell = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
+          cells, sel_registerName("objectAtIndex:"), i);
+      id t = ((id(*)(id, SEL, id))objc_msgSend)(
+          cell, sel_registerName("objectForKey:"), mp_str("tag"));
+      return t != nil ? ((long (*)(id, SEL))objc_msgSend)(
+                 t, sel_registerName("longValue"))
+                      : -1;
+    }
+    cx += cw + gap;
+  }
+  return -1;
+}
+
+static void row_mouseUp(id self, SEL _cmd, id ev) {
+  (void)_cmd;
+  const char *kind = "";
+  id ks = mp_get(self, &k_mp_kind);
+  if (ks != nil)
+    kind = ((const char *(*)(id, SEL))objc_msgSend)(
+        ks, sel_registerName("UTF8String"));
+  struct {
+    double x, y;
+  } pw = {0, 0}, pl = {0, 0};
+  pw = ((typeof(pw) (*)(id, SEL))objc_msgSend)(
+      ev, sel_registerName("locationInWindow"));
+  pl = ((typeof(pl) (*)(id, SEL, typeof(pw), id))objc_msgSend)(
+      self, sel_registerName("convertPoint:fromView:"), pw, nil);
+
+  long tag = -1;
+  id sub = NULL;
+  if (!strcmp(kind, "r")) {
+    tag = mp_cell_tag(self, pl.x);
+  } else if (!strcmp(kind, "i") || !strcmp(kind, "s")) {
+    id t = mp_get(self, &k_mp_tag);
+    if (t != nil)
+      tag = ((long (*)(id, SEL))objc_msgSend)(
+          t, sel_registerName("longValue"));
+    if (!strcmp(kind, "s"))
+      sub = mp_get(self, &k_mp_subspec);
+  }
+  if (tag < 0 && sub == NULL) return; /* disabled/header/sep: keep menu */
+
+  /* for a scroll-mode "sub" row, capture its screen rect so the
+     replacement popup can open where the row sat */
+  if (sub != NULL) {
+    typedef struct {
+      double x, y, w, h;
+    } R;
+    R b = ((R(*)(id, SEL))objc_msgSend)(self,
+                                       sel_registerName("bounds"));
+    R ws = ((R(*)(id, SEL, R, id))objc_msgSend)(
+        self, sel_registerName("convertRect:toView:"), b, nil);
+    id win = ((id(*)(id, SEL))objc_msgSend)(self,
+                                           sel_registerName("window"));
+    R sc = ((R(*)(id, SEL, R))objc_msgSend)(
+        win, sel_registerName("convertRectToScreen:"), ws);
+    mp_repop_x = sc.x + sc.w - 4;
+    mp_repop_y = sc.y + sc.h + 4; /* screen coords: y up, top = y+h */
+    mp_repop = ((jsv *(*)(id, SEL))objc_msgSend)(
+        sub, sel_registerName("pointerValue"));
+  } else {
+    mp_sel = tag;
+  }
+  mp_cancel(self);
+}
+
+static void row_track(id self, SEL _cmd, id ev, int inside) {
+  (void)_cmd;
+  (void)ev;
+  mp_set_flag(self, &k_mp_hover, inside);
+  if (!inside) mp_set(self, &k_mp_hotcell, nil);
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      self, sel_registerName("setNeedsDisplay:"), 1);
+}
+
+static void row_mouseEntered(id self, SEL _cmd, id ev) {
+  row_track(self, _cmd, ev, 1);
+}
+static void row_mouseExited(id self, SEL _cmd, id ev) {
+  row_track(self, _cmd, ev, 0);
+}
+
+static void row_mouseMoved(id self, SEL _cmd, id ev) {
+  (void)_cmd;
+  struct {
+    double x, y;
+  } pw = {0, 0}, pl = {0, 0};
+  pw = ((typeof(pw) (*)(id, SEL))objc_msgSend)(
+      ev, sel_registerName("locationInWindow"));
+  pl = ((typeof(pl) (*)(id, SEL, typeof(pw), id))objc_msgSend)(
+      self, sel_registerName("convertPoint:fromView:"), pw, nil);
+  const char *kind = "";
+  id ks = mp_get(self, &k_mp_kind);
+  if (ks != nil)
+    kind = ((const char *(*)(id, SEL))objc_msgSend)(
+        ks, sel_registerName("UTF8String"));
+  if (!strcmp(kind, "r")) {
+    /* mark the hovered cell index via tag scan */
+    id cells = mp_get(self, &k_mp_cells);
+    long hot = -1;
+    if (cells != nil) {
+      unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+          cells, sel_registerName("count"));
+      typedef struct {
+        double x, y, w, h;
+      } R;
+      R b = ((R(*)(id, SEL))objc_msgSend)(self,
+                                         sel_registerName("bounds"));
+      double pad = 14.0, cw = 30.0, gap = 8.0;
+      if (n > 1) gap = fmax(4.0, (b.w - 2 * pad - n * cw) / (n - 1));
+      double cx = pad;
+      for (unsigned long i = 0; i < n; i++) {
+        if (pl.x >= cx - 2 && pl.x <= cx + cw + 2) hot = (long)i;
+        cx += cw + gap;
+      }
+    }
+    id old = mp_get(self, &k_mp_hotcell);
+    long ov = old != nil ? ((long (*)(id, SEL))objc_msgSend)(
+                      old, sel_registerName("longValue"))
+                         : -1;
+    if (ov != hot) {
+      mp_set(self, &k_mp_hotcell, hot >= 0 ? mp_num(hot) : nil);
+      ((void (*)(id, SEL, int))objc_msgSend)(
+          self, sel_registerName("setNeedsDisplay:"), 1);
+    }
+  } else {
+    row_track(self, _cmd, ev, 1);
+  }
+}
+
+static void row_didMove(id self, SEL _cmd) {
+  (void)_cmd;
+  id ta = mp_get(self, &k_mp_ta);
+  if (ta != nil) {
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        self, sel_registerName("removeTrackingArea:"), ta);
+    mp_set(self, &k_mp_ta, nil);
+  }
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R b = ((R(*)(id, SEL))objc_msgSend)(self, sel_registerName("bounds"));
+  ta = ((id(*)(id, SEL, R, unsigned long, id, id))objc_msgSend)(
+      mp_alloc("NSTrackingArea"),
+      sel_registerName("initWithRect:options:owner:userInfo:"), b,
+      0x01UL | 0x04UL | 0x80UL | 0x200UL
+      /* EnteredAndExited|Moved|ActiveAlways|InVisibleRect */,
+      self, nil);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      self, sel_registerName("addTrackingArea:"), ta);
+  ((void (*)(id, SEL))objc_msgSend)(ta, sel_registerName("release"));
+  mp_set(self, &k_mp_ta, ta);
+}
+
+static void mp_fill_round(id color, double x, double y, double w,
+                          double h, double r) {
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R rr = {x, y, w, h};
+  id bp = ((id(*)(id, SEL, R, double, double))objc_msgSend)(
+      (id)objc_getClass("NSBezierPath"),
+      sel_registerName("bezierPathWithRoundedRect:xRadius:yRadius:"),
+      rr, r, r);
+  ((void (*)(id, SEL))objc_msgSend)(color, sel_registerName("set"));
+  ((void (*)(id, SEL))objc_msgSend)(bp, sel_registerName("fill"));
+}
+
+static void mp_oval(id color, double x, double y, double w, double h,
+                    int fill) {
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R rr = {x, y, w, h};
+  id bp = ((id(*)(id, SEL, R))objc_msgSend)(
+      (id)objc_getClass("NSBezierPath"),
+      sel_registerName("bezierPathWithOvalInRect:"), rr);
+  ((void (*)(id, SEL))objc_msgSend)(color, sel_registerName("set"));
+  ((void (*)(id, SEL))objc_msgSend)(
+      bp, sel_registerName(fill ? "fill" : "stroke"));
+}
+
+static void row_drawRect(id self, SEL _cmd, ls_nsrect dirty) {
+  (void)_cmd;
+  (void)dirty;
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R b = ((R(*)(id, SEL))objc_msgSend)(self, sel_registerName("bounds"));
+  const char *kind = "i";
+  id ks = mp_get(self, &k_mp_kind);
+  if (ks != nil)
+    kind = ((const char *(*)(id, SEL))objc_msgSend)(
+        ks, sel_registerName("UTF8String"));
+
+  int hl = mp_flag(self, &k_mp_hover);
+  if (!hl) {
+    id item = ((id(*)(id, SEL))objc_msgSend)(
+        self, sel_registerName("enclosingMenuItem"));
+    if (item != nil)
+      hl = ((int (*)(id, SEL))objc_msgSend)(
+          item, sel_registerName("isHighlighted"));
+  }
+  id dark_bg = mp_white(vib_dark ? 1.0 : 0.0, vib_dark ? 0.10 : 0.06);
+
+  if (!strcmp(kind, "h")) {
+    /* group header: dimmed 11pt label at left inset */
+    id label = mp_get(self, &k_mp_label);
+    if (label != nil)
+      mp_draw(label, 12.0, (b.h - 14.0) / 2.0 - 1.0,
+              mp_attr(mp_font(11.0), mp_dim_color()));
+    return;
+  }
+  if (!strcmp(kind, "l")) {
+    /* separator line */
+    id c = mp_white(vib_dark ? 1.0 : 0.0, vib_dark ? 0.14 : 0.10);
+    mp_fill_round(c, 12.0, b.h / 2.0 - 0.5, b.w - 24.0, 1.0, 0);
+    return;
+  }
+  if (!strcmp(kind, "r")) {
+    /* composite cell row — swatches / heading icons evenly spread */
+    id cells = mp_get(self, &k_mp_cells);
+    if (cells == nil) return;
+    unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+        cells, sel_registerName("count"));
+    double pad = 14.0, cw = 30.0, gap = 8.0;
+    if (n > 1) gap = fmax(4.0, (b.w - 2 * pad - n * cw) / (n - 1));
+    id hot = mp_get(self, &k_mp_hotcell);
+    long hv = hot != nil ? ((long (*)(id, SEL))objc_msgSend)(
+                      hot, sel_registerName("longValue"))
+                         : -1;
+    double cx = pad;
+    for (unsigned long i = 0; i < n; i++) {
+      id cell = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
+          cells, sel_registerName("objectAtIndex:"), i);
+      const char *ck = "swatch";
+      id cks = ((id(*)(id, SEL, id))objc_msgSend)(
+          cell, sel_registerName("objectForKey:"), mp_str("k"));
+      if (cks != nil)
+        ck = ((const char *(*)(id, SEL))objc_msgSend)(
+            cks, sel_registerName("UTF8String"));
+      if ((long)i == hv)
+        mp_fill_round(dark_bg, cx - 3.0, (b.h - 24.0) / 2.0 - 3.0,
+                      cw + 6.0, 24.0 + 6.0, 6.0);
+      double cy = (b.h - 18.0) / 2.0;
+      if (!strcmp(ck, "swatch")) {
+        id col = ((id(*)(id, SEL, id))objc_msgSend)(
+            cell, sel_registerName("objectForKey:"), mp_str("color"));
+        if (col != nil) mp_oval(col, cx + 6.0, cy, 18.0, 18.0, 1);
+      } else if (!strcmp(ck, "x")) {
+        mp_oval(mp_dim_color(), cx + 6.0, cy, 18.0, 18.0, 0);
+        /* minus glyph */
+        mp_draw(mp_str("-"), cx + 12.0, cy + 3.0,
+                mp_attr(mp_font(11.0), mp_dim_color()));
+      } else if (!strcmp(ck, "icon")) {
+        id img = ((id(*)(id, SEL, id))objc_msgSend)(
+            cell, sel_registerName("objectForKey:"), mp_str("icon"));
+        if (img != nil) {
+          R dr = {cx + 6.0, cy, 18.0, 18.0}, fr = {0, 0, 0, 0};
+          ((void (*)(id, SEL, R, R, unsigned long, double))objc_msgSend)(
+              img,
+              sel_registerName("drawInRect:fromRect:operation:fraction:"),
+              dr, fr, 2UL /* source-over */, 1.0);
+        }
+      }
+      cx += cw + gap;
+    }
+    return;
+  }
+
+  /* "i" / "s": selectable row — 18px icon at x+8, label at x+30, kbd
+     keycaps right-aligned, optional chevron */
+  if (hl)
+    mp_fill_round(dark_bg, 4.0, 2.0, b.w - 8.0, b.h - 4.0, 6.0);
+
+  int enabled = 1;
+  {
+    id en = objc_getAssociatedObject(self, (const void *)"mp_enabled");
+    if (en != nil)
+      enabled = ((int (*)(id, SEL))objc_msgSend)(
+          en, sel_registerName("intValue"));
+  }
+  id label_col = mp_label_color();
+  if (!enabled) label_col = mp_alpha(label_col, 0.35);
+
+  id img = mp_get(self, &k_mp_icon);
+  if (img != nil) {
+    R dr = {8.0, (b.h - 18.0) / 2.0, 18.0, 18.0}, fr = {0, 0, 0, 0};
+    ((void (*)(id, SEL, R, R, unsigned long, double))objc_msgSend)(
+        img,
+        sel_registerName("drawInRect:fromRect:operation:fraction:"), dr,
+        fr, 2UL, enabled ? 1.0 : 0.5);
+  }
+  id dot = mp_get(self, &k_mp_dot);
+  if (dot != nil) mp_oval(dot, 12.0, (b.h - 10.0) / 2.0, 10.0, 10.0, 1);
+
+  id label = mp_get(self, &k_mp_label);
+  if (label != nil)
+    mp_draw(label, 30.0, (b.h - 17.0) / 2.0 - 1.0,
+            mp_attr(mp_font(13.0), label_col));
+
+  /* right edge: chevron for sub rows, else kbd keycaps */
+  if (!strcmp(kind, "s")) {
+    id c = mp_dim_color();
+    ((void (*)(id, SEL))objc_msgSend)(c, sel_registerName("set"));
+    typedef struct { double x, y; } PT;
+    id bp = mp_new("NSBezierPath");
+    ((void (*)(id, SEL, PT))objc_msgSend)(
+        bp, sel_registerName("moveToPoint:"),
+        (PT){b.w - 14.0, b.h / 2.0 - 5.0});
+    ((void (*)(id, SEL, PT))objc_msgSend)(
+        bp, sel_registerName("lineToPoint:"),
+        (PT){b.w - 8.0, b.h / 2.0});
+    ((void (*)(id, SEL, PT))objc_msgSend)(
+        bp, sel_registerName("lineToPoint:"),
+        (PT){b.w - 14.0, b.h / 2.0 + 5.0});
+    ((void (*)(id, SEL))objc_msgSend)(bp, sel_registerName("closePath"));
+    ((void (*)(id, SEL))objc_msgSend)(bp, sel_registerName("fill"));
+  } else {
+    id caps = mp_get(self, &k_mp_caps);
+    if (caps != nil) {
+      unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+          caps, sel_registerName("count"));
+      id kf = mp_font(11.0);
+      id kc = mp_dim_color();
+      id attrs = mp_attr(kf, kc);
+      /* measure right-to-left */
+      double widths[16];
+      double total = 0;
+      for (unsigned long i = 0; i < n && i < 16; i++) {
+        id cap = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
+            caps, sel_registerName("objectAtIndex:"), i);
+        widths[i] = mp_text_w(cap, attrs) + 8.0;
+        total += widths[i] + 3.0;
+      }
+      double x = b.w - 10.0 - (total > 0 ? total - 3.0 : 0);
+      for (unsigned long i = 0; i < n && i < 16; i++) {
+        id cap = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
+            caps, sel_registerName("objectAtIndex:"), i);
+        double ch = 18.0, cy = (b.h - ch) / 2.0;
+        mp_fill_round(mp_white(vib_dark ? 1.0 : 0.0,
+                               vib_dark ? 0.10 : 0.04),
+                      x, cy, widths[i], ch, 3.0);
+        mp_draw(cap, x + 4.0, cy + 2.5, attrs);
+        x += widths[i] + 3.0;
+      }
+    }
+  }
+}
+
+static void mp_ensure_rowclass(void) {
+  static int done = 0;
+  if (done) return;
+  done = 1;
+  Class t = objc_allocateClassPair(objc_getClass("NSView"),
+                                   "LogseqMenuRowView", 0);
+  class_addMethod(t, sel_registerName("drawRect:"), (IMP)row_drawRect,
+                  "v@:{_NSRect={_NSPoint=dd}{_NSSize=dd}}");
+  class_addMethod(t, sel_registerName("mouseUp:"), (IMP)row_mouseUp,
+                  "v@:@");
+  class_addMethod(t, sel_registerName("mouseMoved:"),
+                  (IMP)row_mouseMoved, "v@:@");
+  class_addMethod(t, sel_registerName("mouseEntered:"),
+                  (IMP)row_mouseEntered, "v@:@");
+  class_addMethod(t, sel_registerName("mouseExited:"),
+                  (IMP)row_mouseExited, "v@:@");
+  class_addMethod(t, sel_registerName("viewDidMoveToWindow"),
+                  (IMP)row_didMove, "v@:");
+  objc_registerClassPair(t);
+}
+
+static id mp_row_view(jsv *it, double w, double h, int scroll_mode) {
+  mp_ensure_rowclass();
+  ls_nsrect fr = {0, 0, w, h};
+  id v = ((id(*)(id, SEL, ls_nsrect))objc_msgSend)(
+      mp_alloc("LogseqMenuRowView"), sel_registerName("initWithFrame:"),
+      fr);
+  const char *t = js_str(it, "t");
+  const char *kind = "i";
+  if (t != NULL) {
+    if (!strcmp(t, "header")) kind = "h";
+    else if (!strcmp(t, "row")) kind = "r";
+    else if (!strcmp(t, "sub")) kind = "s";
+    else if (!strcmp(t, "sep")) kind = "l";
+    else kind = "i";
+  }
+  mp_set(v, &k_mp_kind, mp_str(kind));
+  const char *label = js_str(it, "label");
+  if (label != NULL) mp_set(v, &k_mp_label, mp_str(label));
+  jsv *caps = js_get(it, "kbd");
+  if (caps != NULL && caps->t == 'a' && caps->nk > 0) {
+    id arr = mp_new("NSMutableArray");
+    for (int i = 0; i < caps->nk; i++)
+      if (caps->k[i]->t == 's')
+        ((void (*)(id, SEL, id))objc_msgSend)(
+            arr, sel_registerName("addObject:"), mp_str(caps->k[i]->s));
+    mp_set(v, &k_mp_caps, arr);
+  }
+  id img = mp_icon(it);
+  if (img != nil) mp_set(v, &k_mp_icon, img);
+  const char *dot = js_str(it, "dot");
+  if (dot != NULL) {
+    id c = mp_hex_color(dot);
+    if (c != nil) mp_set(v, &k_mp_dot, c);
+  }
+  if (js_bool(it, "chev", 0)) mp_set(v, &k_mp_kind, mp_str("s"));
+  if (!strcmp(kind, "s")) {
+    jsv *items = js_get(it, "items");
+    if (items != NULL) {
+      id pv = ((id(*)(id, SEL, void *))objc_msgSend)(
+          (id)objc_getClass("NSValue"),
+          sel_registerName("valueWithPointer:"), items);
+      mp_set(v, &k_mp_subspec, pv);
+    }
+    /* a submenu parent is still selectable-visual; a leaf tag only
+       when it isn't a real submenu (scroll mode re-pops instead) */
+    mp_set(v, &k_mp_tag, mp_num((long)js_num(it, "tag", -1)));
+  }
+  if (!strcmp(kind, "i"))
+    mp_set(v, &k_mp_tag, mp_num((long)js_num(it, "tag", -1)));
+  {
+    id en = mp_num(js_bool(it, "enabled", 1));
+    objc_setAssociatedObject(v, (const void *)"mp_enabled", en, 1);
+  }
+  jsv *cells = js_get(it, "cells");
+  if (cells != NULL && cells->t == 'a') {
+    id arr = mp_new("NSMutableArray");
+    for (int i = 0; i < cells->nk; i++) {
+      jsv *c = cells->k[i];
+      id dict = mp_new("NSMutableDictionary");
+      const char *ck = js_str(c, "k");
+      if (ck == NULL) ck = "swatch";
+      ((void (*)(id, SEL, id, id))objc_msgSend)(
+          dict, sel_registerName("setObject:forKey:"), mp_str(ck),
+          mp_str("k"));
+      ((void (*)(id, SEL, id, id))objc_msgSend)(
+          dict, sel_registerName("setObject:forKey:"),
+          mp_num((long)js_num(c, "tag", -1)), mp_str("tag"));
+      const char *col = js_str(c, "color");
+      if (col != NULL) {
+        id cc = mp_hex_color(col);
+        if (cc != nil)
+          ((void (*)(id, SEL, id, id))objc_msgSend)(
+              dict, sel_registerName("setObject:forKey:"), cc,
+              mp_str("color"));
+      }
+      id ci = mp_icon(c);
+      if (ci != nil)
+        ((void (*)(id, SEL, id, id))objc_msgSend)(
+            dict, sel_registerName("setObject:forKey:"), ci,
+            mp_str("icon"));
+      ((void (*)(id, SEL, id))objc_msgSend)(
+          arr, sel_registerName("addObject:"), dict);
+      ((void (*)(id, SEL))objc_msgSend)(dict,
+                                       sel_registerName("release"));
+    }
+    mp_set(v, &k_mp_cells, arr);
+  }
+  (void)scroll_mode;
+  return v;
+}
+
+/* ---- measure + build ---- */
+
+static double mp_item_h(jsv *it) {
+  const char *t = js_str(it, "t");
+  if (t != NULL) {
+    if (!strcmp(t, "header")) return 20.0;
+    if (!strcmp(t, "sep")) return 10.0;
+    if (!strcmp(t, "row")) return js_num(it, "h", 38.0);
+  }
+  return 32.0;
+}
+
+static double mp_item_w(jsv *it, id attrs, id kattrs) {
+  const char *t = js_str(it, "t");
+  if (t == NULL) return 200.0;
+  if (!strcmp(t, "sep")) return 200.0;
+  if (!strcmp(t, "header")) {
+    const char *l = js_str(it, "label");
+    return 12.0 + (l ? mp_text_w(mp_str(l), kattrs) : 0) + 12.0;
+  }
+  if (!strcmp(t, "row")) {
+    jsv *cells = js_get(it, "cells");
+    int n = cells != NULL && cells->t == 'a' ? cells->nk : 1;
+    return 28.0 + n * 30.0 + (n - 1) * 8.0;
+  }
+  const char *l = js_str(it, "label");
+  double w = 30.0 + (l ? mp_text_w(mp_str(l), attrs) : 0) + 18.0;
+  jsv *caps = js_get(it, "kbd");
+  if (caps != NULL && caps->t == 'a' && caps->nk > 0) {
+    w += 10.0;
+    for (int i = 0; i < caps->nk; i++)
+      if (caps->k[i]->t == 's')
+        w += mp_text_w(mp_str(caps->k[i]->s), kattrs) + 11.0;
+  }
+  if (!strcmp(t, "sub")) w += 14.0;
+  return w;
+}
+
+static void mp_fill_item(id menu, jsv *it, double w, int scroll_ok);
+
+/* submenu parents: real NSMenu submenus in the standard layout, a
+   chevron row that re-pops a fresh menu in scroll mode */
+static void mp_add_item(id menu, jsv *it, double w, int scroll_mode) {
+  const char *t = js_str(it, "t");
+  if (t != NULL && !strcmp(t, "sep") && !scroll_mode) {
+    menu_add_sep(menu);
+    return;
+  }
+  double h = mp_item_h(it);
+  id v = mp_row_view(it, w, h, scroll_mode);
+  /* a native submenu needs the label on the item itself for
+     accessibility; views still paint the row */
+  id item = ((id(*)(id, SEL, id, SEL, id))objc_msgSend)(
+      mp_alloc("NSMenuItem"),
+      sel_registerName("initWithTitle:action:keyEquivalent:"),
+      mp_str(js_str(it, "label")), (SEL)NULL, mp_str(""));
+  long tag = (long)js_num(it, "tag", -1);
+  ((void (*)(id, SEL, long))objc_msgSend)(
+      item, sel_registerName("setTag:"), tag);
+  if (!js_bool(it, "enabled", 1))
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        item, sel_registerName("setEnabled:"), 0);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      item, sel_registerName("setView:"), v);
+  if (t != NULL && !strcmp(t, "sub") && !scroll_mode) {
+    id sub = new_menu(js_str(it, "label"));
+    jsv *items = js_get(it, "items");
+    if (items != NULL && items->t == 'a')
+      for (int i = 0; i < items->nk; i++)
+        mp_fill_item(sub, items->k[i], w, 0);
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        item, sel_registerName("setSubmenu:"), sub);
+    ((void (*)(id, SEL))objc_msgSend)(sub, sel_registerName("release"));
+  }
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      menu, sel_registerName("addItem:"), item);
+  ((void (*)(id, SEL))objc_msgSend)(item, sel_registerName("release"));
+  ((void (*)(id, SEL))objc_msgSend)(v, sel_registerName("release"));
+}
+
+static void mp_fill_item(id menu, jsv *it, double w, int scroll_ok) {
+  mp_add_item(menu, it, w, 0);
+  (void)scroll_ok;
+}
+
+/* scroll layout: every spec row becomes a LogseqMenuRowView inside one
+   NSScrollView item — the tracker forwards events to them like any
+   custom view */
+static id mp_scroll_item(jsv *items, double w, double maxh) {
+  mp_ensure_rowclass();
+  double total = 0;
+  for (int i = 0; i < items->nk; i++) total += mp_item_h(items->k[i]);
+  if (total < 1) total = 1;
+  ls_nsrect fr = {0, 0, w, total};
+  id doc = ((id(*)(id, SEL, ls_nsrect))objc_msgSend)(
+      mp_alloc("NSView"), sel_registerName("initWithFrame:"), fr);
+  double y = total;
+  for (int i = 0; i < items->nk; i++) {
+    jsv *it = items->k[i];
+    double h = mp_item_h(it);
+    y -= h;
+    const char *t = js_str(it, "t");
+    id v;
+    if (t != NULL && !strcmp(t, "sep")) {
+      ls_nsrect lf = {12, y + h / 2.0 - 0.5, w - 24, 1.0};
+      v = mp_row_view(it, w, h, 1);
+      (void)lf;
+    } else {
+      v = mp_row_view(it, w, h, 1);
+    }
+    ls_nsrect rf = {0, y, w, h};
+    ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(
+        v, sel_registerName("setFrame:"), rf);
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        doc, sel_registerName("addSubview:"), v);
+    ((void (*)(id, SEL))objc_msgSend)(v, sel_registerName("release"));
+  }
+  ls_nsrect sf = {0, 0, w, maxh};
+  id scroll = ((id(*)(id, SEL, ls_nsrect))objc_msgSend)(
+      mp_alloc("NSScrollView"), sel_registerName("initWithFrame:"), sf);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      scroll, sel_registerName("setDocumentView:"), doc);
+  /* non-flipped documentView starts scrolled to its bottom */
+  {
+    mp_pt top = {0, total};
+    ((void (*)(id, SEL, mp_pt))objc_msgSend)(
+        doc, sel_registerName("scrollPoint:"), top);
+  }
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      scroll, sel_registerName("setHasVerticalScroller:"), 1);
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      scroll, sel_registerName("setDrawsBackground:"), 0);
+  ((void (*)(id, SEL))objc_msgSend)(doc, sel_registerName("release"));
+  id item = ((id(*)(id, SEL, id, SEL, id))objc_msgSend)(
+      mp_alloc("NSMenuItem"),
+      sel_registerName("initWithTitle:action:keyEquivalent:"),
+      mp_str(""), (SEL)NULL, mp_str(""));
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      item, sel_registerName("setView:"), scroll);
+  ((void (*)(id, SEL))objc_msgSend)(scroll, sel_registerName("release"));
+  return item;
+}
+
+static void mp_pin_appearance(id view) {
+  if (!mp_responds(view, "setAppearance:")) return;
+  Class appcls = objc_getClass("NSAppearance");
+  if (appcls == Nil) return;
+  id ap = ((id(*)(Class, SEL, id))objc_msgSend)(
+      appcls, sel_registerName("appearanceNamed:"),
+      mp_str(vib_dark ? "NSAppearanceNameDarkAqua"
+                      : "NSAppearanceNameAqua"));
+  if (ap != nil)
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        view, sel_registerName("setAppearance:"), ap);
+}
+
+static void mp_pin_appearance_deep(id view) {
+  if (view == nil) return;
+  mp_pin_appearance(view);
+  if (!mp_responds(view, "subviews")) return;
+  id subs = ((id(*)(id, SEL))objc_msgSend)(
+      view, sel_registerName("subviews"));
+  if (subs == nil) return;
+  unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+      subs, sel_registerName("count"));
+  for (unsigned long i = 0; i < n; i++)
+    mp_pin_appearance_deep(((id(*)(id, SEL, unsigned long))objc_msgSend)(
+        subs, sel_registerName("objectAtIndex:"), i));
+}
+
+/* NSMenu isn't an NSView — pin the appearance on every item's view so
+   semantic colors (labelColor etc.) follow the app theme */
+static void mp_pin_menu_appearance(id menu) {
+  mp_pin_appearance(menu); /* NSMenu has setAppearance: on recent SDKs;
+                              the respondsToSelector check keeps it
+                              safe everywhere */
+  if (!mp_responds(menu, "itemArray")) return;
+  id items = ((id(*)(id, SEL))objc_msgSend)(
+      menu, sel_registerName("itemArray"));
+  if (items == nil) return;
+  unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(
+      items, sel_registerName("count"));
+  for (unsigned long i = 0; i < n; i++) {
+    id item = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
+        items, sel_registerName("objectAtIndex:"), i);
+    id v = ((id(*)(id, SEL))objc_msgSend)(
+        item, sel_registerName("view"));
+    if (v != nil) mp_pin_appearance_deep(v);
+    id sub = ((id(*)(id, SEL))objc_msgSend)(
+        item, sel_registerName("submenu"));
+    if (sub != nil) mp_pin_menu_appearance(sub);
+  }
+}
+
+/* build an NSMenu for a spec items array; scroll_mode forces the
+   single-scroll-item layout */
+static id mp_build(jsv *items, double w, int scroll_mode, double maxh) {
+  id menu = new_menu("");
+  ((void (*)(id, SEL, double))objc_msgSend)(
+      menu, sel_registerName("setMinimumWidth:"), w);
+  if (scroll_mode) {
+    id item = mp_scroll_item(items, w, maxh);
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        menu, sel_registerName("addItem:"), item);
+    ((void (*)(id, SEL))objc_msgSend)(item,
+                                     sel_registerName("release"));
+    return menu;
+  }
+  for (int i = 0; i < items->nk; i++)
+    mp_fill_item(menu, items->k[i], w, 1);
+  /* NSMenu appearance drives the window chrome (padding around the
+     items); label/secondary colors inside views follow the per-view
+     appearance pin applied by mp_pin_appearance_deep below */
+  return menu;
+}
+
+static double mp_measure_w(jsv *items, id attrs, id kattrs) {
+  double w = 200.0;
+  for (int i = 0; i < items->nk; i++) {
+    double iw = mp_item_w(items->k[i], attrs, kattrs);
+    if (iw > w) w = iw;
+  }
+  if (w > 340.0) w = 340.0;
+  return w;
+}
+
+static id mp_key_win(void) {
+  id app = ((id(*)(id, SEL))objc_msgSend)(
+      (id)objc_getClass("NSApplication"),
+      sel_registerName("sharedApplication"));
+  id win = ((id(*)(id, SEL))objc_msgSend)(app,
+                                         sel_registerName("keyWindow"));
+  if (win == nil)
+    win = ((id(*)(id, SEL))objc_msgSend)(
+        app, sel_registerName("mainWindow"));
+  return win;
+}
+
+/* convert an app top-left-origin point into a window point */
+static mp_pt mp_win_pt(id cv, double app_x, double app_top_y) {
+  typedef struct {
+    double x, y, w, h;
+  } R;
+  R vb = ((R(*)(id, SEL))objc_msgSend)(cv, sel_registerName("bounds"));
+  int flipped = ((int (*)(id, SEL))objc_msgSend)(
+      cv, sel_registerName("isFlipped"));
+  double vy = flipped ? app_top_y : vb.h - app_top_y;
+  mp_pt pv = {app_x, vy};
+  return ((mp_pt(*)(id, SEL, mp_pt, id))objc_msgSend)(
+      cv, sel_registerName("convertPoint:toView:"), pv, nil);
+}
+
+/* run the menu synchronously at a window point; synthesizes a
+   right-mouse event for popUpContextMenu:withEvent:forView: */
+static void mp_show_popup(id menu, mp_pt wpt, id win, id cv) {
+  long wnum = win ? (long)((long(*)(id, SEL))objc_msgSend)(
+                        win, sel_registerName("windowNumber"))
+                  : 0;
+  id ev = ((id(*)(id, SEL, unsigned long, mp_pt, unsigned long, double,
+                  long, id, long, long, float))objc_msgSend)(
+      (id)objc_getClass("NSEvent"),
+      sel_registerName("mouseEventWithType:location:modifierFlags:"
+                       "timestamp:windowNumber:context:eventNumber:"
+                       "clickCount:pressure:"),
+      3ul /* NSRightMouseDown */, wpt, 0ul, 0.0, wnum, nil, 0l, 1l,
+      1.0f);
+  ((int (*)(id, SEL, id, id, id))objc_msgSend)(
+      (id)objc_getClass("NSMenu"),
+      sel_registerName("popUpContextMenu:withEvent:forView:"), menu,
+      ev, cv);
+}
+
+static int mp_popup(jsv *root) {
+  jsv *items = js_get(root, "items");
+  if (items == NULL || items->t != 'a' || items->nk == 0) return -1;
+  double cx = js_num(root, "cx", 0);
+  double cy = js_num(root, "cy", 0);
+  double atop = js_num(root, "atop", cy);
+  int flip = js_bool(root, "flip", 0);
+  double maxh = js_num(root, "max_h", 400.0);
+
+  id attrs = mp_attr(mp_font(13.0), mp_label_color());
+  id kattrs = mp_attr(mp_font(11.0), mp_dim_color());
+  double w = mp_measure_w(items, attrs, kattrs);
+
+  double total = 0;
+  for (int i = 0; i < items->nk; i++) total += mp_item_h(items->k[i]);
+  int scroll_mode = total > maxh;
+
+  mp_sel = -1;
+  mp_repop = NULL;
+  for (;;) {
+    id menu = mp_build(items, w, scroll_mode, maxh);
+    if (menu == nil) return -1;
+    mp_pin_menu_appearance(menu);
+    ((void (*)(id, SEL))objc_msgSend)(menu,
+                                     sel_registerName("sizeToFit"));
+    typedef struct {
+      double w, h;
+    } SZ;
+    SZ ms = ((SZ(*)(id, SEL))objc_msgSend)(menu,
+                                          sel_registerName("size"));
+    double menu_h = scroll_mode ? maxh + 10.0 : ms.h;
+    double top_y = flip ? atop - menu_h : cy;
+    id win = mp_key_win();
+    id cv = win ? ((id(*)(id, SEL))objc_msgSend)(
+                      win, sel_registerName("contentView"))
+                : nil;
+    mp_repop = NULL;
+    mp_current_menu = menu;
+    if (cv != nil) {
+      mp_pt pw = mp_win_pt(cv, cx - w / 2.0, top_y);
+      mp_show_popup(menu, pw, win, cv);
+    }
+    mp_current_menu = NULL;
+    ((void (*)(id, SEL))objc_msgSend)(menu,
+                                     sel_registerName("release"));
+    if (mp_sel >= 0 || mp_repop == NULL) break;
+    /* a scroll-mode "sub" row asked for a fresh popup where it sat */
+    items = mp_repop;
+    id menu2 = mp_build(items, mp_measure_w(items, attrs, kattrs), 0,
+                        maxh);
+    mp_pin_menu_appearance(menu2);
+    ((void (*)(id, SEL))objc_msgSend)(menu2,
+                                     sel_registerName("sizeToFit"));
+    mp_pt rsp = {mp_repop_x, mp_repop_y};
+    mp_pt rwp = ((mp_pt(*)(id, SEL, mp_pt))objc_msgSend)(
+        win, sel_registerName("convertPointFromScreen:"), rsp);
+    mp_current_menu = menu2;
+    mp_show_popup(menu2, rwp, win, cv);
+    mp_current_menu = NULL;
+    ((void (*)(id, SEL))objc_msgSend)(menu2,
+                                     sel_registerName("release"));
+    break;
+  }
+  return (int)mp_sel;
+}
+
+/* OCaml entry: json spec string -> selected tag (or -1) */
+CAMLprim value logseq_native_menu_popup(value spec_v) {
+  CAMLparam1(spec_v);
+  const char *src = String_val(spec_v);
+  const char *p = src;
+  jsv *root = js_parse(&p);
+  int sel = -1;
+  if (root != NULL) {
+    caml_enter_blocking_section();
+    void *pool = objc_autoreleasePoolPush();
+    sel = mp_popup(root);
+    objc_autoreleasePoolPop(pool);
+    caml_leave_blocking_section();
+  }
+  if (root != NULL) js_free(root);
+  CAMLreturn(Val_int(sel));
+}
+
 #endif
