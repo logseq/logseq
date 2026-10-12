@@ -443,7 +443,7 @@
        (icon-component/icon icon {:size 16 :color? true})])))
 
 (hsx/defc bidirectional-property-group
-  [value class-uuid entity-uuids]
+  [value class-uuid entity-uuids title]
   (let [class (db-hooks/use-block class-uuid)]
     (when class
       (shui/tabs-trigger
@@ -454,7 +454,7 @@
         :data-entity-count (count entity-uuids)}
        [:span.inline-flex.items-center.gap-1.5
         (bidirectional-tab-icon class)
-        [:span (:block/title class)]]))))
+        [:span.property-k title]]))))
 
 (hsx/defc bidirectional-properties-section
   [groups]
@@ -470,13 +470,14 @@
         (shui/tabs-list
          {:variant :line
           :class "h-8 gap-3"}
-         (for [{:keys [value class-uuid entity-uuids]} groups]
-           (bidirectional-property-group value class-uuid entity-uuids)))
+         (for [{:keys [value class-uuid entity-uuids title]} groups]
+           (bidirectional-property-group value class-uuid entity-uuids title)))
         (for [{:keys [value entity-uuids]} groups]
           (shui/tabs-content
            {:key (str "bidirectional-tab-content-" value)
             :value value}
-           (bidirectional-values-cp entity-uuids))))])))
+           [:div.property-value.w-full
+            (bidirectional-values-cp entity-uuids)])))])))
 
 (hsx/defc ^:large-vars/cleanup-todo property-input
   [block *property-key {:keys [class-schema?]

@@ -96,7 +96,11 @@
 (defn toggle-blocks-as-own-order-list!
   [blocks]
   (when (seq blocks)
-    (let [has-ordered?    (some own-order-number-list? blocks)
+    ;; ref-valued attrs can arrive as {:db/id} stubs without :block/title
+    ;; (e.g. from get-block-immediate-children), so value resolution via
+    ;; own-order-number-list? isn't reliable; "number" is the only list type
+    ;; the UI writes, so property presence is the signal.
+    (let [has-ordered?    (some #(some? (:logseq.property/order-list-type %)) blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
           order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
@@ -2385,6 +2389,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
+                (comments-model/comments-area? (:block state))
                 (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
@@ -4152,7 +4157,10 @@
        (and (not (:ignore-block-collapsed? config))
             (util/collapsed? block))
        (and (util/mobile?) (:logseq.property/query block))
-       (and (or (:list-view? config) (:ref? config))
+       ;; List-view rows mount whole page trees; every level stays
+       ;; collapsed so scrolling only pays for row shells.
+       (:list-view? config)
+       (and (:ref? config)
             (worker-has-children? block)
             (integer? (:block-level config))
             (>= (:block-level config) (state/get-ref-open-blocks-level)))

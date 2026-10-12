@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exportiert in eine .transit-Datei zur Fehlerbehebung. Sensible Daten werden in der exportierten Datei entfernt."
  :export/debug-transit-file "Debug-Transit-Datei exportieren"
  :export/edn-desc "Exportiert in eine lesbare und bearbeitbare .edn-Datei. Verlassen Sie sich nicht darauf als primäres Backup."
- :export/error-unexpected "Beim Exportieren ist ein unerwarteter Fehler aufgetreten. Weitere Informationen finden Sie in der JavaScript-Konsole."
  :export/exporting "Wird exportiert"
  :export/finalizing "Wird abgeschlossen"
  :export/format-text "Text"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Griff zur Größenänderung der rechten Seitenleiste"
  :sidebar.right/toggle "Rechte Seitenleiste umschalten"
 
- :storage/invalid-data-writing "Ungültiger Datenschreibvorgang."
  :storage/sqlitedb-error "SQLiteDB-Fehler: {1}"
  :storage/sqlitedb-import-error "SQLiteDB-Importfehler: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-Speicherfehler: {1}"

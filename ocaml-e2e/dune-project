@@ -1,0 +1,28 @@
+(lang dune 3.23)
+
+(using melange 1.0)
+
+(name logseq-e2e)
+
+(generate_opam_files true)
+
+(source
+ (github logseq/logseq))
+
+(authors "Logseq contributors")
+
+(maintainers https://github.com/logseq/issues)
+
+(license AGPL-3.0-or-later)
+
+(homepage https://logseq.com)
+
+(documentation https://docs.logseq.com)
+
+(package
+ (name logseq-e2e)
+ (allow_empty)
+ (depends melange-fest)
+ (synopsis "OCaml/Melange end-to-end test harness for the Logseq web app")
+ (description
+  "Melange port of the clj-e2e Playwright suite. Drives the built Logseq app\n   through the playwright npm package and node:test."))

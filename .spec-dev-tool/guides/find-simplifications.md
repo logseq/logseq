@@ -11,7 +11,7 @@
 
 ## Non-production and ambiguous corpus
 
-- Treat `src/test`, `deps/*/test`, `clj-e2e`, `cli-e2e`, fixtures, benchmark
+- Treat `src/test`, `deps/*/test`, `ocaml-e2e`, `cli-e2e`, fixtures, benchmark
   helpers, examples, and docs as non-production evidence, not as automatic
   deletion targets.
 - Treat scripts, generated test artifacts, and development-only helpers as

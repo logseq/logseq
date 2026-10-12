@@ -37,7 +37,7 @@ let query_value query =
   Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn_melange.of_edn_string text)
+  try Ok (Edn_util.of_edn_string text)
   with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
@@ -418,17 +418,14 @@ let property_query selector =
          |])
     ()
 
-let first_entity = function
-  | value -> (
-      match
-        (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
-      with
-      | Some values, _, _ when not (Vec.is_empty values) ->
-          Some (Vec.peek_front values)
-      | _, Some values, _ when not (Vec.is_empty values) ->
-          Some (Vec.peek_front values)
-      | _, _, Some _ -> Some value
-      | _ -> None)
+let rec first_entity value =
+  match Edn_util.as_seq value with
+  | Some values when not (Vec.is_empty values) ->
+      first_entity (Vec.peek_front values)
+  | _ -> (
+      match Edn_util.as_map value with
+      | Some _ -> Some value
+      | None -> None)
 
 let uuid_of_entity value =
   Option.bind (Edn_util.get value "block/uuid") Edn_util.as_string_like

@@ -1,2 +1,0 @@
-{:source-aliases #{:test}
- :clean {:ns-inner-blocks-indentation :same-line}}

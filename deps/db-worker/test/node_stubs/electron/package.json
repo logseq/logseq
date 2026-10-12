@@ -1,0 +1,1 @@
+{"name":"electron","version":"0.0.0","main":"index.js","description":"Test stub for electron used by melange node tests via NODE_PATH."}

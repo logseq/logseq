@@ -26,7 +26,8 @@
 (defn- with-memory-sql
   [f]
   (let [db (new sqlite ":memory:" nil)
-        sql #js {:exec (fn [sql-str & args]
+        sql #js {:transaction (fn [f] ((.transaction db f)))
+                 :exec (fn [sql-str & args]
                          (let [stmt (.prepare db sql-str)]
                            (if (select-sql? sql-str)
                              (all-sql stmt args)
@@ -84,12 +85,29 @@
     (storage/set-t! sql 2)
     (is (= 2 (storage/get-t sql)))))
 
+(deftest tx-id-column-migrates-existing-journal-test
+  (with-memory-sql
+    (fn [sql]
+      (common/sql-exec sql "create table tx_log (t INTEGER primary key, tx TEXT not null, created_at INTEGER, outliner_op TEXT)")
+      (common/sql-exec sql "insert into tx_log (t, tx, created_at) values (1, 'old-tx', 100)")
+      (storage/init-schema! sql)
+      (storage/init-schema! sql)
+      (let [id (str (random-uuid))
+            result (try
+                     (common/sql-exec sql "update tx_log set tx_id = ? where t = 1" id)
+                     :ok
+                     (catch :default error error))]
+        (is (= :ok result))
+        (when (= :ok result)
+          (is (= [{:t 1 :tx "old-tx" :outliner-op nil :tx-id (uuid id)}]
+                 (storage/fetch-tx-since sql 0))))))))
+
 (deftest tx-log-test
   (let [sql (test-sql/make-sql)]
     (storage/init-schema! sql)
-    (storage/append-tx! sql 1 "tx-1" 100 :save-block)
-    (storage/append-tx! sql 2 "tx-2" 200 :move-blocks)
-    (storage/append-tx! sql 3 "tx-3" 300 nil)
+    (storage/append-tx! sql 1 "tx-1" 100 :save-block nil)
+    (storage/append-tx! sql 2 "tx-2" 200 :move-blocks nil)
+    (storage/append-tx! sql 3 "tx-3" 300 nil nil)
     (let [result (storage/fetch-tx-since sql 1)]
       (is (= [{:t 2 :tx "tx-2" :outliner-op :move-blocks}
               {:t 3 :tx "tx-3" :outliner-op nil}]
@@ -134,7 +152,7 @@
     (let [sql (test-sql/make-sql)
           snapshot-checksum "bbbbbbbbbbbbbbbb"]
       (storage/init-schema! sql)
-      (storage/append-tx! sql 1 "tx-1" 100 :save-block)
+      (storage/append-tx! sql 1 "tx-1" 100 :save-block nil)
       (storage/set-t! sql 1)
       (let [result (try
                      (storage/set-initial-checksum! sql snapshot-checksum)

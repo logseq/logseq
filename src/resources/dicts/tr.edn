@@ -634,7 +634,6 @@
  :export/debug-transit-desc "Hata ayıklama için bize göndermek üzere .transit dosyası olarak dışa aktarır. Hassas veriler dışa aktarılan dosyadan kaldırılacaktır."
  :export/debug-transit-file "Hata ayıklama transit dosyasını dışa aktar"
  :export/edn-desc "Okunabilir ve düzenlenebilir .edn dosyası olarak dışa aktarır. Bunu birincil yedekleme olarak kullanmayın."
- :export/error-unexpected "Dışa aktarma sırasında beklenmeyen bir hata oluştu. Ayrıntılar için JavaScript konsoluna bakın."
  :export/exporting "Dışa aktarılıyor"
  :export/finalizing "Sonlandırılıyor"
  :export/format-text "Metin"
@@ -1813,7 +1812,6 @@
  :sidebar.right/resize-handle "Sağ kenar çubuğu yeniden boyutlandırma işleyicisi"
  :sidebar.right/toggle "Sağ paneli aç/kapat"
 
- :storage/invalid-data-writing "Geçersiz veri yazımı."
  :storage/sqlitedb-error "SQLiteDB hatası: {1}"
  :storage/sqlitedb-import-error "SQLiteDB içe aktarma hatası: {1}"
  :storage/sqlitedb-save-error "SQLiteDB kaydetme hatası: {1}"

@@ -573,7 +573,6 @@
  :export/debug-transit-desc "デバッグ用に.transitファイルにエクスポートします。エクスポートされたファイルからセンシティブなデータは除去されます。"
  :export/debug-transit-file "デバッグ用transitファイルをエクスポート"
  :export/edn-desc "読み取り・編集可能な.ednファイルにエクスポートします。プライマリバックアップとしては使用しないでください。"
- :export/error-unexpected "エクスポート中に予期しないエラーが発生しました。詳細はJavaScriptコンソールを参照してください。"
  :export/exporting "エクスポート中"
  :export/finalizing "完了処理中"
  :export/format-text "テキスト"
@@ -1665,7 +1664,6 @@
  :sidebar.right/resize-handle "右サイドバーのサイズ変更"
  :sidebar.right/toggle "右サイドバーを開閉"
 
- :storage/invalid-data-writing "無効なデータの書き込みです。"
  :storage/sqlitedb-error "SQLiteDB エラー: {1}"
  :storage/sqlitedb-import-error "SQLiteDB インポート エラー: {1}"
  :storage/sqlitedb-save-error "SQLiteDB 保存エラー: {1}"

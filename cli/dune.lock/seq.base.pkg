@@ -1,0 +1,18 @@
+(version base)
+
+(depends
+ (all_platforms (ocaml)))
+
+(extra_sources
+ (META.seq
+  (fetch
+   (url
+    https://raw.githubusercontent.com/ocaml/opam-source-archives/main/patches/seq/META.seq)
+   (checksum
+    sha256=e95062b4d0519ef8335c02f7d0f1952d11b814c7ab7e6d566a206116162fa2be)))
+ (seq.install
+  (fetch
+   (url
+    https://raw.githubusercontent.com/ocaml/opam-source-archives/main/patches/seq/seq.install)
+   (checksum
+    sha256=fff926c2c4d5a82b6c94c60c4c35eb06e3d39975893ebe6b1f0e6557cbe34904))))

@@ -917,8 +917,8 @@ let task_status_query block_uuid =
     (Vec.singleton (Edn_util.uuid block_uuid))
 
 let values_of_query_result value =
-  match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some values, _ | _, Some values -> values
+  match Edn_util.as_seq value with
+  | Some values -> Vec.map Edn_util.unwrap_row values
   | _ -> Vec.empty
 
 let unquote_transit_value = function
@@ -1607,7 +1607,7 @@ let bridge_lock_owner_pid lock_dir =
   try
     let owner =
       Cli_unix.read_text_file (bridge_lock_owner_path lock_dir)
-      |> Melange_edn_melange.of_edn_string
+      |> Edn_util.of_edn_string
     in
     Edn_util.get_int owner "pid"
   with _ -> None
