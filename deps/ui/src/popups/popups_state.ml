@@ -2245,7 +2245,7 @@ let run_cm_heading t h =
    table the serializer stored on the open menu; -1/unknown = dismiss *)
 let cm_native_dispatch t tag =
   match (get t).cm with
-  | Some ({ native = true; native_acts = acts } as cm) -> (
+  | Some ({ native = true; native_acts = acts; _ } as cm) -> (
       match List.assoc_opt tag acts with
       | Some (Cna_cmd cmd) -> run_cm_item t cmd
       | Some (Cna_color c) -> run_cm_color t c

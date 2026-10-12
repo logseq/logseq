@@ -158,9 +158,18 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
     ?(text_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id_signal : Lui_protocol.wire_value Signal.signal option)
+    (* ext_props/ext_prop_signals carry typed layout props on the native
+       twin; the web twin reads the same declarations from the attrs
+       style string / attrs_signal instead, so both are ignored here *)
+    ?(ext_props : (string * Lui_protocol.wire_value) list = [])
+    ?(ext_prop_signals :
+       (string * Lui_protocol.wire_value Signal.signal) list =
+       [])
     ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
+  ignore ext_props;
+  ignore ext_prop_signals;
   let tag, attrs =
     if registered_tag tag then (tag, attrs)
     else (fallback_tag tag, attrs @ [ ("data-tag", tag) ])

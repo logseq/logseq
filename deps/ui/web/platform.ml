@@ -247,6 +247,17 @@ let json_prop = js_get
    which never fires here *)
 let emit_event (_ : string) (_ : Js.Json.t) : unit = ()
 
+(* register_dom_handler/unregister_dom_handlers are the native hosts'
+   imperative dom-event registry (bubble walk over node ids). On the web
+   the same coverage comes from `el ~events:` wiring real DOM listeners
+   on extension elements — plain LUI kinds expose no element lookup
+   here, so these are no-ops like emit_event. *)
+let register_dom_handler (_ : int) ~events:(_ : string)
+    (_ : string -> string option -> unit) =
+  ()
+
+let unregister_dom_handlers (_ : int) : unit = ()
+
 (* web block drags run through dnd-kit pointer sensors (Block_dnd); the
    native surface has no HTML5 drag and drives the gesture itself
    (editor_keys' mousedown/mousemove path listens only when true) *)
