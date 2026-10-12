@@ -1,8 +1,7 @@
-name: Deploy DB Test Version to Cloud
+name: Deploy web app to Cloud
 
 on:
-  push:
-    branches: ["test/db"]
+  workflow_dispatch:
 
 env:
   CLOJURE_VERSION: "1.12.4.1618"
@@ -118,4 +117,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy public --project-name logseq-db-test --branch main
+          command: pages deploy public --project-name logseq-app --branch main

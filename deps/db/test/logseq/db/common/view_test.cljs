@@ -523,6 +523,42 @@
     (is (<= (:entity-calls window) 3)
         "Custom property sort must stay on the id-only path.")))
 
+(deftest get-view-data-class-objects-checkbox-sort-treats-false-as-a-value-test
+  ;; Unchecked is stored as false. if-let treated that as missing, so asc and
+  ;; desc both put the unchecked row last instead of reversing.
+  (let [conn (topic-conn
+              [{:page {:block/title "checked" :build/tags [:Topic]
+                       :build/properties {:user.property/done true}}}
+               {:page {:block/title "unchecked" :build/tags [:Topic]
+                       :build/properties {:user.property/done false}}}
+               {:page {:block/title "missing" :build/tags [:Topic]}}]
+              :properties {:user.property/done {:logseq.property/type :checkbox}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        unchecked-id (:db/id (db-test/find-page-by-title @conn "unchecked"))
+        missing-id (:db/id (db-test/find-page-by-title @conn "missing"))
+        checked-id (:db/id (db-test/find-page-by-title @conn "checked"))
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? false}]))
+        query-asc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                       :query-entity-ids [checked-id unchecked-id]
+                                                       :sorting [{:id :user.property/done :asc? true}]})
+        query-desc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                        :query-entity-ids [checked-id unchecked-id]
+                                                        :sorting [{:id :user.property/done :asc? false}]})]
+    (is (false? (:user.property/done (d/entity @conn unchecked-id)))
+        "Unchecked is stored as false, not a missing property.")
+    (is (nil? (:user.property/done (d/entity @conn missing-id))))
+    (is (= ["unchecked" "checked" "missing"] (result-titles conn asc))
+        "Ascending: false, true, then missing last.")
+    (is (= ["checked" "unchecked" "missing"] (result-titles conn desc))
+        "Descending reverses false/true; missing stays last.")
+    (is (= ["unchecked" "checked"] (result-titles conn query-asc))
+        "Query table ascending matches the tag table on the same valued rows.")
+    (is (= ["checked" "unchecked"] (result-titles conn query-desc)))))
+
 (deftest get-view-data-class-objects-number-sort-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Topic " idx)
