@@ -63,6 +63,7 @@
   (reset! persist-db/remote-db client)
   (reset! persist-db/remote-repo repo))
 
+;; Fails if, in `<invalidate-remote-repo!`, `and` becomes `or` or `when` becomes `when-not`.
 (deftest invalidate-remote-repo-stops-client-and-honors-generation
   (async done
     (let [client {:wrapped-worker :w}
@@ -86,6 +87,7 @@
        #(set! remote/stop! original-stop)
        done))))
 
+;; Fails if, in `<stop-remote-if-current!`, `and` becomes `or` or `true` becomes `false`.
 (deftest stop-remote-if-current-returns-true-without-client-and-false-for-other-repo
   (async done
     (let [client {:wrapped-worker :w}
@@ -105,6 +107,7 @@
        #(set! remote/stop! original-stop)
        done))))
 
+;; Fails if, in `active-runtime-session?`, `and` becomes `or`.
 (deftest active-runtime-session-and-client-require-all-parts
   (let [client {:id 1}
         state {:repo repo :session-id "s" :client client}]
@@ -116,6 +119,7 @@
     (is (false? (#'persist-db/active-runtime-client? state repo "x" client)))
     (is (false? (#'persist-db/active-runtime-client? state "logseq_db_graph_b" "s" client)))))
 
+;; Fails if, in `reset-active-request-failures!`, `if` becomes `if-not`.
 (deftest reset-active-request-failures-only-for-active-session
   (reset! persist-db/remote-runtime-state {:repo repo :session-id "s" :request-failures 3})
   (#'persist-db/reset-active-request-failures! repo "other")
@@ -123,6 +127,7 @@
   (#'persist-db/reset-active-request-failures! repo "s")
   (is (= 0 (:request-failures @persist-db/remote-runtime-state))))
 
+;; Fails if, in `record-active-request-failure!`, `and` becomes `or` or `or` becomes `and`.
 (deftest record-active-request-failure-counts-only-untriggered-active-session
   (let [client {:id 1}
         error (ex-info "down" {:code :server-unavailable})]
@@ -145,6 +150,7 @@
     (is (= 4 (:request-failures @persist-db/remote-runtime-state)))
     (is (true? (:recovery-triggered? @persist-db/remote-runtime-state)))))
 
+;; Fails if, in `electron-runtime?`, `and` becomes `or`.
 (deftest electron-runtime-is-false-when-not-electron
   (let [original util/electron?]
     (set! util/electron? (constantly false))
@@ -153,6 +159,7 @@
       (finally
         (set! util/electron? original)))))
 
+;; Fails if, in `sync-markdown-mirror-setting-watch!`, `and` becomes `or`.
 (deftest sync-markdown-mirror-setting-watch-needs-repo-worker-and-change
   (let [listener (atom nil)
         calls (atom [])
@@ -180,6 +187,7 @@
         (set! rfx/listen! original-listen)
         (set! state/<invoke-db-worker original-invoke)))))
 
+;; Fails if, in `install-remote-runtime!`, `if` becomes `if-not`.
 (deftest install-remote-runtime-transact-fn-falls-back-to-current-repo
   (async done
     (let [captured (atom [])
@@ -206,6 +214,7 @@
          (set! db-transact/transact original-transact))
        done))))
 
+;; Fails if, in `<ensure-remote-impl!`, `and` becomes `or`.
 (deftest ensure-remote-impl-same-repo-checks-generation
   (async done
     (let [client {:wrapped-worker :w}]
@@ -221,6 +230,7 @@
        (fn [])
        done))))
 
+;; Fails if, in `<ensure-remote-impl!`, `when` becomes `when-not`.
 (deftest ensure-remote-impl-clears-pending-when-repo-changes-during-stop
   (async done
     (let [original-stop remote/stop!]
@@ -236,6 +246,7 @@
        #(set! remote/stop! original-stop)
        done))))
 
+;; Fails if, in `<ensure-remote-impl!`, `or` becomes `and` or `when` becomes `when-not`.
 (deftest ensure-remote-impl-requests-generation-and-clears-pending-on-stale-start
   (async done
     (let [ipc-calls (atom [])
