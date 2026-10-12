@@ -176,6 +176,7 @@ def start_server(args: argparse.Namespace) -> None:
     env.update(
         {
             "DB_SYNC_PORT": str(args.port),
+            "DB_SYNC_HOST": args.host,
             "DB_SYNC_DATA_DIR": str(data_dir),
             "COGNITO_ISSUER": issuer,
             "COGNITO_CLIENT_ID": client_id,

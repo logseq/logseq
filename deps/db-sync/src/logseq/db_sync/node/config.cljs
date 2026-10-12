@@ -1,5 +1,6 @@
 (ns logseq.db-sync.node.config
-  (:require [clojure.string :as string]))
+  (:require ["net" :as node-net]
+            [clojure.string :as string]))
 
 (defn- env-value [^js env k]
   (let [v (aget env k)]
@@ -12,6 +13,7 @@
 (defn config-from-env []
   (let [env (.-env js/process)]
     {:port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
+     :host (aget env "DB_SYNC_HOST")
      :base-url (env-value env "DB_SYNC_BASE_URL")
      :data-dir (or (env-value env "DB_SYNC_DATA_DIR") "data/db-sync")
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
@@ -22,8 +24,15 @@
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :data-dir :storage-driver :assets-driver :log-level
+  [:port :host :base-url :data-dir :storage-driver :assets-driver :log-level
    :cognito-issuer :cognito-client-id :cognito-jwks-url])
+
+(defn- valid-host? [host]
+  (and (string? host)
+       (or (pos? (.isIP node-net host))
+           (and (<= 1 (count host) 253)
+                (every? #(re-matches #"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?" %)
+                        (string/split host #"\." -1))))))
 
 (defn normalize-config [overrides]
   (let [defaults {:port 8080
@@ -32,8 +41,12 @@
                   :assets-driver "filesystem"
                   :log-level "info"}
         merged (merge defaults (config-from-env) overrides)
+        host (:host merged)
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
+    (when (and (or (some? host) (contains? overrides :host))
+               (not (valid-host? host)))
+      (throw (js/Error. "DB_SYNC_HOST must be an IP address or hostname")))
     (when-not (#{"sqlite"} storage-driver)
       (throw (js/Error. (str "unsupported storage driver: " storage-driver))))
     (when-not (#{"filesystem"} assets-driver)

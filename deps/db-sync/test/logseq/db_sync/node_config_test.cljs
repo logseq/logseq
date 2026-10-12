@@ -16,6 +16,25 @@
     (is (nil? (:unknown-key cfg)))
     (is (nil? (:legacy-auth-key cfg)))))
 
+(deftest normalize-config-host-test
+  (doseq [host ["127.0.0.1" "::1" "localhost"]]
+    (is (= host (:host (config/normalize-config {:host host})))))
+  (doseq [host [nil "" " 127.0.0.1" "127.0.0.1 " "http://127.0.0.1" "localhost/path" 127]]
+    (is (throws? #(config/normalize-config {:host host})) (str "invalid host: " host)))
+  (let [env (.-env js/process)
+        original (aget env "DB_SYNC_HOST")]
+    (try
+      (js-delete env "DB_SYNC_HOST")
+      (is (nil? (:host (config/normalize-config {}))))
+      (aset env "DB_SYNC_HOST" "127.0.0.1")
+      (is (= "127.0.0.1" (:host (config/normalize-config {}))))
+      (aset env "DB_SYNC_HOST" "")
+      (is (throws? #(config/normalize-config {})))
+      (finally
+        (if (some? original)
+          (aset env "DB_SYNC_HOST" original)
+          (js-delete env "DB_SYNC_HOST"))))))
+
 (deftest normalize-config-storage-driver-test
   (testing "sqlite storage driver accepted"
     (let [cfg (config/normalize-config {:storage-driver "sqlite"})]

@@ -1,9 +1,36 @@
 (ns logseq.db-sync.node-server-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs" :as fs]
+            ["os" :as os]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [logseq.db-sync.node.server :as node-server]
             [logseq.db-sync.platform.node :as platform-node]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
+
+(deftest node-server-binds-explicit-loopback-host-test
+  (async done
+         (let [dir (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-sync-bind-"))
+               stop-server! (atom nil)]
+           (-> (p/let [{:keys [server port stop!]} (node-server/start! {:port 0
+                                                                       :host "127.0.0.1"
+                                                                       :data-dir dir})
+                       _ (reset! stop-server! stop!)
+                       response (js/fetch (str "http://127.0.0.1:" port "/health"))]
+                 (is (= "127.0.0.1" (.-address (.address server))))
+                 (is (= 200 (.-status response))))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally (fn []
+                            (if-let [stop! @stop-server!]
+                              (stop!)
+                              (p/resolved nil))))
+               (p/then (fn []
+                         (.rmSync fs dir #js {:recursive true :force true})
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (.rmSync fs dir #js {:recursive true :force true})
+                          (done)))))))
 
 (defn- fetch-with-timeout [url timeout-ms]
   (let [timeout-sentinel ::timeout]

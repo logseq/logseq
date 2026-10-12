@@ -161,7 +161,7 @@
                  (.destroy socket)))))
       (p/let [_ (js/Promise.
                  (fn [resolve]
-                   (.listen server (:port cfg)
+                   (.listen server (:port cfg) (:host cfg)
                             (fn [] (resolve nil)))))
               address (.address server)
               port (if (number? address) address (.-port address))
