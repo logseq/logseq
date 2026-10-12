@@ -366,7 +366,10 @@ async function runFile(t) {
   const label = t.shard ? `${t.file}#${t.shard}` : t.file;
   const log = path.join(
     logDir,
-    t.file.replace(/\.js$/, t.shard ? `.shard${t.shard.replace("/", "-")}.log` : ".log"),
+    t.file.replace(
+      /\.js$/,
+      t.shard ? `.shard${t.shard.replace(/[^a-zA-Z0-9_-]/g, "-")}.log` : ".log",
+    ),
   );
   const stream = fs.createWriteStream(log);
   const started = Date.now();
