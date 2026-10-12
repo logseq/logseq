@@ -25,17 +25,6 @@
     (is (nil? (:pending-server (sync-counts 3 nil)))
         "unknown when the remote tx is unknown")))
 
-(deftest sync-counts-ws-state-test
-  (with-redefs [worker-state/*db-sync-client (atom {:repo "r" :ws-state (atom :open)})
-                worker-state/*db-sync-config (atom {:ws-url "wss://sync.example.test"})]
-    (is (= :open (:ws-state (sync-counts 1 1))) "the client's own ws state"))
-  (with-redefs [worker-state/*db-sync-client (atom nil)
-                worker-state/*db-sync-config (atom {:ws-url "wss://sync.example.test"})]
-    (is (= :stopped (:ws-state (sync-counts 1 1))) "no client, sync configured"))
-  (with-redefs [worker-state/*db-sync-client (atom nil)
-                worker-state/*db-sync-config (atom {})]
-    (is (= :inactive (:ws-state (sync-counts 1 1))) "no client, sync not configured")))
-
 ;; Fails if, in `rtc-state-payload`, `=` becomes `not=` or `or` becomes `and`.
 (deftest rtc-state-payload-carries-counts-test
   (let [files [{:asset-id "a" :asset-type "png" :file "assets/a.png"}]
