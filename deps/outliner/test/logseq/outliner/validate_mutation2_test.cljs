@@ -13,6 +13,7 @@
        nil
        (catch :default e (ex-data e))))
 
+;; Fails if, in `validate-page-title-no-hashtag`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:page.validation/name-no-hash` becomes `:page.validation/name-no-slash`.
 (deftest validate-page-title-no-hashtag-throws-notification
   (is (= {:node :n
           :type :notification
@@ -21,6 +22,7 @@
                     :type :warning}}
          (thrown-ex-data #(outliner-validate/validate-page-title-no-hashtag "a#b" {:node :n})))))
 
+;; Fails if, in `validate-page-title-characters`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:page.validation/name-no-slash` becomes `:page.validation/duplicate`.
 (deftest validate-page-title-characters-throws-notification
   (is (= {:node :n
           :type :notification
@@ -29,6 +31,7 @@
                     :type :warning}}
          (thrown-ex-data #(outliner-validate/validate-page-title-characters "a/b" {:node :n})))))
 
+;; Fails if, in `validate-page-title`, the body becomes `nil`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:page.validation/name-blank` becomes `:page.validation/name-no-hash`.
 (deftest validate-page-title-throws-when-blank
   (is (= {:node :n
           :type :notification
@@ -37,6 +40,7 @@
                     :type :warning}}
          (thrown-ex-data #(outliner-validate/validate-page-title " " {:node :n})))))
 
+;; Fails if, in `validate-unique-for-page`, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped, the `:type` key is dropped, `:property.validation/duplicate` becomes `:property.validation/invalid-name`, `:class.validation/duplicate` becomes `:class.validation/extends-cycle`, `:block/title` becomes `:block/_parent` or `:page.validation/duplicate` becomes `:page.validation/duplicate-name`.
 (deftest validate-unique-by-name-and-tags-throws-notifications
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:color {:logseq.property/type :default}
@@ -80,6 +84,7 @@
                         :type :warning}}
              data)))))
 
+;; Fails if, in `validate-disallow-page-with-journal-name`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped or the `:i18n-key` key is dropped.
 (deftest validate-block-title-validates-uniqueness-and-journal-names
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}
@@ -100,6 +105,7 @@
                       :type :warning}}
            (thrown-ex-data #(outliner-validate/validate-disallow-page-with-journal-name "Dec 16th, 2024" another))))))
 
+;; Fails if, in `validate-property-title`, the body becomes `nil`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:property.validation/invalid-name` becomes `:property.validation/duplicate`.
 (deftest validate-property-title-throws-notification
   (let [message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
         expected-payload {:message message
@@ -111,6 +117,7 @@
            (thrown-ex-data #(outliner-validate/validate-property-title "[[bad" {:k 1}))))
     (is (nil? (outliner-validate/validate-property-title "good")))))
 
+;; Fails if, in `validate-editing-built-in-property`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:property` key is dropped, the `:disallowed-attributes` key is dropped or `:db/ident` becomes `:db/id`.
 (deftest validate-editing-built-in-property-throws-notification
   (let [conn (db-test/create-conn)
         property (d/entity @conn :logseq.property/heading)]
@@ -122,6 +129,9 @@
            (thrown-ex-data #(outliner-validate/validate-editing-built-in-property
                              property {:block/title "x" :logseq.property/description "ok"}))))))
 
+;; Fails if, in `validate-extends-property-have-correct-type`, the `:type` key is dropped, the `:payload` key is dropped, the `:blocks` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, `:class.validation/invalid-extends-type` becomes `:class.validation/tag-with-non-tag`, `:db/id` becomes `:db/ident`, `:block/title` becomes `:block/_parent` or `remove` becomes `filter`.
+;; Fails if, in `disallow-built-in-class-extends-change`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:class.validation/built-in-extends-change` becomes `:class.validation/cant-add-tag-on-built-in`.
+;; Fails if, in `disallow-extends-cycle`, `:db/id` becomes `:db/ident`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:blocks` key is dropped, `:class.validation/extends-cycle` becomes `:class.validation/invalid-extends-type` or `:block/title` becomes `:block/_parent`.
 (deftest validate-extends-property-throws-notifications
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Parent {}
@@ -157,6 +167,9 @@
                    [:payload :i18n-key]))
         "A tag can't extend itself")))
 
+;; Fails if, in `disallow-node-cant-tag-with-built-in-non-tags`, the `:type` key is dropped, the `:payload` key is dropped, the `:property-value` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped, `:block/title` becomes `:block/_parent` or `:class.validation/tag-with-non-tag` becomes `:class.validation/built-in-extends-change`.
+;; Fails if, in `disallow-node-cant-tag-with-private-tags`, the `:payload` key is dropped, the `:property-id` key is dropped, the `:property-value` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped, the `:type` key is dropped, `:class.validation/cant-remove-tag-built-in` becomes `:class.validation/cant-remove-tag-on-built-in`, `:class.validation/cant-set-tag-built-in` becomes `:class.validation/duplicate` or `:block/tags` becomes `:block/title`.
+;; Fails if, in `disallow-tagging-a-built-in-entity`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped, `:block/title` becomes `:block/_parent`, `:class.validation/cant-remove-tag-on-built-in` becomes `:class.validation/cant-set-tag-built-in` or `:class.validation/cant-add-tag-on-built-in` becomes `:class.validation/cant-remove-tag-built-in`.
 (deftest validate-tags-property-throws-notifications
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -203,6 +216,7 @@
                       :type :error}}
            (thrown-ex-data #(outliner-validate/validate-tags-property-deletion db [:logseq.property/heading] :logseq.class/Tag))))))
 
+;; Fails if, in `disallow-removing-page-tag`, `:block/parent` becomes `:block/tags`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped, the `:entity` key is dropped, the `:property` key is dropped, `:block/title` becomes `:block/_parent`, `:page.convert/cant-be-block` becomes `:page.convert/cant-be-block-has-children`, `:block/tags` becomes `:block/title`, `:db/id` becomes `:db/ident`, `:page.convert/cant-be-block-move-first` becomes `:page.convert/page-to-property-namespaced`, `:block/_parent` becomes `:block/keys` or `:page.convert/cant-be-block-has-children` becomes `:page.convert/cant-be-block-move-first`.
 (deftest validate-tags-property-deletion-refuses-page-to-block-conversion
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "no parent"}}
@@ -239,6 +253,7 @@
                                       "Page \"has page child\" cannot be converted to a block because it has page children")]
       (is (= expected actual)))))
 
+;; Fails if, in `validate-block-can-tag-with-page-tag`, the `:node` key is dropped, `:logseq.property/created-from-property` becomes `:logseq.property/description`, `:page.convert/property-value-to-page` becomes `:page.convert/block-parent-not-page`, `:page.convert/block-parent-not-page` becomes `:page.convert/cant-be-block`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or the `:block` key is dropped.
 (deftest validate-tags-property-page-tag-refuses-invalid-blocks
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}}
@@ -280,6 +295,7 @@
                         :block (into {} nested)}}
              data)))))
 
+;; Fails if, in `validate-page-to-property-conversion`, the `:message` key is dropped or the `:type` key is dropped.
 (deftest validate-page-to-property-conversion-throws-notification
   (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "namespaced"}}])
         library (db-test/find-page-by-title @conn "Library")
@@ -292,6 +308,7 @@
                       :type :error}}
            (thrown-ex-data #(outliner-validate/validate-page-to-property-conversion page))))))
 
+;; Fails if, in `disallow-editing-private-built-in-nodes`, the body becomes `nil`, the `:type` key is dropped, the `:payload` key is dropped or the `:message` key is dropped.
 (deftest disallow-editing-private-built-in-nodes-throws-notification
   (let [conn (db-test/create-conn)
         db @conn]

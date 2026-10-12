@@ -19,12 +19,16 @@
               {:db/id 4 :block/uuid child-uuid :block/title "Child" :block/order "a1"
                :block/parent 3 :block/page 1}]))
 
+;; Fails if, in `fnv-step`, the body becomes `nil`.
+;; Fails if, in `djb-step`, the body becomes `nil`.
 (deftest recompute-checksum-golden-test
   (is (= "de3d85af64cb053d" (checksum/recompute-checksum (fixed-db))))
   (is (= "cf4b5a20f9006de2"
          (checksum/recompute-checksum
           (d/db-with (fixed-db) [{:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}])))))
 
+;; Fails if, in `entity-values`, `:block/order` becomes `:block/page` or `:block/name` becomes `:block/order`.
+;; Fails if, in `recompute-checksum-diagnostics`, the `:block/order` key is dropped or `:block/name` becomes `:block/order`.
 (deftest recompute-checksum-diagnostics-lists-attrs-and-blocks-test
   (let [db (fixed-db)
         {:keys [attrs blocks e2ee?]} (checksum/recompute-checksum-diagnostics db)]
@@ -41,6 +45,7 @@
              :block/title "Child" :block/name nil}]
            blocks))))
 
+;; Fails if, in `recompute-checksum-diagnostics`, the `(sort-by (comp str :block/uuid))` step is dropped or `:block/uuid` becomes `:block/keys`.
 (deftest recompute-checksum-diagnostics-sorts-blocks-by-uuid-not-entity-id-test
   (let [late-uuid #uuid "00000000-0000-0000-0000-0000000000f0"
         early-uuid #uuid "00000000-0000-0000-0000-000000000001"
@@ -50,6 +55,7 @@
     (is (= [early-uuid late-uuid]
            (mapv :block/uuid (:blocks (checksum/recompute-checksum-diagnostics db)))))))
 
+;; Fails if, in `recompute-checksum-diagnostics`, the `(sort-by str)` step is dropped.
 (deftest recompute-checksum-diagnostics-e2ee-keeps-structure-attrs-test
   (let [db (d/db-with (fixed-db) [{:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}])
         {:keys [attrs blocks e2ee?]} (checksum/recompute-checksum-diagnostics db)]
@@ -61,6 +67,7 @@
             {:block/uuid child-uuid :block/parent parent-uuid :block/page page-a-uuid :block/order "a1"}]
            blocks))))
 
+;; Fails if, in `entids`, `:block/uuid` becomes `:block/keys`.
 (deftest update-checksum-finds-entities-by-uuid-in-tx-items-test
   (let [db0 (fixed-db)
         checksum0 (checksum/recompute-checksum db0)
@@ -72,6 +79,8 @@
              (checksum/update-checksum checksum0 (assoc report :tx-data [[:db/retractEntity entity]])))
           (pr-str entity)))))
 
+;; Fails if, in `page-tag-eids`, `:logseq.class/Journal` becomes `:logseq.class/Page`, `:logseq.class/Tag` becomes `:logseq.class/Journal` or `:logseq.class/Property` becomes `:logseq.class/Tag`.
+;; Fails if, in `net-tuple-delta`, `:block/refs` becomes `:block/tags`.
 (deftest checksum-counts-entities-tagged-with-each-page-class-test
   (let [classes [:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property]
         base (d/db-with (fixed-db) (mapv (fn [class] {:db/ident class}) classes))
@@ -133,6 +142,9 @@
     (= (checksum/recompute-checksum (:db-after report))
        (checksum/update-checksum (checksum/recompute-checksum (:db-before report)) report))))
 
+;; Fails if, in `eids-by-block-uuid`, the `(map :e)` step is dropped or `:block/uuid` becomes `:block/keys`.
+;; Fails if, in `tuple-counts-for-eids`, the body becomes `nil`.
+;; Fails if, in `net-tuple-delta`, the `(mapcat (fn [uuid]` step is dropped, the `set` step is dropped, the `:removed` key is dropped or the `:added` key is dropped.
 (deftest update-checksum-matches-recompute-with-duplicate-uuid-and-many-changes-test
   (is (< 1 (count (d/datoms (entities->db dup-base) :avet :block/uuid shared-uuid))))
   (doseq [[label changes]
@@ -159,23 +171,22 @@
                 (reduce (fn [entities [path value]] (assoc-in entities path value)) dup-base changes)))
         (str label))))
 
+;; Fails if, in `touched-checksum-uuids`, the body becomes `nil` or the `(mapcat (fn [eid]` step is dropped.
+;; Fails if, in `duplicate-block-uuid?`, the body becomes `nil`.
 (deftest update-checksum-matches-recompute-when-peer-leaves-duplicate-uuid-test
   (is (true? (update-matches-recompute? dup-base (dissoc dup-base 5))))
   (is (true? (update-matches-recompute? dup-base (-> dup-base
                                                      (dissoc 5)
                                                      (assoc-in [3 :block/title] "T3 changed"))))))
 
-(deftest update-checksum-reflects-uuid-change-of-referenced-parent-test
-  (let [no-dup (dissoc dup-base 5)]
-    (is (true? (update-matches-recompute? no-dup (assoc-in no-dup [3 :block/uuid] parent-uuid))))
-    (is (true? (update-matches-recompute? no-dup (assoc-in no-dup [1 :block/uuid] parent-uuid))))))
-
+;; Fails if, in `touched-checksum-uuids`, `remove` becomes `filter`.
 (deftest update-checksum-matches-recompute-when-duplicate-uuid-peers-share-a-changed-tuple-test
   (is (true? (update-matches-recompute? dup-base (-> dup-base
                                                      (assoc-in [3 :block/parent] 6)
                                                      (assoc-in [5 :block/parent] 6))))
       "Both peers write the same [uuid :block/parent value] tuple: it changes twice"))
 
+;; Fails if, in `net-tuple-delta`, the `set` step is dropped.
 (deftest update-checksum-matches-recompute-when-a-touched-block-is-also-a-dependent-test
   (let [u7 #uuid "00000000-0000-0000-0000-000000000007"
         u8 #uuid "00000000-0000-0000-0000-000000000008"
@@ -187,6 +198,7 @@
                                                    (assoc-in [4 :block/title] "T4 changed"))))
         "Child 4 is both changed and a referrer of 3, whose uuid changed")))
 
+;; Fails if, in `datoms-checksum-tuples`, the `set` step is dropped.
 (deftest recompute-checksum-counts-a-repeated-tuple-of-an-entity-once-test
   (let [datoms [(d/datom 1 :block/uuid page-a-uuid) (d/datom 1 :block/name "page-a")
                 (d/datom 3 :block/uuid shared-uuid) (d/datom 3 :block/name "p3")

@@ -20,6 +20,7 @@
    :block/page 4
    :logseq.property/created-from-property 5})
 
+;; Fails if, in `property-history-block`, the `:error/message` key is dropped, the `:error/path` key is dropped, `:logseq.property.history/ref-value` becomes `:logseq.property.history/scalar-value` or `:logseq.property.history/scalar-value` becomes `:logseq.property.history/block`.
 (deftest property-history-block-needs-a-ref-value-or-a-scalar-value
   (is (m/validate db-malli-schema/property-history-block
                   (assoc history-base :logseq.property.history/ref-value 7)))
@@ -31,6 +32,8 @@
          (me/humanize (m/explain db-malli-schema/property-history-block history-base)))
       "The error is reported under :logseq.property.history/ref-value"))
 
+;; Fails if, in `closed-value-block*`, the `:optional` key is dropped or `:logseq.property/value` becomes `:logseq.property/view-context`.
+;; Fails if, in `closed-value-block`, the `:error/message` key is dropped, the `:error/path` key is dropped or `:logseq.property/value` becomes `:logseq.property/view-context`.
 (deftest closed-value-block-needs-a-title-or-a-value
   (is (m/validate db-malli-schema/closed-value-block
                   (assoc closed-value-base :block/title "t"))
@@ -45,6 +48,7 @@
          (me/humanize (m/explain db-malli-schema/closed-value-block closed-value-base)))
       "The error is reported under :logseq.property/value"))
 
+;; Fails if, in `normal-block`, the `:error/path` key is dropped or `:error/path` becomes `:error/message`.
 (deftest normal-block-errors-are-grouped-under-normal-block
   (is (= {:block/parent {"normal-block" ["missing required key"]}
           :block/order {"normal-block" ["missing required key"]}

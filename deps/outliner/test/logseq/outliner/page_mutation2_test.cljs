@@ -21,6 +21,7 @@
        nil
        (catch :default e (ex-data e))))
 
+;; Fails if, in `delete!`, the `:deleted-page` key is dropped, the `:persist-op?` key is dropped, `:block/title` becomes `:block/type`, the `:deleted-by-uuid` key is dropped or the `:now-ms` key is dropped.
 (deftest delete-page-records-tx-meta-and-recycle-fields
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "D1"}}
@@ -46,6 +47,7 @@
       (is (= (:db/id deleter) (:db/id (:logseq.property/deleted-by-ref d1')))
           "The recycle tx records who deleted the page"))))
 
+;; Fails if, in `delete!`, the `:msg` key is dropped.
 (deftest delete-built-in-page-reports-error
   (let [conn (db-test/create-conn)
         library (ldb/get-built-in-page @conn "Library")
@@ -54,6 +56,7 @@
                                        {:error-handler #(swap! errors conj %)})))
     (is (= [{:msg "Built-in page cannot be deleted"}] @errors))))
 
+;; Fails if, in `delete!`, the `:truncated?` key is dropped.
 (deftest delete-today-journal-page-truncates-it
   (let [today (date-time-util/ms->journal-day (js/Date.))
         conn (db-test/create-conn-with-blocks
@@ -65,6 +68,8 @@
     (is (some? (d/entity @conn page-id)) "Today's page itself stays")
     (is (nil? (db-test/find-block-by-content @conn "today block")) "Its content is removed")))
 
+;; Fails if, in `throw-private-create-page-tag`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped, the `:i18n-args` key is dropped or `:page.validation/cant-set-built-in-tags` becomes `:page.validation/parents-must-be-pages`.
+;; Fails if, in `resolve-create-page-tag`, `:block/title` becomes `:block/type`.
 (deftest create-page-with-private-tag-throws-notification
   (let [conn (db-test/create-conn)
         db @conn
@@ -81,6 +86,7 @@
            (thrown-ex-data #(outliner-page/create db "p" {:tags [{:db/ident :logseq.class/Whiteboard}]})))
         "A private tag given as a map naming an existing class")))
 
+;; Fails if, in `resolve-create-page-tag`, `:block/uuid` becomes `:block/_page`, `:db/id` becomes `:db/ident` or `:db/ident` becomes `:db/retract`.
 (deftest create-page-resolves-tags-to-db-ids
   (let [conn (db-test/create-conn-with-blocks {:classes {:C1 {} :C2 {}}})
         db @conn
@@ -101,20 +107,24 @@
       (is (not-any? #{(:db/id c1)} tags)
           "A map with its own ident is not matched to an existing class by title"))))
 
+;; Fails if, in `sanitize-title`, the `(text/page-ref-un-brackets!)` step is dropped.
 (deftest sanitize-title-strips-spaces-and-brackets
   (is (= "Foo" (outliner-page/sanitize-title " [[Foo]] "))))
 
+;; Fails if, in `^:api`, the `:node` key is dropped, the `:block/title` key is dropped or `:block/title` becomes `:block/type`.
 (deftest create-page-title-with-hashtag-throws-with-node
   (let [conn (db-test/create-conn)]
     (is (= {:block/title "a #b"}
            (:node (thrown-ex-data #(outliner-page/create @conn "a #b" {})))))))
 
+;; Fails if, in `^:api`, the `:node` key is dropped.
 (deftest create-page-title-with-slash-throws-with-node
   (let [conn (db-test/create-conn)
         data (thrown-ex-data #(outliner-page/create @conn "a/b" {}))]
     (is (= :page.validation/name-no-slash (get-in data [:payload :i18n-key])))
     (is (= "a/b" (get-in data [:node :block/title])))))
 
+;; Fails if, in `split-namespace-pages`, the `(remove string/blank?)` step is dropped.
 (deftest create-namespace-page-ignores-blank-parts-and-trims
   (let [conn (db-test/create-conn)
         _ (outliner-page/create! conn "foo // bar" {:split-namespace? true})
@@ -125,6 +135,7 @@
     (is (= ["foo"] (map :block/title [(:block/parent bar)])))
     (is (= ["bar"] (map :block/title (:block/_parent foo))))))
 
+;; Fails if, in `split-namespace-pages`, the `:type` key is dropped, the `:payload` key is dropped, the `:message` key is dropped, the `:i18n-key` key is dropped or `:page.validation/parents-must-be-pages` becomes `:page.validation/cant-set-built-in-tags`.
 (deftest create-namespace-with-non-page-parent-throws
   (let [conn (db-test/create-conn)
         _ (outliner-page/create! conn "Foo" {:class? true})
@@ -140,6 +151,7 @@
                       :type :warning}}
            (thrown-ex-data #(outliner-page/create @conn "Baz/q" {:class? true :split-namespace? true}))))))
 
+;; Fails if, in `^:api`, the `(filter #(try (when-let [e (d/entity ...` step is dropped.
 (deftest create-class-with-ident-namespace-does-not-reuse-class-of-another-namespace
   (let [conn (db-test/create-conn)
         [_ a-uuid] (outliner-page/create! conn "Thing" {:class? true :class-ident-namespace "ns-a.class"})
@@ -148,18 +160,21 @@
     (is (not= a-uuid b-uuid))
     (is (= a-uuid a-again))))
 
+;; Fails if, in `build-page-tx`, the `[:db/retract [:block/uuid (:block/uui...` tx entry is dropped, `:block/uuid` becomes `:block/_page`, `:block/tags` becomes `:block/title` or `:logseq.class/Page` becomes `:logseq.class/Root`.
 (deftest create-class-tx-data-retracts-the-page-tag
   (let [conn (db-test/create-conn)
         result (outliner-page/create @conn "NewCls" {:class? true})]
     (is (some #(= [:db/retract [:block/uuid (:page-uuid result)] :block/tags :logseq.class/Page] %)
               (:tx-data result)))))
 
+;; Fails if, in `^:api`, the `:title` key is dropped or `:block/title` becomes `:block/type`.
 (deftest create-returns-info-of-existing-page
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "E1" {})]
     (is (= {:page-uuid page-uuid :title "E1"}
            (outliner-page/create @conn "E1" {})))))
 
+;; Fails if, in `^:api`, the `:persist-op?` key is dropped, the `:outliner-op` key is dropped, the `:tx-meta` key is dropped or the `:title` key is dropped.
 (deftest create-new-page-returns-tx-meta-and-title
   (let [conn (db-test/create-conn)
         result (outliner-page/create @conn "N1" {:persist-op? false})]
@@ -171,6 +186,7 @@
     (is (uuid? (:page-uuid result)))
     (is (seq (:tx-data result)))))
 
+;; Fails if, in `^:api`, `:block/uuid` becomes `:block/_page`, the `:persist-op?` key is dropped, the `:outliner-op` key is dropped, the `:tx-meta` key is dropped, the `:page-uuid` key is dropped, the `:title` key is dropped or `:block/title` becomes `:block/type`.
 (deftest create-page-restores-recycled-page
   (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "R1"}}])
         r1 (ldb/get-page @conn "R1")]
@@ -185,6 +201,8 @@
       (is (= "R1" (:title result)))
       (is (seq (:tx-data result))))))
 
+;; Fails if, in `page-ref-rewrite-targets`, `:block/page` becomes `:block/parent`, `:block/refs` becomes `:block/tags` or the `:refs` key is dropped.
+;; Fails if, in `db-refs->page`, `:db/id` becomes `:db/ident`.
 (deftest delete-page-rewrites-its-refs-outside-the-page
   ;; :block/raw-title is a virtual attribute of the app's entities (their
   ;; stored :block/title); nbb entities only have it when it is stored
@@ -221,11 +239,13 @@
     (testing "a nested block of the deleted page keeps its title"
       (is (= nested-title (:block/title (d/entity @conn nested-id)))))))
 
+;; Fails if, in `build-page-tx`, the `(keep (fn [[k v]]` step is dropped.
 (deftest create-page-keeps-a-built-in-property-without-ref-value
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "P1" {:properties {:logseq.property/exclude-from-graph-view true}})]
     (is (true? (:logseq.property/exclude-from-graph-view (d/entity @conn [:block/uuid page-uuid]))))))
 
+;; Fails if, in `^:api`, `:logseq.class/Tag` becomes `:logseq.class/Journal`.
 (deftest create-page-tagged-with-the-tag-class-by-db-id-creates-a-class
   (let [conn (db-test/create-conn)
         tag-id (:db/id (d/entity @conn :logseq.class/Tag))
@@ -235,6 +255,7 @@
     (is (some? (:db/ident page)))
     (is (not (ldb/internal-page? page)))))
 
+;; Fails if, in `^:api`, `:block/tags` becomes `:block/title`.
 (deftest create-journal-in-a-slash-format-unknown-to-the-built-in-formats
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "dd/MM/yyyy"]])
@@ -242,6 +263,7 @@
     (is (vector? result) (str "create! threw: " (ex-message result)))
     (is (= 20261225 (some->> (second result) (vector :block/uuid) (d/entity @conn) :block/journal-day)))))
 
+;; Fails if, in `split-namespace-pages`, the `(map string/trim)` step is dropped.
 (deftest create-namespace-page-finds-an-existing-root-around-spaces
   (let [conn (db-test/create-conn)
         [_ foo-uuid] (outliner-page/create! conn "Foo" {})
@@ -249,6 +271,7 @@
     (is (= foo-uuid (:block/uuid (:block/parent (d/entity @conn [:block/uuid bar-uuid])))))
     (is (= 1 (count (d/datoms @conn :avet :block/name "foo"))))))
 
+;; Fails if, in `^:api`, `:block/journal-day` becomes `:block/keys`.
 (deftest create-slash-formatted-journal-by-title-does-not-split-namespace
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])

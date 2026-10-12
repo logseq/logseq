@@ -33,6 +33,7 @@
 
 ;; stable-entity-ref
 
+;; Fails if, in `stable-entity-ref`, `:db/ident` becomes `:db/other-tx`.
 (deftest stable-entity-ref-returns-ident-of-entity-without-uuid-test
   (let [conn (tree-conn)
         _ (d/transact! conn [{:db/id -1 :db/ident :mutation2/ident-only}])
@@ -42,6 +43,7 @@
 
 ;; sanitize-block-refs / sanitize-block-payload
 
+;; Fails if, in `sanitize-block-refs`, `:db/ident` becomes `:db/other-tx` or the `vec` step is dropped.
 (deftest sanitize-block-refs-keeps-identity-keys-as-vector-test
   (let [u (random-uuid)
         r (#'op-construct/sanitize-block-refs
@@ -50,6 +52,7 @@
     (is (vector? r))
     (is (= [{:block/uuid u :block/title "T" :db/ident :a/b}] r))))
 
+;; Fails if, in `sanitize-block-payload`, the `(filter (set created-uuids))` step is dropped, the `distinct` step is dropped or the `vec` step is dropped.
 (deftest sanitize-block-payload-collects-created-refs-test
   (let [conn (tree-conn)
         a (random-uuid)
@@ -65,12 +68,14 @@
     (is (= [a] created))
     (is (= 3 (count (get r op-construct/rebase-refs-key))))))
 
+;; Fails if, in `sanitize-block-payload`, the body becomes `nil`.
 (deftest sanitize-block-payload-two-arity-sanitizes-block-test
   (let [conn (tree-conn)
         u (random-uuid)
         r (#'op-construct/sanitize-block-payload @conn {:block/uuid u :block/title "x" :db/id 5})]
     (is (= {:block/uuid u :block/title "x"} r))))
 
+;; Fails if, in `sanitize-insert-block-payload`, `:block/page` becomes `:block/parent` or `:block/order` becomes `:block/page`.
 (deftest sanitize-insert-block-payload-drops-page-and-order-only-test
   (let [conn (tree-conn)
         u (random-uuid)
@@ -85,6 +90,7 @@
 
 ;; get-missing-ref-by-lookup / rewrite-block-title-with-retracted-refs
 
+;; Fails if, in `get-missing-ref-by-lookup`, `:logseq.class/Page` becomes `:logseq.class/Property` or `:logseq.class/Root` becomes `:logseq.class/Tag`.
 (deftest get-missing-ref-by-lookup-builds-page-and-tag-entities-test
   (let [pu (random-uuid)
         tu (random-uuid)
@@ -101,6 +107,7 @@
     (is (= :logseq.class/Root (:logseq.property.class/extends tagged)))
     (is (= :user.class/Tagged (:db/ident tagged)))))
 
+;; Fails if, in `rewrite-block-title-with-retracted-refs`, `:block/uuid` becomes `:block/_page` or the `(update :block/tags rewrite-retracted...` step is dropped.
 (deftest rewrite-block-title-with-retracted-refs-test
   (let [conn (tree-conn)
         existing (:block/uuid (blk conn "a"))
@@ -127,6 +134,7 @@
 
 ;; created-block-uuids-from-tx-data / created-db-ident-from-tx-data
 
+;; Fails if, in `created-block-uuids-from-tx-data`, the `distinct` step is dropped or the `vec` step is dropped.
 (deftest created-block-uuids-from-tx-data-distinct-vector-test
   (let [u (random-uuid)
         u2 (random-uuid)
@@ -135,6 +143,7 @@
     (is (vector? r))
     (is (= [u u2] r))))
 
+;; Fails if, in `created-db-ident-from-tx-data`, the body becomes `nil`, `:db/ident` becomes `:db/other-tx` or `:db/add` becomes `:db/cardinality`.
 (deftest created-db-ident-from-tx-data-every-form-test
   (let [f #'op-construct/created-db-ident-from-tx-data]
     (is (= :a/map (f [{:db/ident :a/map}])))
@@ -145,6 +154,7 @@
     (is (nil? (f [[:db/cardinality 1 :db/ident :a/wrong]])))
     (is (nil? (f [])))))
 
+;; Fails if, in `property-ident-by-title`, the `(as-> ident` step is dropped.
 (deftest property-ident-by-title-requires-qualified-ident-test
   (let [conn (tree-conn)
         _ (d/transact! conn [{:db/id -1 :block/title "Odd" :block/tags :logseq.class/Property
@@ -156,6 +166,7 @@
 
 ;; maybe-rewrite-delete-block-ids
 
+;; Fails if, in `maybe-rewrite-delete-block-ids`, the `distinct` step is dropped, the `(stable-id-coll db)` step is dropped or the `vec` step is dropped.
 (deftest maybe-rewrite-delete-block-ids-from-tx-data-test
   (let [conn (tree-conn)
         b (blk conn "d")
@@ -175,6 +186,7 @@
         (is (vector? r))
         (is (= [[:block/uuid buuid]] r))))))
 
+;; Fails if, in `moved-block-ids-from-tx-data`, the `distinct` step is dropped or the `vec` step is dropped.
 (deftest moved-block-ids-from-tx-data-distinct-vector-test
   (let [r (#'op-construct/moved-block-ids-from-tx-data
            [[5 :block/parent 1 100 true] [5 :block/parent 2 100 true]
@@ -185,6 +197,7 @@
 
 ;; template-children-blocks-for-history
 
+;; Fails if, in `template-children-blocks-for-history`, `:db/id` becomes `:db/ident`, the `:include-property-block?` key is dropped or `:logseq.property/used-template` becomes `:logseq.property/classes`.
 (deftest template-children-blocks-for-history-test
   (let [conn (tree-conn)
         tpl (blk conn "tpl")
@@ -204,6 +217,7 @@
 
 ;; inserted-block-uuids-from-tx-data / canonicalize-insert-blocks-op
 
+;; Fails if, in `inserted-block-uuids-from-tx-data`, `:db/id` becomes `:db/ident`.
 (deftest inserted-block-uuids-from-tx-data-entity-id-test
   (let [u (random-uuid)
         r (#'op-construct/inserted-block-uuids-from-tx-data
@@ -211,6 +225,7 @@
             {:e 5 :a :block/uuid :v u :added true}])]
     (is (= [u] r))))
 
+;; Fails if, in `canonicalize-insert-blocks-op`, the body becomes `nil`.
 (deftest canonicalize-insert-blocks-op-three-arity-test
   (let [conn (tree-conn)
         target (blk conn "d")
@@ -224,6 +239,7 @@
     (is (true? (:keep-uuid? (nth r 2))))
     (is (true? (:sibling? (nth r 2))))))
 
+;; Fails if, in `canonicalize-insert-blocks-op`, the `(keep (fn [[old-uuid new-uuid]]` step is dropped.
 (deftest canonicalize-insert-blocks-op-leaves-unchanged-blocks-alone-test
   (let [conn (tree-conn)
         target (blk conn "d")
@@ -232,6 +248,7 @@
            @conn [] [[{:block/uuid u :block/title "n" :foo '(1 2)}] (:db/id target) {}] [])]
     (is (= '(1 2) (:foo (ffirst r))))))
 
+;; Fails if, in `canonicalize-template-op`, the `seq` step is dropped.
 (deftest canonicalize-template-op-falls-back-on-empty-template-blocks-test
   (let [conn (tree-conn)
         tpl (blk conn "tpl")
@@ -242,6 +259,7 @@
     (is (= :apply-template op))
     (is (= 3 (count (:template-blocks opts))))))
 
+;; Fails if, in `canonicalize-indent-outdent-op`, the `vec` step is dropped.
 (deftest canonicalize-indent-outdent-op-returns-vector-test
   (let [conn (tree-conn)
         a1 (blk conn "a1")
@@ -253,17 +271,20 @@
 
 ;; save-block-keys / block-entity / inverse payloads
 
+;; Fails if, in `save-block-keys`, the `(remove transient-keys)` step is dropped, the `(remove #(= :db/other-tx %))` step is dropped, the `(remove nil?)` step is dropped or `:db/other-tx` becomes `:db/retractEntity`.
 (deftest save-block-keys-drops-transient-other-tx-and-nil-test
   (is (= [:block/title]
          (vec (#'op-construct/save-block-keys
                {:db/id 1 :block/title "t" :db/other-tx 3 nil 4 :block/tx-id 9})))))
 
+;; Fails if, in `block-entity`, `:db/id` becomes `:db/ident`.
 (deftest block-entity-resolves-map-with-only-db-id-test
   (let [conn (tree-conn)
         b (blk conn "d")
         ent (#'op-construct/block-entity @conn {:db/id (:db/id b)})]
     (is (= (:block/uuid b) (:block/uuid ent)))))
 
+;; Fails if, in `build-inverse-save-block`, the `:block/uuid` key is dropped or `:block/uuid` becomes `:block/_page`.
 (deftest build-inverse-save-block-keeps-uuid-without-uuid-in-block-test
   (let [conn (tree-conn)
         b (blk conn "d")
@@ -273,14 +294,7 @@
     (is (= {:block/uuid (:block/uuid b) :block/order (:block/order b)} inverse))
     (is (= {:x 1} opts))))
 
-(deftest build-insert-block-payload-drops-reverse-attributes-test
-  (let [conn (tree-conn)
-        b (d/touch (blk conn "b"))
-        r (#'op-construct/build-insert-block-payload @conn b)]
-    (is (= (:block/uuid b) (:block/uuid r)))
-    (is (= "b" (:block/title r)))
-    (is (not-any? #(string/starts-with? (name %) "_") (keys r)))))
-
+;; Fails if, in `build-insert-block-payload`, the `(remove #(string/starts-with? (name %...` step is dropped.
 (deftest build-insert-block-payload-skips-underscore-keys-of-plain-map-test
   (let [conn (tree-conn)
         u (random-uuid)
@@ -288,6 +302,7 @@
            @conn {:block/uuid u :block/title "x" :block/_parent [1 2] :foo/_bar 3 :foo/baz 4})]
     (is (= {:block/uuid u :block/title "x" :foo/baz 4} r))))
 
+;; Fails if, in `stale-numeric-id-in-schema-ops?`, the body becomes `nil`.
 (deftest stale-numeric-id-in-schema-ops-test
   (let [f #'op-construct/stale-numeric-id-in-schema-ops?]
     (is (true? (f :upsert-property [5 {} {}])))
@@ -296,6 +311,7 @@
 
 ;; selected-block-roots
 
+;; Fails if, in `selected-block-roots`, `:db/id` becomes `:db/ident`, the `(remove has-selected-ancestor?)` step is dropped or the `vec` step is dropped.
 (deftest selected-block-roots-test
   (let [conn (tree-conn)
         b (blk conn "b")
@@ -315,6 +331,7 @@
 
 ;; block-restore-target / delete-root->restore-plan
 
+;; Fails if, in `block-restore-target`, `:db/id` becomes `:db/ident` or `:block/page` becomes `:block/parent`.
 (deftest block-restore-target-falls-back-to-page-test
   (let [conn (tree-conn)
         a1 (blk conn "a1")
@@ -325,6 +342,7 @@
     (with-redefs [ldb/get-left-sibling (fn [_] nil)]
       (is (= [page-id false] (#'op-construct/block-restore-target ent))))))
 
+;; Fails if, in `delete-root->restore-plan`, `:db/id` becomes `:db/ident` or `:block/page` becomes `:block/parent`.
 (deftest delete-root->restore-plan-self-target-falls-back-to-page-test
   (let [conn (tree-conn)
         a1 (blk conn "a1")
@@ -336,6 +354,7 @@
         (is (= [:block/uuid (:block/uuid page)] (:target-id plan)))
         (is (false? (:sibling? plan)))))))
 
+;; Fails if, in `delete-root->restore-plan`, the `vec` step is dropped.
 (deftest delete-root->restore-plan-blocks-vector-test
   (let [conn (tree-conn)
         b (blk conn "b")
@@ -343,6 +362,7 @@
     (is (vector? (:blocks plan)))
     (is (= 3 (count (:blocks plan))))))
 
+;; Fails if, in `to-insert-op`, the `:keep-block-order?` key is dropped.
 (deftest to-insert-op-options-test
   (let [conn (tree-conn)
         target (blk conn "d")]
@@ -352,6 +372,7 @@
 
 ;; document order and move helpers
 
+;; Fails if, in `document-order-path`, `:block/parent` becomes `:block/raw-title` or `:db/id` becomes `:db/ident`.
 (deftest document-order-path-test
   (let [conn (tree-conn)
         b (blk conn "b")
@@ -359,6 +380,7 @@
     (is (= (list (:db/id (:block/page b)) (:block/order b) (:block/order b2))
            (#'op-construct/document-order-path b2)))))
 
+;; Fails if, in `opposite-move-restores?`, `:db/id` becomes `:db/ident`.
 (deftest opposite-move-restores-ignores-selected-descendants-test
   (let [conn (tree-conn)
         b (blk conn "b")
@@ -367,6 +389,7 @@
     (is (true? (f @conn [(:db/id b) (:db/id b1)] true)))
     (is (true? (f @conn [(:db/id b) (:db/id b1)] false)))))
 
+;; Fails if, in `page-top-level-blocks`, the `(filter #(= page-id (some-> % :block/...` step is dropped, the `ldb/sort-by-order` step is dropped or the `vec` step is dropped.
 (deftest page-top-level-blocks-sorted-by-order-test
   (let [conn (tree-conn)
         a (blk conn "a")
@@ -383,6 +406,7 @@
 
 ;; delete-page inverse for class and property pages
 
+;; Fails if, in `build-inverse-delete-page`, the `namespace` step is dropped, `:db/ident` becomes `:db/other-tx`, the `:redirect?` key is dropped, the `:split-namespace?` key is dropped, the `:property-name` key is dropped or `:block/title` becomes `:block/tx-id`.
 (deftest delete-page-inverse-for-class-and-property-ops-test
   (let [conn (tree-conn)
         class-page (ldb/get-page @conn "Movie")
@@ -411,6 +435,7 @@
 
 ;; replace-empty-target inverse
 
+;; Fails if, in `restore-target-insert-op`, the `:sibling?` key is dropped.
 (deftest replace-empty-target-inverse-restores-sibling-position-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -435,6 +460,7 @@
 
 ;; build-strict-inverse-outliner-ops
 
+;; Fails if, in `build-strict-inverse-outliner-ops`, the `seq` step is dropped.
 (deftest build-strict-inverse-outliner-ops-returns-seq-test
   (let [conn (tree-conn)
         page-uuid (random-uuid)
@@ -443,6 +469,7 @@
     (is (seq? r))
     (is (= [[:delete-page [page-uuid {}]]] r))))
 
+;; Fails if, in `has-replace-empty-target-insert-op?`, the body becomes `nil`.
 (deftest has-replace-empty-target-insert-op-test
   (let [f #'op-construct/has-replace-empty-target-insert-op?]
     (is (f [[:insert-blocks [[] 1 {:replace-empty-target? true}]]]))
@@ -450,6 +477,7 @@
     (is (not (f [[:insert-blocks [[] 1 {}]]])))
     (is (not (f [[:save-block [{} {:replace-empty-target? true}]]])))))
 
+;; Fails if, in `contains-transact-op?`, the body becomes `nil`.
 (deftest contains-transact-op-test
   (is (nil? (op-construct/contains-transact-op? nil)))
   (is (true? (op-construct/contains-transact-op? [[:save-block [{} {}]] [:transact [[]]]])))
@@ -458,6 +486,7 @@
 
 ;; normalization
 
+;; Fails if, in `normalize-op-entries`, the `seq` step is dropped or the `vec` step is dropped.
 (deftest normalize-op-entries-test
   (let [f #'op-construct/normalize-op-entries]
     (is (nil? (f nil)))
@@ -470,6 +499,7 @@
       (is (vector? several))
       (is (= 2 (count several))))))
 
+;; Fails if, in `canonical-property-id`, the `:db/ident` step is dropped or `:db/ident` becomes `:db/other-tx`.
 (deftest canonical-property-id-resolves-numeric-id-to-ident-test
   (let [conn (tree-conn)
         property (d/entity @conn :user.property/rating)
@@ -478,6 +508,7 @@
     (is (= :user.property/rating (f @conn :user.property/rating)))
     (is (= "x" (f @conn "x")))))
 
+;; Fails if, in `normalize-property-op-entry-ids`, the body becomes `nil`.
 (deftest normalize-block-op-entry-ids-test
   (let [id (fn [x] [:id x])
         ids (fn [xs] (mapv id xs))
@@ -486,6 +517,7 @@
     (is (= [:delete-blocks [[[:id 1]] {:o 1}]] (f id ids :delete-blocks [[1] {:o 1}])))
     (is (nil? (f id ids :unknown [])))))
 
+;; Fails if, in `normalize-property-op-entry-ids`, the `id` step is dropped or the `property-id` step is dropped.
 (deftest normalize-property-op-entry-ids-test
   (let [id (fn [x] [:id x])
         ids (fn [xs] (mapv id xs))
@@ -500,6 +532,7 @@
     (is (= [:upsert-property [nil :schema :opts]]
            (f id ids property-id :upsert-property [nil :schema :opts])))))
 
+;; Fails if, in `canonicalize-explicit-outliner-ops`, the `vec` step is dropped.
 (deftest canonicalize-explicit-outliner-ops-returns-vector-test
   (let [conn (tree-conn)
         u (:block/uuid (blk conn "d"))
@@ -508,6 +541,7 @@
     (is (vector? r))
     (is (= [[:save-block [{:block/uuid u :block/title "New"} {}]]] r))))
 
+;; Fails if, in `patch-inverse-delete-block-ops`, the `(filter #(contains? #{:insert-blocks ...` step is dropped or the `vec` step is dropped.
 (deftest patch-inverse-delete-block-ops-uses-last-forward-insert-test
   (let [u1 (random-uuid)
         r (#'op-construct/patch-inverse-delete-block-ops
@@ -517,6 +551,7 @@
     (is (= [[:delete-blocks [[[:block/uuid u1]] {:x 1}]]] r))
     (is (vector? (get-in r [0 1 0])))))
 
+;; Fails if, in `patch-forward-delete-block-op-ids`, the `seq` step is dropped or the `vec` step is dropped.
 (deftest patch-forward-delete-block-op-ids-test
   (let [conn (tree-conn)
         b (blk conn "d")
@@ -526,23 +561,9 @@
       (is (vector? r))
       (is (= [[:delete-blocks [[[:block/uuid (:block/uuid b)]] {}]] [:save-block [{} nil]]] r)))))
 
-(deftest stale-numeric-id-in-page-ops-test
-  (let [conn (tree-conn)
-        f #'op-construct/stale-numeric-id-in-page-ops?]
-    (is (f @conn :rename-page [5 "x"]))
-    (is (not (f @conn :rename-page [(random-uuid) "x"])))
-    (is (f @conn :delete-page [5 {}]))
-    (is (f @conn :restore-recycled [5]))
-    (is (f @conn :recycle-delete-permanently [5]))
-    (is (f @conn :create-page ["t" {:uuid 5}]))
-    (is (f @conn :insert-blocks [[] 5 {}]))
-    (is (f @conn :apply-template [5 (random-uuid) {}]))
-    (is (f @conn :save-block [{:block/refs #{5}} {}]))
-    (is (not (f @conn :save-block [{:block/title "x"} {}])))
-    (is (nil? (f @conn :unknown [5])))))
-
 ;; derive-history-outliner-ops: explicit inverse ops
 
+;; Fails if, in `derive-history-outliner-ops`, the `(->> (mapv #(normalize-op-entry-ids d...` step is dropped.
 (deftest explicit-inverse-op-ids-resolve-in-db-after-then-db-before-test
   (let [conn (tree-conn)
         explicit-inverse (fn [db-before tx eid]

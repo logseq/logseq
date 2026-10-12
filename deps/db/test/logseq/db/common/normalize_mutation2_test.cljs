@@ -18,6 +18,7 @@
   [db block-uuid]
   (:db/id (d/entity db [:block/uuid block-uuid])))
 
+;; Fails if, in `replace-attr-retract-with-retract-entity-v2`, the `(remove-retract-entity-ref db)` step is dropped.
 (deftest replace-attr-retract-with-retract-entity-v2-drops-datoms-of-retracted-entities
   (let [gone-uuid (random-uuid)
         kept-uuid (random-uuid)
@@ -30,6 +31,7 @@
              [:db/add [:block/uuid gone-uuid] :block/title "gone" 1]
              [:db/add [:block/uuid kept-uuid] :block/title "kept" 1]])))))
 
+;; Fails if, in `replace-attr-retract-with-retract-entity`, `:db/id` becomes `:db/ident`.
 (deftest replace-attr-retract-with-retract-entity-keeps-datoms-of-unchanged-eids
   (let [gone-uuid (random-uuid)
         kept-uuid (random-uuid)
@@ -46,6 +48,8 @@
             db-after
             [gone-retract gone-title-retract same-eid-retract moved-retract])))))
 
+;; Fails if, in `eid->lookup`, `:db/ident` becomes `:db/retract`.
+;; Fails if, in `eid->tempid`, `:db/ident` becomes `:db/retract`.
 (deftest eid->lookup-and-eid->tempid-fall-back-to-ident
   (let [block-uuid (random-uuid)
         db (db-with [{:db/ident :test/some-ident}
@@ -59,6 +63,8 @@
     (is (nil? (normalize/eid->lookup db 900001)))
     (is (nil? (normalize/eid->tempid db 900001)))))
 
+;; Fails if, in `sort-datoms`, `:db/ident` becomes `:db/retract`, `:db/valueType` becomes `:db/add` or `:db/cardinality` becomes `:db/id`.
+;; Fails if, in `normalize-tx-data`, the `sort-datoms` step is dropped.
 (deftest normalize-tx-data-puts-schema-attributes-first
   (let [block-uuid (random-uuid)
         db (db-with [{:block/uuid block-uuid}])
@@ -75,6 +81,7 @@
              (d/datom eid :db/valueType :db.type/ref 7 true)
              (d/datom eid :db/ident :test/new-attr 7 true)])))))
 
+;; Fails if, in `normalize-tx-data`, the `reorder-retract-entity` step is dropped.
 (deftest normalize-tx-data-moves-retract-entity-after-other-items
   (let [gone-uuid (random-uuid)
         kept-uuid (random-uuid)
@@ -87,6 +94,7 @@
             [(d/datom (eid-of db-before gone-uuid) :block/uuid gone-uuid 5 false)
              (d/datom (eid-of db-before kept-uuid) :block/title "kept" 6 true)])))))
 
+;; Fails if, in `normalize-tx-data`, the `distinct` step is dropped.
 (deftest normalize-tx-data-removes-duplicate-retract-entity
   (let [gone-uuid (random-uuid)
         db-before (db-with [{:block/uuid gone-uuid}])
@@ -97,6 +105,7 @@
             [(d/datom 900001 :block/uuid gone-uuid 5 false)
              (d/datom 900002 :block/uuid gone-uuid 5 false)])))))
 
+;; Fails if, in `ref-value-type?`, `:db/valueType` becomes `:db/add`.
 (deftest normalize-datom-resolves-ref-value-known-only-to-db-after
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

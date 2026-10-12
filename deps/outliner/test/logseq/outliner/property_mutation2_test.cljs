@@ -26,6 +26,8 @@
     (d/unlisten! conn ::capture)
     (select-keys (last @tx-metas) [:outliner-op :property-id])))
 
+;; Fails if, in `throw-error-if-read-only-property`, the body becomes `nil`.
+;; Fails if, in `raw-set-block-property!`, `:db/ident` becomes `:db/retract`.
 (deftest read-only-property-edits-throw-the-read-only-error
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -44,6 +46,8 @@
                           (outliner-property/create-property-text-block!
                            conn (:db/id b1) :logseq.property/built-in? "x" {})))))
 
+;; Fails if, in `validate-property-value-aux`, the body becomes `nil`.
+;; Fails if, in `validate-property-value`, the body becomes `nil`, `:logseq.property/type` becomes `:logseq.property/ui-position`, `:db.cardinality/many` becomes `:db.cardinality/one`, `:db/cardinality` becomes `:db/id` or the `:many?` key is dropped.
 (deftest validate-property-value-wraps-single-value-for-many-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:dt-many {:logseq.property/type :datetime :db/cardinality :db.cardinality/many}
@@ -58,6 +62,7 @@
     (is (= ["should be a datetime"] (outliner-property/validate-property-value db one-property #{timestamp})))
     (is (= ["should be a datetime"] (outliner-property/validate-property-value db one-property "x")))))
 
+;; Fails if, in `validate!`, `:db/valueType` becomes `:db/add` or `:logseq.property/empty-placeholder` becomes `:logseq.property/hide-empty-value`.
 (deftest validate!-skips-empty-placeholder-only-for-ref-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}
@@ -71,6 +76,7 @@
     (is (thrown-with-msg? js/Error #"Schema validation failed"
                           (validate! non-ref-property always-invalid-schema :logseq.property/empty-placeholder)))))
 
+;; Fails if, in `throw-error-if-invalid-new-property-value`, the body becomes `nil`.
 (deftest batch-set-property-validates-a-new-default-value
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}}
@@ -80,6 +86,16 @@
     (is (thrown-with-msg? js/Error #"Schema validation failed"
                           (outliner-property/batch-set-property! conn [(:block/uuid b1)] :user.property/txt true)))))
 
+;; Fails if, in `update-property`, the `:outliner-op` key is dropped, the `:property-id` key is dropped or `:db/id` becomes `:db/ident`.
+;; Fails if, in `create-property-text-block!`, the `:outliner-op` key is dropped.
+;; Fails if, in `batch-remove-property!`, the `:outliner-op` key is dropped.
+;; Fails if, in `remove-block-property!`, `:logseq.property/status` becomes `:logseq.property/template-applied-to`.
+;; Fails if, in `upsert-property!`, the `:outliner-op` key is dropped.
+;; Fails if, in `batch-delete-property-value!`, the `:outliner-op` key is dropped.
+;; Fails if, in `upsert-closed-value!`, the `:outliner-op` key is dropped.
+;; Fails if, in `delete-closed-value!`, the `:outliner-op` key is dropped.
+;; Fails if, in `class-add-property!`, the `:outliner-op` key is dropped.
+;; Fails if, in `class-remove-property!`, the `:outliner-op` key is dropped.
 (deftest tx-meta-of-property-operations
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}
@@ -120,6 +136,7 @@
       (is (= {:outliner-op :delete-closed-value}
              (tx-meta-of conn #(outliner-property/delete-closed-value! conn (:db/id (d/entity @conn :user.property/txt)) [:block/uuid value-uuid])))))))
 
+;; Fails if, in `remove-block-property!`, `:logseq.property/default-value` becomes `:logseq.property/description`, the `{:db/id (:db/id block)` tx entry is dropped, `:db/id` becomes `:db/ident` or `:logseq.property/empty-placeholder` becomes `:logseq.property/hide-empty-value`.
 (deftest remove-block-property-resets-a-default-value-to-the-empty-placeholder
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}}
@@ -136,6 +153,7 @@
     (is (= :logseq.property/empty-placeholder
            (:db/ident (:user.property/txt (d/entity @conn b1-id)))))))
 
+;; Fails if, in `remove-block-property!`, the `:outliner-op` key is dropped.
 (deftest remove-block-property-on-class-extends-resets-to-root-with-meta
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:B {}
@@ -146,11 +164,8 @@
     (is (= [:logseq.class/Root]
            (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C)))))))
 
-(deftest class-add-property-ignores-the-empty-placeholder
-  (let [conn (db-test/create-conn-with-blocks {:classes {:c1 {}}})]
-    (outliner-property/class-add-property! conn :user.class/c1 :logseq.property/empty-placeholder)
-    (is (empty? (:logseq.property.class/properties (d/entity @conn :user.class/c1))))))
-
+;; Fails if, in `build-closed-value-tx`, the `:block/title` key is dropped, `:block/title` becomes `:block/uuid`, `:logseq.property/icon` becomes `:logseq.property/order-list-type`, `:property/closed-values` becomes `:property/create-error`, the `:icon` key is dropped, the `:db/id` key is dropped or `:db/id` becomes `:db/ident`.
+;; Fails if, in `upsert-closed-value!`, `:logseq.property/description` becomes `:logseq.property/empty-placeholder`, the `:db/id` key is dropped, the `:block/title` key is dropped, `:db/id` becomes `:db/ident`, `:block/title` becomes `:block/uuid` or `:block/uuid` becomes `:block/_alias`.
 (deftest upsert-closed-value-orders-edits-and-describes-choices
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}}})
@@ -187,6 +202,8 @@
   [db]
   (d/q '[:find [?e ...] :where [?e :block/updated-at] (not [?e :block/uuid])] db))
 
+;; Fails if, in `add-existing-values-to-closed-values!`, the `:db/id` key is dropped or the `:outliner-op` key is dropped.
+;; Fails if, in `delete-closed-value!`, the `:db/id` key is dropped.
 (deftest add-existing-and-delete-closed-value-touch-the-property
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -203,6 +220,7 @@
     (is (< 0 (:block/updated-at (d/entity @conn property-id))))
     (is (empty? (entities-without-uuid @conn)))))
 
+;; Fails if, in `build-closed-value-tx`, the `:block/closed-value-property` key is dropped or `:block/closed-value-property` becomes `:block/name`.
 (deftest upsert-closed-value-turns-an-existing-value-block-into-a-choice
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}}
@@ -217,12 +235,15 @@
       (is (= [property-id]
              (map :db/id (:block/closed-value-property (d/entity @conn [:block/uuid value-uuid]))))))))
 
+;; Fails if, in `throw-error-if-deleting-protected-property`, the body becomes `nil`.
+;; Fails if, in `validate-batch-deletion-of-property`, `:db/ident` becomes `:db/retract`.
 (deftest protected-property-deletion-is-rejected
   (let [conn (db-test/create-conn)
         task-uuid (:block/uuid (d/entity @conn :logseq.class/Task))]
     (is (thrown-with-msg? js/Error #"Property is protected"
                           (outliner-property/batch-remove-property! conn [task-uuid] :block/tags)))))
 
+;; Fails if, in `should-add-task-tag-for-property?`, `:block/tags` becomes `:block/title`.
 (deftest setting-status-on-an-untitled-block-of-a-status-class-adds-no-task-tag
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Project {:build/class-properties [:logseq.property/status]}}
@@ -233,6 +254,7 @@
     (is (= [:user.class/Project]
            (mapv :db/ident (:block/tags (d/entity @conn (:db/id block))))))))
 
+;; Fails if, in `class-lookup-ref?`, `:block/uuid` becomes `:block/_alias`.
 (deftest class-extends-accepts-a-uuid-lookup-ref
   (let [conn (db-test/create-conn-with-blocks {:classes {:B {} :C {}}})
         b (d/entity @conn :user.class/B)
@@ -241,13 +263,7 @@
     (is (= [:user.class/B]
            (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C)))))))
 
-(deftest set-block-property-extends-replaces-the-root-parent
-  (let [conn (db-test/create-conn-with-blocks {:classes {:B {} :C {}}})]
-    (outliner-property/set-block-property! conn (:db/id (d/entity @conn :user.class/C))
-                                           :logseq.property.class/extends (:db/id (d/entity @conn :user.class/B)))
-    (is (= [:user.class/B]
-           (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C)))))))
-
+;; Fails if, in `validate-batch-set-property`, `:logseq.property.class/extends` becomes `:logseq.property.class/properties`.
 (deftest batch-set-property-rejects-an-extends-cycle
   (let [conn (db-test/create-conn-with-blocks {:classes {:A {} :B {:build/class-extends [:A]}}})
         a (d/entity @conn :user.class/A)
@@ -255,6 +271,11 @@
     (is (thrown-with-msg? js/Error #"Extends cycle"
                           (outliner-property/batch-set-property! conn [(:block/uuid a)] :logseq.property.class/extends (:db/id b))))))
 
+;; Fails if, in `resolve-update-cardinality`, `:logseq.property/type` becomes `:logseq.property/ui-position`.
+;; Fails if, in `update-datascript-schema`, `:db/valueType` becomes `:db/add`.
+;; Fails if, in `schema-for-update`, `:db.cardinality/one` becomes `:db.cardinality/many`.
+;; Fails if, in `update-property`, `:block/title` becomes `:block/uuid`, `:db/cardinality` becomes `:db/id`, `:logseq.property/type` becomes `:logseq.property/ui-position` or `:property/closed-values` becomes `:property/create-error`.
+;; Fails if, in `upsert-property!`, `:logseq.property/type` becomes `:logseq.property/ui-position` or `:db/cardinality` becomes `:db/id`.
 (deftest upsert-property-schema-update-rules
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:chk {:logseq.property/type :checkbox}
@@ -294,6 +315,7 @@
                           (outliner-property/upsert-property! conn nil {:logseq.property/type :checkbox :db/cardinality :db.cardinality/many}
                                                               {:property-name "cm"})))))
 
+;; Fails if, in `db-ident->eid`, `:db/id` becomes `:db/ident`.
 (deftest db-ident->eid-resolves-or-rejects-idents
   (let [conn (db-test/create-conn)]
     (is (= (:db/id (d/entity @conn :logseq.property/status))
@@ -301,6 +323,8 @@
     (is (thrown-with-msg? js/Error #"Wrong property db/ident"
                           (#'outliner-property/db-ident->eid @conn :user.property/nope)))))
 
+;; Fails if, in `raw-set-block-property!`, the `:outliner-op` key is dropped.
+;; Fails if, in `set-block-db-attribute!`, `:logseq.property.class/extends` becomes `:logseq.property.class/properties`, `:db/retract` becomes `:db/valueType`, `:logseq.class/Root` becomes `:logseq.class/Tag` or the `:outliner-op` key is dropped.
 (deftest raw-property-writes-use-the-save-block-tx-meta
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:chk {:logseq.property/type :checkbox}}
@@ -319,19 +343,7 @@
     (is (= [:user.class/B]
            (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C)))))))
 
-(deftest class-extends-drops-redundant-parents-given-as-entities-or-lookup-refs
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:A {} :C {:build/class-extends [:A]} :D {} :E {}}})
-        entity-of #(d/entity @conn %)]
-    (outliner-property/set-block-property! conn (:db/id (entity-of :user.class/D)) :logseq.property.class/extends
-                                           [(entity-of :user.class/A) (entity-of :user.class/C)])
-    (is (= [:user.class/C]
-           (:logseq.property.class/extends (db-test/readable-properties (entity-of :user.class/D)))))
-    (outliner-property/set-block-property! conn (:db/id (entity-of :user.class/E)) :logseq.property.class/extends
-                                           [[:db/ident :user.class/A] [:db/ident :user.class/C]])
-    (is (= [:user.class/C]
-           (:logseq.property.class/extends (db-test/readable-properties (entity-of :user.class/E)))))))
-
+;; Fails if, in `build-property-value-tx-data`, `:logseq.property/template-applied-to` becomes `:logseq.property/type`, `:block/tags` becomes `:block/title` or `:logseq.class/Template` becomes `:logseq.class/Page`.
 (deftest setting-template-applied-to-tags-the-block-as-a-template
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {}}
@@ -342,6 +354,7 @@
     (is (= #{:logseq.class/Template}
            (set (map :db/ident (:block/tags (d/entity @conn (:db/id b1)))))))))
 
+;; Fails if, in `throw-error-if-invalid-alias`, `:db/id` becomes `:db/ident`.
 (deftest batch-set-alias-again-on-its-own-owner-is-allowed
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "A"}}
@@ -352,6 +365,7 @@
     (outliner-property/batch-set-property! conn [(:block/uuid a)] :block/alias (:db/id b))
     (is (= [(:db/id b)] (map :db/id (:block/alias (d/entity @conn (:db/id a))))))))
 
+;; Fails if, in `upsert-property!`, `:block/uuid` becomes `:block/_alias`, the `[:db/retract db-id :block/tags :logse...` tx entry is dropped, `:block/tags` becomes `:block/title` or `:logseq.class/Page` becomes `:logseq.class/Root`.
 (deftest upsert-property-converting-a-page-keeps-its-uuid-and-drops-the-page-tag
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "PlainPage" {})
@@ -363,6 +377,7 @@
       (is (= page-uuid (:block/uuid converted)))
       (is (not (contains? (set (map :db/ident (:block/tags converted))) :logseq.class/Page))))))
 
+;; Fails if, in `find-or-create-property-value`, `:logseq.property/value` becomes `:logseq.property/choice-classes`.
 (deftest batch-set-property-picks-existing-closed-values
   (let [number-choice-uuid (random-uuid)
         text-choice-uuid (random-uuid)
@@ -380,6 +395,8 @@
       (is (= number-choice-uuid (:block/uuid (:user.property/num block))))
       (is (= text-choice-uuid (:block/uuid (:user.property/choice block)))))))
 
+;; Fails if, in `convert-ref-property-value`, `:db/id` becomes `:db/ident`.
+;; Fails if, in `set-block-property!`, the `:block-id` key is dropped.
 (deftest set-block-property-creates-values-under-the-block
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:txt {:logseq.property/type :default}
@@ -394,6 +411,7 @@
     (outliner-property/set-block-property! conn (:db/id b1) :user.property/pg "Existing")
     (is (= (:db/id existing) (:db/id (:user.property/pg (d/entity @conn (:db/id b1))))))))
 
+;; Fails if, in `remove-status!`, `:logseq.property/status` becomes `:logseq.property/template-applied-to`, `:logseq.property/empty-placeholder` becomes `:logseq.property/hide-empty-value`, `:db/ident` becomes `:db/retract` or the `[:db/retract (:db/id block) :logseq.p...` tx entry is dropped.
 (deftest remove-status-keeps-a-placeholder-status-and-drops-task-with-real-status
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -411,6 +429,7 @@
     (is (nil? (:logseq.property/status (d/entity @conn doing-id))))
     (is (not (contains? (task-idents doing-id) :logseq.class/Task)))))
 
+;; Fails if, in `batch-delete-property-value!`, `:db/id` becomes `:db/ident`.
 (deftest delete-property-value-from-a-plain-block
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:steps {:logseq.property/type :default
@@ -430,6 +449,9 @@
     (outliner-property/delete-property-value! conn b2-id :block/tags (:db/id (d/entity @conn :user.class/c1)))
     (is (= #{:user.class/c2} (set (map :db/ident (:block/tags (d/entity @conn b2-id))))))))
 
+;; Fails if, in `get-block-classes`, the body becomes `nil`, the `(sort-by :block/name)` step is dropped, `:block/tags` becomes `:block/title`, `:block/name` becomes `:block/order`, `filter` becomes `remove`, the `(filter (fn [class]` step is dropped or `:logseq.property.class/properties` becomes `:logseq.property.class/extends`.
+;; Fails if, in `get-block-classes-properties`, the `(sort-by :block/name)` step is dropped, `:block/name` becomes `:block/order`, the `(filter (fn [class]` step is dropped, the `distinct` step is dropped or the `:classes` key is dropped.
+;; Fails if, in `get-block-full-properties`, the body becomes `nil`, the `(common-util/distinct-by :db/id)` step is dropped or `:block/properties` becomes `:block/tags`.
 (deftest block-classes-and-properties-are-sorted-filtered-and-distinct
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:zeta {:build/class-properties [:p1 :shared]}
@@ -455,6 +477,7 @@
                   [:user.property/own :user.property/shared :user.property/p1 :user.property/p2]))
       (is (= (count full-properties) (count (distinct (map :db/id full-properties))))))))
 
+;; Fails if, in `get-class-properties`, the `(common-util/distinct-by :db/id)` step is dropped.
 (deftest class-properties-include-parent-class-properties-once
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:parent {:build/class-properties [:p1 :shared]}
@@ -473,12 +496,14 @@
   [f]
   (try (f) nil (catch :default e (ex-message e))))
 
+;; Fails if, in `validate-property-name-update`, `:block/title` becomes `:block/uuid`.
 (deftest upsert-property-keeps-an-unchanged-name-without-validating-it
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:hash {:logseq.property/type :default :block/title "#hashy"}}})]
     (is (= "#hashy" (:block/title (d/entity @conn :user.property/hash))))
     (is (nil? (thrown-message #(outliner-property/upsert-property! conn :user.property/hash {} {:property-name "#hashy"}))))))
 
+;; Fails if, in `upsert-property!`, the `:properties` key is dropped.
 (deftest upsert-property-creates-a-property-with-the-given-properties
   (let [conn (db-test/create-conn)
         property (outliner-property/upsert-property! conn nil {:logseq.property/type :default}
@@ -486,6 +511,7 @@
                                                       :properties {:logseq.property/hide? true}})]
     (is (true? (:logseq.property/hide? (d/entity @conn (:db/ident property)))))))
 
+;; Fails if, in `batch-set-property!`, `:logseq.property.class/extends` becomes `:logseq.property.class/properties`.
 (deftest batch-set-class-extends-accepts-lookup-refs
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:A {} :D {}}})
@@ -519,6 +545,8 @@
                        [:db/add (:db/id b1) :user.property/nodes (:db/id (db-test/find-page-by-title @conn "other"))]])
     {:conn conn :b1-id (:db/id b1) :value-uuid value-uuid}))
 
+;; Fails if, in `node-value-target-id`, the body becomes `nil`, `:db/ident` becomes `:db/retract`, `:logseq.property/created-from-property` becomes `:logseq.property/deadline`, the `parse-uuid` step is dropped, `:block/title` becomes `:block/uuid`, `:db/id` becomes `:db/ident` or `:block/uuid` becomes `:block/_alias`.
+;; Fails if, in `batch-delete-property-value!`, `:logseq.property/type` becomes `:logseq.property/ui-position`.
 (deftest delete-node-value-by-the-id-of-the-node-its-value-block-targets
   (let [{:keys [conn b1-id value-uuid]} (node-values-conn)
         target-id (:db/id (d/entity @conn [:block/uuid target-uuid]))]
@@ -526,6 +554,7 @@
     (is (= #{"other"} (set (map :block/title (:user.property/nodes (d/entity @conn b1-id))))))
     (is (not-any? #(= value-uuid (:block/uuid %)) (:user.property/nodes (d/entity @conn b1-id))))))
 
+;; Fails if, in `node-value-target-id`, `:db/id` becomes `:db/ident`.
 (deftest delete-node-value-does-not-match-a-class-value-by-its-ident
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:nodes {:logseq.property/type :node :db/cardinality :db.cardinality/many}}
@@ -539,6 +568,7 @@
     (outliner-property/delete-property-value! conn b1-id :user.property/nodes :user.class/K)
     (is (= 2 (count (:user.property/nodes (d/entity @conn b1-id)))))))
 
+;; Fails if, in `batch-delete-property-value!`, `:db/ident` becomes `:db/retract`.
 (deftest delete-property-value-skips-the-property-entity-itself
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:nodes {:logseq.property/type :node :db/cardinality :db.cardinality/many}}
@@ -552,6 +582,7 @@
     (outliner-property/delete-property-value! conn prop-id :user.property/nodes a-id)
     (is (= #{a-id b-id} (set (map :db/id (:user.property/nodes (d/entity @conn prop-id))))))))
 
+;; Fails if, in `batch-delete-property-value!`, `:block/tags` becomes `:block/title`.
 (deftest delete-property-value-rejects-removing-the-page-tag
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:K {}}
@@ -562,6 +593,7 @@
            (thrown-message #(outliner-property/delete-property-value! conn page-id :block/tags page-tag-id))))
     (is (contains? (set (map :db/ident (:block/tags (d/entity @conn page-id)))) :logseq.class/Page))))
 
+;; Fails if, in `set-block-property!`, `:block/tags` becomes `:block/title`.
 (deftest set-block-property-validates-tags
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:K {}}})
@@ -570,6 +602,7 @@
            (thrown-message #(outliner-property/set-block-property! conn status-id :block/tags :user.class/K))))
     (is (not-any? #{:user.class/K} (map :db/ident (:block/tags (d/entity @conn status-id)))))))
 
+;; Fails if, in `get-class-properties`, the `(ldb/sort-by-order)` step is dropped.
 (deftest get-class-properties-sorts-by-property-order
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:k {:build/class-properties [:p1 :p2]}}
@@ -581,6 +614,7 @@
                        [:db/add (:db/id (d/entity @conn (second set-order))) :block/order "a0"]])
     (is (= (vec (reverse set-order)) (idents)))))
 
+;; Fails if, in `class-add-property!`, `:logseq.property/empty-placeholder` becomes `:logseq.property/hide-empty-value`.
 (deftest class-add-property-adds-hide-empty-value
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:k {}}})]

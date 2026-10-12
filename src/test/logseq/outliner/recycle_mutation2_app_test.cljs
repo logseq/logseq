@@ -45,6 +45,7 @@
                  (recycle/recycle-page-tx-data @conn (d/entity @conn id) {})
                  {:outliner-op :delete-page}))
 
+;; Fails if, in `recycle-blocks-tx-data`, `:block/_parent` becomes `:block/_raw-parent`.
 (deftest recycle-blocks-ignores-property-value-children-of-recycle-page
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -57,6 +58,7 @@
       (recycle-block! conn b1)
       (is (= (next-order o2) (order-of conn b1))))))
 
+;; Fails if, in `next-child-order`, `:block/_parent` becomes `:block/_raw-parent`.
 (deftest recycle-page-ignores-property-value-children-of-recycle-page
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "p1"}}
@@ -69,6 +71,7 @@
       (recycle-page! conn p2)
       (is (= (next-order o1) (order-of conn p2))))))
 
+;; Fails if, in `relink-waiting-children-tx`, `:block/_parent` becomes `:block/_raw-parent`.
 (deftest restore-page-orders-waiting-child-ignoring-property-value-children
   (let [conn (db-test/create-conn)
         [_ bar-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})

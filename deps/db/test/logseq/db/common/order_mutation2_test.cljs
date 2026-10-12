@@ -35,12 +35,14 @@
                     :block/tags :logseq.class/Page
                     :block/parent "parent"}]))))
 
+;; Fails if, in `get-max-order`, the body becomes `nil`.
 (deftest get-max-order-returns-the-greatest-order
   (let [conn (db-test/create-conn)]
     (transact-parent-with-siblings! conn ["zz" "zb"])
     (is (= "zz" (db-order/get-max-order @conn))
         "get-max-order returns the largest :block/order in the db.")))
 
+;; Fails if, in `missing-internal-page-parent-order-tx`, the `(filter string?)` step is dropped.
 (deftest missing-internal-page-parent-order-tx-ignores-non-string-sibling-orders
   (let [conn (db-test/create-conn)]
     (transact-parent-with-siblings! conn ["a5" 7 "a1"])
@@ -48,6 +50,7 @@
       (is (= 1 (count tx)))
       (is (pos? (compare (:block/order (first tx)) "a5"))))))
 
+;; Fails if, in `missing-internal-page-parent-order-tx`, the `sort` step is dropped.
 (deftest missing-internal-page-parent-order-tx-sorts-above-the-greatest-sibling-order
   (let [conn (db-test/create-conn)]
     (transact-parent-with-siblings! conn ["a5" "a3" "a1"])

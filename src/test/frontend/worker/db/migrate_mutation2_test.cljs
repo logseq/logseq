@@ -6,6 +6,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
+;; Fails if, in `schema-version->updates`, the `:fix` key is dropped, the `:properties` key is dropped, `:block/journal-day` becomes `:block/name`, `:logseq.property.view/sort-groups-by-property` becomes `:logseq.property.view/sort-groups-desc?`, `:logseq.property.view/sort-groups-desc?` becomes `:logseq.property.view/gallery-asset-property`, `:logseq.property.asset/width` becomes `:logseq.property.asset/align`, `:logseq.property.asset/height` becomes `:logseq.property.asset/width`, `:logseq.property.asset/external-src` becomes `:logseq.property.asset/height`, `:logseq.property.asset/external-file-name` becomes `:logseq.property.asset/external-src`, `:logseq.property/choice-classes` becomes `:logseq.property/choice-exclusions`, `:logseq.property/choice-exclusions` becomes `:logseq.property/deleted-at`, `:logseq.property.class/bidirectional-property-title` becomes `:logseq.property.class/enable-bidirectional?`, `:logseq.property.class/enable-bidirectional?` becomes `:logseq.property.class/extends`, `:logseq.property.reaction/emoji-id` becomes `:logseq.property.reaction/target`, `:logseq.property.reaction/target` becomes `:logseq.property.reaction/emoji-id`, `:logseq.property.asset/align` becomes `:logseq.property.asset/external-file-name`, `:logseq.property/deleted-at` becomes `:logseq.property/deleted-by-ref`, `:logseq.property/deleted-by-ref` becomes `:logseq.property/type`, `:logseq.property.recycle/original-parent` becomes `:logseq.property.recycle/original-order`, `:logseq.property.recycle/original-page` becomes `:logseq.property.recycle/original-parent`, `:logseq.property.recycle/original-order` becomes `:logseq.property.recycle/original-page`, the `:delete-properties` key is dropped, `:block/pre-block?` becomes `:block/tags`, `:logseq.property.embedding/hnsw-label` becomes `:logseq.property.embedding/hnsw-label-updated-at`, `:logseq.property.embedding/hnsw-label-updated-at` becomes `:logseq.property.embedding/hnsw-label`, the `:classes` key is dropped, `:logseq.class/Comments` becomes `:logseq.class/Journal`, `:logseq.property/assignee` becomes `:logseq.property/built-in?`, `:logseq.property.view/gallery-asset-property` becomes `:logseq.property.view/gallery-card-height`, `:logseq.property.view/gallery-display-properties` becomes `:logseq.property.view/sort-groups-by-property`, `:logseq.property.view/gallery-card-size` becomes `:logseq.property.view/gallery-card-width`, `:logseq.property.view/gallery-card-width` becomes `:logseq.property.view/gallery-display-properties` or `:logseq.property.view/gallery-card-height` becomes `:logseq.property.view/gallery-card-size`.
 (deftest schema-version->updates-table-test
   (is (= [["65.7" {:fix @#'db-migrate/add-quick-add-page}]
           ["65.8" {:fix @#'db-migrate/add-missing-page-name}]
@@ -53,6 +54,7 @@
           ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]]
          db-migrate/schema-version->updates)))
 
+;; Fails if, in `remove-block-path-refs`, the body becomes `nil` or `:block/path-refs` becomes `:block/pre-block?`.
 (deftest remove-block-path-refs-retracts-path-refs-test
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/id 1 :block/title "a"}
@@ -60,6 +62,7 @@
     (is (some #{[:db/retract 2 :block/path-refs]}
               (db-migrate/remove-block-path-refs @conn)))))
 
+;; Fails if, in `repair-comment-classes-and-targets`, `:db/id` becomes `:db/ident` or `:block/order` becomes `:block/parent`.
 (deftest repair-comment-classes-retracts-block-order-test
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/id 1 :db/ident :logseq.class/Root}
@@ -76,12 +79,14 @@
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     conn))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `:block/title` becomes `:block/uuid`.
 (deftest ensure-built-in-data-skips-contents-page-test
   (let [conn (d/create-conn db-schema/schema)]
     (is (some #(= "Contents" (:block/title %)) (sqlite-create-graph/build-db-initial-data "")))
     (db-migrate/ensure-built-in-data-exists! conn)
     (is (empty? (d/q '[:find [?e ...] :where [?e :block/title "Contents"]] @conn)))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `:block/title` becomes `:block/uuid` or `:block/name` becomes `:block/order`.
 (deftest ensure-built-in-data-restores-title-name-and-built-in-flag-test
   (let [conn (initial-conn)
         icon (d/entity @conn :logseq.property/icon)
@@ -99,6 +104,7 @@
       (is (= block-name (:block/name icon')))
       (is (true? (:logseq.property/built-in? icon'))))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `:logseq.property/built-in?` becomes `:logseq.property/choice-classes`.
 (deftest ensure-built-in-data-restores-built-in-flag-of-a-class-test
   (let [conn (initial-conn)
         eid (:db/id (d/entity @conn :logseq.class/Task))]
@@ -106,6 +112,7 @@
     (db-migrate/ensure-built-in-data-exists! conn)
     (is (true? (:logseq.property/built-in? (d/entity @conn :logseq.class/Task))))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `:block/uuid` becomes `:block/journal-day` or `:logseq.property/built-in?` becomes `:logseq.property/choice-classes`.
 (deftest ensure-built-in-data-restores-description-of-a-built-in-property-test
   (let [conn (initial-conn)
         ident :logseq.property.class/enable-bidirectional?
@@ -118,6 +125,7 @@
     (db-migrate/ensure-built-in-data-exists! conn)
     (is (= description (:block/title (:logseq.property/description (d/entity @conn ident)))))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, the `:fix-db?` key is dropped, the `:db-migrate?` key is dropped or the `:fix` key is dropped.
 (deftest ensure-built-in-data-transacts-as-fix-db-migration-test
   (let [conn (d/create-conn db-schema/schema)
         metas (atom [])]
@@ -128,6 +136,7 @@
       (is (= :ensure-built-in-data-exists!
              ((get-in result [:migrate-updates :fix]) nil))))))
 
+;; Fails if, in `upgrade-version!`, the `(map (fn [b] (assoc b :logseq.propert...` step is dropped, `remove` becomes `filter`, `:logseq.class/Page` becomes `:logseq.class/Property`, `:logseq.class/Whiteboard` becomes `:logseq.class/Comment` or the `:db-migrate?` key is dropped.
 (deftest upgrade-version-adds-built-in-properties-and-classes-test
   (let [conn (d/create-conn db-schema/schema)
         metas (atom [])]
@@ -144,6 +153,7 @@
                    :logseq.class/Journal :logseq.class/Whiteboard]]
       (is (true? (:logseq.property/built-in? (d/entity @conn ident))) (str ident)))))
 
+;; Fails if, in `upgrade-version!`, `:logseq.class/Journal` becomes `:logseq.class/Page` or the `;; class already exists, this should ...` step is dropped.
 (deftest upgrade-version-keeps-existing-classes-test
   (let [conn (d/create-conn db-schema/schema)
         page-uuid (:block/uuid (d/entity (let [c (initial-conn)] @c) :logseq.class/Page))]
@@ -158,6 +168,7 @@
       (is (= "Existing page class" (:block/title page))))
     (is (some? (d/entity @conn :logseq.class/Journal)))))
 
+;; Fails if, in `migrate`, the `:from-version` key is dropped or the `:to-version` key is dropped.
 (deftest migrate-reports-from-and-to-versions-test
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version

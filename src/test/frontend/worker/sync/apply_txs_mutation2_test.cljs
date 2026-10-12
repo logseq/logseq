@@ -57,6 +57,7 @@
 
 ;; remote sync conflicts
 
+;; Fails if, in `remote-sync-conflicts`, the `distinct` step is dropped, the `vec` step is dropped, the `a` step is dropped or the `:remote-t` key is dropped.
 (deftest remote-sync-conflicts-lists-distinct-remote-titles-that-differ-from-the-local-block
   (let [conn (three-blocks-conn)
         a (db-test/find-block-by-content @conn "a")
@@ -79,6 +80,7 @@
 
 ;; rebase helpers
 
+;; Fails if, in `rebase-find-existing-left-sibling`, the body becomes `nil` or `:block/uuid` becomes `:block/_raw-parent`.
 (deftest rebase-find-existing-left-sibling-skips-siblings-missing-from-the-current-db
   (let [conn (three-blocks-conn)
         db-before @conn
@@ -91,6 +93,8 @@
         "The nearest left sibling that still exists wins")
     (is (nil? (#'sync-apply/rebase-find-existing-left-sibling @conn a)))))
 
+;; Fails if, in `rebase-target-ref`, `:block/uuid` becomes `:block/_raw-parent`.
+;; Fails if, in `template-parent-ref`, `:block/uuid` becomes `:block/_raw-parent`.
 (deftest rebase-target-ref-and-template-parent-ref-normalize-block-references
   (let [u (random-uuid)]
     (doseq [f [#'sync-apply/rebase-target-ref #'sync-apply/template-parent-ref]]
@@ -103,6 +107,8 @@
     (is (= {:block/uuid "not-a-uuid"} (#'sync-apply/rebase-target-ref {:block/uuid "not-a-uuid"})))
     (is (= {:block/uuid "not-a-uuid"} (#'sync-apply/template-parent-ref {:block/uuid "not-a-uuid"})))))
 
+;; Fails if, in `template-parent-ref`, `:block/uuid` becomes `:block/_raw-parent`.
+;; Fails if, in `sanitize-template-block`, `:db/id` becomes `:db/retract`, the `(d/entity block-id)` step is dropped, the `:block/uuid` step is dropped, `:block/uuid` becomes `:block/_raw-parent`, the `(dissoc :db/id :block/order :block/pa...` step is dropped, the `(update :block/parent template-parent...` step is dropped, `:block/order` becomes `:block/page`, `:block/tx-id` becomes `:block/uuid` or `:block/parent` becomes `:block/pre-block?`.
 (deftest sanitize-template-block-drops-position-data-and-finds-the-uuid
   (let [conn (three-blocks-conn)
         db @conn
@@ -134,6 +140,7 @@
 
 ;; replay of canonical outliner ops
 
+;; Fails if, in `replay-canonical-outliner-op!`, the `:args` key is dropped or the `:reason` key is dropped.
 (deftest replaying-an-op-on-missing-targets-reports-why
   (let [conn (three-blocks-conn)
         missing-uuid (random-uuid)
@@ -156,6 +163,7 @@
     (is (= {:args restore-args :reason :invalid-restore-target :op :restore-recycled}
            (replay-error-data conn :restore-recycled restore-args)))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, `:block/order` becomes `:block/page`.
 (deftest replaying-save-block-ignores-the-recorded-position
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -170,6 +178,7 @@
       (is (= order-before (:block/order b'))
           "The recorded :block/order is dropped, the block keeps its place"))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, `:block/title` becomes `:block/tx-id` or `:block/uuid` becomes `:block/_raw-parent`.
 (deftest replaying-create-page-for-an-existing-page-returns-it
   (let [conn (three-blocks-conn)
         page (ldb/get-page @conn "page1")]
@@ -178,6 +187,7 @@
     (is (= ["page1" (:block/uuid page)]
            (replay! conn :create-page ["page1" {:uuid (:block/uuid page)}])))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, the `:outliner-op` key is dropped.
 (deftest replaying-recycle-ops-tags-the-transaction
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -197,6 +207,7 @@
 
 ;; rebase and meta
 
+;; Fails if, in `sync-fix-tx-meta`, the body becomes `nil`, the `:outliner-op` key is dropped, the `:gen-undo-ops?` key is dropped, the `:db-sync/tx-id` key is dropped or `:db-sync/tx-id` becomes `:db-sync/upload-response-timeout`.
 (deftest sync-fix-tx-meta-marks-a-fix-without-undo
   (let [tx-meta (#'sync-apply/sync-fix-tx-meta)]
     (is (= :fix (:outliner-op tx-meta)))
@@ -204,6 +215,7 @@
     (is (uuid? (:db-sync/tx-id tx-meta)))
     (is (= #{:outliner-op :gen-undo-ops? :db-sync/tx-id} (set (keys tx-meta))))))
 
+;; Fails if, in `rebase-local-op!`, the `:tx-id` key is dropped, the `:status` key is dropped, the `:original-outliner-op` key is dropped, the `:db-sync/inverse-outliner-ops` key is dropped or `:db-sync/inverse-outliner-ops` becomes `:db-sync/large-title-rehydrate-failed`.
 (deftest rebase-local-op-keeps-fix-ops-and-tags-the-replay
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -228,6 +240,7 @@
     (is (= {:tx-id tx-id :status :kept}
            (#'sync-apply/rebase-local-op! nil conn {:tx-id tx-id :outliner-op :fix} @conn)))))
 
+;; Fails if, in `rebase-local-op!`, `:db-sync/replayed-tx-data?` becomes `:db-sync/report-apply-remote-txs-error-failed`, the `normalize-tx-data-for-rebase` step is dropped or `:db-sync/suppress-stale-rebase-transact-failed-log?` becomes `:db-sync/tx-id`.
 (deftest rebase-local-op-replays-recorded-tx-data-when-there-are-no-forward-ops
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -250,6 +263,7 @@
         "The recorded datoms are replayed without their tx ids")
     (is (true? (:db-sync/suppress-stale-rebase-transact-failed-log? inner-tx-meta)))))
 
+;; Fails if, in `reverse-local-txs!`, the `(keep identity)` step is dropped or the `vec` step is dropped.
 (deftest reverse-local-txs-reports-stale-reversals-as-failed
   (let [conn (three-blocks-conn)
         result (sync-apply/reverse-local-txs! conn [{:tx-id 1 :outliner-op :fix}
@@ -260,6 +274,7 @@
 
 ;; reporting
 
+;; Fails if, in `broadcast-sync-conflicts!`, the body becomes `nil`, the `:repo` key is dropped, the `:block-uuid` key is dropped or the `:conflicts` key is dropped.
 (deftest broadcast-sync-conflicts-sends-each-block-once
   (let [u (random-uuid)
         sent (atom [])]
@@ -269,6 +284,7 @@
     (is (= [[:sync-conflicts-updated {:repo "repo" :block-uuid u :conflicts [["repo" u]]}]]
            @sent))))
 
+;; Fails if, in `report-apply-remote-txs-error!`, the body becomes `nil`, the `:error` key is dropped, the `:payload` key is dropped, the `:source` key is dropped, the `:operation` key is dropped, the `:has-local-changes` key is dropped, the `:remote-tx-count` key is dropped, the `:local-tx-count` key is dropped or the `:error-data` key is dropped.
 (deftest report-apply-remote-txs-error-posts-the-failure-context
   (let [posted (atom [])
         error (ex-info "boom" {:code 1})]
@@ -287,6 +303,7 @@
       (is (= {:error-data (str {:code 1})} (:extra payload)))
       (is (not (contains? plain-payload :extra)) "An error without data adds no :extra"))))
 
+;; Fails if, in `fail-if-pending-tx-snapshot-changed!`, the `:repo` key is dropped, the `:local-tx-ids` key is dropped or the `:current-local-tx-ids` key is dropped.
 (deftest fail-if-pending-tx-snapshot-changed-reports-both-snapshots
   (with-redefs [sync-apply/pending-txs (fn [_repo & _] [{:tx-id 2}])]
     (let [data (try
@@ -300,6 +317,7 @@
              data))
       (is (nil? (#'sync-apply/fail-if-pending-tx-snapshot-changed! "repo" [{:tx-id 2}]))))))
 
+;; Fails if, in `finish-apply-remote-txs!`, the `:tx-data` key is dropped or the `:graph-id` key is dropped.
 (deftest finish-apply-remote-txs-rehydrates-large-titles-of-the-remote-data
   (async done
     (let [calls (atom [])
@@ -311,6 +329,7 @@
                        (is (= [["repo" {:tx-data [[:db/add 1 :a 2]] :graph-id "g"}]] @calls))
                        (done)))))))
 
+;; Fails if, in `apply-remote-txs!`, `:db-sync/missing-db` becomes `:db-sync/missing-field`, the `:repo` key is dropped or the `:op` key is dropped.
 (deftest apply-remote-txs-without-a-db-fails-fast-with-its-context
   (let [error (try
                 (sync-apply/apply-remote-txs! "no-such-repo" nil [])
@@ -321,6 +340,7 @@
 
 ;; worker wiring
 
+;; Fails if, in `sync-counts`, the body becomes `nil`, the `:get-datascript-conn` key is dropped, the `:get-client-ops-conn` key is dropped, the `:get-pending-local-tx-count` key is dropped, the `:get-unpushed-asset-ops-count` key is dropped, the `:get-missing-asset-upload-files` key is dropped, the `:get-local-tx` key is dropped, the `:get-local-checksum` key is dropped, the `:get-graph-uuid` key is dropped, the `:latest-remote-tx` key is dropped or the `:latest-remote-checksum` key is dropped.
 (deftest sync-counts-hands-presence-the-worker-lookups-and-the-latest-remote-state
   (let [captured (atom nil)
         original-tx @sync-apply/*repo->latest-remote-tx
@@ -346,6 +366,7 @@
             "r"]
            @captured))))
 
+;; Fails if, in `broadcast-rtc-state!`, the body becomes `nil`.
 (deftest broadcast-rtc-state-sends-the-presence-payload-of-a-client
   (let [sent (atom [])]
     (with-redefs [shared-service/broadcast-to-clients! (fn [& args] (swap! sent conj (vec args)))
@@ -354,18 +375,24 @@
       (#'sync-apply/broadcast-rtc-state! nil))
     (is (= [[:rtc-sync-state [:payload {:repo "r"} true]]] @sent))))
 
+;; Fails if, in `auth-headers`, the body becomes `nil`.
 (deftest auth-headers-come-from-the-id-token
   (with-redefs [sync-auth/auth-headers (fn [token] [:headers token])
                 worker-state/get-id-token (fn [] "tok")]
     (is (= [:headers "tok"] (#'sync-apply/auth-headers)))))
 
+;; Fails if, in `ws-ready-state`, the body becomes `nil`.
 (deftest ws-ready-state-reads-the-socket-or-nothing
   (is (nil? (#'sync-apply/ws-ready-state nil)))
   (is (= 1 (#'sync-apply/ws-ready-state #js {:readyState 1}))))
 
+;; Fails if, in `perf-time-ms`, the body becomes `nil`.
 (deftest perf-time-ms-is-a-number
   (is (number? (#'sync-apply/perf-time-ms))))
 
+;; Fails if, in `upload-large-title!`, the body becomes `nil`, the `:repo` key is dropped, the `:graph-id` key is dropped, the `:title` key is dropped, the `:aes-key` key is dropped, the `:http-base` key is dropped, the `:auth-headers` key is dropped, the `:fail-fast-f` key is dropped or the `:encrypt-text-value-f` key is dropped.
+;; Fails if, in `rehydrate-large-titles!`, the `:repo` key is dropped, the `:graph-id` key is dropped, the `:obj` key is dropped, the `:aes-key` key is dropped, the `:http-base` key is dropped, the `:auth-headers` key is dropped, the `:fail-fast-f` key is dropped or the `:decrypt-text-value-f` key is dropped.
+;; Fails if, in `rehydrate-large-titles-from-db!`, the body becomes `nil`, the `:get-conn-f` key is dropped or the `:rehydrate-large-titles!-f` key is dropped.
 (deftest large-title-wrappers-pass-the-worker-context
   (let [calls (atom [])]
     (with-redefs [sync-auth/http-base-url (fn [config] [:http-base config])
@@ -417,6 +444,7 @@
                                     :rehydrate-large-titles!-f sync-apply/rehydrate-large-titles!}]]
                @calls))))))
 
+;; Fails if, in `request-asset-download!`, the `:broadcast-rtc-state!-f` key is dropped.
 (deftest request-asset-download-passes-the-worker-callbacks
   (let [calls (atom [])]
     (with-redefs [sync-assets/request-asset-download! (fn [repo asset-uuid opts] (swap! calls conj [repo asset-uuid opts]) :requested)]
@@ -428,11 +456,8 @@
 
 ;; ignored attrs and normalization
 
-(deftest reverse-data-ignores-the-tx-id-attr
-  (is (= #{:block/tx-id} sync-apply/reverse-data-ignored-attrs))
-  (is (contains? sync-apply/rtc-ignored-attrs :block/tx-id))
-  (is (not (contains? sync-apply/rtc-ignored-attrs :block/uuid))))
-
+;; Fails if, in `reverse-data-ignored-attrs`, `:block/tx-id` becomes `:block/uuid`.
+;; Fails if, in `normalize-tx-data`, the `remove-ignored-attrs` step is dropped or the `(remove (fn [[_op e]]` step is dropped.
 (deftest normalize-tx-data-drops-ignored-attrs-and-ignored-entities
   (let [conn (three-blocks-conn)
         _ (d/transact! conn [{:db/ident :logseq.kv/graph-uuid :block/title "kv"}])
@@ -446,6 +471,7 @@
     (is (= [[:db/add [:block/uuid (:block/uuid b)] :block/title "b2" t]]
            (vec (#'sync-apply/normalize-tx-data db db tx-data))))))
 
+;; Fails if, in `reverse-tx-data`, the `db-normalize/reorder-retract-entity` step is dropped.
 (deftest reverse-tx-data-puts-the-retract-entity-after-the-other-retracts
   (let [conn (three-blocks-conn)
         db-before @conn
@@ -462,6 +488,7 @@
             [:db/retractEntity [:block/uuid ux]]]
            (vec (sync-apply/reverse-tx-data db-before db-after ordered))))))
 
+;; Fails if, in `rebase-history-ops`, the `:inverse-ops` key is dropped.
 (deftest rebase-history-ops-keeps-the-recorded-inverse-ops
   (let [conn (three-blocks-conn)
         result (#'sync-apply/rebase-history-ops {:tx [] :inverse-outliner-ops [[:save-block [{:block/uuid (random-uuid)} {}]]]} @conn)]
@@ -469,6 +496,7 @@
     (is (nil? (:forward-ops result)))
     (is (contains? result :inverse-ops))))
 
+;; Fails if, in `normalize-tx-data-for-rebase`, the `(mapv (fn [item]` step is dropped or the `db-normalize/reorder-retract-entity` step is dropped.
 (deftest normalize-tx-data-for-rebase-trims-datoms-and-moves-retract-entity-last
   (let [f #'sync-apply/normalize-tx-data-for-rebase
         ref [:block/uuid (random-uuid)]]
@@ -477,6 +505,7 @@
     (is (= [[:db/add ref :block/title "x"] [:db/add 5 :a 1] [:db/retractEntity ref]]
            (vec (f [[:db/retractEntity ref] [:db/add ref :block/title "x" 7] [:db/add 5 :a 1 7]]))))))
 
+;; Fails if, in `inferred-outliner-ops?`, the body becomes `nil`.
 (deftest inferred-outliner-ops-only-for-plain-local-transactions
   (let [f #'sync-apply/inferred-outliner-ops?]
     (is (true? (f {})))
@@ -485,6 +514,7 @@
     (is (false? (f {:redo? true})))
     (is (false? (f {:outliner-op :batch-import-edn})))))
 
+;; Fails if, in `apply-tx-meta`, the body becomes `nil`, the `:transact-remote?` key is dropped, the `:persist-op?` key is dropped or the `:t` key is dropped.
 (deftest apply-tx-meta-describes-a-remote-transaction
   (let [f #'sync-apply/apply-tx-meta]
     (is (= {:transact-remote? true :persist-op? false :t 5} (f {:t 5})))
@@ -496,6 +526,7 @@
 
 ;; upload timeout
 
+;; Fails if, in `report-upload-response-timeout!`, the `:elapsed-ms` key is dropped, the `:t-before` key is dropped, the `:latest-remote-tx` key is dropped, the `:current-local-tx` key is dropped, the `:online?` key is dropped, the `:ws-open?` key is dropped or the `:ws-ready-state` key is dropped.
 (deftest report-upload-response-timeout-posts-the-request-context
   (let [posted (atom [])
         original-remote @sync-apply/*repo->latest-remote-tx
@@ -536,6 +567,7 @@
       (is (= {:tx-ids [(str u1) (str u2)] :outliner-ops ["save-block" "save-block"]}
              (:extra payload))))))
 
+;; Fails if, in `clear-upload-response-timeout!`, the `(dissoc :timer)` step is dropped.
 (deftest clear-upload-response-timeout-returns-the-request-without-its-timer
   (let [*request (atom {:tx-ids [1] :timer (js/setTimeout (fn []) 100000)})]
     (is (= {:tx-ids [1]} (sync-apply/clear-upload-response-timeout! {:upload-request *request})))
@@ -543,6 +575,7 @@
 
 ;; tx item helpers
 
+;; Fails if, in `tx-item-block-uuid`, the body becomes `nil`, `:block/uuid` becomes `:block/_raw-parent` or the `:block/uuid` step is dropped.
 (deftest tx-item-block-uuid-resolves-uuids-lookup-refs-and-entity-ids
   (let [conn (three-blocks-conn)
         db @conn
@@ -556,6 +589,7 @@
     (is (nil? (f db "x")))
     (is (nil? (f db [:block/uuid "x"])))))
 
+;; Fails if, in `tx-item-entity-block-uuid`, the body becomes `nil`.
 (deftest tx-item-entity-block-uuid-uses-the-temp-id-map-then-the-db
   (let [conn (three-blocks-conn)
         db @conn
@@ -566,6 +600,7 @@
     (is (nil? (f db {:e (:db/id b)})))
     (is (= u (f db {(:db/id b) u} [:db/add (:db/id b) :block/title "x"])))))
 
+;; Fails if, in `remote-txs-retract-entity-block-uuid-suffixes`, the `vec` step is dropped.
 (deftest remote-txs-retract-entity-block-uuid-suffixes-collect-the-later-deletions
   (let [u1 (random-uuid)
         u2 (random-uuid)
@@ -575,6 +610,7 @@
     (is (vector? result))
     (is (= [#{u1 u2} #{u2}] result))))
 
+;; Fails if, in `drop-stale-adds-after-remote-entity-delete`, the `(map tx-item-entity)` step is dropped, the `set` step is dropped or `:block/uuid` becomes `:block/_raw-parent`.
 (deftest drop-stale-adds-after-remote-entity-delete-keeps-recreated-entities
   (let [u1 (random-uuid)
         u2 (random-uuid)
@@ -594,6 +630,7 @@
 
 ;; upload grouping
 
+;; Fails if, in `cardinality-many-attr?`, the body becomes `nil` or `:db/cardinality` becomes `:db/cas`.
 (deftest cardinality-many-attr-reads-the-schema-then-the-attribute-entity
   (let [ident {:db/ident {:db/unique :db.unique/identity}}
         schema-db (d/empty-db (assoc ident :foo {:db/cardinality :db.cardinality/many}))
@@ -607,6 +644,7 @@
     (is (true? (f ident-db :bar)))
     (is (false? (f ident-db :baz)))))
 
+;; Fails if, in `ref-attr?`, `:db/valueType` becomes `:db/add`.
 (deftest ref-attr-reads-the-schema-then-the-attribute-entity
   (let [ident {:db/ident {:db/unique :db.unique/identity}}
         schema-db (d/empty-db (assoc ident :foo {:db/valueType :db.type/ref}))
@@ -619,6 +657,7 @@
     (is (true? (f ident-db :bar)))
     (is (false? (f ident-db :baz)))))
 
+;; Fails if, in `upload-tx-item-group-keys`, `:db/id` becomes `:db/retract`, `:db/cas` becomes `:db/id`, `:db.fn/cas` becomes `:db.fn/retractEntity`, `:db/retractEntity` becomes `:db/valueType` or `:db.fn/retractEntity` becomes `:db.fn/cas`.
 (deftest upload-tx-item-group-keys-covers-maps-cas-and-retract-entity-forms
   (let [f #'sync-apply/upload-tx-item-group-keys]
     (is (= #{-1} (f nil #{} {:db/id -1 :block/title "x"})))
@@ -629,6 +668,7 @@
     (is (= #{"x"} (f nil #{} [:db.fn/retractEntity "x"])))
     (is (= #{} (f nil #{} [:db/retractEntity 5])))))
 
+;; Fails if, in `clear-large-upload-progress!`, the `(map #(large-upload-progress-key repo...` step is dropped, the `seq` step is dropped or `filter` becomes `remove`.
 (deftest clear-large-upload-progress-forgets-only-the-given-transactions
   (let [*progress @#'sync-apply/*repo->large-upload-progress
         original @*progress
@@ -648,6 +688,7 @@
 
 ;; persisting a local transaction
 
+;; Fails if, in `persist-local-tx!`, the `:created-at` key is dropped, the `:pending?` key is dropped, the `:failed?` key is dropped, the `:undo-redo` key is dropped, the `:inferred-outliner-ops?` key is dropped or the `:apply-history-action!` key is dropped.
 (deftest persist-local-tx-stores-the-client-op-entry-and-records-undo
   (let [entries (atom [])
         undo-calls (atom [])
@@ -703,6 +744,7 @@
       (p/then (fn [v] [:ok v]))
       (p/catch (fn [e] [:err e]))))
 
+;; Fails if, in `<upload-aes-key`, the body becomes `nil`, `:db-sync/missing-field` becomes `:db-sync/rebased-local?`, the `:repo` key is dropped or the `:field` key is dropped.
 (deftest upload-aes-key-is-needed-only-for-e2ee-graphs-with-entries
   (async done
     (let [calls (atom [])
@@ -735,6 +777,7 @@
                        (set! sync-crypt/<ensure-graph-aes-key original-ensure)
                        (done)))))))
 
+;; Fails if, in `<encrypt-tx-entry`, the `:repo` key is dropped, the `:graph-id` key is dropped or the `:aes-key` key is dropped.
 (deftest encrypt-tx-entry-offloads-the-large-titles-of-the-entry
   (async done
     (let [calls (atom [])
@@ -752,6 +795,7 @@
                        (set! sync-large-title/offload-large-titles original)
                        (done)))))))
 
+;; Fails if, in `send-tx-batch!`, the `:client-revision` key is dropped, the `:t-before` key is dropped, the `distinct` step is dropped or the `vec` step is dropped.
 (deftest send-tx-batch-sends-the-payload-and-starts-the-response-timer
   (async done
     (let [sent (atom [])
@@ -794,6 +838,7 @@
                        (sync-apply/clear-upload-response-timeout! client)
                        (done)))))))
 
+;; Fails if, in `<upload-pending-batch!`, the `:limit` key is dropped or the `(p/catch (fn [error]` step is dropped.
 (deftest upload-pending-batch-asks-for-fifty-pending-txs-and-records-send-failures
   (async done
     (let [limits (atom [])
@@ -819,6 +864,7 @@
                        (set! sync-crypt/<ensure-graph-aes-key original-ensure)
                        (done)))))))
 
+;; Fails if, in `enqueue-flush-pending!`, the `(p/catch (fn [_] nil))` step is dropped or the `(p/catch (fn [error]` step is dropped.
 (deftest enqueue-flush-pending-chains-the-flushes-and-survives-failures
   (async done
     (let [calls (atom 0)
@@ -836,6 +882,7 @@
 
 ;; replay data of a local tx
 
+;; Fails if, in `local-tx-has-replay-data?`, the body becomes `nil`.
 (deftest local-tx-has-replay-data-when-any-recorded-data-is-left
   (let [f #'sync-apply/local-tx-has-replay-data?]
     (is (f {:tx [[:db/add 1 :a 2]]}))
@@ -844,6 +891,7 @@
     (is (f {:inverse-outliner-ops [[:save-block]]}))
     (is (not (f {:tx [] :reversed-tx nil})))))
 
+;; Fails if, in `large-upload-progress`, the `(keep (fn [{:keys [large-upload-origi...` step is dropped, the `vec` step is dropped or the `:large-upload-final?` key is dropped.
 (deftest large-upload-progress-lists-the-chunked-entries
   (let [u (random-uuid)
         result (#'sync-apply/large-upload-progress
@@ -860,6 +908,7 @@
 
 ;; rejected transactions
 
+;; Fails if, in `rollback-and-mark-failed-txs!`, the `(filter uuid?)` step is dropped, the `(drop-while #(not (contains? rejected...` step is dropped, the `vec` step is dropped, the `:rtc-tx?` key is dropped, the `:tx-reject-rollback?` key is dropped, the `:listen-db` key is dropped, `:db-sync/rebased-local?` becomes `:db-sync/replayed-tx-data?`, the `(map :tx-id)` step is dropped, the `(filter (fn [{:keys [status]}]` step is dropped, the `(keep :tx-id)` step is dropped, the `distinct` step is dropped or `filter` becomes `remove`.
 (deftest rollback-and-mark-failed-txs-rebases-the-pending-txs-after-the-rejected-one
   (let [conn (three-blocks-conn)
         [u0 u1 u2 u3 u4] (repeatedly 5 random-uuid)
@@ -919,12 +968,14 @@
 
 ;; history actions
 
+;; Fails if, in `expected-history-action-error-reason?`, the body becomes `nil`.
 (deftest expected-history-action-error-reason-names-the-invalid-action-reasons
   (let [f #'sync-apply/expected-history-action-error-reason?]
     (is (true? (f :invalid-history-action-ops)))
     (is (true? (f :invalid-history-action-tx)))
     (is (false? (f :error)))))
 
+;; Fails if, in `inline-history-action`, the `:outliner-op` key is dropped.
 (deftest inline-history-action-needs-forward-and-inverse-ops
   (let [f #'sync-apply/inline-history-action
         forward [[:save-block [{} {}]]]
@@ -939,6 +990,7 @@
                :inverse-outliner-ops inverse})))
     (is (nil? (f {:outliner-op :save-block :forward-outliner-ops forward})))))
 
+;; Fails if, in `apply-history-action!`, the `:action` key is dropped, the `:applied?` key is dropped, the `:reason` key is dropped, the `:tx-id` key is dropped, `:db-sync/missing-db` becomes `:db-sync/missing-field`, the `:repo` key is dropped or the `:op` key is dropped.
 (deftest apply-history-action-reports-why-nothing-was-applied
   (let [conn (three-blocks-conn)
         id (random-uuid)
@@ -958,6 +1010,7 @@
       (is (= {:applied? false :reason :unsupported-history-action :action fix-action}
              (sync-apply/apply-history-action! "r" id true {}))))))
 
+;; Fails if, in `apply-history-action!`, `:db-sync/tx-id` becomes `:db-sync/upload-response-timeout`, the `:outliner-op` key is dropped, the `:local-tx?` key is dropped, the `:persist-op?` key is dropped, the `:undo?` key is dropped or the `:redo?` key is dropped.
 (deftest apply-history-action-replays-the-semantic-ops-with-a-history-tx-meta
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1015,6 +1068,7 @@
             :db-sync/inverse-outliner-ops inverse}
            redo-meta))))
 
+;; Fails if, in `apply-history-action!`, the `normalize-tx-data-for-rebase` step is dropped.
 (deftest apply-history-action-replays-the-recorded-tx-data-without-semantic-ops
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1065,12 +1119,14 @@
                        [:db/add (:db/id c2) :block/order (:block/order c1)]])
     conn))
 
+;; Fails if, in `block-descendants`, `:block/order` becomes `:block/page`.
 (deftest block-descendants-lists-the-children-in-block-order-then-their-own-descendants
   (let [conn (family-conn)
         p (db-test/find-block-by-content @conn "p")
         titles (mapv :block/title (#'sync-apply/block-descendants p))]
     (is (= ["c2" "c1" "g"] titles))))
 
+;; Fails if, in `block-entity-ref`, `:db/id` becomes `:db/retract`.
 (deftest block-entity-ref-prefers-the-uuid-and-falls-back-to-the-entity-id
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1079,6 +1135,7 @@
     (is (= [:block/uuid (:block/uuid b)] (#'sync-apply/block-entity-ref b)))
     (is (= (:db/id no-uuid) (#'sync-apply/block-entity-ref no-uuid)))))
 
+;; Fails if, in `retract-entity-op?`, `:db.fn/retractEntity` becomes `:db.fn/cas`.
 (deftest retract-entity-op-recognizes-both-retract-entity-forms
   (let [f #'sync-apply/retract-entity-op?]
     (is (true? (f [:db/retractEntity 1])))
@@ -1086,6 +1143,7 @@
     (is (false? (f [:db/retract 1 :a 2])))
     (is (false? (f {:db/id 1})))))
 
+;; Fails if, in `expand-block-retracts-to-descendants`, the `(keep (fn [item]` step is dropped, the `set` step is dropped, the `:db/id` step is dropped, `:db/id` becomes `:db/retract` or the `(remove #(contains? explicit-retracts...` step is dropped.
 (deftest expand-block-retracts-to-descendants-retracts-descendants-ahead-of-each-block-retract
   (let [conn (family-conn)
         db @conn
@@ -1106,6 +1164,7 @@
         "c1 has its own retract, so only c2 and g (in block order) are added ahead of the retract of p")
     (is (= [other] (vec (#'sync-apply/expand-block-retracts-to-descendants db [other]))))))
 
+;; Fails if, in `reverse-history-action!`, the `(map (partial resolve-temp-id db))` step is dropped, the `normalize-tx-data-for-rebase` step is dropped, the `:outliner-op` key is dropped, the `:reverse?` key is dropped, the `:reason` key is dropped or the `:tx-id` key is dropped.
 (deftest reverse-history-action-replays-reversed-tx-data-with-resolved-ids
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1131,6 +1190,7 @@
 
 ;; conflicts
 
+;; Fails if, in `tx-item-components`, `:db/retract` becomes `:db/retractEntity`.
 (deftest tx-item-components-reads-title-adds-and-retracts
   (let [f #'sync-apply/tx-item-components]
     (is (= {:op :db/add :e 1 :a :block/title :v "x"} (f [:db/add 1 :block/title "x"])))
@@ -1139,6 +1199,7 @@
     (is (nil? (f [:db/retractEntity 1])))
     (is (nil? (f [:db/cas 1 :block/title "x" "y"])))))
 
+;; Fails if, in `tx-entity-uuid`, `:block/uuid` becomes `:block/_raw-parent` or the `:block/uuid` step is dropped.
 (deftest tx-entity-uuid-resolves-uuids-strings-lookup-refs-temp-ids-and-entity-ids
   (let [conn (three-blocks-conn)
         db @conn
@@ -1155,12 +1216,14 @@
 
 ;; remote transactions
 
+;; Fails if, in `transact-remote-txs!`, the `(map (partial resolve-temp-id db))` step is dropped.
 (deftest transact-remote-txs-resolves-a-uuid-string-entity-to-the-existing-block
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")]
     (#'sync-apply/transact-remote-txs! conn [{:tx-data [[:db/add (str (:block/uuid b)) :block/title "remote b" 536870913]]}])
     (is (= "remote b" (:block/title (d/entity @conn (:db/id b)))))))
 
+;; Fails if, in `apply-remote-tx-with-local-changes!`, the `distinct` step is dropped or the `:remote-asset-tx-data` key is dropped.
 (deftest apply-remote-tx-with-local-changes-returns-the-applied-data-and-marks-each-stale-tx-once
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1190,6 +1253,7 @@
         (is (= :pending-tx-snapshot-changed (:code (ex-data error))))
         (is (= "remote b" (title)) "Nothing is committed when the pending txs changed meanwhile")))))
 
+;; Fails if, in `apply-remote-tx-without-local-changes!`, the `:before-commit` key is dropped.
 (deftest apply-remote-tx-without-local-changes-commits-nothing-when-a-local-tx-came-meanwhile
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1205,6 +1269,7 @@
     (is (= :pending-tx-snapshot-changed (:code (ex-data error))))
     (is (= "b" (:block/title (d/entity @conn (:db/id b)))))))
 
+;; Fails if, in `apply-remote-txs-with-retry!`, the `:has-local-changes?` key is dropped, the `:remote-txs` key is dropped or the `:local-txs` key is dropped.
 (deftest apply-remote-txs-reports-a-failed-apply-with-its-counts
   (let [conn (three-blocks-conn)
         posted (atom [])
@@ -1227,6 +1292,7 @@
                              :local-tx-count 1}]]
            (mapv (fn [[type payload]] [type (:payload payload)]) @posted)))))
 
+;; Fails if, in `apply-remote-txs!`, the `:remote-tx-data` key is dropped.
 (deftest apply-remote-txs-hands-the-remote-data-to-the-title-rehydration
   (async done
     (let [conn (three-blocks-conn)
@@ -1245,6 +1311,7 @@
                        (is (= [["r" {:tx-data tx-data :graph-id nil}]] @calls))
                        (done)))))))
 
+;; Fails if, in `apply-remote-txs!`, the `:snapshot-retry-count` key is dropped.
 (deftest apply-remote-txs-past-the-retry-limit-waits-then-starts-the-count-over
   (async done
     (let [conn (three-blocks-conn)
@@ -1270,6 +1337,7 @@
 
 ;; local transactions
 
+;; Fails if, in `record-local-graph-undo!`, `:db-sync/tx-id` becomes `:db-sync/upload-response-timeout` or the `:apply-history-action!` key is dropped.
 (deftest record-local-graph-undo-keys-the-entry-by-the-tx-id
   (let [calls (atom [])
         id (random-uuid)
@@ -1281,6 +1349,7 @@
     (is (= ["r" report id {:apply-history-action! sync-apply/apply-history-action!}] (first @calls)))
     (is (uuid? (nth (second @calls) 2)) "A tx without an id gets a fresh one")))
 
+;; Fails if, in `handle-local-tx!`, the `:enqueue-asset-task-f` key is dropped, the `:current-client-f` key is dropped, the `:broadcast-rtc-state!-f` key is dropped or the `:fail-fast-f` key is dropped.
 (deftest handle-local-tx-hands-the-asset-sync-its-worker-callbacks
   (let [conn (three-blocks-conn)
         _ (d/transact! conn [{:db/ident :logseq.kv/graph-remote? :kv/value true}])
@@ -1304,6 +1373,7 @@
 
 ;; template replay
 
+;; Fails if, in `sanitize-template-block`, `:block/uuid` becomes `:block/_raw-parent`.
 (deftest sanitize-template-block-keeps-the-uuid-the-block-carries
   (let [conn (three-blocks-conn)
         a (db-test/find-block-by-content @conn "a")
@@ -1322,6 +1392,8 @@
       (#'sync-apply/replay-canonical-outliner-op! conn [:apply-template args] rebase-db-before))
     @applied))
 
+;; Fails if, in `sanitize-template-block`, the `:block/uuid` step is dropped or `:block/uuid` becomes `:block/_raw-parent`.
+;; Fails if, in `replay-canonical-outliner-op!`, the `(map-indexed` step is dropped, the `(remove nil?)` step is dropped, the `seq` step is dropped, `:block/uuid` becomes `:block/_raw-parent`, the `(dissoc :template-blocks)` step is dropped or the `:gen-undo-ops?` key is dropped.
 (deftest replaying-apply-template-sanitizes-the-recorded-blocks
   (let [conn (three-blocks-conn)
         [a b c] (map #(db-test/find-block-by-content @conn %) ["a" "b" "c"])
@@ -1354,6 +1426,7 @@
            (replayed-template-ops conn [c-uuid b-uuid {:sibling? false :template-blocks [{:block/title "no uuid"}]}] nil))
         "Without a usable recorded block none is passed on, and the outliner takes the template's own children")))
 
+;; Fails if, in `replay-canonical-outliner-op!`, the `(assoc :sibling? sibling?)` step is dropped.
 (deftest replaying-apply-template-on-a-deleted-first-block-goes-under-its-parent
   (let [conn (three-blocks-conn)
         a (db-test/find-block-by-content @conn "a")
@@ -1365,6 +1438,7 @@
            (replayed-template-ops conn [(:block/uuid c) {:block/uuid (:block/uuid a)} {:sibling? true}] db-before))
         "The deleted block had no left sibling, so the template goes in as the page's first child")))
 
+;; Fails if, in `replay-canonical-outliner-op!`, the `:args` key is dropped or the `:reason` key is dropped.
 (deftest replaying-apply-template-of-an-entity-without-a-uuid-reports-why
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
