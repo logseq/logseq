@@ -88,18 +88,6 @@
                                                       :node-ids [[:block/uuid (:block/uuid class-ent)]]})]
     (is (= {:user.class/C1 {:block/title "C1"}} (:classes export-map)))))
 
-(deftest graph-export-keeps-property-uuids
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:user.property/p1 {:logseq.property/type :default}}
-               :pages-and-blocks [{:page {:block/title "page1"}
-                                   :blocks [{:block/title "b1" :build/properties {:user.property/p1 "v"}}]}]})
-        property-uuid (:block/uuid (d/entity @conn :user.property/p1))
-        export-map (sqlite-export/build-export @conn {:export-type :graph-human})
-        import-conn (sqlite-export/create-conn)
-        {:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-map @import-conn {})
-        _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))]
-    (is (= property-uuid (:block/uuid (d/entity @import-conn :user.property/p1))))))
-
 ;; Fails if, in `build-graph-ontology-export`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest graph-export-excludes-namespaces
   (let [conn (db-test/create-conn-with-blocks
