@@ -12,6 +12,7 @@
   (set (:logseq.property.class/extends
         (db-test/readable-properties (d/entity @conn class-ident)))))
 
+;; Fails if, in `normalize-extends-value`, `if` becomes `if-not`.
 (deftest extends-with-two-unrelated-parents-keeps-both
   (testing "batch-set-property! with a vector of two unrelated parents"
     (let [conn (db-test/create-conn-with-blocks
@@ -38,6 +39,7 @@
     (set (map db-property/property-value-content
               (if (set? value) value [value])))))
 
+;; Fails if, in `build-property-value-tx-data`, `=` becomes `not=`.
 (deftest batch-set-property-collection-replaces-many-values
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:steps {:logseq.property/type :default
@@ -51,6 +53,7 @@
     (is (= #{"c"} (value-contents conn block-id :user.property/steps))
         "A collection replaces the existing values of a :many property")))
 
+;; Fails if, in `convert-property-input-string`, `and` becomes `or` or `=` becomes `not=`.
 (deftest convert-property-input-string-parses-default-value-of-number-property
   (testing "the default value of a :number property is parsed as a number"
     (is (= 5 (outliner-property/convert-property-input-string
@@ -62,6 +65,7 @@
     (is (= "5" (outliner-property/convert-property-input-string
                 :number {:db/ident :user.property/note :logseq.property/type :default} "5")))))
 
+;; Fails if, in `validate-property-name-update`, `not=` becomes `=`.
 (deftest upsert-property-rename-validates-new-name
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:note {:logseq.property/type :default}}})]
@@ -70,6 +74,8 @@
          (outliner-property/upsert-property! conn :user.property/note {} {:property-name "#bad"})))
     (is (= "note" (:block/title (d/entity @conn :user.property/note))))))
 
+;; Fails if, in `schema-for-update`, `and` becomes `or`.
+;; Fails if, in `update-property`, `not=` becomes `=`.
 (deftest upsert-property-rename-property-with-values
   (testing "renaming a :many property that has values"
     (let [conn (db-test/create-conn-with-blocks
@@ -87,6 +93,7 @@
       (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {})
       (is (not (db-property/many? (d/entity @conn :user.property/note)))))))
 
+;; Fails if, in `update-property`, `and` becomes `or`, `=` becomes `not=`, `not=` becomes `=` or `seq` becomes `empty?`.
 (deftest upsert-property-with-unchanged-schema-leaves-property-untouched
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:note {:logseq.property/type :default}
@@ -104,6 +111,7 @@
       (outliner-property/upsert-property! conn :user.property/done {:logseq.property/type :checkbox} {})
       (is (= 1 (updated-at :user.property/done))))))
 
+;; Fails if, in `update-property`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest upsert-property-sets-given-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:note {:logseq.property/type :default}}})
@@ -112,6 +120,7 @@
                                         {:properties {:logseq.property/icon icon}})
     (is (= icon (:logseq.property/icon (d/entity @conn :user.property/note))))))
 
+;; Fails if, in `validate-property-value-aux`, `not` becomes `identity`.
 (deftest upsert-closed-value-on-many-number-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:sizes {:logseq.property/type :number
@@ -122,6 +131,7 @@
            (map db-property/closed-value-content
                 (:block/_closed-value-property (d/entity @conn :user.property/sizes)))))))
 
+;; Fails if, in `validate!`, `if` becomes `if-not`.
 (deftest invalid-property-value-message-shows-first-error
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:done {:logseq.property/type :checkbox}}
@@ -134,6 +144,7 @@
     (is (= "Property validation failed: \"done\" should be a boolean"
            (get-in (ex-data error) [:payload :message])))))
 
+;; Fails if, in `convert-ref-property-value`, `or` becomes `and`.
 (deftest set-page-property-to-blank-string-is-rejected
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:project {:logseq.property/type :page}}
@@ -145,6 +156,7 @@
          (outliner-property/set-block-property! conn block-id :user.property/project "  ")))
     (is (nil? (:user.property/project (d/entity @conn block-id))))))
 
+;; Fails if, in `throw-error-if-self-value`, `or` becomes `and`.
 (deftest batch-set-property-rejects-own-block-in-collection
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:related {:logseq.property/type :node
@@ -157,6 +169,7 @@
          (outliner-property/batch-set-property! conn [block-id] :user.property/related [block-id])))
     (is (nil? (:user.property/related (d/entity @conn block-id))))))
 
+;; Fails if, in `batch-remove-property!`, `nil?` becomes `some?`, `and` becomes `or`, `not` becomes `identity`, `or` becomes `and`, `empty?` becomes `seq`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest batch-remove-property-deletes-only-unshared-created-values
   (testing "a :default value block is deleted with the property"
     (let [conn (db-test/create-conn-with-blocks
