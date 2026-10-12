@@ -123,13 +123,16 @@ type placement =
   ; p_end : bool
   }
 
-let placement_state sched (anchor : U.el) ~align_end =
+let placement_state (ctx : Lui_ui.ui_context) (anchor : U.el) ~align_end =
   let st =
-    Signal.state sched { px = 0.; py = 0.; p_above = false; p_end = false }
+    Signal.state ctx.Lui_ui.ui_scheduler
+      { px = 0.; py = 0.; p_above = false; p_end = false }
   in
   let rec place n =
     if anchor.U.rect_pending () && n > 0 then
-      U.timers_later ~ms:32 (fun () -> place (n - 1))
+      ignore
+        (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 32 (fun () ->
+             place (n - 1)))
     else begin
       let x, y, w, h = anchor.U.rect () in
       let vh = U.dom_viewport_height () in
@@ -372,8 +375,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
   ignore
     (push
        (fun context parent ->
-         let place = placement_state context.Lui_ui.ui_scheduler anchor
-             ~align_end in
+         let place = placement_state context anchor ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id)
            ~id:(Printf.sprintf "vp-menu-%d" id) ~place ~card:true
            ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
@@ -391,7 +393,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
   let id = !next_id + 1 in
   let view context parent =
     let sched = context.Lui_ui.ui_scheduler in
-    let place = placement_state sched anchor ~align_end in
+    let place = placement_state context anchor ~align_end in
     let query = Signal.state sched "" in
     let chosen = Signal.state sched 0 in
     let sel_values = Signal.state sched [] in
@@ -648,8 +650,7 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
   ignore
     (push
        (fun context parent ->
-         let place = placement_state context.Lui_ui.ui_scheduler anchor
-             ~align_end in
+         let place = placement_state context anchor ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
            ~id:(Printf.sprintf "vp-c-%d" id) ~place ~cls ~card:true
            ~on_dismiss:(fun _ -> close_entry id)

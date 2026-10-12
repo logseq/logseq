@@ -139,10 +139,11 @@ let set_auth ctx f =
 let set_tab ctx tab =
   set_auth ctx (fun a -> { a with tab; err = "" });
   (* autofocus alone doesn't refire on a patched-in node *)
-  Ui_services.timers_later ~ms:32 (fun () ->
-      match Ui_services.dom_query ".cp__user-login [autofocus]" with
-      | Some el -> el.Ui_services.focus ()
-      | None -> ())
+  ignore
+    (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 32 (fun () ->
+         match Ui_services.dom_query ".cp__user-login [autofocus]" with
+         | Some el -> el.Ui_services.focus ()
+         | None -> ()))
 
 let fail ctx msg = set_auth ctx (fun a -> { a with err = msg })
 

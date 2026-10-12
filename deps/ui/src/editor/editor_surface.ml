@@ -27,9 +27,7 @@ let mount ?(cls = "") uuid scope : t =
      re-measure the overlay too *)
   let frame = Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame in
   S.active_frame := Some frame;
-  let alive = ref true in
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
-      alive := false;
       match !S.active_frame with
       | Some current when current == frame -> S.active_frame := None
       | _ -> ());
@@ -37,18 +35,19 @@ let mount ?(cls = "") uuid scope : t =
      runs prop lands a patch or two later — a frame created after
      apply_focus's refresh already ran would otherwise stay empty until
      the next input event. Measure into THIS frame once the sink can
-     answer; retries cover the runs-prop lag *)
+     answer; retries cover the runs-prop lag and are dropped with the
+     view's scope *)
   List.iter
     (fun ms ->
-      Ui_services.timers_later ~ms
-        (fun () ->
-          match (S.editing (), Editor_sink.conduit uuid) with
-          | Some e, Some conduit
-            when !alive && e.S.uuid = uuid && e.S.scope = scope ->
-              Signal.update frame (fun _ ->
-                  Edit_input.measure conduit e.S.model);
-              Runtime.flush ()
-          | _ -> ()))
+      ignore
+        (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope ms (fun () ->
+             match (S.editing (), Editor_sink.conduit uuid) with
+             | Some e, Some conduit
+               when e.S.uuid = uuid && e.S.scope = scope ->
+                 Signal.update frame (fun _ ->
+                     Edit_input.measure conduit e.S.model);
+                 Runtime.flush ()
+             | _ -> ())))
     [ 0; 40; 120; 300 ];
   let model_sig =
     Edit_view.own ctx (Signal.map

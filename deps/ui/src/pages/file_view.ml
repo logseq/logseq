@@ -8,7 +8,6 @@
    CodeMirror 5 the code blocks use (mount_file — no block wiring). *)
 
 open Lui_elements
-open Promise_ext
 
 (* cljs set-file-content / config write shape: the file entity needs
    block/uuid + timestamps to pass transact validation *)
@@ -34,59 +33,69 @@ let file_ext path =
   | Some i -> String.sub path (i + 1) (String.length path - i - 1)
   | None -> ""
 
-let view ~path (ms : Model.t Signal.signal) : t =
-  let content_st = Signal.state (Signal.signal_owner ms) "" in
-  let loaded_st = Signal.state (Signal.signal_owner ms) false in
+let view ~path (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let content_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  let load_st = Signal.state ctx.Lui_ui.ui_scheduler Ui_effect.Loading in
   let debounced = Ui_services.timers_debounce 500 in
+  (* save is controller-owned: a pending debounced write still lands
+     after the view unmounts *)
   let on_edit s = debounced (fun () -> save (Runtime.repo ()) path s) in
-  ignore
-    (let* w =
-       Runtime.invoke2 "thread-api/get-file-content"
-         (Wire.String (Runtime.repo ()))
-         (Wire.String path)
-     in
-     (match w with
-      | Wire.String s -> Runtime.signal_set content_st s
-      | _ -> ());
-     Runtime.signal_set loaded_st true;
-     (* flush is deferred (scheduled, not synchronous): the textarea
-        mounts on the next tick, so query it after that tick and hand
-        it to CodeMirror once the lazy core chunk lands *)
-     Ui_services.timers_later ~ms:0 (fun () ->
-         Code_mirror.attach_file_editor ~on_change:on_edit ());
-     Js.Promise.resolve ());
+  Ui_effect.task ~scope:ctx.Lui_ui.ui_scope
+    (Subs_state.task_of_promise
+       (Runtime.invoke2 "thread-api/get-file-content"
+          (Wire.String (Runtime.repo ()))
+          (Wire.String path)))
+    ~ok:(fun w ->
+      (match w with
+       | Wire.String s -> Runtime.signal_set content_st s
+       | _ -> ());
+      Runtime.signal_set load_st (Ui_effect.Ready ());
+      (* flush is deferred (scheduled, not synchronous): the textarea
+         mounts on the next tick, so query it after that tick and hand
+         it to CodeMirror once the lazy core chunk lands *)
+      ignore
+        (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 0 (fun () ->
+             Code_mirror.attach_file_editor ~on_change:on_edit ())))
+    ~error:(fun e ->
+      Runtime.signal_set load_st (Ui_effect.Failed e));
   let editor () =
     let ext = file_ext path in
     (* textarea ~text is an initial-value prop: mount once the async
        load lands so the fetched content seeds it (and fromTextArea
        then reads it into the CM doc) *)
     reactive
-      (fun (loaded : bool) ->
-        if loaded then
-          (* cljs extensions__code > code-lang + code-editor > textarea *)
-          row ~key:"ec" ~style_class:"extensions__code"
-            ~grow:1.
-            [ text ~key:"cl"
-                ~value:(String.lowercase_ascii ext)
-                ~style_class:"extensions__code-lang" []
-            ; row ~key:"ce"
-                ~style_class:"code-editor"
-                ~grow:1.
-                ~data_attrs:[ ("style", "width:100%") ]
-                [ textarea ~key:"fe" ~style_class:"ls-file-textarea"
-                    ~grow:1.
-                    ~data_attrs:[ ("data-lang", ext) ]
-                    ~text:(Signal.get (Signal.value content_st))
-                    ~on_input:(fun ev ->
-                      match ev with
-                      | Lui_protocol.TextChanged (_, s) -> on_edit s
-                      | _ -> ())
-                    [] ]
-            ]
-        else box ~key:"ec" ~grow:1. [])
-      (Signal.value loaded_st)
+      (fun (load : unit Ui_effect.load) ->
+        match load with
+        | Ui_effect.Ready () ->
+            (* cljs extensions__code > code-lang + code-editor > textarea *)
+            row ~key:"ec" ~style_class:"extensions__code"
+              ~grow:1.
+              [ text ~key:"cl"
+                  ~value:(String.lowercase_ascii ext)
+                  ~style_class:"extensions__code-lang" []
+              ; row ~key:"ce"
+                  ~style_class:"code-editor"
+                  ~grow:1.
+                  ~data_attrs:[ ("style", "width:100%") ]
+                  [ textarea ~key:"fe" ~style_class:"ls-file-textarea"
+                      ~grow:1.
+                      ~data_attrs:[ ("data-lang", ext) ]
+                      ~text:(Signal.get (Signal.value content_st))
+                      ~on_input:(fun ev ->
+                        match ev with
+                        | Lui_protocol.TextChanged (_, s) -> on_edit s
+                        | _ -> ())
+                      [] ]
+              ]
+        | Ui_effect.Failed e ->
+            row ~key:"ec" ~style_class:"extensions__code" ~grow:1.
+              [ text ~key:"fe-err" ~value:(Printexc.to_string e) [] ]
+        | Ui_effect.Loading -> box ~key:"ec" ~grow:1. [])
+      (Signal.value load_st)
   in
-  column ~key:"file" ~style_class:"ls-file-page page" ~padding:16 ~grow:1.
-    [ heading ~key:"ft" ~level:1 ~value:path ~style_class:"page-title" []
-    ; editor ()
-    ]
+  (column ~key:"file" ~style_class:"ls-file-page page" ~padding:16 ~grow:1.
+     [ heading ~key:"ft" ~level:1 ~value:path ~style_class:"page-title" []
+     ; editor ()
+     ])
+    ctx parent

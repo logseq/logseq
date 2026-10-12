@@ -120,7 +120,7 @@ type view =
 
 type t =
   { vs : view Signal.state
-  ; gen : int ref (* stale-response guard *)
+  ; req : Ui_effect.request (* stale-response guard *)
   ; svs : Svs.t
   }
 
@@ -157,7 +157,7 @@ let make ?(register = true) scheduler svs : t =
    | None -> services_ref := Some svs
    | Some _ -> ());
   let vs = Signal.state scheduler initial_view in
-  let st = { vs; gen = ref 0; svs } in
+  let st = { vs; req = Ui_effect.request (); svs } in
   (* the modal palette is the singleton shortcuts dispatch through;
      sidebar cmdk blocks are independent and must not steal the refs *)
   if register then begin
@@ -705,8 +705,7 @@ let apply_results st q move_mode expanded rows total =
    debounce instead of blanking the list *)
 let refresh ?(clear = true) st =
   let v = get st in
-  incr st.gen;
-  let gen = !(st.gen) in
+  let gen = Ui_effect.issue st.req in
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
   if clear then apply_results st v.input v.move_mode v.expanded [] 0;
@@ -720,7 +719,7 @@ let refresh ?(clear = true) st =
               | Some G_current_page -> current_page_limit v.expanded
               | _ -> nodes_limit v.move_mode v.expanded)
          in
-         if gen = !(st.gen) then
+         if Ui_effect.is_current st.req gen then
            apply_results st v.input v.move_mode v.expanded rows total;
          Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun e ->
                 st.svs.Svs.console_error "cmdk search failed" e;
@@ -801,8 +800,8 @@ let on_input st q =
   set_in st (fun v -> upsert_create { v with input = q; edited = true });
   (* search fires on the keystroke itself — a debounce delays the last
      keystroke's results past the worker roundtrip it should overlap.
-     gen-stamped responses keep stale answers from overwriting newer
-     input *)
+     request-stamped responses keep stale answers from overwriting
+     newer input *)
   refresh ~clear:false st
 
 (* -- open/close ------------------------------------------------------ *)
@@ -877,7 +876,7 @@ let load_last_search (svs : Svs.t) : (string * group_id option) option =
       with _ -> None)
 
 let open_palette ?(move = false) st =
-  st.gen := !(st.gen) + 1;
+  ignore (Ui_effect.issue st.req);
   (* publish the reset view before opening: the mount reads derived signals
      whose republish lags the source publish by one stabilize round, so
      this separate flush guarantees every derived map already carries the

@@ -6,6 +6,25 @@ let invalid f = try f (); false with Invalid_argument _ -> true
    installs before the theme scenarios execute) *)
 let last_theme_snapshot : Ui_services.theme_snapshot option ref = ref None
 
+(* controllable fake timers: recorded, fired only via [run_timers] so
+   scope-bound-effect tests can drive them deterministically *)
+let pending_timers : (int * (unit -> unit)) list ref = ref []
+let pending_intervals : (int * (unit -> unit)) list ref = ref []
+let timer_seq = ref 0
+
+let schedule pool f =
+  incr timer_seq;
+  pool := (!timer_seq, f) :: !pool;
+  !timer_seq
+
+let unschedule pool id =
+  pool := List.filter (fun (i, _) -> i <> id) !pool
+
+let run_timers () =
+  let fire = List.rev !pending_timers in
+  pending_timers := [];
+  List.iter (fun (_, f) -> f ()) fire
+
 let run () =
   check "storage access before installation fails"
     (invalid (fun () -> ignore (Ui_services.storage_get "wide-mode")));
@@ -318,12 +337,12 @@ let run () =
          ; selected_block_uuids = (fun () -> !uuids)
          })
     ; timers =
-        { Ui_services.timeout = (fun _ _ -> 0)
-        ; clear_timeout = (fun _ -> ())
-        ; interval = (fun _ _ -> 0)
-        ; clear_interval = (fun _ -> ())
+        { Ui_services.timeout = (fun f _ -> schedule pending_timers f)
+        ; clear_timeout = (fun id -> unschedule pending_timers id)
+        ; interval = (fun f _ -> schedule pending_intervals f)
+        ; clear_interval = (fun id -> unschedule pending_intervals id)
         ; debounce = (fun _ -> (fun _ -> ()))
-        ; later = (fun ~ms:_ _ -> ())
+        ; later = (fun ~ms:_ f -> ignore (schedule pending_timers f))
         }
     ; files =
         { Ui_services.pick_files = (fun ?accept:_ ?multiple:_ ?directory:_ _ -> ())
