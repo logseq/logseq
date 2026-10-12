@@ -102,6 +102,45 @@ let has_attr (el : element) (name : string) : bool =
 
 type attr_op = Aeq | Aprefix | Asuffix | Acontains | Apresent
 
+let selector_tokens separator s =
+  let tokens = ref [] and start = ref 0 in
+  let quote = ref None and escaped = ref false in
+  let brackets = ref 0 and parentheses = ref 0 in
+  let emit finish =
+    let token = String.sub s !start (finish - !start) |> String.trim in
+    if token <> "" then tokens := token :: !tokens
+  in
+  String.iteri
+    (fun i c ->
+      if !escaped then escaped := false
+      else if c = '\\' then escaped := true
+      else
+        match !quote with
+        | Some q -> if c = q then quote := None
+        | None ->
+            (match c with
+             | '\'' | '"' -> quote := Some c
+             | '[' -> incr brackets
+             | ']' -> decr brackets
+             | '(' -> incr parentheses
+             | ')' -> decr parentheses
+             | _ ->
+                 if !brackets = 0 && !parentheses = 0 && separator c then begin
+                   emit i;
+                   start := i + 1
+                 end);
+            if !brackets < 0 || !parentheses < 0 then
+              invalid_arg ("Unbalanced native selector: " ^ s))
+    s;
+  if !quote <> None || !escaped || !brackets <> 0 || !parentheses <> 0 then
+    invalid_arg ("Unclosed native selector: " ^ s);
+  emit (String.length s);
+  List.rev !tokens
+
+let selector_whitespace = function
+  | ' ' | '\t' | '\n' | '\r' | '\012' -> true
+  | _ -> false
+
 type compound =
   { c_tag : string option
   ; c_classes : string list
@@ -131,11 +170,20 @@ let rec parse_compound (s : string) : compound =
   let take_bracket i open_c close_c =
     let depth = ref 1 in
     let j = ref (i + 1) in
+    let quote = ref None and escaped = ref false in
     while !j < len && !depth > 0 do
-      if s.[!j] = open_c then incr depth;
-      if s.[!j] = close_c then decr depth;
+      let c = s.[!j] in
+      if !escaped then escaped := false
+      else if c = '\\' then escaped := true
+      else (match !quote with
+          | Some q -> if c = q then quote := None
+          | None ->
+              if c = '\'' || c = '"' then quote := Some c
+              else if c = open_c then incr depth
+              else if c = close_c then decr depth);
       incr j
     done;
+    if !depth <> 0 then invalid_arg ("Unclosed native selector group: " ^ s);
     (String.sub s (i + 1) (!j - i - 2), !j - 1)
   in
   let rec go i tag classes id attrs nots =
@@ -247,12 +295,11 @@ let match_chain (comps : compound list) (el : element)
 let selector_matches (sel : string) (el : element)
     (ancestors : element list) : bool =
   sel
-  |> String.split_on_char ','
+  |> selector_tokens (fun c -> c = ',')
   |> List.exists (fun alt ->
          let comps =
            alt
-           |> String.split_on_char ' '
-           |> List.filter (fun c -> c <> "")
+           |> selector_tokens selector_whitespace
            |> List.map parse_compound
          in
          match_chain comps el ancestors)
@@ -346,8 +393,7 @@ let is_scope_token t = t = ":scope"
 (* split a single selector alternative into (combinator, compound) steps *)
 let parse_steps (alt : string) : sstep list =
   alt
-  |> String.split_on_char ' '
-  |> List.filter (fun t -> t <> "")
+  |> selector_tokens selector_whitespace
   |> List.fold_left
        (fun (acc, next_comb) tok ->
          if tok = ">" then (acc, `Child)
@@ -394,7 +440,7 @@ let rec match_steps ~scope (steps : sstep list) (el : element)
 let scoped_matches ~scope (sel : string) (el : element)
     (ancestors : element list) : bool =
   sel
-  |> String.split_on_char ','
+  |> selector_tokens (fun c -> c = ',')
   |> List.exists (fun alt ->
          match parse_steps alt with
          | [] -> false
