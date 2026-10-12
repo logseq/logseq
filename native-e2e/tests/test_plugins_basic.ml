@@ -152,4 +152,23 @@ let tests =
             let property = Client.sdk_call app "get_property" [str "test-property-3"] in
             Suite.equal ctx "Existing property's type changes to default"
               (member "type" property) (str "default");
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "property-related-test"]
+      "property-related-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            List.iter (fun typ ->
+                let name = "test-property-related-" ^ typ in
+                ignore (Client.sdk_call app "upsert_property"
+                          [str name; `Assoc ["type", str typ]]);
+                let property = Client.sdk_call app "get_property" [str name] in
+                Suite.equal ctx (typ ^ " plugin property identifier")
+                  (member "ident" property)
+                  (str (":plugin.property._test_plugin/" ^ name));
+                Suite.equal ctx (typ ^ " property schema type")
+                  (member "type" property) (str typ);
+                ignore (Client.sdk_call app "remove_property" [str name]);
+                Suite.equal ctx (typ ^ " property is absent after removal")
+                  (Client.sdk_call app "get_property" [str name]) `Null)
+              ["default"; "number"; "date"; "datetime"; "checkbox"; "url";
+               "node"; "json"; "string"];
             validate ctx app)) ]
