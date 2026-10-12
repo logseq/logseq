@@ -165,7 +165,7 @@ let store_fraction key f =
    right dock opens or the window resizes, it is rescaled so the dock's
    rendered px width does not move. Stored values are viewport
    fractions; a drag writes back value * content-ratio. *)
-let right_dock_open st = (model ()).Model.right_sidebar_open
+let right_dock_open _st = (model ()).Model.right_sidebar_open
 
 let left_content_ratio st =
   if right_dock_open st then 1. -. Runtime.signal_get st.right_fraction

@@ -54,8 +54,11 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
        ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
-let search_button =
-  icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
+(* mounted twice: header .l (sidebar closed) and .left-sidebar-top
+   (sidebar open) — the key must differ per site or the reconciler
+   folds the two mounted copies into one *)
+let search_button ?(key = "search-btn") () =
+  icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ())
     ~icon:"search" ~tip:(I18n.t "nav/search") ~keys:"\xE2\x8C\x98 K"
     ~on_click:(fun _ -> Cmdk_state.open_latest ()) ()
 
@@ -621,8 +624,8 @@ let index_progress (ms : Model.t Signal.signal) : t =
     ms
 
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
-let left_menu_button =
-  icon_btn ~key:"left-menu-btn" ~id:"left-menu"
+let left_menu_button ?(key = "left-menu-btn") () =
+  icon_btn ~key ~id:"left-menu"
     ~cls:(ghost_btn_cls ())
     ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
     ~keys:"T L"
@@ -663,7 +666,7 @@ let header (ms : Model.t Signal.signal) =
       ~gap:12 ~cross:`center
       [ link ~url:"#/" ~target:`self_ ~text:(I18n.t "nav/home") []
       ; link ~url:"#/all-pages" ~target:`self_ ~text:(I18n.t "nav.all-pages/label") []
-      ; search_button ]
+      ; search_button () ]
   else
   (* resolved: cljs's inline fontSize:50 on .cp__header is dropped —
      no typed-prop equivalent and the icon kind sizes itself *)
@@ -690,7 +693,7 @@ let header (ms : Model.t Signal.signal) =
             (row ~key:"head-l-btns" ~cross:`center
                ~transition:
                  "visibility 0s linear 0.28s, opacity 0.12s linear 0.28s"
-               [ left_menu_button; search_button ]) ]
+               [ left_menu_button (); search_button () ]) ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
         ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]
@@ -829,10 +832,11 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                      var(--lx-gray-03, \
                      var(--ls-tertiary-background-color));z-index:3" )
                 ]
-           [ row ~key:"ls-top" ~cross:`center ~gap:4
-               ~padding_horizontal:8 ~padding_vertical:4
+           [ row ~key:"ls-top" ~height:52 ~padding_horizontal:8
                ~style_class:"left-sidebar-top"
-               [ left_menu_button; search_button ]
+               [ row ~key:"ls-top-pair" ~cross:`center ~margin_top:8
+                   [ left_menu_button ~key:"ls-top-menu-btn" ()
+                   ; search_button ~key:"ls-top-search-btn" () ] ]
            ; box ~key:"ls-wrap" ~style_class:"wrap"
                ~data_attrs:
                  [ ( "style"
@@ -841,11 +845,12 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                       height:calc(100vh - \
                       var(--ls-headbar-inner-top-padding) - 50px)" )
                  ]
-               [ column ~key:"ls-head" ~gap:4 ~padding_horizontal:12
+               [ column ~key:"ls-head" ~gap:4
                    ~style_class:"sidebar-header-container"
                    ~margin_bottom:4
                    ~data_attrs:[ ("style", "flex-shrink:0") ]
-                   [ Left_sidebar_view.header ms ]
+                   [ Left_sidebar_view.graphs_selector st ms
+                   ; Left_sidebar_view.nav_group ms st ]
                ; Left_sidebar_view.contents ms
                ]
            ])

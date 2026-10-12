@@ -938,10 +938,6 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         ] ]
 ;;
 
-let header (ms : Model.t Signal.signal) : t =
-  let st = Sidebar_state.ensure ms in
-  Logseq_el.fragment [ graphs_selector st ms; nav_group ms st ]
-
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Ui_components.with_props [ P.Position, Ui_components.sv "relative" ]

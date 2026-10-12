@@ -41,9 +41,12 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ]
 
-(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
-let left_menu_btn =
-  button ~key:"left-menu-btn" ~size:`icon ~width:32 ~height:32
+(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar —
+   mounted twice (header .l when the sidebar is closed, the sidebar's
+   own top strip when open): the key must differ per site or the
+   reconciler folds the two mounted copies into one *)
+let left_menu_btn ?(key = "left-menu-btn") () =
+  button ~key ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center ~variant:`ghost
     ~label:(I18n.t "header/toggle-left-sidebar")
     ~accessibility_identifier:"left-menu"
@@ -53,8 +56,8 @@ let left_menu_btn =
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
-let search_btn =
-  icon_btn ~key:"search-btn" ~acc:"search-button" ~icon_name:"search"
+let search_btn ?(key = "search-btn") () =
+  icon_btn ~key ~acc:"search-button" ~icon_name:"search"
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
 (* cljs anchors the dropdown to the trigger's right edge — the fixed
@@ -167,7 +170,13 @@ let topbar (ms : Model.t Signal.signal) : t list =
           (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
           (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
              ~style_class:"cp__header-l"
-          [ left_menu_btn; search_btn ])
+             [ if_
+                 ~test:
+                   (reactive
+                      (fun (m : Model.t) -> not m.Model.left_sidebar_open)
+                      ms)
+                 (row ~key:"head-l-pair" ~cross:`center
+                    [ left_menu_btn (); search_btn () ]) ])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
@@ -272,16 +281,31 @@ let left_sidebar (ms : Model.t Signal.signal) =
                [ (* NavigationSplitView sidebar semantics: the column
                     spans the full window height, so its top strip sits
                     in the title-bar zone where the host overlays the
-                    traffic-light controls. It stays empty drag space
-                    (the window is movable-by-background); the graph
-                    switcher starts below it. *)
-                 box ~key:"ls-top" ~height:52
+                    traffic-light controls (~70px, matching Electron's
+                    is-mac .cp__header > .l padding-left:78 with this
+                    row's 8px padding). The toggle/search pair mounts
+                    here while the sidebar is open — the web header's
+                    .l column overlays this same strip. *)
+                 row ~key:"ls-top" ~height:52 ~cross:`center
+                   ~padding_horizontal:8
                    ~style_class:"left-sidebar-top"
-                   ~data_attrs:[ ("data-window-titlebar", "true") ] []
+                   ~data_attrs:[ ("data-window-titlebar", "true") ]
+                   [ row ~key:"lst-lights-pad" ~width:70 []
+                   ; if_
+                       ~test:
+                         (reactive
+                            (fun (m : Model.t) -> m.Model.left_sidebar_open)
+                            ms)
+                       (row ~key:"lst-pair" ~cross:`center
+                          [ left_menu_btn ~key:"lst-menu-btn" ()
+                          ; search_btn ~key:"lst-search-btn" () ]) ]
                ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
-                   [ box ~key:"ls-head"
+                   [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
                        ~style_class:"sidebar-header-container"
-                       [ Left_sidebar_view.header ms ]
+                       [ Left_sidebar_view.graphs_selector
+                           (Sidebar_state.ensure ms) ms
+                       ; Left_sidebar_view.nav_group ms
+                           (Sidebar_state.ensure ms) ]
                    ; Left_sidebar_view.contents ms
                    ]
                ]
