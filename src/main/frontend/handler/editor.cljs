@@ -2174,7 +2174,9 @@
 
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
-   keep-uuid?: if true, keep the uuid provided in the block structure."
+   keep-uuid?: if true, keep the uuid provided in the block structure.
+   property-assignments: [[block-uuid property-id value] ...] set on the inserted
+   blocks in the same transaction."
   [blocks {:keys [content-update-fn
                   exclude-properties
                   target-block
@@ -2183,7 +2185,8 @@
                   revert-cut-txs
                   skip-empty-target?
                   ops-only?
-                  outliner-real-op]
+                  outliner-real-op
+                  property-assignments]
            :or {exclude-properties []}
            :as opts}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
@@ -2249,7 +2252,15 @@
                                                                                         :outliner-op :paste
                                                                                         :outliner-real-op outliner-real-op
                                                                                         :replace-empty-target? replace-empty-target?
-                                                                                        :keep-uuid? keep-uuid?})))))]
+                                                                                        :keep-uuid? keep-uuid?})
+                                     ;; a replaced empty target keeps its uuid for the first block
+                                     (let [first-uuid (:block/uuid (first blocks))]
+                                       (doseq [[block-uuid property-id value] property-assignments]
+                                         (outliner-op/batch-set-property!
+                                          [(if (and replace-empty-target? (= block-uuid first-uuid))
+                                             (:block/uuid target-block')
+                                             block-uuid)]
+                                          property-id value {})))))))]
         (if ops-only?
           (transact-blocks!)
           (p/let [_ (when has-unsaved-edits

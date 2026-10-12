@@ -13,6 +13,7 @@
             [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.editor.format :as editor-format]
             [frontend.handler.notification :as notification]
+            [frontend.handler.paste-properties :as paste-properties]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -54,22 +55,29 @@
                       text format
                       {:page-name (:block/name page-info)})
               blocks (gp-block/with-parent-and-order (:db/id page-info) blocks)
-              blocks' (p/all
-                       (mapv (fn [block]
-                               (p/let [refs (some->> (:block/refs block)
-                                                     (<with-ref-ids repo date-formatter))]
-                                 (-> block
-                                     (dissoc :block/tags)
-                                     (cond-> refs
-                                       (assoc :block/refs refs))
-                                     (cond-> (:logseq.property/heading block)
-                                       (update :block/title commands/clear-markdown-heading))
-                                     (update :block/title (fn [title]
-                                                            (let [title' (db-content/replace-tags-with-id-refs title refs)]
-                                                              (db-content/title-ref->id-ref title' refs)))))))
-                             blocks))]
-        (editor-handler/paste-blocks blocks' {:keep-uuid? true
-                                              :outliner-real-op :paste-text})))))
+              blocks+properties (p/all
+                                 (mapv (fn [block]
+                                         (p/let [[block assignments] (paste-properties/<read-properties repo block)
+                                                 refs (some->> (:block/refs block)
+                                                               (<with-ref-ids repo date-formatter))]
+                                           [(-> block
+                                                (dissoc :block/tags)
+                                                (cond-> refs
+                                                  (assoc :block/refs refs))
+                                                (cond-> (:logseq.property/heading block)
+                                                  (update :block/title commands/clear-markdown-heading))
+                                                (update :block/title (fn [title]
+                                                                       (let [title' (db-content/replace-tags-with-id-refs title refs)]
+                                                                         (db-content/title-ref->id-ref title' refs)))))
+                                            assignments]))
+                                       blocks))]
+        (editor-handler/paste-blocks (mapv first blocks+properties)
+                                     {:keep-uuid? true
+                                      :outliner-real-op :paste-text
+                                      :property-assignments
+                                      (vec (for [[block assignments] blocks+properties
+                                                 [property-id value] assignments]
+                                             [(:block/uuid block) property-id value]))})))))
 
 (defn- paste-segmented-text
   [format text]
