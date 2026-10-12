@@ -318,9 +318,7 @@ let with_search_db repo f =
   Search_index.create_tables_and_triggers db;
   Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
   Fun.protect
-    ~finally:(fun () ->
-      Worker_state.drop_sqlite_conn_of repo Worker_state.Search;
-      Sqlite.close db)
+    ~finally:(fun () -> Endpoint_lifecycle.close_db_aux repo)
     f
 
 (* client-ops sqlite temp store for `repo` (test_undo_redo_native pattern) *)
@@ -2991,6 +2989,7 @@ let test_search_build_starts_for_version_two () =
   let repo = fresh_repo () in
   with_search_db repo (fun () ->
       let conn = create_conn () in
+      ignore (transact_maps conn [ [ "block/uuid", Uuid (Uuid_gen.uuid ()) ] ]);
       Worker_state.set_datascript_conn repo conn;
       let db =
         match Worker_state.sqlite_conn_of repo Worker_state.Search with
@@ -3000,11 +2999,10 @@ let test_search_build_starts_for_version_two () =
       Sqlite.exec db ~sql:"PRAGMA user_version = 2" ~bind:[||];
       let result =
         api "search-build-blocks-indice-in-worker"
-          [ Wire.String repo; Wire.Bool true ]
+          [ Wire.String repo; Wire.Bool false ]
       in
       check "started rebuild"
-        (result = Wire.Keyword "started" || result = Wire.Int 2
-         || result <> Wire.Nil))
+        (result = Wire.Keyword "started"))
 
 (* (deftest search-upsert-blocks-and-search-blocks-fallback-test ...) —
    exercises search-upsert-blocks + search-blocks against a real
