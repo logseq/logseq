@@ -4,6 +4,7 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `validate-local-db!`, `when` becomes `when-not`.
 (deftest validate-local-db!-prints-counts-only-when-verbose-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

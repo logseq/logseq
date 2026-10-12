@@ -2,12 +2,14 @@
   (:require [cljs.test :refer [deftest is]]
             [logseq.db.frontend.property :as db-property]))
 
+;; Fails if, in `sort-properties`, `and` becomes `or` or `nil?` becomes `some?`.
 (deftest sort-properties-puts-unordered-after-ordered-whatever-their-uuid-test
   (let [ordered {:db/id 1 :block/order "a" :block/uuid "uuid-z"}
         unordered {:db/id 2 :block/order nil :block/uuid "uuid-a"}]
     (is (= [1 2] (mapv :db/id (db-property/sort-properties [ordered unordered]))))
     (is (= [1 2] (mapv :db/id (db-property/sort-properties [unordered ordered]))))))
 
+;; Fails if, in `built-in-ident->i18n-key`, `inc` becomes `dec`, `if` becomes `if-not` or `=` becomes `not=`.
 (deftest built-in-ident->i18n-key-test
   (is (= :property.status/backlog
          (db-property/built-in-ident->i18n-key :logseq.property/status.backlog))
