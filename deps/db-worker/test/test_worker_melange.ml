@@ -188,6 +188,40 @@ let () =
       Fest.expect |> Fest.equal (Dispatcher.registered "thread-api/q") true;
       Fest.expect |> Fest.equal (Dispatcher.registered "thread-api/nope") false);
 
+  Fest.test "integer transaction retractions preserve large scalar values" (fun () ->
+      List.iter
+        (fun timestamp ->
+           let conn = Datascript.conn_from_db (Datascript.empty_db ()) in
+           Common_util.protect
+             ~finally:(fun () -> Db_tx.release_flags conn)
+             (fun () ->
+                ignore
+                  (Db_transact.transact conn
+                     [ Wire.kw_map
+                         [ "db/id", Wire.Int 1
+                         ; "block/title", Wire.String "undo"
+                         ; "block/created-at", Wire.Int64 timestamp ] ]
+                     []);
+                Fest.expect |> Fest.equal
+                  (List.exists
+                     (fun (d : Datascript.datom) ->
+                        d.a = "block/created-at" && d.v = Datascript.Int64 timestamp)
+                     (List.of_seq (Datascript.datoms (Datascript.db conn) Datascript.Eavt ~e:1 ())))
+                  true;
+                ignore
+                  (Db_transact.transact conn
+                     [ Wire.Array
+                         [ Wire.Keyword "db/retract"; Wire.Int 1
+                         ; Wire.Keyword "block/created-at"; Wire.Int64 timestamp ]
+                     ; Wire.Array
+                         [ Wire.Keyword "db/retract"; Wire.Int 1
+                         ; Wire.Keyword "block/title"; Wire.String "undo" ] ]
+                     []);
+                Fest.expect |> Fest.equal
+                  (List.of_seq (Datascript.datoms (Datascript.db conn) Datascript.Eavt ~e:1 ()) = [])
+                  true))
+        [ 1791792912141L; 9007199254740993L ]);
+
   Fest.Promise.test "end-to-end worker lifecycle" (fun () ->
       let dir = mkdtemp (Filename.concat (tmpdir ()) "dbw-") in
       set_env "LOGSEQ_WORKER_DB_DIR" dir;
