@@ -21,7 +21,6 @@
                                                       {:page (:block/uuid class)
                                                        :properties (merge properties {:block/tags (:db/id class)})
                                                        :edit-block? false})]
-    (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
 
 (defn- build-asset-file-column
@@ -91,9 +90,7 @@
                                    {:on-change (fn [_e files]
                                                  (p/let [_ (editor-assets/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
                                                    (shui/dialog-close!)))})]))
-                              (p/let [block (add-new-class-object! class properties)]
-                                (when (:db/id block)
-                                  (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
+                              (add-new-class-object! class properties))))]
 
     [:div {:ref *ref}
      (views/view {:config config'
@@ -157,7 +154,6 @@
                                                                     {(:db/ident property) default-value}
                                                                     properties)
                                                        :edit-block? false})]
-    (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
 
 (hsx/defc property-related-objects-inner
@@ -168,9 +164,7 @@
                  :view-feature-type :property-objects
                  :columns columns
                  :add-new-object! (fn [_view _table {:keys [properties]}]
-                                    (p/let [block (add-new-property-object! property properties)]
-                                      (when (:db/id block)
-                                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))
+                                    (add-new-property-object! property properties))
                  ;; TODO: Add support for adding column
                  :show-add-property? false})))
 
