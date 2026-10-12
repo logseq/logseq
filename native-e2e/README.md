@@ -98,7 +98,11 @@ explicit reviewed `inventory.exe --write <repo>` regeneration.
 ./native-e2e/run.sh --coverage
 ```
 
-The strict `--coverage` gate exits 2 for any missing mapping. Duplicate IDs,
+The strict `--coverage` gate runs the selected registered cases before reporting
+missing mappings and exits 2 if coverage remains incomplete. A runtime failure
+takes precedence and exits 1, while still reporting missing mappings.
+`--coverage --inventory-only` skips execution and immediately lists gaps with
+exit 2; it does not verify runtime behavior. Duplicate IDs,
 unknown IDs, wrong ownership, wrong helper/desktop contract and unmapped tests
 without explicit additional provenance fail in all modes. Runtime fails tests with
 zero executed assertions or desktop claims with zero SDL input. A complete parity

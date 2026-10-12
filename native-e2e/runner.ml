@@ -42,11 +42,13 @@ let () =
   let parity_count = List.length tests - additional_count in
   Printf.printf "Coverage declarations: %d/%d; pending: %d; parity native cases: %d; additional native cases: %d\n%!"
     (Hashtbl.length mappings) (List.length cases) (List.length pending) parity_count additional_count;
-  if !coverage && pending <> [] then begin
-    List.iter (fun (id, _) -> Printf.eprintf "MISSING %s\n" id) pending;
-    exit 2
+  let report_missing () =
+    if !coverage then
+      List.iter (fun (id, _) -> Printf.eprintf "MISSING %s\n" id) pending in
+  if !inventory_only then begin
+    report_missing ();
+    exit (if !coverage && pending <> [] then 2 else 0)
   end;
-  if !inventory_only then exit 0;
   let selected = List.filter (fun (file, (definition : Suite.test)) ->
       (match !filter with None -> true | Some name -> definition.name = name) &&
       (match !group with None -> true | Some group_name ->
@@ -95,4 +97,6 @@ let () =
     (`Assoc ["results", `List results; "pending", `Int (List.length pending);
              "declared_parity_cases", `Int parity_count; "declared_additional_cases", `Int additional_count]);
   Printf.printf "Results: %s\n%!" base;
-  if List.exists (fun r -> not (r |> member "passed" |> to_bool)) results then exit 1
+  report_missing ();
+  if List.exists (fun r -> not (r |> member "passed" |> to_bool)) results then exit 1;
+  if !coverage && pending <> [] then exit 2
