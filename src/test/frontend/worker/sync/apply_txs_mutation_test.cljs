@@ -22,7 +22,6 @@
 (def ^:private block-ref? @#'sync-apply/block-ref?)
 (def ^:private expand-block-retracts-to-descendants @#'sync-apply/expand-block-retracts-to-descendants)
 (def ^:private reverse-history-action! @#'sync-apply/reverse-history-action!)
-(def ^:private replace-uuid-str-with-eid @#'sync-apply/replace-uuid-str-with-eid)
 (def ^:private ref-attr? @#'sync-apply/ref-attr?)
 (def ^:private tx-item-components @#'sync-apply/tx-item-components)
 (def ^:private tx-entity-uuid @#'sync-apply/tx-entity-uuid)
@@ -248,16 +247,16 @@
         small-2 (entry 2 3)
         exact (entry 3 5000)
         half-1 (entry 4 2500)
-        half-2 (entry 5 2500)]
-    (let [summary (fn [entries]
-                    (mapv (fn [e] [(:tx-id e) (count (:tx-data e)) (contains? e :large-upload-final?)])
-                          entries))]
-      (is (= [[1 2 false] [2 3 false]] (summary (cap-upload-request-tx-entries "r" nil [small-1 small-2]))))
-      (is (= [[3 5000 false]] (summary (cap-upload-request-tx-entries "r" nil [exact]))))
-      (is (= [[4 2500 false] [5 2500 false]]
-             (summary (cap-upload-request-tx-entries "r" nil [half-1 half-2]))))
-      (is (= [[4 2500 false]]
-             (summary (cap-upload-request-tx-entries "r" nil [half-1 (entry 6 2501)])))))))
+        half-2 (entry 5 2500)
+        summary (fn [entries]
+                  (mapv (fn [e] [(:tx-id e) (count (:tx-data e)) (contains? e :large-upload-final?)])
+                        entries))]
+    (is (= [[1 2 false] [2 3 false]] (summary (cap-upload-request-tx-entries "r" nil [small-1 small-2]))))
+    (is (= [[3 5000 false]] (summary (cap-upload-request-tx-entries "r" nil [exact]))))
+    (is (= [[4 2500 false] [5 2500 false]]
+           (summary (cap-upload-request-tx-entries "r" nil [half-1 half-2]))))
+    (is (= [[4 2500 false]]
+           (summary (cap-upload-request-tx-entries "r" nil [half-1 (entry 6 2501)]))))))
 
 (defn- capture-logs
   "Run f and return the pr-str of every log record emitted meanwhile."
