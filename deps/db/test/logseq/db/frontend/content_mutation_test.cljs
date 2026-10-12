@@ -7,6 +7,7 @@
 (def ^:private uuid-b #uuid "22222222-2222-2222-2222-222222222222")
 (def ^:private uuid-p #uuid "33333333-3333-3333-3333-333333333333")
 
+;; Fails if, in `ref->title-entry`, `and` becomes `or`.
 (deftest recur-replace-uuid-in-block-title-without-block-refs-test
   (let [block-a {:block/uuid uuid-a :block/title "Block A"}
         page-p {:block/uuid uuid-p :block/title "Page P"
@@ -20,6 +21,7 @@
       (is (= "see [[Block A]] and [[Page P]]"
              (db-content/recur-replace-uuid-in-block-title ent))))))
 
+;; Fails if, in `recur-replace-uuid-in-block-title`, `or` becomes `and`, `>=` becomes `>` or `inc` becomes `dec`.
 (deftest recur-replace-uuid-in-block-title-stops-replacing-at-max-depth-test
   ;; The title refs A and P; A's title refs P again. P is a direct ref, so its
   ;; title is known, but its 2nd occurrence only appears after the 1st

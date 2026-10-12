@@ -38,6 +38,7 @@
       (p/let [_ (editor-assets/db-based-save-assets! "repo" files)]
         {:inserted @inserted :edited @edited}))))
 
+;; Fails if, in `new-asset-block`, `if` becomes `if-not`, `=` becomes `not=` or `or` becomes `and`.
 (deftest asset-block-is-titled-after-its-file-and-keeps-its-checksum-test
   (async done
     (-> (p/let [{:keys [inserted]} (save-assets! [{:src "photo.png"}] nil)
@@ -47,6 +48,7 @@
         (p/catch (fn [e] (is (nil? e))))
         (p/finally (fn [& _] (done))))))
 
+;; Fails if, in `db-based-save-assets!`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest asset-pasted-into-an-empty-editing-block-reopens-the-editor-on-it-test
   (async done
     (let [edit-uuid (random-uuid)]
