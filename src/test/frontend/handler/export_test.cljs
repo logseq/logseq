@@ -103,7 +103,19 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
+     {:page {:block/title "page7"}
+      :blocks
+      [{:block/title "embedded"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000701"
+        :build/children [{:block/title "embedded child"}]}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000702"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000703"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -112,7 +124,13 @@
                                        :auto-create-ontology? true})
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     (d/transact! (conn/get-db test-helper/test-db false)
-                 (concat init-index init-tx block-props-tx))))
+                 (concat init-index init-tx block-props-tx))
+    ;; a block embed: a block whose :block/link is the embedded block; 703 embeds itself
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [[:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000702"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]]])))
 
 (use-fixtures :once
   {:before (fn []
@@ -482,6 +500,19 @@
       (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
           "a block that is only a ref to a missing block keeps the ref")
       (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
+(deftest export-blocks-as-markdown-block-embed
+  (async done
+    (p/let [embed (<export-blocks-as-markdown
+                   [#uuid "00000000-0000-4000-8000-000000000702"]
+                   {:remove-options #{}})
+            self-embed (<export-blocks-as-markdown
+                        [#uuid "00000000-0000-4000-8000-000000000703"]
+                        {:remove-options #{}})]
+      (is (= "- embedded\n\t- embedded child" (string/trim embed))
+          "a block embed exports the embedded block and its children")
+      (is (string? self-embed) "an embed of itself does not loop")
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
