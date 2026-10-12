@@ -2404,8 +2404,14 @@ let display_already_shows_remote repo (display : conn)
         let touched : (int * string, unit) Hashtbl.t = Hashtbl.create 16 in
         List.iter
           (fun (d : datom) ->
-             if d.a <> "db/txInstant" && d.e <> d.tx then
-               Hashtbl.replace touched (d.e, d.a) ())
+             (* updated-at moves on every later local insert (the page
+                or parent). The echoed tx still carries the earlier
+                stamp. Rebuilding for that republishes the block being
+                typed into. A title or order change is still a diff. *)
+             if
+               d.a <> "db/txInstant" && d.a <> "block/updated-at"
+               && d.e <> d.tx
+             then Hashtbl.replace touched (d.e, d.a) ())
           !collected;
         Hashtbl.fold
           (fun (e, a) () unchanged ->
@@ -2417,6 +2423,71 @@ let display_already_shows_remote repo (display : conn)
       Worker_log.warn "db-sync/echo-diff-failed"
         [ "repo", repo; "error", Printexc.to_string e ];
       false
+
+let eid_of_wire (db : db) (e : Wire.t) : int option =
+  match e with
+  | Wire.Int n -> (
+      match Datascript.entity db (Entity_id n) with
+      | Some _ -> Some n
+      | None -> None)
+  | Wire.Uuid s | Wire.String s when Sync_state.uuid_string s -> (
+      match
+        Datascript.entity db
+          (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
+      with
+      | Some ent -> Some ent.id
+      | None -> None)
+  | Wire.Array [ a; Wire.Uuid s ] | Wire.List [ a; Wire.Uuid s ]
+  | Wire.Array [ a; Wire.String s ] | Wire.List [ a; Wire.String s ]
+    when a = Wire.keyword "block/uuid" && Sync_state.uuid_string s -> (
+      match
+        Datascript.entity db
+          (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
+      with
+      | Some ent -> Some ent.id
+      | None -> None)
+  | _ -> None
+
+let wire_fact_held (db : db) (eid : int) (attr : string) (v : Wire.t) : bool =
+  if attr = "block/updated-at" || attr = "db/txInstant" then true
+  else
+    let held_value =
+      match eid_of_wire db v with
+      | Some target when Db_normalize.entity_value_type_ref db attr ->
+          Ref target
+      | _ -> Ds_wire.value_of_transit v
+    in
+    fact_present db eid attr held_value
+
+(* A rejected tx stays on the display until the next projection rebuild.
+   Skipping that rebuild would leave the rejected title in the editor. *)
+let failed_overlay_on_display repo (display : conn) (server : conn) : bool =
+  let display_db = Conn.db display in
+  let server_db = Conn.db server in
+  let overlay_item (item : Wire.t) : bool =
+    match item with
+    | Wire.Array (op :: e :: a :: v :: _) | Wire.List (op :: e :: a :: v :: _)
+      when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" -> (
+        match a with
+        | Wire.Keyword attr -> (
+            match eid_of_wire display_db e, eid_of_wire server_db e with
+            | Some de, Some se ->
+                let on_display = wire_fact_held display_db de attr v in
+                let on_server = wire_fact_held server_db se attr v in
+                if op = Wire.keyword "db/add" then on_display && not on_server
+                else on_server && not on_display
+            | _ -> false)
+        | _ -> false)
+    | Wire.Array [ op; e ] | Wire.List [ op; e ]
+      when op = Wire.keyword "db/retractEntity"
+           || op = Wire.keyword "db.fn/retractEntity" ->
+        eid_of_wire display_db e = None && eid_of_wire server_db e <> None
+    | _ -> false
+  in
+  List.exists
+    (fun (t : Sync_client_op.local_tx_entry) ->
+       List.exists overlay_item (tx_items_of t.tx))
+    (Sync_client_op.get_failed_local_txs repo)
 
 (* Remote txs land on the server conn only; the display projection is
    then rebuilt from confirmed state with the pending queue replayed
@@ -2548,6 +2619,7 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
           | Some display, Some server
             when server == conn && display != server ->
               display_already_shows_remote repo display remote_txs
+              && not (failed_overlay_on_display repo display server)
           | _ -> false
         in
         if skip_rebind then

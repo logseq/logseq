@@ -375,6 +375,13 @@ let get_local_tx_entry repo (tx_id : string) : local_tx_entry option =
     | Some r -> Some (row_to_pending_local_tx r)
     | None -> None
 
+let get_failed_local_txs repo : local_tx_entry list =
+  rows (store repo)
+    (pending_tx_select
+     ^ " and failed = 1 order by created_at asc, id asc")
+    []
+  |> List.map row_to_pending_local_tx
+
 let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
   let sql =
     pending_tx_select
