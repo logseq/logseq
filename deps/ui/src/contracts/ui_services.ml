@@ -171,6 +171,13 @@ type env = {
   random_uuid : unit -> string;
   open_url : string -> unit;
   (* Open an external URL in the system browser. *)
+  url_images : unit -> bool;
+  (* The host renders [image ~url] elements — bundled/remote bitmap
+     URLs resolve and paint. Hosts that raster only registered image
+     ids (native) answer false; views fall back to drawn placeholders. *)
+  paints_caret : unit -> bool;
+  (* The host paints the editor caret itself from its own glyph layout
+     (native); the shared overlay caret must not double-draw. *)
   menu_popup : Json.t -> bool;
   (* Hand an in-app menu spec to the host for a native popup (the JSON
      shape lives in popups_state's serializer). The host replies with a
@@ -253,6 +260,11 @@ type el = {
   closest : string -> el option;
   attr : string -> string option;
   rect : unit -> float * float * float * float; (* x, y, width, height *)
+  rect_pending : unit -> bool;
+  (* True while the element's rect is still awaiting an async host
+     measurement — distinct from a genuinely measured zero rect, which
+     callers should treat as final instead of retrying. Synchronous
+     hosts (web) always answer false. *)
   set_style : string -> string -> unit;
   add_class : string -> unit;
   remove_class : string -> unit;
@@ -475,6 +487,8 @@ let env_css_transform_icons () = (get ()).env.css_transform_icons ()
 let env_edit_units () = (get ()).env.edit_units ()
 let env_random_uuid () = (get ()).env.random_uuid ()
 let env_open_url u = (get ()).env.open_url u
+let env_url_images () = (get ()).env.url_images ()
+let env_paints_caret () = (get ()).env.paints_caret ()
 let env_menu_popup spec = (get ()).env.menu_popup spec
 
 let dom_on_document_event ?capture name f = (get ()).dom.on_document_event ?capture name f

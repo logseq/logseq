@@ -2630,8 +2630,8 @@ let ac_it ?group label =
   Popups_state.mk_item ~key:label ~label ?group Popups_state.Noop
 
 let mk_ac kind =
-  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; flipx = None
-    ; query = ""
+  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; pos_pending = false
+  ; flip = None; flipx = None; query = ""
   ; tpos = 0; tlen = 0
   ; items = []; chosen = 0; auuid = "" }
 

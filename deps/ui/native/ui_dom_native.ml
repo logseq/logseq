@@ -101,6 +101,7 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
         , Dom_ext.rect_top r
         , Dom_ext.rect_width r
         , Dom_ext.rect_height r ))
+  ; rect_pending = (fun () -> Dom_ext.rect_pending e)
   ; set_style = (fun name v -> Dom_ext.style_set_property e name v)
   ; add_class = (fun c -> Dom_ext.el_class_add e c)
   ; remove_class = (fun c -> Dom_ext.el_class_remove e c)

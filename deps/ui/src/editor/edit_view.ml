@@ -611,7 +611,7 @@ let overlay (frame : frame Signal.signal) : t =
      alongside the input sink. Other hosts use the measured overlay
      rectangle. *)
   let caret =
-    if Lui_ui.host context = GenericHost then []
+    if Ui_services.env_paints_caret () then []
     else
      [ if_
          ~test:

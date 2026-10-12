@@ -88,6 +88,11 @@ type ac =
   ; x : float
   ; y : float
   ; cy : float (* caret line top — flip-above anchor *)
+  ; pos_pending : bool
+    (* the caret anchor hasn't been measured yet (hosts with async
+       measurement answer popup_pos with None first); x/y/cy hold the
+       (0,0,0) fallback only while this is set — a measured anchor that
+       genuinely resolves to zeros must not keep re-reading *)
   ; flip : (float * float) option
     (* Some (top, avail-h) once the popup measured too tall for the
        space below the caret — base-ui avoidCollisions flips it above *)
@@ -1047,13 +1052,13 @@ let load_templates t =
 
 let open_ac ?tpos ?(autopair = true) t kind =
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
-  let x, y, cy =
-    Option.value (Editor_sink.popup_pos auuid) ~default:(0., 0., 0.)
-  in
+  let pos = Editor_sink.popup_pos auuid in
+  let x, y, cy = Option.value pos ~default:(0., 0., 0.) in
   let tlen = trigger_len_of_kind kind in
   let tpos = Option.value tpos ~default:(fst (Editor_actions.sel_span auuid) - tlen) in
   let ac =
-    { kind; x; y; cy; flip = None; flipx = None; query = ""
+    { kind; x; y; cy; pos_pending = Option.is_none pos
+    ; flip = None; flipx = None; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; auuid }
   in
@@ -1071,20 +1076,21 @@ let open_ac ?tpos ?(autopair = true) t kind =
     match (get t).ac with
     | Some a when a.kind = kind -> (
         (* cljs pins the popup at the caret position captured when it
-           opened — typing further must not re-anchor it. Only the
-           open-time fallback (0,0,0) keeps re-reading popup_pos: on
-           hosts whose caret-rect reply lands on the async channel the
-           first call can still see the fallback, so retries upgrade it
-           once — then the anchor freezes for the popup's session *)
+           opened — typing further must not re-anchor it. While the
+           anchor is still pending (async-measurement hosts answer
+           popup_pos with None first) retries keep re-reading and
+           upgrade it once — then the anchor freezes for the popup's
+           session *)
         let a =
-          if a.x = 0. && a.y = 0. && a.cy = 0. then
+          if a.pos_pending then
             match Editor_sink.popup_pos a.auuid with
-            | Some (x', y', cy')
-              when x' <> a.x || y' <> a.y || cy' <> a.cy ->
-                let a' = { a with x = x'; y = y'; cy = cy' } in
+            | Some (x', y', cy') ->
+                let a' =
+                  { a with x = x'; y = y'; cy = cy'; pos_pending = false }
+                in
                 set_ac t (Some a');
                 a'
-            | _ -> a
+            | None -> a
           else a
         in
         match Ui_services.dom_query "#ui__ac-inner" with

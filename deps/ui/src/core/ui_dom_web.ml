@@ -288,6 +288,9 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
       (fun () ->
         let r = bounding_rect e in
         (num r "x", num r "y", num r "width", num r "height"))
+  ; rect_pending = (fun () -> false)
+      (* getBoundingClientRect is synchronous — a zero rect is a real
+         zero, never a pending measurement *)
   ; set_style = (fun name v -> set_style_prop e name v)
   ; add_class = (fun c -> class_add e c)
   ; remove_class = (fun c -> class_rm e c)

@@ -108,7 +108,7 @@ let theme_row ctx =
          ())
     ~control:
       (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
-         [ box ~key:"theme-a" [ V.theme_modes_ul ~ctx ~st:mode ]
+         [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
          ; row ~key:"theme-desc" ~cross:`center
              [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
          ])

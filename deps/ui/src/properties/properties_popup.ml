@@ -44,17 +44,18 @@ let open_at ?(cls = "") ~x ~y content =
   key
 
 (* On backends with async measurement (the native host) the anchor's
-   first rect
-   is still pending, so an element-anchored popup would mount at 0,0
-   on first open. Retry a few ticks until the rect resolves — same
-   pattern as Properties_dialog.open_for_anchor_el. *)
+   first rect is still pending, so an element-anchored popup would
+   mount at 0,0 on first open. Retry while rect_pending reports the
+   measurement outstanding — a resolved rect (zero or not) is final —
+   same pattern as Properties_dialog.open_for_anchor_el. *)
 let measure_anchor (anchor : Ui_services.el) f =
   let rec go tries_left =
-    let x, y, w, h = anchor.Ui_services.rect () in
-    if x = 0. && y = 0. && w = 0. && h = 0. && tries_left > 0 then
+    if anchor.Ui_services.rect_pending () && tries_left > 0 then
       ignore
         (Ui_services.timers_timeout (fun () -> go (tries_left - 1)) 32)
-    else f x y w h
+    else
+      let x, y, w, h = anchor.Ui_services.rect () in
+      f x y w h
   in
   go 4
 

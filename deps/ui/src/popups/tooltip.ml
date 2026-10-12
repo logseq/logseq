@@ -84,11 +84,11 @@ let show_for (trig : Ui_services.el) =
         match Ui_services.dom_query "#lui-tooltip" with
         | None -> ()
         | Some bubble ->
-            let _, _, w, h = bubble.Ui_services.rect () in
-            if w = 0. && h = 0. && tries > 0 then
+            if bubble.Ui_services.rect_pending () && tries > 0 then
               ignore
                 (Ui_services.timers_timeout (fun () -> place (tries - 1)) 16)
             else
+              let _, _, w, h = bubble.Ui_services.rect () in
               let x =
                 Float.max 5.
                   (Float.min (trig_cx -. (w /. 2.))

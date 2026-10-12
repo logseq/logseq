@@ -567,6 +567,11 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; edit_units = (fun () -> `Bytes)
         ; random_uuid = Host.random_uuid
         ; open_url = Host.open_url
+        ; url_images =
+            (* the native scene graph paints registered image ids, not
+               url-fetched bitmaps *)
+            (fun () -> false)
+        ; paints_caret = (fun () -> true)
         ; menu_popup = native_menu_popup
         }
     ; dom

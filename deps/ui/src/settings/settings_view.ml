@@ -157,15 +157,14 @@ let theme_thumb_native ~key mode =
           ]
       ]
 
-let theme_item ~(ctx : Lui_ui.ui_context) ~st mode label =
+let theme_item ~st mode label =
   let thumbnail =
-    match Lui_ui.host ctx with
-    | Lui_protocol.GenericHost -> theme_thumb_native ~key:("tt-" ^ mode) mode
-    | _ ->
+    if Ui_services.env_url_images () then
       image ~key:("tt-" ^ mode)
         ~url:("../img/" ^ mode ^ "-theme.png") ~alt:label
         ~width:92 ~height:63 ~corner_radius:4
         ~data_attrs:[ "style", "height:63.25px;object-fit:cover" ] []
+    else theme_thumb_native ~key:("tt-" ^ mode) mode
   in
   C.class_signal (Signal.value st)
     (fun active -> if active = mode then "active" else "")
@@ -178,12 +177,12 @@ let theme_item ~(ctx : Lui_ui.ui_context) ~st mode label =
          Runtime.flush ()) ())
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
-let theme_modes_ul ~ctx ~st =
+let theme_modes_ul ~st =
   row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
     ~cross:`center ~min_height:87
-    [ theme_item ~ctx ~st "light" T.theme_light
-    ; theme_item ~ctx ~st "dark" T.theme_dark
-    ; theme_item ~ctx ~st "system" T.theme_system
+    [ theme_item ~st "light" T.theme_light
+    ; theme_item ~st "dark" T.theme_dark
+    ; theme_item ~st "system" T.theme_system
     ]
 
 (* shui select trigger + chevron; the popover mounts as a sibling so
@@ -229,7 +228,7 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:"ui__dialog-title" ~value:T.settings_title []
       ; column ~key:"st-theme" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-tl" ~value:T.theme_label []
-          ; theme_modes_ul ~ctx ~st:mode
+          ; theme_modes_ul ~st:mode
           ]
       ; column ~key:"st-lang" ~style_class:"ls-settings-col" ~gap:8
           [ text ~key:"st-ll" ~value:T.language_label []
