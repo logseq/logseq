@@ -510,14 +510,20 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
   double x = Double_val(vx), y = Double_val(vy);
   double w = Double_val(vw), h = Double_val(vh);
   int visible = Int_val(vvisible) != 0;
+  /* Called once per layout — the windows/layer walks below hand out
+     autoreleased NSArrays, and this host has no Cocoa run loop
+     draining a pool per turn, so drain them ourselves. */
+  extern void *objc_autoreleasePoolPush(void);
+  extern void objc_autoreleasePoolPop(void *);
+  void *pool = objc_autoreleasePoolPush();
   Class cls = objc_getClass("NSApplication");
-  if (cls == Nil) CAMLreturn(Val_unit);
+  if (cls == Nil) goto done;
   id app = ((id (*)(Class, SEL))objc_msgSend)(
       cls, sel_registerName("sharedApplication"));
-  if (app == nil) CAMLreturn(Val_unit);
+  if (app == nil) goto done;
   id windows =
       ((id (*)(id, SEL))objc_msgSend)(app, sel_registerName("windows"));
-  if (windows == nil) CAMLreturn(Val_unit);
+  if (windows == nil) goto done;
   unsigned long count =
       ((unsigned long (*)(id, SEL))objc_msgSend)(
           windows, sel_registerName("count"));
@@ -600,6 +606,8 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
         effect, sel_registerName("setHidden:"), visible ? 0 : 1);
     break;
   }
+done:
+  objc_autoreleasePoolPop(pool);
   CAMLreturn(Val_unit);
 }
 #endif
