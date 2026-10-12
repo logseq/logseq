@@ -36,6 +36,7 @@
    {:e e :a :block/title :v "s" :added true}
    {:e e :a :block/parent :v 1 :added true}])
 
+;; Fails if, in `stable-entity-ref`, `or` becomes `and`.
 (deftest derive-history-outliner-ops-resolves-block-maps-to-uuids-test
   (testing "a block id given as a map with only :block/uuid or only :db/id becomes the block's uuid"
     (let [conn (conn-with-blocks-a-b)
@@ -47,6 +48,8 @@
                                                    {:db/id (:db/id b)}]
                                                   true]]]))))))
 
+;; Fails if, in `sanitize-block-payload`, `when` becomes `when-not` or `seq` becomes `empty?`.
+;; Fails if, in `created-block-uuids-from-tx-data`, `>=` becomes `>`.
 (deftest derive-history-outliner-ops-save-block-marks-refs-created-in-tx-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -69,6 +72,8 @@
                                   [0 1 0])
                           op-construct/rebase-created-refs-key))))))
 
+;; Fails if, in `get-missing-ref-by-lookup`, `or` becomes `and`.
+;; Fails if, in `rewrite-block-title-with-retracted-refs`, `seq` becomes `empty?`.
 (deftest rewrite-block-title-with-retracted-refs-restores-missing-ref-test
   (testing "a ref missing from the db is put back as a page with its title, and the title shows its name"
     (let [conn (conn-with-blocks-a-b)
@@ -83,6 +88,7 @@
              (map (juxt :block/title :block/uuid) (:block/refs result))))
       (is (not (contains? result op-construct/rebase-refs-key))))))
 
+;; Fails if, in `created-page-uuid-from-tx-data`, `when` becomes `when-not`, `and` becomes `or` or `=` becomes `not=`.
 (deftest derive-history-outliner-ops-create-page-finds-created-uuid-in-tx-data-test
   (testing "from entity maps: the map with the page's title"
     (let [conn (conn-with-blocks-a-b)
@@ -107,6 +113,7 @@
                                   [[:create-page ["New" {}]]])
                      [0 1 1 :uuid]))))))
 
+;; Fails if, in `maybe-rewrite-delete-block-ids`, `=` becomes `not=`, `first` becomes `last` or `>=` becomes `>`.
 (deftest derive-history-outliner-ops-delete-blocks-takes-ids-retracted-in-tx-data-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -123,6 +130,7 @@
                            {:e (:db/id b) :a :block/title :v "b" :added false}]
                           [[:delete-blocks [[(:db/id a)] {}]]]))))))
 
+;; Fails if, in `maybe-rewrite-delete-block-ids`, `seq` becomes `empty?`, `=` becomes `not=`, `and` becomes `or`, `first` becomes `last` or `nil?` becomes `some?`.
 (deftest derive-history-outliner-ops-delete-blocks-takes-created-uuids-for-missing-lookups-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -136,6 +144,9 @@
       (is (= [[:delete-blocks [[(:block/uuid a)] {}]]]
              (forward-ops @conn tx-data [[:delete-blocks [[[:block/uuid (:block/uuid a)]] {}]]]))))))
 
+;; Fails if, in `inserted-block-uuids-from-tx-data`, `some?` becomes `nil?`, `or` becomes `and`, `and` becomes `or` or `=` becomes `not=`.
+;; Fails if, in `canonicalize-insert-ops`, `if` becomes `if-not`, `=` becomes `not=`, `first` becomes `last` or `not` becomes `identity`.
+;; Fails if, in `canonicalize-explicit-outliner-op-groups`, `first` becomes `last`.
 (deftest derive-history-outliner-ops-insert-blocks-takes-uuids-of-inserted-blocks-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -182,6 +193,8 @@
                               [:db/add -2 :block/parent [:block/uuid page-uuid]]]
                              [(insert-op s1)]))))))))
 
+;; Fails if, in `replaces-empty-target?`, `or` becomes `and`, `and` becomes `or`, `>` becomes `>=`, `first` becomes `last` or `=` becomes `not=`.
+;; Fails if, in `canonicalize-insert-blocks-op`, `or` becomes `and`, `and` becomes `or`, `=` becomes `not=`, `inc` becomes `dec`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest derive-history-outliner-ops-insert-blocks-replaces-empty-target-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -226,6 +239,7 @@
       (testing "1 new block fewer than source blocks: the 1st takes the target's uuid"
         (is (= [target-uuid x2] (insert-uuids new-x2-vectors [s1 s2] {:replace-empty-target? true})))))))
 
+;; Fails if, in `compare-document-order`, `nil?` becomes `some?` or `if` becomes `if-not`.
 (deftest derive-history-outliner-ops-move-blocks-inverse-restores-in-page-order-test
   (let [conn (conn-with-blocks-a-b-c)
         a (db-test/find-block-by-content @conn "a")
@@ -239,6 +253,7 @@
     (testing "ids in reverse page order"
       (is (= [(:block/uuid a) (:block/uuid c)] (restored-uuids [(:db/id c) (:db/id a)]))))))
 
+;; Fails if, in `opposite-move-restores?`, `seq` becomes `empty?`, `=` becomes `not=`, `some?` becomes `nil?`, `if` becomes `if-not`, `first` becomes `last` or `last` becomes `first`.
 (deftest derive-history-outliner-ops-move-blocks-up-down-inverse-test
   (let [conn (conn-with-blocks-a-b-c)
         [a b c] (map #(db-test/find-block-by-content @conn %) ["a" "b" "c"])
@@ -252,6 +267,8 @@
     (testing "b, c down (c is the last child): restored by moves"
       (is (= [:move-blocks :move-blocks] (map first (inverse [b c] false)))))))
 
+;; Fails if, in `canonical-move-op-for-block`, `or` becomes `and`.
+;; Fails if, in `reverse-inverse-entry-groups`, `first` becomes `last`.
 (deftest derive-history-outliner-ops-inverse-reverses-groups-of-different-sizes-test
   (testing "an indent that becomes 2 moves, then a save: the inverse is the save's, then the 2 moves'"
     (let [conn (conn-with-blocks-a-b-c)
@@ -267,6 +284,9 @@
       (is (= [:save-block :move-blocks :move-blocks] (map first inverse)))
       (is (= [(:block/uuid b) (:block/uuid c)] (map #(get-in % [1 0 0]) (rest inverse)))))))
 
+;; Fails if, in `has-replace-empty-target-insert-op?`, `and` becomes `or`.
+;; Fails if, in `patch-inverse-delete-block-ops`, `first` becomes `last`, `or` becomes `and`, `=` becomes `not=`, `seq` becomes `empty?` or `if` becomes `if-not`.
+;; Fails if, in `derive-history-outliner-ops`, `nil?` becomes `some?`.
 (deftest derive-history-outliner-ops-explicit-inverse-deletes-take-inserted-ids-test
   (testing "without a built inverse, each explicit delete takes the ids of the inserts in reverse order"
     (let [conn (conn-with-blocks-a-b)
@@ -279,6 +299,9 @@
                            :db-sync/inverse-outliner-ops [[:delete-blocks [[x] {}]]
                                                           [:delete-blocks [[y] {}]]]}))))))
 
+;; Fails if, in `build-inverse-insert-like`, `and` becomes `or`.
+;; Fails if, in `patch-inverse-delete-block-ops`, `=` becomes `not=`.
+;; Fails if, in `derive-history-outliner-ops`, `and` becomes `or`, `=` becomes `not=` or `seq` becomes `empty?`.
 (deftest derive-history-outliner-ops-undo-picks-built-or-explicit-inverse-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -295,6 +318,11 @@
       (is (= [[:delete-page [page-uuid {}]]]
              (inverse-ops @conn tx-data (assoc tx-meta :outliner-op :apply-template)))))))
 
+;; Fails if, in `canonicalize-template-op`, `and` becomes `or`.
+;; Fails if, in `canonicalize-insert-ops`, `if` becomes `if-not` or `=` becomes `not=`.
+;; Fails if, in `canonicalize-semantic-outliner-op`, `or` becomes `and`.
+;; Fails if, in `stale-numeric-id-in-page-ops?`, `or` becomes `and`.
+;; Fails if, in `stale-numeric-id-in-op?`, `not=` becomes `=`.
 (deftest derive-history-outliner-ops-rejects-stale-numeric-ids-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -316,6 +344,10 @@
       (is (thrown-with-msg? js/Error #"Invalid apply-template args"
                             (forward-ops @conn [] [[:apply-template [(:block/uuid a) nil {}]]]))))))
 
+;; Fails if, in `canonicalize-semantic-outliner-op`, `or` becomes `and`.
+;; Fails if, in `normalize-op-entries`, `first` becomes `last`.
+;; Fails if, in `canonical-block-id`, `and` becomes `or`.
+;; Fails if, in `canonical-property-id`, `and` becomes `or`.
 (deftest derive-history-outliner-ops-forward-op-shapes-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -335,6 +367,10 @@
         (is (= [[:remove-block-property [(:block/uuid a) status-lookup]]]
                (forward-ops @conn [] [[:remove-block-property [(:block/uuid a) status-lookup]]])))))))
 
+;; Fails if, in `delete-root->restore-plan`, `and` becomes `or`.
+;; Fails if, in `build-inverse-delete-blocks`, `and` becomes `or`.
+;; Fails if, in `move-root->restore-op`, `and` becomes `or`.
+;; Fails if, in `build-inverse-move-blocks`, `and` becomes `or`.
 (deftest derive-history-outliner-ops-inverse-needs-every-block-and-a-target-test
   (let [conn (conn-with-blocks-a-b)
         a (db-test/find-block-by-content @conn "a")
@@ -350,6 +386,7 @@
     (testing "move-blocks of an entity with no parent or page to move it back to"
       (is (nil? (inverse-ops @conn [[:move-blocks [[page-uuid] (:db/id b) {:sibling? true}]]]))))))
 
+;; Fails if, in `split-block-refs`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest derive-history-outliner-ops-delete-inverse-defers-refs-to-later-blocks-test
   (testing "a ref to a block restored by a later insert is set after it; the other refs stay in the insert"
     (let [conn (conn-with-blocks-a-b-c)
