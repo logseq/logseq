@@ -1441,6 +1441,10 @@ let () =
       let menu = Ui.open_menu ui in
       if menu <> 0 then menu else Ui.focused ui
     in
+    let editor_key =
+      down && target <> 0
+      && Lui_store.kind store target = "extension:logseq-editor"
+    in
     let fields =
       [ ("key", jstr (dom_key scancode))
       ; ("code", jstr (dom_code scancode))
@@ -1449,6 +1453,9 @@ let () =
          | Some kc -> [ ("keyChar", jstr kc) ]
          | None -> [])
       @ mods_fields mods
+      @ (if editor_key then
+           [ ("detail", "{\"editor-key\":true}") ]
+         else [])
     in
     (* macOS routes menu keyEquivalents (Edit-menu tags 6-11:
        z/x/c/v/a with gui or gui+shift) to both SDL and the menu
@@ -1500,9 +1507,7 @@ let () =
          conduit "key" event alongside the document dispatch — give the
          focused logseq-editor sink the same feed; typed text arrives
          separately as Text_input -> "insert" *)
-      if down && target <> 0
-         && Lui_store.kind store target = "extension:logseq-editor"
-      then begin
+      if editor_key then begin
         dbg "editor key %s" (dom_key scancode);
         apply_patch_json
           (Native_embed.extension_event target "logseq-editor" "key"
