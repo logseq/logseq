@@ -4,6 +4,7 @@ type db =
   ; filename : string
   ; mutable tx_depth : int
   ; mutable savepoint_seq : int
+  ; mutable closed : bool
   ; mu : Mutex.t
   }
 
@@ -51,6 +52,7 @@ let check rc context =
 let open_db ~path =
   let handle = Sqlite3.db_open path in
   { handle; filename = path; tx_depth = 0; savepoint_seq = 0
+  ; closed = false
   ; mu = Mutex.create () }
 
 let prepare_pool ~name:_ = Db_worker_effect.pure ()
@@ -78,7 +80,11 @@ let open_db_pool ~name ~path =
       db
 
 let close t =
-  ignore (Sqlite3.db_close t.handle);
+  with_lock t (fun () ->
+      if not t.closed then begin
+        ignore (Sqlite3.db_close t.handle);
+        t.closed <- true
+      end);
   let empty_names = ref [] in
   Hashtbl.iter
     (fun name by_path ->
@@ -171,7 +177,11 @@ let transaction t f =
          end);
         raise exn)
 
-let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
+let checkpoint t =
+  with_lock t (fun () ->
+      if not t.closed then
+        check (Sqlite3.exec t.handle "pragma wal_checkpoint(TRUNCATE)")
+          "pragma wal_checkpoint(TRUNCATE)")
 
 let backup t ~dst_path =
   let escaped = String.concat "''" (String.split_on_char '\'' dst_path) in
