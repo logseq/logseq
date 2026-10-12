@@ -19,15 +19,15 @@ transport/persistence slice; **later** means not covered by that slice.
 
 | # | Master `deftest` (line) | Production contract; JS/desktop boundary | Fest (line; path) | Native process plan |
 |---:|---|---|---|---|
-| 1 | `db-worker-node-root-dir-permission-error` (244) | P: reject unwritable isolated root; Node chmod/OS permissions are the trigger | 566; real | later, OS-dependent |
-| 2 | `db-worker-node-creates-log-file` (261) | P: log file appears after admitted start | 592; real | later |
+| 1 | `db-worker-node-root-dir-permission-error` (244) | P: reject unwritable isolated root; Node chmod/OS permissions are the trigger | 566; real | executed POSIX chmod 0555 root; native startup error has original code/path, real CLI exits 1 before graph admission; original test also bypasses Windows |
+| 2 | `db-worker-node-creates-log-file` (261) | P: log file appears after admitted start | 592; real | executed real admitted daemon; dated file exists after startup |
 | 3 | `db-worker-node-log-file-has-entries` (280) | P: unknown invocation returns 500 and emits a nonempty log | 604; real | selected, including log |
-| 4 | `db-worker-node-logs-version-on-startup` (304) | P: logged revision/build time | 624; real | later |
+| 4 | `db-worker-node-logs-version-on-startup` (304) | P: logged revision/build time | 624; real | executed info-level daemon; original version event, build-time, and revision logged |
 | 5 | `db-worker-node-logs-println-output` (327) | A: captured stdout/logging; cljs `println` primitive is JS runtime-specific | 647; real, uses Node console instead | later; distinguish the trigger |
 | 6 | `db-worker-node-logs-console-error-output` (349) | A: captured error logging; JS `console.error` primitive | 662; real, uses Node console | later; distinguish the trigger |
 | 7 | `db-worker-node-logs-console-number-output` (371) | A: non-string console argument formatting; JS console primitive | 677; real, stringifies `123` first | later; not exact numeric-argument parity |
 | 8 | `db-worker-node-logs-process-stdout-output` (392) | A: raw Node `process.stdout.write` interception | 691; real, Node-specific | JS-only trigger; native stdout capture needs separate proof |
-| 9 | `db-worker-node-log-retention` (414) | P: keep seven dated logs | 706; real | later; native log retention unit behavior may exist |
+| 9 | `db-worker-node-log-retention` (414) | P: keep seven dated logs | 706; real | executed native filesystem retention against original nine dated logs; seven newest remain. This is a direct policy check, not a daemon process assertion |
 | 10 | `db-worker-node-parse-args-ignores-host-and-port` (440) | P: unsupported CLI flags do not change repo/root | 749; real parser, omits JS nil-field assertions | executed real child with ignored legacy flags; host/port/repo observed via health |
 | 11 | `db-worker-node-parse-args-ignores-auth-token` (452) | P: ignore deprecated auth-token flag | 765; real parser | executed with ignored auth-token; no direct nil-field parser assertion |
 | 12 | `db-worker-node-parse-args-ignores-rtc-ws-url` (460) | P: ignore deprecated websocket flag | 776; real parser | executed with ignored rtc-ws-url; no direct nil-field parser assertion |
@@ -49,13 +49,13 @@ transport/persistence slice; **later** means not covered by that slice.
 | 28 | `db-worker-node-stop-closes-bound-repo` (786) | P: shutdown closes worker DB | 1116; seam invoke | selected via different-PID reopen, not call-list equivalence |
 | 29 | `db-worker-node-stop-retains-publication-until-process-exit` (813) | P: registry publication persists at stop; same PID remains in original in-process test | 1145; seam invoke/db-exists, real registry | later; process-exit timing differs |
 | 30 | `db-worker-node-repo-error-handles-keyword-methods` (836) | P: missing/mismatched repo rejection and repo-less method exemptions; cljs keyword method accepted | 1176; real pure validator, methods translated to strings | selected for HTTP repo errors; keyword-method equivalence later |
-| 31 | `db-worker-node-set-context-does-not-trigger-repo-mismatch` (864) | P: context/sync configuration is exempt from repo mismatch | 1276; real | later; no real RTC server in this case |
+| 31 | `db-worker-node-set-context-does-not-trigger-repo-mismatch` (864) | P: context/sync configuration is exempt from repo mismatch | 1276; real | executed original four-method sequence via real daemon HTTP; URL roundtrips, auth-token absent from config, set-context returns nil. No real RTC server in this case |
 | 32 | `db-worker-node-create-empty-startup-skips-built-in-initial-data` (889) | P: empty graph lacks library page | 1309; real | executed real empty daemon and original Library query |
 | 33 | `db-worker-node-sync-status-requires-repo-and-returns-structured-status` (913) | P: structured sync state and missing-repo error | 1327; real but no server | executed original missing-repo/status-key assertions over native HTTP; server-backed RTC separate |
 | 34 | `db-worker-node-sync-start-and-status-invoke-path` (944) | P: sync remains inactive without WS config | 1363; real but no server | executed original nil start/inactive status with no WS; no claim of real RTC |
 | 35 | `db-worker-node-daemon-smoke-test` (971) | P: health/readyz, registry, lock, invoke Transit, typed transact/query | 1403; real *in-process* | selected with real child PID; publication-at-stop requires separate assertion |
 | 36 | `db-worker-node-vector-search-finds-outline-context-after-rebuild` (1048) | P: semantic vector search after rebuild | 1494; conditional `darwin` plus embeddings URL, otherwise true/skip | later; never count optional skip as verified |
-| 37 | `db-worker-node-import-edn` (1124) | P: export/import graph EDN between repos | 1562; real | later |
+| 37 | `db-worker-node-import-edn` (1124) | P: export/import graph EDN between repos | 1562; real | executed actual typed graph EDN map across two separately admitted native daemon PIDs; imported page is queryable |
 | 38 | `db-worker-node-import-file-graph-posts-progress-over-sse` (1184) | P: import status, progress type/payload/labels, persisted page | 1609; real SSE + import | selected; check importer result and emitted SSE |
 | 39 | `db-worker-node-import-file-graph-electron-lazy-fs-path` (1269) | O: worker resolves lazy `fs-path`; Electron file enumeration is outside worker | 1717; real worker on fixture, paths enumerated inline | later; use actual filesystem inputs, not UI substitute |
 | 40 | `db-worker-node-import-db-binary` (1306) | P: Transit `Wire.Binary` export/import into another graph | 1771; real | selected; distinct daemon PIDs |

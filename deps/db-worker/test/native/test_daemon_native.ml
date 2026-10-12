@@ -228,7 +228,7 @@ let run_command root children args =
   status, read stdout_path, read stderr_path
 
 let start root children ~repo ?(owner = "cli") ?(create_empty = false)
-    ?(legacy_flags = []) () =
+    ?(legacy_flags = []) ?(log_level = "error") () =
   let storage =
     Graph_lifecycle.resolve_storage ~root
       ~graphs_dir:(Filename.concat root "graphs")
@@ -237,7 +237,7 @@ let start root children ~repo ?(owner = "cli") ?(create_empty = false)
   let daemon, _, _ =
     launch root children ~repo
       ([ "--root-dir"; root; "--repo"; repo; "--owner-source"; owner
-       ; "--log-level"; "error" ]
+       ; "--log-level"; log_level ]
        @ (if create_empty then [ "--create-empty-db" ] else [])
        @ legacy_flags)
   in
@@ -831,6 +831,135 @@ let test_outliner_validation_http_status () =
       (contains_text (get_string "message" (get_error response)) "Can't set tag");
     stop daemon)
 
+let test_edn_roundtrip () =
+  with_processes (fun root children ->
+    let repo_a = "logseq_db_edn_a_" ^ Uuid_gen.uuid () in
+    let repo_b = "logseq_db_edn_b_" ^ Uuid_gen.uuid () in
+    let daemon_a = start root children ~repo:repo_a () in
+    ignore (invoke daemon_a "thread-api/create-or-open-db" [ str repo_a; Wire.Map [] ]);
+    let time = now () in
+    transact daemon_a repo_a
+      [ map
+          [ "block/uuid", Wire.Uuid (Uuid_gen.uuid ())
+          ; "block/title", str "Import Page"
+          ; "block/name", str "import-page"
+          ; "block/tags", Wire.Set [ kw "logseq.class/Page" ]
+          ; "block/created-at", time; "block/updated-at", time ] ];
+    let export_edn =
+      invoke daemon_a "thread-api/export-edn"
+        [ str repo_a; map [ "export-type", kw "graph" ] ]
+    in
+    check "export-edn returns a map"
+      (match export_edn with Wire.Map _ -> true | _ -> false);
+    stop daemon_a;
+    let daemon_b = start root children ~repo:repo_b () in
+    ignore (invoke daemon_b "thread-api/create-or-open-db" [ str repo_b; Wire.Map [] ]);
+    ignore (invoke daemon_b "thread-api/import-edn" [ str repo_b; export_edn ]);
+    check "EDN imported page is queryable"
+      (contains_row (query daemon_b repo_b title_query [ str "Import Page" ]));
+    stop daemon_b)
+
+let test_context_repo_exemptions () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_context_" ^ Uuid_gen.uuid () in
+    let daemon = start root children ~repo () in
+    let ws_url = "wss://example.com/sync/%s" in
+    ignore
+      (invoke daemon "thread-api/set-db-sync-config"
+         [ map [ "ws-url", str ws_url ] ]);
+    ignore
+      (invoke daemon "thread-api/sync-app-state"
+         [ map [ "auth/id-token", str "token-value" ] ]);
+    let config = invoke daemon "thread-api/get-db-sync-config" [] in
+    check "repo-less config preserves WS URL"
+      (Wire.get "ws-url" config = Some (str ws_url));
+    check "config excludes auth-token" (Wire.get "auth-token" config = None);
+    check "repo-less set-context returns nil"
+      (invoke daemon "thread-api/set-context" [ map [ "app", str "desktop" ] ]
+       = Wire.Nil);
+    stop daemon)
+
+let test_startup_log_metadata () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_log_version_" ^ Uuid_gen.uuid () in
+    let daemon = start root children ~repo ~log_level:"info" () in
+    let log_path = Db_worker_log.log_path root repo in
+    check "startup creates dated worker log" (Sys.file_exists log_path);
+    let expected =
+      [ ":db-worker-node-version"
+      ; Printf.sprintf ":build-time %S" (Common_version.build_time ())
+      ; Printf.sprintf ":revision %S" (Common_version.revision ()) ]
+    in
+    let deadline = Unix.gettimeofday () +. 2. in
+    let rec wait_contents () =
+      let contents = await (File_sys.read_text log_path) in
+      if List.for_all (contains_text contents) expected then contents
+      else if Unix.gettimeofday () < deadline then begin
+        Thread.delay 0.02;
+        wait_contents ()
+      end else contents
+    in
+    let contents = wait_contents () in
+    List.iter
+      (fun text -> check ("startup log contains " ^ text) (contains_text contents text))
+      expected;
+    stop daemon)
+
+let test_readonly_root () =
+  with_processes (fun root children ->
+    let readonly_root = Filename.concat root "readonly" in
+    Unix.mkdir readonly_root 0o555;
+    Fun.protect ~finally:(fun () -> Unix.chmod readonly_root 0o700)
+      (fun () ->
+        let repo = "logseq_db_permission_" ^ Uuid_gen.uuid () in
+        let opts : Db_worker_node.daemon_opts =
+          { opt_root_dir = readonly_root
+          ; opt_graphs_dir = None; opt_lifecycle_dir = None
+          ; opt_repo = repo; opt_admission_ticket = None; opt_graph_generation = None
+          ; opt_create_empty_db = false; opt_owner_source = "cli"
+          ; opt_embedding_endpoint = None; opt_embedding_model_id = None
+          ; opt_log_level = Some "error"; opt_on_stopped = (fun _ -> ()) }
+        in
+        let error =
+          match await (Db_worker_node.start_daemon opts) with
+          | daemon -> ignore (await (daemon.stop ())); None
+          | exception Dispatcher.Exn_info (_, fields) -> Some (Wire.Map fields)
+        in
+        (match error with
+         | None -> Alcotest.fail "expected root-dir permission error"
+         | Some fields ->
+             check "readonly startup root-dir-permission code"
+               (Wire.get "code" fields = Some (kw "root-dir-permission"));
+             check "readonly startup resolved path"
+               (Wire.get "path" fields = Some (str (Root_dir.normalize_root_dir (Some readonly_root)))));
+        let status, stdout, stderr =
+          run_command root children [ "--root-dir"; readonly_root; "--repo"; repo ]
+        in
+        check "readonly CLI exits one" (status = Unix.WEXITED 1);
+        check "readonly CLI has no stdout" (stdout = "");
+        check "readonly CLI error includes resolved root"
+          (contains_text stderr readonly_root);
+        check "readonly CLI does not initialize graph storage"
+          (not (Sys.file_exists (Filename.concat readonly_root "graphs")))))
+
+let test_log_retention () =
+  with_processes (fun root _children ->
+    let days =
+      [ "20240101"; "20240102"; "20240103"; "20240104"; "20240105"
+      ; "20240106"; "20240107"; "20240108"; "20240109" ]
+    in
+    let log_name day = "db-worker-node-" ^ day ^ ".log" in
+    List.iter
+      (fun day -> await (File_sys.write_text (Filename.concat root (log_name day)) "log\n"))
+      days;
+    await (Db_worker_log.enforce_retention root);
+    let remaining = await (Db_worker_log.log_files root) in
+    check "retention keeps seven dated logs" (List.length remaining = 7);
+    check "retention keeps the newest original dates"
+      (remaining = List.map log_name
+          [ "20240103"; "20240104"; "20240105"; "20240106"; "20240107"
+          ; "20240108"; "20240109" ]))
+
 let cases =
   [ Alcotest.test_case "native-daemon-http-invoke-transit-and-errors" `Quick
       test_http_invocation
@@ -851,4 +980,14 @@ let cases =
   ; Alcotest.test_case "native-daemon-sync-status-without-ws" `Quick
       test_sync_status_without_ws
   ; Alcotest.test_case "native-daemon-outliner-validation-http-status" `Quick
-      test_outliner_validation_http_status ]
+      test_outliner_validation_http_status
+  ; Alcotest.test_case "native-daemon-edn-roundtrip" `Quick
+      test_edn_roundtrip
+  ; Alcotest.test_case "native-daemon-context-repo-exemptions" `Quick
+      test_context_repo_exemptions
+  ; Alcotest.test_case "native-daemon-startup-log-metadata" `Quick
+      test_startup_log_metadata
+  ; Alcotest.test_case "native-worker-log-retention-filesystem" `Quick
+      test_log_retention ]
+  @ if Sys.win32 then []
+    else [ Alcotest.test_case "native-daemon-readonly-root" `Quick test_readonly_root ]
