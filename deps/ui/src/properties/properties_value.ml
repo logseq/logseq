@@ -1318,6 +1318,7 @@ let rec view ?(positioned = false) ~(hover : bool Signal.state option)
       | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
     in
     display (D.row_effective_value row')
+  else if ident = "logseq.property/icon" then icon_view ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ctx row'
   else
     match ty with
@@ -1337,6 +1338,68 @@ let rec view ?(positioned = false) ~(hover : bool Signal.state option)
         if ty = "default" && D.ref_title (D.row_value row') <> ""
         then block_value_wrap cell
         else cell
+
+(* :logseq.property/icon's editing cell is the icon picker, not a
+   text/closed-value editor — the {:type :id} map value can't be
+   produced by the generic write paths. The cell shows the current
+   icon (or Empty) and pressing it opens the picker anchored on
+   itself; choices write the map the icon schema requires. *)
+and icon_view ctx row : t =
+ fun context parent ->
+  let anchor_id = "pv-icon-" ^ ctx.block_uuid in
+  let icon =
+    match D.row_value row with
+    | W.Map _ as m -> (
+        match (Wire.get m "type", Wire.get m "id") with
+        | Some (W.Keyword ty), Some (W.String id) -> Some (ty, id)
+        | Some (W.String ty), Some (W.String id) -> Some (ty, id)
+        | _ -> None)
+    | _ -> None
+  in
+  (Lui_elements.row ~gap:0 ~grow:1.0
+     [ button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
+         ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
+         ~label:"Icon"
+         ~foreground:"var(--ls-primary-text-color)"
+         ~text:(match icon with Some _ -> "" | None -> I18n.t "ui/empty")
+         ~data_attrs:
+           [ ( "style"
+             , "height:auto;min-height:0;padding:0;line-height:20px;\
+                justify-content:flex-start" ) ]
+         ~on_press:(fun _ ->
+           match Ui_services.dom_query ("#" ^ anchor_id) with
+           | Some anchor ->
+               Icon_picker.open_picker ~anchor ~del:(icon <> None)
+                 ~on_chosen:(fun c ->
+                   (match c with
+                    | Icon_picker.Remove ->
+                        D.remove_block_property ~block_uuid:ctx.block_uuid
+                          ~ident:"logseq.property/icon"
+                    | Icon_picker.Emoji id ->
+                        D.set_block_property ~block_uuid:ctx.block_uuid
+                          ~ident:"logseq.property/icon"
+                          ~value:
+                            (W.Map
+                               [ (W.Keyword "type", W.Keyword "emoji")
+                               ; (W.Keyword "id", W.String id) ])
+                    | Icon_picker.Tabler (id, color) ->
+                        D.set_block_property ~block_uuid:ctx.block_uuid
+                          ~ident:"logseq.property/icon"
+                          ~value:
+                            (W.Map
+                               ([ (W.Keyword "type", W.Keyword "tabler-icon")
+                                ; (W.Keyword "id", W.String id) ]
+                                @
+                                match color with
+                                | Some c -> [ (W.Keyword "color", W.String c) ]
+                                | None -> [])))
+                   |> ignore;
+                   S.refresh_all ())
+           | None -> ())
+         (match icon with
+          | Some (ty, id) -> [ Icon_picker.icon_el (ty, id) ]
+          | None -> []) ])
+    context parent
 
 (* cljs embeds non-closed values in
    .property-block-container > .ls-block > .block-main-container —

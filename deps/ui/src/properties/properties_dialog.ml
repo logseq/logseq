@@ -402,6 +402,49 @@ let value_items d prop wire_values =
             | None -> None)
           wire_values
 
+(* :logseq.property/icon's value editor is the icon picker — the
+   generic select paths would write a text-block ref or entity id
+   where the icon schema requires a {:type :id} map. Mount an anchor
+   element and open the picker on appear (same as the p i chord's
+   block picker, which passes ~del:false). *)
+let icon_value_view d : t =
+ fun context parent ->
+  let anchor_id = "pd-icon-" ^ d.d_target.uuid in
+  (box ~accessibility_identifier:anchor_id
+     ~on_appear:(fun _ ->
+       match Ui_services.dom_query ("#" ^ anchor_id) with
+       | Some anchor ->
+           Icon_picker.open_picker ~anchor ~del:false
+             ~on_chosen:(fun c ->
+               (match c with
+                | Icon_picker.Remove ->
+                    D.remove_block_property ~block_uuid:d.d_target.uuid
+                      ~ident:"logseq.property/icon"
+                | Icon_picker.Emoji id ->
+                    D.set_block_property ~block_uuid:d.d_target.uuid
+                      ~ident:"logseq.property/icon"
+                      ~value:
+                        (W.Map
+                           [ (W.Keyword "type", W.Keyword "emoji")
+                           ; (W.Keyword "id", W.String id) ])
+                | Icon_picker.Tabler (id, color) ->
+                    D.set_block_property ~block_uuid:d.d_target.uuid
+                      ~ident:"logseq.property/icon"
+                      ~value:
+                        (W.Map
+                           ([ (W.Keyword "type", W.Keyword "tabler-icon")
+                            ; (W.Keyword "id", W.String id) ]
+                            @
+                            match color with
+                            | Some c -> [ (W.Keyword "color", W.String c) ]
+                            | None -> [])))
+               |> ignore;
+               S.refresh_all ();
+               close ())
+       | None -> ())
+     [])
+    context parent
+
 let value_edit_view d prop : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -436,6 +479,8 @@ let value_edit_view d prop : t =
            []
        ])
       context parent)
+  else if ident_of prop = "logseq.property/icon" then
+    icon_value_view d context parent
   else
     let placeholder = I18n.t1 "property/set-placeholder" (title_of prop) in
     let on_new =
