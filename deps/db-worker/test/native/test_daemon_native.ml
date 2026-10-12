@@ -227,7 +227,8 @@ let run_command root children args =
   in
   status, read stdout_path, read stderr_path
 
-let start root children ~repo ?(owner = "cli") ?(legacy_flags = []) () =
+let start root children ~repo ?(owner = "cli") ?(create_empty = false)
+    ?(legacy_flags = []) () =
   let storage =
     Graph_lifecycle.resolve_storage ~root
       ~graphs_dir:(Filename.concat root "graphs")
@@ -236,7 +237,9 @@ let start root children ~repo ?(owner = "cli") ?(legacy_flags = []) () =
   let daemon, _, _ =
     launch root children ~repo
       ([ "--root-dir"; root; "--repo"; repo; "--owner-source"; owner
-       ; "--log-level"; "error" ] @ legacy_flags)
+       ; "--log-level"; "error" ]
+       @ (if create_empty then [ "--create-empty-db" ] else [])
+       @ legacy_flags)
   in
   let pid = daemon.pid in
   let deadline = Unix.gettimeofday () +. 20. in
@@ -734,6 +737,100 @@ let test_cross_pid_ownership () =
     assert_imported_page next_owner repo title;
     stop next_owner)
 
+let test_empty_startup_and_repo_identity () =
+  with_processes (fun root children ->
+    let repo = "demo" in
+    let daemon = start root children ~repo ~owner:"electron" ~create_empty:true () in
+    let health = json_body (http daemon ~method_:"GET" ~path:"/healthz" ()) in
+    check "electron owner published" (get_string "owner-source" health = "electron");
+    check "empty startup has no Library"
+      (list_rows (query daemon repo title_query [ str Ldb.library_page_name ]) = []);
+    let response =
+      invoke_raw daemon "thread-api/create-or-open-db"
+        [ str "logseq_db_demo"; Wire.Map [] ]
+    in
+    check "prefix-equivalent repo HTTP 200" (response.status = 200);
+    check "prefix-equivalent repo acknowledged"
+      (Wire.get "ok" (json_body response) = Some (Wire.Bool true));
+    stop daemon)
+
+let test_sync_status_without_ws () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_sync_status_" ^ Uuid_gen.uuid () in
+    let daemon = start root children ~repo () in
+    let missing = invoke_raw daemon "thread-api/db-sync-status" [] in
+    check "sync status requires repo HTTP 400" (missing.status = 400);
+    check "sync status missing-repo code"
+      (get_string "code" (get_error missing) = "missing-repo");
+    ignore (invoke daemon "thread-api/create-or-open-db" [ str repo; Wire.Map [] ]);
+    let status = invoke daemon "thread-api/db-sync-status" [ str repo ] in
+    check "sync status repo" (Wire.get "repo" status = Some (str repo));
+    List.iter
+      (fun key -> check ("sync status has " ^ key) (Wire.get key status <> None))
+      [ "ws-state"; "pending-local"; "pending-asset"; "pending-server"
+      ; "local-tx"; "remote-tx"; "graph-id" ];
+    ignore
+      (invoke daemon "thread-api/set-db-sync-config"
+         [ map [ "ws-url", Wire.Nil; "http-base", str "https://example.com" ] ]);
+    check "no-WS sync start returns nil"
+      (invoke daemon "thread-api/db-sync-start" [ str repo ] = Wire.Nil);
+    let inactive = invoke daemon "thread-api/db-sync-status" [ str repo ] in
+    check "inactive status repo" (Wire.get "repo" inactive = Some (str repo));
+    check "no-WS sync status is inactive"
+      (Wire.get "ws-state" inactive = Some (kw "inactive"));
+    List.iter
+      (fun key -> check ("inactive status has " ^ key) (Wire.get key inactive <> None))
+      [ "pending-local"; "pending-server" ];
+    stop daemon)
+
+let test_outliner_validation_http_status () =
+  with_processes (fun root children ->
+    let repo = "logseq_db_validation_" ^ Uuid_gen.uuid () in
+    let daemon = start root children ~repo () in
+    ignore (invoke daemon "thread-api/create-or-open-db" [ str repo; Wire.Map [] ]);
+    let journal =
+      invoke daemon "thread-api/pull"
+        [ str repo; Wire.Array [ kw "db/id" ]
+        ; Wire.Array [ kw "db/ident"; kw "logseq.class/Journal" ] ]
+    in
+    let journal_id =
+      match Wire.get "db/id" journal with
+      | Some ((Wire.Int _ | Wire.Int64 _) as id) -> id
+      | _ -> Alcotest.fail "Journal class has no numeric db/id"
+    in
+    let page_uuid = Uuid_gen.uuid () in
+    let block_uuid = Uuid_gen.uuid () in
+    let time = now () in
+    transact daemon repo
+      [ map
+          [ "block/uuid", Wire.Uuid page_uuid
+          ; "block/title", str "Validation Target Page"
+          ; "block/name", str "validation-target-page"
+          ; "block/tags", Wire.Set [ kw "logseq.class/Page" ]
+          ; "block/created-at", time; "block/updated-at", time ]
+      ; map
+          [ "block/uuid", Wire.Uuid block_uuid
+          ; "block/title", str "Validation Target Block"
+          ; "block/page", Wire.Array [ kw "block/uuid"; Wire.Uuid page_uuid ]
+          ; "block/parent", Wire.Array [ kw "block/uuid"; Wire.Uuid page_uuid ]
+          ; "block/order", str "a0"
+          ; "block/created-at", time; "block/updated-at", time ] ];
+    let response =
+      invoke_raw daemon "thread-api/apply-outliner-ops"
+        [ str repo
+        ; Wire.Array
+            [ Wire.Array
+                [ kw "batch-set-property"
+                ; Wire.Array
+                    [ Wire.Array [ Wire.Uuid block_uuid ]; kw "block/tags"
+                    ; journal_id; Wire.Map [] ] ] ]
+        ; Wire.Map [] ]
+    in
+    check "tag validation error HTTP 400 not 500" (response.status = 400);
+    check "tag validation error message"
+      (contains_text (get_string "message" (get_error response)) "Can't set tag");
+    stop daemon)
+
 let cases =
   [ Alcotest.test_case "native-daemon-http-invoke-transit-and-errors" `Quick
       test_http_invocation
@@ -748,4 +845,10 @@ let cases =
   ; Alcotest.test_case "native-daemon-ignores-legacy-flags" `Quick
       test_cli_ignores_legacy_flags
   ; Alcotest.test_case "native-daemon-cross-pid-ownership" `Quick
-      test_cross_pid_ownership ]
+      test_cross_pid_ownership
+  ; Alcotest.test_case "native-daemon-empty-startup-and-repo-identity" `Quick
+      test_empty_startup_and_repo_identity
+  ; Alcotest.test_case "native-daemon-sync-status-without-ws" `Quick
+      test_sync_status_without_ws
+  ; Alcotest.test_case "native-daemon-outliner-validation-http-status" `Quick
+      test_outliner_validation_http_status ]
