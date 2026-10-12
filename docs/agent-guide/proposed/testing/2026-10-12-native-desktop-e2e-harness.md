@@ -32,6 +32,19 @@ Lowest stable boundary: The real OCaml runner with automatically discovered temp
 Planned retained tests: 0 new product cases; mark the existing smoke only. Remove all scratch probes before handoff.
 Reason: The user explicitly requested metadata/runner changes and targeted rejection/acceptance validation. Do not add speculative product coverage or change inventory contract categories before coordinated audit.
 
+### Isolated fixture and read-oracle safety follow-up
+
+TEST DECISION: USER-REQUIRED
+
+Claim: Native fixtures must never register per-root login daemons, and validation oracles must never repair the graph.
+Stable project-owned contract: Client.start forces LOGSEQ_NO_LOGIN_DAEMON=1; property read endpoints remain read-only; Client.validate fixes its options to fix=false and returns Wire.t.
+Concrete regression risk: A cleaned-up test graph could leave a LaunchAgent targeting a deleted root; default validate-db options can mutate data and invalidate an oracle.
+Existing coverage searched: Client.start/read, native daemon_client.ensure_login_daemon, property/read endpoints and validate-db implementation.
+Cheaper evidence considered: Source audit plus one temporary real-client probe and the existing native smoke are sufficient; no new retained product cases.
+Lowest stable boundary: Real host/daemon fixtures with LaunchAgent before/after inventory and typed wire requests.
+Planned retained tests: 0 new product cases; delete scratch probes before handoff.
+Reason: The user explicitly requested fixture safety and typed read APIs, not product behavior changes or additional parity cases.
+
 ## Alternatives considered
 
 ### Browser or reducer harness

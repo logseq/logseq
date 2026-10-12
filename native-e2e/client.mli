@@ -30,6 +30,7 @@ val focused : t -> int
 val clipboard_read : t -> string
 val clipboard_write : t -> string -> unit
 val read : ?repo:string -> t -> string -> Wire.t list -> Wire.t
+val validate : ?repo:string -> t -> Wire.t
 val invoke_fixture : ?repo:string -> t -> string -> Wire.t list -> Wire.t
 val q : ?repo:string -> ?inputs:Wire.t list -> t -> string -> Wire.t
 val sdk_call : ?namespace:sdk_namespace -> t -> string -> Yojson.Safe.t list -> Yojson.Safe.t
