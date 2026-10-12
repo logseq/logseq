@@ -123,12 +123,10 @@ jobs:
           opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
@@ -153,7 +151,6 @@ jobs:
         run: opam exec -- pnpm --dir cli test
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
@@ -229,12 +226,10 @@ jobs:
           opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
@@ -256,7 +251,6 @@ jobs:
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 

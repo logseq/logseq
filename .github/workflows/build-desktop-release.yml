@@ -138,12 +138,10 @@ jobs:
           opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
@@ -296,7 +294,6 @@ jobs:
             ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Fetch db-worker OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         shell: bash
         run: sh scripts/install-opam-deps.sh

@@ -74,7 +74,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch OCaml deps
-        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
