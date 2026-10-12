@@ -1353,6 +1353,10 @@ let on_keydown ev =
     then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (ev_key ev))
+    (* Native document delivery is queued; the conduit may already have
+       replaced its sink by then. Its key must not enter remount replay.
+       Autocomplete and global listeners still receive the document event. *)
+    else if ev.Ui_services.detail_json "editor-key" = Some (Json.Bool true) then ()
     else
       let target = ev.Ui_services.target in
       (* CodeMirror surfaces (fenced-code editor, query source editor)
