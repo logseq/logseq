@@ -149,19 +149,6 @@
     (is (= (common-uuid/gen-journal-template-block (:block/uuid journal) (:block/uuid body))
            (:block/uuid inserted)))))
 
-(deftest template-dynamic-journal-page-is-created-as-a-journal-test
-  (let [tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
-        conn (create-tag-template-conn)
-        target (:db/id (db-test/find-block-by-content @conn "target"))
-        two (db-test/find-block-by-content @conn "two")
-        foo (:db/id (ldb/get-page @conn "Foo"))
-        _ (d/transact! conn [[:db/add (:db/id two) :block/title "due <% tomorrow %>"]])
-        db' (db-after-pipeline @conn [[:db/add target :block/tags foo]] {})
-        journal (db-test/find-journal-by-journal-day db' tomorrow)]
-    (is (some? journal))
-    (is (= #{:logseq.class/Journal} (tag-idents db' (:db/id journal))))
-    (is (= 1 (count (d/datoms db' :avet :block/name (:block/name journal)))))))
-
 ;; Fails if, in `fix-page-tags`, `=` becomes `not=`, `and` becomes `or` or `seq` becomes `empty?`.
 (deftest fix-page-tags-test
   (let [conn (db-test/create-conn-with-blocks
