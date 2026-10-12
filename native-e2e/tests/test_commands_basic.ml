@@ -107,6 +107,9 @@ let slash_group_headings ctx =
 
 let input_command ?label app command =
   let label = Option.value label ~default:command in
+  let content = Client.sdk_call app "get_editing_block_content" [] |> to_string in
+  if content <> "" && content.[String.length content - 1] <> ' ' then
+    Client.text app " ";
   Client.text app "/";
   ignore (Client.wait_for ~text:"Node reference" app ".menu-link.chosen");
   Client.text app command;
@@ -165,6 +168,7 @@ let add_link ctx app =
   Suite.equal ctx "Link URL field is autofocused" (Client.focused app) (node_id url);
   Client.text app "https://logseq.com";
   ignore (wait_input_text app "https://logseq.com");
+  ignore (Client.screenshot ~name:"link-url-filled.png" app);
   Client.press app "Tab";
   wait_focus app label;
   Suite.equal ctx "Tab moves focus from URL to label" (Client.focused app) (node_id label);
@@ -197,6 +201,168 @@ let link ctx =
       validate_graph ctx app;
       ignore (Client.screenshot ~name:"two-links.png" app))
 
+let exit_edit app =
+  Client.press app "Escape";
+  wait_absent app ".block-editor"
+
+let visible element =
+  let rect = Client.rect element in
+  rect.width > 0. && rect.height > 0.
+
+let underline ctx =
+  Suite.with_app ~label:"underline" ctx (fun app ->
+      let page = "Underline Command" in
+      open_page app page;
+      add_block app "";
+      input_command ~label:"Underline" app "underline";
+      Suite.equal ctx "Underline inserts both delimiters"
+        (wait_editor_text app "<ins></ins>") "<ins></ins>";
+      Client.text app "test";
+      Suite.equal ctx "Inserted caret is between underline delimiters"
+        (wait_editor_text app "<ins>test</ins>") "<ins>test</ins>";
+      Client.press app "Meta+a";
+      Client.press app "Right";
+      assert_persisted_title ctx app page "<ins>test</ins>";
+      validate_graph ctx app)
+
+let quote ctx =
+  Suite.with_app ~label:"quote" ctx (fun app ->
+      open_page app "Quote Command";
+      add_block app "";
+      input_command ~label:"Quote" app "quote";
+      ignore (Client.wait_for app "[data-node-type='quote']");
+      Suite.check ctx "Quote display type is rendered"
+        (List.exists visible (Client.query app "[data-node-type='quote']"));
+      Suite.check ctx "Quote does not introduce block tags"
+        (not (List.exists visible (Client.query app ".ls-page-blocks .block-tags")));
+      validate_graph ctx app)
+
+let heading_selector level =
+  Printf.sprintf "[data-has-heading='%d'] heading.block-title-wrap.as-heading" level
+
+let assert_heading ctx app level title =
+  let selector = heading_selector level in
+  ignore (Client.wait_for ~text:title app selector);
+  Suite.check ctx ("Rendered heading level " ^ string_of_int level ^ ": " ^ title)
+    (List.exists (fun el -> visible el && Client.text_content el = title)
+       (Client.query app selector))
+
+let quote_heading ctx =
+  Suite.with_app ~label:"quote-heading" ctx (fun app ->
+      open_page app "Quote Heading Commands";
+      add_block app "Property quote heading";
+      input_command ~label:"Quote" app "quote";
+      input_command ~label:"Heading 1" app "h1";
+      exit_edit app;
+      add_block app "# Markdown quote heading";
+      input_command ~label:"Quote" app "quote";
+      exit_edit app;
+      List.iter (fun title ->
+          let selector = "[data-node-type='quote'] heading.block-title-wrap.as-heading" in
+          ignore (Client.wait_for ~text:title app selector);
+          Suite.check ctx ("Quote retains heading: " ^ title)
+            (List.exists (fun el -> visible el && Client.text_content el = title)
+               (Client.query app selector));
+          assert_heading ctx app 1 title)
+        ["Property quote heading"; "Markdown quote heading"];
+      Client.click ~text:"Markdown quote heading" app ".ls-page-blocks .block-title-wrap";
+      ignore (Client.wait_for app ".block-editor");
+      Suite.equal ctx "Markdown heading is parsed out of the edit buffer"
+        (wait_editor_text app "Markdown quote heading") "Markdown quote heading";
+      exit_edit app;
+      add_block app "Plain quote";
+      input_command ~label:"Quote" app "quote";
+      exit_edit app;
+      ignore (Client.wait_for ~text:"Plain quote" app "[data-node-type='quote'] text.block-title-wrap");
+      Suite.check ctx "Plain quote remains a non-heading title"
+        (List.exists (fun el -> visible el && Client.text_content el = "Plain quote")
+           (Client.query app "[data-node-type='quote'] text.block-title-wrap"));
+      validate_graph ctx app)
+
+let headings ctx =
+  Suite.with_app ~label:"headings" ctx (fun app ->
+      open_page app "Heading Commands";
+      for level = 1 to 6 do
+        let command = "h" ^ string_of_int level in
+        let content = command ^ " test " in
+        add_block app content;
+        input_command ~label:("Heading " ^ string_of_int level) app command;
+        Suite.equal ctx (command ^ " preserves exact editor content")
+          (wait_editor_text app content) content;
+        exit_edit app;
+        assert_heading ctx app level (String.trim content)
+      done;
+      validate_graph ctx app)
+
+let clear_heading ctx =
+  Suite.with_app ~label:"clear-heading" ctx (fun app ->
+      open_page app "Clear Heading Command";
+      let title = "clear heading test" in
+      add_block app title;
+      input_command ~label:"Heading 1" app "h1";
+      exit_edit app;
+      assert_heading ctx app 1 title;
+      Client.click ~text:title app ".ls-page-blocks .block-title-wrap";
+      ignore (Client.wait_for app ".block-editor");
+      input_command app "Clear heading";
+      exit_edit app;
+      ignore (Client.wait_for ~text:title app "text.block-title-wrap");
+      Suite.check ctx "Clear heading removes the heading rendering"
+        (not (List.exists (fun el -> visible el && Client.text_content el = title)
+                (Client.query app (heading_selector 1))));
+      Suite.check ctx "Clear heading preserves the normal title"
+        (List.exists (fun el -> visible el && Client.text_content el = title)
+           (Client.query app "text.block-title-wrap"));
+      add_block app "normal block";
+      Client.text app " ";
+      Client.text app "/";
+      Client.text app "clear";
+      ignore (Client.wait_for app ".ui__popover-content");
+      Suite.check ctx "Clear heading is absent on a normal block"
+        (not (List.exists (fun el -> Client.text_content el = "Clear heading")
+                (Client.query app ".menu-link")));
+      ignore (Client.wait_for ~text:"No matched commands" app ".menu-link");
+      Suite.check ctx "Filtered palette explicitly has no matched commands"
+        (List.exists (fun el -> Client.text_content el = "No matched commands")
+           (Client.query app ".menu-link"));
+      validate_graph ctx app)
+
+let status ctx =
+  Suite.with_app ~label:"status" ctx (fun app ->
+      open_page app "Status Commands";
+      List.iter (fun (command, icon) ->
+          let content = command ^ " test " in
+          add_block app content;
+          input_command ~label:(if command = "In review" then "In Review" else command) app command;
+          Suite.equal ctx (command ^ " preserves exact editor content")
+            (wait_editor_text app content) content;
+          exit_edit app;
+          Client.press app "Escape";
+          ignore (Client.wait_for app (".ls-icon-" ^ icon));
+          Suite.check ctx (command ^ " renders the source status icon")
+            (List.exists visible (Client.query app (".ls-icon-" ^ icon))))
+        ["Backlog", "backlog"; "Todo", "todo"; "Doing", "in-progress50";
+         "In review", "in-review"; "Done", "done"; "Canceled", "cancelled"];
+      validate_graph ctx app)
+
+let priority ctx =
+  Suite.with_app ~label:"priority" ctx (fun app ->
+      open_page app "Priority Commands";
+      List.iter (fun (command, icon) ->
+          let content = command ^ " test " in
+          add_block app content;
+          input_command app command;
+          Suite.equal ctx (command ^ " preserves exact editor content")
+            (wait_editor_text app content) content;
+          exit_edit app;
+          ignore (Client.wait_for app (".ls-icon-" ^ icon));
+          Suite.check ctx (command ^ " renders the source priority icon")
+            (List.exists visible (Client.query app (".ls-icon-" ^ icon))))
+        ["No priority", "line-dashed"; "Low", "priority-lvl-low";
+         "Medium", "priority-lvl-medium"; "High", "priority-lvl-high";
+         "Urgent", "priority-lvl-urgent"];
+      validate_graph ctx app)
+
 let tests =
   [ Suite.test
       ~covers:["ocaml-e2e/test/test_commands_basic.ml::command-trigger-test"]
@@ -209,4 +375,18 @@ let tests =
       "page-reference-test" page_reference
   ; Suite.test
       ~covers:["ocaml-e2e/test/test_commands_basic.ml::link-test"]
-      "link-test" link ]
+      "link-test" link
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::underline-test"]
+      "underline-test" underline
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::quote-test"]
+      "quote-test" quote
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::quote-heading-test"]
+      "quote-heading-test" quote_heading
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::headings-test"]
+      "headings-test" headings
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::clear-heading-test"]
+      "clear-heading-test" clear_heading
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::status-test"]
+      "status-test" status
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::priority-test"]
+      "priority-test" priority ]
