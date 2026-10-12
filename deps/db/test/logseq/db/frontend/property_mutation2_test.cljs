@@ -23,6 +23,7 @@
      :ids ids
      :block-id (:db/id (db-test/find-block-by-content @conn "described"))}))
 
+;; Fails if, in `valid-property-name?`, the `:pre` key is dropped.
 (deftest valid-property-name-requires-a-string
   (is (true? (db-property/valid-property-name? "plain")))
   (is (false? (db-property/valid-property-name? "#tag")))
@@ -30,6 +31,7 @@
   (is (thrown-with-msg? js/Error #"Assert failed: \(string\? s\)"
                         (db-property/valid-property-name? nil))))
 
+;; Fails if, in `get-closed-property-values`, the `(remove entity-util/recycled?)` step is dropped or the `(sort-by :block/order)` step is dropped.
 (deftest get-closed-property-values-skips-recycled-and-sorts-by-order
   (let [{:keys [conn ids]} (closed-value-conn)]
     (d/transact! conn [[:db/add (ids "a") :block/order "a3"]
@@ -43,12 +45,14 @@
            (map :block/title (db-property/get-closed-property-values @conn :user.property/choice)))
         "A recycled value is not returned")))
 
+;; Fails if, in `get-closed-value-entity-by-name`, the body becomes `nil`.
 (deftest get-closed-value-entity-by-name-finds-a-value-by-its-content
   (let [{:keys [conn ids]} (closed-value-conn)]
     (is (= (ids "b")
            (:db/id (db-property/get-closed-value-entity-by-name @conn :user.property/choice "b"))))
     (is (nil? (db-property/get-closed-value-entity-by-name @conn :user.property/choice "missing")))))
 
+;; Fails if, in `sort-properties`, `:block/uuid` becomes `:block/_closed-value-property`.
 (deftest sort-properties-breaks-ties-by-uuid
   (let [p1 {:db/id 1 :block/order "a" :block/uuid "uuid-a"}
         p2 {:db/id 2 :block/order "b" :block/uuid "uuid-b"}
@@ -59,6 +63,7 @@
     (is (= [p4 p5] (db-property/sort-properties [p5 p4])) "Missing orders sort by uuid")
     (is (= [p1 p2 p3 p4 p5] (db-property/sort-properties [p5 p3 p4 p2 p1])))))
 
+;; Fails if, in `get-class-ordered-properties`, the body becomes `nil` or `:logseq.property.class/properties` becomes `:logseq.property.class/bidirectional-property-title`.
 (deftest get-class-ordered-properties-sorts-the-class-properties
   (let [p1 {:db/id 1 :block/order "a" :block/uuid "uuid-a"}
         p2 {:db/id 2 :block/order "b" :block/uuid "uuid-b"}
@@ -71,6 +76,7 @@
   [& order-keys]
   (every? neg? (map compare order-keys (rest order-keys))))
 
+;; Fails if, in `normalize-sorted-entities-block-order`, `:block/order` becomes `:block/page`.
 (deftest normalize-sorted-entities-block-order-keeps-generated-keys-between-neighbours
   (let [orders (fn [entities]
                  (let [tx-map (into {} (map (juxt :db/id :block/order))
@@ -85,6 +91,8 @@
     (is (ascending? "a0" lo hi "a1") "Duplicates share the gap between the previous entity and their own order")
     (is (ascending? "a2" lo' hi' "a3") "A single previous entity bounds the generated keys from below")))
 
+;; Fails if, in `normalize-choice-ids`, the body becomes `nil` or `:db/id` becomes `:db/ident`.
+;; Fails if, in `scoped-closed-values`, `:logseq.property/choice-exclusions` becomes `:logseq.property/classes` or `:db/id` becomes `:db/ident`.
 (deftest scoped-closed-values-applies-exclusions-and-class-scope
   (let [excluded {:db/id 101}
         scoped {:db/id 100 :logseq.property/choice-classes [{:db/id 10}]}
@@ -100,6 +108,7 @@
            (db-property/scoped-closed-values property {:db/id 2} :values [scoped excluded other-scope unscoped]))
         "A block without classes sees only unscoped choices")))
 
+;; Fails if, in `scoped-closed-values`, `:db/id` becomes `:db/ident`.
 (deftest scoped-closed-values-includes-the-block-itself-when-it-is-a-class
   (let [scoped {:db/id 100 :logseq.property/choice-classes [{:db/id 10}]}
         class-block {:db/id 10 :block/tags [{:db/ident :logseq.class/Tag}]}]
@@ -107,6 +116,7 @@
            (db-property/scoped-closed-values {} class-block :values [scoped]))
         "A class sees choices scoped to itself")))
 
+;; Fails if, in `get-block-property-value`, the body becomes `nil` or `:db/id` becomes `:db/ident`.
 (deftest get-block-property-value-reads-the-live-entity
   (let [{:keys [conn block-id]} (closed-value-conn)]
     (is (= "desc"

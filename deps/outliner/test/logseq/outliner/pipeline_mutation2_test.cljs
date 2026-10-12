@@ -23,6 +23,7 @@
   [db]
   (:e (first (d/datoms db :avet :block/journal-day 20260908))))
 
+;; Fails if, in `build-journal-refs-for-datetime-properties`, `:logseq.property/scheduled` becomes `:logseq.property/type`.
 (deftest datetime-journal-refs-of-built-in-properties-test
   (let [conn (journal-conn)
         db @conn
@@ -34,6 +35,7 @@
     (is (= [journal] (refs-of :logseq.property/scheduled)))
     (is (= [journal] (refs-of :logseq.property/deadline)))))
 
+;; Fails if, in `page-or-object?-helper`, `:logseq.property/created-from-property` becomes `:logseq.property/deadline`.
 (deftest page-or-object-helper-excludes-property-value-objects-test
   (let [conn (journal-conn)
         page (db-test/find-page-by-title @conn "page1")]
@@ -42,6 +44,7 @@
                         (:db/id (d/entity @conn :logseq.property/query))]])
     (is (false? (boolean (outliner-pipeline/page-or-object?-helper (d/entity @conn (:db/id page))))))))
 
+;; Fails if, in `non-ref-properties`, `:logseq.property/query` becomes `:logseq.property/scheduled`.
 (deftest scheduled-datetime-property-builds-a-journal-ref-test
   (let [conn (journal-conn)
         block (db-test/find-block-by-content @conn "b1")
@@ -52,6 +55,7 @@
     (is (contains? (set (outliner-pipeline/db-rebuild-block-refs db updated)) journal))
     (is (contains? (set ((outliner-pipeline/db-rebuild-block-refs-fn db) updated)) journal))))
 
+;; Fails if, in `block-refs`, the `distinct` step is dropped.
 (deftest block-refs-are-distinct-test
   (let [conn (journal-conn)
         b1 (db-test/find-block-by-content @conn "b1")
@@ -62,6 +66,7 @@
                       :block/link {:db/id (:db/id b2)})]
     (is (= [(:db/id b2)] (vec (outliner-pipeline/db-rebuild-block-refs @conn block'))))))
 
+;; Fails if, in `block-refs`, `:db/id` becomes `:db/ident`.
 (deftest block-refs-drop-a-self-ref-given-as-a-lookup-test
   (let [conn (journal-conn)
         b1 (db-test/find-block-by-content @conn "b1")
@@ -74,6 +79,7 @@
       (is (= [[:block/uuid (:block/uuid b2)]]
              (vec (outliner-pipeline/db-rebuild-block-refs @conn block')))))))
 
+;; Fails if, in `rebuild-block-refs-tx`, the body becomes `nil`, `:db/id` becomes `:db/ident`, the `[:db/retract (:db/id block) :block/refs]` tx entry is dropped, the `{:db/id (:db/id block)` tx entry is dropped, `:db/retract` becomes `:db/valueType`, `:block/refs` becomes `:block/tags`, the `:db/id` key is dropped or the `:block/refs` key is dropped.
 (deftest rebuild-block-refs-tx-test
   (let [conn (journal-conn)
         b1 (db-test/find-block-by-content @conn "b1")
