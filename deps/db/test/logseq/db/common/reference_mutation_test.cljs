@@ -37,6 +37,8 @@
   [db ids]
   (set (map #(:block/title (d/entity db %)) ids)))
 
+;; Fails if, in `matched-ref-block-ids-under-top`, `when` becomes `when-not`, `seq` becomes `empty?`, `empty?` becomes `seq`, `or` becomes `and` or `not` becomes `identity`.
+;; Fails if, in `expand-to-top-refs`, `if` becomes `if-not`.
 (deftest class-page-filter-skips-blocks-tagged-with-the-class-test
   (let [db @class-filter-db
         {:keys [ref-blocks ref-matched-children-ids]}
@@ -69,6 +71,7 @@
                          [:db/add c :block/refs (id-of db "Big")]])
       @conn)))
 
+;; Fails if, in `get-ref-pages-count`, `>` becomes `>=`.
 (deftest ref-pages-count-keeps-tied-pages-in-first-seen-order-test
   (let [db @ties-db
         {:keys [ref-pages-count]} (db-reference/get-linked-references db (id-of db "Target"))]

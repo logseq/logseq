@@ -47,6 +47,7 @@
                  (zip-file) "imported" #(swap! calls update :finished inc)))]
       @calls)))
 
+;; Fails if, in `import-from-sqlite-zip!`, `and` becomes `or`, `not` becomes `identity`, `when` becomes `when-not`, `if-not` becomes `if`, `seq` becomes `empty?` or `not=` becomes `=`.
 (deftest import-from-sqlite-zip-copies-every-asset-test
   (async done
     (-> (<import-zip! nil)
@@ -68,6 +69,7 @@
         (p/catch (fn [e] (is false (str e))))
         (p/finally done))))
 
+;; Fails if, in `import-from-sqlite-zip!`, `when` becomes `when-not`, `seq` becomes `empty?`, `and` becomes `or` or `not=` becomes `=`.
 (deftest import-from-sqlite-zip-reports-a-skipped-asset-test
   (async done
     (-> (<import-zip! "b.png")

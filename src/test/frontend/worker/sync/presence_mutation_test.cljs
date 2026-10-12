@@ -16,6 +16,7 @@
     :latest-remote-checksum {}}
    "r"))
 
+;; Fails if, in `sync-counts`, `when` becomes `when-not` or `and` becomes `or`.
 (deftest sync-counts-pending-server-test
   (with-redefs [worker-state/*db-sync-client (atom nil)
                 worker-state/*db-sync-config (atom {})]
@@ -35,6 +36,7 @@
                 worker-state/*db-sync-config (atom {})]
     (is (= :inactive (:ws-state (sync-counts 1 1))) "no client, sync not configured")))
 
+;; Fails if, in `rtc-state-payload`, `=` becomes `not=` or `or` becomes `and`.
 (deftest rtc-state-payload-carries-counts-test
   (let [files [{:asset-id "a" :asset-type "png" :file "assets/a.png"}]
         payload (sync-presence/rtc-state-payload

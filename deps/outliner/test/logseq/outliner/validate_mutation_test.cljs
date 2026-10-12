@@ -8,6 +8,7 @@
   [entity]
   (set (map :db/ident (:block/tags entity))))
 
+;; Fails if, in `colliding-tag-ids`, `>` becomes `>=`.
 (deftest validate-unique-page-with-only-page-tag-against-page-with-more-tags-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Company {}}
@@ -37,6 +38,7 @@
            #"Duplicate page"
            (outliner-validate/validate-unique-by-name-and-tags @conn "Apple" banana))))))
 
+;; Fails if, in `validate-disallow-page-with-journal-name`, `not` becomes `identity`.
 (deftest validate-disallow-page-with-journal-name-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Foo"}}
@@ -54,6 +56,7 @@
       (is (some? journal))
       (is (nil? (outliner-validate/validate-disallow-page-with-journal-name "Oct 11th, 2026" journal))))))
 
+;; Fails if, in `disallow-node-cant-tag-with-private-tags`, `=` becomes `not=`.
 (deftest validate-tags-property-allows-asset-tag-on-assets-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
