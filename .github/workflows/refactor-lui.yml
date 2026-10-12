@@ -1,0 +1,114 @@
+name: refactor/lui CI
+
+on:
+  push:
+    branches: ['refactor/lui']
+  pull_request:
+    branches: ['refactor/lui']
+  workflow_dispatch:
+
+concurrency:
+  group: refactor-lui-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  OCAML_VERSION: '5.5.1'
+  # lui feat/ml-backend commit validated locally
+  LUI_REF: '00ba1776'
+
+jobs:
+  ubuntu:
+    name: Build & test (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            deps/db-worker/pnpm-lock.yaml
+            deps/ui/pnpm-lock.yaml
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ env.LUI_REF }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
+
+      - name: Root pnpm deps
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: Pin lui @ ${{ env.LUI_REF }}
+        run: |
+          rm -rf "$RUNNER_TEMP/lui"
+          git clone --filter=blob:none https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
+          echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
+
+      - name: opam deps (db-worker + ui)
+        run: |
+          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
+          (cd deps/ui && sh scripts/install-opam-deps.sh)
+          opam install -y uri
+          opam list --pinned
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
+
+      - name: JS deps (db-worker, ui)
+        # package-lock.json is out of sync with package.json; pnpm lock works
+        run: |
+          pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
+          pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
+
+      - name: Build deps/db-worker
+        working-directory: deps/db-worker
+        run: opam exec -- dune build
+
+      - name: Build deps/ui
+        working-directory: deps/ui
+        run: opam exec -- dune build
+
+      - name: UI tests (test_main.js)
+        working-directory: deps/ui
+        run: node _build/default/test/ui_test/test/test_main.js
+
+      - name: dune runtest (deps/ui)
+        working-directory: deps/ui
+        run: opam exec -- dune runtest
+
+      - name: db-worker bundle
+        run: pnpm db-worker:build
+
+      - name: Web bundle (vite)
+        run: pnpm ui:build
+
+      - name: CSS build
+        run: pnpm gulp:build
