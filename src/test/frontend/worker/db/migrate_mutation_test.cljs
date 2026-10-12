@@ -11,6 +11,7 @@
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     conn))
 
+;; Fails if, in `missing-class-extends?`, `empty?` becomes `seq`.
 (deftest missing-class-extends-is-true-for-nil-and-empty-test
   (let [f #'db-migrate/missing-class-extends?]
     (is (true? (f {})))
@@ -19,6 +20,7 @@
     (is (false? (f {:logseq.property.class/extends #{1}})))
     (is (false? (f {:logseq.property.class/extends [1]})))))
 
+;; Fails if, in `repair-comment-classes-and-targets`, `and` becomes `or`.
 (deftest repair-comment-classes-adds-root-only-when-extends-is-missing-test
   (let [conn (initial-conn)
         root-id (:db/id (d/entity @conn :logseq.class/Root))
@@ -38,6 +40,7 @@
       (is (= (set (map (fn [id] [:db/add id :logseq.property.class/extends root-id]) class-ids))
              (set (extends-adds (repair @conn))))))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `=` becomes `not=`.
 (deftest ensure-built-in-data-restores-type-and-keeps-extra-attributes-test
   (let [conn (initial-conn)
         type-property (->> (sqlite-create-graph/build-db-initial-data "")
@@ -57,6 +60,7 @@
     (testing "an attribute the built-in data does not set is kept"
       (is (true? (:logseq.property/hide? (d/entity @conn extra-ident)))))))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `some?` becomes `nil?`.
 (deftest ensure-built-in-data-keeps-a-stored-value-over-the-built-in-one-test
   (let [conn (initial-conn)
         public-property (->> (sqlite-create-graph/build-db-initial-data "")
@@ -79,6 +83,7 @@
     (d/transact! conn [(merge {:db/ident ident :block/uuid built-in-uuid} attrs)])
     conn))
 
+;; Fails if, in `ensure-built-in-data-exists!`, `=` becomes `not=`.
 (deftest ensure-built-in-data-keeps-a-class-stored-timestamps-test
   (let [stored {:block/created-at 1 :block/updated-at 2}
         conn (conn-with-1-built-in :logseq.class/Tag stored)]
