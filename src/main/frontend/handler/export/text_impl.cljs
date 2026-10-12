@@ -21,6 +21,44 @@
 (declare inline-ast->simple-ast
          block-ast->simple-ast)
 
+(def ^:private block-title-start-markup
+  "Text at the start of a block's first line that mldoc reads as structure: a
+  heading or a task marker. mldoc gives plain text starting like this only when
+  it was escaped (`\\# x` parses as the text `# x`)."
+  #"^(?:#+(?:\s|$)|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
+
+(def ^:private line-start-markup
+  "Text at the start of a later line of a block that mldoc reads as structure:
+  a heading, a list item, a quote, a task marker. mldoc gives plain text
+  starting like this only when it was escaped."
+  #"^(?:#+(?:\s|$)|[-*+](?:\s|$)|>|\d+[.)](?:\s|$)|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
+
+(defn- escape-plain-start
+  "The inlines with a backslash before a first plain inline matching markup, so
+  an escape written in a block (e.g. `\\# not a heading`) survives the export
+  instead of turning the text into structure."
+  [markup inline-coll]
+  (let [[[ast-type ast-content] & more] inline-coll
+        [_ leading text] (when (string? ast-content)
+                           (re-matches #"(?s)([ \t]*)(.*)" ast-content))]
+    (if (and (= "Plain" ast-type)
+             text
+             (re-find markup text))
+      (cons ["Plain" (str leading "\\" text)] more)
+      inline-coll)))
+
+(defn- escape-paragraph-line-starts
+  "escape-plain-start for each line of a paragraph: the paragraph's first
+  inline and every inline after a line break."
+  [inline-coll]
+  (loop [[inline & more] inline-coll line-start? true acc []]
+    (if (nil? inline)
+      acc
+      (let [inline' (if line-start? (first (escape-plain-start line-start-markup [inline])) inline)]
+        (recur more
+               (contains? #{"Break_Line" "Hard_Break_Line"} (first inline))
+               (conj acc inline'))))))
+
 (defn- block-heading-prefix
   [{:keys [marker level priority size]}]
   (let [indent-style (get-in *state* [:export-options :indent-style])
@@ -49,7 +87,10 @@
                                   (not (get-in *state* [:newline-after-block :current-block-is-first-heading-block?])))
                          [(newline* 2)])
                        (block-heading-prefix heading)
-                       (mapcatv inline-ast->simple-ast title)
+                       (mapcatv inline-ast->simple-ast
+                                (if (or (:marker heading) (:size heading))
+                                  title
+                                  (escape-plain-start block-title-start-markup title)))
                        [(newline* 1)]))]
       (set! *state* (assoc-in *state* [:newline-after-block :current-block-is-first-heading-block?] false))
       simple-asts))
@@ -440,7 +481,7 @@
            (concatv
             (when (and origin-ast newline-after-block? (not current-block-is-first-heading-block?))
               [(newline* 2)])
-            (mapcatv inline-ast->simple-ast ast-content)
+            (mapcatv inline-ast->simple-ast (escape-paragraph-line-starts ast-content))
             (let [last-element (last ast-content)
                   [last-element-type] last-element]
               (when (and newline-after-block? (= "Break_Line" last-element-type))
