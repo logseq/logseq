@@ -96,7 +96,7 @@ let () =
       |> List.map (fun (name, line) ->
           `Assoc [ "id", str (src ^ "::" ^ name); "name", str name;
                    "source_file", str src; "line", `Int line; "group", str group;
-                   "contract", str (if file = "graph" then "helper" else "desktop");
+                   "contract", str (match file with "graph" -> "helper" | "plugins_basic" -> "api" | _ -> "desktop");
                    "target_file", str (target file) ])) files) groups in
   let ids = List.map (fun c -> Yojson.Safe.Util.(c |> member "id" |> to_string)) cases in
   if List.length ids <> List.length (List.sort_uniq String.compare ids) then failwith "Duplicate upstream case";

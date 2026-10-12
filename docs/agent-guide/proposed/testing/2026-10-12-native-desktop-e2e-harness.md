@@ -45,6 +45,54 @@ Lowest stable boundary: Real host/daemon fixtures with LaunchAgent before/after 
 Planned retained tests: 0 new product cases; delete scratch probes before handoff.
 Reason: The user explicitly requested fixture safety and typed read APIs, not product behavior changes or additional parity cases.
 
+### Audited API contracts and fixture initialization
+
+TEST DECISION: USER-REQUIRED
+
+Claim: The 15 audited plugins_basic cases exercise production SDK actions, not desktop input or pure helpers.
+Stable project-owned contract: Api requires a real started app, executed assertions and completed production SDK results; parity maps one native case to one upstream registration. A protected pre-boot hook may seed production-format local state, and db-sync-status remains an unmodified read oracle.
+Concrete regression risk: Fake SDL setup could satisfy API coverage, bulk covers lists could inflate parity, initialization failures could leak fixtures, and worker reads could be miscounted as SDK actions.
+Existing coverage searched: All 15 plugins_basic registrations, Sdk_api registry/bridge, Client.sdk_call, Suite.with_app/runner, inventory and Sync_client.status.
+Cheaper evidence considered: Temporary OCaml guard probes plus a real native registry call verify the harness contracts without new product cases.
+Lowest stable boundary: The real native host/daemon with production SDK registry completion and the actual runner.
+Planned retained tests: 0 new product cases; keep the existing smoke, remove temporary probes. Exactly 15 audited manifest entries change contract to api, total 249 unchanged.
+Reason: The parent explicitly authorized this correction and requested real API proof, negative guards, initialization cleanup and one-to-one mappings.
+
+TEST DECISION: SCRATCH
+
+Claim: A synchronous production SDK exception may leak pending transport tokens and exhaust the 32-request limit.
+Stable project-owned contract: Completed production SDK errors remain consumable results, without exhausting subsequent registered calls.
+Concrete regression risk: Expected SDK errors can leave the automation bridge unusable for later API cases.
+Existing coverage searched: Sdk_read.custom_query parsing before promise creation and the sdk-call token insertion/result path.
+Cheaper evidence considered: Source inspection identifies risk but cannot establish a runtime regression; use one real native registry probe before any fix.
+Lowest stable boundary: Private socket plus the actual production custom_query registry method.
+Planned retained tests: 0; delete the probe after real red/green evidence.
+Reason: The user requires a real reproduction before a TDD fix; do not change production based on an unverified risk.
+
+TEST DECISION: SCRATCH
+
+Claim: A daemon health response and a nonempty retained tree do not yet guarantee the default native graph route is ready for public SDK reads.
+Stable project-owned contract: Returning from Client.start means a real page has rendered and the production SDK can read the active repo.
+Concrete regression risk: A freshly booted API-only case can fail get_all_tags with "repo is required" before graph route activation, despite a healthy daemon.
+Existing coverage searched: Client.start readiness checks and the real Suite.Api temporary probe.
+Cheaper evidence considered: Source inspection alone does not prove the observed race; a real get_all_tags call immediately after Client.start failed, while polling the title made it pass.
+Lowest stable boundary: The native retained graph route inside the existing Client.start fixture.
+Planned retained tests: 0; remove the temporary API probe after validating readiness.
+Reason: Repair fixture readiness once instead of adding per-case sleeps/retries or weakening SDK assertions.
+
+### Semantic locator correctness under dynamic native layout
+
+TEST DECISION: KEEP
+
+Claim: A native semantic locator must select and click its intended target despite quoted attribute whitespace and settling layout.
+Stable project-owned contract: Native query tokenization preserves quoted attribute values; Client.click waits for stable identity/geometry before one real SDL button sequence, never retries a misclick.
+Concrete regression risk: Splitting a quoted item key on spaces loses the target, while an intermediate Cmd-K rectangle can click a different row and mutate the wrong page.
+Existing coverage searched: Native Dom_ext selector parser/matcher, Client.query/click, native smoke and the editor child's real Cmd-K reproduction.
+Cheaper evidence considered: A pure parser probe can diagnose tokenization but cannot protect the production query-to-layout-to-SDL boundary; compilation and the current smoke do not use quoted-space item keys.
+Lowest stable boundary: Real native retained selectors and SDL input with the isolated daemon.
+Planned retained tests: 1 generic additional native locator contract, no upstream parity claim and no per-group click workarounds.
+Reason: The parent explicitly requested the shared root fix and a generic regression; protect semantic target correctness without fake layout/input or speculative product cases.
+
 ## Alternatives considered
 
 ### Browser or reducer harness
