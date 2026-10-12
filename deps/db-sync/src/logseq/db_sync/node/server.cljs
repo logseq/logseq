@@ -78,7 +78,7 @@
 (defn- reject-ws-upgrade!
   [^js socket status reason]
   (.write socket
-          (str "HTTP/1.1 " status " Conflict\r\n"
+          (str "HTTP/1.1 " status " " (get {409 "Conflict" 500 "Internal Server Error"} status "Error") "\r\n"
                "Connection: close\r\n"
                "Content-Type: application/json\r\n\r\n"
                "{\"error\":\"" reason "\"}"))
@@ -170,17 +170,24 @@
                    parsed (node-routes/parse-sync-path path)
                    graph-id (:graph-id parsed)]
                (if (and graph-id (seq graph-id))
-                 (p/let [allowed? (access-allowed? env graph-id request)]
-                   (if allowed?
-                     (let [ctx (graph/get-or-create-graph registry deps graph-id)]
-                       (p/let [ready-for-sync? (sync-handler/<ready-for-sync? ctx graph-id)]
-                         (if ready-for-sync?
-                           (.handleUpgrade wss req socket head
-                                           (fn [ws-socket]
-                                             (attach-ws! ctx ws-socket)
-                                             (handle-ws-connection ctx env request ws-socket)))
-                           (reject-ws-upgrade! socket 409 "graph not ready"))))
-                     (.destroy socket)))
+                 (-> (p/let [allowed? (access-allowed? env graph-id request)]
+                       (if allowed?
+                         (let [ctx (graph/get-or-create-graph registry deps graph-id)]
+                           (p/let [ready-for-sync? (sync-handler/<ready-for-sync? ctx graph-id)]
+                             (if ready-for-sync?
+                               (.handleUpgrade wss req socket head
+                                               (fn [ws-socket]
+                                                 (attach-ws! ctx ws-socket)
+                                                 (handle-ws-connection ctx env request ws-socket)))
+                               (reject-ws-upgrade! socket 409 "graph not ready"))))
+                         (.destroy socket)))
+                     ;; an auth error (a malformed token, a JWKS fetch failure)
+                     ;; or a failed readiness check: answer, as an HTTP request
+                     ;; gets a 500, instead of leaving the socket open
+                     (p/catch (fn [e]
+                                (log/error :db-sync/node-ws-upgrade-failed {:error e})
+                                (when-not (.-destroyed socket)
+                                  (reject-ws-upgrade! socket 500 "server error")))))
                  (.destroy socket)))))
       (p/let [_ (js/Promise.
                  (fn [resolve]
