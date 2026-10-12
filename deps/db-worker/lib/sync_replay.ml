@@ -2336,6 +2336,88 @@ let finish_apply_remote_txs repo (client : Sync_state.client)
   >>= fun () ->
   download_missing_remote_assets_for_owner repo client remote_asset_tx_data
 
+(* Entity refs land as Ref on a committed datom and as Ref_to while a
+   lookup is still unresolved. Compare those by eid; every other value
+   compares structurally. *)
+let ref_eid_of (v : value) : int option =
+  match v with
+  | Ref n -> Some n
+  | Ref_to (Entity_id n) -> Some n
+  | _ -> None
+
+let same_datom_value (a : value) (b : value) : bool =
+  match ref_eid_of a, ref_eid_of b with
+  | Some ea, Some eb -> ea = eb
+  | None, None -> a = b
+  | Some _, None | None, Some _ -> false
+
+let fact_present (db : db) (e : int) (a : string) (v : value) : bool =
+  Datascript.datoms db Eavt ~e ~a ()
+  |> Seq.exists (fun (d : datom) -> same_datom_value d.v v)
+
+(* Set equality, not multiset: datascript-ocaml keeps a re-added fact as
+   a second datom, so an echo has more copies than the baseline and the
+   same values. *)
+let attr_matches (baseline : db) (probe : db) (e : int) (a : string) : bool =
+  let present_in other (d : datom) = fact_present other e a d.v in
+  Seq.for_all (present_in probe) (Datascript.datoms baseline Eavt ~e ~a ())
+  && Seq.for_all (present_in baseline)
+       (Datascript.datoms probe Eavt ~e ~a ())
+
+(* True when applying [remote_txs] to a copy of [display] changes no
+   user-visible fact. cljs drops already-present facts out of tx-data, so
+   an echo never reaches the editor. This conn keeps those facts, and a
+   display rebind also allocates new eids — either one makes the frontend
+   write the server title over keystrokes that have not been saved yet.
+   The probe must not call transact_remote_txs: that records asserted
+   eids, and the copy's eids are not the server's. A probe failure falls
+   back to rebuild; the server conn is already committed. *)
+let display_already_shows_remote repo (display : conn)
+    (remote_txs : Wire.t list) : bool =
+  let baseline = Conn.db display in
+  let probe = conn_from_db { baseline with storage_ref = None } in
+  let fl = Db_tx.flags_of probe in
+  fl.Db_tx.skip_store <- true;
+  fl.Db_tx.skip_validate <- true;
+  let collected = ref [] in
+  let lid =
+    listen probe "echo-diff" (fun (r : tx_report) ->
+        collected := List.rev_append r.tx_data !collected)
+  in
+  let apply_one (remote_tx : Wire.t) : unit =
+    let raw =
+      match Wire.get "tx-data" remote_tx with
+      | Some xs -> tx_items_of xs
+      | None -> []
+    in
+    let tx_data = List.map (resolve_temp_id (Conn.db probe)) raw in
+    match tx_data with
+    | [] -> ()
+    | _ ->
+        ignore
+          (Db_transact.transact probe tx_data (apply_tx_meta remote_tx))
+  in
+  match
+    Db_tx.with_temp_conn_cleanup probe lid (fun () ->
+        List.iter apply_one remote_txs;
+        let probe_db = Conn.db probe in
+        let touched : (int * string, unit) Hashtbl.t = Hashtbl.create 16 in
+        List.iter
+          (fun (d : datom) ->
+             if d.a <> "db/txInstant" && d.e <> d.tx then
+               Hashtbl.replace touched (d.e, d.a) ())
+          !collected;
+        Hashtbl.fold
+          (fun (e, a) () unchanged ->
+             unchanged && attr_matches baseline probe_db e a)
+          touched true)
+  with
+  | unchanged -> unchanged
+  | exception e ->
+      Worker_log.warn "db-sync/echo-diff-failed"
+        [ "repo", repo; "error", Printexc.to_string e ];
+      false
+
 (* Remote txs land on the server conn only; the display projection is
    then rebuilt from confirmed state with the pending queue replayed
    forward. No reverse step — nothing local ever enters the base. *)
@@ -2451,11 +2533,29 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
         (* A journal echo is durable confirmation even when the upload
            response was lost. Remove its overlay before replaying the tail. *)
         ignore (Sync_apply.mark_pending_txs_false ~rebuild:false repo confirmed_ids);
-        rebuild_display repo
-          ~jump_tx_data:
-            (match tx_report with
-             | Some r -> r.tx_data
-             | None -> []);
+        let jump =
+          match tx_report with
+          | Some r -> r.tx_data
+          | None -> []
+        in
+        (* An echo of facts already on the display must not rebind eids
+           or publish a render delta. A novel remote fact still rebuilds,
+           including when other local ops remain pending. *)
+        let skip_rebind =
+          match
+            Worker_state.datascript_conn repo, Sync_state.server_conn repo
+          with
+          | Some display, Some server
+            when server == conn && display != server ->
+              display_already_shows_remote repo display remote_txs
+          | _ -> false
+        in
+        if skip_rebind then
+          (match Worker_state.datascript_conn repo with
+           | Some display ->
+               fix_tx repo display ~jump_tx_data:jump (sync_fix_tx_meta ())
+           | None -> ())
+        else rebuild_display repo ~jump_tx_data:jump;
         !remote_tx_results
       with e ->
         Worker_log.error "db-sync/apply-remote-txs-inner-error"

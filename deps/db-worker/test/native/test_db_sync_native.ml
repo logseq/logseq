@@ -15434,6 +15434,259 @@ let test_failed_pull_does_not_confirm_journal_echo () =
           check "failed pull does not upload against an incomplete journal"
             (not (List.exists (fun m -> Wire.get "type" m = Some (Wire.String "tx/batch")) !sent))))
 
+(* A sync echo of a tx the display already shows must not publish that
+   block again. The editor writes delta block titles into the textarea,
+   and an unsaved keystroke lives only there until the debounced save. *)
+let delta_uuid_keys (field : string) (captured : (string * Wire.t) list)
+    : string list =
+  List.concat_map
+    (fun (kind, payload) ->
+       if kind <> "sync-db-changes" then []
+       else
+         match Wire.get "delta" (broadcast_data payload) with
+         | None -> []
+         | Some delta -> (
+             match Wire.get field delta with
+             | Some (Wire.Map kvs) ->
+                 List.filter_map
+                   (fun (k, _) ->
+                      match k with Wire.Uuid u -> Some u | _ -> None)
+                   kvs
+             | _ -> []))
+    captured
+
+let echo_tx (entry : Sync_client_op.local_tx_entry) : Wire.t =
+  wire_map
+    (List.filter_map Fun.id
+       [ Some ("tx-id", Wire.String entry.tx_id)
+       ; Option.map (fun op -> ("outliner-op", kw op)) entry.outliner_op
+       ; Some ("tx-data", entry.tx) ])
+
+let insert_pending_block (display : conn) (parent : entity) (uuid : string)
+    (title : string) : unit =
+  ignore
+    (Outliner_core.insert_blocks_conn display
+       [ Block_map.of_transit
+           (wire_map
+              [ "block/uuid", Wire.Uuid uuid
+              ; "block/title", Wire.String title ]) ]
+       (Block_map.of_entity parent)
+       { Outliner_core.default_insert_opts with
+         sibling = false
+       ; keep_uuid = true }
+       (Block_map.of_transit
+          (wire_map
+             [ "sibling?", Wire.Bool false
+             ; "keep-uuid?", Wire.Bool true ])))
+
+let pending_has (tx_id : string) : bool =
+  List.exists
+    (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id = tx_id)
+    (Sync_apply.pending_txs test_repo ())
+
+let test_echo_of_local_insert_does_not_republish_block () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          let parent_on_display =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) parent_uuid)
+          in
+          let block_uuid = fresh_uuid () in
+          insert_pending_block display parent_on_display block_uuid "";
+          let pending = Sync_apply.pending_txs test_repo () in
+          check "insert is one pending tx" (List.length pending = 1);
+          let entry = List.hd pending in
+          let before =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) block_uuid)
+          in
+          let title_before = Ldb.string_value before "block/title" in
+          with_broadcast_capture (fun captured ->
+              await_unit
+                (Sync_replay.apply_remote_txs test_repo (mk_client ())
+                   [ echo_tx entry ]);
+              let after =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db display) block_uuid)
+              in
+              check "echo keeps the editing block's db id"
+                (after.id = before.id);
+              check "echo keeps the saved title"
+                (Ldb.string_value after "block/title" = title_before);
+              check "echo does not republish the block"
+                (not
+                   (List.mem block_uuid (delta_uuid_keys "blocks" !captured)));
+              check "echo does not delete the block"
+                (not
+                   (List.mem block_uuid
+                      (delta_uuid_keys "deleted" !captured)));
+              check "echo confirms the pending insert"
+                (not (pending_has entry.tx_id)))))
+
+let test_remote_title_change_still_applies () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _, child, _, _ = setup_parent_child () in
+      let child_uuid = ent_block_uuid child in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ "tx-data"
+                   , Wire.Array
+                       [ db_add
+                           (block_uuid_lookup (Wire.Uuid child_uuid))
+                           "block/title" (Wire.String "from-server") ] ] ]);
+          let after =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) child_uuid)
+          in
+          check "remote title reaches the display"
+            (Ldb.string_value after "block/title" = Some "from-server")))
+
+let test_echo_of_earlier_insert_keeps_later_pending_block () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          let parent_on_display =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) parent_uuid)
+          in
+          let first_uuid = fresh_uuid () in
+          let second_uuid = fresh_uuid () in
+          insert_pending_block display parent_on_display first_uuid "";
+          insert_pending_block display parent_on_display second_uuid "next";
+          let pending = Sync_apply.pending_txs test_repo () in
+          check "both inserts stay pending" (List.length pending = 2);
+          let first = List.hd pending in
+          let second = List.nth pending 1 in
+          let first_before =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) first_uuid)
+          in
+          let second_before =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) second_uuid)
+          in
+          with_broadcast_capture (fun captured ->
+              await_unit
+                (Sync_replay.apply_remote_txs test_repo (mk_client ())
+                   [ echo_tx first ]);
+              let first_after =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db display) first_uuid)
+              in
+              let second_after =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db display) second_uuid)
+              in
+              check "echo keeps the confirmed block's db id"
+                (first_after.id = first_before.id);
+              check "echo keeps the newer block's db id"
+                (second_after.id = second_before.id);
+              check "echo keeps the newer block's title"
+                (Ldb.string_value second_after "block/title" = Some "next");
+              check "echo does not republish the newer block"
+                (not
+                   (List.mem second_uuid
+                      (delta_uuid_keys "blocks" !captured)));
+              check "echo confirms only the earlier insert"
+                (not (pending_has first.tx_id));
+              check "newer insert stays pending" (pending_has second.tx_id))))
+
+let test_echo_batch_with_later_title_still_applies () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          let parent_on_display =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) parent_uuid)
+          in
+          let block_uuid = fresh_uuid () in
+          insert_pending_block display parent_on_display block_uuid "";
+          let entry = List.hd (Sync_apply.pending_txs test_repo ()) in
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ echo_tx entry
+               ; wire_map
+                   [ "tx-id", Wire.String (fresh_uuid ())
+                   ; "tx-data"
+                   , Wire.Array
+                       [ db_add
+                           (block_uuid_lookup (Wire.Uuid block_uuid))
+                           "block/title" (Wire.String "from-server") ] ] ]);
+          let after =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) block_uuid)
+          in
+          check "later remote title in the same batch lands"
+            (Ldb.string_value after "block/title" = Some "from-server");
+          check "echo in that batch still confirms the insert"
+            (not (pending_has entry.tx_id))))
+
+let test_remote_title_applies_while_insert_is_pending () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child, _, _ = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let child_uuid = ent_block_uuid child in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          let parent_on_display =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) parent_uuid)
+          in
+          let block_uuid = fresh_uuid () in
+          insert_pending_block display parent_on_display block_uuid "local";
+          let entry = List.hd (Sync_apply.pending_txs test_repo ()) in
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ "tx-data"
+                   , Wire.Array
+                       [ db_add
+                           (block_uuid_lookup (Wire.Uuid child_uuid))
+                           "block/title" (Wire.String "from-server") ] ] ]);
+          let child_after =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) child_uuid)
+          in
+          let inserted =
+            Option.get
+              (ent_by_block_uuid (Datascript.db display) block_uuid)
+          in
+          check "remote title lands while a local insert is pending"
+            (Ldb.string_value child_after "block/title" = Some "from-server");
+          check "pending insert is still on the display"
+            (Ldb.string_value inserted "block/title" = Some "local");
+          check "pending insert stays pending" (pending_has entry.tx_id)))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "sync-failure-recovery"
@@ -16242,6 +16495,19 @@ let () =
         ; Alcotest.test_case
             "sanitize-tx-derives-property-value-retracts-test" `Quick
             test_sanitize_tx_derives_property_value_retracts
+        ; Alcotest.test_case
+            "echo-of-local-insert-does-not-republish-block" `Quick
+            test_echo_of_local_insert_does_not_republish_block
+        ; Alcotest.test_case "remote-title-change-still-applies" `Quick
+            test_remote_title_change_still_applies
+        ; Alcotest.test_case
+            "echo-of-earlier-insert-keeps-later-pending-block" `Quick
+            test_echo_of_earlier_insert_keeps_later_pending_block
+        ; Alcotest.test_case "echo-batch-with-later-title-still-applies"
+            `Quick test_echo_batch_with_later_title_still_applies
+        ; Alcotest.test_case
+            "remote-title-applies-while-insert-is-pending" `Quick
+            test_remote_title_applies_while_insert_is_pending
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]
