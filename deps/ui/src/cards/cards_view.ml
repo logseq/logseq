@@ -82,7 +82,8 @@ let selector_row st =
 (* cljs rating->shortcut / btn-with-shortcut colors *)
 (* cljs per-rating classes set --primary (primary-red/purple/logseq/
    green); the native class dict lacks them, so the tint hexes are
-   spelled out — bg = color @ 5%, border = color, fg stays dark *)
+   spelled out — bg = color @ 5%, border = neutral #ebeaeb like every
+   other ui__button, fg stays dark *)
 let ratings =
   [ ("again", "flashcard.rating/again", "1", "primary-red", "#e5484d")
   ; ("hard", "flashcard.rating/hard", "2", "primary-purple", "#8e4ec6")
@@ -100,7 +101,7 @@ let rating_btn st i (r, label_key, sc, style, hex) =
     [ button ~key:"b" ~accessibility_identifier:id
         ~padding_horizontal:8 ~padding_vertical:4
         ~background:(hex ^ "0d")
-        ~border_color:hex ~border_width:1
+        ~border_color:"rgb(235,234,235)" ~border_width:1
         ~foreground:"rgb(23,23,23)"
         ~style_class:(id ^ " " ^ style)
         ~label:(t_ label_key)
@@ -167,8 +168,11 @@ let rec card_view st b phase =
     else { b with Model.block_children = [] }
   in
   (* grow:1 fills #cards-modal so the scroll region expands and the
-     action row pins to the dialog bottom (cljs flex-1 min-h-0) *)
+     action row pins to the dialog bottom (cljs flex-1 min-h-0);
+     min-height 60vh like cljs .ls-card so the card area keeps its
+     review size even when content is short *)
   column ~key:"card-cur" ~grow:1. ~style_class:"ls-card content"
+    ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
     [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
         ~min_height:0 ~style_class:"ls-card-scroll"
         [ (* scroll lays its children out in a single grid cell — the
@@ -199,8 +203,8 @@ let rec card_view st b phase =
               keyed_card st b'
             ]
         ]
-    ; box ~key:"actions" ~style_class:"ls-card-actions"
-        ~margin_top:32 ~main:`start ~cross:`start
+    ; row ~key:"actions" ~style_class:"ls-card-actions"
+        ~margin_top:32 ~main:`center ~cross:`start
         ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
@@ -275,6 +279,7 @@ let cards_body st =
           if List.length cards = 0 && all = [] then
             column ~key:"empty" ~style_class:"ls-card content ls-ml"
               ~margin_left:8
+              ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
               [ heading ~key:"h" ~level:2
                   ~value:(t_ "flashcard.empty/title") []
               ; paragraph ~key:"d"
@@ -283,6 +288,7 @@ let cards_body st =
           else if List.length cards = 0 then
             column ~key:"nodue" ~style_class:"ls-card content ls-ml"
               ~margin_left:8
+              ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
               [ heading ~key:"h" ~level:2
                   ~value:(t_ "flashcard.empty/no-due-title") []
               ; paragraph ~key:"d"
@@ -292,6 +298,7 @@ let cards_body st =
           else
             column ~key:"fin" ~style_class:"ls-card content ls-ml"
               ~margin_left:8
+              ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
               [ paragraph ~key:"d"
                   ~value:(t_ "flashcard.review/finished") []
               ; box ~key:"btns" ~margin_top:16
@@ -337,7 +344,7 @@ let modal st =
       (* cljs ui__dialog-content: w-full max-w-2xl/lg:max-w-3xl →
          min(85%, 980px); fixed 980 approximates the desktop case *)
       dialog ~key:"cards-dlg" ~style_class:"ls-dialog-flashcards"
-        ~width:980
+        ~width:980 ~padding:20
         ~on_dismiss:(fun _ ->
           if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)
