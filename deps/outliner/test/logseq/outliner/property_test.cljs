@@ -271,6 +271,23 @@
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2"))))))))
 
+(deftest set-block-property-skips-identical-many-ref-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:nodes {:logseq.property/type :node :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/properties {:nodes #{[:build/page {:block/title "A"}]
+                                                                         [:build/page {:block/title "B"}]}}}]}]})
+        block-id (:db/id (db-test/find-block-by-content @conn "b1"))
+        value-ids (set (map :db/id (:user.property/nodes (d/entity @conn block-id))))
+        tx-count (atom 0)]
+    (is (= 2 (count value-ids)))
+    (d/listen! conn ::count-txs (fn [_] (swap! tx-count inc)))
+    (outliner-property/set-block-property! conn block-id :user.property/nodes (vec value-ids))
+    (outliner-property/set-block-property! conn block-id :user.property/nodes value-ids)
+    (d/unlisten! conn ::count-txs)
+    (is (zero? @tx-count) "Setting the values a block already has transacts nothing")))
+
 (deftest batch-set-property-stores-explicit-literal-numbers
   (testing "Literal integers including 0, negatives, and coincidental entity ids store as numbers"
     (let [conn (db-test/create-conn-with-blocks

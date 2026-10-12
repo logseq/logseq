@@ -929,7 +929,7 @@
                                         (->> (cond
                                                (nil? value) []
                                                (de/entity? value) [value]
-                                               (sequential? value) value
+                                               (coll? value) value
                                                :else [value])
                                              (map (fn [item]
                                                     (if (de/entity? item)
