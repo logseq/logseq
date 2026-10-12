@@ -217,7 +217,13 @@ let attached : (string, string) Hashtbl.t = Hashtbl.create 4
    profiling needs no external stopwatch *)
 let boot_t0 = Unix.gettimeofday ()
 
+let boot_trace =
+  match Sys.getenv_opt "LOGSEQ_BOOT_TRACE" with
+  | Some ("" | "0") | None -> false
+  | Some _ -> true
+
 let boot_mark msg =
+  if boot_trace then
   Printf.eprintf "[boot +%.3fs u=%.3f] %s\n%!"
     (Unix.gettimeofday () -. boot_t0) (Unix.gettimeofday ()) msg
 

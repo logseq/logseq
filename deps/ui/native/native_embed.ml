@@ -459,6 +459,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   Rtc_flows.init ();
   perf_mark "init.installs" t1;
   let t2 = perf_ms () in
+  Graph.boot_trace := Daemon_client.boot_trace;
   ignore (Boot.run ());
   perf_mark "init.boot" t2;
   take_patches ()

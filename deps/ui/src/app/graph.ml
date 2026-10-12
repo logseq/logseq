@@ -9,8 +9,13 @@ let full_graph_name name = db_version_prefix ^ String.trim name
 
 let default_config = "{:feature/enable-git-auto-commit? false}"
 
+(* boot timing trace; off by default. Native hosts flip it from
+   LOGSEQ_BOOT_TRACE so the web console stays quiet. *)
+let boot_trace = ref false
+
 let boot_mark name =
-  Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
+  if !boot_trace then
+    Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
 
 let init_worker () =
   let* _ = Runtime.invoke1 "thread-api/init" (Wire.Array []) in

@@ -94,8 +94,7 @@ let ensure_today_journal repo =
 let published_boot : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> failwith "Publishing boot is not installed")
 
-let boot_mark name =
-  Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
+let boot_mark = Graph.boot_mark
 
 let run () =
   apply_storage_env ();

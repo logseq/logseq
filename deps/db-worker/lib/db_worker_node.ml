@@ -868,7 +868,13 @@ type daemon_opts =
 
 let start_daemon (opts : daemon_opts) : daemon E.t =
   let boot_t0 = Time.monotonic_now () in
+  let trace =
+    match Sys.getenv_opt "LOGSEQ_BOOT_TRACE" with
+    | Some ("" | "0") | None -> false
+    | Some _ -> true
+  in
   let mark name =
+    if trace then
     Printf.eprintf "[dbw +%.3fs] %s\n%!"
       (Time.diff_monotonic_ms boot_t0 (Time.monotonic_now ()) /. 1000.)
       name
