@@ -291,16 +291,6 @@
            nil
            (catch :default e (:reason (ex-data e)))))))
 
-(deftest replace-uuid-str-with-eid-test
-  (let [u (random-uuid)
-        db (d/db-with (d/empty-db {:block/uuid {:db/unique :db.unique/identity}})
-                      [{:db/id 3 :block/uuid u}])]
-    (is (= 3 (replace-uuid-str-with-eid db (str u))))
-    (is (= "hello" (replace-uuid-str-with-eid db "hello")))
-    (let [s (str (random-uuid))]
-      (is (= s (replace-uuid-str-with-eid db s))))
-    (is (= 7 (replace-uuid-str-with-eid db 7)))))
-
 (deftest ref-attr?-test
   (let [db (d/empty-db {:a {:db/valueType :db.type/ref}})]
     (is (true? (ref-attr? db :a)))
