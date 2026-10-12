@@ -170,7 +170,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      && inst.V.kind <> V.KUnlinkedRefs
                      && count_of s > 0)
                    isig))
-           (text ~font_size:"0.75rem"
+           (text ~font_size:"0.75rem" ~margin_left:4
               ~foreground:"hsl(var(--muted-foreground), var(--ls-secondary-text-color))"
               ~value_signal:
                 (Logseq_el.own ctx
