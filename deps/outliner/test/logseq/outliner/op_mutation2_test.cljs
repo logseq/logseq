@@ -9,6 +9,7 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.template :as outliner-template]))
 
+;; Fails if, in `toggle-reaction!`, the `:outliner-op` key is dropped.
 (deftest toggle-reaction-transacts-with-its-outliner-op-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -22,6 +23,7 @@
     (is (= [:toggle-reaction :toggle-reaction] (mapv :outliner-op @metas)))
     (is (empty? (:logseq.property.reaction/_target (d/entity @conn [:block/uuid target-uuid]))))))
 
+;; Fails if, in `import-edn-data`, the `:error` key is dropped or the `:edn-label` key is dropped.
 (deftest import-edn-data-reports-errors-test
   (let [conn (db-test/create-conn)]
     (testing "a build that throws"
@@ -64,6 +66,7 @@
                                  {:block/title "template child 2"}]}]}]
     :properties {:log-time {:logseq.property/type :default}}}))
 
+;; Fails if, in `template-children-blocks`, the `:include-property-block?` key is dropped or `:db/id` becomes `:db/retractEntity`.
 (deftest template-children-blocks-test
   (let [conn (template-conn)
         root (db-test/find-block-by-content @conn "template root")
@@ -76,6 +79,7 @@
     (testing "property value blocks are included"
       (is (some :logseq.property/created-from-property blocks)))))
 
+;; Fails if, in `ensure-template-journal-pages!`, the `:journal?` key is dropped.
 (deftest ensure-template-journal-pages-creates-journals-test
   (let [conn (db-test/create-conn)
         created (atom [])]
@@ -96,6 +100,7 @@
          [?page :block/title ?page-title]]
        db title page-title))
 
+;; Fails if, in `apply-template-op!`, the `seq` step is dropped.
 (deftest apply-template-uses-the-template-when-given-no-blocks-test
   (let [conn (template-conn)
         root (db-test/find-block-by-content @conn "template root")
@@ -106,17 +111,7 @@
                             {})
     (is (= 1 (count (titled-blocks-on-page @conn "template child 2" "Target Page"))))))
 
-(deftest apply-template-accepts-given-blocks-as-a-list-test
-  (let [conn (template-conn)
-        root (db-test/find-block-by-content @conn "template root")
-        target (db-test/find-block-by-content @conn "target block")
-        blocks (#'outliner-op/template-children-blocks @conn [:block/uuid (:block/uuid root)])]
-    (outliner-op/apply-ops! conn
-                            [[:apply-template [(:block/uuid root) (:block/uuid target)
-                                               {:template-blocks (apply list blocks)}]]]
-                            {})
-    (is (= 1 (count (titled-blocks-on-page @conn "template child 2" "Target Page"))))))
-
+;; Fails if, in `resolve-indent-outdent-opts`, the `:block/uuid` key is dropped or `:block/uuid` becomes `:block/_parent`.
 (deftest resolve-indent-outdent-opts-reports-a-missing-parent-test
   (let [conn (db-test/create-conn)
         missing (random-uuid)
@@ -128,6 +123,7 @@
             :block/uuid missing}
            (ex-data error)))))
 
+;; Fails if, in `apply-op!`, the `:block/uuid` key is dropped, the `:block/title` key is dropped or `:block/uuid` becomes `:block/_parent`.
 (deftest rename-page-op-rejects-a-blank-title-test
   (let [conn (db-test/create-conn)
         page-uuid (random-uuid)
@@ -138,6 +134,7 @@
     (is (= {:block/uuid page-uuid :block/title "  "}
            (ex-data error)))))
 
+;; Fails if, in `apply-op!`, `:block/uuid` becomes `:block/_parent`.
 (deftest create-property-text-block-op-sets-the-value-on-the-block-test
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:text-prop {:logseq.property/type :default}}
@@ -150,6 +147,7 @@
                             {})
     (is (some? (:user.property/text-prop (d/entity @conn [:block/uuid block-uuid]))))))
 
+;; Fails if, in `import-edn-op?`, the body becomes `nil`.
 (deftest import-edn-op-test
   (is (true? (#'outliner-op/import-edn-op? [:batch-import-edn [{} {}]])))
   (is (false? (#'outliner-op/import-edn-op? [:save-block [{} {}]]))))

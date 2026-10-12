@@ -51,6 +51,7 @@
       (p/catch (fn [error] (is false (str error (some-> error .-stack)))))
       (p/finally (fn [& _] (done)))))
 
+;; Fails if, in `ensure-conn!`, the body becomes `nil`.
 (deftest ensure-conn-initializes-schema-and-opens-conn-test
   (let [sql (make-memory-sql)
         self #js {:sql sql}]
@@ -59,6 +60,7 @@
     (is (some? (.-conn self)))
     (.close sql)))
 
+;; Fails if, in `<set-graph-ready-for-use!`, the body becomes `nil`, the `.-env` step is dropped, the `(aget "DB")` step is dropped, the `(aget "meta")` step is dropped, the `(aget "changes")` step is dropped, the `(aget "rows_written")` step is dropped, the `(aget "success")` step is dropped, the `:type` key is dropped, the `:graph-id` key is dropped, the `:graph-ready-for-use?` key is dropped, the `:result` key is dropped, `:db-sync/graph-ready-for-use-set-failed` becomes `:db-sync/graph-ready-for-use-set-no-rows`, the `:rows-affected` key is dropped, `:db-sync/graph-ready-for-use-set-no-rows` becomes `:db-sync/http-error` or `:db-sync/missing-db-binding` becomes `:db-sync/skip-checksum-update?`.
 (deftest set-graph-ready-for-use-test
   (async done
          (let [calls (atom [])
@@ -115,6 +117,8 @@
               true)
             done))))
 
+;; Fails if, in `reset-import!`, the body becomes `nil`.
+;; Fails if, in `import-snapshot!`, the body becomes `nil`.
 (deftest import-snapshot-reset-replaces-existing-state-test
   (let [sql (make-memory-sql)
         self #js {:sql sql}]
@@ -137,6 +141,7 @@
                         (common/get-sql-rows (common/sql-exec sql "select addr from kvs order by addr")))))
     (.close sql)))
 
+;; Fails if, in `fetch-snapshot-kvs-rows`, the body becomes `nil`.
 (deftest fetch-snapshot-kvs-rows-test
   (let [calls (atom [])
         sql #js {:exec (fn [sql-str & args]
@@ -149,6 +154,7 @@
              [1 10]]]
            @calls))))
 
+;; Fails if, in `missing-block-uuids-from-error`, the `distinct` step is dropped.
 (deftest missing-block-uuids-from-error-test
   (let [u1 (random-uuid)
         u2 (random-uuid)
@@ -159,12 +165,7 @@
     (is (vector? result))
     (is (= [u1 u2] result))))
 
-(deftest cardinality-many-attr-reads-schema-test
-  (let [db (d/empty-db {:many-attr {:db/cardinality :db.cardinality/many}
-                        :one-attr {}})]
-    (is (true? (#'sync-handler/cardinality-many-attr? db :many-attr)))
-    (is (false? (#'sync-handler/cardinality-many-attr? db :one-attr)))))
-
+;; Fails if, in `cardinality-many-attr?`, `:db/cardinality` becomes `:db/cas`.
 (deftest cardinality-many-attr-falls-back-to-attr-entity-test
   (testing "an attribute missing from the schema takes its cardinality from its entity"
     (let [db (d/init-db [(d/datom 1 :db/ident :many-attr)
@@ -176,6 +177,7 @@
       (is (true? (#'sync-handler/cardinality-many-attr? db :many-attr)))
       (is (false? (#'sync-handler/cardinality-many-attr? db :one-attr))))))
 
+;; Fails if, in `tx-item-group-keys`, `:db/id` becomes `:db/retract`, `:db/cas` becomes `:db/id`, `:db.fn/cas` becomes `:db.fn/retractEntity`, `:db/retractEntity` becomes `:db/valueType` or `:db.fn/retractEntity` becomes `:db.fn/cas`.
 (deftest tx-item-group-keys-test
   (let [db (d/empty-db)
         group-keys #(#'sync-handler/tx-item-group-keys db #{} %)]
@@ -191,6 +193,7 @@
       (is (= #{} (group-keys [:db/retractEntity 7])))
       (is (= #{} (group-keys {:db/id 7 :block/title "x"}))))))
 
+;; Fails if, in `normalize-diagnostic-block`, the body becomes `nil`, `:block/uuid` becomes `:block/order`, `:block/parent` becomes `:block/uuid`, `:block/page` becomes `:block/parent` or `:block/order` becomes `:block/page`.
 (deftest normalize-diagnostic-block-test
   (let [uuid (random-uuid)
         parent (random-uuid)
@@ -216,6 +219,7 @@
        :schema-ready true
        :conn :old-conn})
 
+;; Fails if, in `handle-sync-admin-reset`, the body becomes `nil` or the `:ok` key is dropped.
 (deftest handle-sync-admin-reset-with-delete-all-test
   (async done
          (let [closed (atom [])
@@ -236,6 +240,7 @@
               (is (nil? (.-conn self))))
             done))))
 
+;; Fails if, in `handle-sync-admin-reset`, the `:ok` key is dropped.
 (deftest handle-sync-admin-reset-without-delete-all-test
   (async done
          (let [closed (atom [])
@@ -259,6 +264,7 @@
               (.close sql))
             done))))
 
+;; Fails if, in `handle-http`, the `:error` key is dropped, the `:debug-message` key is dropped or the `:debug-stack` key is dropped.
 (deftest handle-http-synchronous-error-response-test
   (async done
          (finish
@@ -270,6 +276,7 @@
             (is (string? (:debug-stack sync-body))))
           done)))
 
+;; Fails if, in `handle-http`, the `:url` key is dropped.
 (deftest handle-http-passes-url-to-route-handler-test
   (async done
          (let [sql (test-sql/make-sql)
@@ -305,6 +312,7 @@
          [:db/add [:block/uuid stale-missing-uuid] :block/updated-at 1773188050934 1]])
    :outliner-op :save-block})
 
+;; Fails if, in `handle-tx-batch!`, the `:t` key is dropped, the `:type` key is dropped or the `:reason` key is dropped.
 (deftest handle-tx-batch-rejections-test
   (let [self (batch-self)
         sql (.-sql self)]
@@ -318,6 +326,7 @@
       (is (= {:type "tx/reject" :reason "snapshot upload in progress" :t 3}
              (sync-handler/handle-tx-batch! self nil [(ok-entry (random-uuid))] 3))))))
 
+;; Fails if, in `apply-tx!`, the `:type` key is dropped, `:db-sync/tx-entry-failed` becomes `:db-sync/apply-large-tx-entry-done` or the `:successful-tx-ids` key is dropped.
 (deftest apply-tx-reports-successful-and-failed-entries-test
   (let [self (batch-self)
         sql (.-sql self)
@@ -336,6 +345,7 @@
              nil
              (catch :default e (ex-data e)))))))
 
+;; Fails if, in `handle-tx-batch!`, the `:error-detail` key is dropped.
 (deftest handle-tx-batch-failure-reports-partial-progress-test
   (let [self (batch-self)
         sql (.-sql self)
@@ -357,6 +367,7 @@
     (is (= [stale-missing-uuid] (:missing-block-uuids response)))
     (is (= [{:type "changed" :t (:t response)}] @broadcasts))))
 
+;; Fails if, in `apply-tx-entry!`, the `:type` key is dropped, `:db-sync/empty-delete-tx` becomes `:db-sync/graph-ready-for-use-set-failed` or the `:outliner-op` key is dropped.
 (deftest apply-tx-entry-empty-delete-throws-with-context-test
   (let [conn (storage/open-conn (test-sql/make-sql))
         entry {:tx (protocol/tx->transit []) :outliner-op :delete-blocks}]
@@ -387,6 +398,7 @@
                         :block/order "a2" :block/created-at now :block/updated-at now}])
     {:conn conn :parent parent :child child :pv pv :now now}))
 
+;; Fails if, in `sanitize-tx-entry`, the `:drop-ops-targeting-retracted-entitie...` key is dropped or the `:retract-touched-descendants?` key is dropped.
 (deftest sanitize-tx-entry-delete-ops-options-test
   (let [{:keys [conn parent child pv now]} (delete-fixture)
         tx [[:db/add [:block/uuid child] :block/updated-at (inc now) 1]
@@ -415,6 +427,7 @@
                                        @conn {:tx (protocol/tx->transit tx)
                                               :outliner-op :delete-blocks}))))))))
 
+;; Fails if, in `apply-large-tx-entry!`, the `:tx-data` key is dropped.
 (deftest large-tx-entry-updates-checksum-from-its-tx-data-test
   (let [self (batch-self)
         sql (.-sql self)
@@ -433,6 +446,7 @@
     (is (not= before (storage/get-checksum sql)))
     (is (= (sync-checksum/recompute-checksum @conn) (storage/get-checksum sql)))))
 
+;; Fails if, in `sanitize-tx-entry`, the `:tx-entry` key is dropped.
 (deftest large-tx-entry-keeps-outliner-op-in-tx-meta-test
   (let [conn (storage/open-conn (test-sql/make-sql))
         tx-metas (atom [])

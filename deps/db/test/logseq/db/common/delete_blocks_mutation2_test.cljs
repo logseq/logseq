@@ -26,6 +26,8 @@
                       referrer-titles))
     conn))
 
+;; Fails if, in `build-retracted-tx`, the body becomes `nil`, `:db/id` becomes `:db/retract`, `:block/raw-title` becomes `:block/refs`, the `[:db/retract (:db/id ref) :block/refs...` tx entry is dropped, `:db/retract` becomes `:db/retractEntity`, `:block/refs` becomes `:block/title`, `:db/add` becomes `:db/id` or `:block/title` becomes `:block/uuid`.
+;; Fails if, in `block-entity?`, `:block/page` becomes `:block/raw-title`.
 (deftest delete-block-retracts-refs-and-inlines-title-in-every-referrer
   (let [conn (referencing-conn ["see a" "see b"])
         target (db-test/find-block-by-content @conn "Target block")
@@ -37,6 +39,7 @@
     (is (contains? extra [:db/add (:db/id ref-a) :block/title "see a Target block"]))
     (is (contains? extra [:db/add (:db/id ref-b) :block/title "see b Target block"]))))
 
+;; Fails if, in `build-retracted-tx`, `:db/id` becomes `:db/retract`.
 (deftest delete-block-does-not-rewrite-title-of-referrer-deleted-with-it
   (let [conn (referencing-conn ["see a"])
         target (db-test/find-block-by-content @conn "Target block")

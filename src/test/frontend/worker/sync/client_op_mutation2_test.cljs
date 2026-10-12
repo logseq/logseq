@@ -45,6 +45,7 @@
           :reversed-tx-data []}
          opts))
 
+;; Fails if, in `sqlite-store-or-throw`, the `:type` key is dropped, the `:repo` key is dropped or `:db-sync/legacy-client-ops-storage` becomes `:db-sync/undo-redo`.
 (deftest legacy-client-ops-storage-throws-with-type-and-repo
   (let [repo "repo-legacy"]
     (with-store repo #js {}
@@ -52,6 +53,8 @@
         (is (= {:type :db-sync/legacy-client-ops-storage :repo repo}
                (thrown-ex-data #(client-op/get-graph-uuid repo))))))))
 
+;; Fails if, in `sqlite-run!`, the `:bind` key is dropped.
+;; Fails if, in `sqlite-rows`, the `:bind` key is dropped, the `:rowMode` key is dropped or the `:returnValue` key is dropped.
 (deftest sqlite-wasm-mode-passes-bind-and-row-options
   (let [repo "repo-wasm"
         calls (atom [])
@@ -70,6 +73,9 @@
         (is (every? #(array? (.-bind %)) @calls)
             "Every statement is run with a bind array")))))
 
+;; Fails if, in `update-graph-uuid`, the `:pre` key is dropped.
+;; Fails if, in `update-local-checksum`, the `:pre` key is dropped.
+;; Fails if, in `upsert-local-tx-entry!`, the `:pre` key is dropped.
 (deftest writes-without-their-key-arg-are-rejected
   (let [repo "repo-pre"]
     (with-client-ops-db
@@ -82,6 +88,7 @@
         (is (thrown? js/Error (client-op/upsert-local-tx-entry! repo (tx-entry nil))))
         (is (empty? (client-op/get-pending-local-txs repo)))))))
 
+;; Fails if, in `update-local-tx`, the `:repo` key is dropped, the `:prev-t` key is dropped or the `:new-t` key is dropped.
 (deftest update-local-tx-must-increase
   (let [repo "repo-monotonic"]
     (with-client-ops-db
@@ -92,6 +99,7 @@
                (thrown-ex-data #(client-op/update-local-tx repo 3))))
         (is (= 9 (client-op/get-local-tx repo)))))))
 
+;; Fails if, in `reset-local-tx`, the body becomes `nil`.
 (deftest reset-local-tx-sets-zero
   (let [repo "repo-reset"]
     (with-client-ops-db
@@ -101,6 +109,10 @@
         (client-op/reset-local-tx repo)
         (is (= 0 (client-op/get-local-tx repo)))))))
 
+;; Fails if, in `row->pending-local-tx`, the `:db-sync/undo-redo` key is dropped or `:db-sync/undo-redo` becomes `:db-sync/checksum`.
+;; Fails if, in `upsert-local-tx-entry!`, the `:tx-id` key is dropped or the `:created-at` key is dropped.
+;; Fails if, in `get-pending-local-txs`, the `vec` step is dropped.
+;; Fails if, in `history-action-ops-by-tx-id`, the `seq` step is dropped.
 (deftest local-tx-entry-roundtrip
   (let [repo "repo-entry"
         tx-id (random-uuid)]
@@ -117,6 +129,8 @@
                (client-op/history-action-ops-by-tx-id repo tx-id))
             "Empty op lists are reported as nil")))))
 
+;; Fails if, in `sync-conflict-row->map`, the `:id` key is dropped or the `:created-at` key is dropped.
+;; Fails if, in `get-all-sync-conflicts`, the body becomes `nil`, the `(map sync-conflict-row->map)` step is dropped or the `(group-by :block-uuid)` step is dropped.
 (deftest sync-conflicts-roundtrip
   (let [repo "repo-conflicts"
         block-a (random-uuid)
@@ -136,6 +150,8 @@
           (is (= [:block/title] (map :attr (get all block-a))))
           (is (= ["vb"] (map :value (get all block-b)))))))))
 
+;; Fails if, in `mark-pending-txs-false!`, the `(filter uuid?)` step is dropped or the `(filter (fn [tx-id]` step is dropped.
+;; Fails if, in `mark-failed-txs!`, the `(filter uuid?)` step is dropped, the `(filter (fn [tx-id]` step is dropped, the `count` step is dropped or `filter` becomes `remove`.
 (deftest mark-txs-counts-only-pending-uuid-ids
   (let [repo "repo-mark"
         pending-id (random-uuid)
@@ -163,6 +179,9 @@
         (is (= [string-id] (map :tx-id (client-op/get-pending-local-txs repo)))
             "The string ids left their tx pending")))))
 
+;; Fails if, in `local-asset-op-map`, the `:block/uuid` key is dropped.
+;; Fails if, in `add-asset-ops`, the `second` step is dropped.
+;; Fails if, in `get-all-asset-ops`, the `vec` step is dropped.
 (deftest asset-ops-keep-uuid-and-ignore-updates-older-than-a-remove
   (let [repo "repo-asset-ops"
         asset-uuid (random-uuid)]
@@ -180,6 +199,7 @@
                (client-op/get-all-asset-ops repo))
             "An update older than the remove is dropped")))))
 
+;; Fails if, in `add-all-exists-asset-as-ops`, the body becomes `nil`, the `(keep (fn [d]` step is dropped or the `:block-uuid` key is dropped.
 (deftest add-all-exists-asset-as-ops-adds-an-update-per-asset-block
   (let [repo "repo-all-assets"
         asset-uuid (random-uuid)

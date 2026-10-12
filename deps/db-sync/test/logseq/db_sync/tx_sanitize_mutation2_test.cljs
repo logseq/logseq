@@ -5,6 +5,7 @@
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `entity-op-kinds`, `:db/cas` becomes `:db/id` or `:db.fn/cas` becomes `:db.fn/retractEntity`.
 (deftest entity-op-kinds-test
   (testing "ops on an entity attribute"
     (doseq [op [:db/add :db/retract :db/cas :db.fn/cas]]
@@ -14,6 +15,8 @@
     (is (false? (#'tx-sanitize/entity-op? [:db/retractEntity 1 :a 2])))
     (is (false? (#'tx-sanitize/entity-op? [:db/id 1 :a 2])))))
 
+;; Fails if, in `ignored-kv-entity-ref?`, `:db/ident` becomes `:db/retract`.
+;; Fails if, in `ignored-kv-entity-op?`, `:db/id` becomes `:db/ident`.
 (deftest sanitize-tx-drops-ops-on-an-existing-ignored-kv-entity-by-eid-test
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [{:db/ident :logseq.kv/graph-backup-folder
@@ -28,6 +31,7 @@
     (is (pos? eid))
     (is (= [kept] (vec sanitized)))))
 
+;; Fails if, in `bookkeeping-attrs`, `:block/created-at` becomes `:block/name`, `:block/updated-at` becomes `:block/uuid` or `:block/order` becomes `:block/path-refs`.
 (deftest sanitize-tx-drops-stamps-on-missing-entities-test
   (let [conn (db-test/create-conn)
         missing 99999999
@@ -39,6 +43,7 @@
         sanitized (tx-sanitize/sanitize-tx @conn (into stamps kept))]
     (is (= kept (vec sanitized)))))
 
+;; Fails if, in `encrypted-attrs`, `:block/name` becomes `:block/order`.
 (deftest sanitize-tx-drops-conflicted-encrypted-retracts-test
   (let [conn (db-test/create-conn)
         block-uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -87,6 +92,7 @@
        :child-uuid child
        :bare-parent-eid (eid bare-parent) :bare-child-eid (eid bare-child)})))
 
+;; Fails if, in `touched-entity-eid`, `:db/id` becomes `:db/ident` or `:block/uuid` becomes `:block/created-at`.
 (deftest sanitize-tx-preserves-touched-descendants-of-a-retracted-block-test
   (let [{:keys [db parent-eid child-eid pv-eid child-uuid]} (descendants-fixture)
         retract-of (fn [eid] [:db/retractEntity eid])
@@ -105,6 +111,7 @@
           (is (not-any? #{(retract-of child-eid)} out) label)
           (is (some #{(retract-of pv-eid)} out) label))))))
 
+;; Fails if, in `sanitize-tx`, the `set` step is dropped.
 (deftest sanitize-tx-preserves-a-descendant-touched-by-several-ops-test
   (let [{:keys [db parent-eid child-eid pv-eid]} (descendants-fixture)
         out (tx-sanitize/sanitize-tx db [[:db/retractEntity parent-eid]
@@ -113,6 +120,7 @@
     (is (not-any? #{[:db/retractEntity child-eid]} out))
     (is (some #{[:db/retractEntity pv-eid]} out))))
 
+;; Fails if, in `sanitize-tx`, `:block/uuid` becomes `:block/created-at`.
 (deftest sanitize-tx-retracts-children-of-a-retracted-block-with-uuid-test
   (let [{:keys [db bare-parent-eid bare-child-eid]} (descendants-fixture)
         out (tx-sanitize/sanitize-tx db [[:db/retractEntity bare-parent-eid]])]

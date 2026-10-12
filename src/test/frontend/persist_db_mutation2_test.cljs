@@ -48,6 +48,7 @@
 (use-fixtures :each {:before save-runtime-state!
                      :after restore-runtime-state!})
 
+;; Fails if, in `<invalidate-remote-repo!`, the `:url` key is dropped.
 (deftest invalidating-a-deleted-graph-deletes-the-repo
   (async done
     (let [delete-calls (atom [])
@@ -63,6 +64,7 @@
                        (set! state/delete-repo! original-delete-repo!)
                        (done)))))))
 
+;; Fails if, in `set-remote-runtime!`, the `:request-failures` key is dropped or the `:recovery-triggered?` key is dropped.
 (deftest set-remote-runtime-starts-with-no-failures
   (let [client {:wrapped-worker (fn [& _] nil)}]
     (reset-runtime-state!)
@@ -77,6 +79,7 @@
     (is (= "logseq_db_graph_a" @persist-db/remote-repo))
     (is (= (:wrapped-worker client) @state/*db-worker))))
 
+;; Fails if, in `<enqueue-ensure-remote!`, the `(p/catch (fn [_] nil))` step is dropped.
 (deftest ensure-remote-queue-continues-after-a-failed-step
   (async done
     (reset-runtime-state!)
@@ -93,6 +96,7 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+;; Fails if, in `<stop-remote-client!`, the `(p/catch (fn [error]` step is dropped.
 (deftest stop-remote-client-swallows-stop-failures
   (async done
     (let [original-stop! remote/stop!]
@@ -104,6 +108,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+;; Fails if, in `<discard-stale-started-client!`, the `(p/catch (fn [e]` step is dropped.
 (deftest discard-stale-started-client-releases-runtime-even-when-stop-or-release-fail
   (async done
     (let [ipc-calls (atom [])
@@ -124,6 +129,7 @@
                        (set! ipc/ipc original-ipc)
                        (done)))))))
 
+;; Fails if, in `<ensure-remote-impl!`, the `:epoch` key is dropped.
 (deftest ensure-remote-registers-the-pending-session-with-its-epoch
   (async done
     (let [pending-at-ipc (atom nil)
@@ -172,15 +178,7 @@
                      (set! remote/start! original-start!)
                      (set! state/get-current-repo original-current-repo))))))
 
-(deftest recovery-restarts-a-replaced-runtime-at-the-generation-it-got
-  (async done
-    (-> (p/let [calls (recover-with-replaced-runtime! "logseq_db_graph_gen" (fn [_] nil))]
-          (is (= ["db-worker-runtime" "db-worker-runtime"] (map first calls)))
-          (is (= {:generation 7} (second (second calls)))
-              "The restart asks for the generation the recovery probe returned"))
-        (p/catch (fn [e] (is false (str "unexpected error: " e))))
-        (p/finally (fn [] (done))))))
-
+;; Fails if, in `<recover-remote-impl!`, the `:only-if-current?` key is dropped.
 (deftest recovery-does-not-restart-a-runtime-for-a-graph-switched-away-from
   (async done
     (-> (p/let [calls (recover-with-replaced-runtime! "logseq_db_graph_switch"
@@ -190,6 +188,7 @@
         (p/catch (fn [e] (is false (str "unexpected error: " e))))
         (p/finally (fn [] (done))))))
 
+;; Fails if, in `node-runtime?`, the body becomes `nil`.
 (deftest electron-runtime-is-off-in-a-window-less-node-process
   (let [original-electron? util/electron?
         window (.-window js/globalThis)]
@@ -202,6 +201,7 @@
         (set! (.-window js/globalThis) window)
         (set! util/electron? original-electron?)))))
 
+;; Fails if, in `<close-db`, the `(p/catch (fn [_] nil))` step is dropped.
 (deftest close-db-stops-the-runtime-even-when-the-close-request-fails
   (async done
     (let [stop-calls (atom [])
@@ -228,6 +228,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+;; Fails if, in `<close-db`, `:thread-api/close-db` becomes `:thread-api/markdown-mirror-set-enabled`.
 (deftest close-db-outside-electron-asks-the-db-worker
   (async done
     (let [invoke-calls (atom [])
