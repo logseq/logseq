@@ -451,10 +451,28 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
      | None -> false);
   close_palette h
 
+(* Running the move-blocks command flips the open palette into move
+   mode — the search input stays mounted and only its placeholder prop
+   republishes. *)
+let move_mode_placeholder (h : ('m, 'a) Shared_scenarios.host) =
+  open_palette h;
+  let input = input_node h in
+  h.H.check "default placeholder"
+    (M.string_prop input "placeholder"
+     = Some "What are you looking for?");
+  h.H.command "editor/move-blocks";
+  h.flush ();
+  let input' = input_node h in
+  h.H.check "move-mode placeholder updates in place"
+    (input'.M.id = input.M.id
+     && M.string_prop input' "placeholder" = Some "Move blocks to");
+  close_palette h
+
 let run h =
   results_order h;
   selection_moves h;
   enter_navigates h;
   escape_close h;
   close_persists h;
-  structure_props h
+  structure_props h;
+  move_mode_placeholder h

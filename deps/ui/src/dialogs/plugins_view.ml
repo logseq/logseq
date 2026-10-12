@@ -34,7 +34,7 @@ let search_input ~key st =
   Ui_components.search_row ~key ~height:28 ~pad_left:28
     ~placeholder:(t "plugin/search-plugin")
     ~text_signal:(Signal.value st)
-    ~on_input:(fun ev -> Runtime.signal_set st (text_of ev)) ()
+    ~on_text:(fun q -> Runtime.signal_set st q) ()
 
 (* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" —
    counts render only on the installed tab (marketplace passes nil).

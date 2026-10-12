@@ -171,8 +171,7 @@ let theme_item ~(ctx : Lui_ui.ui_context) ~st mode label =
     (fun active -> if active = mode then "active" else "")
     (Ui_components.option_card ~key:("tm-" ^ mode) ~mode ~thumbnail ~label
        ~min_height:83
-       ~selected_signal:
-         (Signal.map (fun active -> active = mode) (Signal.value st))
+       ~selected:(reactive (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
          use_mode mode;
          Signal.set st mode;

@@ -112,7 +112,14 @@ let cmdk_input_row ~key children =
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
        ~height:54 ~background:"var(--lx-gray-02, #f8f8f8)" children)
 
-let cmdk_search_input ~key ?placeholder ~text_signal:text ~on_input () =
+let cmdk_search_input ~key ?placeholder ?placeholder_signal
+    ~text_signal:text ~on_text () =
+  (* TextChanged is decoded once here — callers take the string *)
+  let on_input ev =
+    match ev with
+    | P.TextChanged (_, q) -> on_text q
+    | _ -> ()
+  in
   with_props
     [ P.FontSize, sv "var(--lx-text-input)"
     ; P.LineHeight, sv "1.75rem"
@@ -133,7 +140,7 @@ let cmdk_search_input ~key ?placeholder ~text_signal:text ~on_input () =
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
           var(--lui-c-foreground)))"
-       ?placeholder ~text_signal:text ~on_input [])
+       ?placeholder ?placeholder_signal ~text_signal:text ~on_input [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; the
    56px bottom pad scrolls the last row clear of the hints bar (a
@@ -158,13 +165,13 @@ let cmdk_group_hairline ~key : t =
       "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
     []
 
-let cmdk_group ~key ~kind ~last ~pad children =
+let cmdk_group ~key ~kind ~last_signal ~pad children =
   column ~key ~cross:`stretch ~gap:0
     ~data_attrs:[ "data-cmdk-group-kind", kind ]
     (children
     @ [ spacer ~key:"gpad" ~height:pad []
       ; if_
-          ~test:(Signal.map not last)
+          ~test:(reactive not last_signal)
           (cmdk_group_hairline ~key:"gline")
       ])
 
@@ -219,24 +226,24 @@ let cmdk_group_more ~key ~on_press children : t =
    [data-cmdk-item] hooks are attrs only — the old cp__cmdk-item class
    dual-track is gone. The header's -4px pull becomes a relative inset
    on the header row — same pixels as the deleted negative margin. *)
-let cmdk_item_row ~key ~data_attrs ~background ~shadow ~hover_background
-    ~hover_ring ~cursor ~header ~main : t =
+let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
+    ~hover_background_signal ~hover_ring_signal ~cursor_signal ~header ~main
+    : t =
   let children =
     (match header with Some h -> [ h ] | None -> [])
     @ [ main ]
   in
   with_signal_props
-    [ P.Shadow, shadow
-    ; P.HoverBackground, hover_background
-    ; P.HoverShadow, hover_ring
-    ; P.Cursor, cursor
+    [ P.Shadow, shadow_signal
+    ; P.HoverBackground, hover_background_signal
+    ; P.HoverShadow, hover_ring_signal
+    ; P.Cursor, cursor_signal
     ]
     (with_props
        [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.25rem" ]
        (column ~key ~gap:2 ~cross:`stretch ~padding_vertical:6
           ~padding_horizontal:12 ~corner_radius:8
-          ~data_attrs_signal:data_attrs
-          ~background_signal:background children))
+          ~data_attrs_signal ~background_signal children))
 
 (* Breadcrumb header inside an item row — 32px left inset, small light
    type, single-line ellipsis. *)
@@ -440,9 +447,9 @@ let shortcut_compact ~key children : t =
 
 (* 20px shortcut slot inside an item row — the cells box is clipped at
    20px like the deleted .shui-shortcut-row > .lui-box rule. *)
-let shortcut_slot ~key ~opacity children : t =
+let shortcut_slot ~key ~opacity_signal children : t =
   row ~key ~style_class:"shui-shortcut-row" ~cross:`center ~gap:4
-    ~height:20 ~min_height:20 ~max_height:20 ~opacity_signal:opacity
+    ~height:20 ~min_height:20 ~max_height:20 ~opacity_signal
     [ with_props [ P.Overflow, sv "hidden" ]
         (box ~key:"sc-cells" ~height:20 ~max_height:20 children) ]
 
@@ -665,7 +672,13 @@ let form_desc ~key ~value : t =
    border+ring (icon-picker's gray-03 input). *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
     ?(pad_left = 28) ?background ?(borderless = false) ?(trailing = [])
-    ?autofocus ~placeholder ~text_signal:text ~on_input () : t =
+    ?autofocus ~placeholder ~text_signal:text ~on_text () : t =
+  (* TextChanged is decoded once here — callers take the string *)
+  let on_input ev =
+    match ev with
+    | P.TextChanged (_, q) -> on_text q
+    | _ -> ()
+  in
   with_props [ P.Position, sv "relative" ]
     (row ~key ~cross:`center ~gap:0
        ~min_width:0

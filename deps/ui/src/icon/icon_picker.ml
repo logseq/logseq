@@ -524,11 +524,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                     "var(--lx-gray-03, var(--ls-tertiary-background-color, \
                      hsl(var(--muted))))"
                   ~placeholder:(placeholder_of s.tab)
-                  ~text_signal:(Signal.map (fun s -> s.q) sv)
-                  ~on_input:(fun ev ->
-                    match ev with
-                    | Lui_protocol.TextChanged (_, v) -> on_input v
-                    | _ -> ())
+                  ~text_signal:(reactive (fun s -> s.q) sv)
+                  ~on_text:on_input
                   ~trailing:
                     [ if_
                         ~test:(reactive (fun s -> s.q <> "") sv)

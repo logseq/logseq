@@ -16,6 +16,7 @@ type ('model, 'action) host =
   { session : unit -> ('model, 'action) S.t
   ; check : string -> bool -> unit
   ; keydown : meta:bool -> string -> unit
+  ; command : string -> unit
   ; toggle_sidebar : unit -> unit
   ; storage_get : string -> string option
   ; open_settings : unit -> unit

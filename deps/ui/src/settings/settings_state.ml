@@ -155,8 +155,10 @@ let set_config key v =
   set (fun s -> { s with config = cfg' });
   ignore (Sdk_config.write_config (repo ()) cfg')
 
+let config_set_bool key b = set_config key (Wire.Bool b)
+
 let config_toggle key ~default =
-  set_config key (Wire.Bool (not (config_bool key ~default)))
+  config_set_bool key (not (config_bool key ~default))
 
 (* cljs update-home-page: blank clears :default-home/:page; a name is only
    stored when a :block/name match exists *)
@@ -209,38 +211,49 @@ let storage_set_bool key b =
 
 (* cljs ui-handler/toggle-wide-mode!: storage + ls-wide-mode on
    main#app-container-wrapper *)
-let toggle_wide_mode () =
-  let v = not (storage_bool "wide-mode" ~default:false) in
-  storage_set_bool "wide-mode" v;
+let set_wide_mode on =
+  storage_set_bool "wide-mode" on;
   poke ();
   match Ui_services.dom_query "#app-container-wrapper" with
   | Some el ->
-      (if v then el.Ui_services.add_class else el.Ui_services.remove_class)
+      (if on then el.Ui_services.add_class else el.Ui_services.remove_class)
         "ls-wide-mode"
   | None -> ()
 
-let toggle_shortcut_tooltip () =
-  storage_set_bool "shortcut-tooltip?"
-    (not (storage_bool "shortcut-tooltip?" ~default:true));
+let toggle_wide_mode () =
+  set_wide_mode (not (storage_bool "wide-mode" ~default:false))
+
+let set_shortcut_tooltip on =
+  storage_set_bool "shortcut-tooltip?" on;
   poke ()
+
+let toggle_shortcut_tooltip () =
+  set_shortcut_tooltip (not (storage_bool "shortcut-tooltip?" ~default:true))
 
 (* developer-mode storage read is inverted: stored flag disables instrumentation *)
 let instrument_disabled () =
   storage_bool "instrument-disabled" ~default:false
 
-let toggle_usage_diagnostics () =
-  storage_set_bool "instrument-disabled" (not (instrument_disabled ()));
+let set_usage_diagnostics on =
+  storage_set_bool "instrument-disabled" (not on);
   poke ()
+
+let toggle_usage_diagnostics () =
+  set_usage_diagnostics (not (instrument_disabled ()))
 
 let developer_mode () = storage_bool "developer-mode" ~default:false
-let toggle_developer_mode () =
-  storage_set_bool "developer-mode" (not (developer_mode ()));
+let set_developer_mode on =
+  storage_set_bool "developer-mode" on;
   poke ()
 
+let toggle_developer_mode () = set_developer_mode (not (developer_mode ()))
+
 let plugin_system () = storage_bool "lsp-core-enabled" ~default:true
-let toggle_plugin_system () =
-  storage_set_bool "lsp-core-enabled" (not (plugin_system ()));
+let set_plugin_system on =
+  storage_set_bool "lsp-core-enabled" on;
   poke ()
+
+let toggle_plugin_system () = set_plugin_system (not (plugin_system ()))
 
 (* ---- accent color (theme.cljs accent-color effect) ---- *)
 
