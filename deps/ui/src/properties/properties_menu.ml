@@ -323,38 +323,25 @@ let choices_pane_view m ~set_pane ~close : t =
      ])
     context parent
 
-let edit_choice_view m choice ~set_pane ~close : t =
+let edit_choice_view m choice ~set_pane : t =
   let is_add = D.entity_uuid_of choice = None in
   let title_v = if is_add then "" else D.ref_title choice in
   text_form_view ~title_v ~desc_v:""
     ~title_placeholder:(I18n.t "property/title-placeholder")
     ~desc_placeholder:(I18n.t "property/description-placeholder")
     (fun v _d ->
-      if is_add then (
-        (* creating a choice while the owner is a tag scopes it to
-           that class (cljs ->closed-choice-scope-opts) *)
-        let scoped =
-          match m.owner_is_tag, m.owner_id with
-          | true, Some id -> Some id
-          | _ -> None
-        in
-        ignore
-          (let* _ =
-             D.upsert_closed_value ~ident:(prop_ident m) ~value:v
-               ?scoped_class_id:scoped ()
-           in
-           Js.Promise.resolve ());
-        S.refresh_all ();
-        close ())
-      else (
-        ignore
-          (let* _ =
-             D.upsert_closed_value ~ident:(prop_ident m)
-               ?choice_id:(D.entity_uuid_of choice) ~value:v ()
-           in
-           Js.Promise.resolve ());
-        S.refresh_all ();
-        Runtime.signal_set set_pane MChoices))
+      let scoped =
+        if is_add && m.owner_is_tag then m.owner_id else None
+      in
+      ignore
+        (let* _ =
+           D.upsert_closed_value ~ident:(prop_ident m)
+             ?choice_id:(D.entity_uuid_of choice)
+             ?scoped_class_id:scoped ~value:v ()
+         in
+         S.refresh_all ();
+         Runtime.signal_set set_pane MChoices;
+         Js.Promise.resolve ()))
 
 let default_value_pane_view m ~close : t =
  fun context parent ->
@@ -484,7 +471,7 @@ let menu_body_view ~more_options ~with_title m ~close : t =
                     @ main_items context m ~set_pane:pane ~close)
              | MName -> name_pane_view m ~close
              | MChoices -> choices_pane_view m ~set_pane:pane ~close
-             | MEditChoice c -> edit_choice_view m c ~set_pane:pane ~close
+             | MEditChoice c -> edit_choice_view m c ~set_pane:pane
              | MDefaultValue -> default_value_pane_view m ~close
              | MNodeTags -> column ~gap:0 [])
           ])
@@ -498,6 +485,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
     { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row }
   in
   (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
+     ~style_class:"ls-property-dropdown"
      ~anchor_offset:4.0 ~min_width:200
      ~transition:Ui_components.popover_transition
      ~on_dismiss:(fun _ -> close ())

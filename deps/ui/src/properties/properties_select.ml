@@ -4,9 +4,8 @@
    item list (same input-on-top / results-below structure as web
    master's .cp__select).
 
-   Keyboard: Enter picks the current first match (native backends give
-   menu items their own arrow navigation); Escape bubbles to the global
-   property keydown handler which dismisses the owning popup. *)
+   Keyboard navigation and submission share the selected index; Escape
+   bubbles to the property keydown handler which dismisses the popup. *)
 
 open Promise_ext
 open Lui_elements
@@ -86,7 +85,32 @@ let visible_items ~items ~filter ~searched ~new_option =
 type sel_state =
   { q : string
   ; searched : item list option
+  ; selected : int
   }
+
+let key_handlers : (string, string -> bool) Hashtbl.t = Hashtbl.create 8
+let select_sequence = ref 0
+
+let handle_keydown (ev : Ui_services.ev) =
+  match ev.target, ev.key with
+  | Some target, Some key when not ev.composing && not ev.meta && not ev.alt ->
+      (match target.Ui_services.closest ".ls-property-select" with
+       | Some root ->
+           (match Hashtbl.find_opt key_handlers (root.Ui_services.id ()) with
+            | Some handle ->
+                let key =
+                  if ev.ctrl && key = "n" then "ArrowDown"
+                  else if ev.ctrl && key = "p" then "ArrowUp"
+                  else key
+                in
+                if handle key then (
+                  ev.prevent_default ();
+                  ev.stop_propagation ();
+                  true)
+                else false
+            | None -> false)
+       | None -> false)
+  | _ -> false
 
 (* Builds the select as a [t]: text_field over a scrollable list of
    menu_items. Mounted inside the property dialog card or an anchored
@@ -95,7 +119,8 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
-  let st = Signal.state sched { q = ""; searched = None } in
+  let st = Signal.state sched { q = ""; searched = None; selected = 0 } in
+  let model = Signal.value st in
   let visible () =
     let s = Runtime.signal_get st in
     visible_items ~items ~filter:s.q ~searched:s.searched ~new_option
@@ -107,10 +132,25 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
       | Some f, t when t <> "" -> f t
       | _ -> ())
     else
-      match vis with
-      | first :: _ -> first.on_choose ()
-      | [] -> ()
+      match List.nth_opt vis (Runtime.signal_get st).selected with
+      | Some it -> it.on_choose ()
+      | None -> ()
   in
+  incr select_sequence;
+  let select_id = "property-select-" ^ string_of_int !select_sequence in
+  Hashtbl.add key_handlers select_id (fun key ->
+      match key with
+      | "ArrowDown" | "ArrowUp" ->
+          let count = List.length (visible ()) in
+          if count > 0 then (
+            let s = Runtime.signal_get st in
+            let delta = if key = "ArrowDown" then 1 else count - 1 in
+            Runtime.signal_set st { s with selected = (s.selected + delta) mod count });
+          true
+      | "Enter" -> pick (); true
+      | _ -> false);
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      Hashtbl.remove key_handlers select_id);
   let list_view =
     reactive ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
       (fun s ->
@@ -132,14 +172,21 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                    [] ]
              else [])
             @ [ list ~height:(if vis = [] then 0 else if compact then min 280 (32 * List.length vis) else 280)
+                ~scroll_target:(reactive (fun s ->
+                    match List.nth_opt vis s.selected with
+                    | Some it -> if it.it_new then "__new__" else it.it_title
+                    | None -> "") model)
                (List.mapi
               (fun index it ->
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
                  let on_press _ = it.on_choose () in
-                 if compact then
+                 Ui_parts.class_signal model
+                   (fun s -> if s.selected = index then "menu-link chosen" else "menu-link")
+                   (if compact then
                    list_item ~key:(if it.it_new then "__new__" else it.it_title)
                      ~height:32 ~padding_horizontal:8 ~padding_vertical:4
-                     ~corner_radius:4 ~selected:(index = 0) ~on_press
+                     ~corner_radius:4
+                     ~selected:(reactive (fun s -> s.selected = index) model) ~on_press
                      [ row ~gap:4 ~cross:`center ~grow:1.0
                          ((if it.it_icon = "" then [] else [ Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon ])
                           @ [ text ~value:title ~grow:1.0 [] ]
@@ -148,13 +195,15 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                    list_item
                      ~key:(if it.it_new then "__new__" else it.it_title)
                      ~text:title
+                     ~selected:(reactive (fun s -> s.selected = index) model)
                      ?icon:(if it.it_icon = "" then None else Some (Icons.name_ref it.it_icon))
-                     ~on_press [])
+                     ~on_press []))
               vis) ]))
-      (Signal.value st)
+      model
   in
   (column ~gap:(if compact then 0 else 2)
-     ~style_class:(if compact then "ls-property-select-compact" else "")
+     ~accessibility_identifier:select_id
+     ~style_class:(if compact then "ls-property-select ls-property-select-compact" else "ls-property-select")
      [ text_field ~placeholder ~autofocus:true
          ?height:(if compact then Some 32 else None)
          ?padding:(if compact then Some 6 else None)
@@ -167,15 +216,15 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                     (* update the filter synchronously so the client-side
                        new-option row shows even while the async search is
                        in flight (or rejects) *)
-                    Runtime.signal_set st { q; searched = None };
+                    Runtime.signal_set st { q; searched = None; selected = 0 };
                     ignore
                       (let* found = search q in
                        (* stale guard — a later keystroke owns the list *)
                        if (Runtime.signal_get st).q = q then
                          Runtime.signal_set st
-                           { q; searched = Some found };
+                           { q; searched = Some found; selected = 0 };
                        Js.Promise.resolve ())
-                | None -> Runtime.signal_set st { q; searched = None })
+                | None -> Runtime.signal_set st { q; searched = None; selected = 0 })
            | _ -> ())
          ~on_submit:(fun _ -> pick ())
          []

@@ -31,7 +31,7 @@ let editable_target (ev : Ui_services.ev) =
   | None -> false
 
 let on_keydown (ev : Ui_services.ev) =
-  if ev.Ui_services.composing then ()
+  if ev.Ui_services.composing || Properties_select.handle_keydown ev then ()
   else
     match ev.Ui_services.key with
     | Some "Escape" ->

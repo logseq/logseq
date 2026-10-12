@@ -62,8 +62,7 @@ let property_icon row =
       box ~key:"pk-b" ~style_class:"bullet-container"
         [ box ~style_class:"bullet" [] ]
 
-(* the key (name + bullet) opens the property menu — the dropdown_menu
-   anchors to the enclosing stack. cljs property-key-cp skips the
+(* the key (name + bullet) opens an anchored property menu. cljs property-key-cp skips the
    .property-icon picker for other-position keys (pills) *)
 let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
     row : t =
@@ -71,14 +70,17 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   if Ui_services.env_publishing () then
     text ~style_class:"property-k" ~value:(D.row_title row) [] context parent
   else
-  let sched = context.Lui_ui.ui_scheduler in
-  let menu_open = Signal.state sched false in
+  let anchor_id =
+    Printf.sprintf "property-key-%d-%s" (Option.get parent)
+      (Option.get (D.row_ident row))
+  in
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28
      ~style_class:"property-key-inner"
      ~data_attrs:[ ("style", "position:relative;width:100%;min-width:0") ]
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
+         ~accessibility_identifier:anchor_id
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
          ~data_attrs:
@@ -90,13 +92,14 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
            ]
          ~label:(D.row_title row)
          ~text:(D.row_title row)
-         ~on_press:(fun _ -> Runtime.signal_set menu_open true)
+         ~on_press:(fun _ ->
+           match Ui_services.dom_by_id anchor_id with
+           | Some anchor ->
+               Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid
+                 ~owner_id:ctx.block_id ~owner_is_tag ~owner_title
+                 ~refresh:ctx.refresh row
+           | None -> ())
          []
-     ; if_ ~test:(Signal.value menu_open)
-         (Menu.menu_view ~owner_uuid:ctx.block_uuid ~owner_id:ctx.block_id
-            ~owner_is_tag ~owner_title ~refresh:ctx.refresh
-            ~close:(fun () -> Runtime.signal_set menu_open false)
-            row)
      ])
     context parent
 
