@@ -497,6 +497,24 @@
      properties
      (assoc :properties properties))))
 
+(deftest sort-entities-puts-a-missing-value-last-both-ways-test
+  ;; query and grouped tables (sort-entities) put a row with no value last in
+  ;; both directions, as tag tables do
+  (let [conn (topic-conn
+              [{:page {:block/title "With score" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3}}}
+               {:page {:block/title "Without score" :build/tags [:Topic]}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        rows (mapv #(d/entity @conn [:block/uuid (:block/uuid (d/entity @conn %))])
+                   (map :db/id (filter #(#{"With score" "Without score"} (:block/title %))
+                                       (map #(d/entity @conn (:e %)) (d/datoms @conn :avet :block/title)))))
+        titles (fn [sorting] (mapv :block/title (db-view/sort-entities @conn sorting rows)))]
+    (is (= ["With score" "Without score"] (titles [{:id :user.property/score :asc? true}])))
+    (is (= ["With score" "Without score"] (titles [{:id :user.property/score :asc? false}])))
+    ;; as the second sort key too
+    (is (= ["With score" "Without score"]
+           (titles [{:id :block/name :asc? true} {:id :user.property/score :asc? true}])))))
+
 (deftest get-view-data-class-objects-number-property-sort-test
   (let [conn (topic-conn
               [{:page {:block/title "A" :build/tags [:Topic]
