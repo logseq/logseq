@@ -117,6 +117,22 @@
              :class nil}]
            (remove nil?)))))
 
+(defn- insert-create-after-first-page
+  [groups]
+  (let [creation-items (some (fn [[_ group items]]
+                              (when (= group :create) items)) groups)
+        page-group (some (fn [[_ group items]]
+                           (when (some #(= :page (:result-type %)) items) group)) groups)]
+    (if (and (seq creation-items) page-group)
+      (for [[title group items] groups
+            :when (not= group :create)]
+        [title group
+         (if (= group page-group)
+           (let [[before pages] (split-with #(not= :page (:result-type %)) items)]
+             (concat before [(first pages)] creation-items (rest pages)))
+           items)])
+      groups)))
+
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered
   [state]
@@ -179,7 +195,7 @@
                    (when-not node-exists?
                      [(group-label :create)         :create         (create-items input)])]
                   (remove nil?)))
-        order (remove nil? order*)]
+        order (insert-create-after-first-page (remove nil? order*))]
     (for [[group-name group-key group-items] order]
       [group-name
        group-key
@@ -187,7 +203,8 @@
          (count group-items)
          (or (get-in results [group-key :matched-count])
              (count (get-in results [group-key :items]))))
-       (mapv #(assoc % :group group-key :item-index (vswap! index inc)) group-items)])))
+       (mapv #(assoc % :group (if (:source-create %) :create group-key)
+                       :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item
   ([state]
@@ -938,9 +955,10 @@
         highlighted-item (or highlighted-item*
                              (when (= :keyboard focus-source) first-item))
         mouse-mode? (= :mouse focus-source)
-        can-show-less? (< (get-group-limit group) (count visible-items))
+        visible-result-count (count (remove :source-create visible-items))
+        can-show-less? (< (get-group-limit group) visible-result-count)
         can-show-more? (or has-more?
-                           (< (count visible-items) (count items)))
+                           (< visible-result-count (count items)))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(show-more-results! state group)]
     [:div {:class         (if (= group :create)
@@ -990,7 +1008,7 @@
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
         ^{:key (:item-index item)}
-        [render-result-list-item state group highlighted? mouse-mode? item hls-page? text input])]]))
+        [render-result-list-item state (:group item) highlighted? mouse-mode? item hls-page? text input])]]))
 
 (defn move-highlight
   [state n]
