@@ -457,6 +457,42 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-page-with-property-and-tag-of-same-name
+  (p/let [file (write-temp-graph-file
+                 "pages/paper.md"
+                 "tags:: [[research]], [[arxiv]]\narxiv:: 0000.00000\n\n- Dummy note\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"Dummy note"))
+        "Page with a property and a tag of the same name imports")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-property-page-then-tag-of-same-name-convert-all-tags
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}"
+                "pages/A_paper.md" "arxiv:: 0000.00000\n\n- Dummy note\n"
+                "pages/B_other.md" "tags:: [[research]], [[arxiv]]\n\n- Other note\n"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (is (some? (db-test/find-block-by-content @conn #"Other note")))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
+  (p/let [file (write-temp-graph-file
+                 "pages/paper.md"
+                 "tags:: [[research]], [[arxiv]]\narxiv:: 0000.00000\n\n- Dummy note\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})]
+    (is (some? (db-test/find-block-by-content @conn #"Dummy note"))
+        "Page with a property and a tag of the same name imports")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-org-page-title-when-property-appears-in-middle
   (p/let [file (write-temp-graph-file
                 "pages/20230410145300-end_to_end_note.org"
