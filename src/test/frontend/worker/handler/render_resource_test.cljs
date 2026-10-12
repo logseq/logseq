@@ -2150,6 +2150,31 @@
       (is (not-any? #(contains? (:slots (call-resource api conn offset-key)) [:block %])
                     offset-rows)))))
 
+(deftest all-pages-snapshot-skips-named-entities-without-uuid-test
+  (let [api (get @thread-api/*thread-apis :thread-api/get-render-snapshots)]
+    (if-not api
+      (is false "Missing thread API: get-render-snapshots")
+      (let [{:keys [conn page]} (render-resource-fixture)
+            view-uuid (add-view! conn :all-pages)
+            resource-key [:view-data view-uuid
+                          {:feature-type :all-pages
+                           :sorting [{:id :block/updated-at :asc? false}]}]
+            request {:blocks []
+                     :children []
+                     :resources [resource-key]}
+            snapshot (fn []
+                       (with-redefs [worker-state/get-datascript-conn (constantly conn)]
+                         (api test-repo request)))
+            before (get-in (snapshot) [:slots [:resource resource-key] :value :rows])
+            _ (d/transact! conn [{:block/name "external url"
+                                  :block/title "External URL"}])
+            after (get-in (snapshot) [:slots [:resource resource-key] :value :rows])]
+        (is (seq before))
+        (is (contains? (set before) page))
+        (is (every? uuid? before))
+        (is (= before after)
+            "A leftover :block/name entity without :block/uuid must not fail All Pages.")))))
+
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)
