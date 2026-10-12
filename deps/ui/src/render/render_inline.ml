@@ -1310,8 +1310,9 @@ let hiccup_tag_end s i =
      open/close delimiter bytes around inner content; when [re_parse] the
      inner range tokenizes again (nested emphasis), otherwise it is
      literal (code). When [show_delims] the read-mode [parse] emits the
-     delimiter bytes as plain text beside the element (markdown emphasis
-     stays visible in read mode; inline HTML tags keep theirs hidden). *)
+     delimiter bytes as plain text beside the element. Read mode hides
+     markup like the web does, so markdown wrappers pass [false]; the flag
+     remains for callers that need the source visible in read mode. *)
 type run_spec =
   | Rs_plain
   | Rs_atomic of string * string
@@ -1694,7 +1695,7 @@ and try_code s i =
       Some
         ( code_span (sub s (i + 1) (j - i - 1))
         , j + 1 - i
-        , Rs_wrapped (1, 1, false, "ed-code", true) )
+        , Rs_wrapped (1, 1, false, "ed-code", false) )
   | _ -> None
 
 (* **bold** / *italic* *)
@@ -1705,7 +1706,7 @@ and try_star ~refs ~self s i =
         Some
           ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-bold", true) )
+          , Rs_wrapped (2, 2, true, "ed-bold", false) )
     | _ -> None
   else
     match find_sub s (i + 1) "*" with
@@ -1713,7 +1714,7 @@ and try_star ~refs ~self s i =
         Some
           ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
-          , Rs_wrapped (1, 1, true, "ed-italic", true) )
+          , Rs_wrapped (1, 1, true, "ed-italic", false) )
     | _ -> None
 
 (* __bold__ / _italic_ *)
@@ -1724,7 +1725,7 @@ and try_uscore ~refs ~self s i =
         Some
           ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-bold", true) )
+          , Rs_wrapped (2, 2, true, "ed-bold", false) )
     | _ -> None
   else
     match find_sub s (i + 1) "_" with
@@ -1732,7 +1733,7 @@ and try_uscore ~refs ~self s i =
         Some
           ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
-          , Rs_wrapped (1, 1, true, "ed-italic", true) )
+          , Rs_wrapped (1, 1, true, "ed-italic", false) )
     | _ -> None
 
 (* ~~strike~~ *)
@@ -1743,7 +1744,7 @@ and try_strike ~refs ~self s i =
         Some
           ( emph "del" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-strike", true) )
+          , Rs_wrapped (2, 2, true, "ed-strike", false) )
     | _ -> None
   else None
 
@@ -1755,7 +1756,7 @@ and try_hl ~refs ~self s i =
         Some
           ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-hl", true) )
+          , Rs_wrapped (2, 2, true, "ed-hl", false) )
     | _ -> None
   else None
 
@@ -1767,7 +1768,7 @@ and try_eq ~refs ~self s i =
         Some
           ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
-          , Rs_wrapped (2, 2, true, "ed-hl", true) )
+          , Rs_wrapped (2, 2, true, "ed-hl", false) )
     | _ -> None
   else None
 
