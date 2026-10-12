@@ -418,6 +418,7 @@ let () =
             (b.Lui_scene.y +. b.Lui_scene.h)
           -. y))
   in
+  let unclipped = Lui_scene.rect (-1.e9) (-1.e9) 2.e9 2.e9 in
   let hooks =
     Lui_paint.
       { color_of = Theme_vars.color_of;
@@ -662,7 +663,9 @@ let () =
         walk p
           ((sx +. Ui.scroll_offset_x ui p, sy +. Ui.scroll_offset ui p), clip)
     in
-    let (sx, sy), clip = walk id ((0., 0.), base) in
+    (* the seed clip is unbounded: clipping to the node's own unshifted
+       base would cancel the scroll offset back out (r ∩ base = base) *)
+    let (sx, sy), clip = walk id ((0., 0.), unclipped) in
     rect_intersect
       { base with
         Lui_scene.x = base.Lui_scene.x -. sx;
@@ -740,7 +743,7 @@ let () =
                ((sx +. Ui.scroll_offset_x ui p,
                  sy +. Ui.scroll_offset ui p), clip)
          in
-         let (sx, sy), clip = walk id ((0., 0.), base) in
+         let (sx, sy), clip = walk id ((0., 0.), unclipped) in
          let r =
            { base with
              Lui_scene.x = base.Lui_scene.x -. sx;
