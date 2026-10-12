@@ -6,6 +6,7 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `build-page-export`, `when` becomes `when-not`.
 (deftest page-export-includes-alias-pages
   (let [alias-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -36,6 +37,7 @@
     (d/transact! import-conn (concat init-tx block-props-tx))
     {:export-map export-map :db @import-conn}))
 
+;; Fails if, in `buildable-properties`, `or` becomes `and`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest page-export-keeps-user-closed-values
   (let [closed-uuid (random-uuid)
         multi-uuid (random-uuid)
@@ -59,6 +61,8 @@
     (is (= "open" (:block/title (:user.property/status b1))))
     (is (= #{"red"} (set (map :block/title (:user.property/labels b1)))))))
 
+;; Fails if, in `buildable-properties`, `when` becomes `when-not` or `seq` becomes `empty?`.
+;; Fails if, in `build-node-export`, `false` becomes `true`.
 (deftest page-export-keeps-property-value-children
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}
@@ -86,6 +90,7 @@
     (is (= [{:block/title "parent"}]
            (mapcat :blocks (:pages-and-blocks export-map))))))
 
+;; Fails if, in `build-nodes-export`, `true` becomes `false`.
 (deftest selected-nodes-export-shallow-copies-selected-class-pages
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}
@@ -107,6 +112,7 @@
         _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))]
     (is (= property-uuid (:block/uuid (d/entity @import-conn :user.property/p1))))))
 
+;; Fails if, in `build-graph-ontology-export`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest graph-export-excludes-namespaces
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}
@@ -118,6 +124,7 @@
     (is (= #{:user.property/p1} (set (keys (:properties export-map)))))
     (is (= #{:user.class/C1} (set (keys (:classes export-map)))))))
 
+;; Fails if, in `patch-invalid-keywords`, `=` becomes `not=`, `if` becomes `if-not` or `not=` becomes `=`.
 (deftest graph-export-patches-invalid-keywords-only-for-old-graphs
   (let [invalid-kw (keyword "user.property" "2ndprop")
         patched-kw (keyword "user.property" "NUM-2ndprop")
@@ -134,6 +141,8 @@
         (is (contains? properties patched-kw))
         (is (not (contains? properties invalid-kw)))))))
 
+;; Fails if, in `disallowed-key-error?`, `=` becomes `not=`.
+;; Fails if, in `remove-disallowed-key-datoms`, `and` becomes `or`.
 (deftest validate-import-txs-keeps-data-and-reports-real-errors
   (let [conn (db-test/create-conn-with-import-map
               {:properties {:plugin.property.foo/p1 {:logseq.property/type :json}}
@@ -158,6 +167,7 @@
                         {:edn-label "exported EDN"})]
         (is (some? (:error validation)))))))
 
+;; Fails if, in `referenced-property-value-contents`, `if` becomes `if-not` or `=` becomes `not=`.
 (deftest page-export-keeps-referenced-recycled-closed-values
   (let [recycled-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -183,6 +193,7 @@
     (d/transact! target-conn (concat init-tx block-props-tx misc-tx))
     {:export-map export-map :db @target-conn}))
 
+;; Fails if, in `build-blocks-export`, `or` becomes `and`.
 (deftest graph-export-keeps-user-closed-values-of-blocks
   (let [closed-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -195,6 +206,8 @@
         {:keys [db]} (graph-human-round-trip conn (sqlite-export/create-conn) {})]
     (is (= "open" (:block/title (:user.property/status (db-test/find-block-by-content db "b1")))))))
 
+;; Fails if, in `build-export-properties`, `not` becomes `identity`.
+;; Fails if, in `build-export-class`, `not` becomes `identity`.
 (deftest graph-export-keeps-property-and-class-aliases
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}
@@ -209,6 +222,7 @@
     (is (= #{"p1 alias"} (set (map :block/title (:block/alias (d/entity db :user.property/p1))))))
     (is (= #{"C1 alias"} (set (map :block/title (:block/alias (d/entity db :user.class/C1))))))))
 
+;; Fails if, in `build-page-export*`, `true` becomes `false`.
 (deftest class-page-export-shallow-copies-class-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :node
@@ -221,6 +235,7 @@
            (select-keys (get-in export-map [:properties :user.property/p1])
                         [:logseq.property/type :db/cardinality :block/title :build/property-classes])))))
 
+;; Fails if, in `build-export-properties`, `true` becomes `false`.
 (deftest property-page-export-imports-the-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}})
@@ -231,6 +246,7 @@
         _ (d/transact! import-conn (concat init-tx block-props-tx))]
     (is (= (:block/uuid property) (:block/uuid (d/entity @import-conn :user.property/p1))))))
 
+;; Fails if, in `pvalue-descendant?`, `if-not` becomes `if`.
 (deftest page-export-exports-property-value-children-only-inside-the-value
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}
@@ -242,6 +258,8 @@
         {:keys [export-map]} (page-round-trip conn "page1")]
     (is (= ["b1"] (map :block/title (-> export-map :pages-and-blocks first :blocks))))))
 
+;; Fails if, in `basic-validate-export`, `when-not` becomes `when`, `seq` becomes `empty?` or `empty?` becomes `seq`.
+;; Fails if, in `build-import`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest graph-export-excluding-namespaces-imports-their-used-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}
@@ -260,6 +278,7 @@
     (is (= "v2" (db-property/property-value-content (:plugin.property.foo/p2 b1)))
         "Excluded property is taken from the graph imported into")))
 
+;; Fails if, in `build-import`, `and` becomes `or`.
 (deftest page-export-imported-with-current-block-imports-the-page
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
@@ -276,6 +295,7 @@
     (is (= "current" (:block/title (d/entity @target-conn (:db/id current-block)))))
     (is (= "other" (:block/title (:block/page (d/entity @target-conn (:db/id current-block))))))))
 
+;; Fails if, in `find-undefined-uuids`, `when` becomes `when-not`.
 (deftest page-export-allows-node-values-that-are-property-value-blocks
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}
@@ -291,6 +311,7 @@
     (is (= {:user.property/p2 [:block/uuid (:block/uuid value-block)]}
            (:build/properties (second (:blocks (first (:pages-and-blocks export-map)))))))))
 
+;; Fails if, in `build-export`, `if` becomes `if-not`.
 (deftest graph-export-of-undefined-property-is-rejected-unless-errors-are-caught
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}

@@ -32,6 +32,7 @@
                   {:db/id 2 :block/uuid (fixed-uuid 2) :block/title "Tag-only page" :block/tags [100]}
                   {:db/id 3 :block/uuid (fixed-uuid 3) :block/title "Tagged block" :block/tags [1]}])))
 
+;; Fails if, in `eligible-datoms?`, `=` becomes `not=`.
 (deftest tag-only-page-edit-changes-incremental-checksum-test
   (testing "a page known only by its Page tag counts, and its edit reaches the incremental checksum"
     (let [db (tagged-db)
@@ -40,6 +41,7 @@
                 (checksum/recompute-checksum (:db-after report))))
       (is (incremental=recompute? report)))))
 
+;; Fails if, in `eligible-datoms?`, `and` becomes `or`.
 (deftest non-page-tagged-block-edit-leaves-checksum-test
   (testing "a block tagged with a non-class page is not a page: its edit changes no checksum"
     (let [db (tagged-db)
@@ -57,12 +59,14 @@
                   {:db/id 3 :block/uuid (fixed-uuid 3) :block/title "Parent" :block/parent 1 :block/page 1 :block/order "a0"}
                   {:db/id 4 :block/uuid (fixed-uuid 4) :block/title "Child" :block/parent 3 :block/page 1 :block/order "a0"}])))
 
+;; Fails if, in `parse-uuid-string`, `when` becomes `when-not`.
 (deftest uuid-string-entity-edit-matches-recompute-test
   (testing "normalized tx-data naming an existing block by its uuid string reaches the incremental checksum"
     (let [db (page-db)
           report (d/with db [[:db/add 4 :block/title "Child edited"]])]
       (is (incremental=recompute? report [[:db/add (str (fixed-uuid 4)) :block/title "Child edited"]])))))
 
+;; Fails if, in `tx-item-eids`, `=` becomes `not=`.
 (deftest new-block-with-non-uuid-tempid-matches-recompute-test
   (testing "a block created under a tempid that is not its uuid is found through its :block/uuid value"
     (let [db (page-db)
@@ -91,6 +95,7 @@
                              [:db/add 6 :block/title "Edited"]])]
       (is (incremental=recompute? report)))))
 
+;; Fails if, in `get-block-uuid`, `first` becomes `last`.
 (deftest parent-with-2-uuid-datoms-normalizes-to-its-first-uuid-test
   (testing "a block moved under a parent holding 2 :block/uuid datoms names the parent by its first one, as the recompute does"
     (let [db (datoms-db [[1 :block/uuid (fixed-uuid 1)] [1 :block/name "page-a"]
@@ -99,6 +104,7 @@
           report (d/with db [[:db/add 3 :block/parent 2]])]
       (is (incremental=recompute? report)))))
 
+;; Fails if, in `recompute-state`, `true` becomes `false`.
 (deftest page-with-false-then-true-built-in-datoms-counts-test
   (testing "the first :logseq.property/built-in? datom (false) decides, in the recompute as in the incremental update"
     (let [db (datoms-db [[1 :block/uuid (fixed-uuid 1)] [1 :block/name "page-a"] [1 :block/title "Page A"]
@@ -106,6 +112,7 @@
           report (d/with db [[:db/add 1 :block/title "Page A renamed"]])]
       (is (incremental=recompute? report)))))
 
+;; Fails if, in `net-tuple-delta`, `or` becomes `and`.
 (deftest retracted-page-drops-its-blocks-from-incremental-checksum-test
   (testing "retracting a page by its normalized lookup ref also removes its blocks, which stop being eligible"
     (let [db (page-db)
