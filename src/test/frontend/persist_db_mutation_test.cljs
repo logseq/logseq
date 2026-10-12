@@ -59,9 +59,9 @@
 (def ^:private repo "logseq_db_graph_a")
 
 (defn- install-fake-runtime!
-  [repo client]
+  [repo' client]
   (reset! persist-db/remote-db client)
-  (reset! persist-db/remote-repo repo))
+  (reset! persist-db/remote-repo repo'))
 
 ;; Fails if, in `<invalidate-remote-repo!`, `and` becomes `or` or `when` becomes `when-not`.
 (deftest invalidate-remote-repo-stops-client-and-honors-generation
@@ -196,8 +196,8 @@
           original-transact db-transact/transact]
       (set! rfx/listen! (fn [_id _f] nil))
       (set! state/<invoke-db-worker (fn [& _] (p/resolved nil)))
-      (set! db-transact/transact (fn [_worker-transact repo _tx-data _tx-meta]
-                                   (swap! captured conj repo)
+      (set! db-transact/transact (fn [_worker-transact repo' _tx-data _tx-meta]
+                                   (swap! captured conj repo')
                                    (p/resolved nil)))
       (state/swap-state! assoc :git/current-repo "logseq_db_current")
       (finish!
