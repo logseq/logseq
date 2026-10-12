@@ -94,7 +94,15 @@
          :block/uuid uuid-10
          :build/tags [:logseq.class/Code-block]
          :build/properties {:logseq.property.node/display-type :code
-                            :logseq.property.code/lang "clojure"}}]}]))
+                            :logseq.property.code/lang "clojure"}}]}
+     {:page {:block/title "page6"}
+      :blocks
+      [{:block/title "((00000000-0000-4000-8000-0000000009ff))"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
+       {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -460,6 +468,19 @@
              (string/trim with-properties)))
       (is (= "- issue"
              (string/trim without-properties)))
+      (done))))
+
+(deftest export-blocks-as-markdown-keeps-ref-to-missing-block
+  (async done
+    (p/let [only-ref (<export-blocks-as-markdown
+                      [#uuid "00000000-0000-4000-8000-000000000601"]
+                      {:remove-options #{}})
+            in-text (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000602"]
+                     {:remove-options #{}})]
+      (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
+          "a block that is only a ref to a missing block keeps the ref")
+      (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
