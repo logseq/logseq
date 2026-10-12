@@ -5,6 +5,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]))
 
+;; Fails if, in `fix-duplicate-orders!`, `and` becomes `or`.
 (deftest fix-duplicate-orders-ignores-order-without-parent-test
   (let [conn (d/create-conn db-schema/schema)
         [parent-1 parent-2 block-1 block-2 no-parent] (repeatedly 5 random-uuid)

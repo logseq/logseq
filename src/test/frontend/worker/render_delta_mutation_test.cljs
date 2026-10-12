@@ -12,6 +12,7 @@
                        :affected-keys #{}
                        :tx-report tx-report}))
 
+;; Fails if, in `validate-input!`, `and` becomes `or`.
 (deftest tx-report-map-without-dbs-fails-fast-test
   (is (thrown-with-msg? js/Error #"Invalid transaction report"
                         (build-with-tx-report {:tx-data []}))))

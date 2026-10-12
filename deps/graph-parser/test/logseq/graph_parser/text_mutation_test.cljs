@@ -6,6 +6,7 @@
 (defn- refs-of [s]
   (text/extract-refs-from-mldoc-ast (gp-mldoc/inline->edn s (gp-mldoc/default-config :markdown))))
 
+;; Fails if, in `get-ref-from-ast`, `first` becomes `last`.
 (deftest extract-refs-from-tag-with-several-parts-test
   ;; mldoc parses `#foo[[bar]]` as one Tag of [Plain "foo", Link bar]
   (is (= #{"foo"} (refs-of "#foo[[bar]]"))

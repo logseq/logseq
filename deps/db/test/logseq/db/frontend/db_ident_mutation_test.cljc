@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.db.frontend.db-ident :as db-ident]))
 
+;; Fails if, in `ensure-unique-db-ident`, `inc` becomes `dec`.
 (deftest ensure-unique-db-ident-takes-next-number-test
   (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}})]
     (d/transact! conn [{:db/ident :user.property/foo}
@@ -26,6 +27,7 @@
 
 #?(:org.babashka/nbb nil
    :cljs
+   ;; Fails if, in `create-db-ident-from-name`, `and` becomes `or` or `when-not` becomes `when`.
    (deftest create-db-ident-from-name-random-suffix-test
      (without-stable-idents
       (fn []

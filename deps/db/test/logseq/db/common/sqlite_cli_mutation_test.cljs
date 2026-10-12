@@ -9,6 +9,8 @@
 (defn- tmp-dir []
   (fs/mkdtempSync (node-path/join (os/tmpdir) "sqlite-cli-mutation-")))
 
+;; Fails if, in `store-addr-content!`, `when` becomes `when-not`.
+;; Fails if, in `open-sqlite-datascript!`, `if` becomes `if-not`.
 (deftest reopened-sqlite-db-restores-every-datom-test
   ;; Enough datoms for the stored index trees to have branch nodes, whose
   ;; child addresses are stored in the kvs addresses column.
@@ -27,6 +29,7 @@
              (:v (first (d/datoms @conn2 :avet :block/title "block 2999")))))
       (.close sqlite2))))
 
+;; Fails if, in `open-sqlite-datascript!`, `if` becomes `if-not`.
 (deftest open-db-with-graphs-dir-stores-db-inside-graphs-dir-test
   (let [dir (tmp-dir)
         graphs-dir (node-path/join dir "graphs")

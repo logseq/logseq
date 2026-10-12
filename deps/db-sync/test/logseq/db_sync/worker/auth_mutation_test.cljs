@@ -12,6 +12,7 @@
                  (string/replace "=" ""))]
     (str "eyJhbGciOiJSUzI1NiJ9." part ".signature")))
 
+;; Fails if, in `expired-token?`, `and` becomes `or`.
 (deftest auth-claims-verifies-unexpired-jwt-test
   (async done
          (let [token (jwt-with-exp (+ (js/Math.floor (/ (.now js/Date) 1000)) 3600))

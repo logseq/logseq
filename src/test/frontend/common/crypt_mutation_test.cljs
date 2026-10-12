@@ -28,6 +28,7 @@
       (p/then (fn [value] {:value value}))
       (p/catch (fn [e] {:error e}))))
 
+;; Fails if, in `expected-crypto-operation-error?`, `or` becomes `and`.
 (deftest-async decrypt-private-key-with-wrong-password-is-invalid-password-test
   (p/let [{:keys [privateKey]} (<rsa-key-pair)
           encrypted (crypt/<encrypt-private-key "right-password" privateKey)
@@ -35,6 +36,8 @@
     (is (= "decrypt-private-key" (ex-message error)))
     (is (true? (:invalid-password? (ex-data error))))))
 
+;; Fails if, in `expected-crypto-operation-error?`, `or` becomes `and`.
+;; Fails if, in `<decrypt-aes-key`, `when-not` becomes `when`.
 (deftest-async decrypt-aes-key-with-wrong-private-key-logs-no-error-test
   (let [records (atom [])
         handler (fn [record] (swap! records conj record))]
@@ -64,6 +67,10 @@
     (is (some? publicKey))
     nil))
 
+;; Fails if, in `<encrypt-aes-key`, `and` becomes `or`.
+;; Fails if, in `<decrypt-aes-key`, `and` becomes `or`.
+;; Fails if, in `<encrypt-uint8array`, `and` becomes `or`.
+;; Fails if, in `<encrypt-text`, `and` becomes `or`.
 (deftest-async crypt-rejects-key-data-that-is-not-a-uint8array-test
   (p/let [key-pair (<rsa-key-pair)
           aes-key (crypt/<generate-aes-key)
