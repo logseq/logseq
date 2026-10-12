@@ -116,15 +116,6 @@ let hit_transparent (elem : t) : t =
   Lui_ui.bool_property context node Lui_protocol.PointerEnabled false;
   node
 
-(* pointer-events:auto for content inside a hit-transparent layer:
-   popup content boxes opt their subtree back into hit-testing the way
-   .ui__popover-content does on the web. *)
-let hit_opaque (elem : t) : t =
- fun context parent ->
-  let node = elem context parent in
-  ignore (standard_kind context node);
-  Lui_ui.bool_property context node Lui_protocol.PointerEnabled true;
-  node
 
 (* The imperative side queries .mock-text/.editor-inner/.block-editor by
    class, so the semantic classes stay on style_class; flex/grow layout
