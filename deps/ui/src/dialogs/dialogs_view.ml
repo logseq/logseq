@@ -106,7 +106,9 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
           @ (if title = "" then []
              else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ]))
        ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
-       [ column ~key:("dlg-m-" ^ name) ~grow:1.
+       [ (* no ~grow — the dialog hugs its content height instead of
+            filling the window *)
+         column ~key:("dlg-m-" ^ name)
         ~gap:(if title = "" then 0 else 16) ~cross:`stretch
         ( (if title = "" then []
           else
@@ -232,7 +234,7 @@ let docinfo_view (di : Dialogs_state.docinfo) : t =
   dialog ~key:"dlg-pdf-docinfo" ~padding:24
     ~style_class:"ls-dialog-pdf-docinfo"
     ~on_dismiss:(fun _ -> Dialogs_state.close_docinfo ())
-    [ column ~key:"di-m" ~grow:1. ~min_height:0
+    [ column ~key:"di-m" ~min_height:0
         [ scroll ~key:"di-s" ~style_class:"ui__dialog-main-content"
             ~orientation:`vertical ~grow:1. ~min_height:0
             [ column ~key:"di-b" ~style_class:"extensions__pdf-doc-info"

@@ -341,10 +341,9 @@ let modal st =
         ~on_dismiss:(fun _ ->
           if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)
-        [ (* column (not box): flex-column parent so cards-modal's
-             ~grow:1. can claim the main-content height on every
-             platform *)
-          column ~key:"cards-main" ~grow:1.
+        [ (* no ~grow on the main column — the dialog hugs its
+             content height instead of filling the window *)
+          column ~key:"cards-main"
             [ column ~key:"cards-modal"
                 ~accessibility_identifier:"cards-modal"
                 ~style_class:"ls-cards-stack" ~grow:1.
