@@ -138,14 +138,18 @@ jobs:
           opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -282,10 +286,27 @@ jobs:
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
 
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+
       - name: Fetch db-worker OCaml deps
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
         shell: bash
         run: sh scripts/install-opam-deps.sh
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: Build native db-worker-node
         working-directory: deps/db-worker

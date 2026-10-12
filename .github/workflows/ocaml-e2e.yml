@@ -101,10 +101,13 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
       - name: Fetch OCaml deps
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
