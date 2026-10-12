@@ -249,4 +249,64 @@ let tests =
               (member "title" text_block) (str "some content");
             Suite.check ctx "Updated text property block belongs to a page"
               (member "page" text_block <> `Null);
-            validate ctx app)) ]
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "create-page-test"]
+      "create-page-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let get value = Client.sdk_call app "get_block" [value] in
+            let tag_ident page =
+              page |> member "tags" |> to_list |> List.hd |> get |> member "ident"
+            in
+            let first = Client.sdk_call app "create_page" [str "Test page 1"] in
+            Suite.equal ctx "Created page has the requested title"
+              (member "title" first) (str "Test page 1");
+            Suite.equal ctx "Created page carries the Page class tag"
+              (tag_ident first) (str ":logseq.class/Page");
+            let properties = `Assoc
+                ["px1", str "test"; "px2", `Int 1; "px3", str "Page 1"
+                ; "px4", `List [str "Page 2"; str "Page 3"]] in
+            let schema = `Assoc
+                ["px3", `Assoc ["type", str "page"]
+                ; "px4", `Assoc ["type", str "page"]] in
+            let second = Client.sdk_call app "create_page"
+                [str "Test page 2"; properties; `Assoc ["schema", schema]] in
+            let page = get (str "Test page 2") in
+            let field key = member (":plugin.property._test_plugin/" ^ key) page in
+            let get_ref value = get (member "id" value) in
+            Suite.equal ctx "Page with properties has the requested title"
+              (member "title" second) (str "Test page 2");
+            Suite.equal ctx "Page with properties carries the Page class tag"
+              (tag_ident second) (str ":logseq.class/Page");
+            Suite.equal ctx "Text page property resolves to its exact title"
+              (member "title" (get_ref (field "px1"))) (str "test");
+            Suite.equal ctx "Number page property resolves to its exact value"
+              (member ":logseq.property/value" (get_ref (field "px2"))) (`Int 1);
+            Suite.equal ctx "Single page property resolves to its page name"
+              (member "name" (get_ref (field "px3"))) (str "page 1");
+            Suite.equal ctx "Many page properties preserve both page names"
+              (`List (field "px4" |> to_list
+                      |> List.map (fun value -> member "name" (get_ref value))))
+              (`List [str "page 2"; str "page 3"]);
+            let tag = Client.sdk_call app "create_page"
+                [str "Tag new"; `Assoc []; `Assoc ["class", `Bool true]] in
+            Suite.equal ctx "Class page carries the Tag class tag"
+              (tag_ident tag) (str ":logseq.class/Tag");
+            validate ctx app));
+    Suite.test ~contract:Suite.Api ~covers:[source "get-all-tags-test"]
+      "get-all-tags-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let tags = Client.sdk_call app "get_all_tags" [] |> to_list in
+            let idents = List.map (member "ident") tags in
+            let builtins =
+              [ ":logseq.class/Template"; ":logseq.class/Query"
+              ; ":logseq.class/Math-block"; ":logseq.class/Task"
+              ; ":logseq.class/Code-block"; ":logseq.class/Card"
+              ; ":logseq.class/Quote-block"; ":logseq.class/Cards" ] in
+            Suite.check ctx "Native SDK returns every source-required built-in class"
+              (List.for_all (fun ident -> List.mem (str ident) idents) builtins)));
+    Suite.test ~contract:Suite.Api ~covers:[source "get-all-properties-test"]
+      "get-all-properties-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let properties = Client.sdk_call app "get_all_properties" [] |> to_list in
+            Suite.check ctx "Worker exposes at least twenty built-in properties"
+              (List.length properties >= 20))) ]
