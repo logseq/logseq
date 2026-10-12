@@ -298,6 +298,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
+            ~main:`center ~cross:`center
             ~icon:(`app "dots") ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
@@ -316,6 +317,7 @@ let item_header st idx (it : Sidebar_state.item) =
               Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
+            ~main:`center ~cross:`center
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
             ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)

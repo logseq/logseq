@@ -749,9 +749,15 @@ let add_search_item st q =
   end
 
 let remove_item st key =
-  Runtime.signal_set st.items
-    (List.filter (fun (i : item) -> i.key <> key)
-       (Runtime.signal_get st.items))
+  let rest =
+    List.filter (fun (i : item) -> i.key <> key)
+      (Runtime.signal_get st.items)
+  in
+  Runtime.signal_set st.items rest;
+  (* cljs: once the last item is closed the right dock closes itself —
+     same rule clear_items applies *)
+  if rest = [] && (model ()).Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar
 
 let toggle_props st key =
   Runtime.signal_set st.items
