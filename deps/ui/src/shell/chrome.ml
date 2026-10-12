@@ -864,7 +864,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       if Sidebar_state.left_docked m.Model.left_sidebar_open vw then
         "cp__left-split"
       else "cp__left-split is-collapsed")
-    (split ~key:"left-split" ~grow:1. ~gap:6
+    (split ~key:"left-split" ~grow:1. ~gap:3
        ~value:
          (reactive
             (fun (m : Model.t) f vw ->
@@ -889,7 +889,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (fun (m : Model.t) ->
       "cp__right-split"
       ^ if m.right_sidebar_open then "" else " is-collapsed")
-    (split ~key:"right-split" ~grow:1. ~gap:6
+    (split ~key:"right-split" ~grow:1. ~gap:3
        ~value:
          (reactive
             (fun (m : Model.t) f ->

@@ -302,7 +302,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
    (the native kit has no split animation today). *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1. ~gap:6
+  split ~key:"left-split" ~grow:1. ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
@@ -315,7 +315,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1. ~gap:6
+  split ~key:"right-split" ~grow:1. ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
