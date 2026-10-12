@@ -171,9 +171,9 @@
                  [[(group-label :current-page)   :current-page  (visible-items :current-page)]
                   [(group-label :nodes)          :nodes         (visible-items :nodes)]
                   [(group-label :files)          :files         (visible-items :files)]
-                  [(group-label :filters)        :filters       (visible-items :filters)]
                   (when-not node-exists?
-                    [(group-label :create)       :create        (create-items input)])]
+                    [(group-label :create)       :create        (create-items input)])
+                  [(group-label :filters)        :filters       (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :nodes)
@@ -191,9 +191,9 @@
                    [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
                    [(group-label :commands)         :commands       (visible-items :commands)]
                    [(group-label :files)            :files          (visible-items :files)]
-                   [(group-label :filters)          :filters        (visible-items :filters)]
                    (when-not node-exists?
-                     [(group-label :create)         :create         (create-items input)])]
+                     [(group-label :create)         :create         (create-items input)])
+                   [(group-label :filters)          :filters        (visible-items :filters)]]
                   (remove nil?)))
         order (insert-create-after-first-page (remove nil? order*))]
     (for [[group-name group-key group-items] order]

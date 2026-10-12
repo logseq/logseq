@@ -24,6 +24,7 @@
                       :source-block {:page? true :block.temp/original-title "cart"}}
         command {:source-command {:id :test-command}}
         file {:file-path "car.pdf"}
+        filter-item {:filter {:group :nodes}}
         namespaced-page {:result-type :page
                          :source-block {:page? true :block.temp/original-title "transport/car"}}]
     (doseq [[input filter-group results expected-groups expected-action]
@@ -45,8 +46,8 @@
               [:nodes :create :nodes :files] :open]
              ["ca" :nodes {:nodes {:items [page another-page]}}
               [:nodes :create :nodes] :open]
-             ["carr" nil {} [:create] :create]
-             ["transport/carr" nil {} [:create] :create]]]
+             ["carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]
+             ["transport/carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]]]
       (testing (str "Default action for " input " with filter " filter-group)
         (let [state {::cmdk/input (atom input)
                      ::cmdk/filter (atom (when filter-group {:group filter-group}))
