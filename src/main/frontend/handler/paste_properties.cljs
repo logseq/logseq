@@ -129,9 +129,13 @@
   `tags::` line names existing tags."
   [repo line]
   (when-let [[k v] (parse-property-line line)]
-    (if (= "tags" (string/lower-case (string/trim k)))
-      (p/let [ids (<tag-ids repo v)]
-        (when ids [:block/tags ids]))
+    (case (string/lower-case (string/trim k))
+      "tags" (p/let [ids (<tag-ids repo v)]
+               (when ids [:block/tags ids]))
+      "collapsed" (case (string/trim v)
+                    "true" [:block/collapsed? true]
+                    "false" [:block/collapsed? false]
+                    nil)
       (<user-property-assignment repo k v))))
 
 (defn <read-properties
@@ -144,6 +148,8 @@
       (p/resolved [block []])
       (p/let [assignments (p/all (map #(<property-assignment repo %) property-lines))]
         (let [kept (keep (fn [[line assignment]] (when-not assignment line))
-                         (map vector property-lines assignments))]
-          [(assoc block :block/title (string/join "\n" (concat title-lines kept)))
-           (vec (remove nil? assignments))])))))
+                         (map vector property-lines assignments))
+              collapsed (some (fn [[k v]] (when (= :block/collapsed? k) v)) (remove nil? assignments))]
+          [(cond-> (assoc block :block/title (string/join "\n" (concat title-lines kept)))
+             (some? collapsed) (assoc :block/collapsed? collapsed))
+           (vec (remove (fn [a] (or (nil? a) (= :block/collapsed? (first a)))) assignments))])))))

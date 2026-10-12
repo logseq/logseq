@@ -341,7 +341,15 @@
               " ")
         content (str prefix sep new-content)]
     (if-let [properties-content (when-not (false? include-properties?)
-                                  (block-properties-content db b property-spaces-tabs context))]
+                                  (->> [(block-properties-content db b property-spaces-tabs context)
+                                        ;; a collapsed block whose children are exported, as the
+                                        ;; file graph's `collapsed::` line
+                                        (when (and (:block/collapsed? b) (seq (:block/children b)))
+                                          (property-line-content "collapsed" "true" property-spaces-tabs context))]
+                                       (remove nil?)
+                                       seq
+                                       (string/join "\n")
+                                       not-empty))]
       (str content "\n" properties-content)
       content)))
 
@@ -363,7 +371,10 @@
                         (transform-content db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
-                (cons content (tree->file-content-aux db children {:init-level (inc level)} context))
+                (cons content (tree->file-content-aux db children
+                                                      (-> (select-keys opts [:include-properties? :heading-to-list?])
+                                                          (assoc :init-level (inc level)))
+                                                      context))
                 [content])]
           (conj! block-contents new-content)
           (recur r level))))))

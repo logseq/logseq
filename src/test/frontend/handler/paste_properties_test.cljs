@@ -20,6 +20,7 @@
 (def ^:private priority-uuid #uuid "00000000-0000-4000-8000-000000000103")
 (def ^:private choice-joy #uuid "00000000-0000-4000-8000-0000000000c1")
 (def ^:private tagged-uuid #uuid "00000000-0000-4000-8000-000000000104")
+(def ^:private collapsed-uuid #uuid "00000000-0000-4000-8000-000000000105")
 
 (use-fixtures :once
   {:before (fn []
@@ -47,7 +48,11 @@
                          :build/properties {:logseq.property/priority :logseq.property/priority.high}}
                         {:block/title "tagged"
                          :block/uuid tagged-uuid :build/keep-uuid? true
-                         :build/tags [:research :idea]}]}]
+                         :build/tags [:research :idea]}
+                        {:block/title "folded"
+                         :block/uuid collapsed-uuid :build/keep-uuid? true
+                         :block/collapsed? true
+                         :build/children [{:block/title "inside"}]}]}]
                      :classes {:research {} :idea {}}
                      :properties {:p-text {:logseq.property/type :default}
                                   :p-number {:logseq.property/type :number}
@@ -143,6 +148,16 @@
                (is (= "- tagged\n  tags:: idea, research" (string/trim text)))
                (is (= "tagged" (:block/title (first blocks))))
                (is (= (set [(page-id "research") (page-id "idea")]) (set (:block/tags assignments)))))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest exported-collapsed-pastes-back
+  (async done
+         (-> (p/let [{:keys [text blocks]} (<export-and-paste collapsed-uuid)]
+               (is (= "- folded\n  collapsed:: true\n\t- inside"
+                      (string/trim (string/replace text #" +\n" "\n"))))
+               (is (= ["folded" "inside"] (mapv :block/title blocks)))
+               (is (true? (:block/collapsed? (first blocks)))))
              (p/catch (fn [e] (is false (str e))))
              (p/finally done))))
 

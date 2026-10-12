@@ -473,7 +473,8 @@
 (defn- block->content-context
   [options]
   {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
-   :excluded-properties #{:logseq.property/status}
+   ;; status and tags are written on the block line (decorate-block-content)
+   :excluded-properties #{:logseq.property/status :block/tags}
    :export-properties-as-list-items? true
    :export-node-property-values-as-page-refs? true
    :export-default-property-values-as-blocks? true
