@@ -455,6 +455,71 @@ let rec menu_spec_icons (j : J.t) : J.t =
   | `List xs -> `List (List.map menu_spec_icons xs)
   | v -> v
 
+(* ---------- editor input focus ---------- *)
+
+(* set-input-focus requests that arrived before their sink mounted —
+   replayed after every applied patch batch (see flush_pending_focus).
+   A newer request for the same block supersedes the queued one. *)
+let pending_focus : (string * bool) list ref = ref []
+
+(* the block whose editor sink currently owns focus, per the app's
+   handshake — Some while the app's editing surface is focused, cleared
+   on an explicit blur request. A sink remount clears Ui.focused
+   silently (the node id died); the app still owns the same editing
+   block and re-arms nothing, so flush_pending_focus re-focuses the
+   fresh sink for this block. *)
+let editor_focus_bid : string option ref = ref None
+
+let try_set_input_focus (e : env) (bid : string) (focused : bool) : bool =
+  match ed_ctx e bid with
+  | None -> false
+  | Some ctx ->
+    editor_focus_bid := (if focused then Some bid else None);
+    (if focused then begin
+       (* moving the text input onto the sink includes window focus —
+          Ui.focused is what routes keydown dom-events to the editor *)
+       Ui.set_focused e.ui e.store ctx.sink;
+       e.focused_text_input ctx.sink;
+       List.iter e.apply_batch
+         (Patch_decode.batches_of_string
+            (Native_embed.extension_event ctx.sink "logseq-editor"
+               "focus" "{}"))
+     end
+     else begin
+       Ui.set_focused e.ui e.store 0;
+       e.focused_text_input 0;
+       List.iter e.apply_batch
+         (Patch_decode.batches_of_string
+            (Native_embed.extension_event ctx.sink "logseq-editor"
+               "blur" "{}"))
+     end);
+    true
+
+let queue_input_focus bid focused =
+  pending_focus :=
+    (bid, focused)
+    :: List.filter (fun (b, _) -> b <> bid) !pending_focus
+
+let flush_pending_focus () =
+  match !env with
+  | None -> ()
+  | Some e ->
+    let queued = !pending_focus in
+    if queued <> [] then begin
+      pending_focus := [];
+      List.iter
+        (fun (bid, focused) ->
+           if not (try_set_input_focus e bid focused) then
+             pending_focus := (bid, focused) :: !pending_focus)
+        (List.rev queued)
+    end;
+    (* a sink remount dropped Ui.focused while the app still owns the
+       same editing block — re-arm it on the fresh sink *)
+    (match !editor_focus_bid with
+     | Some bid when Ui.focused e.ui = 0 ->
+       ignore (try_set_input_focus e bid true)
+     | _ -> ())
+
 (* ---------- dom-op dispatch ---------- *)
 
 let dom_op (e : env) (op : string) (body : string) =
@@ -630,8 +695,7 @@ let dom_op (e : env) (op : string) (body : string) =
      | None -> ())
   | "click" | "katex-pending" | "hljs-pending"
   | "imperative-attach" | "imperative-detach" -> ()
-  | "caret-rect" | "offset-at" | "line-ranges" | "scroll-height"
-  | "set-input-focus" ->
+  | "caret-rect" | "offset-at" | "line-ranges" | "scroll-height" ->
     (* Editor conduit over the rendered .ed-r text runs — the host's
        twin of getClientRects over DOM text nodes. The sink node
        (ed-sink-<block-id>) carries the "runs" prop listing each run's
@@ -679,28 +743,22 @@ let dom_op (e : env) (op : string) (body : string) =
              (`Assoc
                 [ ("block-id", `String bid)
                 ; ("height", `Float (scroll_height e ctx)) ])
-         | "set-input-focus" ->
-           (* the conduit contract is a handshake: after the host moves
-              its text input onto the sink it pushes the "focus"/"blur"
-              extension event back — Edit_input.Focus folds into
-              Editor_state.focused_block, which is_focused reads to
-              consume the pending_focus arm. Without the event the
-              app's focus-retry loops forever. *)
-           (match jbool_opt "focused" parsed with
-            | Some true -> (
-              e.focused_text_input ctx.sink;
-              List.iter e.apply_batch
-                (Patch_decode.batches_of_string
-                   (Native_embed.extension_event ctx.sink "logseq-editor"
-                      "focus" "{}")))
-            | Some false -> (
-              e.focused_text_input 0;
-              List.iter e.apply_batch
-                (Patch_decode.batches_of_string
-                   (Native_embed.extension_event ctx.sink "logseq-editor"
-                      "blur" "{}")))
-            | None -> ())
          | _ -> ())))
+  | "set-input-focus" ->
+    (* the conduit contract is a handshake: after the host moves its
+       text input onto the sink it pushes the "focus"/"blur" extension
+       event back — Edit_input.Focus folds into
+       Editor_state.focused_block, which is_focused reads to consume the
+       pending_focus arm. Without the event the app's focus-retry loops
+       forever. The request may beat the sink's mount patch (the app
+       emits focus_input as soon as can_focus answers) — queue it for
+       the late mount instead of dropping it; the next applied batch
+       replays it. *)
+    (match (jstr_opt "block-id" parsed, jbool_opt "focused" parsed) with
+     | Some bid, Some focused ->
+       if not (try_set_input_focus e bid focused) then
+         queue_input_focus bid focused
+     | _ -> ())
   | other -> log "dom-op %s unsupported: %s" other body
 
 (* ---------- top-level envelope dispatch ---------- *)

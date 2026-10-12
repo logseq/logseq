@@ -578,10 +578,14 @@ let () =
     (Some (fun () -> Some (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
   let apply_patch_json (s : string) =
-    if s <> "" then
+    if s <> "" then begin
       List.iter
         (fun b -> ignore (Lui_host.apply_batch host b))
-        (Patch_decode.batches_of_string s)
+        (Patch_decode.batches_of_string s);
+      (* a set-input-focus request may have queued waiting on a sink
+         that this batch just mounted *)
+      Host_requests.flush_pending_focus ()
+    end
   in
   (* on-demand rect with the same shift+clip math populate_rects bakes
      into the cache — for measure-node replies that arrive between
@@ -1229,7 +1233,26 @@ let () =
          | None -> [])
       @ mods_fields mods
     in
-    emit_dom (if down then "keydown" else "keyup") target fields
+    emit_dom (if down then "keydown" else "keyup") target fields;
+    (* on web the hidden textarea's own keydown listener emits the
+       conduit "key" event alongside the document dispatch — give the
+       focused logseq-editor sink the same feed; typed text arrives
+       separately as Text_input -> "insert" *)
+    if down && target <> 0
+       && Lui_store.kind store target = "extension:logseq-editor"
+    then begin
+      dbg "editor key %s" (dom_key scancode);
+      apply_patch_json
+        (Native_embed.extension_event target "logseq-editor" "key"
+           (String.concat ""
+              [ "{\"key\":"; jstr (dom_key scancode)
+              ; ",\"shift\":"; jbool (mods.Input.shift)
+              ; ",\"alt\":"; jbool (mods.Input.alt)
+              ; ",\"meta\":"; jbool (mods.Input.meta)
+              ; ",\"ctrl\":"; jbool (mods.Input.ctrl)
+              ; ",\"repeat\":"; jbool (repeat)
+              ; "}" ]))
+    end
   in
   let emit_dom_event e =
     match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
@@ -1342,7 +1365,20 @@ let () =
            apply_actions
              (Ui.handle ui store rects (Input.Resize (w, h)))
          | Some input ->
-           apply_actions (Ui.handle ui store rects input)
+           apply_actions (Ui.handle ui store rects input);
+           (match input with
+            | Input.Text_input s ->
+              (* the editor sink's conduit reads text commits as
+                 "insert" — Ui.handle's TextChanged path stays unused
+                 because the extension admits no such event *)
+              let tgt = Ui.focused ui in
+              if tgt <> 0
+                 && Lui_store.kind store tgt = "extension:logseq-editor"
+              then
+                apply_patch_json
+                  (Native_embed.extension_event tgt "logseq-editor" "insert"
+                     (Printf.sprintf {|{"text":%s}|} (jstr s)))
+            | _ -> ())
          | None -> ());
         emit_dom_event e
       end
