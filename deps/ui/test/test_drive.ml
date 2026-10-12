@@ -1559,7 +1559,7 @@ let props_mount_cell ~block_uuid ~row =
   let s =
     S.mount ~registry ~profile:Logseq_el.web_profile ~initial:Model.initial
       ~reducer:Update.apply
-      ~view:(fun _ctx _ms _send -> Properties_value.view ctx row)
+      ~view:(fun _ctx _ms _send -> Properties_value.view ctx row ~hover:None)
       ()
   in
   s_ref := Some s;

@@ -183,6 +183,7 @@ let run () =
         ; edit_units = (fun () -> `U16)
         ; random_uuid = (fun () -> incr uuid_seq; Printf.sprintf "uuid-%d" !uuid_seq)
         ; open_url = (fun u -> opened_urls := u :: !opened_urls)
+        ; menu_popup = (fun _ -> false)
         }
     ; dom =
         (let listeners : (string, Ui_services.ev -> unit) Hashtbl.t =

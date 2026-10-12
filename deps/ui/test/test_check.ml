@@ -76,6 +76,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_hl = None
   ; block_asset_ref = None
   ; block_hl_image = None
+  ; block_bg_color = None
   }
 
 let page blocks : Model.page =
