@@ -93,9 +93,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Fetch db-worker OCaml deps
         if: steps.opam-cache.outputs.cache-hit != 'true'
@@ -185,9 +185,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -326,9 +326,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
