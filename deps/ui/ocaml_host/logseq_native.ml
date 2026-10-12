@@ -523,7 +523,14 @@ let () =
           (fun name ->
             (* shadow strings carry raw css vars like --kbd-glow-*;
                the theme-var table resolves them, the token palette
-               can't *)
+               can't. A spec that is itself a var(--x, fallback) must
+               resolve to its spec string before parsing — the
+               per-token color resolver can't unwrap the whole layer. *)
+            let name =
+              match Theme_vars.resolve_value name 0 with
+              | Some s -> s
+              | None -> name
+            in
             Lui_theme.shadow_of
               ~resolve:(fun _mode s -> Theme_vars.color_of s)
               !Theme_vars.mode name) }

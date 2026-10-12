@@ -655,6 +655,9 @@ let input_row svs st : t =
     Signal.map (fun (v : S.view) -> v.S.move_mode)
       (Signal.value (st.S.vs))
   in
+  let text_sig =
+    Signal.map (fun (v : S.view) -> v.S.input) (Signal.value (st.S.vs))
+  in
   Ui_components.cmdk_input_row ~key:"input-row"
     [ (* prod's .cp__cmdk-input-row has no leading glyph — the input is
          flush-left; older cljs baselines that showed a dimmed magnifier
@@ -668,7 +671,7 @@ let input_row svs st : t =
           (* sidebar blocks mount seeded with the query; the modal is
              always "" so this is a no-op there *)
           Ui_components.cmdk_search_input ~key:"input"
-            ~text:(S.get st).S.input
+            ~text_signal:text_sig
             ~placeholder:
               (if move_mode then
                  svs.Svs.i18n "cmdk.input/move-blocks-placeholder"

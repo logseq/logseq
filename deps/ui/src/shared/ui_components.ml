@@ -112,7 +112,7 @@ let cmdk_input_row ~key children =
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
        ~height:54 ~background:"var(--lx-gray-02, #f8f8f8)" children)
 
-let cmdk_search_input ~key ?placeholder ~text ~on_input () =
+let cmdk_search_input ~key ?placeholder ~text_signal:text ~on_input () =
   with_props
     [ P.FontSize, sv "var(--lx-text-input)"
     ; P.LineHeight, sv "1.75rem"
@@ -133,7 +133,7 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
           var(--lui-c-foreground)))"
-       ?placeholder ~text ~on_input [])
+       ?placeholder ~text_signal:text ~on_input [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; the
    56px bottom pad scrolls the last row clear of the hints bar (a
