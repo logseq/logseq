@@ -24,6 +24,8 @@
         (set! (.-error js/console) orig)))
     @calls))
 
+;; Fails if, in `register-transact-fn!`, `when` becomes `when-not`.
+;; Fails if, in `transact!`, `and` becomes `or` or `if` becomes `if-not`.
 (deftest register-transact-fn-receives-transact-of-a-repo-test
   (testing "a repo (UI thread) transact goes to the registered transact fn, untouched by delete expansion"
     (let [orig @ldb/*transact-fn
@@ -45,6 +47,7 @@
         (finally
           (reset! ldb/*transact-fn orig))))))
 
+;; Fails if, in `register-transact-invalid-callback-fn!`, `when` becomes `when-not`.
 (deftest register-transact-invalid-callback-fn-is-told-of-invalid-data-test
   (let [orig @ldb/*transact-invalid-callback
         calls (atom 0)
@@ -61,6 +64,7 @@
       (finally
         (reset! ldb/*transact-invalid-callback orig)))))
 
+;; Fails if, in `remove-temp-block-data`, `seq` becomes `empty?` or `first` becomes `last`.
 (deftest transact-drops-block-temp-attributes-test
   (let [conn (d/create-conn plain-schema)
         block-uuid (random-uuid)
@@ -77,6 +81,7 @@
     (testing "a [:db/add e :block.temp/* v] vector is dropped"
       (is (empty? (d/datoms @conn :aevt :block.temp/vector-flag))))))
 
+;; Fails if, in `transact!`, `or` becomes `and`.
 (deftest transact-drops-entities-given-as-bare-items-test
   (let [conn (d/create-conn plain-schema)
         block-uuid (random-uuid)
@@ -85,6 +90,7 @@
     (ldb/transact! conn [block {:db/id (:db/id block) :block/title "new"}])
     (is (= "new" (:block/title (d/entity @conn [:block/uuid block-uuid]))))))
 
+;; Fails if, in `throw-if-page-has-block-parent!`, `=` becomes `not=`.
 (deftest transact-rejects-a-page-with-a-block-parent-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -98,6 +104,7 @@
                            #(ldb/transact! conn [[:db/add (:db/id page-a) :block/parent (:db/id block)]]))))
     (is (nil? (:block/parent (d/entity @conn (:db/id page-a)))))))
 
+;; Fails if, in `transact-sync`, `and` becomes `or`.
 (deftest transact-without-changes-commits-nothing-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -112,6 +119,7 @@
     (is (identical? db-before @conn))
     (is (zero? @reports))))
 
+;; Fails if, in `transact-sync`, `or` becomes `and`, `and` becomes `or` or `=` becomes `not=`.
 (deftest transact-failed-log-follows-suppress-flags-test
   (let [logged? (fn [tx tx-meta]
                   (let [conn (d/create-conn plain-schema)
@@ -130,6 +138,7 @@
       (is (false? (logged? missing-entity-tx {:db-sync/suppress-stale-rebase-transact-failed-log? true})))
       (is (true? (logged? nil-value-tx {:db-sync/suppress-stale-rebase-transact-failed-log? true}))))))
 
+;; Fails if, in `transact!`, `if` becomes `if-not`.
 (deftest transact-delete-blocks-retracts-children-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -142,6 +151,7 @@
     (is (nil? (d/entity @conn (:db/id parent))))
     (is (nil? (d/entity @conn (:db/id child))))))
 
+;; Fails if, in `batch-transact-with-temp-conn!`, `and` becomes `or`.
 (deftest batch-transact-with-temp-conn-empty-batch-builds-no-tx-meta-test
   (let [conn (db-test/create-conn)
         db-before @conn
@@ -154,11 +164,15 @@
     (is (zero? @calls))
     (is (identical? db-before @conn))))
 
+;; Fails if, in `get-right-sibling`, `nil?` becomes `some?`.
+;; Fails if, in `get-left-sibling`, `nil?` becomes `some?`.
+;; Fails if, in `get-down`, `nil?` becomes `some?`.
 (deftest siblings-and-down-of-nil-are-nil-test
   (is (nil? (ldb/get-right-sibling nil)))
   (is (nil? (ldb/get-left-sibling nil)))
   (is (nil? (ldb/get-down nil))))
 
+;; Fails if, in `get-journal-page-by-day`, `and` becomes `or` or `first` becomes `last`.
 (deftest get-journal-page-by-day-edges-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -175,6 +189,8 @@
       (is (= "Apr 10th, 2026"
              (:block/title (ldb/get-journal-page-by-day @conn 20260410)))))))
 
+;; Fails if, in `page-empty?`, `if` becomes `if-not`.
+;; Fails if, in `get-orphaned-pages`, `not` becomes `identity`.
 (deftest page-empty-and-orphaned-pages-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -198,6 +214,7 @@
     (testing "an empty unreferenced non-journal page with a / in its name is kept"
       (is (= #{} (orphaned-titles ["a/b"]))))))
 
+;; Fails if, in `block-order-path`, `or` becomes `and`.
 (deftest sort-page-random-blocks-leaves-out-property-value-blocks-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn
@@ -247,6 +264,7 @@
       (is (= preorder
              (map :block/title (ldb/sort-page-random-blocks @conn shuffled)))))))
 
+;; Fails if, in `compare-order-paths`, `nil?` becomes `some?`.
 (deftest sort-page-random-blocks-keeps-given-order-of-siblings-sharing-an-order-test
   (testing "siblings with the same :block/order (e.g. before db-sync fixes duplicate orders) stay in the order given"
     (let [conn (db-test/create-conn-with-blocks
@@ -260,6 +278,7 @@
       (is (= ["a" "b"] (sorted-titles ["a" "b"])))
       (is (= ["b" "a" "c"] (sorted-titles ["c" "b" "a"]))))))
 
+;; Fails if, in `get-alias-source-page`, `first` becomes `last`.
 (deftest get-alias-source-page-of-an-alias-of-2-pages-is-the-older-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -274,6 +293,7 @@
                        [:db/add (:db/id source-2) :block/alias (:db/id alias)]])
     (is (= "source 1" (:block/title (ldb/get-alias-source-page @conn (:db/id alias)))))))
 
+;; Fails if, in `get-graph-rtc-uuid`, `when` becomes `when-not`.
 (deftest get-graph-rtc-uuid-test
   (let [conn (db-test/create-conn)
         graph-uuid (random-uuid)]
@@ -294,12 +314,14 @@
              :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
      {:page {:block/title "Bob"}}]}))
 
+;; Fails if, in `build-bidirectional-property-group`, `if` becomes `if-not`.
 (deftest get-bidirectional-properties-custom-title-test
   (let [conn (bidirectional-conn {:logseq.property.class/bidirectional-property-title "Friends of"})
         bob (db-test/find-page-by-title @conn "Bob")]
     (is (= ["Friends of"]
            (map :title (ldb/get-bidirectional-properties @conn (:db/id bob)))))))
 
+;; Fails if, in `get-bidirectional-properties`, `and` becomes `or`.
 (deftest get-bidirectional-properties-without-target-is-nil-test
   (let [conn (bidirectional-conn {})
         bob (db-test/find-page-by-title @conn "Bob")]
@@ -307,6 +329,7 @@
            (map :title (ldb/get-bidirectional-properties @conn (:db/id bob)))))
     (is (empty? (ldb/get-bidirectional-properties @conn nil)))))
 
+;; Fails if, in `get-bidirectional-properties`, `and` becomes `or`.
 (deftest get-bidirectional-properties-ignores-recycled-classes-test
   (let [conn (bidirectional-conn {})
         bob (db-test/find-page-by-title @conn "Bob")
@@ -315,6 +338,7 @@
                         :logseq.property/deleted-at 1}])
     (is (empty? (ldb/get-bidirectional-properties @conn (:db/id bob))))))
 
+;; Fails if, in `bidirectional-property-attr?`, `and` becomes `or`.
 (deftest get-bidirectional-properties-ignores-db-attributes-test
   (testing ":block/alias given property classes is still not a bidirectional property"
     (let [conn (db-test/create-conn-with-blocks
