@@ -117,19 +117,22 @@
              :class nil}]
            (remove nil?)))))
 
-(defn- insert-create-after-first-page
+(defn- insert-create-after-first-match
   [groups]
   (let [creation-items (some (fn [[_ group items]]
                               (when (= group :create) items)) groups)
-        page-group (some (fn [[_ group items]]
-                           (when (some #(= :page (:result-type %)) items) group)) groups)]
-    (if (and (seq creation-items) page-group)
+        first-match (fn [result-type]
+                      (some (fn [[_ group items]]
+                              (when-let [item (some #(when (= result-type (:result-type %)) %) items)]
+                                [group item])) groups))
+        [matched-group matched-item] (or (first-match :page) (first-match :block))]
+    (if (and (seq creation-items) matched-group)
       (for [[title group items] groups
             :when (not= group :create)]
         [title group
-         (if (= group page-group)
-           (let [[before pages] (split-with #(not= :page (:result-type %)) items)]
-             (concat before [(first pages)] creation-items (rest pages)))
+         (if (= group matched-group)
+           (let [[before after] (split-with #(not= matched-item %) items)]
+             (concat before [(first after)] creation-items (rest after)))
            items)])
       groups)))
 
@@ -195,7 +198,7 @@
                      [(group-label :create)         :create         (create-items input)])
                    [(group-label :filters)          :filters        (visible-items :filters)]]
                   (remove nil?)))
-        order (insert-create-after-first-page (remove nil? order*))]
+        order (insert-create-after-first-match (remove nil? order*))]
     (for [[group-name group-key group-items] order]
       [group-name
        group-key

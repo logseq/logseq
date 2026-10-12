@@ -22,6 +22,8 @@
         alias {:result-type :page :alias alias-target :source-block alias-target}
         another-page {:result-type :page
                       :source-block {:page? true :block.temp/original-title "cart"}}
+        block {:result-type :block :source-block {:block/title "hello"}}
+        another-block {:result-type :block :source-block {:block/title "hello again"}}
         command {:source-command {:id :test-command}}
         file {:file-path "car.pdf"}
         filter-item {:filter {:group :nodes}}
@@ -46,6 +48,13 @@
               [:nodes :create :nodes :files] :open]
              ["ca" :nodes {:nodes {:items [page another-page]}}
               [:nodes :create :nodes] :open]
+             ["hello" nil {:nodes {:items [block another-block]}
+                           :commands {:items [command]}
+                           :filters {:items [filter-item]}}
+              [:nodes :create :nodes :commands :filters] :open]
+             ["ca" nil {:current-page {:items [block another-block]}
+                        :nodes {:items [page another-page]}}
+              [:current-page :current-page :nodes :create :nodes] :open]
              ["carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]
              ["transport/carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]]]
       (testing (str "Default action for " input " with filter " filter-group)
