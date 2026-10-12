@@ -56,6 +56,16 @@ let tags =
 
 let identifier tag = "logseq-" ^ tag
 
+(* phrasing-level tags — their children flow along the inline axis like
+   the web's inline boxes. Block-level tags keep the host's column
+   default. The hints ride as the [orientation]/[flex-wrap] extension
+   props declared in [schema_of]; the native layout reads them from the
+   store and the web twin ignores them. *)
+let inline_tags =
+  [ "span"; "a"; "b"; "i"; "em"; "strong"; "code"; "small"; "kbd"; "u"
+  ; "mark"; "del"; "ins"; "sub"; "sup"; "tspan"; "label"; "img"
+  ; "em-emoji" ]
+
 (* dedicated widget extensions (logseq-codemirror) nest inside
    logseq-<tag> parents the same way tags nest in each other *)
 let child_identifiers =
@@ -73,6 +83,14 @@ let schema_of tag =
         None
     ; Lui_extension.property "accessibility-identifier"
         Lui_extension.StringScalar false None
+    ; (* layout hints for the native host — phrasing tags lay their
+         children out along the inline axis (row + wrap), matching the
+         web's inline boxes; block-level tags omit both and stay on the
+         column default *)
+      Lui_extension.property "orientation" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "flex-wrap" Lui_extension.StringScalar false
+        None
     ]
     [ Lui_extension.event "dom-event"
         [ Lui_extension.event_field "name" Lui_extension.StringScalar true
@@ -207,6 +225,11 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   in
   let node = Lui_ui.extension context (identifier tag) in
   Option.iter (Lui_ui.key context node) key;
+  if List.mem tag inline_tags then (
+    Lui_ui.extension_property context node "orientation"
+      (StringValue "horizontal");
+    Lui_ui.extension_property context node "flex-wrap"
+      (StringValue "wrap"));
   if attrs <> [] then
     Lui_ui.extension_property context node "attrs"
       (StringValue (attrs_json attrs));
