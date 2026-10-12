@@ -49,6 +49,8 @@
 
 (defn- bytes-of [x] (vec (js/Array.from x)))
 
+;; Fails if, in `->uint8`, `and` becomes `or`.
+;; Fails if, in `upload-remote-asset!`, `if` becomes `if-not`.
 (deftest upload-encrypts-bytes-of-an-array-payload-test
   (async done
          (-> (p/let [r (<upload {:repo "r" :asset-id "a" :aes-key "k"
@@ -59,6 +61,7 @@
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
 
+;; Fails if, in `->uint8`, `and` becomes `or` or `=` becomes `not=`.
 (deftest upload-encrypts-bytes-of-a-serialized-buffer-payload-test
   (async done
          (-> (p/let [r (<upload {:repo "r" :asset-id "a" :aes-key "k"
@@ -68,6 +71,7 @@
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
 
+;; Fails if, in `->uint8`, `and` becomes `or`.
 (deftest upload-rejects-an-unsupported-object-payload-test
   (async done
          (-> (p/let [r (<upload {:repo "r" :asset-id "a" :aes-key "k"
@@ -78,6 +82,7 @@
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
 
+;; Fails if, in `payload-size`, `some?` becomes `nil?`.
 (deftest upload-progress-total-of-an-array-buffer-test
   (async done
          (-> (p/let [r (<upload {:repo "r" :asset-id "a" :aes-key nil
@@ -94,6 +99,7 @@
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
 
+;; Fails if, in `clear-missing-asset-upload-file!`, `if` becomes `if-not`.
 (deftest upload-of-one-asset-keeps-other-missing-asset-files-test
   (async done
          (let [repo "missing-files-repo"
@@ -116,6 +122,7 @@
                             (sync-assets/clear-missing-asset-upload-files! repo)
                             (done)))))))
 
+;; Fails if, in `enqueue-asset-task!`, `or` becomes `and`.
 (deftest enqueue-asset-task-runs-tasks-one-after-another-test
   (async done
          (let [events (atom [])
@@ -132,6 +139,7 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+;; Fails if, in `request-asset-download!`, `when` becomes `when-not`.
 (deftest request-asset-download-of-missing-asset-removes-its-asset-op-test
   (async done
          (let [repo "asset-download-repo"
@@ -155,6 +163,7 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+;; Fails if, in `remote-asset-download-candidates-in-tx`, `when` becomes `when-not`, `and` becomes `or` or `=` becomes `not=`.
 (deftest remote-asset-download-candidates-in-tx-only-added-remote-metadata-test
   (let [uploaded (random-uuid)
         renamed (random-uuid)

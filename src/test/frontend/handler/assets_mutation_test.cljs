@@ -8,6 +8,7 @@
             [frontend.util :as util]
             [promesa.core :as p]))
 
+;; Fails if, in `alias-enabled?`, `and` becomes `or`.
 (deftest alias-enabled-needs-electron-and-the-setting-test
   (with-redefs [util/electron? (constantly false)
                 state/get-state (constantly {:assets/alias-enabled? true})]
@@ -19,16 +20,19 @@
                 state/get-state (constantly {:assets/alias-enabled? true})]
     (is (assets/alias-enabled?))))
 
+;; Fails if, in `clean-path-prefix`, `when` becomes `when-not`.
 (deftest clean-path-prefix-strips-the-assets-dir-test
   (is (= "@alias/a.png" (assets/clean-path-prefix "../assets/@alias/a.png")))
   (is (assets/check-alias-path? "../assets/@alias/a.png"))
   (is (nil? (assets/clean-path-prefix nil))))
 
+;; Fails if, in `windows-drive-absolute-path?`, `and` becomes `or`.
 (deftest normalize-asset-resource-url-keeps-protocol-links-test
   (with-redefs [util/electron? (constantly false)]
     (is (= "https://example.com/a.png"
            (assets/normalize-asset-resource-url "https://example.com/a.png")))))
 
+;; Fails if, in `normalize-asset-resource-url`, `if` becomes `if-not`.
 (deftest normalize-asset-resource-url-decodes-an-encoded-absolute-path-once-test
   (with-redefs [util/electron? (constantly false)]
     (is (= "file:///home/a%20b.png"
@@ -36,12 +40,14 @@
     (is (= "file:///home/a%20b.png"
            (assets/normalize-asset-resource-url "/home/a b.png")))))
 
+;; Fails if, in `resolve-asset-real-path-url`, `if` becomes `if-not`.
 (deftest resolve-asset-real-path-url-decodes-an-encoded-path-once-test
   (with-redefs [util/electron? (constantly false)
                 config/get-repo-dir (constantly "/graph")]
     (is (= (#'assets/resolve-asset-real-path-url "repo" "assets/a b.png")
            (#'assets/resolve-asset-real-path-url "repo" "assets/a%20b.png")))))
 
+;; Fails if, in `resolve-asset-real-path-url`, `if` becomes `if-not`.
 (deftest resolve-asset-real-path-url-protects-a-windows-drive-only-in-electron-test
   (with-redefs [util/electron? (constantly true)
                 config/get-repo-dir (constantly "C:/graph")]
@@ -52,6 +58,7 @@
     (is (= "file:///C:/graph/assets/a.png"
            (#'assets/resolve-asset-real-path-url "repo" "assets/a.png")))))
 
+;; Fails if, in `<make-data-url`, `when` becomes `when-not`.
 (deftest make-data-url-returns-a-blob-url-test
   (async done
     (-> (p/with-redefs [state/get-current-repo (constantly "repo")
@@ -64,6 +71,7 @@
         (p/catch (fn [e] (is false (str e))))
         (p/finally done))))
 
+;; Fails if, in `->uint8`, `and` becomes `or`.
 (deftest uint8-rejects-an-object-with-data-that-is-not-a-buffer-test
   (is (thrown-with-msg? js/Error #"unsupported binary payload"
                         (assets/->uint8 #js {:data #js [1 2]})))

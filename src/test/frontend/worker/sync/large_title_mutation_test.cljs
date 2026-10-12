@@ -7,10 +7,12 @@
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
+;; Fails if, in `large-title?`, `>` becomes `>=`.
 (deftest large-title-is-strictly-over-the-byte-limit
   (is (false? (large-title/large-title? (apply str (repeat large-title/large-title-byte-limit "a")))))
   (is (true? (large-title/large-title? (apply str (repeat (inc large-title/large-title-byte-limit) "a"))))))
 
+;; Fails if, in `large-title-object?`, `and` becomes `or`.
 (deftest large-title-object-needs-both-fields
   (is (true? (large-title/large-title-object? {:asset-uuid "u" :asset-type "txt"})))
   (is (false? (large-title/large-title-object? {:asset-uuid "u"})))
@@ -48,6 +50,7 @@
         (p/then (fn [m] (assoc m :fail-fasts @*fail-fasts :urls @*urls)))
         (p/finally (fn [] (set! js/fetch fetch-prev))))))
 
+;; Fails if, in `upload-large-title!`, `when-not` becomes `when` or `seq` becomes `empty?`.
 (deftest upload-large-title-checks-http-base-and-graph-id
   (async done
          (-> (p/let [ok (upload! {})
@@ -113,6 +116,7 @@
   [eid]
   [[:db/add eid large-title/large-title-object-attr title-obj]])
 
+;; Fails if, in `rehydrate-large-titles!`, `or` becomes `and`, `when` becomes `when-not` or `nil?` becomes `some?`.
 (deftest rehydrate-large-titles-uses-given-or-looked-up-inputs
   (async done
          (-> (p/let [[conn1 eid1] (conn-and-eid false)
