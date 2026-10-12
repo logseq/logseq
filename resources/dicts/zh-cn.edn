@@ -555,6 +555,7 @@
  :editor.slash/link-desc "创建一个 HTTP 链接"
  :editor.slash/math-block "数学块"
  :editor.slash/math-block-desc "创建一个 LaTeX 块"
+ :editor.slash/no-matched-commands "没有匹配的命令"
  :editor.slash/no-priority "无优先级"
  :editor.slash/node-embed "节点嵌入"
  :editor.slash/node-embed-desc "在此处嵌入一个节点"

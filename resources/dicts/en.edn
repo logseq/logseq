@@ -555,6 +555,7 @@
  :editor.slash/link-desc "Create a HTTP link"
  :editor.slash/math-block "Math block"
  :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-matched-commands "No matched commands"
  :editor.slash/no-priority "No priority"
  :editor.slash/node-embed "Node embed"
  :editor.slash/node-embed-desc "Embed a node here"
