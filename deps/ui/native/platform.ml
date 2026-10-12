@@ -248,7 +248,7 @@ let js_escape s = s
 let utf8 s = s (* OCaml strings are already UTF-8 bytes *)
 
 let desktop_os () = true
-let is_mac () = true
+let is_mac = Platform_native.is_mac
 let online () = true
 let document_visible () = true
 let dev_build = true
