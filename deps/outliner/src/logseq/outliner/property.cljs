@@ -5,18 +5,17 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.query-dsl :as query-dsl]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -445,13 +444,7 @@
         value' (if (and (= property-id :logseq.property/query)
                         (string? value')
                         (string/includes? value' "[["))
-                 (let [ref-pages (->> (re-seq page-ref/page-ref-re value')
-                                      (map second)
-                                      distinct
-                                      (keep #(ldb/get-page @conn %)))]
-                   (if (seq ref-pages)
-                     (db-content/title-ref->id-ref value' ref-pages {:replace-tag? false})
-                     value'))
+                 (query-dsl/resolve-page-refs value' #(:block/uuid (ldb/get-page @conn %)))
                  value')
         _ (when (and (not= (:logseq.property/type property) :number)
                      (not (string? value')))

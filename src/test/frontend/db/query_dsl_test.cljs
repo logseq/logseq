@@ -9,7 +9,8 @@
             [frontend.worker.query-dsl :as query-dsl]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.outliner.property :as outliner-property]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -271,6 +272,21 @@
          (set (map (comp first string/split-lines :block/title)
                    (dsl-query "(property prop-d)"))))
       "Blocks that have a property"))
+
+(deftest query-property-reference-conversion
+  (load-test-files [{:page {:block/title "Sample"}}
+                    {:page {:block/title "Home"}
+                     :blocks [{:block/title "query"}]}])
+  (let [db-conn (conn/get-db test-helper/test-db false)
+        block (first (d/q '[:find [(pull ?b [*]) ...]
+                           :where [?b :block/title "query"]]
+                         @db-conn))
+        query-text "(and (tags [[Sample]]) (property text \"text [[Sample]]\"))"
+        query-uuid (outliner-property/create-property-text-block!
+                    db-conn (:db/id block) :logseq.property/query query-text {})
+        sample-uuid (:block/uuid (ldb/get-page @db-conn "Sample"))]
+    (is (= (str "(and (tags [[" sample-uuid "]]) (property text \"text [[Sample]]\"))")
+           (:block/raw-title (d/entity @db-conn [:block/uuid query-uuid]))))))
 
 (deftest block-property-queries
   (testing "block property tests with default config"

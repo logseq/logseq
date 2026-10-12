@@ -131,10 +131,9 @@
   (let [page-name' (string/replace page-name "#" tag-placeholder)]
     (pr-str (str page-ref/left-brackets page-name' page-ref/right-brackets))))
 
-(defn- quote-page-refs
-  "Quote each [[page]] as an EDN string, leaving existing quoted strings
-  untouched. Page names are pr-str'd so quotes, backslashes, [[, and ]] stay valid."
-  [s]
+(defn- map-page-refs
+  "Transforms reference tokens with `f`, leaving quoted strings untouched."
+  [s f]
   (let [n (count s)]
     (loop [i 0
            last-copy 0
@@ -158,7 +157,7 @@
           (recur end end vector-depth
                  (-> parts
                      (conj! (subs s last-copy i))
-                     (conj! (quote-page-ref (subs s (+ i 2) (- end 2))))))
+                     (conj! (f (subs s (+ i 2) (- end 2))))))
           (string/join (persistent! (conj! parts (subs s last-copy)))))
 
         (= \[ (nth s i))
@@ -169,6 +168,13 @@
 
         :else
         (recur (inc i) last-copy vector-depth parts)))))
+
+(defn resolve-page-refs
+  "Converts reference tokens to UUID references using `resolve-page-id`.
+  Quoted literals and references without a matching page retain their text."
+  [s resolve-page-id]
+  (map-page-refs s (fn [page-name]
+                     (page-ref/->page-ref (or (resolve-page-id page-name) page-name)))))
 
 (defn- replace-hash-in-quoted-strings
   [s]
@@ -217,7 +223,7 @@
 
     (string? s)
     (-> s
-        quote-page-refs
+        (map-page-refs quote-page-ref)
         transform-between
         replace-hash-in-quoted-strings
         (string/replace " #" " #tag ")

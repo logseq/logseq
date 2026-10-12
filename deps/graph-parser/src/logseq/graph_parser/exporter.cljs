@@ -33,6 +33,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.query-dsl :as query-dsl]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -1448,20 +1449,10 @@
        (maybe-asset-link-text? (:block/title pvalue))))
 
 (defn- query-refs->id-refs
-  "Replaces `[[title]]` refs in a query string with `[[uuid]]` for pages that
-   resolve in page-names-to-uuids"
   [query page-names-to-uuids]
-  (if (string/includes? query "[[")
-    (let [ref-pages (keep (fn [[_ page-name]]
-                            (when-let [id (or (get @page-names-to-uuids page-name)
-                                              (get @page-names-to-uuids
-                                                   (common-util/page-name-sanity-lc page-name)))]
-                              {:block/title page-name :block/uuid id}))
-                          (re-seq page-ref/page-ref-re query))]
-      (if (seq ref-pages)
-        (db-content/title-ref->id-ref query ref-pages {:replace-tag? false})
-        query))
-    query))
+  (query-dsl/resolve-page-refs
+   query #(or (get @page-names-to-uuids %)
+              (get @page-names-to-uuids (common-util/page-name-sanity-lc %)))))
 
 (defn- handle-queries
   "If a block contains a simple or advanced queries, converts block to a #Query node. If a block
