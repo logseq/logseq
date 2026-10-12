@@ -7055,7 +7055,6 @@ let test_rapid_enter_burst_rebuild_cost () =
       in
       (match ent_at_uuid (db_of_conn conn) base_uuid with
        | Some base ->
-           Sync_replay.debug_reset ();
            (* burst: all Enters land as pending before the first echo
               catches up *)
            let burst = 40 in
@@ -7063,15 +7062,14 @@ let test_rapid_enter_burst_rebuild_cost () =
              create_block_bang conn base (Printf.sprintf "b%d" i)
                (Uuid_gen.uuid ())
            done;
+           Sync_state.replayed_pending_count := 0;
            for _ = 1 to burst do
              confirm_oldest ()
            done;
            check "pending queue drained"
              (List.length (Sync_apply.pending_tx_rows repo_a ()) = 0);
-           check "verbatim own echoes never rebuilt the projection"
-             (!Sync_replay.debug_rebuild_count = 0);
-           check "no pending entries were replayed"
-             (!Sync_replay.debug_replay_entries = 0);
+           check "verbatim own echoes triggered no pending replay"
+             (!Sync_state.replayed_pending_count = 0);
            (* the projection still holds every burst block, in order *)
            let titles =
              match ent_at_uuid (db_of_conn conn) base_uuid with

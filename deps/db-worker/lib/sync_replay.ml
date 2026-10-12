@@ -1367,6 +1367,8 @@ let replay_pending_entry repo (conn : conn)
    Nothing here marks entries failed, so a single pass suffices. *)
 let replay_pending_txs repo (conn : conn) : unit =
   let pending = pending_tx_rows repo () in
+  Sync_state.replayed_pending_count :=
+    !Sync_state.replayed_pending_count + List.length pending;
   if pending <> [] then begin
     (* replayed txs must not re-enter the client-ops queue — the flag
        suppresses enqueue for this pass *)
@@ -1565,19 +1567,9 @@ let projection_changes (display : db) (projection : db)
       refs [] in
   (!known && changes = [], changes)
 
-(* test observation seam: how often the display projection was rebuilt
-   and how many pending entries each rebuild replayed *)
-let debug_rebuild_count = ref 0
-let debug_replay_entries = ref 0
-let debug_reset () =
-  debug_rebuild_count := 0;
-  debug_replay_entries := 0
-
 (* Build the confirmed base plus pending overlay off-screen. Journal echoes
    that already match the display must not rebind eids or publish stale titles. *)
 let rebuild_display ?changed_items repo ~(jump_tx_data : datom list) : unit =
-  debug_replay_entries :=
-    !debug_replay_entries + List.length (pending_tx_rows repo ());
   match Sync_state.server_conn repo, Worker_state.datascript_conn repo with
   | Some server_conn, Some display_conn ->
       let db_before = Conn.db display_conn in
@@ -1603,8 +1595,7 @@ let rebuild_display ?changed_items repo ~(jump_tx_data : datom list) : unit =
             { db_before; db_after = Conn.db display_conn; tx_data
             ; tempids = []; tx_meta = [ "rtc-tx?", Bool true ] }
       end;
-      fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ());
-      incr debug_rebuild_count
+      fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
   | _ -> ()
 
 let () =
