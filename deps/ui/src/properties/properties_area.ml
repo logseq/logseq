@@ -54,12 +54,10 @@ let property_icon row =
   in
   match name with
   | Some n ->
-      box ~key:"pk-i" ~style_class:"property-icon"
+      box ~key:"pk-i" ~style_class:"property-icon" ~opacity:0.5
         ~data_attrs:[ ("style", "display:flex;align-items:center;\
           margin-right:4px") ]
-        [ Ui_components.with_props
-            [ Lui_protocol.Opacity, Ui_components.fv 0.5 ]
-            (Icons.icon ~size:15. n) ]
+        [ Icons.icon ~size:15. n ]
   | None ->
       box ~key:"pk-b" ~style_class:"bullet-container"
         [ box ~style_class:"bullet" [] ]
@@ -107,7 +105,7 @@ let show_panel_bullet row =
   || (match D.row_type row with "default" | "url" -> false | _ -> true)
   || D.value_empty_p (D.row_value row)
 
-let value_cell ctx row : t =
+let value_cell ~(hover : bool Signal.state option) ctx row : t =
   (* cljs renders entity-valued properties (even :default/:url) as a
      nested ls-block — its block-control bullet shows beside the value;
      show_panel_bullet covers the cljs .property-panel-bullet rule *)
@@ -137,10 +135,16 @@ let value_cell ctx row : t =
             ]
         ]
       else [])
-    @ [ V.view ctx row ])
+    @ [ V.view ~hover ctx row ])
 
 let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
-  Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  (* cljs .property-panel-edit-btn reveals while the pointer is over
+     the whole property-pair, so the hover signal lives at row level
+     and value cells read it through [view ?hover] *)
+  let hover = Signal.state sched false in
+  (Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0
     ~style_class:
       ("property-pair property-panel-row"
       ^ (if D.value_empty_p (D.row_value row) then
@@ -149,13 +153,21 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
     ~data_attrs:
       [ ("data-property-type", D.row_type row)
       ; ("style", "width:100%;padding-right:0.75rem;margin-left:0") ]
+    ~on_pointer_enter:(fun _ ->
+      Signal.set hover true;
+      Runtime.flush ())
+    ~on_pointer_leave:(fun _ ->
+      if Runtime.signal_get hover then (
+        Signal.set hover false;
+        Runtime.flush ()))
     [ column ~min_width:150 ~max_width:260 ~cross:`stretch ~gap:0
         ~main:`center ~min_height:28
         ~foreground:"var(--ls-primary-text-color)"
         ~style_class:"property-key-panel"
         [ key_cell ctx ~owner_is_tag ~owner_title row ]
-    ; value_cell ctx row
-    ]
+    ; value_cell ~hover:(Some hover) ctx row
+    ])
+    context parent
 
 (* hidden-properties toggle row — `p a` parity *)
 let toggle_row : t =
@@ -169,6 +181,8 @@ let toggle_row : t =
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         ~main:`center ~min_height:28
         [ button ~variant:`ghost ~size:`sm ~text_alignment:`start
+            ~icon:(`app (if !S.show_hidden then "chevron-up"
+                         else "chevron-down"))
             ~style_class:"property-key-inner hidden-properties-toggle-key"
             ~min_height:28 ~foreground:"var(--ls-primary-text-color)"
             ~data_attrs:
@@ -259,7 +273,7 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
            ~data_attrs:
              [ ("style", "position:relative;min-width:0;overflow:hidden;\
                 flex-shrink:0") ]
-           [ V.view ctx prow ])
+           [ V.view ~hover:None ctx prow ])
     ]
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
@@ -291,7 +305,6 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
     ~margin_top:(if for_class then 0 else 8)
     [ button ~variant:`secondary ~size:`sm
         ~icon:(`app "plus")
-        ~grow:1. ~min_width:0
         ~style_class:"jtrigger"
         ~data_attrs:[ ("style", "display:flex") ]
         ~label:(I18n.t "property/add-new")
@@ -429,7 +442,7 @@ let block_left_chips ~uuid : t =
                           block-row and crushes the title *)
                        Ui_components.with_props
                          [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
-                         (V.view ~positioned:true ctx r) ])
+                         (V.view ~positioned:true ~hover:None ctx r) ])
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
@@ -460,7 +473,7 @@ let block_right_chips ~uuid : t =
                      ~style_class:"property-value-inner"
                      [ Ui_components.with_props
                          [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
-                         (V.view ~positioned:true ctx r) ])
+                         (V.view ~positioned:true ~hover:None ctx r) ])
                  d.right))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.right = b.right))

@@ -932,7 +932,7 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
         ; repeat_column ctx ~is_datetime ~rep ]
     ]
 
-let date_view ctx row : t =
+let date_view ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
@@ -949,8 +949,21 @@ let date_view ctx row : t =
            (day mod 10000 / 100)
            (day mod 100))
   in
+  (* cljs reveals .property-panel-edit-btn while the pointer is over
+     the property-pair; without a row-supplied signal fall back to
+     hover on the value cell itself *)
+  let hover =
+    match hover with Some h -> h | None -> Signal.state sched false
+  in
   (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
      ~style_class:"ls-datetime"
+     ~on_pointer_enter:(fun _ ->
+       Signal.set hover true;
+       Runtime.flush ())
+     ~on_pointer_leave:(fun _ ->
+       if Runtime.signal_get hover then (
+         Signal.set hover false;
+         Runtime.flush ()))
      [ (if D.value_empty_p value then
           (* empty date has no journal link — keep the ghost button so
              a click opens the picker *)
@@ -974,15 +987,18 @@ let date_view ctx row : t =
                  ~on_press:(fun _ -> Runtime.signal_set open_ true)))
      ; (if D.value_empty_p value then Logseq_el.nothing
         else
-          (* cljs bottom-property-edit-icon: always visible inside
-             block-below pills; in panels CSS keeps it hover-only like
-             .property-panel-edit-btn *)
-          button ~variant:`ghost ~size:`icon ~icon:`edit
-            ~style_class:"prop-edit-ico"
-            ~width:18 ~height:18
-            ~data_attrs:[ ("style", "min-width:0;padding:0") ]
-            ~label:(I18n.t "ui/edit")
-            ~on_press:(fun _ -> Runtime.signal_set open_ true) [])
+          (* cljs .property-panel-edit-btn is hover-only inside the
+             property panel (block-below pills keep it always visible) —
+             the row's pointer enter/leave drives the opacity *)
+          box ~opacity:(reactive
+                          (fun h -> if h then 1. else 0.)
+                          (Signal.value hover))
+            [ button ~variant:`ghost ~size:`icon ~icon:`edit
+                ~style_class:"prop-edit-ico"
+                ~width:18 ~height:18
+                ~data_attrs:[ ("style", "min-width:0;padding:0") ]
+                ~label:(I18n.t "ui/edit")
+                ~on_press:(fun _ -> Runtime.signal_set open_ true) [] ])
      ; if_ ~test:(Signal.value open_)
          (date_picker_pop sched ctx ~ident ~is_datetime ~buffer
             ~selected:(ymd_of_datetime_value value)
@@ -1282,8 +1298,11 @@ let node_view ctx row : t =
 (* ---------- dispatch ---------- *)
 
 (* [view ctx row] renders the cell's value control inside the row's
-   value column. *)
-let rec view ?(positioned = false) ctx row : t =
+   value column. [hover] (when the row supplies one) reflects pointer
+   hover over the whole property-pair so hover-only affordances like
+   the date edit pencil match the cljs row-hover rule. *)
+let rec view ?(positioned = false) ~(hover : bool Signal.state option)
+    ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
@@ -1304,7 +1323,7 @@ let rec view ?(positioned = false) ctx row : t =
     match ty with
     | "checkbox" -> checkbox_view ctx row'
     | "number" -> scalar_edit_cell ctx row'
-    | "date" | "datetime" -> date_view ctx row'
+    | "date" | "datetime" -> date_view ~hover ctx row'
     | "url" -> url_view ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
@@ -1350,18 +1369,16 @@ and block_value_wrap (inner : t) : t =
             ; Lui_elements.box ~grow:1.0
                 [ inner ] ] ] ]
 
-(* cljs url values embed a .property-block-container .ls-block row —
-   external-link title (inline inside the non-flex content wrap);
-   click navigates (target=_blank), editing goes
-   through the property menu. empty values keep the press-to-edit
-   affordance *)
+(* cljs url values render the external-link inline inside the plain
+   property-value cell (no .property-block-container / .ls-block wrap);
+   click navigates (target=_blank), editing goes through the property
+   menu. empty values keep the press-to-edit affordance *)
 and url_view ctx row : t =
   let value = D.row_value row in
   let url = String.trim (D.value_display value) in
   if url = "" then scalar_edit_cell ctx row
   else
-    block_value_wrap
-      (Ui_components.with_props
+    (Ui_components.with_props
          [ Lui_protocol.TextDecoration, Ui_components.sv "none" ]
          (link ~url ~target:`blank ~style_class:"external-link"
          ~data_attrs:

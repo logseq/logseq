@@ -472,8 +472,12 @@ let prop_cell ~blk (c : V.column) : t =
                  .block-tag[data-tag-uuid] chip wrapping
                  a.relative.tag[data-ref][data-uuid][draggable] — the
                  delegated context menu reads the chip attrs, click
-                 readers the anchor's *)
-              [ (let tuuid =
+                 readers the anchor's; siblings join on a
+                 span.opacity-50.-ml-1 "," separator *)
+              (if i > 0 then
+                 [ box ~margin_left:(-8) ~opacity:0.5 [ text ~value:"," [] ] ]
+               else [])
+              @ [ (let tuuid =
                    Option.value (Wr.ref_uuid x) ~default:""
                  in
                  row ~cross:`center ~gap:4 ~padding_vertical:2
@@ -547,7 +551,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; is_page = is_page_row blk
                  ; class_schema = false }
                in
-               inner_cell [ Properties_value.view pctx row ]
+               inner_cell [ Properties_value.view ~hover:None pctx row ]
            | None -> prop_cell ~blk c)) ])
 
 (* ---------- header ---------- *)
