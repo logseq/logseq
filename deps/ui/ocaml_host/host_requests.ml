@@ -500,6 +500,30 @@ let queue_input_focus bid focused =
     (bid, focused)
     :: List.filter (fun (b, _) -> b <> bid) !pending_focus
 
+(* while an ed-sink exists it holds focus — the browser keeps the
+   editing input focused for the whole editing session, covering a
+   remount that dropped the focused node AND the mount paths that
+   never emit set-input-focus (pointer-driven mounts). Only moves
+   focus when nothing else owns it — a focused popup/menu/other input
+   is left alone. Runs both after applied batches and after the frame
+   loop's store_changed (dead-focus cleanup clears Ui.focused there,
+   when no batch is pending to trigger this again). *)
+let ensure_ed_focus_ (e : env) =
+  if Ui.focused e.ui = 0 then
+    (match
+       List.find_map
+         (fun id ->
+           match Lui_store.prop e.store id "block-id" with
+           | Some (Lui_protocol.StringValue bid) -> Some bid
+           | _ -> None)
+         (Lui_store.preorder e.store)
+     with
+     | Some bid -> ignore (try_set_input_focus e bid true)
+     | None -> ())
+
+let ensure_ed_focus () =
+  match !env with Some e -> ensure_ed_focus_ e | None -> ()
+
 let flush_pending_focus () =
   match !env with
   | None -> ()
@@ -513,12 +537,7 @@ let flush_pending_focus () =
              pending_focus := (bid, focused) :: !pending_focus)
         (List.rev queued)
     end;
-    (* a sink remount dropped Ui.focused while the app still owns the
-       same editing block — re-arm it on the fresh sink *)
-    (match !editor_focus_bid with
-     | Some bid when Ui.focused e.ui = 0 ->
-       ignore (try_set_input_focus e bid true)
-     | _ -> ())
+    ensure_ed_focus_ e
 
 (* ---------- dom-op dispatch ---------- *)
 
