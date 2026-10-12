@@ -37,6 +37,7 @@
         (p/catch (fn [error] (is false (str error))))
         (p/finally done))))
 
+;; Fails if, in `gzip-bytes?`, `>=` becomes `>`.
 (deftest gzip-bytes-needs-two-magic-bytes-test
   (let [f #'sync-download/gzip-bytes?]
     (is (true? (f (js/Uint8Array. #js [31 139]))))
@@ -46,6 +47,7 @@
     (is (false? (f (js/Uint8Array. #js [31 138]))))
     (is (false? (f nil)))))
 
+;; Fails if, in `<flush-row-batches!`, `>=` becomes `>`.
 (deftest flush-row-batches-flushes-exact-batch-test
   (async-test
    (let [batches* (atom [])]
@@ -54,6 +56,9 @@
        (is (= [[1 2]] @batches*))
        (is (= [] remaining))))))
 
+;; Fails if, in `gzip-bytes?`, `some?` becomes `nil?` or `=` becomes `not=`.
+;; Fails if, in `<stream-starts-with-gzip?`, `if` becomes `if-not`.
+;; Fails if, in `<response-body-stream`, `nil?` becomes `some?`, `and` becomes `or` or `=` becomes `not=`.
 (deftest response-body-stream-picks-the-right-stream-test
   (async-test
    (let [plain (js/Uint8Array. #js [1 2 3 4 5])
@@ -79,6 +84,7 @@
        (testing "a gzip header over plain bytes is left alone"
          (is (= [1 2 3 4 5] stale-bytes)))))))
 
+;; Fails if, in `<stream-snapshot-row-batches!`, `if` becomes `if-not`.
 (deftest truncated-snapshot-stream-is-rejected-test
   (async-test
    (let [framed (frame-bytes (snapshot/encode-rows [[1 "row-1" nil]]))
@@ -90,6 +96,7 @@
          (p/catch (fn [error]
                     (is (= "incomplete framed buffer" (ex-message error)))))))))
 
+;; Fails if, in `require-import-state!`, `nil?` becomes `some?`.
 (deftest require-import-state-matches-repo-and-ids-test
   (let [state* @#'sync-download/*import-state
         prev @state*
@@ -104,6 +111,7 @@
       (finally
         (reset! state* prev)))))
 
+;; Fails if, in `finalize-import!`, `when-not` becomes `when` or `=` becomes `not=`.
 (deftest finalize-import-clears-state-only-on-non-stale-errors-test
   (async-test
    (let [state* @#'sync-download/*import-state
@@ -133,6 +141,7 @@
                      (is (= 1 @closed*)))))
          (p/finally (fn [] (reset! state* prev)))))))
 
+;; Fails if, in `import-datoms-batch!`, `if` becomes `if-not` or `=` becomes `not=`.
 (deftest import-datoms-batch-decrypts-only-e2ee-and-stamps-blocks-test
   (async-test
    (let [conn (d/create-conn db-schema/schema)
@@ -154,6 +163,7 @@
          (is (= "decrypted" (:block/title (d/entity @conn 7))))
          (is (pos? tx-id)))))))
 
+;; Fails if, in `schema-datom?`, `or` becomes `and`, `=` becomes `not=` or `and` becomes `or`.
 (deftest schema-datom-covers-version-and-ident-entities-test
   (let [f #'sync-download/schema-datom?
         ident-eids #{10}
@@ -167,6 +177,7 @@
       (is (false? (boolean (f ident-eids version-eid {:e 11 :a :db/ident :v :x}))))
       (is (false? (boolean (f ident-eids version-eid {:e 11 :a :db/valueType :v :x})))))))
 
+;; Fails if, in `prepare-import!`, `when` becomes `when-not` or `nil?` becomes `some?`.
 (deftest prepare-import-closes-db-only-on-reset-and-needs-aes-key-test
   (async-test
    (let [calls* (atom [])

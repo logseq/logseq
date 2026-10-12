@@ -65,11 +65,13 @@
 (def ^:private rebase-local-op! @#'sync-apply/rebase-local-op!)
 (def ^:private apply-remote-tx-with-local-changes! @#'sync-apply/apply-remote-tx-with-local-changes!)
 
+;; Fails if, in `outliner-op->string`, `some?` becomes `nil?`.
 (deftest outliner-op->string-test
   (is (= "x" (outliner-op->string :x)))
   (is (= "abc" (outliner-op->string "abc")))
   (is (nil? (outliner-op->string nil))))
 
+;; Fails if, in `offload-large-titles`, `or` becomes `and`.
 (deftest offload-large-titles-uses-given-upload-fn-test
   (let [captured (atom nil)
         upload-fn (fn [& _] nil)]
@@ -80,6 +82,7 @@
       (sync-apply/offload-large-titles [] {})
       (is (fn? (:upload-fn @captured))))))
 
+;; Fails if, in `rehydrate-large-titles!`, `or` becomes `and`.
 (deftest rehydrate-large-titles-uses-given-download-fn-test
   (let [captured (atom nil)
         download-fn (fn [& _] nil)]
@@ -90,12 +93,14 @@
       (sync-apply/rehydrate-large-titles! "r" {})
       (is (fn? (:download-fn @captured))))))
 
+;; Fails if, in `broadcast-rtc-state!`, `when` becomes `when-not`.
 (deftest broadcast-rtc-state-skips-nil-client-test
   (let [calls (atom [])]
     (with-redefs [shared-service/broadcast-to-clients! (fn [& args] (swap! calls conj args))]
       (broadcast-rtc-state! nil)
       (is (empty? @calls)))))
 
+;; Fails if, in `normalize-tx-data-for-rebase`, `if` becomes `if-not`, `and` becomes `or` or `=` becomes `not=`.
 (deftest normalize-tx-data-for-rebase-test
   (is (= [[:db/add 1 :a 2] [:db/add 1 :b 3]]
          (normalize-tx-data-for-rebase [[:db/add 1 :a 2 100]
@@ -105,6 +110,7 @@
     (let [m {:a 1 :b 2 :c 3 :d 4 :e 5}]
       (is (= [m] (normalize-tx-data-for-rebase [m]))))))
 
+;; Fails if, in `inferred-outliner-ops?`, `and` becomes `or`, `nil?` becomes `some?`, `not` becomes `identity` or `not=` becomes `=`.
 (deftest inferred-outliner-ops?-test
   (is (true? (inferred-outliner-ops? {})))
   (is (false? (boolean (inferred-outliner-ops? {:outliner-ops [1]}))))
@@ -113,6 +119,7 @@
   (is (false? (boolean (inferred-outliner-ops? {:outliner-op :batch-import-edn}))))
   (is (true? (boolean (inferred-outliner-ops? {:outliner-op :save-block})))))
 
+;; Fails if, in `apply-tx-meta`, `=` becomes `not=`.
 (deftest apply-tx-meta-test
   (is (= {:transact-remote? true :persist-op? false :t 5
           :outliner-op :db-migrate :db-migrate? true :skip-validate-db? true}
@@ -122,6 +129,7 @@
   (is (= {:transact-remote? true :persist-op? false :t 5}
          (apply-tx-meta {:t 5}))))
 
+;; Fails if, in `perf-time-ms`, `if` becomes `if-not` or `and` becomes `or`.
 (deftest perf-time-ms-test
   (let [orig (.-now js/performance)]
     (try
@@ -134,18 +142,21 @@
       (finally
         (set! (.-now js/performance) orig)))))
 
+;; Fails if, in `tx-item-block-uuid`, `=` becomes `not=` or `first` becomes `last`.
 (deftest tx-item-block-uuid-test
   (let [u (random-uuid)]
     (is (= u (tx-item-block-uuid nil u)))
     (is (= u (tx-item-block-uuid nil [:block/uuid u])))
     (is (nil? (tx-item-block-uuid nil [:other/attr u])))))
 
+;; Fails if, in `tx-item-retract?`, `=` becomes `not=` or `first` becomes `last`.
 (deftest tx-item-retract?-test
   (is (true? (tx-item-retract? [:db/retract 1 :a 2])))
   (is (false? (tx-item-retract? [:db/add 1 :a 2])))
   (is (true? (tx-item-retract? {:added false})))
   (is (false? (tx-item-retract? {:added true}))))
 
+;; Fails if, in `tx-item-retract-entity-block-uuid`, `when` becomes `when-not`, `and` becomes `or` or `first` becomes `last`.
 (deftest tx-item-retract-entity-block-uuid-test
   (let [u (random-uuid)]
     (is (= u (tx-item-retract-entity-block-uuid [:db/retractEntity [:block/uuid u]])))
@@ -153,6 +164,7 @@
     (is (nil? (tx-item-retract-entity-block-uuid [:db/add [:block/uuid u] :a 1])))
     (is (nil? (tx-item-retract-entity-block-uuid {:e 1})))))
 
+;; Fails if, in `drop-local-reversal-stale-target-ops`, `and` becomes `or` or `=` becomes `not=`.
 (deftest drop-local-reversal-stale-target-ops-test
   (let [u (random-uuid)
         schema {:block/uuid {:db/unique :db.unique/identity}}
@@ -164,23 +176,27 @@
     (is (= [stale recreate]
            (vec (drop-local-reversal-stale-target-ops db-before db-after [stale recreate]))))))
 
+;; Fails if, in `upload-tempid?`, `and` becomes `or`.
 (deftest upload-tempid?-test
   (is (true? (upload-tempid? -1)))
   (is (true? (upload-tempid? "a")))
   (is (false? (boolean (upload-tempid? 5))))
   (is (false? (boolean (upload-tempid? -1.5)))))
 
+;; Fails if, in `cardinality-many-attr?`, `or` becomes `and`.
 (deftest cardinality-many-attr?-test
   (let [db (d/empty-db {:a {:db/cardinality :db.cardinality/many}})]
     (is (true? (cardinality-many-attr? db :a)))
     (is (false? (cardinality-many-attr? db :b)))))
 
+;; Fails if, in `upload-replaced-values`, `and` becomes `or`.
 (deftest upload-replaced-values-test
   (is (= #{[5 :a]}
          (upload-replaced-values nil [[:db/retract -1 :a 1]
                                       [:db/retract 5 :a 1]
                                       [:db/add 6 :a 1]]))))
 
+;; Fails if, in `upload-tx-item-group-keys`, `and` becomes `or`, `first` becomes `last` or `=` becomes `not=`.
 (deftest upload-tx-item-group-keys-test
   (is (= #{} (upload-tx-item-group-keys nil #{} {:db/id 5 :a 1})))
   (is (= #{-1} (upload-tx-item-group-keys nil #{} {:db/id -1 :a 1})))
@@ -188,10 +204,12 @@
   (is (= #{-1} (upload-tx-item-group-keys nil #{} [:db.fn/retractEntity -1])))
   (is (= #{} (upload-tx-item-group-keys nil #{} [:db/retractEntity -1 :extra]))))
 
+;; Fails if, in `merge-upload-tx-ranges`, `<=` becomes `<`.
 (deftest merge-upload-tx-ranges-test
   (is (= [[0 2]] (merge-upload-tx-ranges [[1 2] [0 1]])))
   (is (= [[0 1] [3 4]] (merge-upload-tx-ranges [[3 4] [0 1]]))))
 
+;; Fails if, in `upload-tempid?`, `and` becomes `or`.
 (deftest upload-group-range-by-start-test
   (is (= {0 2} (upload-group-range-by-start
                 nil [[:db/add -1 :a 1] [:db/add -1 :b 2] [:db/add -1 :c 3]])))
@@ -200,6 +218,7 @@
           nil [[:db/add -1 :a 1] [:db/add -1 :b 2] [:db/add 7 :a 1]
                [:db/add -2 :a 1] [:db/add -2 :b 2]]))))
 
+;; Fails if, in `clear-large-upload-progress!`, `when` becomes `when-not`.
 (deftest clear-large-upload-progress!-test
   (let [prev @*repo->large-upload-progress]
     (try
@@ -209,6 +228,7 @@
       (finally
         (reset! *repo->large-upload-progress prev)))))
 
+;; Fails if, in `large-upload-request-entry`, `<` becomes `<=`.
 (deftest large-upload-request-entry-restarts-when-progress-reached-total-test
   (let [prev @*repo->large-upload-progress
         tx-data (mapv (fn [i] [:db/add 1 :a i]) (range 3))]
@@ -221,6 +241,7 @@
       (finally
         (reset! *repo->large-upload-progress prev)))))
 
+;; Fails if, in `cap-upload-request-tx-entries`, `first` becomes `last`, `and` becomes `or` or `>` becomes `>=`.
 (deftest cap-upload-request-tx-entries-test
   (let [entry (fn [id n] {:tx-id id :tx-data (mapv (fn [i] [:db/add 1 :a i]) (range n))})
         small-1 (entry 1 2)
@@ -254,6 +275,7 @@
 (defn- logged? [records event-name]
   (boolean (some #(.includes ^string % event-name) records)))
 
+;; Fails if, in `inline-history-action`, `and` becomes `or`.
 (deftest inline-history-action-test
   (is (= {:outliner-op :x :forward-outliner-ops [[:a]] :inverse-outliner-ops [[:b]]}
          (inline-history-action {:outliner-op :x
@@ -262,6 +284,7 @@
   (is (nil? (inline-history-action {:db-sync/forward-outliner-ops [[:a]]})))
   (is (nil? (inline-history-action {:inverse-outliner-ops [[:b]]}))))
 
+;; Fails if, in `block-ref?`, `and` becomes `or`.
 (deftest block-ref?-test
   (let [u (random-uuid)]
     (is (true? (block-ref? 5)))
@@ -269,6 +292,7 @@
     (is (false? (boolean (block-ref? [:other u]))))
     (is (false? (boolean (block-ref? "x"))))))
 
+;; Fails if, in `expand-block-retracts-to-descendants`, `when` becomes `when-not` or `and` becomes `or`.
 (deftest expand-block-retracts-to-descendants-test
   (let [u1 (random-uuid)
         u2 (random-uuid)
@@ -283,6 +307,7 @@
     (is (= [[:db/add 2 :block/title "x"] r2 r1]
            (vec (expand-block-retracts-to-descendants db [[:db/add 2 :block/title "x"] r1]))))))
 
+;; Fails if, in `reverse-history-action!`, `when-not` becomes `when` or `=` becomes `not=`.
 (deftest reverse-history-action!-test
   (is (nil? (reverse-history-action! nil {:outliner-op :fix})))
   (is (= :missing-reversed-tx-data
@@ -291,11 +316,13 @@
            nil
            (catch :default e (:reason (ex-data e)))))))
 
+;; Fails if, in `ref-attr?`, `or` becomes `and`.
 (deftest ref-attr?-test
   (let [db (d/empty-db {:a {:db/valueType :db.type/ref}})]
     (is (true? (ref-attr? db :a)))
     (is (false? (ref-attr? db :b)))))
 
+;; Fails if, in `tx-item-components`, `and` becomes `or`.
 (deftest tx-item-components-test
   (is (= {:op :db/add :e 1 :a :block/title :v "x"}
          (tx-item-components [:db/add 1 :block/title "x"])))
@@ -306,6 +333,7 @@
   (is (nil? (tx-item-components [:db/add 1 :other "x"])))
   (is (nil? (tx-item-components [:db/cas 1 :block/title "x"]))))
 
+;; Fails if, in `tx-entity-uuid`, `and` becomes `or`, `=` becomes `not=` or `first` becomes `last`.
 (deftest tx-entity-uuid-test
   (let [u (random-uuid)
         u2 (random-uuid)
@@ -319,6 +347,7 @@
     (testing "a string that is not a uuid string is not read as a uuid"
       (is (not (uuid? (try (tx-entity-uuid db {} "abc") (catch :default e e))))))))
 
+;; Fails if, in `tx-item-created-block-uuid-entry`, `and` becomes `or` or `not` becomes `identity`.
 (deftest tx-item-created-block-uuid-entry-test
   (let [u (random-uuid)]
     (is (= [5 u] (tx-item-created-block-uuid-entry [:db/add 5 :block/uuid u])))
@@ -328,6 +357,7 @@
     (is (nil? (tx-item-created-block-uuid-entry {:e 5 :a :block/uuid :v u :added false})))
     (is (nil? (tx-item-created-block-uuid-entry [:db/add :kw :block/uuid u])))))
 
+;; Fails if, in `remote-sync-conflicts`, `and` becomes `or`.
 (deftest remote-sync-conflicts-test
   (let [u (random-uuid)
         u2 (random-uuid)
@@ -346,6 +376,7 @@
     (testing "the same value is no conflict"
       (is (= [] (remote-sync-conflicts db local-txs (remote [:db/add [:block/uuid u] :block/title "cur"])))))))
 
+;; Fails if, in `expected-stale-rebase-error?`, `and` becomes `or`.
 (deftest expected-stale-rebase-error?-test
   (is (true? (boolean (expected-stale-rebase-error? (ex-info "invalid rebase op" {})))))
   (is (true? (boolean (expected-stale-rebase-error? (ex-info "x" {:error :entity-id/missing})))))
@@ -356,6 +387,7 @@
   (is (false? (boolean (expected-stale-rebase-error?
                         (ex-info "x" {:error :other :attribute :block/uuid}))))))
 
+;; Fails if, in `replay-entity-id-value`, `or` becomes `and`.
 (deftest replay-entity-id-value-test
   (let [u (random-uuid)
         db (d/db-with (d/empty-db {:block/uuid {:db/unique :db.unique/identity}})
@@ -365,6 +397,8 @@
     (is (= 3 (replay-entity-id-value db [:block/uuid u])))
     (is (= "x" (replay-entity-id-value db "x")))))
 
+;; Fails if, in `rebase-target-ref`, `and` becomes `or`.
+;; Fails if, in `template-parent-ref`, `and` becomes `or`.
 (deftest rebase-target-and-template-parent-ref-test
   (let [u (random-uuid)]
     (doseq [f [rebase-target-ref template-parent-ref]]
@@ -374,6 +408,7 @@
       (is (= {:a 1} (f {:a 1})))
       (is (= 5 (f 5))))))
 
+;; Fails if, in `sanitize-template-block`, `or` becomes `and` or `when` becomes `when-not`.
 (deftest sanitize-template-block-test
   (let [u1 (random-uuid)
         u2 (random-uuid)
@@ -390,6 +425,7 @@
     nil
     (catch :default e (:reason (ex-data e)))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, `and` becomes `or`.
 (deftest replay-apply-template-rejects-missing-template-or-target-test
   (let [tu (random-uuid)
         conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}})]
@@ -399,6 +435,7 @@
     (is (= :missing-template-or-target-uuid
            (replay-error-reason conn [:apply-template [10 [:block/uuid tu] {}]])))))
 
+;; Fails if, in `apply-remote-txs-with-retry!`, `<` becomes `<=` or `inc` becomes `dec`.
 (deftest apply-remote-txs-with-retry-count-test
   (let [orig sync-apply/apply-remote-txs!
         calls (atom [])
@@ -429,6 +466,8 @@
         {:keys [db-after tx-data]} (d/with db-before [{:db/id 1 :block/uuid (random-uuid) :block/title "x"}])]
     {:db-before db-before :db-after db-after :tx-data tx-data :tx-meta {}}))
 
+;; Fails if, in `enqueue-local-tx-aux`, `when` becomes `when-not` or `=` becomes `not=`.
+;; Fails if, in `enqueue-local-tx!`, `not=` becomes `=`.
 (deftest enqueue-local-tx-flushes-only-for-the-client-repo-test
   (let [prev @worker-state/*db-sync-client
         flushes (atom [])]
@@ -452,6 +491,7 @@
       (finally
         (reset! worker-state/*db-sync-client prev)))))
 
+;; Fails if, in `handle-local-tx!`, `and` becomes `or`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest handle-local-tx!-test
   (let [prev @worker-state/*db-sync-client
         enqueued (atom 0)
@@ -484,6 +524,7 @@
       (finally
         (reset! worker-state/*db-sync-client prev)))))
 
+;; Fails if, in `<upload-aes-key`, `seq` becomes `empty?`.
 (deftest upload-aes-key-test
   (let [ensure-calls (atom 0)
         orig-e2ee? sync-crypt/graph-e2ee?
@@ -503,6 +544,7 @@
                        (set! sync-crypt/<ensure-graph-aes-key orig-ensure)
                        (done)))))))
 
+;; Fails if, in `<upload-pending-batch!`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest upload-pending-batch-marks-empty-txs-not-pending-test
   (let [marked (atom [])
         tx-id (random-uuid)]
@@ -511,6 +553,7 @@
       (<upload-pending-batch! "r" {:inflight (atom [])} nil 1)
       (is (= [["r" [tx-id]]] @marked)))))
 
+;; Fails if, in `persist-local-tx!`, `when` becomes `when-not`.
 (deftest persist-local-tx!-increments-pending-count-test
   (doseq [inc? [true false]]
     (let [adjusts (atom [])]
@@ -523,10 +566,12 @@
         (persist-local-tx! "r" {:db-before nil :db-after nil :tx-data [] :tx-meta {}} [] [])
         (is (= (if inc? [["r" 1]] []) @adjusts))))))
 
+;; Fails if, in `log-outliner-op-perf!`, `when` becomes `when-not` or `and` becomes `or`.
 (deftest log-outliner-op-perf!-test
   (is (logged? (capture-logs #(log-outliner-op-perf! {:perf-id 1})) "outliner-op-perf"))
   (is (not (logged? (capture-logs #(log-outliner-op-perf! {})) "outliner-op-perf"))))
 
+;; Fails if, in `flush-pending!`, `when` becomes `when-not` or `or` becomes `and`.
 (deftest flush-pending!-logs-skip-only-with-pending-txs-test
   (let [run (fn [pending-count]
               (with-redefs [client-op/get-local-tx (constantly 1)
@@ -547,6 +592,7 @@
       (is (true? (:applied? (sync-apply/apply-history-action! "r" tx-id undo? tx-meta))))
       @captured)))
 
+;; Fails if, in `apply-history-action!`, `or` becomes `and`, `if` becomes `if-not`, `not` becomes `identity` or `seq` becomes `empty?`.
 (deftest apply-history-action!-tx-meta-test
   (let [tx-id (random-uuid)
         u (random-uuid)
@@ -571,6 +617,7 @@
                                                          :db-sync/inverse-outliner-ops [[:not-semantic]]})]
         (is (true? (:db-sync/replayed-tx-data? tx-meta)))))))
 
+;; Fails if, in `transact-remote-txs!`, `first` becomes `last`.
 (deftest transact-remote-txs!-drops-refs-to-blocks-deleted-later-in-the-batch-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page 1"}
@@ -600,6 +647,7 @@
     (is (nil? (d/entity @conn [:block/uuid c])))
     (is (= "remote" (:block/title (d/entity @conn (:db/id existing)))))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, `nil?` becomes `some?`.
 (deftest replay-apply-template-replace-empty-target-test
   (let [tu (random-uuid)
         gu (random-uuid)
@@ -626,6 +674,7 @@
         (is (= [au bu] (replay [{:block/uuid au :block/title "a"}
                                 {:block/uuid bu :block/title "b"}])))))))
 
+;; Fails if, in `replay-canonical-outliner-op!`, `or` becomes `and`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest replay-create-page-reuses-existing-page-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Foo"}}]})
@@ -641,6 +690,7 @@
       (testing "nothing found: the page is created"
         (is (= [:created "Bar"] (replay-canonical-outliner-op! conn [:create-page ["Bar" {}]] nil)))))))
 
+;; Fails if, in `rebase-local-op!`, `not` becomes `identity` or `seq` becomes `empty?`.
 (deftest rebase-local-op!-marks-replayed-tx-data-test
   (let [u (random-uuid)
         captured (atom nil)
@@ -658,6 +708,7 @@
         (is (true? (:db-sync/replayed-tx-data?
                     (rebase {:tx-id 2 :outliner-op :save-block :tx [[:db/add 1 :block/title "x"]]}))))))))
 
+;; Fails if, in `apply-remote-tx-with-local-changes!`, `and` becomes `or`.
 (deftest apply-remote-tx-with-local-changes!-handles-only-rebased-local-reports-test
   (let [prev @worker-state/*db-sync-client
         calls (atom [])

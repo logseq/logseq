@@ -27,6 +27,7 @@
    :block/updated-at 1
    :block/tags #{:logseq.class/Page}})
 
+;; Fails if, in `toggle-reaction!`, `and` becomes `or`.
 (deftest toggle-reaction-matches-emoji-and-user-test
   (let [user-a (random-uuid)
         user-b (random-uuid)
@@ -52,6 +53,7 @@
                             (:block/uuid (:logseq.property/created-by-ref reaction))])
                          (reactions)))))))))
 
+;; Fails if, in `apply-template-op!`, `seq` becomes `empty?`.
 (deftest apply-template-nests-under-a-target-with-children-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -80,6 +82,7 @@
       (is (some #(= (:db/id target-b) (:db/id (:block/parent %))) (copies))
           "a target with children gets the template as a child"))))
 
+;; Fails if, in `apply-op!`, `and` becomes `or`.
 (deftest move-blocks-without-a-target-is-a-no-op-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -93,6 +96,7 @@
     (outliner-op/apply-ops! conn [[:move-blocks [[(random-uuid)] (:block/uuid a) {}]]] {})
     (is (= before-order (:block/order (d/entity @conn (:db/id a)))))))
 
+;; Fails if, in `resolve-op`, `and` becomes `or`.
 (deftest delete-blocks-without-selection-is-recorded-as-sent-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -106,6 +110,7 @@
         recorded (vec (mapcat :outliner-ops metas))]
     (is (= [[:delete-blocks [[(:block/uuid child) (:block/uuid parent)] {}]]] recorded))))
 
+;; Fails if, in `apply-ops!`, `or` becomes `and` or `and` becomes `or`.
 (deftest apply-ops-tx-meta-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -129,6 +134,7 @@
       (is (= tx-id (:db-sync/tx-id (last-meta (apply-ops-capturing! conn (save) {:db-sync/tx-id tx-id})))))
       (is (uuid? (:db-sync/tx-id (last-meta (apply-ops-capturing! conn (save) {}))))))))
 
+;; Fails if, in `apply-ops!`, `when` becomes `when-not` or `seq` becomes `empty?`.
 (deftest apply-ops-additional-tx-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
