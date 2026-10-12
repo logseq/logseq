@@ -1,0 +1,24 @@
+(* Selected by dune for the macOS native host. *)
+let is_macos = true
+let platform_code = 1
+
+let prefers_dark () =
+  let ic = Unix.open_process_in
+      "defaults read -g AppleInterfaceStyle 2>/dev/null" in
+  let out = try input_line ic with End_of_file -> "" in
+  ignore (Unix.close_process_in ic);
+  Some (String.trim out = "Dark")
+
+module Text = Lui_text
+
+module Shell = struct
+  include Lui_shell
+
+  let pump () = ()
+
+  let open_url url =
+    ignore
+      (Unix.create_process "open" [| "open"; url |]
+         Unix.stdin Unix.stdout Unix.stderr);
+    true
+end

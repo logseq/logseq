@@ -1,6 +1,26 @@
 (* Native persistence, appearance state, navigation, and scheduling services.
    This library contains no browser runtime emulation. *)
 
+(* Sys.os_type reports Unix on both macOS and Linux. Probe once and
+   retain the native system name for services that differ between them. *)
+let native_system =
+  if Sys.os_type <> "Unix" then Sys.os_type
+  else
+    let ic = Unix.open_process_args_in "uname" [| "uname"; "-s" |] in
+    let name =
+      Fun.protect
+        ~finally:(fun () ->
+          match Unix.close_process_in ic with
+          | Unix.WEXITED 0 -> ()
+          | _ -> failwith "Could not identify the native operating system")
+        (fun () -> In_channel.input_all ic |> String.trim)
+    in
+    if name = "" then
+      failwith "The native operating system name is empty";
+    name
+
+let is_mac () = native_system = "Darwin"
+
 (* ---------- host request channel ---------- *)
 
 (* Requests the OCaml side needs the native host to perform. Serialized
@@ -27,6 +47,16 @@ let app_support_dir =
     match Sys.getenv_opt "LOGSEQ_UI_STATE_DIR" with
     | Some path when path <> "" -> path
     | Some _ -> invalid_arg "LOGSEQ_UI_STATE_DIR must not be empty"
+    | None when native_system = "Linux" ->
+        let state_home =
+          match Sys.getenv_opt "XDG_STATE_HOME" with
+          | Some path when path <> "" && not (Filename.is_relative path) ->
+              path
+          | Some _ | None ->
+              (* XDG ignores empty or relative base directories. *)
+              Filename.concat (Unix.getenv "HOME") ".local/state"
+        in
+        Filename.concat state_home "logseq"
     | None ->
         Filename.concat
           (Filename.concat (Unix.getenv "HOME") "Library")
@@ -530,7 +560,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
               | Some "true" -> true
               | _ -> false)
         ; online = (fun () -> true)
-        ; is_mac = (fun () -> true)
+        ; is_mac
         ; native_drag = (fun () -> true)
         ; native_block_controls = (fun () -> true)
         ; css_transform_icons = (fun () -> false)

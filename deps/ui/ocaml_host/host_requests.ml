@@ -14,6 +14,7 @@ open Lui_protocol
 open Lui_window
 
 module J = Yojson.Safe
+module Lui_shell = Host_platform.Shell
 
 let log fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -811,12 +812,7 @@ let handle (envelope : string) =
               | `String u -> u
               | _ -> payload
             in
-            (* no outbound open-url in lui_shell; the user's browser
-               is the target either way *)
-            ignore
-              (Unix.create_process "open"
-                 [| "open"; url |]
-                 Unix.stdin Unix.stdout Unix.stderr)
+            ignore (Lui_shell.open_url url)
           | "ui-state" ->
             (match J.from_string payload with
              | `Assoc _ as j ->
