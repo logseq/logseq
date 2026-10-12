@@ -2355,74 +2355,110 @@ let fact_present (db : db) (e : int) (a : string) (v : value) : bool =
   Datascript.datoms db Eavt ~e ~a ()
   |> Seq.exists (fun (d : datom) -> same_datom_value d.v v)
 
-(* Set equality, not multiset: datascript-ocaml keeps a re-added fact as
-   a second datom, so an echo has more copies than the baseline and the
-   same values. *)
-let attr_matches (baseline : db) (probe : db) (e : int) (a : string) : bool =
-  let present_in other (d : datom) = fact_present other e a d.v in
-  Seq.for_all (present_in probe) (Datascript.datoms baseline Eavt ~e ~a ())
-  && Seq.for_all (present_in baseline)
-       (Datascript.datoms probe Eavt ~e ~a ())
+(* server-conn eid -> the display eid holding the same entity. eids are
+   conn-local: the display replays pending ops over an older confirmed
+   base, so a pending entity can carry the eid of a different confirmed
+   one. Identity has to go through block/uuid or :db/ident — anything
+   without either can't be proven equal and fails closed (rebuild). *)
+let display_eid_for (server_db : db) (display_db : db) (se : int)
+    : int option =
+  match Datascript.entity server_db (Entity_id se) with
+  | None -> None
+  | Some ent -> (
+      match Datascript.entity_attr ent "block/uuid" with
+      | Some (One_value (Uuid u)) -> (
+          match
+            Datascript.entity display_db (Lookup_ref ("block/uuid", Uuid u))
+          with
+          | Some e -> Some e.id
+          | None -> None)
+      | _ -> (
+          match Datascript.entity_attr ent "db/ident" with
+          | Some (One_value (Keyword ident)) -> (
+              match Datascript.entity display_db (Ident ident) with
+              | Some e -> Some e.id
+              | None -> None)
+          | _ -> None))
 
-(* True when applying [remote_txs] to a copy of [display] changes no
-   user-visible fact. cljs drops already-present facts out of tx-data, so
-   an echo never reaches the editor. This conn keeps those facts, and a
-   display rebind also allocates new eids — either one makes the frontend
-   write the server title over keystrokes that have not been saved yet.
-   The probe must not call transact_remote_txs: that records asserted
-   eids, and the copy's eids are not the server's. A probe failure falls
-   back to rebuild; the server conn is already committed. *)
-let display_already_shows_remote repo (display : conn)
-    (remote_txs : Wire.t list) : bool =
-  let baseline = Conn.db display in
-  let probe = conn_from_db { baseline with storage_ref = None } in
-  let fl = Db_tx.flags_of probe in
-  fl.Db_tx.skip_store <- true;
-  fl.Db_tx.skip_validate <- true;
-  let collected = ref [] in
-  let lid =
-    listen probe "echo-diff" (fun (r : tx_report) ->
-        collected := List.rev_append r.tx_data !collected)
+(* Whether the display already holds the fact a committed server datom
+   names. Ref values map the target eid the same way; other values
+   compare literally. None when the fact can't even be expressed on the
+   display — the caller must treat that as "cannot prove a no-op". *)
+let display_fact_held (server_db : db) (display_db : db) (de : int)
+    (a : string) (v : value) : bool option =
+  let expected =
+    if Db_normalize.entity_value_type_ref display_db a then
+      match v with
+      | Ref sv | Ref_to (Entity_id sv) ->
+          Option.map
+            (fun dv -> Ref dv)
+            (display_eid_for server_db display_db sv)
+      | Ref_to (Lookup_ref (la, lv)) ->
+          Option.map
+            (fun e -> Ref e.id)
+            (Datascript.entity display_db (Lookup_ref (la, lv)))
+      | Ref_to (Ident ident) | Keyword ident ->
+          Option.map
+            (fun e -> Ref e.id)
+            (Datascript.entity display_db (Ident ident))
+      | Uuid u ->
+          Option.map
+            (fun e -> Ref e.id)
+            (Datascript.entity display_db
+               (Lookup_ref ("block/uuid", Uuid u)))
+      | _ -> None
+    else Some v
   in
-  let apply_one (remote_tx : Wire.t) : unit =
-    let raw =
-      match Wire.get "tx-data" remote_tx with
-      | Some xs -> tx_items_of xs
-      | None -> []
-    in
-    let tx_data = List.map (resolve_temp_id (Conn.db probe)) raw in
-    match tx_data with
-    | [] -> ()
-    | _ ->
-        ignore
-          (Db_transact.transact probe tx_data (apply_tx_meta remote_tx))
+  Option.map (fact_present display_db de a) expected
+
+(* The batch commit report is already the authoritative change set — the
+   datoms cljs would diff against its single conn. Fold adds/retracts to
+   a net effect (an add and a retract of the same fact inside one batch
+   cancel; the display saw neither) and ask whether every surviving
+   change already holds on the display. When it does, a rebind would
+   only move eids and republish facts the editor already shows — and the
+   frontend writes a republished block title over keystrokes that have
+   not been saved yet. *)
+let jump_is_display_noop (server_db : db) (display_db : db)
+    (jump : datom list) : bool =
+  let net_adds : (int * string * value, unit) Hashtbl.t = Hashtbl.create 16 in
+  let net_retracts : (int * string * value, unit) Hashtbl.t =
+    Hashtbl.create 16
   in
-  match
-    Db_tx.with_temp_conn_cleanup probe lid (fun () ->
-        List.iter apply_one remote_txs;
-        let probe_db = Conn.db probe in
-        let touched : (int * string, unit) Hashtbl.t = Hashtbl.create 16 in
-        List.iter
-          (fun (d : datom) ->
-             (* updated-at moves on every later local insert (the page
-                or parent). The echoed tx still carries the earlier
-                stamp. Rebuilding for that republishes the block being
-                typed into. A title or order change is still a diff. *)
-             if
-               d.a <> "db/txInstant" && d.a <> "block/updated-at"
-               && d.e <> d.tx
-             then Hashtbl.replace touched (d.e, d.a) ())
-          !collected;
-        Hashtbl.fold
-          (fun (e, a) () unchanged ->
-             unchanged && attr_matches baseline probe_db e a)
-          touched true)
-  with
-  | unchanged -> unchanged
-  | exception e ->
-      Worker_log.warn "db-sync/echo-diff-failed"
-        [ "repo", repo; "error", Printexc.to_string e ];
-      false
+  List.iter
+    (fun (d : datom) ->
+       (* updated-at moves on every later local insert (the page or
+          parent), and block/tx-id is the server-stamped journal id —
+          neither is user-visible state. The echoed tx carries the
+          earlier stamps, so a changed stamp is not a diff. A title or
+          order change is. *)
+       if
+         d.a <> "db/txInstant" && d.a <> "block/updated-at"
+         && d.a <> "block/tx-id" && d.e <> d.tx
+       then
+         let key = (d.e, d.a, d.v) in
+         if d.added then
+           if Hashtbl.mem net_retracts key then
+             Hashtbl.remove net_retracts key
+           else Hashtbl.replace net_adds key ()
+         else if Hashtbl.mem net_adds key then
+           Hashtbl.remove net_adds key
+         else Hashtbl.replace net_retracts key ())
+    jump;
+  let check net want_present =
+    Hashtbl.fold
+      (fun (se, a, v) () unchanged ->
+         unchanged
+         &&
+         match display_eid_for server_db display_db se with
+         | Some de -> (
+             match display_fact_held server_db display_db de a v with
+             | Some held -> held = want_present
+             | None -> false)
+         | None -> false)
+      net true
+  in
+  check net_adds true && check net_retracts false
 
 let eid_of_wire (db : db) (e : Wire.t) : int option =
   match e with
@@ -2618,7 +2654,7 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
           with
           | Some display, Some server
             when server == conn && display != server ->
-              display_already_shows_remote repo display remote_txs
+              jump_is_display_noop (Conn.db server) (Conn.db display) jump
               && not (failed_overlay_on_display repo display server)
           | _ -> false
         in
