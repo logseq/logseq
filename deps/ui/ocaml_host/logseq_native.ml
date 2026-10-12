@@ -1401,6 +1401,7 @@ let () =
   log "logseq_native: %dx%d drawable (scale %.2f), renderer=%s, icons=%d"
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
+  let mem_mark = ref 0. in
   let raises_left = ref 3 in
   Daemon_client.boot_mark "loop";
   while not !quit do
@@ -1523,6 +1524,19 @@ let () =
     (let iter_ms = (perf_s () -. t0) *. 1000. in
      if iter_ms > 20. then
        Daemon_client.boot_mark (Printf.sprintf "iter %.0fms" iter_ms));
+    (let now = perf_s () in
+     if now -. !mem_mark > 2.0 then begin
+       mem_mark := now;
+       let st = Gc.quick_stat () in
+       Printf.eprintf
+         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d]\n%!"
+         !frame
+         (st.Gc.live_words * 8 / 1048576)
+         (st.Gc.heap_words * 8 / 1048576)
+         (st.Gc.free_words * 8 / 1048576)
+         (st.Gc.top_heap_words * 8 / 1048576)
+         (Lui_store.node_count store)
+     end);
     if dirty && not vsync then begin
       (* Boot frames pace at ~2ms, not vsync: pacing sleeps delay the
          wakeup-driven boot pumps behind every repaint. *)
