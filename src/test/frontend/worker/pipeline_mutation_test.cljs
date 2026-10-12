@@ -49,6 +49,9 @@
    :block/created-at 1
    :block/updated-at 1})
 
+;; Fails if, in `refs-need-recalculated?`, `or` becomes `and`.
+;; Fails if, in `rebuild-block-refs`, `and` becomes `or`.
+;; Fails if, in `transact-pipeline`, `and` becomes `or`.
 (deftest refs-are-rebuilt-only-for-outliner-ops-that-change-content-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -93,6 +96,7 @@
   [db id]
   (ldb/sort-by-order (:block/_parent (d/entity db id))))
 
+;; Fails if, in `insert-tag-templates`, `and` becomes `or`, `=` becomes `not=` or `first` becomes `last`.
 (deftest tag-template-inserts-fresh-copies-of-all-children-in-order-test
   (let [conn (create-tag-template-conn)
         target (:db/id (db-test/find-block-by-content @conn "target"))
@@ -109,6 +113,7 @@
     (is (= ["one" "two"] (map :block/title (children-of db' template)))
         "The template keeps its own children")))
 
+;; Fails if, in `compute-extra-tx-data`, `or` becomes `and`.
 (deftest undo-tag-addition-does-not-insert-the-tag-template-test
   (let [conn (create-tag-template-conn)
         target (:db/id (db-test/find-block-by-content @conn "target"))
@@ -117,6 +122,7 @@
     (is (contains? (tag-ids db' target) foo))
     (is (empty? (children-of db' target)))))
 
+;; Fails if, in `insert-tag-templates`, `when` becomes `when-not`, `and` becomes `or` or `=` becomes `not=`.
 (deftest journal-template-blocks-get-uuids-derived-from-the-new-journal-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -156,6 +162,7 @@
     (is (= #{:logseq.class/Journal} (tag-idents db' (:db/id journal))))
     (is (= 1 (count (d/datoms db' :avet :block/name (:block/name journal)))))))
 
+;; Fails if, in `fix-page-tags`, `=` becomes `not=`, `and` becomes `or` or `seq` becomes `empty?`.
 (deftest fix-page-tags-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}}
@@ -183,6 +190,7 @@
         (is (= #{(d/entid db :logseq.class/Page) foo}
                (tag-ids db' (:db/id (d/entity db' [:block/uuid page-uuid])))))))))
 
+;; Fails if, in `fix-inline-built-in-page-classes`, `when-not` becomes `when`, `=` becomes `not=` or `or` becomes `and`.
 (deftest inline-built-in-page-class-is-removed-from-block-title-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -204,6 +212,7 @@
         (is (= "y" (:v (first (d/datoms db'' :eavt b1 :block/title)))))
         (is (not (contains? (tag-idents db'' b1) :logseq.class/Tag)))))))
 
+;; Fails if, in `toggle-page-and-block`, `=` becomes `not=`, `and` becomes `or`, `when` becomes `when-not`, `not` becomes `identity` or `or` becomes `and`.
 (deftest block-tagged-page-becomes-a-page-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -229,6 +238,7 @@
     (is (nil? (:block/page (d/entity db' sub)))
         "Descendant pages get no :block/page")))
 
+;; Fails if, in `toggle-page-and-block`, `not` becomes `identity`.
 (deftest block-moved-to-library-becomes-a-page-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -242,6 +252,7 @@
     (is (= "b1" (:block/name (d/entity db' b1))))
     (is (nil? (:block/page (d/entity db' b1))))))
 
+;; Fails if, in `toggle-page-and-block`, `and` becomes `or`, `nil?` becomes `some?` or `not` becomes `identity`.
 (deftest class-page-tagged-page-does-not-move-its-parent-to-library-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "root"}}]
@@ -252,6 +263,7 @@
         db' (db-after-pipeline @conn [[:db/add foo :block/tags :logseq.class/Page]] {})]
     (is (nil? (:block/parent (d/entity db' root))))))
 
+;; Fails if, in `toggle-page-and-block`, `=` becomes `not=`, `and` becomes `or`, `or` becomes `and` or `not` becomes `identity`.
 (deftest block-on-class-page-converted-to-page-drops-class-parent-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}}]
@@ -264,6 +276,7 @@
     (is (ldb/internal-page? (d/entity db' id)))
     (is (nil? (:block/parent (d/entity db' id))))))
 
+;; Fails if, in `add-missing-properties-to-typed-display-blocks`, `=` becomes `not=`.
 (deftest display-type-adds-its-class-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -272,6 +285,8 @@
         db' (db-after-pipeline @conn [[:db/add b1 :logseq.property.node/display-type :code]] {})]
     (is (contains? (tag-idents db' b1) :logseq.class/Code-block))))
 
+;; Fails if, in `ensure-query-property-on-tag-additions`, `and` becomes `or`.
+;; Fails if, in `ensure-comments-blocks-property-on-tag-additions`, `and` becomes `or`.
 (deftest query-and-comments-properties-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -310,6 +325,7 @@
                                                        :email "alice@example.com"})))]
     (str "header." payload ".signature")))
 
+;; Fails if, in `add-created-by-ref-hook`, `when` becomes `when-not`, `and` becomes `or`, `not` becomes `identity`, `or` becomes `and` or `seq` becomes `empty?`.
 (deftest created-by-ref-is-added-to-new-blocks-except-on-undo-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}])
@@ -327,6 +343,7 @@
       (finally
         (worker-state/set-new-state! {:auth/id-token nil})))))
 
+;; Fails if, in `revert-disallowed-changes`, `or` becomes `and`.
 (deftest built-in-protected-attrs-are-reverted-except-in-fix-db-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}])
@@ -335,6 +352,7 @@
     (is (= "Library" (:block/title (d/entity (db-after-pipeline db [[:db/add library :block/title "Renamed"]] {}) library))))
     (is (= "Renamed" (:block/title (d/entity (db-after-pipeline db [[:db/add library :block/title "Renamed"]] {:fix-db? true}) library))))))
 
+;; Fails if, in `compute-extra-tx-data`, `or` becomes `and`.
 (deftest undo-of-task-done-does-not-reschedule-test
   (let [now (t/local-date-time 2026 9 20 12 0 0)
         scheduled-ms (tc/to-long now)
@@ -356,6 +374,7 @@
     (is (not= scheduled-ms (scheduled {})) "precondition: done reschedules a repeating task")
     (is (= scheduled-ms (scheduled {:undo? true})))))
 
+;; Fails if, in `reference-attrs`, `false` becomes `true`.
 (deftest reference-attrs-follow-public-and-private-ref-properties-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -379,6 +398,7 @@
     (is (not= 10 (revision (db-after-pipeline db [[:db/add query-value :block/title "q edited"]] {}) query-owner))
         "A public ref property is a projected reference")))
 
+;; Fails if, in `projected-reference-owner-ids`, `when-not` becomes `when`.
 (deftest new-ref-property-is-a-reference-attr-in-later-transactions-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -418,6 +438,7 @@
     (is (= 1 (:kv/value (d/entity db' :logseq.kv/pipeline-mutation-test))))
     (is (nil? (:block/tx-id (d/entity db' :logseq.kv/pipeline-mutation-test))))))
 
+;; Fails if, in `invoke-hooks-default`, `when` becomes `when-not`.
 (deftest invoke-hooks-lists-only-deleted-assets-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
