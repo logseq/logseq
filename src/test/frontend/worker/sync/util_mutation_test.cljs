@@ -8,6 +8,7 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
+;; Fails if, in `cli-node-owner?`, `and` becomes `or`.
 (deftest cli-node-owner-needs-node-runtime-and-cli-owner-test
   (with-redefs [platform/current (fn [] {:env {:runtime :node :owner-source :electron}})]
     (is (false? (sync-util/cli-node-owner?))))
@@ -16,6 +17,7 @@
   (with-redefs [platform/current (fn [] {:env {:runtime :node :owner-source :cli}})]
     (is (true? (sync-util/cli-node-owner?)))))
 
+;; Fails if, in `get-graph-id`, `or` becomes `and` or `when` becomes `when-not`.
 (deftest get-graph-id-prefers-db-graph-uuid-then-client-op-test
   (let [db-uuid #uuid "6a1d0c1e-0000-4000-8000-0000000000aa"
         op-uuid #uuid "6a1d0c1e-0000-4000-8000-0000000000bb"]
@@ -54,6 +56,7 @@
                      (set! (.-fetch js/globalThis) original-fetch)
                      (swap! worker-state/*state assoc :auth/id-token original-token))))))
 
+;; Fails if, in `with-auth-headers`, `or` becomes `and`.
 (deftest-async fetch-json-keeps-caller-headers-test
   (p/let [{:keys [requests]} (<fetch-json-with-response
                               200 "{\"ok\":true}"
@@ -63,6 +66,7 @@
             "authorization" "Bearer token"}
            (get-in (first requests) [:init "headers"])))))
 
+;; Fails if, in `fetch-json`, `if` becomes `if-not` or `nil?` becomes `some?`.
 (deftest-async fetch-json-rejects-a-response-its-schema-rejects-test
   (p/let [{:keys [error result]} (<fetch-json-with-response
                                   200 "{\"foo\":1}" {} {:response-schema :worker/health})
@@ -72,6 +76,7 @@
     (is (= "db-sync invalid response" (ex-message error)))
     (is (= {:ok true} (:result ok)))))
 
+;; Fails if, in `fetch-json`, `when` becomes `when-not` or `if` becomes `if-not`.
 (deftest-async fetch-json-error-body-is-coerced-by-error-schema-test
   (p/let [{valid :error} (<fetch-json-with-response
                           400 "{\"error\":\"bad\"}" {} {})

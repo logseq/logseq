@@ -13,6 +13,7 @@
 (defn- validate-fn [prop-type]
   (last (get db-property-type/built-in-validation-schemas prop-type)))
 
+;; Fails if, in `url-entity?`, `if` becomes `if-not`.
 (deftest url-entity-strict-unless-skipped-test
   (let [url? (validate-fn :url)
         text-id (:db/id (db-test/find-block-by-content @db "not a url"))
@@ -22,6 +23,7 @@
     (is (url? @db text-id {:skip-strict-url-validate? true})
         "skipping strict validation accepts any titled block")))
 
+;; Fails if, in `text-entity?`, `and` becomes `or`.
 (deftest text-entity-needs-a-page-test
   (let [text? (validate-fn :default)
         page-id (:db/id (db-test/find-page-by-title @db "Page"))
