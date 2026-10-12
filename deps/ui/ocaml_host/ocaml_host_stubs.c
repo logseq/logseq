@@ -375,8 +375,7 @@ CAMLprim void logseq_native_titlebar_blend(void) {
     ((void (*)(id, SEL, long))objc_msgSend)(
         w, sel_registerName("setTitleVisibility:"),
         1L /* NSWindowTitleHidden */);
-    ((void (*)(id, SEL, int))objc_msgSend)(
-        w, sel_registerName("setMovableByWindowBackground:"), 1);
+    /* SDL owns background movability through its Cocoa hit-test state. */
   }
 }
 /* Register every font file in a directory with CoreText so Lui_text's
