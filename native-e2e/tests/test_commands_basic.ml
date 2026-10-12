@@ -152,6 +152,37 @@ let page_reference ctx =
       validate_graph ctx app;
       ignore (Client.screenshot ~name:"page-reference.png" app))
 
+let block_reference ctx =
+  Suite.with_app ~label:"block-reference" ctx (fun app ->
+      open_page app "Block Reference";
+      add_block app "block test";
+      let target_uuid = Client.sdk_call app "check_editing" [] |> to_string in
+      Client.press app "Enter";
+      ignore (wait_editor_text app "");
+      input_command app "Node reference";
+      Client.text app "block test";
+      ignore (Client.wait_for ~text:"block test" app ".menu-link.chosen");
+      Client.press app "Enter";
+      let content = Client.sdk_call app "get_editing_block_content" [] |> to_string in
+      Suite.check ctx "Block reference has the original bracketed syntax"
+        (contains content "[[");
+      let source_uuid = Client.sdk_call app "check_editing" [] |> to_string in
+      Client.press app "Escape";
+      wait_absent app ".block-editor";
+      ignore (Client.wait_for ~text:"block test" app "a.page-ref");
+      Suite.check ctx "Block reference renders its source target text"
+        (Client.query app "a.page-ref"
+         |> List.exists (fun el -> Client.text_content el = "block test"));
+      let refs () =
+        Client.q ~inputs:[Wire.Uuid source_uuid] app
+          "[:find ?uuid :in $ ?source :where [?b :block/uuid ?source] [?b :block/refs ?r] [?r :block/uuid ?uuid]]"
+      in
+      let expected = Wire.Set [Wire.Array [Wire.Uuid target_uuid]] in
+      ignore (Client.poll "Real daemon resolves the referenced block" (fun () ->
+          if refs () = expected then Some () else None));
+      Suite.equal ctx "Worker refs resolve to the existing block" (refs ()) expected;
+      validate_graph ctx app)
+
 let node_id element = element |> member "node-id" |> to_number |> int_of_float
 
 let wait_focus app element =
@@ -373,6 +404,9 @@ let tests =
   ; Suite.test
       ~covers:["ocaml-e2e/test/test_commands_basic.ml::page-reference-test"]
       "page-reference-test" page_reference
+  ; Suite.test
+      ~covers:["ocaml-e2e/test/test_commands_basic.ml::block-reference-test"]
+      "block-reference-test" block_reference
   ; Suite.test
       ~covers:["ocaml-e2e/test/test_commands_basic.ml::link-test"]
       "link-test" link
