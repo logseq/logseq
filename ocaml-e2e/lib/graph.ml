@@ -11,7 +11,7 @@ let refresh_all_remote_graphs env =
 
 let goto_all_graphs env = Util.search_and_click env "Go to all graphs"
 
-let e2ee_password_modal = ".e2ee-password-modal-content"
+let e2ee_password_modal = E2ee_password_poll.modal_selector
 
 let e2ee_new_password_input =
   e2ee_password_modal ^ " input[placeholder=\"Enter password\"]"
@@ -23,13 +23,13 @@ let e2ee_password_input =
   e2ee_password_modal ^ " .ls-toggle-password-input input"
 
 let e2ee_password_submit = e2ee_password_modal ^ " button:text(\"Submit\")"
-let cloud_ready_indicator = "button.cloud.on.idle"
+let cloud_ready_indicator = E2ee_password_poll.cloud_ready_selector
 let new_graph_dialog = ".new-graph"
 let new_graph_submit = new_graph_dialog ^ " button:not([disabled]):text(\"Submit\")"
 let rtc_sync_toggle = "button#rtc-sync"
 let rtc_graph_e2ee_toggle = "button#rtc-graph-e2ee"
-let e2ee_password_poll_ms = 250.
-let e2ee_password_prompt_grace_ms = 2000.
+let e2ee_password_poll_ms = E2ee_password_poll.poll_ms
+let e2ee_password_prompt_grace_ms = E2ee_password_poll.grace_ms
 
 let input_e2ee_password env =
   let* confirm = Pw.visible env e2ee_new_password_confirm_input in
@@ -51,23 +51,14 @@ let input_e2ee_password env =
     right after submit, so require it to stay visible briefly before treating
     it as the terminal state.  Dependencies are injectable so the pure state
     machine can be unit-tested (mirroring graph-test.clj's with-redefs). *)
+module E2ee_poll = E2ee_password_poll.Make (struct
+  type 'a t = 'a Js.Promise.t
+  let return = Js.Promise.resolve
+  let bind value f = Js.Promise.then_ f value
+end)
+
 let maybe_input_e2ee_password_gen ~visible ~wait_timeout ~input_password () =
-  let rec loop remaining_ms cloud_ready_ms =
-    let* modal = visible e2ee_password_modal in
-    if modal then input_password ()
-    else
-      let* cloud_ready = visible cloud_ready_indicator in
-      if cloud_ready_ms >= e2ee_password_prompt_grace_ms && cloud_ready then
-        Js.Promise.resolve ()
-      else if remaining_ms <= 0. then Js.Promise.resolve ()
-      else
-        let* () = wait_timeout e2ee_password_poll_ms in
-        loop
-          (remaining_ms -. e2ee_password_poll_ms)
-          (if cloud_ready then cloud_ready_ms +. e2ee_password_poll_ms
-           else 0.)
-  in
-  loop 20000. 0.
+  E2ee_poll.run ~visible ~wait_timeout ~input_password ()
 
 let maybe_input_e2ee_password env =
   maybe_input_e2ee_password_gen
