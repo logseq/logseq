@@ -1,0 +1,24 @@
+(include_subdirs unqualified)
+
+(rule (copy ../deps/ui/src/contracts/wire.ml wire.ml))
+(rule (copy ../deps/ui/native/transit.ml transit.ml))
+
+(executable
+ (name inventory)
+ (modules inventory)
+ (libraries unix yojson compiler-libs.common))
+
+(executable
+ (name discover)
+ (modules discover)
+ (libraries unix))
+
+(rule
+ (target registry.ml)
+ (deps (source_tree tests))
+ (action (run %{exe:discover.exe} tests %{target})))
+
+(executable
+ (name runner)
+ (modules (:standard \ inventory discover))
+ (libraries unix yojson melange-transit-core melange-transit-native))

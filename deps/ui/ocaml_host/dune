@@ -346,7 +346,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine))
+ (modules (:standard \ logseq_native native_embed bridge automation patch_decode host_requests theme_vars host_icons text_engine))
  (modes native)
  (libraries
    lui
@@ -369,7 +369,7 @@
   (pps lui.ppx)))
 (executable
  (name logseq_native)
- (modules logseq_native native_embed bridge patch_decode host_requests
+ (modules logseq_native native_embed bridge automation patch_decode host_requests
    theme_vars host_icons text_engine)
  (libraries logseq_ui_ocamlhost
    lui

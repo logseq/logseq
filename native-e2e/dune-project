@@ -1,0 +1,2 @@
+(lang dune 3.10)
+(name logseq_native_e2e)
