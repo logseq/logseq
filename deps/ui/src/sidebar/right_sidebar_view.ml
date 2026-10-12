@@ -299,7 +299,7 @@ let item_header st idx (it : Sidebar_state.item) =
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
-            ~icon:(`app "dots") ~label:(t "sidebar.right/more")
+            ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
@@ -315,13 +315,13 @@ let item_header st idx (it : Sidebar_state.item) =
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
               Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
-            []
+            [ Icons.icon ~size:16. "dots" ]
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
-            ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
+            ~label:(t "ui/close") ~width:32 ~height:32
             ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
-            [] ]
+            [ Icons.icon ~size:16. "x" ] ]
     ]
 
 (* cljs onboarding.cljs help pane: .help.cp__sidebar-help-docs is a
