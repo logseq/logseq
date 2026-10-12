@@ -27,6 +27,7 @@
   [^js db sql]
   (aget (.get (.prepare db sql)) "c"))
 
+;; Fails if, in `detect-sqlite-mode`, `when` becomes `when-not`.
 (deftest sqlite-mode-is-cached-on-the-db-test
   (with-client-ops-db
     "repo-mode"
@@ -34,6 +35,8 @@
       (client-op/get-graph-uuid "repo-mode")
       (is (= :better-sqlite (gobj/get db "__logseq_client_ops_sqlite_mode"))))))
 
+;; Fails if, in `int->bool`, `not` becomes `identity`, `or` becomes `and`, `nil?` becomes `some?`, `=` becomes `not=` or `false` becomes `true`.
+;; Fails if, in `normalize-op-entries`, `first` becomes `last`.
 (deftest int-bool-and-normalize-op-entries-test
   (let [int->bool #'client-op/int->bool]
     (is (false? (int->bool nil)))
@@ -48,12 +51,14 @@
     (is (= [[:move-blocks [1 2]] [:save-block [3]]]
            (normalize [[:move-blocks [1 2]] [:save-block [3]]])))))
 
+;; Fails if, in `sqlite-row`, `first` becomes `last`.
 (deftest sqlite-row-takes-the-first-row-test
   (with-client-ops-db
     "repo-row"
     (fn [db]
       (is (= 1 (aget (#'client-op/sqlite-row db "select 1 as v union all select 2 as v" []) "v"))))))
 
+;; Fails if, in `update-local-tx`, `and` becomes `or`.
 (deftest update-local-tx-requires-a-non-negative-integer-test
   (with-client-ops-db
     "repo-tx"
@@ -63,6 +68,7 @@
       (client-op/update-local-tx "repo-tx" 3)
       (is (= 3 (client-op/get-local-tx "repo-tx"))))))
 
+;; Fails if, in `adjust-pending-local-tx-count!`, `or` becomes `and`.
 (deftest adjust-pending-local-tx-count-accumulates-and-clamps-test
   (with-client-ops-db
     "repo-count"
@@ -73,6 +79,7 @@
       (client-op/adjust-pending-local-tx-count! "repo-count" -9)
       (is (= 0 (get @client-op/*repo->pending-local-tx-count "repo-count"))))))
 
+;; Fails if, in `rtc-db-graph?`, `some?` becomes `nil?`.
 (deftest rtc-db-graph-without-process-needs-a-graph-uuid-test
   (with-client-ops-db
     "repo-rtc"
@@ -89,6 +96,7 @@
           (finally
             (aset js/globalThis "process" saved)))))))
 
+;; Fails if, in `upsert-local-tx-entry!`, `not=` becomes `=`.
 (deftest upsert-local-tx-entry-reports-whether-to-count-pending-test
   (with-client-ops-db
     "repo-upsert"
@@ -103,6 +111,7 @@
         (is (true? (:should-inc-pending? third-write)))
         (is (false? (:inferred-outliner-ops? (client-op/get-local-tx-entry "repo-upsert" tx-id))))))))
 
+;; Fails if, in `add-sync-conflicts!`, `and` becomes `or`.
 (deftest add-sync-conflicts-ignores-malformed-entries-test
   (with-client-ops-db
     "repo-conflicts"
@@ -120,6 +129,9 @@
         (is (= 1 (sqlite-count db "select count(*) as c from sync_conflicts")))
         (is (= ["v"] (mapv :value (client-op/get-sync-conflicts "repo-conflicts" block-uuid))))))))
 
+;; Fails if, in `sqlite-asset-op-by-uuid`, `or` becomes `and`.
+;; Fails if, in `add-asset-ops`, `>` becomes `>=`.
+;; Fails if, in `get-all-asset-ops`, `and` becomes `or`.
 (deftest asset-ops-keep-stored-value-and-break-ties-test
   (with-client-ops-db
     "repo-asset-ops"
