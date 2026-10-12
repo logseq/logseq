@@ -251,6 +251,8 @@
        (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
        (remove (fn [ref]
                  (or
+                  ;; Exclude blocks that live on this page or one of its aliases.
+                  (contains? ids (:db/id (:block/page ref)))
                   (when class-ids
                     (some class-ids (map :db/id (:block/tags ref))))
                   (entity-util/hidden? ref)
@@ -309,17 +311,19 @@
 (defn get-unlinked-references
   [db id]
   (let [entity (d/entity db id)
-        title (string/lower-case (:block/title entity))]
+        title (string/lower-case (:block/title entity))
+        page-ids (ldb/page-alias-set db id)]
     (when-not (string/blank? title)
       (let [ids (->> (d/datoms db :avet :block/title)
                      (keep (fn [d]
-                             (when (and (not= id (:e d))
+                             (when (and (not (contains? page-ids (:e d)))
                                         (string/includes? (string/lower-case (:v d)) title))
                                (:e d)))))]
         (keep
          (fn [eid]
            (let [e (d/entity db eid)]
-             (when-not (or (some #(= id %) (map :db/id (:block/refs e)))
+             (when-not (or (contains? page-ids (:db/id (:block/page e)))
+                           (some #(contains? page-ids %) (map :db/id (:block/refs e)))
                            (:block/link e)
                            (ldb/built-in? e))
                e)))
