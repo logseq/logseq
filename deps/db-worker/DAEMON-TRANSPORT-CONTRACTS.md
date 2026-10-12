@@ -28,20 +28,20 @@ transport/persistence slice; **later** means not covered by that slice.
 | 7 | `db-worker-node-logs-console-number-output` (371) | A: non-string console argument formatting; JS console primitive | 677; real, stringifies `123` first | later; not exact numeric-argument parity |
 | 8 | `db-worker-node-logs-process-stdout-output` (392) | A: raw Node `process.stdout.write` interception | 691; real, Node-specific | JS-only trigger; native stdout capture needs separate proof |
 | 9 | `db-worker-node-log-retention` (414) | P: keep seven dated logs | 706; real | later; native log retention unit behavior may exist |
-| 10 | `db-worker-node-parse-args-ignores-host-and-port` (440) | P: unsupported CLI flags do not change repo/root | 749; real parser, omits JS nil-field assertions | later; preserve CLI boundary |
-| 11 | `db-worker-node-parse-args-ignores-auth-token` (452) | P: ignore deprecated auth-token flag | 765; real parser | later |
-| 12 | `db-worker-node-parse-args-ignores-rtc-ws-url` (460) | P: ignore deprecated websocket flag | 776; real parser | later |
+| 10 | `db-worker-node-parse-args-ignores-host-and-port` (440) | P: unsupported CLI flags do not change repo/root | 749; real parser, omits JS nil-field assertions | executed real child with ignored legacy flags; host/port/repo observed via health |
+| 11 | `db-worker-node-parse-args-ignores-auth-token` (452) | P: ignore deprecated auth-token flag | 765; real parser | executed with ignored auth-token; no direct nil-field parser assertion |
+| 12 | `db-worker-node-parse-args-ignores-rtc-ws-url` (460) | P: ignore deprecated websocket flag | 776; real parser | executed with ignored rtc-ws-url; no direct nil-field parser assertion |
 | 13 | `db-worker-node-parse-args-recognizes-create-empty-db` (468) | P: recognize empty-graph flag | 788; real parser | later |
-| 14 | `db-worker-node-parse-args-ignores-server-list-file` (476) | P: ignore deprecated registry flag | 802; real parser | later |
+| 14 | `db-worker-node-parse-args-ignores-server-list-file` (476) | P: ignore deprecated registry flag | 802; real parser | executed real child; legacy path unused, default registry published |
 | 15 | `db-worker-node-parse-args-recognizes-version` (486) | P: recognize version flag | 819; real parser | later |
-| 16 | `db-worker-node-main-version-exits-early-without-repo` (493) | P: version/exit 0 without opening graph | 826; seam for process exit/start | later; actual executable |
-| 17 | `db-worker-node-main-missing-root-dir-prints-error-and-exits-1` (526) | P: missing root produces error and exit 1 | 846; seam for process exit/start | later; actual executable |
-| 18 | `db-worker-node-main-missing-repo-prints-error-and-exits-1` (554) | P: missing repo produces error and exit 1 | 873; seam for process exit/start | later; actual executable |
+| 16 | `db-worker-node-main-version-exits-early-without-repo` (493) | P: version/exit 0 without opening graph | 826; seam for process exit/start | executed; actual exit 0, revision stdout, no graph/registry |
+| 17 | `db-worker-node-main-missing-root-dir-prints-error-and-exits-1` (526) | P: missing root produces error and exit 1 | 846; seam for process exit/start | executed; actual exit 1, empty stdout, required error stderr |
+| 18 | `db-worker-node-main-missing-repo-prints-error-and-exits-1` (554) | P: missing repo produces error and exit 1 | 873; seam for process exit/start | executed; actual exit 1, empty stdout, required error stderr |
 | 19 | `db-worker-node-owner-source-cli-is-published` (582) | P: `/healthz` publishes `owner-source=cli` | 899; real | selected |
 | 20 | `db-worker-node-owner-source-electron-is-published` (602) | P: `/healthz` publishes `owner-source=electron` | 912; real | later; no Electron host required for daemon assertion |
 | 21 | `db-worker-node-handle-event-encodes-sse-json-payload` (622) | P: SSE `data:` JSON contains Transit payload; original calls `handle-event` directly | 928; seam for sink; real encoder | selected for emitted production event; not direct synthetic event |
 | 22 | `db-worker-node-handle-event-preserves-namespaced-type` (640) | P: namespaced event type and Transit payload survive SSE; original uses synthetic `db-worker/ui-request` | 950; seam for sink; real encoder | selected for production `thread-api/set-ui-state`; synthetic kind remains separate |
-| 23 | `db-worker-node-help-documents-required-root-dir-and-omits-server-list-file` (658) | P: public help flags and ANSI styling | 972; mixed stdout/color seams | later; compare native CLI stdout |
+| 23 | `db-worker-node-help-documents-required-root-dir-and-omits-server-list-file` (658) | P: public help flags and ANSI styling | 972; mixed stdout/color seams | executed plain CLI help; forced ANSI/TTY assertion remains later |
 | 24 | `db-worker-node-start-daemon-uses-empty-datoms-when-create-empty-enabled` (678) | P: init then create/open with empty datoms and sync download flag | 1015; seam invoke and db-exists | later; verify resulting graph, not fabricated call list |
 | 25 | `db-worker-node-start-daemon-uses-default-startup-opts-without-create-empty` (706) | P: init then normal create/open options | 1049; seam invoke and db-exists | later; native actual startup |
 | 26 | `db-worker-node-start-daemon-defers-open-for-new-graph` (732) | P: non-CLI graph waits for explicit open | 1074; seam invoke and db-exists | selected for binary import destination |
@@ -64,8 +64,8 @@ transport/persistence slice; **later** means not covered by that slice.
 | 43 | `db-worker-node-backup-db-sqlite` (1455) | P: backup path exists and bytes import into second graph | 1908; real | selected; backup generated by endpoint only |
 | 44 | `db-worker-node-accepts-prefix-equivalent-repo-test` (1518) | P: `demo` and `logseq_db_demo` match | 1969; real | later |
 | 45 | `db-worker-node-repo-mismatch-test` (1540) | P: mismatched repo returns HTTP 409/code | 1990; real | selected |
-| 46 | `db-worker-node-lock-prevents-multiple-daemons` (1562) | P: another owner cannot acquire same graph | 2010; real but same PID | later; separate-PID ownership conflict |
-| 47 | `db-worker-node-ownership-covers-import-backup-and-reopen` (1584) | P: ownership persists across mutate/reopen until stop | 2030; real within one PID | later; real-PID lock |
+| 46 | `db-worker-node-lock-prevents-multiple-daemons` (1562) | P: another owner cannot acquire same graph | 2010; real but same PID | executed; competing executable exits 1/repo-locked, first owner remains ready |
+| 47 | `db-worker-node-ownership-covers-import-backup-and-reopen` (1584) | P: ownership persists across mutate/reopen until stop | 2030; real within one PID | executed lifetime via real child contenders after import/backup/close/reopen; original direct lock-file assertion not reproduced |
 | 48 | `db-worker-node-mutations-require-retained-ownership` (1614) | P: lost ownership rejects mutating methods | 2081; injected ownership failure, real HTTP | later; production lock loss reproduction only |
 | 49 | `db-worker-node-desktop-and-cli-share-same-graph-daemon` (1640) | O: actual Electron/CLI reuse path belongs to orchestrator | 2129; real daemon but inline imitation, not real Electron/CLI | later; native UI/CLI integration owner |
 | 50 | `db-worker-node-validation-error-returns-400` (1691) | P: invalid outliner tag assignment maps to HTTP 400, not 500 | 2183; real | later; use original invalid operation |
@@ -130,3 +130,28 @@ These results verify the specified first slice, **not** all 53 master
 contracts, synthetic SSE types, full native UI graph deletion, or real
 server-backed RTC. Entries marked `later` remain unverified at the native
 process boundary; the in-process Fest suite is not their substitute.
+
+## Executed process-exit and ownership slice
+
+Three additional native cases use isolated roots and the actual executable:
+
+- CLI early exits: `--version` and `--help` exit 0 without repo/root;
+  required root/repo errors exit 1 with empty stdout and the original stderr
+  message. These commands create neither graph storage nor a daemon registry.
+  Help documents `--root-dir` and omits `--server-list-file`. The original
+  forced-color assertion is still a separate gap.
+- A graph-admitted daemon accepts deprecated host/port/auth-token/RTC URL/
+  server-list flags without honoring them: health reports the real loopback
+  listener, bound repo, and CLI owner, the obsolete registry path is unused,
+  and a typed transaction/query succeeds. The original parser's exact
+  nil-field assertions remain in the in-process Fest suite, not this case.
+- Ownership: actual competing child PIDs exit 1 with `repo-locked` while the
+  first daemon remains ready. Repeating this after real binary import,
+  backup, close, and reopen proves retained ownership. Shutdown admits a new
+  PID and the original typed page remains queryable. This is not a direct
+  filesystem assertion on the original master's lock path.
+
+Focused `daemon-http`: 7/7 passed, including a separate rerun of the legacy
+flag assertions; no production change was needed. They do not
+prove lock-loss injection, shared Electron/CLI orchestration, or complete
+native parity for the remaining matrix rows.
