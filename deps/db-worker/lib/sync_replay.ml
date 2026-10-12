@@ -1290,6 +1290,28 @@ let transact_remote_txs
   in
   loop remote_txs []
 
+(* batch-ok is the confirmation — like master's single conn, where the
+   local tx already is the confirmed state. The equivalent here replays
+   each acked entry's stored normalized .tx onto the server conn only;
+   the display already shows those facts, so nothing republishes and no
+   journal pull is needed. The whole batch commits atomically: on a
+   failed replay the caller falls back to pulling the journal rows. *)
+let confirm_local_txs repo (txs : Wire.t list) : unit =
+  match Sync_state.server_conn repo, txs with
+  | Some conn, _ :: _ ->
+      let tx_meta =
+        [ "rtc-tx?", Bool true ]
+        @ [ ( (if Sync_apply.pending_txs repo () <> []
+               then "with-local-changes?"
+               else "without-local-changes?")
+            , Bool true ) ]
+      in
+      ignore
+        (batch_transact_with_temp_conn conn tx_meta
+           (fun c -> ignore (transact_remote_txs ~repo c txs ()))
+           ())
+  | _ -> ()
+
 (* ---- pending replay / display rebuild ---- *)
 
 (* ---- pending replay / display rebuild ---- *)

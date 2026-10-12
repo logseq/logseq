@@ -7958,12 +7958,6 @@ let test_tx_batch_ok_removes_acked_pending_txs () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
-          (* journal truth: local-tx advances only when the journal echo
-             lands — the batch-ok requests a pull of the own window *)
-          Sync_handle_message.handle_message test_repo client
-            (msg_json
-               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
-               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8020,10 +8014,6 @@ let test_tx_batch_ok_removes_only_inflight_acked_pending_txs () =
             (List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
                (Sync_apply.pending_txs test_repo ())
              = [ unacked_tx_id ]);
-          Sync_handle_message.handle_message test_repo client
-            (msg_json
-               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
-               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8056,11 +8046,6 @@ let test_tx_batch_ok_does_not_anchor_remote_checksum () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
-          Sync_handle_message.handle_message test_repo client
-            (msg_json
-               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
-               ; "checksum", Wire.String remote_checksum
-               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1);
           check "local checksum stays"
@@ -8178,9 +8163,9 @@ let test_pending_op_not_written_to_server_conn () =
                "block/title"
              <> Some (String "pending edit"))))
 
-(* pending model: ack clears the row; the edit reaches the server conn
-   through the journal echo (pull of the own window), not the ack
-   itself. *)
+(* pending model: the ack itself confirms the edit — the stored .tx
+   replays onto the server conn, so a later pull of the same window is
+   a plain no-op echo. *)
 let test_tx_batch_ok_applies_op_to_server_conn () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -8206,12 +8191,20 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
-          check "server conn awaits echo"
+          check "local tx 1"
+            (Sync_client_op.get_local_tx test_repo = Some 1);
+          check "server conn has edit"
             (Ldb.value
                (Option.get
                   (Ldb.ent_of_id (Datascript.db server_conn) child1.id))
                "block/title"
-             <> Some (String "acked edit"));
+             = Some (String "acked edit"));
+          check "display keeps edit"
+            (Ldb.value
+               (Option.get
+                  (Ldb.ent_of_id (Datascript.db display) child1.id))
+               "block/title"
+             = Some (String "acked edit"));
           let echo_tx =
             Transit_codec.to_string
               (Wire.Array
@@ -8226,10 +8219,10 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                      [ wire_map
                          [ "t", Wire.Int 1
                          ; "tx", Wire.String echo_tx ] ] ) ]);
-          check "server conn has edit"
+          check "late echo harmless"
             (Ldb.value
                (Option.get
-                  (Ldb.ent_of_id (Datascript.db server_conn) child1.id))
+                  (Ldb.ent_of_id (Datascript.db display) child1.id))
                "block/title"
              = Some (String "acked edit"))))
 
