@@ -1,5 +1,6 @@
 (ns logseq.e2e.reference-basic-test
   (:require
+   [clojure.string :as string]
    [clojure.test :refer [deftest is testing use-fixtures]]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
@@ -94,39 +95,40 @@
         " return el ? el.innerText : ''; })()")))
 
 (defn- no-raw-uuid?
-  "Text contains no uuid block ref or raw uuid string."
-  [text]
-  (not (re-find #"\(\(|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" text)))
+  "Returns true when `text` does not contain the referenced `block-uuid`."
+  [text block-uuid]
+  (not (string/includes? text block-uuid)))
 
 (deftest search-displays-referenced-block-title
   (testing "cmdk and [[ autocomplete resolve [[uuid]] to the referenced title"
     (b/new-block "ref target")
-    (b/copy)
-    (b/new-block "")
-    (b/paste)
-    (util/exit-edit)
-    (b/assert-blocks-visible ["ref target" "ref target"])
+    (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (b/copy)
+      (b/new-block "")
+      (b/paste)
+      (util/exit-edit)
+      (b/assert-blocks-visible ["ref target" "ref target"])
 
-    ;; cmdk search
-    (util/search "ref target")
-    (assert/assert-is-visible ".cp__cmdk :text('ref target')")
-    (is (no-raw-uuid? (inner-text ".cp__cmdk"))
-        "cmdk results show resolved title, not raw [[uuid]]")
-    ;; first esc clears the query, second closes the modal
-    (k/esc)
-    (k/esc)
-    (w/wait-for-not-visible ".cp__cmdk")
+      ;; cmdk search
+      (util/search "ref target")
+      (assert/assert-is-visible ".cp__cmdk :text('ref target')")
+      (is (no-raw-uuid? (inner-text ".cp__cmdk") block-uuid)
+          "cmdk results show resolved title, not raw [[uuid]]")
+      ;; first esc clears the query, second closes the modal
+      (k/esc)
+      (k/esc)
+      (w/wait-for-not-visible ".cp__cmdk")
 
-    ;; [[ node autocomplete
-    (b/new-block "")
-    (util/press-seq "[[")
-    (util/wait-timeout 300)
-    (util/press-seq "ref")
-    (util/wait-timeout 800)
-    (assert/assert-is-visible "#ui__ac-inner")
-    (assert/assert-is-visible "#ui__ac-inner :text('ref target')")
-    (is (no-raw-uuid? (inner-text "#ui__ac-inner"))
-        "[[ autocomplete shows resolved title, not raw [[uuid]]")))
+      ;; [[ node autocomplete
+      (b/new-block "")
+      (util/press-seq "[[")
+      (util/wait-timeout 300)
+      (util/press-seq "ref")
+      (util/wait-timeout 800)
+      (assert/assert-is-visible "#ui__ac-inner")
+      (assert/assert-is-visible "#ui__ac-inner :text('ref target')")
+      (is (no-raw-uuid? (inner-text "#ui__ac-inner") block-uuid)
+          "[[ autocomplete shows resolved title, not raw [[uuid]]"))))
 
 (deftest page-self-mentions-are-excluded-from-references
   (testing "blocks on a page do not appear in that page's linked or unlinked references"

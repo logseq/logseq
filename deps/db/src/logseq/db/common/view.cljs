@@ -31,8 +31,11 @@
           (let [col (->> (if (db-property-type/all-ref-property-types typ) (map db-property/property-value-content v) v)
                          (remove nil?))]
             (if number-type?
-              (reduce + (filter number? col))
-              (string/join ", " col)))
+              (let [nums (filter number? col)]
+                (when (seq nums)
+                  (reduce + nums)))
+              (when (seq col)
+                (string/join ", " col))))
           (let [v' (if (db-property-type/all-ref-property-types typ) (db-property/property-value-content v) v)]
             (cond
               (and number-type? (number? v')) v'
@@ -63,19 +66,29 @@
           (when (valid-type-for-sort? v)
             v))))))
 
-(defn- by-one-sorting
-  [{:keys [asc? get-value]}]
-  (let [cmp (if asc? compare #(compare %2 %1))]
-    (fn [a b]
-      (cmp (get-value a) (get-value b)))))
+(defn- compare-sort-values
+  [va vb asc?]
+  (cond
+    (and (nil? va) (nil? vb)) 0
+    (nil? va) 1
+    (nil? vb) -1
+    :else (let [c (compare va vb)]
+            (if asc? c (- c)))))
+
+(defn- by-sorting
+  [sorting]
+  (fn [a b]
+    (reduce
+     (fn [order {:keys [get-value asc?]}]
+       (if (zero? order)
+         (compare-sort-values (get-value a) (get-value b) asc?)
+         (reduced order)))
+     0 sorting)))
 
 (defn- sort-ref-entities-by-single-property
   "get all entities sorted by `major-sorting`"
   [entities {:keys [_id asc?]} get-value-fn]
-  (let [sorting {:asc? asc?
-                 :get-value get-value-fn}
-        sort-cmp (by-one-sorting sorting)]
-    (sort sort-cmp entities)))
+  (sort (by-sorting [{:asc? asc? :get-value get-value-fn}]) entities))
 
 (defn- sort-by-single-property
   [db {:keys [id asc?] :as sorting} entities partition?]
@@ -90,9 +103,7 @@
         sorted-entities (->>
                          (cond
                            (= id :block.temp/refs-count)
-                           (cond-> (sort-by :block.temp/refs-count entities')
-                             (not asc?)
-                             reverse)
+                           (sort (by-sorting [{:asc? asc? :get-value :block.temp/refs-count}]) entities')
 
                            use-datom-sort?
                            (let [datoms (cond->
@@ -102,12 +113,14 @@
                                           (not asc?)
                                           rseq)
                                  row-ids (set (map :db/id entities'))
-                                 id->row (zipmap (map :db/id entities') entities')]
-                             (keep
-                              (fn [d]
-                                (when (row-ids (:e d))
-                                  (id->row (:e d))))
-                              datoms))
+                                 id->row (zipmap (map :db/id entities') entities')
+                                 sorted-eids (into [] (comp (map :e) (filter row-ids)) datoms)
+                                 ;; Rows missing the sort attr tie on nil in the comparator
+                                 ;; path; keep them last in both directions, like
+                                 ;; sort-eids-from-avet's leftover eids.
+                                 missing-eids (sort (if asc? compare #(compare %2 %1))
+                                                    (remove (set sorted-eids) row-ids))]
+                             (map id->row (concat sorted-eids missing-eids)))
 
                            :else
                            (sort-ref-entities-by-single-property entities' sorting get-value-fn))
@@ -126,7 +139,7 @@
                  {:asc? asc?
                   :get-value (memoize (get-value-for-sort property))}))
              minor-sorting)
-        sort-cmp (common-util/by-sorting sorting)]
+        sort-cmp (by-sorting sorting)]
     (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
 (defn sort-entities
@@ -582,15 +595,6 @@
 
         :else
         (first vs))))))
-
-(defn- compare-sort-values
-  [va vb asc?]
-  (cond
-    (and (nil? va) (nil? vb)) 0
-    (nil? va) 1
-    (nil? vb) -1
-    :else (let [c (compare va vb)]
-            (if asc? c (- c)))))
 
 (def ^:private avet-first-window-sort-attrs
   #{:block/updated-at :block/created-at :block/title :block/name})
@@ -1180,20 +1184,13 @@
   (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
                                           :block/journal-day)
         desc? (view-sort-groups-desc? view)
-        page-sort-value (fn [page]
-                          (let [v (get page groups-sort-by-property-ident)]
-                            (if (and (= groups-sort-by-property-ident :block/journal-day)
-                                     (not desc?)
-                                     (nil? (:block/journal-day page)))
-                              js/Number.MAX_SAFE_INTEGER
-                              v)))
         page-sorters (cond->
-                      [{:get-value (fn [[page _blocks]] (page-sort-value page))
+                      [{:get-value (fn [[page _blocks]] (get page groups-sort-by-property-ident))
                         :asc? (not desc?)}]
                        (not= groups-sort-by-property-ident :block/title)
                        (conj {:get-value (fn [[page _blocks]] (:block/title page))
                               :asc? (not desc?)}))
-        sorted-page-groups (sort (common-util/by-sorting page-sorters)
+        sorted-page-groups (sort (by-sorting page-sorters)
                                  (group-by #(or (:block/page %) %) entities))
         block-row (fn [block]
                     {:db/id (:db/id block)
@@ -1318,13 +1315,7 @@
                                       (fn [[by-value _]]
                                         (cond
                                           group-by-page?
-                                          (let [v (comparable-sort-value db (get by-value groups-sort-by-property-ident))]
-                                            (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
-                                                     (nil? (:block/journal-day by-value)))
-                                              ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
-                                              ;; after all journal pages when sorting by journal date.
-                                              js/Number.MAX_SAFE_INTEGER
-                                              v))
+                                          (comparable-sort-value db (get by-value groups-sort-by-property-ident))
                                           group-by-closed-values?
                                           (:block/order by-value)
                                           ref-property?
@@ -1334,7 +1325,7 @@
                                           (comparable-sort-value db by-value)
                                           :else
                                           (comparable-sort-value db by-value))))]
-                          (sort (common-util/by-sorting
+                          (sort (by-sorting
                                  (cond->
                                    [{:get-value (keyfn groups-sort-by-property-ident)
                                      :asc? (not desc?)}]
