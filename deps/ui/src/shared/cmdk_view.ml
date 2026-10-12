@@ -604,34 +604,32 @@ let search_only_chip svs st (gid : S.group_id) =
 
 let scroller svs st : t =
   let view_sig = Signal.value (st.S.vs) in
-  (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
-     the results stack inside a single column instead *)
+  (* cmdk_scroller owns the single column scroll children stack into
+     (scroll children share a grid cell); bottom pad scrolls the last
+     row clear of the hints bar — the sidebar has none *)
   Ui_components.cmdk_scroller ~key:"scroller"
-    [ column ~key:"scroller-body" ~grow:1.
-        [ reactive
-            (fun (v : S.view) ->
-              match v.S.filter with
-              | Some gid -> search_only_chip svs st gid
-              | None -> spacer ~key:"chip" [])
-            view_sig
-        ; groups_body svs st
-        ; if_
-            ~test:
-              (reactive
-                 (fun (v : S.view) ->
-                   v.S.input <> ""
-                   && not
-                        (v.S.groups <> []
-                        && List.exists
-                             (fun (g : S.group) -> g.S.gitems <> [])
-                             v.S.groups))
-                 view_sig)
-            (Ui_components.cmdk_empty ~key:"empty"
-               [ text ~key:"empty-t"
-                   ~value:(svs.Svs.i18n "search/no-result") [] ])
-        ; spacer ~key:"scpad"
-            ~height:(if (S.get st).S.sidebar then 0 else 56) []
-        ]
+    ~bottom_pad:(if (S.get st).S.sidebar then 0 else 56)
+    [ reactive
+        (fun (v : S.view) ->
+          match v.S.filter with
+          | Some gid -> search_only_chip svs st gid
+          | None -> spacer ~key:"chip" [])
+        view_sig
+    ; groups_body svs st
+    ; if_
+        ~test:
+          (reactive
+             (fun (v : S.view) ->
+               v.S.input <> ""
+               && not
+                    (v.S.groups <> []
+                    && List.exists
+                         (fun (g : S.group) -> g.S.gitems <> [])
+                         v.S.groups))
+             view_sig)
+        (Ui_components.cmdk_empty ~key:"empty"
+           [ text ~key:"empty-t"
+               ~value:(svs.Svs.i18n "search/no-result") [] ])
     ]
 
 (* -- input row -------------------------------------------------------- *)

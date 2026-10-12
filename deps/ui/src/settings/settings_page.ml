@@ -15,27 +15,27 @@ let version = Version.app
 
 (* config.edn-backed toggle row — folds the (config_bool, config_toggle)
    pair every config toggle repeats *)
-let cfg_row ~key ~for_ ~label ?label_extra ?detail ?binding ~cfg ~default
+let cfg_row ~key ~label ?label_extra ?detail ?binding ~cfg ~default
     () =
-  C.toggle_row ~key ~for_ ~label ?label_extra ?detail ?binding
+  C.toggle_row ~key ~label ?label_extra ?detail ?binding
     ~on:(S.config_bool cfg ~default)
     ~on_checked:(fun checked -> S.config_set_bool cfg checked)
     ()
 
 (* localStorage-backed toggle row *)
-let storage_row ~key ~for_ ~label ?label_extra ?detail ?binding ~key_ ~default
+let storage_row ~key ~label ?label_extra ?detail ?binding ~key_ ~default
     ~on_checked () =
-  C.toggle_row ~key ~for_ ~label ?label_extra ?detail ?binding
+  C.toggle_row ~key ~label ?label_extra ?detail ?binding
     ~on:(S.storage_bool key_ ~default) ~on_checked ()
 
 (* show-brackets and wide-mode appear in both the editor pane and the
    appearance popup — same row spec, different DOM key *)
 let brackets_row ~key =
-  cfg_row ~key ~for_:"show_brackets" ~label:T.show_brackets
+  cfg_row ~key ~label:T.show_brackets
     ~binding:"t b" ~cfg:"ui/show-brackets?" ~default:true ()
 
 let wide_mode_row ~key =
-  storage_row ~key ~for_:"wide_mode" ~label:T.wide_mode ~binding:"t w"
+  storage_row ~key ~label:T.wide_mode ~binding:"t w"
     ~key_:"wide-mode" ~default:false ~on_checked:S.set_wide_mode ()
 
 (* ---- general pane ---- *)
@@ -43,7 +43,7 @@ let wide_mode_row ~key =
 let revision = "dev" (* logseq.common.version/REVISION — goog-define default *)
 
 let version_row () =
-  C.action_row ~key:"ver" ~for_:"current-version" ~label:T.current_version
+  C.action_row ~key:"ver" ~label:T.current_version
     ~actions:
       [ Ui_components.with_props
           [ Ui_components.Prop.position `relative ]
@@ -78,7 +78,7 @@ let language_row ctx =
     Signal.state ctx.Lui_ui.ui_scheduler
       (V.lang_label_for (V.current_lang ()))
   in
-  C.action_row ~key:"lang" ~for_:"preferred_language"
+  C.action_row ~key:"lang"
     ~label:T.language_label
     ~actions:
       [ V.lang_trigger ~ctx ~key:"lang-sel" ~height:32
@@ -142,7 +142,7 @@ let editor_font_row () =
     font_button ~key:("font-" ^ t) ~label ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  C.it_row ~key:"font" ~for_:"font_family" ~label:T.editor_font
+  C.it_row ~key:"font" ~label:T.editor_font
     ~value_cls:"ls-it-value-col" ~min_height:76
     [ row ~key:"font-btns" ~style_class:"ls-row-gap"
         [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
@@ -226,7 +226,7 @@ let accent_row ~modal =
       ]
   in
   column ~key:"acc" ~min_height:80
-    [ C.action_row ~key:"acc-r" ~for_:"toggle_radix_theme"
+    [ C.action_row ~key:"acc-r"
         ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
         ~min_height:60
         ~actions:[ swatches ] ~stretch:modal
@@ -251,11 +251,9 @@ let general_pane ~modal ctx =
     ; editor_font_row ()
     ; accent_row ~modal
     ; C.edit_link_row ~key:"cfg" ~label:T.config_custom_configuration
-        ~button:T.edit_config_edn ~href:"#/file/logseq%2Fconfig.edn"
-        ~for_:"config_edn" ()
+        ~button:T.edit_config_edn ~href:"#/file/logseq%2Fconfig.edn" ()
     ; C.edit_link_row ~key:"css" ~label:T.config_custom_theme
-        ~button:T.edit_custom_css ~href:"#/file/logseq%2Fcustom.css"
-        ~for_:"customize_css" ()
+        ~button:T.edit_custom_css ~href:"#/file/logseq%2Fcustom.css" ()
     ]
 
 (* ---- editor pane ---- *)
@@ -339,29 +337,29 @@ let editor_pane ctx =
     [ date_format_row ctx
     ; brackets_row ~key:"brackets"
     ; wide_mode_row ~key:"wide"
-    ; cfg_row ~key:"outdent" ~for_:"preferred_outdenting"
+    ; cfg_row ~key:"outdent"
         ~label:T.logical_outdenting
         ~label_extra:
           [ C.info_icon ~key:"outdent-i" ~title:T.outdenting_hint ]
         ~cfg:"editor/logical-outdenting?" ~default:false ()
-    ; cfg_row ~key:"fullb" ~for_:"show_full_blocks"
+    ; cfg_row ~key:"fullb"
         ~label:T.show_full_blocks
         ~cfg:"ui/show-full-blocks?" ~default:false ()
-    ; cfg_row ~key:"pasting" ~for_:"preferred_pasting_file"
+    ; cfg_row ~key:"pasting"
         ~label:T.preferred_pasting
         ~label_extra:[ C.info_icon ~key:"pasting-i" ~title:T.pasting_hint ]
         ~cfg:"editor/preferred-pasting-file?" ~default:false ()
-    ; cfg_row ~key:"autoexp" ~for_:"auto_expand_block_refs"
+    ; cfg_row ~key:"autoexp"
         ~label:T.auto_expand_refs
         ~label_extra:
           [ C.info_icon ~key:"autoexp-i" ~title:T.auto_expand_hint ]
         ~cfg:"ui/auto-expand-block-refs?" ~default:true ()
-    ; storage_row ~key:"sttip" ~for_:"enable_tooltip"
+    ; storage_row ~key:"sttip"
         ~label:T.shortcut_tooltip ~key_:"shortcut-tooltip?" ~default:true
         ~on_checked:S.set_shortcut_tooltip ()
-    ; cfg_row ~key:"tooltips" ~for_:"enable_tooltip"
+    ; cfg_row ~key:"tooltips"
         ~label:T.tooltips ~cfg:"ui/enable-tooltip?" ~default:true ()
-    ; cfg_row ~key:"puball" ~for_:"all pages public"
+    ; cfg_row ~key:"puball"
         ~label:T.all_pages_public ~cfg:"publishing/all-pages-public?"
         ~default:false ()
     ]
@@ -583,20 +581,20 @@ let storage_url key default =
 let advanced_pane () =
   column ~key:"pane-advanced" ~style_class:"panel-wrap"
     ~gap:16 ~padding:4
-    [ C.toggle_row ~key:"usage" ~for_:"usage-diagnostics"
+    [ C.toggle_row ~key:"usage"
         ~label:T.usage_diagnostics
         ~detail:
           [ text ~key:"usage-d" ~style_class:"ls-desc"
               ~value:T.usage_diagnostics_desc [] ]
         ~on:(not (S.instrument_disabled ()))
         ~on_checked:S.set_usage_diagnostics ()
-    ; C.toggle_row ~key:"devm" ~for_:"developer_mode"
+    ; C.toggle_row ~key:"devm"
         ~label:T.developer_mode
         ~detail:
           [ text ~key:"devm-d" ~style_class:"ls-desc"
               ~value:T.developer_mode_desc [] ]
         ~on:(S.developer_mode ()) ~on_checked:S.set_developer_mode ()
-    ; C.action_row ~key:"syncurl" ~for_:"sync_server_url"
+    ; C.action_row ~key:"syncurl"
         ~label:T.sync_server_url
         ~actions:
           [ url_button ~key:"syncurl-b"
@@ -604,7 +602,7 @@ let advanced_pane () =
               ~on_open:(fun () -> Dialogs_state.open_ "sync-server")
           ]
         ()
-    ; C.action_row ~key:"puburl" ~for_:"publish_server_url"
+    ; C.action_row ~key:"puburl"
         ~label:T.publish_server_url
         ~actions:
           [ url_button ~key:"puburl-b"
@@ -630,7 +628,7 @@ let home_page_row ctx =
   let home_text =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
-  C.it_row ~key:"homep" ~for_:"default page" ~label:T.home_default_page
+  C.it_row ~key:"homep" ~label:T.home_default_page
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
@@ -655,8 +653,8 @@ let home_page_row ctx =
 (* action_row + switch cell — plugins/flashcards rows in the features
    pane use the same control pair as toggle rows, laid out as an
    action row *)
-let switch_action_row ~key ~for_ ~label ~on ~on_checked () =
-  C.action_row ~key ~for_ ~label
+let switch_action_row ~key ~label ~on ~on_checked () =
+  C.action_row ~key ~label
     ~actions:[ C.switch_el ~key:(key ^ "-sw") ~on ~on_checked ]
     ()
 
@@ -664,7 +662,7 @@ let features_pane ctx =
   column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
     ~gap:16 ~padding:4 ~margin_bottom:32 ~min_width:560
     [ home_page_row ctx
-    ; C.action_row ~key:"plugs" ~for_:"plugin_system"
+    ; C.action_row ~key:"plugs"
         ~label:T.plugins_label
         ~actions:
           [ row ~key:"plugs-a" ~style_class:"ls-toolbar-gap"
@@ -672,7 +670,7 @@ let features_pane ctx =
                  ~on_checked:S.set_plugin_system ())
           ]
         ()
-    ; switch_action_row ~key:"cards" ~for_:"flashcards"
+    ; switch_action_row ~key:"cards"
         ~label:T.flashcards
         ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
         ~on_checked:(fun checked ->
