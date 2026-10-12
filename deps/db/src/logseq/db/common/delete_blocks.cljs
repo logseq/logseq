@@ -24,11 +24,16 @@
 
 (defn- build-retracted-tx
   ([retracted-blocks]
-   (build-retracted-tx retracted-blocks #{}))
-  ([retracted-blocks extra-retract-ids]
+   (build-retracted-tx retracted-blocks #{} []))
+  ([retracted-blocks extra-retract-ids retracted-pages]
   (let [refs (->> (mapcat (fn [block] (:block/_refs block)) retracted-blocks)
                   (common-util/distinct-by :db/id))
-        retract-ids (into (set (map :db/id retracted-blocks)) extra-retract-ids)]
+        retract-ids (into (set (map :db/id retracted-blocks)) extra-retract-ids)
+        ;; A title rewritten here replaces any rewrite of the same block in
+        ;; the transaction (e.g. a deleted page's refs turned into its title),
+        ;; so refs to pages retracted in the transaction are turned into their
+        ;; titles here too.
+        title-sources (concat retracted-blocks retracted-pages)]
     (mapcat
      (fn [ref]
        (let [id (:db/id ref)
@@ -38,7 +43,7 @@
                                  (fn [raw-title block]
                                    (replace-ref-with-deleted-block-title block raw-title))
                                  raw-title
-                                 retracted-blocks)))
+                                 title-sources)))
              tx (cond->
                  (mapcat
                   (fn [block]
@@ -179,6 +184,7 @@
 (defn- direct-cleanup-tx
   [entities]
   (let [retracted-blocks (filter block-entity? entities)
+        retracted-pages (filter #(and (:block/uuid %) (entity-util/page? %)) entities)
         retracted-history-self-entities (filter property-history-entity? entities)
         retracted-history-self-tx (map (fn [history] [:db/retractEntity (:db/id history)])
                                        retracted-history-self-entities)
@@ -204,7 +210,7 @@
                                           history-entities)
                                  (keep :db/id)
                                  set)
-        retracted-tx (build-retracted-tx retracted-blocks cleanup-retract-ids)
+        retracted-tx (build-retracted-tx retracted-blocks cleanup-retract-ids retracted-pages)
         delete-views (map (fn [view] [:db/retractEntity (:db/id view)]) view-entities)]
     (vec (concat retracted-tx delete-views retracted-history-self-tx retract-history-tx retract-reactions-tx))))
 
