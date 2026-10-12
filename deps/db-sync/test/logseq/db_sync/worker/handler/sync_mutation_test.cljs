@@ -116,6 +116,7 @@
 
 ;; ensure-schema!
 
+;; Fails if, in `ensure-schema!`, `true` becomes `false`.
 (deftest ensure-schema-initializes-schema-once-test
   (let [calls (atom 0)
         self #js {:sql (test-sql/make-sql)}]
@@ -127,6 +128,7 @@
 
 ;; health
 
+;; Fails if, in `handle`, `true` becomes `false`.
 (deftest health-route-reports-ok-test
   (async done
     (finish-async!
@@ -138,6 +140,7 @@
 
 ;; pull
 
+;; Fails if, in `<ready-for-sync?`, `false` becomes `true`.
 (deftest sync-pull-is-blocked-while-snapshot-upload-is-in-progress-test
   (async done
     (let [sql (test-sql/make-sql)
@@ -153,6 +156,7 @@
           (is (= 409 (.-status resp)))
           (is (= "graph not ready" (:error body))))))))
 
+;; Fails if, in `handle-sync-pull`, `if` becomes `if-not`, `some?` becomes `nil?` or `or` becomes `and`.
 (deftest sync-pull-returns-txs-after-since-and-rejects-invalid-since-test
   (async done
     (let [{:keys [conn self]} (server-self)
@@ -177,6 +181,7 @@
 
 ;; tx batch
 
+;; Fails if, in `handle-tx-batch!`, `or` becomes `and`.
 (deftest tx-batch-rejects-invalid-t-before-test
   (let [{:keys [self]} (server-self)
         entry {:tx (protocol/tx->transit [[:db/add -1 :block/title "x"]])
@@ -186,6 +191,7 @@
         (is (= {:type "tx/reject" :reason "invalid t-before"}
                (sync-handler/handle-tx-batch! self nil [entry] t-before)))))))
 
+;; Fails if, in `block-uuid-lookup-ref`, `and` becomes `or`.
 (deftest tx-batch-reports-only-block-uuid-lookups-as-missing-blocks-test
   (let [{:keys [self]} (server-self)
         response (tx-batch! self [[:db/add [:db/ident :user.property/missing] :block/title "x"]] :save-block)]
@@ -193,6 +199,7 @@
     (is (= "db transact failed" (:reason response)))
     (is (not (contains? response :missing-block-uuids)))))
 
+;; Fails if, in `sanitize-tx-entry`, `=` becomes `not=`.
 (deftest tx-batch-fix-retracting-only-a-missing-block-is-not-broadcast-test
   (testing "a :fix entry whose only op retracts a block that does not exist changes nothing, so other clients are not told to pull"
     (let [{:keys [self]} (server-self)
@@ -209,6 +216,9 @@
 
 ;; large tx chunking
 
+;; Fails if, in `replaced-value-attrs`, `when` becomes `when-not`.
+;; Fails if, in `tx-item-group-keys`, `and` becomes `or`.
+;; Fails if, in `reduce-ordered-tx-chunks`, `>` becomes `>=`.
 (deftest large-tx-of-1000-independent-maps-is-applied-in-two-chunks-of-500-test
   (let [server (server-self)
         tx-data (mapv (fn [_] {:block/uuid (random-uuid) :block/title "same title"}) (range 1000))
@@ -217,6 +227,9 @@
     (is (= 2 (count tx-metas)))
     (is (= 2 (:t response)))))
 
+;; Fails if, in `tempid?`, `and` becomes `or`.
+;; Fails if, in `replaced-value-attrs`, `when` becomes `when-not`, `and` becomes `or` or `=` becomes `not=`.
+;; Fails if, in `tx-item-group-keys`, `and` becomes `or`.
 (deftest large-tx-chunks-updates-of-an-existing-block-independently-test
   (testing "two adds of a cardinality-one attr on an existing block (raw eid) far apart are not grouped"
     (let [{:keys [conn] :as server} (server-self)
@@ -229,6 +242,9 @@
       (is (= 2 (count tx-metas)))
       (is (= 3 (:block/updated-at (d/entity @conn [:block/uuid block-uuid])))))))
 
+;; Fails if, in `cardinality-many-attr?`, `or` becomes `and`.
+;; Fails if, in `replaced-value-attrs`, `and` becomes `or`.
+;; Fails if, in `tx-item-group-keys`, `and` becomes `or`.
 (deftest large-tx-chunks-cardinality-many-retract-and-add-independently-test
   (testing "a retract and an add of a cardinality-many attr on an existing block far apart are not grouped"
     (let [{:keys [conn] :as server} (server-self)
@@ -243,6 +259,8 @@
       (is (= "tx/batch/ok" (:type response)))
       (is (= 2 (count tx-metas))))))
 
+;; Fails if, in `tempid?`, `and` becomes `or`.
+;; Fails if, in `tx-item-group-keys`, `and` becomes `or`.
 (deftest large-tx-chunks-retract-entity-of-an-existing-block-independently-test
   (testing "two retractEntity items of one existing block (raw eid) far apart are not grouped"
     (let [{:keys [conn] :as server} (server-self)
@@ -255,6 +273,7 @@
       (is (= 2 (count tx-metas)))
       (is (nil? (d/entity @conn [:block/uuid block-uuid]))))))
 
+;; Fails if, in `merge-ranges`, `<=` becomes `<`.
 (deftest large-tx-keeps-groups-sharing-an-item-in-one-chunk-test
   (testing "tempid A's last item refers to tempid B: A's and B's items stay in one chunk"
     (let [{:keys [conn] :as server} (server-self)
@@ -282,6 +301,8 @@
       (is (= 2 (count tx-metas)))
       (is (= "b" (:block/title (d/entity @conn [:block/uuid b-uuid])))))))
 
+;; Fails if, in `reduce-ordered-tx-chunks`, `>` becomes `>=`.
+;; Fails if, in `large-tx?`, `>=` becomes `>`.
 (deftest tx-entry-of-500-items-is-applied-as-large-tx-test
   (let [{:keys [conn] :as server} (server-self)
         {:keys [page-uuid]} (seed-page-and-block! conn)
@@ -294,12 +315,14 @@
     (is (= "tx/batch/ok" (:type response)))
     (is (= [true] (mapv :db-sync/skip-checksum-update? tx-metas)))))
 
+;; Fails if, in `apply-tx-entry!`, `and` becomes `or`.
 (deftest small-tx-entry-is-applied-as-one-plain-transaction-test
   (let [server (server-self)
         {:keys [response tx-metas]} (tx-batch-reports! server [[:db/add -1 :block/title "small"]] :save-block)]
     (is (= "tx/batch/ok" (:type response)))
     (is (= [nil] (mapv :db-sync/skip-checksum-update? tx-metas)))))
 
+;; Fails if, in `apply-tx-entry!`, `and` becomes `or`.
 (deftest large-db-migrate-entry-is-applied-in-one-transaction-test
   (let [{:keys [conn] :as server} (server-self)
         {:keys [page-uuid]} (seed-page-and-block! conn)
@@ -308,6 +331,7 @@
     (is (= "tx/batch/ok" (:type response)))
     (is (= 1 (count tx-metas)))))
 
+;; Fails if, in `apply-large-tx-entry!`, `when` becomes `when-not`.
 (deftest large-tx-removes-its-checksum-listener-test
   (let [{:keys [conn] :as server} (server-self)
         {:keys [page-uuid]} (seed-page-and-block! conn)
@@ -318,6 +342,7 @@
 
 ;; snapshot download
 
+;; Fails if, in `snapshot-stream-gzip-enabled?`, `false` becomes `true`.
 (deftest snapshot-download-omits-gzip-when-env-flag-is-boolean-false-test
   (async done
     (let [self #js {:env #js {"DB_SYNC_SNAPSHOT_STREAM_GZIP" false}
@@ -332,6 +357,7 @@
           (is (true? (:ok body)))
           (is (not (contains? body :content-encoding))))))))
 
+;; Fails if, in `snapshot-export-stream`, `first` becomes `last`.
 (deftest snapshot-stream-pages-by-the-last-row-addr-test
   (async done
     (let [rows [[1 "row-1" nil]
@@ -380,6 +406,7 @@
         {:count n
          :calls @calls}))))
 
+;; Fails if, in `import-snapshot-stream!`, `true` becomes `false` or `or` becomes `and`.
 (deftest import-snapshot-stream-resets-for-an-empty-snapshot-test
   (async done
     (finish-async!
@@ -387,6 +414,7 @@
      #(p/let [result (import-calls! [] true)]
         (is (= {:count 0 :calls [[[] true]]} result))))))
 
+;; Fails if, in `import-snapshot-stream!`, `and` becomes `or`.
 (deftest import-snapshot-stream-resets-only-with-the-first-chunk-test
   (async done
     (let [rows-1 [[1 "row-1" nil]]
@@ -435,6 +463,8 @@
 
 (def ^:private upload-rows [[7 "row-7" nil]])
 
+;; Fails if, in `maybe-decompress-stream`, `if` becomes `if-not`, `and` becomes `or` or `=` becomes `not=`.
+;; Fails if, in `handle-sync-snapshot-upload`, `or` becomes `and`, `and` becomes `or` or `not` becomes `identity`.
 (deftest snapshot-upload-decompresses-only-gzip-bodies-test
   (async done
     (let [frame (framed-rows upload-rows)]
@@ -450,6 +480,8 @@
               (is (= {:ok true :count 1} (:body result)))
               (is (= [[upload-rows true]] (:imported result))))))))))
 
+;; Fails if, in `maybe-decompress-stream`, `if` becomes `if-not`.
+;; Fails if, in `handle-sync-snapshot-upload`, `or` becomes `and`, `and` becomes `or`, `=` becomes `not=` or `not` becomes `identity`.
 (deftest snapshot-upload-without-decompression-stream-rejects-only-gzip-test
   (async done
     (let [frame (framed-rows upload-rows)
@@ -472,6 +504,9 @@
                      (is false (str error))
                      (done)))))))
 
+;; Fails if, in `import-snapshot-stream!`, `and` becomes `or`.
+;; Fails if, in `parse-reset-param`, `if` becomes `if-not`, `nil?` becomes `some?` or `not` becomes `identity`.
+;; Fails if, in `handle-sync-snapshot-upload`, `when` becomes `when-not`, `false` becomes `true` or `true` becomes `false`.
 (deftest snapshot-upload-reset-param-test
   (async done
     (let [frame (framed-rows upload-rows)]
@@ -486,6 +521,7 @@
           (is (= [[upload-rows true]] (:imported reset-true)))
           (is (= [false true] (:ready-updates reset-true))))))))
 
+;; Fails if, in `handle-sync-snapshot-upload`, `when` becomes `when-not`, `true` becomes `false` or `false` becomes `true`.
 (deftest snapshot-upload-marks-graph-uploading-until-finished-test
   (async done
     (let [frame (framed-rows upload-rows)]
@@ -503,6 +539,7 @@
             (is (= "false" (:uploading-after last-part)))
             (is (= [false true] (:ready-updates last-part)))))))))
 
+;; Fails if, in `sqlite-too-big-error?`, `or` becomes `and`.
 (deftest snapshot-upload-returns-413-for-a-non-error-too-big-rejection-test
   (async done
     (let [self #js {:sql (test-sql/make-sql)
