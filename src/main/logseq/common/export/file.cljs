@@ -179,8 +179,21 @@
                                   (contains? (:excluded-properties context) k)))
                         (remove (fn [[k _]]
                                   (:logseq.property/hide? (d/entity db k))))
-                        (into {}))]
-    (when (seq properties)
+                        (into {}))
+        ;; tags set on the block but not written in its text, as the file
+        ;; graph's `tags::` line; built-in tags are implied by the block
+        tag-titles (when (and (:block/page block)
+                              (not (contains? (:excluded-properties context) :block/tags)))
+                     (->> (:block/tags block)
+                          (remove :logseq.property/built-in?)
+                          (remove #(string/includes? (str (:block/title block))
+                                                     (str "#" (page-ref/->page-ref (:block/uuid %)))))
+                          (map :block/title)
+                          sort
+                          seq))
+        tags-line (when tag-titles
+                    (property-line-content "tags" (string/join ", " tag-titles) spaces-tabs context))]
+    (when (or (seq properties) tags-line)
       (let [sorted-properties (->> (keys properties)
                                    (keep (fn [k] (d/entity db k)))
                                    db-property/sort-properties)]
@@ -201,6 +214,8 @@
                               (property-value->string db property value context)
                               spaces-tabs
                               context)))))))
+             (cons tags-line)
+             (remove nil?)
              (string/join "\n"))))))
 
 (defn- property-value-block-content

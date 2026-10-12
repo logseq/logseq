@@ -94,18 +94,45 @@
       (contains? #{:date :node :page} type)
       (<page-id repo s))))
 
+(defn- <tag-ids
+  "Ids of the existing tags named in a `tags::` value (`a, #b, [[c d]]`), or
+  nil when one of them is not an existing tag."
+  [repo v]
+  (let [names (->> (string/split v #",")
+                   (map #(-> % string/trim (string/replace #"^#" "") strip-page-ref string/lower-case))
+                   (remove string/blank?))]
+    (when (seq names)
+      (p/let [ids (p/all (map (fn [n]
+                                (<q repo
+                                    '[:find ?t . :in $ ?name
+                                      :where
+                                      [?t :block/name ?name]
+                                      [?c :db/ident :logseq.class/Tag]
+                                      [?t :block/tags ?c]]
+                                    n))
+                              names))]
+        (when (every? some? ids) (vec ids))))))
+
+(defn- <user-property-assignment
+  [repo k v]
+  (p/let [property (<property-by-title repo k)]
+    (when property
+      (p/let [closed-values (<closed-values repo (:db/id property))
+              many? (= :db.cardinality/many (:db/cardinality property))
+              parts (if many? (string/split v #",\s*") [v])
+              values (p/all (map #(<value repo property closed-values %) parts))]
+        (when (and (seq values) (every? some? values))
+          [(:db/ident property) (if many? (vec values) (first values))])))))
+
 (defn- <property-assignment
-  "[property-ident value] for one exported `key:: value` line, or nil."
+  "[property-ident value] for one exported `key:: value` line, or nil. A
+  `tags::` line names existing tags."
   [repo line]
   (when-let [[k v] (parse-property-line line)]
-    (p/let [property (<property-by-title repo k)]
-      (when property
-        (p/let [closed-values (<closed-values repo (:db/id property))
-                many? (= :db.cardinality/many (:db/cardinality property))
-                parts (if many? (string/split v #",\s*") [v])
-                values (p/all (map #(<value repo property closed-values %) parts))]
-          (when (and (seq values) (every? some? values))
-            [(:db/ident property) (if many? (vec values) (first values))]))))))
+    (if (= "tags" (string/lower-case (string/trim k)))
+      (p/let [ids (<tag-ids repo v)]
+        (when ids [:block/tags ids]))
+      (<user-property-assignment repo k v))))
 
 (defn <read-properties
   "For a pasted block (title as parsed): the block with its resolved property

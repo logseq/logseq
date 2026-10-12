@@ -1,6 +1,7 @@
 (ns frontend.handler.paste-properties-test
   "Text exported by the app pastes back with its properties."
   (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -18,6 +19,7 @@
 (def ^:private status-uuid #uuid "00000000-0000-4000-8000-000000000102")
 (def ^:private priority-uuid #uuid "00000000-0000-4000-8000-000000000103")
 (def ^:private choice-joy #uuid "00000000-0000-4000-8000-0000000000c1")
+(def ^:private tagged-uuid #uuid "00000000-0000-4000-8000-000000000104")
 
 (use-fixtures :once
   {:before (fn []
@@ -42,7 +44,11 @@
                          :build/properties {:logseq.property/status :logseq.property/status.doing}}
                         {:block/title "important"
                          :block/uuid priority-uuid :build/keep-uuid? true
-                         :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]
+                         :build/properties {:logseq.property/priority :logseq.property/priority.high}}
+                        {:block/title "tagged"
+                         :block/uuid tagged-uuid :build/keep-uuid? true
+                         :build/tags [:research :idea]}]}]
+                     :classes {:research {} :idea {}}
                      :properties {:p-text {:logseq.property/type :default}
                                   :p-number {:logseq.property/type :number}
                                   :p-check {:logseq.property/type :checkbox}
@@ -128,6 +134,23 @@
                (is (= {:logseq.property/status (ident-id :logseq.property/status.doing)} (:assignments status)))
                (is (= "important" (:block/title (first (:blocks priority)))) (pr-str (:text priority)))
                (is (= {:logseq.property/priority (ident-id :logseq.property/priority.high)} (:assignments priority))))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest exported-tags-paste-back
+  (async done
+         (-> (p/let [{:keys [text blocks assignments]} (<export-and-paste tagged-uuid)]
+               (is (= "- tagged\n  tags:: idea, research" (string/trim text)))
+               (is (= "tagged" (:block/title (first blocks))))
+               (is (= (set [(page-id "research") (page-id "idea")]) (set (:block/tags assignments)))))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest tags-line-with-unknown-tag-stays-text
+  (async done
+         (-> (p/let [{:keys [blocks assignments]} (<paste "- block\n  tags:: research, no-such-tag")]
+               (is (= "block\ntags:: research, no-such-tag" (:block/title (first blocks))))
+               (is (nil? (:block/tags assignments))))
              (p/catch (fn [e] (is false (str e))))
              (p/finally done))))
 
