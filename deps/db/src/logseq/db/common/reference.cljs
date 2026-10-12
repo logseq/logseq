@@ -6,6 +6,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; -----------------------------------------------------------------------------
@@ -308,16 +309,31 @@
                  set)))]
     (linked-reference-result db id include-ref-pages-count? has-filters? ref-blocks children-ids))))
 
+(defn- mentions-title?
+  "Whether block-title mentions one of titles (lower-cased) as text. Refs are
+  stored as [[uuid]], so the ids are removed first: a page title such as \"a\"
+  would otherwise match the id of any referenced page."
+  [block-title titles]
+  (let [lc (string/lower-case block-title)]
+    (and (some #(string/includes? lc %) titles)
+         (let [text (string/replace lc db-content/id-ref-pattern "")]
+           (some #(string/includes? text %) titles)))))
+
 (defn get-unlinked-references
+  "Blocks that mention the page, or one of its aliases, by title without
+  referencing it."
   [db id]
-  (let [entity (d/entity db id)
-        title (string/lower-case (:block/title entity))
-        page-ids (ldb/page-alias-set db id)]
-    (when-not (string/blank? title)
+  (let [page-ids (ldb/page-alias-set db id)
+        titles (->> page-ids
+                    (keep #(:block/title (d/entity db %)))
+                    (map string/lower-case)
+                    (remove string/blank?)
+                    distinct)]
+    (when (seq titles)
       (let [ids (->> (d/datoms db :avet :block/title)
                      (keep (fn [d]
                              (when (and (not (contains? page-ids (:e d)))
-                                        (string/includes? (string/lower-case (:v d)) title))
+                                        (mentions-title? (:v d) titles))
                                (:e d)))))]
         (keep
          (fn [eid]
