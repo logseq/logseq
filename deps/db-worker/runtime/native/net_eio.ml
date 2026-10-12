@@ -47,40 +47,19 @@ let io_of_flow (flow : _ Eio.Flow.two_way) : io =
    tags that [Gluten_eio.Client.create] requires. *)
 let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
   let open Eio in
-  let read_buffer = Bigstringaf.create 0x4000 in
+  let read_buffer = ref (Bigstringaf.create 0x4000) in
   let pending_off = ref 0 in
   let pending_len = ref 0 in
   let rec read_loop () =
     match R.next_read_operation t with
     | `Read when !pending_len > 0 ->
-        let consumed = R.read t read_buffer ~off:!pending_off ~len:!pending_len in
+        let consumed = R.read t !read_buffer ~off:!pending_off ~len:!pending_len in
         pending_off := !pending_off + consumed;
         pending_len := !pending_len - consumed;
-        read_loop ()
-    | `Read ->
-        (match flow.read (Cstruct.of_bigarray read_buffer) with
-         | exception End_of_file ->
-             let rec drain_eof () =
-               match R.next_read_operation t with
-               | `Read ->
-                   let consumed =
-                     R.read_eof t read_buffer ~off:!pending_off ~len:!pending_len
-                   in
-                   pending_off := !pending_off + consumed;
-                   pending_len := !pending_len - consumed;
-                   drain_eof ()
-               | `Yield ->
-                   let p, u = Promise.create () in
-                   R.yield_reader t (fun () -> Promise.resolve u ());
-                   Promise.await p;
-                   drain_eof ()
-               | `Close -> ()
-             in
-             drain_eof ()
-         | n ->
-             pending_off := 0;
-             pending_len := n;
-             read_loop ())
+        if consumed = 0 && R.next_read_operation t = `Read
+        then read_more ()
+        else read_loop ()
+    | `Read -> read_more ()
     | `Yield ->
         let p, u = Promise.create () in
         R.yield_reader t (fun () -> Promise.resolve u ());
@@ -88,6 +67,46 @@ let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
         read_loop ()
     | `Close ->
         flow.shutdown `Receive
+  and read_more () =
+    if !pending_off > 0 then begin
+      Bigstringaf.blit !read_buffer ~src_off:!pending_off !read_buffer
+        ~dst_off:0 ~len:!pending_len;
+      pending_off := 0
+    end;
+    if !pending_len = Bigstringaf.length !read_buffer then begin
+      if !pending_len >= 0x100000 then failwith "Net_eio: response header too large";
+      let larger = Bigstringaf.create (2 * !pending_len) in
+      Bigstringaf.blit !read_buffer ~src_off:0 larger ~dst_off:0
+        ~len:!pending_len;
+      read_buffer := larger
+    end;
+    let destination =
+      Cstruct.of_bigarray ~off:!pending_len
+        ~len:(Bigstringaf.length !read_buffer - !pending_len) !read_buffer
+    in
+    (match flow.read destination with
+     | exception End_of_file -> drain_eof ()
+     | 0 -> failwith "Net_eio: socket read made no progress"
+     | n ->
+         pending_len := !pending_len + n;
+         read_loop ())
+  and drain_eof () =
+    match R.next_read_operation t with
+    | `Read ->
+        let consumed =
+          R.read_eof t !read_buffer ~off:!pending_off ~len:!pending_len
+        in
+        pending_off := !pending_off + consumed;
+        pending_len := !pending_len - consumed;
+        if consumed = 0 && R.next_read_operation t = `Read then
+          failwith "Net_eio: incomplete response at EOF";
+        drain_eof ()
+    | `Yield ->
+        let p, u = Promise.create () in
+        R.yield_reader t (fun () -> Promise.resolve u ());
+        Promise.await p;
+        drain_eof ()
+    | `Close -> ()
   in
   let rec write_loop () =
     match R.next_write_operation t with
