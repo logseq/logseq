@@ -36,6 +36,8 @@ let parse_path (p : string) : Model.route =
           let rest = String.sub p (i + 1) (String.length p - i - 1) in
           match seg with
           | "page" -> Model.Page (decode rest)
+          | "block" when Wire.is_uuid_string (decode rest) ->
+              Model.Block_zoom (decode rest)
           | "file" -> Model.File (decode rest)
           | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
