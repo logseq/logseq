@@ -365,6 +365,11 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
                 has no intrinsic box; suppress the kind default's muted
                 chip + hairline so the translucent gray-06 fill shows *)
              P.BackgroundValue, sv "transparent"
+           ; (* the kbd kind's text placement reserves 6/2 ink inset
+                which would stack on the wrapper's padding — zero it so
+                each key measures glyph + wrapper px-1, matching web *)
+             P.PaddingHorizontal, iv 0
+           ; P.PaddingVertical, iv 0
            ]
            (kbd
               ~style_class:(if boxed then "" else "shui-shortcut-key")

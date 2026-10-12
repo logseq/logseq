@@ -516,7 +516,12 @@ let nav_group ms st =
             [ P.InsetTop, Ui_components.fv (-4.)
             ; P.ZIndex, Ui_components.iv 2
             ; P.UserSelect, Ui_components.sv "none"
-            ; P.Cursor, Ui_components.sv "default" ]
+            ; P.Cursor, Ui_components.sv "default"
+            ; (* no resting fill — section headers stay dim so the
+                 list content pops; hover still gets the web's
+                 gray-04 affordance *)
+              ( P.HoverBackground
+              , Ui_components.sv "var(--lx-gray-04, var(--rx-gray-04))" ) ]
             (row ~key:"nav-hd" ~cross:`center ~main:`space_between
                ~data_attrs_signal:
                  (Signal.constant ctx.Lui_ui.ui_scheduler
@@ -528,7 +533,6 @@ let nav_group ms st =
                ~on_pointer_leave:(fun _ ->
                  Signal.set nav_hov false;
                  Runtime.flush ())
-               ~background:"var(--left-sidebar-bg-color)"
                ~style_class:"hd non-collapsable enter-show-more"
                ~data_attrs:
                  [ ("style", "padding-left:8px;padding-right:4px") ]
@@ -537,7 +541,7 @@ let nav_group ms st =
                        [ P.FontSize, Ui_components.sv "0.875rem"
                        ; P.LineHeight, Ui_components.sv "1.25rem"
                        ; P.FontWeight, Ui_components.iv 500 ]
-                       (row ~cross:`center ~grow:1. ~opacity:0.5
+                       (row ~cross:`center ~grow:1. ~opacity:0.4
                           ~style_class:"wrap-th"
                           [ (* web .wrap-th > .lui-text: sm:text-xs
                                (12px/16px) — the smaller label reads
@@ -735,12 +739,14 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                   [ P.InsetTop, Ui_components.fv (-4.)
                   ; P.ZIndex, Ui_components.iv 2
                   ; P.UserSelect, Ui_components.sv "none"
-                  ; P.Cursor, Ui_components.sv "pointer" ]
+                  ; P.Cursor, Ui_components.sv "pointer"
+                  ; ( P.HoverBackground
+                    , Ui_components.sv
+                        "var(--lx-gray-04, var(--rx-gray-04))" ) ]
                   (row ~key:(key ^ "-hd") ~cross:`center
-                     ~main:`space_between ~height:32 ~corner_radius:6
-                     ~padding_horizontal:4
-                     ~background:"var(--left-sidebar-bg-color)"
-                     ~style_class:"hd"
+                        ~main:`space_between ~height:32 ~corner_radius:6
+                        ~padding_horizontal:4
+                        ~style_class:"hd"
                      ~data_attrs:
                        [ ( "style"
                          , "position:sticky;top:-4px;padding-left:8px;\
@@ -751,7 +757,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                              [ P.FontSize, Ui_components.sv "0.875rem"
                              ; P.LineHeight, Ui_components.sv "1.25rem"
                              ; P.FontWeight, Ui_components.iv 500 ]
-                             (row ~cross:`center ~grow:1. ~opacity:0.5
+                             (row ~cross:`center ~grow:1. ~opacity:0.4
                                 ~style_class:"wrap-th"
                                 [ (* web .wrap-th > .lui-text:
                                      sm:text-xs (12px/16px) *)
