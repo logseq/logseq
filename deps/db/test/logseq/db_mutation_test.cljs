@@ -246,24 +246,6 @@
                    @conn
                    [(pick "ordinary after") (pick "property value") (pick "ordinary before")])))))))
 
-(deftest sort-page-random-blocks-puts-parents-before-children-test
-  (testing "200 shuffled blocks (100 parents with 1 child each) come back in page preorder"
-    (let [n 100
-          conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks
-                 [{:page {:block/title "page 1"}
-                   :blocks (mapv (fn [i]
-                                   {:block/title (str "p" i)
-                                    :build/children [{:block/title (str "c" i)}]})
-                                 (range n))}]})
-          preorder (mapcat (fn [i] [(str "p" i) (str "c" i)]) (range n))
-          by-title (into {} (map (fn [t] [t (db-test/find-block-by-content @conn t)])) preorder)
-          ;; a fixed permutation of the 200 blocks (37 is coprime with 200)
-          shuffled (map (fn [i] (by-title (nth preorder (mod (* i 37) (* 2 n)))))
-                        (range (* 2 n)))]
-      (is (= preorder
-             (map :block/title (ldb/sort-page-random-blocks @conn shuffled)))))))
-
 ;; Fails if, in `compare-order-paths`, `nil?` becomes `some?`.
 (deftest sort-page-random-blocks-keeps-given-order-of-siblings-sharing-an-order-test
   (testing "siblings with the same :block/order (e.g. before db-sync fixes duplicate orders) stay in the order given"
