@@ -514,21 +514,18 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   (* the delegated context-menu handler reads data-tag-uuid/id/title/
      priv off the chip root — they ride ~data_attrs *)
   Ui_components.with_props
-    [ (* cljs .block-tag is inline-flex; bare "flex" is not a valid
-         DisplayValue and crashes the host at mount *)
-      Lui_protocol.DisplayValue, Ui_components.sv "inline-flex"
-    ; Lui_protocol.Position, Ui_components.sv "relative"
+    [ Lui_protocol.Position, Ui_components.sv "relative"
     ; Lui_protocol.CornerRadius, Ui_components.iv 4
     ; ( Lui_protocol.HoverBackground
       , Ui_components.sv "var(--lx-gray-03)" ) ]
-    (box ~key:("tag-" ^ key)
+    (row ~key:("tag-" ^ key) ~cross:`center
        ~style_class:"block-tag"
        ~data_attrs:
          [ ("data-tag-uuid", tuuid)
          ; ("data-tag-id", string_of_int dbid)
          ; ("data-tag-title", tag)
          ; ("data-tag-priv", if priv then "true" else "false")
-         ; ("style", "padding-left:8px;padding-right:4px") ]
+         ; ("style", "display:inline-flex;padding-left:8px;padding-right:4px") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         [ (* the link kind renders a real <a> so a.hash-symbol css keeps
              matching; href="#" is the cljs decorative-anchor convention *)
@@ -582,7 +579,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
               [ ("tabindex", "0"); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
-            [ text ~key:"ts" ~value:tag [] ])
+            (* a.tag is an inline text run on the web — it never wraps
+               mid-word inside the chip *)
+            [ text ~key:"ts" ~value:tag ~white_space:"nowrap" [] ])
         ] ])
 
 let tags_el uuid (b : Model.block) : t =

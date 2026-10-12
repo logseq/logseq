@@ -162,6 +162,16 @@ let open_menu (page : Model.page) name payload =
          (Some (ax, atop, abot, false, page.page_uuid)));
     Runtime.flush ())
 
+(* cljs wires the title contextmenu on .ls-page-title (flex-1 w-full)
+   — the whole row is the right-click target, so the handler lives on
+   the row itself (the raw title el only hugs the text width) *)
+let title_ctx_row ~key (page : Model.page) (children : t list) : t =
+ fun ctx parent ->
+  let node = row ~key ~main:`space_between children ctx parent in
+  Platform.register_dom_handler node ~events:"contextmenu"
+    (fun name payload -> open_menu page name payload);
+  node
+
 (* generic: works for any entity uuid (page or block) *)
 let set_icon (u : string) (c : Icon_picker.choice) =
   let op =
@@ -793,7 +803,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             Runtime.flush ();
             (* land the key input on the freshly mounted sink *)
             Editor_sink.focus_input uuid)
-      | _ -> open_menu page name payload)
+      (* contextmenu lives on the full-width title_row below — the raw
+         el only hugs the text, so it would miss the row's empty tail *)
+      | _ -> ())
     body
     ) ctx parent
 
@@ -1120,7 +1132,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"page-inner"
             ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
-            [ row ~key:("jit-" ^ key) ~main:`space_between
+            [ title_ctx_row ~key:("jit-" ^ key) p0
                 [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
                       page_title_el
@@ -1450,7 +1462,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     ctx parent
 
 let title_row (m : Model.t) (page : Model.page) : t =
-  row ~key:"page-title-row" ~main:`space_between
+  title_ctx_row ~key:"page-title-row" page
     [ page_title_el m page; pagebar_slots_el page ]
 
 (* reactive bodies mount a single node — display:contents keeps the segment

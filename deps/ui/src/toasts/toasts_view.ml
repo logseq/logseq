@@ -28,15 +28,27 @@ let toast_icon_color (k : string) : string =
 
 let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
+  let duration =
+    if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000
+  in
   fun ctx parent ->
     (toast ~key:("toast-" ^ string_of_int t.toast_id)
-       ~duration:(if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000)
+       ~duration
        ~label:t.toast_text
+       ~on_appear:(fun _ ->
+         (* the web toaster runs the duration countdown itself; the
+            native retained host does not, so the view owns it here —
+            dismissing an already-closed id is a no-op *)
+         if duration > 0 then
+           ignore
+             (Ui_services.timers_timeout
+                (fun () -> Toast.dismiss t.toast_id)
+                duration))
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:kind
-       [ overlay ~key:"ti-content" ~grow:1.
+       [ overlay ~key:"ti-content"
            [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
-               ~padding_vertical:20 ~cross:`start
+               ~padding_vertical:8 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
                    ~foreground:(toast_icon_color kind) []
@@ -49,7 +61,7 @@ let toast_item (t : Model.toast) : t =
                       ~value:t.toast_text [])
                ; spacer ~width:20 []
                ]
-           ; align `top_trailing
+           ; align `trailing
                (button ~key:"ti-close" ~variant:`ghost ~size:`icon
                    ~width:32 ~height:32 ~corner_radius:6
                    ~foreground:
