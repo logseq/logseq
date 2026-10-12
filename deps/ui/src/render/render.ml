@@ -94,19 +94,6 @@ let heading_level s =
   then Some (i, String.trim (String.sub s (i + 1) (n - i - 1)))
   else None
 
-(* "1. " ordered-list prefix *)
-let ordered_prefix s =
-  let n = String.length s in
-  let rec digits i =
-    if i < n && s.[i] >= '0' && s.[i] <= '9' then digits (i + 1) else i
-  in
-  let i = digits 0 in
-  if i > 0 && i + 1 < n && s.[i] = '.' && s.[i + 1] = ' '
-  then
-    Some
-      ( String.sub s 0 (i + 1)
-      , String.trim (String.sub s (i + 2) (n - i - 2)) )
-  else None
 
 (* #+BEGIN_QUOTE is deprecated in db graphs — cljs renders a
    .warning notice (t :block/deprecated-quote), not a quote block *)
@@ -737,14 +724,7 @@ let title ?heading ?(is_query = false) ?(is_cards = false)
                else [])
               @ if is_cards then [ practice_el ~eid:card_eid ] else []
             in
-            match ordered_prefix s with
-            | Some (num, rest) ->
-                [ D.el ~key:"rc-typed-list" ~tag:"span"
-                    ~style_class:"typed-list"
-                    [ label ~value:num [] ] ]
-                @ [ content ?heading ~self ~wrap_attrs ~prefix rest ]
-                @ tail
-            | None -> content ?heading ~self ~wrap_attrs ~prefix s :: tail))
+            content ?heading ~self ~wrap_attrs ~prefix s :: tail))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
