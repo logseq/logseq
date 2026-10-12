@@ -148,26 +148,28 @@ let update_online_users ~broadcast (client : Sync_state.client)
 
 let update_user_presence ~broadcast (client : Sync_state.client)
     ~(user_id : string) ~(editing_block_uuid : string option) =
-  (* cljs (and user-id* editing-block-uuid) — truthy: nil blocks,
-     an empty string does not *)
-  match editing_block_uuid with
-  | Some editing_block_uuid -> begin
-    client.online_users :=
-      List.map
-        (fun u ->
-           match Wire.get "user/uuid" u with
-           | Some (Wire.String id) when id = user_id ->
-               (match u with
-                | Wire.Map kvs ->
-                    Wire.Map
-                      ((List.filter
-                          (fun (k, _) -> k <> Wire.Keyword "user/editing-block-uuid")
-                          kvs)
-                       @ [ ( Wire.Keyword "user/editing-block-uuid"
-                           , Wire.String editing_block_uuid ) ])
-                | _ -> u)
-           | _ -> u)
-        !(client.online_users);
-    broadcast client
-  end
-  | None -> ()
+  (* a missing editing-block-uuid means the user stopped editing (the
+     server clears it the same way): drop their editing block *)
+  client.online_users :=
+    List.map
+      (fun u ->
+         match Wire.get "user/uuid" u with
+         | Some (Wire.String id) when id = user_id ->
+             (match u with
+              | Wire.Map kvs ->
+                  let kvs' =
+                    List.filter
+                      (fun (k, _) -> k <> Wire.Keyword "user/editing-block-uuid")
+                      kvs
+                  in
+                  Wire.Map
+                    (match editing_block_uuid with
+                     | Some uuid ->
+                         kvs'
+                         @ [ ( Wire.Keyword "user/editing-block-uuid"
+                             , Wire.String uuid ) ]
+                     | None -> kvs')
+              | _ -> u)
+         | _ -> u)
+      !(client.online_users);
+  broadcast client

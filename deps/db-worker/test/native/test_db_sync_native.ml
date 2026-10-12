@@ -1188,6 +1188,36 @@ let test_presence_message_updates_other_user () =
              | _ -> false);
           check "1 broadcast" (List.length !broadcasts = 1)))
 
+(* (deftest presence-message-with-no-editing-block-clears-the-users-editing-block-test ...) *)
+let test_presence_message_without_editing_block_clears () =
+  preserve_state (fun () ->
+      let client = mk_client ~online_users:(online_users_alice_bob ())
+          ~ws_state:"open" () in
+      set_id_token "token";
+      Sync_util.parse_jwt_fn :=
+        (fun _ -> Some (wire_map [ "sub", Wire.String "u1" ]));
+      let presence_msg editing_block_uuid =
+        msg_json
+          [ "type", Wire.String "presence"
+          ; "user-id", Wire.String "u2"
+          ; "editing-block-uuid", editing_block_uuid ]
+      in
+      Sync_handle_message.handle_message test_repo client
+        (presence_msg (Wire.String "block-2"));
+      check "u2 editing-block-uuid set"
+        (Wire.get "user/editing-block-uuid"
+           (List.nth !(client.online_users) 1)
+         = Some (Wire.String "block-2"));
+      Sync_handle_message.handle_message test_repo client
+        (presence_msg Wire.Nil);
+      check "u2 editing-block-uuid cleared"
+        (Wire.get "user/editing-block-uuid"
+           (List.nth !(client.online_users) 1)
+         = None);
+      check "u1 unchanged"
+        (Wire.get "user/name" (List.nth !(client.online_users) 0)
+         = Some (Wire.String "Alice")))
+
 
 (* (deftest ws-send-tx-batch-serializes-tx-id-as-uuid-string-test ...) *)
 let test_ws_send_tx_batch_serializes_tx_id_as_uuid_string () =
@@ -15445,6 +15475,9 @@ let () =
             `Quick test_presence_message_ignores_source_client
         ; Alcotest.test_case "presence-message-updates-other-user"
             `Quick test_presence_message_updates_other_user
+        ; Alcotest.test_case
+            "presence-message-without-editing-block-clears"
+            `Quick test_presence_message_without_editing_block_clears
         ; Alcotest.test_case "ws-send-tx-batch-serializes-tx-id-as-uuid-string"
             `Quick test_ws_send_tx_batch_serializes_tx_id_as_uuid_string
         ; Alcotest.test_case

@@ -169,6 +169,12 @@
       (and (string? v) (string/blank? v))
       (and (coll? v) (empty? v))))
 
+(defn- text-contains?
+  [value match]
+  (and (some? value)
+       (string/includes? (string/lower-case (str value))
+                         (string/lower-case (str match)))))
+
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
   (let [or? (:or? filters)
@@ -232,13 +238,13 @@
 
                    :text-contains
                    (some (fn [v]
-                           (if-let [property-value (get-property-value-content db v)]
-                             (string/includes? (string/lower-case property-value) (string/lower-case match))
-                             false))
+                           (text-contains? (get-property-value-content db v) match))
                          value')
 
                    :text-not-contains
-                   (not-any? #(string/includes? (str (get-property-value-content db %)) match) value')
+                   (not-any? (fn [v]
+                               (text-contains? (get-property-value-content db v) match))
+                             value')
 
                    :number-gt
                    (when value
@@ -864,14 +870,12 @@
   (case operator
     :text-contains
     (some (fn [c]
-            (and (some? c)
-                 (string/includes? (string/lower-case (str c))
-                                   (string/lower-case (str match)))))
+            (text-contains? c match))
           contents)
 
     :text-not-contains
     (not-any? (fn [c]
-                (string/includes? (str c) (str match)))
+                (text-contains? c match))
               contents)
 
     :number-gt (number-compare-match contents match >)
