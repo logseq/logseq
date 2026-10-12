@@ -382,6 +382,19 @@
       (str content "\n" properties-content)
       content)))
 
+(def ^:private ^:dynamic *embedding-ids*
+  "Ids of the blocks whose embeds are being exported, to stop an embed cycle."
+  #{})
+
+(defn- embed-content
+  "Content of a block that embeds another block (:block/link): the embedded
+  block and its children, as the embed shows them; nil for an embed cycle."
+  [db f level context]
+  (when-let [linked (some->> (:block/link f) :db/id (d/entity db))]
+    (when-not (contains? *embedding-ids* (:db/id linked))
+      (binding [*embedding-ids* (conj *embedding-ids* (:db/id linked))]
+        (block->content db (:block/uuid linked) {:init-level level} context)))))
+
 (defn- tree->file-content-aux
   [db tree {:keys [init-level link] :as opts} context]
   (let [block-contents (transient [])]
@@ -389,7 +402,11 @@
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
+              embed (when-not page? (embed-content db f level context))
               content (cond
+                        embed
+                        embed
+
                         (and page? (not link) (:include-page-properties? opts))
                         (block-properties-content db f "" context)
 
