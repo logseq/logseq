@@ -457,7 +457,10 @@ let ac_popover (st : S.t) : t =
                | None -> 0.)
              vs))
      ~on_dismiss:(fun _ -> S.close_ac st)
-     [ Ui_parts.class_signal vs
+     [ (* the overlay layer is hit-transparent; the content card opts
+          back in so row clicks reach the menu-link handlers *)
+       Ui_parts.hit_opaque
+         (Ui_parts.class_signal vs
          (fun (v : S.view) ->
            "ui__popover-content "
            ^ (match v.S.ac with
@@ -541,7 +544,7 @@ let ac_popover (st : S.t) : t =
                                ~value:(Ui_services.literal_text "\xe2\x8f\x8e") ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
-            ])
+            ]))
      ])
     context parent
 ;;
