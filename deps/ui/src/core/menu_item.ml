@@ -125,6 +125,37 @@ let menu_link ~key ~id ~on_click ?(transition = true) ?(plain_bg = false)
             Logseq_el.attrs_signal s (fun c ->
                 [ ("tabindex", "0"); ("style", style_of c) ]))
          chosen_signal)
+    (* menu_link_base_style as typed props — the web twin reads the
+       same declarations from the attrs style string *)
+    ~ext_props:
+      ([ ("font-size", Lui_protocol.FloatValue 14.)
+       ; ("line-height", Lui_protocol.FloatValue 20.)
+       ; ("padding", Lui_protocol.StringValue "6 8")
+       ; ("main", Lui_protocol.StringValue "space-between")
+       ; ("corner-radius", Lui_protocol.FloatValue 4.) ]
+      @
+      (match chosen_signal with
+       | Some _ -> []
+       | None ->
+           if plain_bg then
+             [ ("background", Lui_protocol.StringValue "none") ]
+           else if chosen then
+             [ ( "background"
+               , Lui_protocol.StringValue
+                   (Option.value chosen_bg ~default:ac_chosen_bg) ) ]
+           else []))
+    ?ext_prop_signals:
+      (Option.map
+         (fun s ->
+            [ ( "background"
+              , Signal.map
+                  (fun c ->
+                     Lui_protocol.StringValue
+                       (if c then
+                          Option.value chosen_bg ~default:ac_chosen_bg
+                        else ""))
+                  s ) ])
+         chosen_signal)
     ~events:"click"
     ~on_dom_event:(fun name _payload ->
       if name = "click" then on_click ())

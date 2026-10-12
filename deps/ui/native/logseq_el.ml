@@ -91,6 +91,75 @@ let schema_of tag =
         None
     ; Lui_extension.property "flex-wrap" Lui_extension.StringScalar false
         None
+    ; (* typed layout/paint props a callsite may set alongside the
+         attrs style string — the native layout/paint pipelines read
+         these names; the web twin ignores them *)
+      Lui_extension.property "font-size" Lui_extension.FloatScalar false
+        None
+    ; Lui_extension.property "font-weight" Lui_extension.FloatScalar false
+        None
+    ; Lui_extension.property "line-height" Lui_extension.FloatScalar false
+        None
+    ; Lui_extension.property "letter-spacing" Lui_extension.FloatScalar
+        false None
+    ; Lui_extension.property "opacity" Lui_extension.FloatScalar false None
+    ; Lui_extension.property "corner-radius" Lui_extension.FloatScalar
+        false None
+    ; Lui_extension.property "padding" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "padding-top" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "padding-right" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "padding-bottom" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "padding-left" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "padding-horizontal"
+        Lui_extension.StringScalar false None
+    ; Lui_extension.property "padding-vertical"
+        Lui_extension.StringScalar false None
+    ; Lui_extension.property "margin" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "margin-top" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "margin-right" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "margin-bottom" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "margin-left" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "margin-horizontal"
+        Lui_extension.StringScalar false None
+    ; Lui_extension.property "margin-vertical" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "width" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "height" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "min-width" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "min-height" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "max-width" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "max-height" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "gap" Lui_extension.StringScalar false None
+    ; Lui_extension.property "row-gap" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "column-gap" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "background" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "shadow" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "display" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "main" Lui_extension.StringScalar false
+        None
+    ; Lui_extension.property "cross" Lui_extension.StringScalar false
+        None
     ]
     [ Lui_extension.event "dom-event"
         [ Lui_extension.event_field "name" Lui_extension.StringScalar true
@@ -320,6 +389,10 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
     ?(text_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id_signal : Lui_protocol.wire_value Signal.signal option)
+    ?(ext_props : (string * Lui_protocol.wire_value) list = [])
+    ?(ext_prop_signals :
+       (string * Lui_protocol.wire_value Signal.signal) list =
+       [])
     ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
@@ -348,6 +421,16 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
            List.iter (fun set -> set context n) setters;
            n) ]
   in
+  (* typed layout/paint props the callsite wants on the native node —
+     extension props are opaque to the web twin, which reads the same
+     values out of the attrs style string instead *)
+  List.iter
+    (fun (n, v) -> Lui_ui.extension_property context node n v)
+    ext_props;
+  List.iter
+    (fun (n, s) ->
+       Lui_ui.extension_property_signal context node n (own context s))
+    ext_prop_signals;
   (* delegated document click/contextmenu handlers (block edit, page-ref,
      bullet zoom, block context menu) need every raw element to emit
      those dom-events — the native host only emits for names the

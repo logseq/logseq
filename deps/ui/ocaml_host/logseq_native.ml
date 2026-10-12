@@ -580,9 +580,7 @@ let () =
   let apply_patch_json (s : string) =
     if s <> "" then begin
       List.iter
-        (fun b ->
-          ignore
-            (Lui_host.apply_batch host (Host_requests.expand_style_attrs b)))
+        (fun b -> ignore (Lui_host.apply_batch host b))
         (Patch_decode.batches_of_string s);
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
@@ -989,9 +987,10 @@ let () =
   in
   let dom_hit ~x ~y =
     let s = !scale_cell in
-    match hit store rects ~x:(x *. s) ~y:(y *. s) with
-    | Some id -> id
-    | None -> dom_root ()
+    let path = hit_path store rects ~x:(x *. s) ~y:(y *. s) in
+    match path with
+    | id :: _ -> id
+    | [] -> dom_root ()
   in
   (* DOM `buttons` bitmask: 1 primary, 2 secondary, 4 auxiliary. SDL
      button numbers are 1 left, 2 middle, 3 right while DOM is 0 left,
