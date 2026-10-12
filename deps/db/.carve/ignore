@@ -8,6 +8,8 @@ logseq.db.frontend.rules/rules
 logseq.db.frontend.rules/rules-dependencies
 ;; API
 logseq.db.frontend.query-dsl/pre-transform
+;; Used outside deps/db by outliner properties, graph importer, and frontend worker pipeline.
+logseq.db.frontend.query-dsl/resolve-page-refs
 ;; API
 logseq.db.frontend.query-dsl/simplify-query
 ;; API
