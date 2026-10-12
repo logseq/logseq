@@ -181,7 +181,13 @@
             response (with-redefs [ws/broadcast! (fn [& _] nil)]
                        (sync-handler/handle-tx-batch! self nil [entry] 0))]
         (is (= "tx/batch/ok" (:type response)))
+        (is (number? (:t-before response)))
+        (when (number? (:t-before response))
+          (is (= (:txs response)
+                 (storage/fetch-tx-since (.-sql self) (:t-before response)))))
         (is (= 1 (:t response)))
+        (is (= 0 (:t-before response)))
+        (is (some? (ws/coerce-ws-server-message response)))
         (is (= [{:t 1 :tx (protocol/tx->transit []) :outliner-op :delete-blocks :tx-id tx-id}]
                (:txs (sync-handler/pull-response self 0))))))))
 
@@ -1382,6 +1388,10 @@
       (let [response (with-redefs [ws/broadcast! (fn [& _] nil)]
                        (sync-handler/handle-tx-batch! self nil [entry] t-before))]
         (is (= "tx/batch/ok" (:type response)))
+        (is (number? (:t-before response)))
+        (when (number? (:t-before response))
+          (is (= (:txs response)
+                 (storage/fetch-tx-since (.-sql self) (:t-before response)))))
         (recur (:t response) (next remaining)))
       t-before)))
 
@@ -1831,6 +1841,10 @@
                        (finally
                          (d/unlisten! conn ::capture-request-context-tx-meta))))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (some #(= {:op :apply-client-tx
                      :outliner-op :save-block
                      :graph-id "graph-context"
@@ -1947,6 +1961,10 @@
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
       (is (nil? (d/entity @conn [:block/uuid child-uuid])))
       (is (nil? (d/entity @conn [:block/uuid property-value-uuid]))))))
@@ -1970,6 +1988,10 @@
                      (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
           page (d/entity @conn [:block/uuid page-uuid])]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= 1 (:t response)))
       (is (some? page))
       (is (= "created-by-sanitize-page" (:block/title page)))
@@ -2036,6 +2058,10 @@
                      (finally
                        (d/unlisten! conn ::capture-db-migrate-tx-meta)))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= 1 (:t response)))
       (is (some (fn [tx-meta]
                   (and (:db-migrate? tx-meta)
@@ -2101,6 +2127,10 @@
                          (finally
                            (d/unlisten! conn ::large-entry-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (> @tx-report-count 1))
           (is (= (+ t-before @tx-report-count) (:t response)))
           (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
@@ -2147,6 +2177,10 @@
                          (finally
                            (d/unlisten! conn ::large-tempid-entry-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (> @tx-report-count 1))
           (is (= (+ t-before @tx-report-count) (:t response)))
           (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
@@ -2199,6 +2233,10 @@
                          (finally
                            (d/unlisten! conn ::large-dependent-block-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (= [497 7] @tx-data-counts))
           (is (= @tx-data-counts
                  (mapv (comp count protocol/transit->tx :tx)
@@ -2268,6 +2306,10 @@
                          (finally
                            (d/unlisten! conn ::replacement-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (= 1 @tx-report-count))
           (is (= 2 (:block/updated-at (d/entity @conn block-ref))))
           (is (= 72 (block-title-prefix-count @conn "replacement-filler-"))))))))
@@ -2322,6 +2364,10 @@
                          (finally
                            (d/unlisten! conn ::large-delete-block-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (> @tx-report-count 1))
           (is (> (:t response) t-before))
           (is (pos? (count (storage/fetch-tx-since sql t-before))))
@@ -2422,6 +2468,10 @@
                          (finally
                            (d/unlisten! conn ::large-visible-tx-report-size)))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (= (count tx-data) (reduce + @tx-data-counts)))
           (is (every? #(<= % 500) @tx-data-counts)))))))
 
@@ -2452,6 +2502,10 @@
                                      ws/broadcast! (fn [& _] nil)]
                          (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
           (is (= "tx/batch/ok" (:type response)))
+          (is (number? (:t-before response)))
+          (when (number? (:t-before response))
+            (is (= (:txs response)
+                   (storage/fetch-tx-since (.-sql self) (:t-before response)))))
           (is (> (:t response) (inc t-before)))
           (is (= 1 (count @checksum-updates)))
           (is (= (sync-checksum/recompute-checksum @conn)
@@ -2630,6 +2684,10 @@
                                                    (swap! changed-messages conj payload))]
                        (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
         (is (= "tx/batch/ok" (:type response)))
+        (is (number? (:t-before response)))
+        (when (number? (:t-before response))
+          (is (= (:txs response)
+                 (storage/fetch-tx-since (.-sql self) (:t-before response)))))
         (is (= (inc t-before) (:t response)))
         (is (= checksum-before (:checksum response)))
         (is (= [(inc t-before)] (mapv :t @changed-messages)))))))
@@ -2697,6 +2755,10 @@
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= t-before (:t response)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))
@@ -2721,6 +2783,10 @@
                      (sync-handler/handle-tx-batch! self nil [noop-rebase-entry real-entry] t-before))
           txs (storage/fetch-tx-since sql t-before)]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= (inc t-before) (:t response)))
       (is (= 1 (count txs)))
       (is (= :save-block (:outliner-op (first txs))))
@@ -2769,6 +2835,10 @@
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= t-before (:t response)))
       (is (= checksum-before (storage/get-checksum sql)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
@@ -2811,6 +2881,10 @@
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= (inc t-before) (:t response)))
       (is (nil? (:failed-tx-id response)))
       (is (= checksum-before (storage/get-checksum sql)))
@@ -2861,6 +2935,10 @@
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (= t-before (:t response)))
       (is (= checksum-before (storage/get-checksum sql)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
@@ -3177,6 +3255,10 @@
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
                      (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (number? (:t response)))
       (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
       (is (nil? (d/entity @conn [:block/uuid child-a-uuid])))
@@ -3196,6 +3278,10 @@
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
                      (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (number? (:t-before response)))
+      (when (number? (:t-before response))
+        (is (= (:txs response)
+               (storage/fetch-tx-since (.-sql self) (:t-before response)))))
       (is (number? (:t response)))
       (is (nil? (d/entity @conn [:block/uuid page-uuid])))
       (is (nil? (d/entity @conn [:block/uuid parent-uuid])))

@@ -285,6 +285,8 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
           | Some id when not retryable ->
               (* Keep accepted edits visible until their journal echo
                  arrives; that pull also removes the rejected overlay. *)
+              if successful_tx_ids <> [] then
+                client.discarded_overlay_tx_ids := id :: !(client.discarded_overlay_tx_ids);
               ignore
                 (Sync_apply.mark_failed_txs
                    ~rebuild:(successful_tx_ids = []) repo [ id ])
@@ -377,70 +379,6 @@ let handle_presence (client : Sync_state.client) (message : Wire.t) =
            | _ -> None)
   | None -> ()
 
-let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
-    remote_checksum =
-  (* cljs (require-non-negative remote-tx) — unconditional, :t missing/nil
-     fail-fasts *)
-  require_non_negative remote_tx (context ~repo ~typ:"tx/batch/ok" ());
-  Sync_apply.ack_upload_response repo client;
-  let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
-  (* master's batch-ok is bookkeeping only: the local tx already is the
-     conn's confirmed state. The equivalent here replays each acked
-     entry's stored normalized .tx — the payload the server ingested —
-     onto the server conn. The display already shows those facts, so
-     nothing republishes and no journal pull is needed. *)
-  let confirm_txs =
-    List.filter_map
-      (fun tx_id ->
-         match Sync_client_op.get_local_tx_entry repo tx_id with
-         | Some entry ->
-             Some
-               (Wire.Map
-                  (List.filter_map Fun.id
-                     [ Some (Wire.keyword "tx-id", Wire.String entry.tx_id)
-                     ; Option.map
-                         (fun op ->
-                            (Wire.keyword "outliner-op", Wire.keyword op))
-                         entry.outliner_op
-                     ; Some (Wire.keyword "tx-data", entry.tx) ]))
-         | None ->
-             Worker_log.warn "db-sync/batch-ok-missing-local-tx"
-               [ "repo", repo; "tx-id", tx_id ];
-             None)
-      !(client.inflight)
-  in
-  ignore
-    (Sync_apply.mark_pending_txs_false ~rebuild:false repo
-       !(client.inflight));
-  client.inflight := [];
-  Sync_util.clear_last_sync_error client;
-  let confirmed =
-    try
-      Sync_replay.confirm_local_txs repo confirm_txs;
-      true
-    with e ->
-      (* the journal still holds the verbatim rows — pull them *)
-      Worker_log.warn "db-sync/batch-ok-local-confirm-failed"
-        [ "repo", repo; "error", Printexc.to_string e ];
-      request_pull client
-        (Option.value (Sync_client_op.get_local_tx repo) ~default:0);
-      false
-  in
-  (* advance the watermark only once those rows are on the server conn —
-     a stale ack must also never regress it *)
-  let local_tx =
-    Option.value (Sync_client_op.get_local_tx repo) ~default:0
-  in
-  if confirmed && remote_tx_n > local_tx then
-    Sync_client_op.update_local_tx repo remote_tx_n;
-  broadcast_rtc_state client;
-  let local_tx =
-    Option.value (Sync_client_op.get_local_tx repo) ~default:0
-  in
-  verify_sync_checksum repo client local_tx remote_tx_n remote_checksum
-    (context ~repo ~typ:"tx/batch/ok" ());
-  Sync_apply.enqueue_flush_pending repo client
-
 (* update-latest-remote-state! *)
 let update_latest_remote_state repo (message : Wire.t)
     : bool * int option =
@@ -505,99 +443,127 @@ let validate_local_tx repo (message : Wire.t) (local_tx : int option) =
               | Some n -> Wire.Int n
               | None -> Wire.Nil) ])
 
-let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
-    (remote_tx : Wire.t) (remote_checksum : Wire.t option)
-    (message : Wire.t) : unit Db_worker_effect.t =
-  clear_pending_pull client;
+let handle_journal_ok
+      ~typ
+      repo
+      (client : Sync_state.client)
+      (local_tx : int option)
+      (remote_tx : Wire.t)
+      (remote_checksum : Wire.t option)
+      (message : Wire.t)
+  : unit Db_worker_effect.t
+  =
   (* cljs (> remote-tx local-tx) throws on a missing/nil :t before the
      branch is entered *)
-  require_non_negative remote_tx (context ~repo ~typ:"pull/ok" ());
+  require_non_negative remote_tx (context ~repo ~typ ());
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let local_tx_n = Option.value local_tx ~default:0 in
-  if remote_tx_n <= local_tx_n then begin
-    if remote_tx_n = local_tx_n then Sync_apply.enqueue_flush_pending repo client;
-    Db_worker_effect.pure ()
-  end
-  else begin
-    let txs = Wire.get "txs" message in
-    (match txs with
-     | Some t -> require_seq t (context ~repo ~typ:"pull/ok" ~field:"txs" ())
-     | None -> require_seq Wire.Nil
-                 (context ~repo ~typ:"pull/ok" ~field:"txs" ()));
-    let remote_txs =
-      seq_items (Option.get txs)
-      |> List.map (fun data ->
-             let tx_data =
-               parse_transit
-                 (Option.value (Wire.get "tx" data) ~default:Wire.Nil)
-                 (context ~repo ~typ:"pull/ok" ())
-             in
-             Wire.Map
-               (List.filter_map Fun.id
-                  [ (match Wire.get "t" data with
-                     | Some t -> Some (Wire.keyword "t", t)
-                     | None -> None)
-                  ; (match Wire.get "outliner-op" data with
-                     | Some o -> Some (Wire.keyword "outliner-op", o)
-                     | None -> None)
-                  ; (match Wire.get "tx-id" data with
-                     | Some id -> Some (Wire.keyword "tx-id", id)
-                     | None -> None)
-                  ; Some (Wire.keyword "tx-data", tx_data) ]))
-    in
+  if remote_tx_n <= local_tx_n
+  then (
+    if remote_tx_n = local_tx_n
+    then (
+      if typ = "tx/batch/ok"
+      then
+        verify_sync_checksum
+          repo
+          client
+          local_tx_n
+          remote_tx_n
+          remote_checksum
+          (context ~repo ~typ ());
+      Sync_apply.enqueue_flush_pending repo client);
+    Db_worker_effect.pure ())
+  else
     Db_worker_effect.catch
-      ((match remote_txs with
+      (Db_worker_effect.pure ()
+       >>= fun () ->
+       let txs = Wire.get "txs" message in
+       (match txs with
+        | Some t -> require_seq t (context ~repo ~typ ~field:"txs" ())
+        | None -> require_seq Wire.Nil (context ~repo ~typ ~field:"txs" ()));
+       let remote_txs =
+         seq_items (Option.get txs)
+         |> List.filter (fun row ->
+           let row_t = Option.get (Wire.get "t" row) |> wire_to_int |> Option.get in
+           if row_t < 0 || row_t > remote_tx_n
+           then fail_fast "db-sync/invalid-field" (context ~repo ~typ ~field:"txs" ());
+           row_t > local_tx_n)
+         |> List.map (fun data ->
+           let tx_data =
+             parse_transit
+               (Option.value (Wire.get "tx" data) ~default:Wire.Nil)
+               (context ~repo ~typ ())
+           in
+           Wire.Map
+             (List.filter_map
+                Fun.id
+                [ (match Wire.get "t" data with
+                   | Some t -> Some (Wire.keyword "t", t)
+                   | None -> None)
+                ; (match Wire.get "outliner-op" data with
+                   | Some o -> Some (Wire.keyword "outliner-op", o)
+                   | None -> None)
+                ; (match Wire.get "tx-id" data with
+                   | Some id -> Some (Wire.keyword "tx-id", id)
+                   | None -> None)
+                ; Some (Wire.keyword "tx-data", tx_data)
+                ]))
+       in
+       (match remote_txs with
         | [] -> Db_worker_effect.pure ()
         | _ ->
-            (match Worker_state.datascript_conn repo with
-             | Some conn -> (
-                 try
-                   Db_worker_effect.pure
-                     (Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee
-                        (Datascript.Conn.db conn))
-                 with e -> Db_worker_effect.error e)
-             | None -> Db_worker_effect.pure false)
-            >>= fun graph_e2ee ->
-            Sync_deps.require "ensure_graph_aes_key"
-              Sync_deps.ensure_graph_aes_key repo
-            >>= fun aes_key ->
-            (if graph_e2ee && aes_key = Wire.Nil then
-               fail_fast "db-sync/missing-field"
-                 (context ~repo ~typ:"pull/ok" ~field:"aes-key" ());
-             match aes_key with
-             | Wire.Nil -> Db_worker_effect.pure remote_txs
-             | _ ->
-                 Db_worker_effect.all
-                   (List.map
-                      (fun remote_tx ->
-                         let tx_data = Wire.get "tx-data" remote_tx in
-                         (match tx_data with
-                          | Some td ->
-                              Sync_deps.require "decrypt_tx_data"
-                                Sync_deps.decrypt_tx_data
-                                (match aes_key with
-                                 | Wire.String s -> s
-                                 | Wire.Binary b -> b
-                                 | _ -> "")
-                                (seq_items td)
-                              >>= fun tx_data' ->
-                              Db_worker_effect.pure
-                                (Wire.Map
-                                   (List.map
-                                      (fun (k, v) ->
-                                         if k = Wire.keyword "tx-data"
-                                         then (k, Wire.Array tx_data')
-                                         else (k, v))
-                                      (Wire.as_map remote_tx)))
-                          | None -> Db_worker_effect.pure remote_tx))
-                      remote_txs))
-            >>= fun remote_txs' ->
-            Db_worker_effect.catch
-              (Sync_replay.apply_remote_txs repo client remote_txs')
-              (fun e ->
-                 Worker_log.error "apply-remote-tx"
-                   [ ("repo", repo); ("error", Printexc.to_string e) ];
-                 Db_worker_effect.error e))
+          (match Worker_state.datascript_conn repo with
+           | Some conn ->
+             (try
+                Db_worker_effect.pure
+                  (Sync_deps.require
+                     "graph_e2ee"
+                     Sync_deps.graph_e2ee
+                     (Datascript.Conn.db conn))
+              with
+              | e -> Db_worker_effect.error e)
+           | None -> Db_worker_effect.pure false)
+          >>= fun graph_e2ee ->
+          Sync_deps.require "ensure_graph_aes_key" Sync_deps.ensure_graph_aes_key repo
+          >>= fun aes_key ->
+          (if graph_e2ee && aes_key = Wire.Nil
+           then fail_fast "db-sync/missing-field" (context ~repo ~typ ~field:"aes-key" ());
+           match aes_key with
+           | Wire.Nil -> Db_worker_effect.pure remote_txs
+           | _ ->
+             Db_worker_effect.all
+               (List.map
+                  (fun remote_tx ->
+                     let tx_data = Wire.get "tx-data" remote_tx in
+                     match tx_data with
+                     | Some td ->
+                       Sync_deps.require
+                         "decrypt_tx_data"
+                         Sync_deps.decrypt_tx_data
+                         (match aes_key with
+                          | Wire.String s -> s
+                          | Wire.Binary b -> b
+                          | _ -> "")
+                         (seq_items td)
+                       >>= fun tx_data' ->
+                       Db_worker_effect.pure
+                         (Wire.Map
+                            (List.map
+                               (fun (k, v) ->
+                                  if k = Wire.keyword "tx-data"
+                                  then k, Wire.Array tx_data'
+                                  else k, v)
+                               (Wire.as_map remote_tx)))
+                     | None -> Db_worker_effect.pure remote_tx)
+                  remote_txs))
+          >>= fun remote_txs' ->
+          Db_worker_effect.catch
+            (Sync_replay.apply_remote_txs repo client remote_txs')
+            (fun e ->
+               Worker_log.error
+                 "apply-remote-tx"
+                 [ "repo", repo; "error", Printexc.to_string e ];
+               Db_worker_effect.error e))
        >>= fun () ->
        (* journal truth: local-tx follows the server watermark even when
           the pulled window carries no rows — an empty window means the
@@ -608,18 +574,78 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
           server generated it, or txs broadcast mid-flight — pull
           again until the journal prefix actually covers it *)
        (match Sync_apply.latest_remote_tx repo with
-        | Some latest when latest > remote_tx_n ->
-            request_pull client remote_tx_n
+        | Some latest when latest > remote_tx_n -> request_pull client remote_tx_n
         | _ -> ());
        broadcast_rtc_state client;
-       verify_sync_checksum repo client remote_tx_n remote_tx_n
-         remote_checksum (context ~repo ~typ:"pull/ok" ());
+       verify_sync_checksum
+         repo
+         client
+         remote_tx_n
+         remote_tx_n
+         remote_checksum
+         (context ~repo ~typ ());
        Sync_apply.enqueue_flush_pending repo client;
        Db_worker_effect.pure (Sync_util.clear_last_sync_error client))
       (fun error ->
-         Db_worker_effect.pure
-           (Sync_util.set_last_sync_error client error))
-end
+         Sync_util.set_last_sync_error client error;
+         if typ = "tx/batch/ok" then request_pull client local_tx_n;
+         Db_worker_effect.pure ())
+
+let handle_pull_ok repo client local_tx remote_tx remote_checksum message =
+  clear_pending_pull client;
+  handle_journal_ok ~typ:"pull/ok" repo client local_tx remote_tx remote_checksum message
+
+let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx remote_checksum message
+  =
+  require_non_negative remote_tx (context ~repo ~typ:"tx/batch/ok" ());
+  let before = Option.get (Wire.get "t-before" message) in
+  require_non_negative before (context ~repo ~typ:"tx/batch/ok" ~field:"t-before" ());
+  let before_n = Option.get (wire_to_int before) in
+  let remote_n = Option.get (wire_to_int remote_tx) in
+  if before_n > remote_n
+  then
+    fail_fast
+      "db-sync/invalid-field"
+      (context ~repo ~typ:"tx/batch/ok" ~field:"t-before" ());
+  let local_tx = Sync_client_op.get_local_tx repo in
+  let local_n = Option.get local_tx in
+  let stale_request =
+    match !(client.upload_request) with
+    | Some request -> remote_n <= local_n && request.t_before <> Some before_n
+    | None -> false
+  in
+  if stale_request
+  then
+    handle_journal_ok
+      ~typ:"tx/batch/ok"
+      repo
+      client
+      local_tx
+      remote_tx
+      remote_checksum
+      message
+  else (
+    Sync_apply.ack_upload_response repo client;
+    (* Acceptance removes this upload's overlay. The ACK's journal, including
+     idless chunks and server corrections, is the only confirmed graph data. *)
+    client.discarded_overlay_tx_ids
+    := List.rev_append !(client.inflight) !(client.discarded_overlay_tx_ids);
+    ignore (Sync_apply.mark_pending_txs_false ~rebuild:false repo !(client.inflight));
+    client.inflight := [];
+    broadcast_rtc_state client;
+    if local_n < before_n
+    then (
+      request_pull client local_n;
+      Db_worker_effect.pure ())
+    else
+      handle_journal_ok
+        ~typ:"tx/batch/ok"
+        repo
+        client
+        local_tx
+        remote_tx
+        remote_checksum
+        message)
 
 let handle_changed repo (client : Sync_state.client) (local_tx : int option)
     (remote_tx : Wire.t) =
@@ -630,9 +656,8 @@ let handle_changed repo (client : Sync_state.client) (local_tx : int option)
   | Some l when l < remote_tx_n -> request_pull client l
   | _ -> ()
 
-(* cljs handle-message! — returns the pull/ok apply promise so the
-   receive-queue serializes it against later messages; all other handlers are
-   synchronous and resolve immediately. *)
+(* Return journal application effects for both pull and upload responses so
+   the receive queue waits for decryption and replay before the next message. *)
 let handle_message_effect repo (client : Sync_state.client) (raw : string)
     : unit Db_worker_effect.t =
   let message =
@@ -656,8 +681,7 @@ let handle_message_effect repo (client : Sync_state.client) (raw : string)
       | Some (Wire.String "presence") ->
           Db_worker_effect.pure (handle_presence client message)
       | Some (Wire.String "tx/batch/ok") ->
-          Db_worker_effect.pure
-            (handle_tx_batch_ok repo client remote_tx remote_checksum)
+          handle_tx_batch_ok repo client remote_tx remote_checksum message
       | Some (Wire.String "pull/ok") ->
           handle_pull_ok repo client local_tx remote_tx remote_checksum message
       | Some (Wire.String "changed") ->

@@ -2335,7 +2335,8 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
   let ready =
     conn <> None
     && local_tx = remote_tx
-    && inflight = [] && ws_open_state && online
+    && inflight = [] && !(client.upload_request) = None
+    && ws_open_state && online
     && not upload_stopped_state
   in
   if not ready then begin
