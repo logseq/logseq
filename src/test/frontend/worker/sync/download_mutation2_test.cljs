@@ -40,6 +40,7 @@
     (.set out data 4)
     out))
 
+;; Fails if, in `bytes->stream`, the body becomes `nil` or the `:start` key is dropped.
 (deftest bytes->stream-emits-payload-then-closes-test
   (async done
          (let [payload (js/Uint8Array. #js [1 2 3])]
@@ -51,6 +52,7 @@
                      (is (identical? payload (.-value first-read)))
                      (is (true? (.-done second-read))))))))
 
+;; Fails if, in `<stream-starts-with-gzip?`, the `(p/catch (fn [_] false))` step is dropped.
 (deftest stream-starts-with-gzip-false-when-read-fails-test
   (async done
          (let [stream (js/ReadableStream.
@@ -60,6 +62,7 @@
                    (p/let [result (#'sync-download/<stream-starts-with-gzip? stream)]
                      (is (false? result)))))))
 
+;; Fails if, in `<stream-starts-with-gzip?`, the `(p/finally (fn []` step is dropped.
 (deftest stream-starts-with-gzip-releases-reader-lock-test
   (async done
          (let [released? (atom false)
@@ -71,6 +74,7 @@
                      (is (false? result))
                      (is (true? @released?)))))))
 
+;; Fails if, in `<response-body-stream`, the `;; If probing fails, keep original pa...` step is dropped.
 (deftest response-body-stream-keeps-payload-when-gzip-pipe-fails-test
   (async done
          (let [probe (js/ReadableStream.
@@ -85,6 +89,7 @@
                    (p/let [result (#'sync-download/<response-body-stream resp)]
                      (is (identical? payload result)))))))
 
+;; Fails if, in `<stream-snapshot-row-batches!`, the `:chunk-count` key is dropped.
 (deftest stream-snapshot-row-batches-reports-chunk-count-test
   (async done
          (let [rows [[1 "row-1" nil]]
@@ -98,6 +103,7 @@
                      (is (= {:chunk-count 1} full))
                      (is (= {:chunk-count 0} none)))))))
 
+;; Fails if, in `<stream-snapshot-row-batches!`, the `:chunk-count` key is dropped.
 (deftest stream-snapshot-row-batches-buffered-path-reports-chunk-count-test
   (async done
          (let [rows [[1 "row-1" nil]]
@@ -114,11 +120,13 @@
                      (is (= {:chunk-count 1} full))
                      (is (= {:chunk-count 0} none)))))))
 
+;; Fails if, in `with-auth-headers`, the body becomes `nil`.
 (deftest with-auth-headers-adds-bearer-token-test
   (with-redefs [worker-state/get-id-token (fn [] "tok")]
     (is (= {:method "GET" :headers {"authorization" "Bearer tok"}}
            (#'sync-download/with-auth-headers {:method "GET"})))))
 
+;; Fails if, in `fetch-json`, the body becomes `nil` or the `:response-schema` key is dropped.
 (deftest fetch-json-passes-response-schema-test
   (let [calls (atom [])]
     (with-redefs [sync-util/fetch-json (fn [url opts config]
@@ -127,6 +135,7 @@
       (is (= :result (#'sync-download/fetch-json "https://x/pull" {:method "GET"} :sync/pull)))
       (is (= [["https://x/pull" {:method "GET"} {:response-schema :sync/pull}]] @calls)))))
 
+;; Fails if, in `complete-datoms-import!`, the body becomes `nil`, the `:sub-type` key is dropped, the `:graph-uuid` key is dropped, the `:message` key is dropped, `:thread-api/db-sync-rehydrate-large-titles` becomes `:thread-api/unsafe-unlink-db` or the `:repo` key is dropped.
 (deftest complete-datoms-import-runs-steps-in-order-test
   (async done
          (let [events (atom [])
@@ -162,6 +171,7 @@
                (p/finally (fn [] (vreset! thread-api/*thread-apis apis-prev)))
                (->> (finish done))))))
 
+;; Fails if, in `complete-datoms-import!`, the `(p/catch (fn [error]` step is dropped.
 (deftest complete-datoms-import-continues-when-rehydrate-fails-test
   (async done
          (let [events (atom [])
@@ -180,6 +190,7 @@
                (p/finally (fn [] (vreset! thread-api/*thread-apis apis-prev)))
                (->> (finish done))))))
 
+;; Fails if, in `complete-datoms-import!`, `:db-sync/missing-field` becomes `:db-sync/stale-import`, the `:field` key is dropped or `:thread-api/db-sync-rehydrate-large-titles` becomes `:thread-api/unsafe-unlink-db`.
 (deftest complete-datoms-import-logs-missing-rehydrate-api-test
   (async done
          (let [records (atom [])
@@ -205,6 +216,7 @@
                             (vreset! thread-api/*thread-apis apis-prev)))
                (->> (finish done))))))
 
+;; Fails if, in `complete-datoms-import!`, the `(p/catch (fn [error]` step is dropped.
 (deftest complete-datoms-import-swallows-later-step-failure-test
   (async done
          (let [apis-prev @thread-api/*thread-apis
@@ -226,6 +238,7 @@
                             (vreset! thread-api/*thread-apis apis-prev)))
                (->> (finish done))))))
 
+;; Fails if, in `require-thread-api-f!`, `:db-sync/missing-field` becomes `:db-sync/stale-import` or the `:field` key is dropped.
 (deftest require-thread-api-f-fails-fast-on-missing-api-test
   (let [apis-prev @thread-api/*thread-apis]
     (vreset! thread-api/*thread-apis {:thread-api/known identity})
@@ -239,6 +252,7 @@
       (finally
         (vreset! thread-api/*thread-apis apis-prev)))))
 
+;; Fails if, in `stale-import-ex-info`, the `:repo` key is dropped, the `:graph-id` key is dropped or the `:import-id` key is dropped.
 (deftest stale-import-ex-info-carries-identifiers-test
   (let [error (#'sync-download/stale-import-ex-info "repo" "graph-1" "import-1")]
     (is (= "stale db sync import" (ex-message error)))
@@ -248,10 +262,12 @@
             :import-id "import-1"}
            (ex-data error)))))
 
+;; Fails if, in `import-temp-pool-name`, the body becomes `nil`.
 (deftest import-temp-pool-name-derives-from-repo-test
   (is (= (worker-util/get-pool-name "download-import-my-repo")
          (#'sync-download/import-temp-pool-name "my-repo"))))
 
+;; Fails if, in `close-import-state!`, the `(p/catch (fn [_] nil))` step is dropped.
 (deftest close-import-state-ignores-pool-removal-failure-test
   (async done
          (let [removed (atom [])]
@@ -265,6 +281,7 @@
                        (is (nil? result))
                        (is (= [:pool] @removed))))))))
 
+;; Fails if, in `upsert-addr-content!`, the body becomes `nil`, the `:sql` key is dropped or the `:bind` key is dropped.
 (deftest upsert-addr-content-executes-one-insert-per-item-test
   (let [executed (atom [])
         tx #js {:exec (fn [opts] (swap! executed conj opts))}
@@ -277,6 +294,7 @@
     (is (identical? item-1 (.-bind (first @executed))))
     (is (identical? item-2 (.-bind (second @executed))))))
 
+;; Fails if, in `import-datoms-batch!`, the `:sync-download-graph?` key is dropped.
 (deftest import-datoms-batch-transacts-with-sync-download-meta-test
   (async done
          (let [conn (d/create-conn {})
@@ -291,6 +309,7 @@
                      (is (= [{:sync-download-graph? true}] @metas))
                      (is (= "t" (:block/title (d/entity @conn 1)))))))))
 
+;; Fails if, in `snapshot-datoms-in-import-order`, the `:db/id` step is dropped, `:logseq.kv/schema-version` becomes `:logseq.kv/graph-remote?` or `:db/id` becomes `:db/ident`.
 (deftest snapshot-datoms-in-import-order-puts-schema-datoms-first-test
   (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}})]
     (d/transact! conn [{:db/id 1 :db/ident :logseq.kv/schema-version :kv/value 3}
@@ -303,6 +322,7 @@
             {:e 3 :a :block/title :v "plain"}]
            (vec (sync-download/snapshot-datoms-in-import-order conn))))))
 
+;; Fails if, in `take-import-datoms-batch`, the body becomes `nil`.
 (deftest take-import-datoms-batch-splits-at-batch-size-test
   (is (= [[0 1] [2 3 4]]
          (let [[batch remaining] (#'sync-download/take-import-datoms-batch (range 5) 2)]
@@ -327,6 +347,7 @@
                      (vreset! thread-api/*thread-apis apis-prev)
                      (reset! @#'sync-download/*import-state state-prev))))))
 
+;; Fails if, in `prepare-import!`, the `:close-other-db?` key is dropped, the `:sync-download-graph?` key is dropped, the `:aes-key` key is dropped, the `:conn` key is dropped, the `:graph-e2ee?` key is dropped, the `:imported-datoms` key is dropped, the `:rows-db` key is dropped, the `:rows-imported?` key is dropped, the `:rows-path` key is dropped, the `:rows-pool` key is dropped or the `:total-datoms` key is dropped.
 (deftest prepare-import-opens-db-and-records-import-state-test
   (async done
          (let [calls (atom [])]
@@ -353,6 +374,7 @@
                                    :total-datoms 99}
                                   @@#'sync-download/*import-state))))))))))
 
+;; Fails if, in `prepare-import!`, `:db-sync/missing-field` becomes `:db-sync/stale-import` or the `:repo` key is dropped.
 (deftest prepare-import-fails-fast-without-aes-key-test
   (async done
          (finish done
@@ -364,6 +386,7 @@
                          (is (= "missing-field" (ex-message error)))
                          (is (= {:repo "repo" :field :aes-key} (ex-data error))))))))))
 
+;; Fails if, in `prepare-import!`, `:db-sync/missing-field` becomes `:db-sync/stale-import`, the `:repo` key is dropped or the `:field` key is dropped.
 (deftest prepare-import-fails-fast-without-datascript-conn-test
   (async done
          (finish done
@@ -375,6 +398,7 @@
                          (is (= "missing-field" (ex-message error)))
                          (is (= {:repo "repo" :field :datascript-conn} (ex-data error))))))))))
 
+;; Fails if, in `prepare-import!`, the `(p/catch (fn [error]` step is dropped.
 (deftest prepare-import-failure-clears-import-state-test
   (async done
          (finish done
@@ -388,6 +412,7 @@
                        (is (= "close failed" (ex-message error)))
                        (is (nil? @@#'sync-download/*import-state))))))))
 
+;; Fails if, in `set-graph-sync-metadata!`, `:logseq.kv/graph-uuid` becomes `:logseq.kv/schema-version`, `:logseq.kv/graph-remote?` becomes `:logseq.kv/graph-rtc-e2ee?`, `:logseq.kv/graph-rtc-e2ee?` becomes `:logseq.kv/graph-uuid` or the `:persist-op?` key is dropped.
 (deftest set-graph-sync-metadata-writes-kv-without-persist-op-test
   (let [conn (d/create-conn db-schema/schema)
         metas (atom [])
@@ -400,6 +425,7 @@
       (is (true? (kv :logseq.kv/graph-rtc-e2ee?))))
     (is (= [false] (mapv :persist-op? @metas)))))
 
+;; Fails if, in `set-graph-sync-metadata!`, the body becomes `nil`.
 (deftest set-graph-sync-metadata-rejects-non-uuid-graph-id-test
   (let [conn (d/create-conn db-schema/schema)]
     (is (thrown? js/Error (#'sync-download/set-graph-sync-metadata! conn "not-a-uuid" true)))))

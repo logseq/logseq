@@ -11,6 +11,7 @@
   [db title]
   (d/q '[:find [?e ...] :in $ ?t :where [?e :block/title ?t] [?e :block/tags :logseq.class/Tag]] db title))
 
+;; Fails if, in `get-page-by-parent-name`, `:logseq.property.class/extends` becomes `:logseq.property.class/_extends`.
 (deftest create-tag-under-an-existing-tag-reuses-it
   (let [conn (db-test/create-conn)
         [_ beta-uuid] (outliner-page/create! conn "Alpha/Beta" {:class? true :split-namespace? true})
@@ -19,6 +20,7 @@
     (is (= [beta-uuid] (map :block/uuid (:logseq.property.class/extends gamma))))
     (is (= 1 (count (tags-titled @conn "Beta"))))))
 
+;; Fails if, in `^:api`, `:db/ident` becomes `:db/retract`.
 (deftest create-does-not-take-over-a-built-in-tag-on-its-path
   (let [conn (db-test/create-conn)]
     (is (nil? (outliner-page/create @conn "Root Tag/Task" {:class? true :split-namespace? true})))))

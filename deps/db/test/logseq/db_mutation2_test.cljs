@@ -39,6 +39,8 @@
 
 ;; transact! / batch plumbing
 
+;; Fails if, in `register-transact-invalid-callback-fn!`, the body becomes `nil`.
+;; Fails if, in `invalid-tx-log-data`, the body becomes `nil`, the `:tx-meta` key is dropped, the `:tx-count` key is dropped, the `:pipeline-tx-count` key is dropped, the `:error-count` key is dropped or the `:errors` key is dropped.
 (deftest invalid-tx-calls-the-invalid-callback-and-reports-error-data
   (let [conn (db-test/create-conn)
         callback-args (atom nil)
@@ -67,6 +69,7 @@
           "The callback gets the report and the errors")
       (is (some? (:tx-data (first @callback-args)))))))
 
+;; Fails if, in `batch-transact-cleanup!`, the body becomes `nil`.
 (deftest batch-transact-cleans-up-after-itself
   (let [conn (db-test/create-conn)
         listened (atom 0)
@@ -84,6 +87,7 @@
     (run-batch!)
     (is (= 2 @listened) "A finished batch can be followed by another")))
 
+;; Fails if, in `batch-transact!`, the `:tx-meta` key is dropped.
 (deftest nested-batch-transact-reports-the-tx-meta
   (let [conn (db-test/create-conn)
         error (atom nil)]
@@ -98,6 +102,7 @@
     (is (= "batch-transact! can't be nested called" (ex-message @error)))
     (is (= {:tx-meta {:inner true}} (ex-data @error)))))
 
+;; Fails if, in `conn-from-db`, the `:tx-tail` key is dropped or the `:db-last-stored` key is dropped.
 (deftest temp-conn-from-storage-backed-db-starts-with-clean-tail-bookkeeping
   (let [storage (->InMemoryStorage (volatile! {}))
         conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}} {:storage storage})
@@ -110,12 +115,14 @@
 
 ;; page / block navigation
 
+;; Fails if, in `get-page-blocks-count`, the body becomes `nil` or `:block/page` becomes `:block/parent`.
 (deftest get-page-blocks-count-counts-blocks-of-a-page
   (let [conn (tree-conn)
         page (title->entity @conn "page")]
     (is (= 4 (ldb/get-page-blocks-count @conn (:db/id page))))
     (is (= 0 (ldb/get-page-blocks-count @conn (:db/id (title->entity @conn "first")))))))
 
+;; Fails if, in `get-block-children-or-property-children`, `:block/_parent` becomes `:block/_raw-parent`.
 (deftest block-children-or-property-children-lists-the-parent-children-of-an-ordinary-block
   (let [conn (tree-conn)
         children-fn #'ldb/get-block-children-or-property-children
@@ -123,12 +130,14 @@
     (is (= ["first" "second" "third"]
            (titles (children-fn (title->entity @conn "first") page))))))
 
+;; Fails if, in `get-down`, `:block/_parent` becomes `:block/_raw-parent`.
 (deftest get-down-returns-the-first-child
   (let [conn (tree-conn)]
     (is (= "first" (:block/title (ldb/get-down (title->entity @conn "page")))))
     (is (= "grandchild" (:block/title (ldb/get-down (title->entity @conn "second")))))
     (is (nil? (ldb/get-down (title->entity @conn "third"))))))
 
+;; Fails if, in `get-pages`, the `(map first)` step is dropped, `:block/name` becomes `:block/order` or `remove` becomes `filter`.
 (deftest get-pages-lists-visible-page-titles
   (let [conn (db-test/create-conn)]
     (d/transact! conn [{:block/uuid (random-uuid) :block/title "visible" :block/name "visible"}
@@ -140,6 +149,8 @@
       (is (not (some #{"$$$hidden"} pages)) "Hidden pages are left out")
       (is (not (some #{"just a block"} pages)) "Only pages are listed"))))
 
+;; Fails if, in `page-empty?`, `:block/_parent` becomes `:block/_raw-parent`.
+;; Fails if, in `get-first-child`, the body becomes `nil` or `:block/_parent` becomes `:block/_raw-parent`.
 (deftest page-empty-and-first-child-follow-the-page-children
   (let [conn (tree-conn)
         page (title->entity @conn "page")
@@ -149,6 +160,7 @@
     (is (= "first" (:block/title (ldb/get-first-child @conn (:db/id page)))))
     (is (nil? (ldb/get-first-child @conn (:db/id leaf))))))
 
+;; Fails if, in `get-orphaned-pages`, `:block/_refs` becomes `:block/anchor`, the `(remove nil?)` step is dropped, the `(remove hidden?)` step is dropped, `:db/id` becomes `:db/ident` or `:block/_page` becomes `:block/_parent`.
 (deftest get-orphaned-pages-finds-unreferenced-pages-without-content
   (let [conn (db-test/create-conn)
         page-tx (fn [id title & [blocks]]
@@ -175,6 +187,9 @@
       (is (= #{"empty page" "blank page"} (set (titles orphans))))
       (is (= 2 (count orphans)) "Missing pages and nils are dropped"))))
 
+;; Fails if, in `has-children?`, `:block/_parent` becomes `:block/_raw-parent`.
+;; Fails if, in `get-block-last-direct-child-id`, `:block/_parent` becomes `:block/_raw-parent`.
+;; Fails if, in `get-children`, the body becomes `nil` or `:block/_parent` becomes `:block/_raw-parent`.
 (deftest has-children-and-last-direct-child-and-get-children
   (let [conn (tree-conn)
         page (title->entity @conn "page")
@@ -190,6 +205,8 @@
     (is (= ["first" "second" "third"] (titles (ldb/get-children @conn (:block/uuid page)))))
     (is (= ["grandchild"] (titles (ldb/get-children @conn second'))))))
 
+;; Fails if, in `block-order-path`, `:block/closed-value-property` becomes `:block/collapsed?`.
+;; Fails if, in `sort-page-random-blocks`, the `(distinct)` step is dropped.
 (deftest sort-page-random-blocks-skips-closed-values-and-repeats
   (let [conn (tree-conn)
         db @conn
@@ -208,12 +225,14 @@
                                                        (title->entity @conn "first")])))
         "A closed value is not part of the page order")))
 
+;; Fails if, in `new-block-id`, the body becomes `nil`.
 (deftest new-block-id-generates-fresh-uuids
   (let [id-1 (ldb/new-block-id)
         id-2 (ldb/new-block-id)]
     (is (uuid? id-1))
     (is (not= id-1 id-2))))
 
+;; Fails if, in `page-alias-set`, the body becomes `nil`, the `(set)` step is dropped or the `(set/union #{page-id})` step is dropped.
 (deftest page-alias-set-includes-the-page-and-its-aliases
   (let [conn (db-test/create-conn)]
     (d/transact! conn [{:db/id -1 :block/title "page" :block/name "page" :block/uuid (random-uuid) :block/alias [-2 -3]}
@@ -226,6 +245,7 @@
       (is (= 2 (count alias-ids)))
       (is (= (conj alias-ids (:db/id page)) result)))))
 
+;; Fails if, in `hidden-or-internal-tag?`, `:db/ident` becomes `:db/other-tx`.
 (deftest get-all-pages-leaves-out-internal-tags
   (let [conn (db-test/create-conn)
         pages (ldb/get-all-pages @conn)
@@ -235,6 +255,8 @@
     (is (not (contains? idents :logseq.class/Property)))
     (is (not (contains? idents :logseq.class/Page)))))
 
+;; Fails if, in `get-graph-schema-version`, the body becomes `nil` or `:logseq.kv/schema-version` becomes `:logseq.kv/graph-rtc-e2ee?`.
+;; Fails if, in `get-graph-remote-schema-version`, the body becomes `nil` or `:logseq.kv/remote-schema-version` becomes `:logseq.kv/schema-version`.
 (deftest graph-schema-versions-read-their-own-key-values
   (let [conn (db-test/create-conn)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 5 :minor 1}}
@@ -267,6 +289,7 @@
                                    created-ats))
     conn))
 
+;; Fails if, in `build-bidirectional-property-group`, the `(assoc :db/id (:db/id class))` step is dropped, `:db/id` becomes `:db/ident`, the `(sort-by :block/created-at)` step is dropped or `:block/created-at` becomes `:block/journal-day`.
 (deftest bidirectional-group-carries-the-class-id-and-sorted-entities
   (let [conn (bidirectional-conn [30 10 50 20 40])
         target (db-test/find-page-by-title @conn "Bob")
@@ -279,6 +302,7 @@
            (titles (:entities group)))
         "Entities are sorted by :block/created-at")))
 
+;; Fails if, in `get-bidirectional-properties`, the `(sort-by (comp :block/created-at :cla...` step is dropped or `:block/created-at` becomes `:block/journal-day`.
 (deftest bidirectional-groups-are-sorted-by-class-creation
   (doseq [[person-created company-created] [[1 2] [2 1]]]
     (let [conn (db-test/create-conn-with-blocks
@@ -301,6 +325,7 @@
         (is (= (if (< person-created company-created) ["People" "Companies"] ["Companies" "People"])
                (mapv :title groups)))))))
 
+;; Fails if, in `get-bidirectional-properties`, `:logseq.property/created-from-property` becomes `:logseq.property/query` or `:db/id` becomes `:db/ident`.
 (deftest bidirectional-properties-skip-property-values-and-self-references
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:friend {:logseq.property/type :node
