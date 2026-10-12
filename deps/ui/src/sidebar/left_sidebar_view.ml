@@ -56,16 +56,18 @@ let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
    (cljs ml-auto pl-2) *)
 let menu_sc caps =
   row ~key:"sc" ~grow:1. ~main:`end_ ~cross:`center ~padding_horizontal:8
-    [ row ~key:"sc-box" ~gap:4 ~cross:`center
-        ~style_class:"shui-shortcut-combo shui-shortcut-glow"
-        (List.mapi
-           (fun i cap ->
-             Ui_components.with_props
-               [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
-               (kbd ~key:("k" ^ string_of_int i)
-                  ~style_class:"shui-shortcut-key" ~value:(Ui_services.literal_text cap)
-                  []))
-           caps) ]
+    [ Ui_components.shortcut_combo ~key:"sc-box" ~glow:true
+        (List.concat
+           (List.mapi
+              (fun i cap ->
+                (if i > 0 then
+                   [ Ui_components.keycap_separator
+                       ~key:("sep" ^ string_of_int i) ]
+                 else [])
+                @ [ Ui_components.keycap ~key:("k" ^ string_of_int i)
+                      ~boxed:false ~glow:true ~min_slot:20
+                      ~value:(Ui_services.literal_text cap) ])
+              caps)) ]
 ;;
 
 (* ---------- nav edit (checkbox) menu ---------- *)
@@ -363,14 +365,12 @@ let shortcut_hint hov binding =
         ~display:`inline_flex ~gap:2 ~margin_left:4 ~margin_right:8
         ~opacity_signal:
           (Signal.map (fun h -> if h then 1. else 0.) (Signal.value hov))
-        [ row ~key:"sep" ~gap:4 ~cross:`center
-            ~style_class:"shui-shortcut-separate shui-shortcut-glow"
-            (List.map
-               (fun k ->
-                 Ui_components.with_props
-                   [ Lui_protocol.BackgroundValue, Ui_components.sv "transparent" ]
-                   (kbd ~style_class:"shui-shortcut-key shui-key-boxed"
-                      ~value:(Ui_services.literal_text (String.uppercase_ascii k)) []))
+        [ Ui_components.shortcut_separate ~key:"sep" ~glow:false
+            (List.mapi
+               (fun i k ->
+                 Ui_components.keycap ~key:("k" ^ string_of_int i)
+                   ~boxed:true ~glow:true ~min_slot:20
+                   ~value:(Ui_services.literal_text (String.uppercase_ascii k)))
                keys) ] ]
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
@@ -539,7 +539,12 @@ let nav_group ms st =
                        ; P.FontWeight, Ui_components.iv 500 ]
                        (row ~cross:`center ~grow:1. ~opacity:0.5
                           ~style_class:"wrap-th"
-                          [ text ~value:(t "sidebar.left/navigations") [] ]) ]
+                          [ (* web .wrap-th > .lui-text: sm:text-xs
+                               (12px/16px) — the smaller label reads
+                               as a section header, not a button *)
+                            text ~font_size:"0.75rem"
+                              ~line_height:"1rem"
+                              ~value:(t "sidebar.left/navigations") [] ]) ]
                ; box ~key:"nav-more" ~style_class:"b"
                    ~width:28 ~height:32 ~main:`center
                    ~opacity_signal:
@@ -748,7 +753,11 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                              ; P.FontWeight, Ui_components.iv 500 ]
                              (row ~cross:`center ~grow:1. ~opacity:0.5
                                 ~style_class:"wrap-th"
-                                [ text ~value:label [] ]) ]
+                                [ (* web .wrap-th > .lui-text:
+                                     sm:text-xs (12px/16px) *)
+                                  text ~font_size:"0.75rem"
+                                    ~line_height:"1rem"
+                                    ~value:label [] ]) ]
                      ; box ~key:(key ^ "-b") ~style_class:"b"
                          ~width:28 ~height:32 ~main:`center
                          ~opacity:0.4 ~transition:"opacity 0.15s"

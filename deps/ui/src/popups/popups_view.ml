@@ -497,22 +497,14 @@ let ac_popover (st : S.t) : t =
                         a row, not text — native text elements only lay
                         out text-kind children *)
                      row ~key:"scw"
-                       [ box ~key:"sc"
-                           ~style_class:"shui-shortcut-combo shui-shortcut-glow"
-                           [ Ui_components.with_props
-                               [ Lui_protocol.BackgroundValue
-                               , Ui_components.sv "transparent"
-                               ]
-                               (kbd ~key:"k0" ~style_class:"shui-shortcut-key"
-                                  ~value:(Ui_services.literal_text "\xe2\x8c\x98") [])
-                           ; text ~key:"sep1"
-                               ~style_class:"shui-shortcut-separator" []
-                           ; Ui_components.with_props
-                               [ Lui_protocol.BackgroundValue
-                               , Ui_components.sv "transparent"
-                               ]
-                               (kbd ~key:"k1" ~style_class:"shui-shortcut-key"
-                                  ~value:(Ui_services.literal_text "\xe2\x8f\x8e") []) ] ]
+                       [ Ui_components.shortcut_combo ~key:"sc" ~glow:true
+                           [ Ui_components.keycap ~key:"k0" ~boxed:false
+                               ~glow:true ~min_slot:20
+                               ~value:(Ui_services.literal_text "\xe2\x8c\x98")
+                           ; Ui_components.keycap_separator ~key:"sep1"
+                           ; Ui_components.keycap ~key:"k1" ~boxed:false
+                               ~glow:true ~min_slot:20
+                               ~value:(Ui_services.literal_text "\xe2\x8f\x8e") ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ])

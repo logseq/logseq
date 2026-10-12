@@ -444,28 +444,28 @@ let keymap_binding ~key (b : Keymap_data.binding) =
         ~display:`inline_flex
         [ row ~key:(key ^ "d") ~style_class:cls ~cross:`center
             ~accessibility_identifier:b.data
-            (List.concat
-             @@ List.mapi
-                  (fun i k ->
-                 (if i > 0 && b.kind = "combo" then
-                    [ box
-                        ~key:(key ^ "s" ^ string_of_int i)
-                        ~style_class:"shui-shortcut-separator" []
-                    ]
-                  else [])
-                 @ [ Ui_components.with_props
-                       [ Lui_protocol.BackgroundValue
-                       , Ui_components.sv "transparent"
-                       ]
-                       (kbd
-                          ~key:(key ^ "k" ^ string_of_int i)
-                          ~style_class:
-                            (if b.kind = "separate" then
-                               "shui-shortcut-key shui-key-boxed"
-                             else "shui-shortcut-key")
-                          ~value:(Ui_services.literal_text k) [])
-                   ])
-               b.keys)
+            [ (let cells =
+                 List.concat
+                   (List.mapi
+                      (fun i k ->
+                        (if i > 0 && b.kind = "combo" then
+                           [ Ui_components.keycap_separator
+                               ~key:(key ^ "s" ^ string_of_int i) ]
+                         else [])
+                        @ [ Ui_components.keycap
+                              ~key:(key ^ "k" ^ string_of_int i)
+                              ~boxed:(b.kind = "separate") ~glow:true
+                              ~min_slot:20
+                              ~value:(Ui_services.literal_text k) ])
+                      b.keys)
+               in
+               if b.kind = "combo" then
+                 Ui_components.shortcut_combo ~key:(key ^ "sc")
+                   ~glow:true cells
+               else
+                 Ui_components.shortcut_separate ~key:(key ^ "sc")
+                   ~glow:false cells)
+            ]
         ]
     ]
 
