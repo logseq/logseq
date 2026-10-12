@@ -4,6 +4,7 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `hidden-class-object-eid?`, `or` becomes `and` or `seq` becomes `empty?`.
 (deftest filter-visible-class-object-ids-hides-children-of-hidden-page-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Hidden page"}

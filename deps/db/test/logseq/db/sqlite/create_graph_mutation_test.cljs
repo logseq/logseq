@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
+;; Fails if, in `build-initial-classes*`, `or` becomes `and`.
 (deftest build-initial-classes*-title-test
   (let [[titled untitled] (sqlite-create-graph/build-initial-classes*
                            [[:user.class/Foo {:title "Foo Bar"}]
