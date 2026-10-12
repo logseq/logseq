@@ -1064,7 +1064,7 @@ let () =
   in
   let dom_down_node = ref 0 in
   let dom_down_clicks = ref 0 in
-  let last_clipboard_key = ref None in
+  let last_dom_key = ref None in
   (* Same-hit free moves carry no new information — cap them the way
      native hosts do (~25/s); drags emit every move. *)
   let last_move_emit = ref (0, 0.) in
@@ -1294,58 +1294,71 @@ let () =
          | None -> [])
       @ mods_fields mods
     in
-    emit_dom (if down then "keydown" else "keyup") target fields;
-    (* browsers dispatch copy/cut/paste as their own dom events on
-       mod+c/x/v — the document clipboard listeners (on_copy/on_cut/
-       on_paste) hang off those, not the keydown; a paste event carries
-       the OS clipboard as clipboardData.text like the browser's.
-       macOS routes menu keyEquivalents to both SDL and the menu
-       callback (which re-injects the key), so one physical press
-       arrives as two keydowns — dedupe the same key inside a short
-       window so the dom event fires once like the browser's *)
-    if down && (not repeat) && mods.Input.meta && (not mods.Input.ctrl)
-       && not (mods.Input.alt || mods.Input.shift)
-    then
-      (match dom_key scancode with
-       | ("c" | "x" | "v") as k ->
-           let now = Unix.gettimeofday () in
-           let dupe =
-             match !last_clipboard_key with
-             | Some (k', t) -> k' = k && now -. t < 0.08
-             | None -> false
-           in
-           if dupe then ()
-           else begin
-             last_clipboard_key := Some (k, now);
-             match k with
-             | "c" -> emit_dom "copy" target []
-             | "x" -> emit_dom "cut" target []
-             | _ ->
-                 let text =
-                   Option.value (Lui_shell.clipboard_read ()) ~default:""
-                 in
-                 emit_dom "paste" target
-                   [ ("clipboardData", "{\"text\":" ^ jstr text ^ "}") ]
-           end
-       | _ -> ());
-    (* on web the hidden textarea's own keydown listener emits the
-       conduit "key" event alongside the document dispatch — give the
-       focused logseq-editor sink the same feed; typed text arrives
-       separately as Text_input -> "insert" *)
-    if down && target <> 0
-       && Lui_store.kind store target = "extension:logseq-editor"
-    then begin
-      dbg "editor key %s" (dom_key scancode);
-      apply_patch_json
-        (Native_embed.extension_event target "logseq-editor" "key"
-           (String.concat ""
-              [ "{\"key\":"; jstr (dom_key scancode)
-              ; ",\"shift\":"; jbool (mods.Input.shift)
-              ; ",\"alt\":"; jbool (mods.Input.alt)
-              ; ",\"meta\":"; jbool (mods.Input.meta)
-              ; ",\"ctrl\":"; jbool (mods.Input.ctrl)
-              ; ",\"repeat\":"; jbool (repeat)
-              ; "}" ]))
+    (* macOS routes menu keyEquivalents (Edit-menu tags 6-11:
+       z/x/c/v/a with gui or gui+shift) to both SDL and the menu
+       callback, which re-injects the key — one physical press arrives
+       as two keydown/keyup pairs ~1ms apart. Browsers dispatch each
+       key once, and a doubled mod+a exits editing to block selection
+       on the second dispatch, so drop an identical
+       (scancode, shift, down) meta event inside a short window. *)
+    let dupe =
+      if mods.Input.meta && not (mods.Input.ctrl || mods.Input.alt)
+      then
+        let now = Unix.gettimeofday () in
+        let dupe =
+          match !last_dom_key with
+          | Some (sc', sh', dn', t) ->
+              sc' = scancode && sh' = mods.Input.shift && dn' = down
+              && now -. t < 0.08
+          | None -> false
+        in
+        if dupe then true
+        else begin
+          last_dom_key := Some (scancode, mods.Input.shift, down, now);
+          false
+        end
+      else false
+    in
+    if dupe then ()
+    else begin
+      emit_dom (if down then "keydown" else "keyup") target fields;
+      (* browsers dispatch copy/cut/paste as their own dom events on
+         mod+c/x/v — the document clipboard listeners (on_copy/on_cut/
+         on_paste) hang off those, not the keydown; a paste event
+         carries the OS clipboard as clipboardData.text like the
+         browser's *)
+      if down && (not repeat) && mods.Input.meta
+         && not (mods.Input.ctrl || mods.Input.alt || mods.Input.shift)
+      then
+        (match dom_key scancode with
+         | "c" -> emit_dom "copy" target []
+         | "x" -> emit_dom "cut" target []
+         | "v" ->
+             let text =
+               Option.value (Lui_shell.clipboard_read ()) ~default:""
+             in
+             emit_dom "paste" target
+               [ ("clipboardData", "{\"text\":" ^ jstr text ^ "}") ]
+         | _ -> ());
+      (* on web the hidden textarea's own keydown listener emits the
+         conduit "key" event alongside the document dispatch — give the
+         focused logseq-editor sink the same feed; typed text arrives
+         separately as Text_input -> "insert" *)
+      if down && target <> 0
+         && Lui_store.kind store target = "extension:logseq-editor"
+      then begin
+        dbg "editor key %s" (dom_key scancode);
+        apply_patch_json
+          (Native_embed.extension_event target "logseq-editor" "key"
+             (String.concat ""
+                [ "{\"key\":"; jstr (dom_key scancode)
+                ; ",\"shift\":"; jbool (mods.Input.shift)
+                ; ",\"alt\":"; jbool (mods.Input.alt)
+                ; ",\"meta\":"; jbool (mods.Input.meta)
+                ; ",\"ctrl\":"; jbool (mods.Input.ctrl)
+                ; ",\"repeat\":"; jbool (repeat)
+                ; "}" ]))
+      end
     end
   in
   let emit_dom_event e =
