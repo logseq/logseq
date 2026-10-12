@@ -112,7 +112,14 @@ let cmdk_input_row ~key children =
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
        ~height:54 ~background:"var(--lx-gray-02, #f8f8f8)" children)
 
-let cmdk_search_input ~key ?placeholder ~text_signal:text ~on_input () =
+let cmdk_search_input ~key ?placeholder ?placeholder_signal
+    ~text_signal:text ~on_text () =
+  (* TextChanged is decoded once here — callers take the string *)
+  let on_input ev =
+    match ev with
+    | P.TextChanged (_, q) -> on_text q
+    | _ -> ()
+  in
   with_props
     [ P.FontSize, sv "var(--lx-text-input)"
     ; P.LineHeight, sv "1.75rem"
@@ -133,7 +140,7 @@ let cmdk_search_input ~key ?placeholder ~text_signal:text ~on_input () =
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
           var(--lui-c-foreground)))"
-       ?placeholder ~text_signal:text ~on_input [])
+       ?placeholder ?placeholder_signal ~text_signal:text ~on_input [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; the
    56px bottom pad scrolls the last row clear of the hints bar (a
@@ -665,7 +672,13 @@ let form_desc ~key ~value : t =
    border+ring (icon-picker's gray-03 input). *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
     ?(pad_left = 28) ?background ?(borderless = false) ?(trailing = [])
-    ?autofocus ~placeholder ~text_signal:text ~on_input () : t =
+    ?autofocus ~placeholder ~text_signal:text ~on_text () : t =
+  (* TextChanged is decoded once here — callers take the string *)
+  let on_input ev =
+    match ev with
+    | P.TextChanged (_, q) -> on_text q
+    | _ -> ()
+  in
   with_props [ P.Position, sv "relative" ]
     (row ~key ~cross:`center ~gap:0
        ~min_width:0

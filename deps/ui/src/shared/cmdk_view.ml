@@ -612,76 +612,58 @@ let search_only_chip svs st (gid : S.group_id) =
     ]
 
 let scroller svs st : t =
- fun ctx parent ->
-  let has_items_sig =
-    Signal.map
-      (fun (v : S.view) ->
-        v.S.groups <> []
-        && List.exists (fun (g : S.group) -> g.S.gitems <> []) v.S.groups)
-      (Signal.value (st.S.vs))
-  in
-  let input_sig =
-    Signal.map (fun (v : S.view) -> v.S.input) (Signal.value (st.S.vs))
-  in
+  let view_sig = Signal.value (st.S.vs) in
   (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
      the results stack inside a single column instead *)
-  (Ui_components.cmdk_scroller ~key:"scroller"
+  Ui_components.cmdk_scroller ~key:"scroller"
     [ column ~key:"scroller-body" ~grow:1.
         [ reactive
             (fun (v : S.view) ->
               match v.S.filter with
               | Some gid -> search_only_chip svs st gid
               | None -> spacer ~key:"chip" [])
-            (Signal.value (st.S.vs))
+            view_sig
         ; groups_body svs st
         ; if_
             ~test:
-              (Signal.map2
-                 (fun (q : string) has -> q <> "" && not has)
-                 input_sig has_items_sig)
+              (reactive
+                 (fun (v : S.view) ->
+                   v.S.input <> ""
+                   && not
+                        (v.S.groups <> []
+                        && List.exists
+                             (fun (g : S.group) -> g.S.gitems <> [])
+                             v.S.groups))
+                 view_sig)
             (Ui_components.cmdk_empty ~key:"empty"
                [ text ~key:"empty-t"
                    ~value:(svs.Svs.i18n "search/no-result") [] ])
         ; spacer ~key:"scpad"
             ~height:(if (S.get st).S.sidebar then 0 else 56) []
         ]
-    ])
-    ctx parent
+    ]
 
 (* -- input row -------------------------------------------------------- *)
 
 let input_row svs st : t =
-  let move_sig =
-    Signal.map (fun (v : S.view) -> v.S.move_mode)
-      (Signal.value (st.S.vs))
-  in
-  let text_sig =
-    Signal.map (fun (v : S.view) -> v.S.input) (Signal.value (st.S.vs))
-  in
+  let view_sig = Signal.value (st.S.vs) in
   Ui_components.cmdk_input_row ~key:"input-row"
     [ (* prod's .cp__cmdk-input-row has no leading glyph — the input is
          flush-left; older cljs baselines that showed a dimmed magnifier
          are stale *)
       (* move_mode can flip while the palette stays open (move-blocks
-         command); no placeholder_signal exists, so a keyed remount
-         swaps the placeholder — the caller re-focuses the input right
-         after the state publish *)
-      reactive
-        (fun move_mode ->
-          (* sidebar blocks mount seeded with the query; the modal is
-             always "" so this is a no-op there *)
-          Ui_components.cmdk_search_input ~key:"input"
-            ~text_signal:text_sig
-            ~placeholder:
-              (if move_mode then
+         command); the placeholder updates in place via the signal *)
+      Ui_components.cmdk_search_input ~key:"input"
+        ~text_signal:(reactive (fun (v : S.view) -> v.S.input) view_sig)
+        ~placeholder:
+          (reactive
+             (fun (v : S.view) ->
+               if v.S.move_mode then
                  svs.Svs.i18n "cmdk.input/move-blocks-placeholder"
                else svs.Svs.i18n "cmdk.input/default-placeholder")
-            ~on_input:(fun ev ->
-              match ev with
-              | Lui_protocol.TextChanged (_, q) -> S.on_input st q
-              | _ -> ())
-            ())
-        move_sig
+             view_sig)
+        ~on_text:(fun q -> S.on_input st q)
+        ()
     ]
 
 (* -- hints ------------------------------------------------------------- *)

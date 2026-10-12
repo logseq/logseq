@@ -19,14 +19,14 @@ let cfg_row ~key ~for_ ~label ?label_extra ?detail ?binding ~cfg ~default
     () =
   C.toggle_row ~key ~for_ ~label ?label_extra ?detail ?binding
     ~on:(S.config_bool cfg ~default)
-    ~on_toggle:(fun () -> S.config_toggle cfg ~default)
+    ~on_checked:(fun checked -> S.config_set_bool cfg checked)
     ()
 
 (* localStorage-backed toggle row *)
 let storage_row ~key ~for_ ~label ?label_extra ?detail ?binding ~key_ ~default
-    ~on_toggle () =
+    ~on_checked () =
   C.toggle_row ~key ~for_ ~label ?label_extra ?detail ?binding
-    ~on:(S.storage_bool key_ ~default) ~on_toggle ()
+    ~on:(S.storage_bool key_ ~default) ~on_checked ()
 
 (* show-brackets and wide-mode appear in both the editor pane and the
    appearance popup — same row spec, different DOM key *)
@@ -36,7 +36,7 @@ let brackets_row ~key =
 
 let wide_mode_row ~key =
   storage_row ~key ~for_:"wide_mode" ~label:T.wide_mode ~binding:"t w"
-    ~key_:"wide-mode" ~default:false ~on_toggle:S.toggle_wide_mode ()
+    ~key_:"wide-mode" ~default:false ~on_checked:S.set_wide_mode ()
 
 (* ---- general pane ---- *)
 
@@ -150,7 +150,7 @@ let editor_font_row () =
         [ row ~key:"font-gl" ~cross:`center ~min_height:28
             ~style_class:"ls-check-row"
             [ C.checkbox_el ~key:"font-gc" ~on:font.S.fglobal
-                ~on_change:(fun b -> S.set_editor_font_global b)
+                ~on_checked:(fun b -> S.set_editor_font_global b)
             ; text ~key:"font-gt" ~style_class:"ls-check-label"
                 ~value:T.editor_font_global []
             ]
@@ -358,7 +358,7 @@ let editor_pane ctx =
         ~cfg:"ui/auto-expand-block-refs?" ~default:true ()
     ; storage_row ~key:"sttip" ~for_:"enable_tooltip"
         ~label:T.shortcut_tooltip ~key_:"shortcut-tooltip?" ~default:true
-        ~on_toggle:S.toggle_shortcut_tooltip ()
+        ~on_checked:S.set_shortcut_tooltip ()
     ; cfg_row ~key:"tooltips" ~for_:"enable_tooltip"
         ~label:T.tooltips ~cfg:"ui/enable-tooltip?" ~default:true ()
     ; cfg_row ~key:"puball" ~for_:"all pages public"
@@ -379,7 +379,7 @@ let keymap_pill st ~key ~title filter =
   Ui_components.chip_toggle ~key ~radius:9999 ~pad_v:2 ~pad_h:8
     ~font_size:"0.75rem"
     ~text:(title ^ Ui_services.literal_text " \xc2\xb7 " ^ string_of_int (Keymap_data.count filter))
-    ~checked_signal:(Signal.map active (Signal.value st))
+    ~checked:(reactive active (Signal.value st))
     ~on_toggle:(fun _ ->
         Runtime.signal_set st { (Runtime.signal_get st) with km_filter = filter }) ()
 
@@ -394,11 +394,9 @@ let keymap_controls st =
             [ Ui_components.search_row ~key:"km-sw" ~height:26
                 ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
                 ~placeholder:T.keymap_search_placeholder
-                ~text_signal:(Signal.map (fun s -> s.km_query) (Signal.value st))
-                ~on_input:(function
-                    | Lui_protocol.TextChanged (_, query) ->
-                        Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
-                    | _ -> ()) ()
+                ~text_signal:(reactive (fun s -> s.km_query) (Signal.value st))
+                ~on_text:(fun query ->
+                    Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }) ()
             ]
         ; Ui_components.with_props
             [ ( Lui_protocol.HoverBackground
@@ -592,13 +590,13 @@ let advanced_pane () =
           [ text ~key:"usage-d" ~style_class:"ls-desc"
               ~value:T.usage_diagnostics_desc [] ]
         ~on:(not (S.instrument_disabled ()))
-        ~on_toggle:S.toggle_usage_diagnostics ()
+        ~on_checked:S.set_usage_diagnostics ()
     ; C.toggle_row ~key:"devm" ~for_:"developer_mode"
         ~label:T.developer_mode
         ~detail:
           [ text ~key:"devm-d" ~style_class:"ls-desc"
               ~value:T.developer_mode_desc [] ]
-        ~on:(S.developer_mode ()) ~on_toggle:S.toggle_developer_mode ()
+        ~on:(S.developer_mode ()) ~on_checked:S.set_developer_mode ()
     ; C.action_row ~key:"syncurl" ~for_:"sync_server_url"
         ~label:T.sync_server_url
         ~actions:
@@ -658,9 +656,9 @@ let home_page_row ctx =
 (* action_row + switch cell — plugins/flashcards rows in the features
    pane use the same control pair as toggle rows, laid out as an
    action row *)
-let switch_action_row ~key ~for_ ~label ~on ~on_toggle () =
+let switch_action_row ~key ~for_ ~label ~on ~on_checked () =
   C.action_row ~key ~for_ ~label
-    ~actions:[ C.switch_el ~key:(key ^ "-sw") ~on ~on_toggle ]
+    ~actions:[ C.switch_el ~key:(key ^ "-sw") ~on ~on_checked ]
     ()
 
 let features_pane ctx =
@@ -672,14 +670,14 @@ let features_pane ctx =
         ~actions:
           [ row ~key:"plugs-a" ~style_class:"ls-toolbar-gap"
               (C.switch_controls ~key:"plugs" ~on:(S.plugin_system ())
-                 ~on_toggle:S.toggle_plugin_system ())
+                 ~on_checked:S.set_plugin_system ())
           ]
         ()
     ; switch_action_row ~key:"cards" ~for_:"flashcards"
         ~label:T.flashcards
         ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
-        ~on_toggle:(fun () ->
-          S.config_toggle "feature/enable-flashcards?" ~default:true)
+        ~on_checked:(fun checked ->
+          S.config_set_bool "feature/enable-flashcards?" checked)
         ()
     ]
 

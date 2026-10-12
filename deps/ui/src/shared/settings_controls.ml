@@ -84,21 +84,30 @@ let btn_size = function
 
 (* ui/toggle -> shui Switch size sm. The cljs hidden input mirroring the
    switch state is gone: the switch kind embeds a real checkbox input on
-   web, so no mirror is needed *)
-let switch_el ~key ~on ~on_toggle =
+   web, so no mirror is needed. ToggleChanged is decoded once here —
+   callers get the new checked state, not the raw event. *)
+let switch_el ~key ~on ~on_checked =
   switch_ ~key ~style_class:"ui__switch" ~width:32 ~height:18 ~checked:on
-    ~on_toggle:(fun _ -> on_toggle ()) []
+    ~on_toggle:(fun ev ->
+      match ev with
+      | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
+      | _ -> ())
+    []
 
 (* switch (+ optional detail children) — the switch-wrap cell contents
    of every toggle row *)
-let switch_controls ~key ~on ~on_toggle ?(extra = []) () =
-  switch_el ~key:(key ^ "-sw") ~on ~on_toggle :: extra
+let switch_controls ~key ~on ~on_checked ?(extra = []) () =
+  switch_el ~key:(key ^ "-sw") ~on ~on_checked :: extra
 
 (* shui/checkbox — the kind draws its own check indicator, so the cljs
    check svg child is dropped *)
-let checkbox_el ~key ~on ~on_change =
+let checkbox_el ~key ~on ~on_checked =
   checkbox ~key ~style_class:"ui__checkbox" ~checked:on
-    ~on_toggle:(fun _ -> on_change (not on)) []
+    ~on_toggle:(fun ev ->
+      match ev with
+      | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
+      | _ -> ())
+    []
 
 (* <label> takes no children in the kind schema — info icons etc. join
    the label cell through form_row's label_extra slot instead *)
@@ -117,12 +126,12 @@ let label_el ~key ~for_ ~text ?text_signal children =
    label children in cljs. ~binding adds the show-brackets/wide-mode
    shortcut column (narrow switch wrap + right-aligned kbd cell). *)
 let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
-    ?binding ~on ~on_toggle () =
+    ?binding ~on ~on_checked () =
   ignore for_;
   let control =
     row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
       ?max_width:(match binding with Some _ -> Some 320 | None -> None)
-      (switch_controls ~key ~on ~on_toggle
+      (switch_controls ~key ~on ~on_checked
          ~extra:(match binding with Some _ -> [] | None -> detail)
          ())
   in
