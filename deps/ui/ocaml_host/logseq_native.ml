@@ -41,6 +41,21 @@ external sidebar_vibrancy :
   float -> float -> float -> float -> bool -> unit
   = "logseq_native_sidebar_vibrancy"
 
+(* App theme → material appearance: the SDL window doesn't track the
+   app's own light/dark switch, so the host pushes it each frame. *)
+external sidebar_theme : bool -> unit = "logseq_native_sidebar_theme"
+
+(* ocaml_host_stubs.c: installs the real NSMenu main menu. Every item
+   carries a command tag forwarded to the "ocaml_host_menu_command"
+   named value registered below. *)
+external native_install_menus : unit -> unit
+  = "logseq_native_install_menus"
+
+(* ocaml_host_stubs.c: AppKit verbs the menu dispatch bounces back
+   out — about/hide/hide-others/show-all on NSApp, miniaturize/zoom/
+   close/fullscreen on the key window. *)
+external native_app_op : int -> unit = "logseq_native_app_op"
+
 let log fmt = Printf.printf (fmt ^^ "\n%!")
 let warn fmt = Printf.eprintf (fmt ^^ "\n%!")
 
@@ -249,6 +264,7 @@ let () =
   List.iter
     (fun d -> if Sys.file_exists d then native_register_fonts d)
     font_dirs;
+  native_install_menus ();
   let drawable () = Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in
@@ -528,8 +544,8 @@ let () =
            | _ -> []) };
   let host =
     Lui_host.create ~hooks ~layout:(module Lui_layout)
-      ~measure:(fun id text _w _h ->
-        let w, h = Text_engine.measure_text text_engine id text in
+      ~measure:(fun id text w _h ->
+        let w, h = Text_engine.measure_text ~width:w text_engine id text in
         let tp = Lui_paint.text_placement_of (text_engine.store ()) id in
         let s = text_engine.scale () in
         Some
@@ -698,6 +714,7 @@ let () =
            then begin
              s.Lui_scene.ops <- sidebar_hole r s.Lui_scene.ops;
              let sc = !scale_cell in
+             sidebar_theme (!Theme_vars.mode = Lui_theme.Dark);
              sidebar_vibrancy
                (r.Lui_scene.x /. sc)
                (float !win_h -. (r.Lui_scene.y +. r.Lui_scene.h) /. sc)
@@ -1232,6 +1249,68 @@ let () =
         ~repeat:false
     | _ -> ()
   in
+  (* ---- macOS main menu commands -----------------------------------
+
+     ocaml_host_stubs.c installs the NSMenu bar; every item's tag is
+     forwarded here through the "ocaml_host_menu_command" named value.
+     One dispatch path: Edit commands are re-injected as real SDL key
+     events so the app's keymap sees exactly what a keyboard press
+     produces (the item's keyEquivalent fires the same action, so
+     Cmd+Z from the keyboard is routed here instead of being
+     swallowed); app-level commands reuse the "menu-*" platform_event
+     contract Menu_bar.install registers; OS verbs bounce back to the
+     AppKit stub (native_app_op). Tags match the kMenu* enum in
+     ocaml_host_stubs.c. *)
+  let push_menu_key ~down ~scancode ~keymod =
+    let ev = Sdl.Event.create () in
+    Sdl.Event.set ev Sdl.Event.typ
+      (if down then Sdl.Event.key_down else Sdl.Event.key_up);
+    Sdl.Event.set ev Sdl.Event.keyboard_window_id
+      (Sdl.get_window_id !win);
+    Sdl.Event.set ev Sdl.Event.keyboard_state
+      (if down then Sdl.pressed else Sdl.released);
+    Sdl.Event.set ev Sdl.Event.keyboard_repeat 0;
+    Sdl.Event.set ev Sdl.Event.keyboard_scancode scancode;
+    Sdl.Event.set ev Sdl.Event.keyboard_keymod keymod;
+    ignore (Sdl.push_event ev)
+  in
+  let menu_key ~scancode ~keymod =
+    push_menu_key ~down:true ~scancode ~keymod;
+    push_menu_key ~down:false ~scancode ~keymod
+  in
+  let menu_command tag =
+    dbg "menu-command %d" tag;
+    match tag with
+    | 1 -> native_app_op 0 (* About *)
+    | 2 -> native_app_op 1 (* Hide *)
+    | 3 -> native_app_op 2 (* Hide Others *)
+    | 4 -> native_app_op 3 (* Show All *)
+    | 5 -> (* Quit — through SDL so the app's normal exit path runs *)
+      let ev = Sdl.Event.create () in
+      Sdl.Event.set ev Sdl.Event.typ Sdl.Event.quit;
+      ignore (Sdl.push_event ev)
+    | 6 -> menu_key ~scancode:Sdl.Scancode.z ~keymod:Sdl.Kmod.gui
+    | 7 ->
+      menu_key ~scancode:Sdl.Scancode.z
+        ~keymod:(Sdl.Kmod.gui lor Sdl.Kmod.shift)
+    | 8 -> menu_key ~scancode:Sdl.Scancode.x ~keymod:Sdl.Kmod.gui
+    | 9 -> menu_key ~scancode:Sdl.Scancode.c ~keymod:Sdl.Kmod.gui
+    | 10 -> menu_key ~scancode:Sdl.Scancode.v ~keymod:Sdl.Kmod.gui
+    | 11 -> menu_key ~scancode:Sdl.Scancode.a ~keymod:Sdl.Kmod.gui
+    | 12 -> native_app_op 7 (* Toggle Full Screen *)
+    | 13 -> Native_embed.platform_event "menu-toggle-left-sidebar\n{}"
+    | 14 -> Native_embed.platform_event "menu-reload\n{}"
+    | 15 -> native_app_op 4 (* Minimize *)
+    | 16 -> native_app_op 5 (* Zoom *)
+    | 17 -> native_app_op 6 (* Close *)
+    | 18 -> (* Help *)
+      ignore
+        (Unix.create_process "open"
+           [| "open"; "https://docs.logseq.com" |]
+           Unix.stdin Unix.stdout Unix.stderr)
+    | _ -> ()
+  in
+  Callback.register "ocaml_host_menu_command" menu_command;
   let e = Sdl.Event.create () in
   let drain_events () =
     let go = ref true in
@@ -1253,8 +1332,8 @@ let () =
     done
   in
   (* ---- boot the embedded app ---- *)
-  Lui_shell.set_app_name "logseq";
-  ignore (Lui_shell.set_window_title "logseq");
+  Lui_shell.set_app_name "Logseq";
+  ignore (Lui_shell.set_window_title "Logseq");
   (* platform_code 1 = MacOS, host_code 0 = the generic host
      profile (drives the app-icons push and host-gated views). *)
   let init_patches = Domain.join init_d in

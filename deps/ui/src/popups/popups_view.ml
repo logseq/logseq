@@ -537,6 +537,12 @@ let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
 (* base-ui sets data-highlighted on the hovered item (bg-muted) *)
 let cm_hi_el : Ui_services.el option ref = ref None
 
+(* the sub-open routine is defined next to open_cm_picker far below;
+   the sub-trigger's press handler goes through this ref so the row
+   can stay above it in the file *)
+let cm_press_open_ref : (S.t -> Ui_services.el -> unit) ref =
+  ref (fun _st _trg -> ())
+
 let close_cm st =
   cm_hi_el := None;
   close_cm_picker ();
@@ -674,13 +680,29 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
       | S.Ci_colors -> cm_color_row st
       | S.Ci_headings -> cm_heading_row st
       | S.Ci_sub (label, _sub) ->
-          (* opens on hover — cm_hover finds it by the cm-sub-<i> id;
-             role=menuitem rides data_attrs (the kind's ~role variant
-             list doesn't cover it) *)
+          (* opens on hover — cm_hover finds it by data-cm-sub (the
+             attrs whitelist rejects a bare id). The press handler
+             doubles as click-to-open and, just as importantly, marks
+             the row interactive so hit-testing reaches it — without
+             it the row is hit-transparent and hover can never fire *)
           menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
-            ~data_attrs:[ ("role", "menuitem") ]
+            ~data_attrs:
+              [ ("role", "menuitem")
+              ; ("data-cm-sub", string_of_int idx)
+              ]
+            ~on_press_detail:(fun ev ->
+              match ev with
+              | Lui_protocol.PressDetail (_, d) -> (
+                  match
+                    Option.bind (Ui_services.dom_element_at d.x d.y)
+                      (fun hit ->
+                        hit.Ui_services.closest "[data-cm-sub]")
+                  with
+                  | Some trg -> !cm_press_open_ref st trg
+                  | None -> ())
+              | _ -> ())
             ~text:label
             [ (* margin-left:auto doesn't translate — a grow row
                  ~main:`end_ pushes the chevron to the item's right
@@ -1335,25 +1357,39 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
                close_cm st))
 ;;
 
+let cm_open_sub_at st (trg : Ui_services.el) (cm : S.cm) (idx : int) =
+  close_cm_picker ();
+  match S.cm_sub_at st idx with
+  | Some (S.Sub_menu _) ->
+      let tx, ty, tw, _th = trg.Ui_services.rect () in
+      S.open_cm_sub st ~index:idx ~x:(tx +. tw -. 4.) ~y:(ty -. 4.)
+  | Some (S.Sub_picker pk) ->
+      S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
+      open_cm_picker st pk trg cm
+  | None -> ()
+;;
+
+(* click-to-open path for the sub-trigger rows (cm_item_el installs it
+   through cm_press_open_ref); re-reads the live cm state at press time *)
+let _ =
+  cm_press_open_ref :=
+    fun st trg ->
+      match trg.Ui_services.attr "data-cm-sub", (S.get st).S.cm with
+      | Some s, Some cm -> (
+          match int_of_string_opt s with
+          | Some idx -> cm_open_sub_at st trg cm idx
+          | None -> ())
+      | _ -> ()
+;;
+
 let cm_hover st (el : Ui_services.el) =
-  (match el.Ui_services.closest "[id^='cm-sub-']" with
+  (match el.Ui_services.closest "[data-cm-sub]" with
   | Some trg -> (
-      match trg.Ui_services.attr "id" with
+      match trg.Ui_services.attr "data-cm-sub" with
       | Some s -> (
-          let s = String.sub s 7 (String.length s - 7) in
           match int_of_string_opt s, (S.get st).S.cm with
-          | Some idx, Some cm when cm.S.sub_open <> idx -> (
-              close_cm_picker ();
-              match S.cm_sub_at st idx with
-              | Some (S.Sub_menu _) ->
-                  let tx, ty, tw, _th = trg.Ui_services.rect () in
-                  S.open_cm_sub st ~index:idx
-                    ~x:(tx +. tw -. 4.)
-                    ~y:(ty -. 4.)
-              | Some (S.Sub_picker pk) ->
-                  S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
-                  open_cm_picker st pk trg cm
-              | None -> ())
+          | Some idx, Some cm when cm.S.sub_open <> idx ->
+              cm_open_sub_at st trg cm idx
           | Some _, _ | None, _ -> ())
       | None -> ())
   | None ->

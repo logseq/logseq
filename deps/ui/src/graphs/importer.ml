@@ -232,15 +232,27 @@ let on_change id () =
    `lui-file-picker` element — no Picked event, no web File objects.
    Needs a web FilePicker backend plus directory-pick support *)
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
+  (* .action-input is a horizontal field row on the web — the label tag
+     wraps the whole hit area for the nested input's click activation;
+     natively the row carries the same layout via typed props *)
   Logseq_el.el ~key:id ~tag:"label"
     ~style_class:"action-input"
-    [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center"
-        [ icon ~key:(id ^ "-ico") ~name:(`app "logseq-logo")
-            ~point_size:28 [] ]
-    ; column ~key:(id ^ "-t")
-        ~style_class:"ls-imp-field"
-        [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
-        ; text ~key:(id ^ "-d") ~as_:`Small ~value:desc [] ]
+    [ row ~key:(id ^ "-row") ~style_class:"ls-imp-row" ~cross:`center
+        ~gap:14 ~padding:12 ~corner_radius:10
+        ~border_width:1 ~border_color:"hsl(var(--border))"
+        [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center" ~width:40
+            ~height:40 ~corner_radius:8 ~main:`center ~cross:`center
+            ~background:"var(--lx-gray-03, hsl(var(--muted)))"
+            [ icon ~key:(id ^ "-ico") ~name:(`app "logseq-logo")
+                ~point_size:28 [] ]
+        ; column ~key:(id ^ "-t")
+            ~style_class:"ls-imp-field" ~gap:2 ~grow:1.
+            [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
+            ; Ui_components.with_props
+                [ Lui_protocol.ForegroundValue
+                , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+                (text ~key:(id ^ "-d") ~as_:`Small ~value:desc []) ]
+        ]
     ; Logseq_el.el ~key:(id ^ "-i") ~tag:"input"
         ~style_class:"ls-hidden-input"
         ~attrs:
@@ -270,15 +282,21 @@ let items () =
   ]
 
 let article () =
-  column ~key:"import" ~style_class:"importer"
-    [ column ~key:"imp-c" ~style_class:"c"
+  column ~key:"import" ~style_class:"importer" ~gap:16
+    [ column ~key:"imp-c" ~style_class:"c" ~gap:8 ~cross:`center
         [ (* .importer .c h1/h2 key on the heading tags — ~as_ retags
              the heading element so the CSS contract holds *)
-          heading ~key:"imp-h" ~level:1 ~as_:`H1
-            ~value:T.import_title []
-        ; heading ~key:"imp-d" ~level:2 ~as_:`H2
-            ~value:T.import_desc [] ]
-    ; column ~key:"imp-l" ~style_class:"d" (items ()) ]
+          Ui_components.with_props
+            [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
+            ; Lui_protocol.FontWeight, Lui_protocol.IntValue 600 ]
+            (heading ~key:"imp-h" ~level:1 ~as_:`H1
+               ~value:T.import_title [])
+        ; Ui_components.with_props
+            [ Lui_protocol.ForegroundValue
+            , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+            (heading ~key:"imp-d" ~level:2 ~as_:`H2
+               ~value:T.import_desc []) ]
+    ; column ~key:"imp-l" ~style_class:"d" ~gap:12 (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
@@ -287,17 +305,24 @@ let view () : t =
     [ Lui_protocol.ZIndex, Ui_components.iv 1
     ; Lui_protocol.Overflow, Ui_components.sv "hidden" ]
     (column ~key:"importer" ~style_class:"cp__onboarding-setups"
-       ~grow:1. ~corner_radius:20
-    [ column ~key:"imp-card"
-        ~style_class:"inner-card"
-        [ (* .inner-card > h1.ls-imp-title / > h2 key on
-             the heading tags — ~as_ retags the heading element *)
-          heading ~key:"imp-th" ~level:1 ~as_:`H1
-            ~style_class:"ls-imp-title"
-            ~value:T.import_existing_notes []
-        ; heading ~key:"imp-td" ~level:2 ~as_:`H2
-            ~value:T.import_later []
-        ; article () ]
+       ~grow:1. ~corner_radius:20 ~cross:`center ~padding:48
+    [ Ui_components.with_props
+        [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.75rem"
+        ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+        (heading ~key:"imp-th" ~level:1 ~as_:`H1
+           ~style_class:"ls-imp-title"
+           ~value:T.import_existing_notes [])
+    ; Ui_components.with_props
+        [ Lui_protocol.ForegroundValue
+        , Lui_protocol.StringValue "hsl(var(--muted-foreground))" ]
+        (heading ~key:"imp-td" ~level:2 ~as_:`H2
+           ~value:T.import_later [])
+    ; column ~key:"imp-card"
+        ~style_class:"inner-card" ~width:560 ~margin_top:32 ~padding:32
+        ~corner_radius:16 ~gap:24
+        ~background:"hsl(var(--card))"
+        ~border_width:1 ~border_color:"hsl(var(--border))"
+        [ article () ]
     ])
 
 let body (_ms : Model.t Signal.signal) : t = article ()

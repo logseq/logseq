@@ -386,9 +386,15 @@ let measure store id ~scale =
 
 (* Device-pixel (w, h) of an arbitrary string in node [id]'s font —
    the caret offset and the composition overlay measure through this
-   so they stay consistent with what [text_ops] paints. *)
-let measure_text t id s =
+   so they stay consistent with what [text_ops] paints. [width] is an
+   offered wrap width in device px (0/non-finite = no wrap, the
+   single-line measure the caret paths rely on). *)
+let measure_text ?(width = 0.) t id s =
   if s = "" then (0., 0.)
   else
-    let w, h = Lui_text.measure (font_of (t.store ()) id) s in
-    (w *. t.scale (), h *. t.scale ())
+    let scale = t.scale () in
+    let width =
+      if Float.is_finite width && width > 0. then width /. scale else 0.
+    in
+    let w, h = Lui_text.measure ~width (font_of (t.store ()) id) s in
+    (w *. scale, h *. scale)

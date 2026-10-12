@@ -51,6 +51,11 @@ let rec json_to_js : Json.t -> Js.Json.t = function
   | Json.Object kvs -> jobj (List.map (fun (k, v) -> (k, json_to_js v)) kvs)
 let jstr_ s = Js.Json.string s
 
+(* JSON.stringify(j, null, 2) — the code-mode settings editor's
+   pretty-printed view of the settings object *)
+let json_pretty : Js.Json.t -> string =
+  [%mel.raw "function (j) { return JSON.stringify(j, null, 2); }"]
+
 (* ---------- persistent stores (localStorage mirrors cljs idb) *)
 
 let store_key = "LSPUserDotRoot/installed-plugins-for-web/all.json"

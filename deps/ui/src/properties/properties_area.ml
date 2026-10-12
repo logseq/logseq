@@ -423,7 +423,13 @@ let block_left_chips ~uuid : t =
                  (fun r ->
                    row ~gap:2 ~cross:`center
                      ~style_class:"property-value-inner"
-                     [ V.view ~positioned:true ctx r ])
+                     [ (* value views carry ~grow:1.0 to fill their
+                          panel column — a positioned chip must hug its
+                          content instead, else the chip eats the whole
+                          block-row and crushes the title *)
+                       Ui_components.with_props
+                         [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
+                         (V.view ~positioned:true ctx r) ])
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
@@ -452,7 +458,9 @@ let block_right_chips ~uuid : t =
                  (fun r ->
                    row ~gap:2 ~cross:`center
                      ~style_class:"property-value-inner"
-                     [ V.view ~positioned:true ctx r ])
+                     [ Ui_components.with_props
+                         [ Lui_protocol.GrowValue, Ui_components.fv 0. ]
+                         (V.view ~positioned:true ctx r) ])
                  d.right))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.right = b.right))

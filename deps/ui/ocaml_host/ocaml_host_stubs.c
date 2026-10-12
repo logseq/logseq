@@ -133,6 +133,215 @@ CAMLprim void logseq_native_activate(void) {
   ((void (*)(id, SEL, int))objc_msgSend)(app, activate, 1);
 }
 
+/* macOS main menu. SDL only installs its minimal default menu, so the
+   host builds a real NSMenu bar: every item carries a command tag and
+   fires the single LogseqMenuTarget action, which forwards the tag to
+   the "ocaml_host_menu_command" named value registered in
+   logseq_native.ml. OCaml owns the whole dispatch table — Edit
+   commands are re-injected as real SDL key events so they behave
+   identically to the keyboard, app commands reuse the app's menu-*
+   platform_event contract, and OS verbs go back out through
+   logseq_native_app_op below. */
+
+/* Command tags — keep in sync with menu_command in logseq_native.ml. */
+enum {
+  kMenuAbout = 1,
+  kMenuHide,
+  kMenuHideOthers,
+  kMenuShowAll,
+  kMenuQuit,
+  kMenuUndo,
+  kMenuRedo,
+  kMenuCut,
+  kMenuCopy,
+  kMenuPaste,
+  kMenuSelectAll,
+  kMenuFullScreen,
+  kMenuToggleSidebar,
+  kMenuReload,
+  kMenuMinimize,
+  kMenuZoom,
+  kMenuClose,
+  kMenuHelp
+};
+
+static id logseq_menu_target = nil;
+
+static void logseq_menu_action(id self, SEL _cmd, id sender) {
+  (void)self;
+  (void)_cmd;
+  long tag = ((long (*)(id, SEL))objc_msgSend)(sender,
+                                               sel_registerName("tag"));
+  const value *cb = caml_named_value("ocaml_host_menu_command");
+  if (cb != NULL) {
+    value res = caml_callback_exn(*cb, Val_long(tag));
+    (void)Is_exception_result(res);
+  }
+}
+
+static id menu_nsstr(const char *s) {
+  return ((id(*)(id, SEL, const char *))objc_msgSend)(
+      (id)objc_getClass("NSString"),
+      sel_registerName("stringWithUTF8String:"), s);
+}
+
+static id menu_alloc(Class cls) {
+  return ((id(*)(Class, SEL))objc_msgSend)(cls, sel_registerName("alloc"));
+}
+
+static id new_menu(const char *title) {
+  return ((id(*)(id, SEL, id))objc_msgSend)(
+      menu_alloc(objc_getClass("NSMenu")),
+      sel_registerName("initWithTitle:"), menu_nsstr(title));
+}
+
+static void menu_add_sep(id menu) {
+  id sep = ((id(*)(id, SEL))objc_msgSend)(
+      (id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      menu, sel_registerName("addItem:"), sep);
+}
+
+static id menu_add_item(id menu, const char *title, const char *key,
+                        unsigned long mods, long tag) {
+  id item = ((id(*)(id, SEL, id, SEL, id))objc_msgSend)(
+      menu_alloc(objc_getClass("NSMenuItem")),
+      sel_registerName("initWithTitle:action:keyEquivalent:"),
+      menu_nsstr(title), sel_registerName("logseqMenuAction:"),
+      menu_nsstr(key));
+  ((void (*)(id, SEL, unsigned long))objc_msgSend)(
+      item, sel_registerName("setKeyEquivalentModifierMask:"), mods);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      item, sel_registerName("setTarget:"), logseq_menu_target);
+  ((void (*)(id, SEL, long))objc_msgSend)(
+      item, sel_registerName("setTag:"), tag);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      menu, sel_registerName("addItem:"), item);
+  ((void (*)(id, SEL))objc_msgSend)(item, sel_registerName("release"));
+  return item;
+}
+
+static id menu_add_submenu(id main, const char *title) {
+  id item = ((id(*)(id, SEL, id, SEL, id))objc_msgSend)(
+      menu_alloc(objc_getClass("NSMenuItem")),
+      sel_registerName("initWithTitle:action:keyEquivalent:"),
+      menu_nsstr(title), (SEL)NULL, menu_nsstr(""));
+  id sub = new_menu(title);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      item, sel_registerName("setSubmenu:"), sub);
+  ((void (*)(id, SEL, id))objc_msgSend)(
+      main, sel_registerName("addItem:"), item);
+  ((void (*)(id, SEL))objc_msgSend)(item, sel_registerName("release"));
+  ((void (*)(id, SEL))objc_msgSend)(sub, sel_registerName("release"));
+  return sub;
+}
+
+CAMLprim void logseq_native_install_menus(void) {
+  id pool = ((id(*)(id, SEL))objc_msgSend)(
+      menu_alloc(objc_getClass("NSAutoreleasePool")),
+      sel_registerName("init"));
+  Class appcls = objc_getClass("NSApplication");
+  id app = appcls == Nil
+               ? nil
+               : ((id(*)(Class, SEL))objc_msgSend)(
+                     appcls, sel_registerName("sharedApplication"));
+  if (app != nil) {
+    if (logseq_menu_target == nil) {
+      Class t = objc_allocateClassPair(objc_getClass("NSObject"),
+                                       "LogseqMenuTarget", 0);
+      class_addMethod(t, sel_registerName("logseqMenuAction:"),
+                      (IMP)logseq_menu_action, "v@:@");
+      objc_registerClassPair(t);
+      logseq_menu_target =
+          ((id(*)(Class, SEL))objc_msgSend)(t, sel_registerName("new"));
+    }
+
+    const unsigned long modShift = 1UL << 17, modCtrl = 1UL << 18,
+                        modOpt = 1UL << 19, modCmd = 1UL << 20;
+
+    id main = new_menu("");
+
+    id appm = menu_add_submenu(main, "Logseq");
+    menu_add_item(appm, "About Logseq", "", 0, kMenuAbout);
+    menu_add_sep(appm);
+    menu_add_item(appm, "Hide Logseq", "h", modCmd, kMenuHide);
+    menu_add_item(appm, "Hide Others", "h", modCmd | modOpt,
+                  kMenuHideOthers);
+    menu_add_item(appm, "Show All", "", 0, kMenuShowAll);
+    menu_add_sep(appm);
+    menu_add_item(appm, "Quit Logseq", "q", modCmd, kMenuQuit);
+
+    id edit = menu_add_submenu(main, "Edit");
+    menu_add_item(edit, "Undo", "z", modCmd, kMenuUndo);
+    menu_add_item(edit, "Redo", "z", modCmd | modShift, kMenuRedo);
+    menu_add_sep(edit);
+    menu_add_item(edit, "Cut", "x", modCmd, kMenuCut);
+    menu_add_item(edit, "Copy", "c", modCmd, kMenuCopy);
+    menu_add_item(edit, "Paste", "v", modCmd, kMenuPaste);
+    menu_add_item(edit, "Select All", "a", modCmd, kMenuSelectAll);
+
+    id view = menu_add_submenu(main, "View");
+    menu_add_item(view, "Enter Full Screen", "f", modCtrl | modCmd,
+                  kMenuFullScreen);
+    menu_add_sep(view);
+    /* No key equivalent: the app's own binding is the "t l" sequence,
+       which a single NSMenuItem accelerator cannot express. */
+    menu_add_item(view, "Toggle Left Sidebar", "", 0,
+                  kMenuToggleSidebar);
+    menu_add_item(view, "Reload Page", "r", modCmd, kMenuReload);
+
+    id winm = menu_add_submenu(main, "Window");
+    menu_add_item(winm, "Minimize", "m", modCmd, kMenuMinimize);
+    menu_add_item(winm, "Zoom", "", 0, kMenuZoom);
+    menu_add_sep(winm);
+    menu_add_item(winm, "Close", "w", modCmd, kMenuClose);
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        app, sel_registerName("setWindowsMenu:"), winm);
+
+    id help = menu_add_submenu(main, "Help");
+    menu_add_item(help, "Logseq Documentation", "", 0, kMenuHelp);
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        app, sel_registerName("setHelpMenu:"), help);
+
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        app, sel_registerName("setMainMenu:"), main);
+    ((void (*)(id, SEL))objc_msgSend)(main, sel_registerName("release"));
+  }
+  ((void (*)(id, SEL))objc_msgSend)(pool, sel_registerName("drain"));
+}
+
+/* AppKit verbs the menu routes back out of the OCaml dispatch — they
+   act on NSApp (hide/about) or the key window (miniaturize/zoom/
+   close/fullscreen), addressed by small op ids so one stub covers
+   them all. */
+CAMLprim void logseq_native_app_op(value tag) {
+  Class appcls = objc_getClass("NSApplication");
+  if (appcls == Nil) return;
+  id app = ((id(*)(Class, SEL))objc_msgSend)(
+      appcls, sel_registerName("sharedApplication"));
+  if (app == nil) return;
+  id win = ((id(*)(id, SEL))objc_msgSend)(app,
+                                         sel_registerName("keyWindow"));
+  if (win == nil)
+    win = ((id(*)(id, SEL))objc_msgSend)(app,
+                                        sel_registerName("mainWindow"));
+  id target = nil;
+  SEL op = NULL;
+  switch (Long_val(tag)) {
+  case 0: target = app; op = sel_registerName("orderFrontStandardAboutPanel:"); break;
+  case 1: target = app; op = sel_registerName("hide:"); break;
+  case 2: target = app; op = sel_registerName("hideOtherApplications:"); break;
+  case 3: target = app; op = sel_registerName("unhideAllApplications:"); break;
+  case 4: target = win; op = sel_registerName("performMiniaturize:"); break;
+  case 5: target = win; op = sel_registerName("performZoom:"); break;
+  case 6: target = win; op = sel_registerName("performClose:"); break;
+  case 7: target = win; op = sel_registerName("toggleFullScreen:"); break;
+  default: return;
+  }
+  if (target == nil) return;
+  ((void (*)(id, SEL, id))objc_msgSend)(target, op, nil);
+}
+
 /* Blend the app header into the title bar: content covers the full
    window and the title bar becomes transparent and untitled, like
    Electron's `titleBarStyle: hiddenInset`. The app's .cp__header row
@@ -246,6 +455,10 @@ static void make_layers_transparent(id layer) {
   if (name != NULL) {
     ((void (*)(id, SEL, int))objc_msgSend)(
         layer, sel_registerName("setOpaque:"), 0);
+    /* setOpaque:NO still leaves an opaque backgroundColor fill that
+       shows through the hole — NULL it too. */
+    ((void (*)(id, SEL, void *))objc_msgSend)(
+        layer, sel_registerName("setBackgroundColor:"), NULL);
   }
   id sub = ((id (*)(id, SEL))objc_msgSend)(
       layer, sel_registerName("sublayers"));
@@ -260,8 +473,19 @@ static void make_layers_transparent(id layer) {
     if (ln != NULL && strstr(ln, "CAMetalLayer") != NULL) {
       ((void (*)(id, SEL, int))objc_msgSend)(
           l, sel_registerName("setOpaque:"), 0);
+      ((void (*)(id, SEL, void *))objc_msgSend)(
+          l, sel_registerName("setBackgroundColor:"), NULL);
     }
   }
+}
+
+/* App theme (light/dark) drives the material's appearance pin — set
+   once per frame alongside sidebar_vibrancy. */
+static int vib_dark = 0;
+CAMLprim value logseq_native_sidebar_theme(value vdark) {
+  CAMLparam1(vdark);
+  vib_dark = Bool_val(vdark);
+  CAMLreturn(Val_unit);
 }
 
 /* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
@@ -332,10 +556,34 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
           2L | 16L);
       ((void (*)(id, SEL, id, long, id))objc_msgSend)(
           frame, sel_registerName("addSubview:positioned:relativeTo:"),
-          effect, 1L /* NSWindowBelow */, cv);
+          effect, -1L /* NSWindowBelow */, cv);
       ((void (*)(id, SEL, int))objc_msgSend)(
           win, sel_registerName("setOpaque:"), 0);
+      /* A non-opaque window still fills behind the effect with its
+         backgroundColor; clear it or the material samples an opaque
+         dark base instead of the desktop. */
+      Class nscolor = objc_getClass("NSColor");
+      if (nscolor != Nil) {
+        id clear = ((id (*)(Class, SEL))objc_msgSend)(
+            nscolor, sel_registerName("clearColor"));
+        if (clear != nil)
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              win, sel_registerName("setBackgroundColor:"), clear);
+      }
     }
+      /* The material follows the app theme, not the window's
+         effective appearance (an SDL window doesn't track the app's
+         own light/dark switch). */
+      Class appcls = objc_getClass("NSAppearance");
+      if (appcls != Nil) {
+        id ap = ((id (*)(Class, SEL, id))objc_msgSend)(
+            appcls, sel_registerName("appearanceNamed:"),
+            menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua"
+                                : "NSAppearanceNameAqua"));
+        if (ap != nil)
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              effect, sel_registerName("setAppearance:"), ap);
+      }
     /* SDL or a driver update may re-opaque the metal layer; keep it
        transparent while the effect lives. */
     id layer =

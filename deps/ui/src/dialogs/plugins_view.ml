@@ -58,7 +58,7 @@ let category_tabs ~key ~nums cat_st =
     ; category_tab ~key cat_st "themes" (t "nav/themes") nt
     ]
 
-external open_url_ : string -> unit = "open" [@@mel.scope "window"]
+let open_url_ = Ui_services.env_open_url
 
 (* cljs plugins.cljs panel-control-tabs .r: search + filter + more +
    contribute link. The filter/more buttons are inert stubs upstream
@@ -110,11 +110,13 @@ let list_wrap ~key children =
     (column ~key ~style_class:"cp__plugins-item-lists"
        ~data_attrs:
          [ "style", "height: calc(100vh - 320px); overflow-y: auto" ]
-       (row ~key:(key ^ "-in")
-          ~style_class:"cp__plugins-item-lists-inner" ~gap:12
-          ~data_attrs:[ "style", "flex-wrap: wrap" ]
-          children
-        :: (if children = [] then [ empty_item (key ^ "-empty") ] else [])))
+       (if children = [] then [ empty_item (key ^ "-empty") ]
+        else
+          [ (* cljs .cp__plugins-item-lists-inner is a wrapping card grid —
+               the grid kind's fixed columns give equal-width cells *)
+            grid ~key:(key ^ "-in")
+              ~style_class:"cp__plugins-item-lists-inner" ~columns:3
+              ~gap:12 children ]))
 
 (* ---------- marketplace card ---------- *)
 
@@ -134,12 +136,9 @@ let market_card ~stats ~search_st pkg =
   (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
      the readme dialog *)
   let open_readme _ = Plugin_readme.open_readme pkg in
-  (* cljs plugin-thumb-icon: the pkg-asset <img>, folder svg fallback *)
-  let thumb =
-    let src = pkg_asset id (jstr pkg "icon") in
-    if src = "" then icon ~key:"ic-f" ~name:(`app "folder") []
-    else image ~key:"ic-img" ~url:src ~style_class:"icon" ~alt:title []
-  in
+  (* cljs plugin-thumb-icon shows the pkg-asset <img>; the native port
+     has no remote image fetcher, so the folder fallback always shows. *)
+  let thumb = icon ~key:"ic-f" ~name:(`app "folder") ~point_size:28 [] in
   let repo = jstr pkg "repo" in
   Ui_components.plugin_card ~key:("mkt-" ^ id) ~classes:cls
     (row ~key:"r" ~gap:12 ~cross:`start
@@ -152,19 +151,37 @@ let market_card ~stats ~search_st pkg =
                   ~background:"var(--lx-gray-03, hsl(var(--muted)))"
                   [ thumb ] ]))
     ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
-        ([ Ui_components.with_props
-             [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
-             ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
-             (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
-                ~data_attrs:[ "style", "padding-top: 6px" ]
-                [ text ~key:"t" ~style_class:"l link-block" ~value:title
-                    ~on_press:open_readme [] ])
+        ([ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+             ~main:`space_between
+             ~data_attrs:[ "style", "padding-top: 6px" ]
+             [ Ui_components.with_props
+                 [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
+                 ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+                 (text ~key:"t" ~style_class:"l link-block" ~value:title
+                    ~on_press:open_readme [])
+             ; row ~key:"flag" ~style_class:"flag is-top" ~cross:`center
+                 ~gap:6
+                 ([ (* cljs flag icon opens the plugin readme dialog *)
+                    Ui_components.with_props
+                      [ Lui_protocol.Cursor
+                      , Lui_protocol.StringValue "pointer" ]
+                      (button ~key:"doc" ~variant:`ghost ~size:`icon
+                         ~width:18 ~height:18 ~min_width:18 ~min_height:18
+                         ~icon:(`app "book") ~label:"Readme"
+                         ~on_press:open_readme [])
+                  ]
+                  @
+                  (if repo = "" then []
+                   else
+                     [ link ~key:"gh-a" ~url:(gh_repo_url repo)
+                         ~target:`blank ~icon:(`app "brand-github")
+                         ~label:"GitHub" [] ])) ]
          ; Ui_components.with_props
              [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.7 ]
              (paragraph ~key:"desc" ~style_class:"desc"
                 ~font_size:"0.75rem"
                 ~value:(jstr pkg "description") [])
-         ; box ~key:"flag"
+         ; box ~key:"flag-meta"
              [ Ui_components.with_props
                  [ Lui_protocol.FontSize
                  , Lui_protocol.StringValue "0.75rem" ]
@@ -179,14 +196,6 @@ let market_card ~stats ~search_st pkg =
                         []
                     ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]
          ]
-         (* cljs .flag.is-top: GitHub repo link pinned top-right *)
-         @
-         (if repo = "" then []
-          else
-            [ box ~key:"gh" ~style_class:"flag is-top"
-                [ link ~key:"gh-a" ~url:(gh_repo_url repo)
-                    ~target:`blank ~icon:(`app "github")
-                    ~label:"GitHub" [] ] ])
          @
          [ row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
              ~cross:`center
@@ -430,14 +439,17 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
     ]
 
 (* cljs plugins.cljs .cp__plugins-marketplace-cnt: category tabs carry
-   no counts on the market tab (cljs passes total-nums nil) *)
+   the whole marketplace counts *)
 let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~stats
     ~loading =
   let filtered =
     List.filter (fun p -> category_ok cat p && matches search p) pkgs
   in
+  let n_themes = List.length (List.filter (fun p -> Plugin_host.jbool p "theme") pkgs) in
+  let n_plugins = List.length pkgs - n_themes in
   column ~key  ~gap:8
-    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:None ]
+    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st
+         ~nums:(Some (n_plugins, n_themes)) ]
     @
     if loading && pkgs = [] then
       [ row ~key:"pl-loading" ~style_class:"ls-pl-loading"
@@ -555,8 +567,9 @@ let body (_ms : Model.t Signal.signal) : t =
 
 let jstr_ = Plugin_host.jstr_
 
-let json_pretty : Js.Json.t -> string =
-  [%mel.raw "function (j) { return JSON.stringify(j, null, 2); }"]
+(* JSON.stringify(j, null, 2) — per-platform impl lives in plugin_host
+   (FFI on web, Json tree on native) *)
+let json_pretty = Plugin_host.json_pretty
 
 let set_json_exn s =
   try Some (Js.Json.parseExn s) with _ -> None
@@ -752,10 +765,10 @@ let code_mode_wrap owner pid code_mode =
                   Plugin_host.replace_plugin_settings pid j;
                   Runtime.signal_set code_mode false
               | None ->
-                  Web_dom.dispatch_custom "ls:toast"
-                    (Plugin_host.jobj
-                       [ ("msg", jstr_ "Invalid JSON")
-                       ; ("cls", jstr_ "error")
+                  Ui_services.dom_dispatch_json "ls:toast"
+                    (Json.Object
+                       [ ("msg", Json.String "Invalid JSON")
+                       ; ("cls", Json.String "error")
                        ]))
             []
         ]

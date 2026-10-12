@@ -328,6 +328,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ])
         ])
     ; row ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap" ~cross:`center
+        ~margin_left:(if order_list then -3 else 0)
         ~foreground:"var(--ls-primary-text-color)"
         ~data_attrs:
           [ ( "style"
@@ -342,13 +343,23 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~main:`center ~cross:`center ~corner_radius:8
-               ~width:(if order_list then 22 else if icon_size > 0 then icon_size else 16)
-               ~min_width:(if order_list then 22 else if icon_size > 0 then icon_size else 16)
+               ~width:(if order_list then 20 else if icon_size > 0 then icon_size else 16)
+               ~min_width:(if order_list then 20 else if icon_size > 0 then icon_size else 16)
                ~height:(if order_list then 16 else if icon_size > 0 then icon_size else 16)
                ~data_attrs:
                  ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
+                  | None when order_list ->
+                      (* cljs .bullet-container.as-order-list.typed-list:
+                         the .bullet dot is hidden (unset bg/size) and the
+                         1.4em box centers the number alone with pl-[3px]
+                         pushing it 3px toward the title *)
+                      (match b.Model.block_order_index with
+                       | Some idx ->
+                           label ~key:("ol-" ^ uuid) ~margin_left:3
+                             ~value:(string_of_int idx ^ ".") []
+                       | None -> box [])
                   | None ->
                       Ui_parts.class_signal (S.selected_sig ())
                         (fun selected ->
@@ -362,11 +373,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                            ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
-                     (match b.Model.block_order_index with
-                      | Some idx when order_list ->
-                          [ label ~key:("ol-" ^ uuid)
-                              ~value:(string_of_int idx ^ ".") [] ]
-                      | _ -> [])))
+                     []))
             ])
         ]
     ]
@@ -385,7 +392,7 @@ let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   box ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~min_height:24
+    ~min_height:24 ~main:`center
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -549,7 +556,12 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                           ; Wire.Int dbid ] ]))
                (Ui_components.with_props
                   [ Lui_protocol.UserSelect, Ui_components.sv "none"
-                  ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+                  ; Lui_protocol.Cursor, Ui_components.sv "pointer"
+                  ; (* .block-tag:hover reveals the x on the web; the
+                       closest per-element channel keeps it hidden at
+                       rest and reveals it under the pointer *)
+                    Lui_protocol.Opacity, Ui_components.fv 0.
+                  ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
                   (text ~key:("tx-" ^ key)
                      ~style_class:"tag-x"
                      ~data_attrs:

@@ -43,27 +43,48 @@ let body_of name (ms : Model.t Signal.signal) : t =
    height for the dialog kinds emitted elsewhere (cards, views_popup,
    properties_menu, cmdk); padding repeats here so every named dialog
    carries its own spec (the native host reads the same prop).
-   Viewport/calc
-   widths, px max-widths and the login centering have no prop on the
-   modal kind — they ride the documented data-attrs style pair. *)
+   Sizing is carried twice: typed props (viewport fractions and px
+   clamps) for the native host, and the original style string for the
+   web host where calc()/box-sizing/overflow still apply. *)
 let dialog_spec name =
   match name with
   | "settings" ->
       ( 0
       , "box-sizing:border-box;width:min(1024px, calc(100vw - 2rem));\
-         max-width:min(64rem, calc(100vw - 2rem));overflow:hidden" )
+         max-width:min(64rem, calc(100vw - 2rem));overflow:hidden"
+      , [ ( Lui_protocol.WidthValue
+          , Lui_protocol.IntValue
+              (int_of_float
+                 (Float.min 1024.
+                    (Ui_services.dom_viewport_width () -. 32.))) )
+        ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1024
+        ; Lui_protocol.MaxWidthViewport, Lui_protocol.FloatValue 0.97
+        ; ( Lui_protocol.MaxHeightViewport
+          , Lui_protocol.FloatValue 0.75 ) ] )
   | "plugins" ->
       ( 24
       , "width:90vw;max-width:1246px;max-height:calc(100vh - 50px);\
-         overflow-y:hidden" )
-  | "sync-server" | "publish-server" -> (24, "max-width:42rem")
-  | "plugin-readme" -> (24, "max-height:86vh;overflow:auto")
-  | "export-page" -> (24, "max-height:80vh;overflow-y:auto")
-  | "new-graph" | "add-graph" -> (24, "max-width:500px")
+         overflow-y:hidden"
+      , [ Lui_protocol.WidthViewport, Lui_protocol.FloatValue 0.9
+        ; Lui_protocol.MaxWidth, Lui_protocol.IntValue 1246
+        ; Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.94 ] )
+  | "sync-server" | "publish-server" ->
+      (24, "max-width:42rem", [ Lui_protocol.MaxWidth, Lui_protocol.IntValue 672 ])
+  | "plugin-readme" ->
+      ( 24
+      , "max-height:86vh;overflow:auto"
+      , [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.86 ] )
+  | "export-page" ->
+      ( 24
+      , "max-height:80vh;overflow-y:auto"
+      , [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.8 ] )
+  | "new-graph" | "add-graph" ->
+      (24, "max-width:500px", [ Lui_protocol.MaxWidth, Lui_protocol.IntValue 500 ])
   | "login" ->
       ( 24
-      , "padding-top:0;width:auto;max-width:none;align-items:center" )
-  | _ -> (24, "")
+      , "padding-top:0;width:auto;max-width:none;align-items:center"
+      , [] )
+  | _ -> (24, "", [])
 
 (* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
 let title_of = function
@@ -76,15 +97,16 @@ let title_of = function
    button overlays the content column. *)
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let title = title_of name in
-  let padding, chrome = dialog_spec name in
-  dialog ~key:("dlg-" ^ name) ~padding
-    ~style_class:("ls-dialog-" ^ name)
-    ~data_attrs:
-      ((if chrome = "" then [] else [ ("style", chrome) ])
-       @ (if title = "" then []
-          else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ]))
-    ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
-    [ column ~key:("dlg-m-" ^ name) ~grow:1.
+  let padding, chrome, binds = dialog_spec name in
+  Ui_components.with_props binds
+    (dialog ~key:("dlg-" ^ name) ~padding
+       ~style_class:("ls-dialog-" ^ name)
+       ~data_attrs:
+         ((if chrome = "" then [] else [ ("style", chrome) ])
+          @ (if title = "" then []
+             else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ]))
+       ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
+       [ column ~key:("dlg-m-" ^ name) ~grow:1.
         ~gap:(if title = "" then 0 else 16) ~cross:`stretch
         ( (if title = "" then []
           else
@@ -110,8 +132,8 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
                  else [])
               [ body_of name ms ]
           ] )
-    ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
-    ]
+       ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
+       ])
 
 (* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
    dismiss — Escape and the footer buttons are the only way out *)

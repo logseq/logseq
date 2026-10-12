@@ -738,6 +738,19 @@ let inner ~modal : t =
  fun ctx parent ->
   S.ensure ctx;
   S.activate ();
+  (* cljs .cp__settings-inner is flex-col under md and md:flex-row at
+     >=768px: the aside nav column sits left of the article on wide
+     screens. Native has no media queries — read the viewport once at
+     mount. *)
+  let wide = Ui_services.dom_viewport_width () >= 768. in
+  let inner_box children =
+    if wide then
+      row ~key:"settings-inner" ~style_class:"cp__settings-inner"
+        ~cross:`stretch children
+    else
+      column ~key:"settings-inner" ~style_class:"cp__settings-inner"
+        children
+  in
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
@@ -745,12 +758,14 @@ let inner ~modal : t =
             , Lui_protocol.FloatValue 0.55 )
           ; ( Lui_protocol.MaxHeightViewport
             , Lui_protocol.FloatValue 0.75 ) ]
-          (column ~key:"settings-inner" ~style_class:"cp__settings-inner"
+          (inner_box
              [ column ~key:"settings-aside"
                  ~style_class:"settings-aside"
                  ~background:
                    "var(--lx-gray-03-alpha, var(--rx-gray-03-alpha))"
-                 ~padding:16 ~min_width:160 ~gap:16
+                 ~padding:16
+                 ?width:(if wide then Some 256 else None)
+                 ~min_width:160 ~gap:16
                  [ row ~key:"aside-h"
                      ~style_class:"cp__settings-header"
                      ~cross:`center ~main:`start ~gap:8 ~height:40

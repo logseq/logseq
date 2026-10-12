@@ -1654,7 +1654,7 @@ let region (ms : Model.t Signal.signal) : t =
       | Model.Ready, Model.All_pages ->
           (* cljs all_pages.cljs renders .ls-all-pages inside the page
              wrapper — the objects view mounts declaratively here *)
-          column ~key:"graphs-view" ~style_class:"ls-all-pages"
+          column ~key:"graphs-view" ~style_class:"ls-all-pages" ~grow:1.
             [ Views_view.view ~kind:Views_state.KAllPages
                 ~owner:(Wire.String "$$$views") ]
       | Model.Ready, Model.All_graphs -> Graphs_view.view ms

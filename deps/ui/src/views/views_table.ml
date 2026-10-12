@@ -1172,12 +1172,12 @@ let add_row_footer inst : t =
    .force-visible-scrollbar > .relative > [header; body rows] *)
 let table_el inst (s : V.vstate) : t =
   let cols = visible_columns s in
-  box ~style_class:"ls-table"
+  box ~style_class:"ls-table" ~grow:1.
     [ (* .ls-table-rows font sweep migrated to props *)
       Ui_components.with_props
         [ Lui_protocol.FontSize, Ui_components.sv "0.875rem"
         ; Lui_protocol.LineHeight, Ui_components.sv "1.25rem" ]
-        (scroll ~orientation:`horizontal
+        (scroll ~orientation:`horizontal ~grow:1.
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
             [ Lui_protocol.Position, Ui_components.sv "relative" ]
@@ -1293,7 +1293,7 @@ let foldable inst ~key ~title ~(body : t) : t =
          (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
          (Signal.value (inst.V.st)))
   in
-  (column
+  (column ~grow:1.
     [ row ~style_class:"ls-foldable-title content"
         [ row ~grow:1. ~style_class:"foldable-title"
             [ (* grow so .ls-view-head's justify-content:space-between
@@ -1336,9 +1336,9 @@ let foldable inst ~key ~title ~(body : t) : t =
     ; Ui_parts.class_signal collapsed_sig
         (fun c ->
           "ls-foldable-content" ^ if c then " is-collapsed" else "")
-        (box ~key:"content"
+        (box ~key:"content" ~grow:1.
            ~transition:"grid-template-rows 0.2s ease-in-out"
-           [ box ~style_class:"ls-foldable-content-inner"
+           [ box ~style_class:"ls-foldable-content-inner" ~grow:1.
                ~transition:
                  "opacity 0.2s ease-in-out, transform 0.2s ease-in-out"
                [ body ] ]) ])
@@ -1504,11 +1504,11 @@ let render_table inst s : t =
            gs)
   | _ ->
       (* cljs view-table wraps the table in a random-uuid div *)
-      box ~accessibility_identifier:(Ui_services.env_random_uuid ())
+      box ~grow:1. ~accessibility_identifier:(Ui_services.env_random_uuid ())
         [ table_el inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
-  column ~gap:8 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body"
+  column ~gap:8 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
     ((* cljs filters-row renders nil with no filters — mounting the
         empty box would still eat the column gap *)
      (if s.V.filters = [] then [] else [ filters ])

@@ -8,6 +8,7 @@ let install () =
   in
   route "menu-toggle-left-sidebar" Action.Toggle_left_sidebar;
   route "menu-toggle-right-sidebar" Action.Toggle_right_sidebar;
+  Platform.add_event_listener "menu-reload" (fun _ -> Router.reload ());
   Platform.add_event_listener "menu-toggle-search" (fun _ ->
       Cmdk_state.open_latest ());
   Platform.add_event_listener "menu-toggle-wide-mode" (fun _ ->
