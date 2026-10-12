@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [logseq.db.test.helper :as db-test]))
 
+;; Fails if, in `build-class-extends`, `when` becomes `when-not`.
 (deftest class-parent-warns-about-deprecation-only-when-given-test
   (let [with-parent (with-out-str
                       (db-test/create-conn-with-blocks
@@ -13,6 +14,7 @@
     (is (re-find #":build/class-parent is deprecated" with-parent))
     (is (nil? (re-find #":build/class-parent is deprecated" without-parent)))))
 
+;; Fails if, in `build-pvalue`, `if` becomes `if-not`.
 (deftest property-value-with-nested-many-property-values-test
   (let [uuid-a (random-uuid)
         uuid-b (random-uuid)

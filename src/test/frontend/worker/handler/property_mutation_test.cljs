@@ -21,6 +21,7 @@
   [classes]
   (set (map :db/ident classes)))
 
+;; Fails if, in `get-all-classes`, `and` becomes `or`.
 (deftest get-all-classes-filters-private-and-extends-hidden-tags
   (let [conn (initial-conn)]
     (d/transact! conn [{:db/ident :user.class/Topic
@@ -46,6 +47,7 @@
           (is (contains? result :user.class/Topic))
           (is (not (contains? result :logseq.class/Page))))))))
 
+;; Fails if, in `property-node-selector-data`, `not` becomes `identity`, `when` becomes `when-not` or `=` becomes `not=`.
 (deftest property-node-selector-data-class-options-and-class-ids
   (let [conn (initial-conn)
         plain-uuid (random-uuid)]
@@ -97,12 +99,14 @@
                                    :logseq.property/type :class}))
                        topic-id))))))
 
+;; Fails if, in `broad-scoped-node-property?`, `=` becomes `not=`.
 (deftest broad-scoped-node-property-needs-node-type-and-page-class
   (let [f #'worker-property/broad-scoped-node-property?]
     (is (true? (f {:logseq.property/type :node} [{:db/ident :logseq.class/Page}])))
     (is (not (f {:logseq.property/type :default} [{:db/ident :logseq.class/Page}])))
     (is (not (f {:logseq.property/type :node} [{:db/ident :user.class/Topic}])))))
 
+;; Fails if, in `property-node-selector-values`, `=` becomes `not=`, `if` becomes `if-not`, `and` becomes `or`, `first` becomes `last`, `not=` becomes `=` or `or` becomes `and`.
 (deftest property-node-selector-resolves-hidden-value-blocks-to-targets
   (let [conn (initial-conn)
         target-uuid (random-uuid)
@@ -205,6 +209,7 @@
   [result]
   (set (map :property-id (:full-properties result))))
 
+;; Fails if, in `display-properties`, `not` becomes `identity`, `and` becomes `or`, `nil?` becomes `some?` or `first` becomes `last`.
 (deftest display-properties-shows-visible-class-and-hidden-valued-properties
   (let [conn (render-conn)
         db @conn
@@ -231,6 +236,7 @@
         (is (not (contains? (full-ids result) :logseq.property/created-from-property)))
         (is (contains? (full-ids result) :user.property/visible))))))
 
+;; Fails if, in `display-properties-for-block`, `or` becomes `and`, `not` becomes `identity`, `if` becomes `if-not` or `nil?` becomes `some?`.
 (deftest display-properties-for-block-reads-cardinality-and-bidirectional-default
   (let [conn (initial-conn)
         holder-uuid (random-uuid)]
@@ -264,6 +270,7 @@
       (is (not (contains? (f db (d/entity db :logseq.class/Task))
                           :logseq.property.class/enable-bidirectional?))))))
 
+;; Fails if, in `block-class-properties`, `if` becomes `if-not` or `or` becomes `and`.
 (deftest block-class-properties-accepts-tag-maps-and-idents
   (let [conn (render-conn)
         db @conn
@@ -274,6 +281,9 @@
              (set (map :db/ident (:classes-properties (f db {:block/tags [tag]}))))))
           (pr-str tag))))
 
+;; Fails if, in `render-schema-or-tag-related-property?`, `or` becomes `and` or `=` becomes `not=`.
+;; Fails if, in `property-has-closed-values?`, `seq` becomes `empty?`.
+;; Fails if, in `render-bottom-position-property?`, `and` becomes `or`, `=` becomes `not=`, `not` becomes `identity`, `or` becomes `and` or `not=` becomes `=`.
 (deftest render-property-position-helpers
   (let [conn (render-conn)
         db @conn
@@ -298,6 +308,8 @@
       (is (true? (bottom? :logseq.property/created-from-property)))
       (is (false? (bottom? :logseq.property.class/extends))))))
 
+;; Fails if, in `render-tag-class-page?`, `or` becomes `and`.
+;; Fails if, in `render-positioned-property?`, `=` becomes `not=` or `not` becomes `identity`.
 (deftest render-positioned-property-block-below-needs-value-or-allowance
   (let [conn (render-conn)
         db @conn
@@ -312,6 +324,7 @@
     (is (f db class-id p :block-below {}))
     (is (not (f db valued-id p :block-left {})))))
 
+;; Fails if, in `block-positioned-property-idents-by-position`, `and` becomes `or`.
 (deftest block-positioned-property-idents-by-position-drops-unpositioned
   (let [conn (render-conn)
         db @conn
@@ -320,6 +333,10 @@
     (is (not (contains? result nil)))
     (is (every? seq (vals result)))))
 
+;; Fails if, in `entity-direct-value`, `first` becomes `last`.
+;; Fails if, in `entity-ref-value?`, `and` becomes `or`.
+;; Fails if, in `sort-by-order-recursive`, `and` becomes `or`.
+;; Fails if, in `group-by-page`, `first` becomes `last`.
 (deftest worker-property-small-helpers
   (let [conn (render-conn)
         db @conn
