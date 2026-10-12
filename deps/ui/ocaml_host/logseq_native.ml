@@ -1435,12 +1435,8 @@ let () =
         | None -> None)
     | _ -> None
   in
-  let on_dom_key ~down ~scancode ~keymod ~repeat =
+  let on_dom_key ~target ~down ~scancode ~keymod ~repeat =
     let mods = mods_of_keymod keymod in
-    let target =
-      let menu = Ui.open_menu ui in
-      if menu <> 0 then menu else Ui.focused ui
-    in
     let editor_key =
       down && target <> 0
       && Lui_store.kind store target = "extension:logseq-editor"
@@ -1522,7 +1518,7 @@ let () =
       end
     end
   in
-  let emit_dom_event e =
+  let emit_dom_event ~key_target e =
     match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
     | `Mouse_button_down ->
       on_dom_button_down
@@ -1547,12 +1543,12 @@ let () =
         ~ry:(Sdl.Event.get e Sdl.Event.mouse_motion_yrel)
         ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
     | `Key_down ->
-      on_dom_key ~down:true
+      on_dom_key ~target:key_target ~down:true
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
         ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0)
     | `Key_up ->
-      on_dom_key ~down:false
+      on_dom_key ~target:key_target ~down:false
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
         ~repeat:false
@@ -1626,6 +1622,10 @@ let () =
     while !go do
       if Sdl.poll_event (Some e) then begin
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
+        let key_target =
+          let menu = Ui.open_menu ui in
+          if menu <> 0 then menu else Ui.focused ui
+        in
         (match input_of_event e with
          | Some (Input.Resize (w, h)) ->
            win_w := w;
@@ -1648,7 +1648,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        emit_dom_event e
+        emit_dom_event ~key_target e
       end
       else go := false
     done
