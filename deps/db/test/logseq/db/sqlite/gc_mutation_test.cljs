@@ -27,6 +27,7 @@
 (defn- node-addrs [^js db]
   (set (map #(.-addr ^js %) (.all (.prepare db "select addr from kvs")))))
 
+;; Fails if, in `gc-kvs-table-node-version!`, `if` becomes `if-not`.
 (deftest gc-kvs-table-node-version-walk-removes-garbage-chain-test
   (let [db (node-db)]
     (sqlite-gc/gc-kvs-table-node-version! db true)
@@ -53,6 +54,7 @@
     (set! (.-transaction db) (fn [f] (f db)))
     db))
 
+;; Fails if, in `gc-kvs-table!`, `if` becomes `if-not` or `seq` becomes `empty?`.
 (deftest gc-kvs-table-deletes-unreferenced-addresses-test
   (let [deleted (atom [])]
     (sqlite-gc/gc-kvs-table! (wasm-db deleted) {:full-gc? false})
