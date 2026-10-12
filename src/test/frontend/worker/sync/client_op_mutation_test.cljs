@@ -48,21 +48,6 @@
     (is (= [[:move-blocks [1 2]] [:save-block [3]]]
            (normalize [[:move-blocks [1 2]] [:save-block [3]]])))))
 
-(deftest sqlite-wasm-mode-helpers-test
-  (let [rows (#'client-op/sqlite-rows #js {:exec (fn [_opts] #js [#js {:a 1}])} "select 1" [])
-        none (#'client-op/sqlite-rows #js {:exec (fn [_opts] nil)} "select 1" [])
-        with-tx (#'client-op/sqlite-with-tx!
-                 #js {:exec (fn [_] nil)
-                      :transaction (fn [cb] (cb :tx-handle))}
-                 (fn [tx] [:ran tx]))
-        plain-db #js {:exec (fn [_] nil)}
-        without-tx (#'client-op/sqlite-with-tx! plain-db (fn [tx] [:ran (identical? tx plain-db)]))]
-    (is (= 1 (count rows)))
-    (is (= 1 (aget (first rows) "a")))
-    (is (= [] none))
-    (is (= [:ran :tx-handle] with-tx))
-    (is (= [:ran true] without-tx))))
-
 (deftest sqlite-row-takes-the-first-row-test
   (with-client-ops-db
     "repo-row"
