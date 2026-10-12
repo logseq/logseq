@@ -1,3 +1,5 @@
+open Yojson.Safe.Util
+
 let command app label =
   Client.press app "Mod+k";
   ignore (Client.wait_for app ".cp__cmdk-search-input");
@@ -20,6 +22,16 @@ let validate_graph ctx app =
     (Wire.get result "errors") (Some Wire.Nil);
   Suite.equal ctx "Graph validation has no invalid entity IDs"
     (Wire.get result "invalid-entity-ids") (Some (Wire.Array []))
+
+let set_default_home app page =
+  let value = `Assoc (match page with None -> [] | Some p -> ["page", `String p]) in
+  ignore (Client.sdk_call app "set_current_graph_configs"
+            [`Assoc ["default-home", value]]);
+  let expected = match page with None -> `Null | Some p -> `String p in
+  ignore (Client.poll "persisted default-home config" (fun () ->
+      if Client.sdk_call app "get_current_graph_configs"
+           [`String "default-home"; `String "page"] = expected
+      then Some () else None))
 
 let tests =
   [ Suite.test
@@ -133,4 +145,60 @@ let tests =
               (Wire.Set [Wire.Array [Wire.String expected]]);
             validate_graph ctx app;
             ignore (Client.screenshot ~name:"graph-restored-interaction.png" app)))
+  ; Suite.test
+      ~covers:["ocaml-e2e/test/test_graph_navigation_basic.ml::default-home-route-test"]
+      "default-home-route-test" (fun ctx ->
+        Suite.with_app ctx (fun app ->
+            let page = "sample default home" in
+            create_page app page;
+            Client.click app ".block-add-button";
+            ignore (Client.wait_for app ".block-editor");
+            Client.text app "default home content";
+            Client.press app "Escape";
+            ignore (Client.wait_for ~text:"default home content" app ".ls-page-blocks .block-title-wrap");
+            let graph_id =
+              match Client.q app
+                "[:find ?uuid :where [?g :db/ident :logseq.kv/local-graph-uuid] [?g :kv/value ?uuid]]" with
+              | Wire.Set [Wire.Array [Wire.Uuid uuid]] -> uuid
+              | _ -> failwith "Expected the persisted local graph UUID"
+            in
+            Suite.check ctx "Home graph has a persisted nonempty graph UUID" (graph_id <> "");
+            let navigate_home () =
+              ignore (Client.sdk_call app "push_state" [`String ""]);
+              let state = Yojson.Safe.from_file
+                (Filename.concat (Client.settings app) "ui-state.json") in
+              Suite.equal ctx "Native Home startup route targets the actual graph UUID"
+                (state |> member "native-last-route")
+                (`String ("#/?graph-id=" ^ graph_id));
+              Client.reload app
+            in
+            set_default_home app (Some page);
+            navigate_home ();
+            ignore (Client.wait_for ~text:page app ".ls-page-title .block-title-wrap");
+            Suite.equal ctx "Configured home opens the exact page"
+              (Client.query app ".ls-page-title .block-title-wrap" |> List.map Client.text_content)
+              [page];
+            ignore (Client.wait_for ~text:"default home content" app ".ls-page-blocks .block-title-wrap");
+            let query = "[:find ?title :in $ ?page :where [?p :block/title ?page] [?b :block/page ?p] [?b :block/title ?title]]" in
+            Suite.equal ctx "Home page content is worker-backed"
+              (Client.q ~inputs:[Wire.String page] app query)
+              (Wire.Set [Wire.Array [Wire.String "default home content"]]);
+            set_default_home app (Some "missing sample home");
+            navigate_home ();
+            ignore (Client.wait_for app "#journals");
+            Suite.equal ctx "Missing configured home falls back to journals"
+              (Client.sdk_call app "get_current_route" [] |> member "to")
+              (`String "all-journals");
+            Suite.equal ctx "Missing configured home does not strand graph loading"
+              (Client.query app ".loading-graph") [];
+            set_default_home app None;
+            create_page app "post default home validation";
+            Client.press app "Escape";
+            Client.reload app;
+            ignore (Client.wait_for app "#search-button");
+            Suite.equal ctx "Cleared default-home remains cleared after reload"
+              (Client.sdk_call app "get_current_graph_configs"
+                 [`String "default-home"; `String "page"]) `Null;
+            validate_graph ctx app;
+            ignore (Client.screenshot ~name:"graph-default-home.png" app)))
   ]
