@@ -423,7 +423,16 @@ let pdf_link_el ~src ~alt : t =
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
    <strong>/<kbd> styling comes from element-selector CSS
    (:not(pre) > code, mark {…}) — ~as_ retags the text kind *)
-let code_span s = text ~as_:`Code ~value:s []
+(* inline `code` — mirrors the ed-code typed props (frag_binds): mono
+   family, 0.9em, inline-code bg/fg, 1.45 line-height, 3x5 padding *)
+let code_span s =
+  text ~as_:`Code ~value:s
+    ~font_family:"MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
+                 'COURIER NEW', monospace"
+    ~font_size:"0.9em"
+    ~background:"var(--lx-gray-06, var(--ls-page-inline-code-bg-color))"
+    ~foreground:"var(--lx-gray-11, var(--ls-page-inline-code-color))"
+    ~line_height:"1.45" ~padding_vertical:3 ~padding_horizontal:5 []
 
 (* cljs extensions/latex: the logseq-katex extension slot carries the
    .latex/.latex-inline classes, a generated #ls-katex-* id, and a

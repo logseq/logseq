@@ -210,6 +210,110 @@ let registered_tag tag = List.mem tag tags
 
 let fallback_tag = function _ -> "span"
 
+(* The [style] attr is a web DOM contract that native hosts
+   parse-ignore; decode the declarations the typed props cover into
+   extension props so emphasis/code/mark read the same on native.
+   font-style (italic) has no channel and stays unstyled for now. *)
+let px_of (s : string) =
+  let n = String.length s in
+  let stop =
+    let rec find i =
+      if i >= n then n
+      else
+        match String.unsafe_get s i with
+        | '0' .. '9' | '.' | '-' | '+' -> find (i + 1)
+        | _ -> i
+    in
+    find 0
+  in
+  if stop = 0 then None
+  else
+    try Some (int_of_float (float_of_string (String.sub s 0 stop)))
+    with _ -> None
+
+(* The [style] attr is a web DOM contract that native hosts
+   parse-ignore; decode the declarations the typed props cover into
+   property setters. Extension nodes admit no typed props themselves
+   (common_property_supported whitelists standard kinds only), so [el]
+   mounts the declared style on a [row] wrapping the element's
+   children: text styling inherits through it to the run. font-style
+   (italic) has no channel and stays unstyled for now. *)
+let style_setters attrs =
+  match List.assoc_opt "style" attrs with
+  | None -> []
+  | Some style ->
+    String.split_on_char ';' style
+    |> List.filter_map (fun d ->
+         match String.index_opt d ':' with
+         | None -> None
+         | Some i ->
+           let name = String.trim (String.sub d 0 i) in
+           let value =
+             String.trim (String.sub d (i + 1) (String.length d - i - 1))
+           in
+           (match name with
+            | "font-weight" ->
+              (match value with
+               | "bolder" | "bold" ->
+                 Some (fun c n -> Lui_ui.int_property c n FontWeight 700)
+               | "normal" ->
+                 Some (fun c n -> Lui_ui.int_property c n FontWeight 400)
+               | s -> (
+                 try
+                   let v = int_of_string s in
+                   Some
+                     (fun c n -> Lui_ui.int_property c n FontWeight v)
+                 with _ -> None))
+            | "text-decoration" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n TextDecoration value)
+            | "color" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n ForegroundValue value)
+            | "background" | "background-color" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n BackgroundValue value)
+            | "font-family" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n FontFamily value)
+            | "font-size" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n FontSize value)
+            | "line-height" ->
+              Some
+                (fun c n ->
+                  Lui_ui.string_property c n LineHeight value)
+            | "padding" ->
+              let toks =
+                String.split_on_char ' ' value
+                |> List.filter (fun t -> String.trim t <> "")
+                |> List.filter_map px_of
+              in
+              (match toks with
+               | [ v ] ->
+                 Some
+                   (fun c n ->
+                     Lui_ui.int_property c n PaddingVertical v;
+                     Lui_ui.int_property c n PaddingHorizontal v)
+               | [ v; h ] ->
+                 Some
+                   (fun c n ->
+                     Lui_ui.int_property c n PaddingVertical v;
+                     Lui_ui.int_property c n PaddingHorizontal h)
+               | _ -> None)
+            | "border-radius" -> (
+              match px_of value with
+              | Some px ->
+                Some
+                  (fun c n -> Lui_ui.int_property c n CornerRadius px)
+              | None -> None)
+            | _ -> None))
+
 let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")
     ?(style_class_signal : Lui_protocol.wire_value Signal.signal option)
@@ -233,6 +337,17 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   if attrs <> [] then
     Lui_ui.extension_property context node "attrs"
       (StringValue (attrs_json attrs));
+  let children =
+    match style_setters attrs with
+    | [] -> children
+    | setters ->
+      [ (fun context parent ->
+           let n =
+             (Lui_elements.row ~cross:`center children) context parent
+           in
+           List.iter (fun set -> set context n) setters;
+           n) ]
+  in
   (* delegated document click/contextmenu handlers (block edit, page-ref,
      bullet zoom, block context menu) need every raw element to emit
      those dom-events — the native host only emits for names the
@@ -276,6 +391,7 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
    | None -> ());
   Lui_elements.mount_children context node children;
   node
+
 
 (* the invisible carrier — mount once at the native root so the
    host's window observers always find a logseq-* extension ancestor to
