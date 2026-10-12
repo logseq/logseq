@@ -809,6 +809,10 @@
   (testing "an entity that is already invalid on the server must not fail txs
             that only stamp it with :block/updated-at/:block/created-at"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          ;; the graph is marked synced before the server copy, as a synced
+          ;; graph's server has the mark too (with-datascript-conns would
+          ;; add it to the local side only)
+          _ (mark-graph-synced! conn)
           server-conn (d/conn-from-db @conn)
           new-uuid (random-uuid)
           server-page (db-test/find-page-by-title @server-conn "page 1")]
