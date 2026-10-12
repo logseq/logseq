@@ -80,6 +80,19 @@ Lowest stable boundary: The native retained graph route inside the existing Clie
 Planned retained tests: 0; remove the temporary API probe after validating readiness.
 Reason: Repair fixture readiness once instead of adding per-case sleeps/retries or weakening SDK assertions.
 
+### Semantic locator correctness under dynamic native layout
+
+TEST DECISION: KEEP
+
+Claim: A native semantic locator must select and click its intended target despite quoted attribute whitespace and settling layout.
+Stable project-owned contract: Native query tokenization preserves quoted attribute values; Client.click waits for stable identity/geometry before one real SDL button sequence, never retries a misclick.
+Concrete regression risk: Splitting a quoted item key on spaces loses the target, while an intermediate Cmd-K rectangle can click a different row and mutate the wrong page.
+Existing coverage searched: Native Dom_ext selector parser/matcher, Client.query/click, native smoke and the editor child's real Cmd-K reproduction.
+Cheaper evidence considered: A pure parser probe can diagnose tokenization but cannot protect the production query-to-layout-to-SDL boundary; compilation and the current smoke do not use quoted-space item keys.
+Lowest stable boundary: Real native retained selectors and SDL input with the isolated daemon.
+Planned retained tests: 1 generic additional native locator contract, no upstream parity claim and no per-group click workarounds.
+Reason: The parent explicitly requested the shared root fix and a generic regression; protect semantic target correctness without fake layout/input or speculative product cases.
+
 ## Alternatives considered
 
 ### Browser or reducer harness

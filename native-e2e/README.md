@@ -157,6 +157,12 @@ clients close. Settings and socket directories remain private per app.
 `Client.start` does not report readiness at the first nonempty retained tree:
 it waits for the real daemon, native renderer and the default graph page title
 before returning. This prevents early SDK calls from racing repo activation.
+Native selectors preserve quoted attribute values containing whitespace, commas
+and brackets; queries still use the production native retained-tree matcher.
+`Client.click` polls a semantic node identity and rectangle until stable for
+200 ms, then rechecks after the real SDL pointer move. It emits one button
+down/up pair only at the settled target, or times out after 15 seconds; it never
+silently retries an activated click or uses a hard-coded coordinate offset.
 
 - Inputs: `press` (e.g. `Mod+k`, `Enter`, `Escape`, `Down`/`ArrowDown`), raw SDL
   scancode `key`, UTF-8 `text`, `fill`, `move`, `button`, `click_at`, semantic

@@ -120,13 +120,15 @@ let normalize_space value =
         scan (i+1)
       end
   in scan 0; Buffer.contents out
+let matching ?text app selector =
+  query app selector |> List.filter (fun el -> visible el &&
+      match text with None -> true | Some s ->
+        let content = normalize_space (text_content el) and s = normalize_space s in
+        let rec contains i = i + String.length s <= String.length content &&
+          (String.sub content i (String.length s) = s || contains (i + 1)) in contains 0)
 let wait_for ?timeout ?text app selector =
   poll ?timeout ("native selector " ^ selector) (fun () ->
-      let els = query app selector |> List.filter (fun el -> visible el &&
-          match text with None -> true | Some s ->
-            let content = normalize_space (text_content el) and s = normalize_space s in
-            let rec contains i = i + String.length s <= String.length content &&
-              (String.sub content i (String.length s) = s || contains (i + 1)) in contains 0) in
+      let els = matching ?text app selector in
       if els = [] then None else Some els)
 
 let input app kind values =
@@ -143,14 +145,51 @@ let click_at ?button:btn ?clicks ?modifiers app x y =
   move app x y;
   button ?button:btn ?clicks ?modifiers app ~down:true x y;
   button ?button:btn ?clicks ?modifiers app ~down:false x y
-let click ?text ?(index = 0) ?button ?clicks ?modifiers app selector =
-  let el = List.nth (wait_for ?text app selector) index in
-  let r = rect el in
-  let x = int_of_float (r.x +. r.width /. 2.) and y = int_of_float (r.y +. r.height /. 2.) in
-  let state = status app in
-  if x < 0 || y < 0 || x >= (state |> member "width" |> to_int) || y >= (state |> member "height" |> to_int) then
-    failwith "Target outside viewport: scroll before clicking";
-  click_at ?button ?clicks ?modifiers app x y
+let click ?text ?(index = 0) ?button:btn ?clicks ?modifiers app selector =
+  let deadline = Unix.gettimeofday () +. 15. in
+  let target () =
+    match List.nth_opt (matching ?text app selector) index with
+    | None -> None
+    | Some el ->
+        let id = member "node-id" el in
+        if id = `Null then failwith "Native locator has no retained identity";
+        Some (id, rect el)
+  in
+  let stable_target () =
+    let previous = ref None in
+    let remaining = deadline -. Unix.gettimeofday () in
+    if remaining <= 0. then raise (Timeout ("stable native click " ^ selector));
+    poll ~timeout:remaining ("stable native click " ^ selector) (fun () ->
+        match target () with
+        | None -> previous := None; None
+        | Some key ->
+            let now = Unix.gettimeofday () in
+            (match !previous with
+             | Some (last, since) when last = key ->
+                 if now -. since >= 0.2 then Some key else None
+             | _ -> previous := Some (key, now); None))
+  in
+  let center r =
+    let x = int_of_float (r.x +. r.width /. 2.)
+    and y = int_of_float (r.y +. r.height /. 2.) in
+    let state = status app in
+    if x < 0 || y < 0 || x >= (state |> member "width" |> to_int)
+       || y >= (state |> member "height" |> to_int) then
+      failwith "Target outside viewport: scroll before clicking";
+    x, y
+  in
+  let rec click_when_stable () =
+    let before = stable_target () in
+    let x, y = center (snd before) in
+    move app x y;
+    let after = stable_target () in
+    if before = after && center (snd after) = (x, y)
+       && target () = Some after then begin
+      button ?button:btn ?clicks ?modifiers app ~down:true x y;
+      button ?button:btn ?clicks ?modifiers app ~down:false x y
+    end else click_when_stable ()
+  in
+  click_when_stable ()
 let drag ?(steps = 12) ?(modifiers = 0) app (x0, y0) (x1, y1) =
   if steps <= 0 then invalid_arg "drag steps";
   move app x0 y0;
