@@ -196,13 +196,19 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let item_btn (it : item) : t =
     (* ls-emoji-cell is the regression test's icon-button locator; the
        .its/.icons-row button chrome moved to the typed props *)
-    let cell ?font_size ~cls ~key ~label ~tooltip ~on_press child : t =
+    let cell ?font_size ?fg ?ff ~cls ~key ~label ~tooltip ~on_press child : t =
       Ui_components.with_props
         ([ ( P.HoverBackground
            , P.StringValue
                "var(--lx-gray-03, var(--ls-menu-hover-color, \
                   hsl(var(--muted))))" )
          ]
+         @ (match fg with
+            | Some c -> [ P.ForegroundValue, P.StringValue c ]
+            | None -> [])
+         @ (match ff with
+            | Some f -> [ P.FontFamily, P.StringValue f ]
+            | None -> [])
          @ (match font_size with
             | Some fz -> [ P.FontSize, P.StringValue fz ]
             | None -> []))
@@ -215,10 +221,15 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     | Emoji_item (id, name) ->
         cell ~font_size:"1.5rem" ~cls:"ls-emoji-preview" ~key:("e-" ^ id)
           ~label:name ~tooltip:name
+          (* emoji keep their own color glyphs: the color preset only
+             tints tabler icons, and the platform color-emoji font keeps
+             them from rasterizing as tinted monochrome shapes *)
+          ~ff:"Apple Color Emoji, Noto Color Emoji, Segoe UI Emoji"
           ~on_press:(fun _ -> choose (Emoji id))
           (Logseq_emoji.el ~name:id ())
     | Tabler_item (display, kebab) ->
         cell ~cls:"ls-emoji-cell" ~key:("t-" ^ icon_id display) ~label:display
+          ~fg:(Option.value (get ()).preset ~default:"inherit")
           ~tooltip:(icon_id display)
           ~on_press:(fun _ ->
             choose (Tabler (icon_id display, (get ()).preset)))
@@ -247,8 +258,6 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let pane_section label (items : t list) : t =
     Ui_components.with_props [ P.Overflow, P.StringValue "auto" ]
       (column ~grow:1.
-         ~foreground:(reactive (fun (s : pstate) ->
-             Option.value s.preset ~default:"inherit") sv)
          ~data_attrs:[ ("style", "padding-left: 0.5rem") ]
          (box ~style_class:"hd"
             [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
@@ -412,64 +421,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         ~data_attrs:
           [ ("data-keep-selection", "true")
           ; ("style", "max-width: calc(100vw - 16px)") ]
-        [ Ui_components.with_props
-            [ P.Position, P.StringValue "absolute"
-            ; P.InsetTop, P.FloatValue 38.
-            ; P.InsetLeft, P.FloatValue 0. ]
-            (box ~key:"hd" ~container_relative_frame:`horizontal
-               ~background:"hsl(var(--popover))"
-               ~data_attrs:
-                 [ ( "style"
-                   , "box-sizing: border-box; padding: 0.625rem 0.75rem \
-                      0.25rem" ) ]
-         [ reactive
-             ~equal:(fun (a : pstate) b ->
-                a.tab = b.tab && a.reset = b.reset)
-             (fun s ->
-                Ui_components.search_row
-                  ~key:
-                    ("sr-" ^ tab_name s.tab ^ "-" ^ string_of_int s.reset)
-                  ~height:32 ~pad_left:32 ~borderless:true ~autofocus:true
-                  ~background:
-                    "var(--lx-gray-03, var(--ls-tertiary-background-color, \
-                     hsl(var(--muted))))"
-                  ~placeholder:(placeholder_of s.tab)
-                  ~text_signal:(Signal.map (fun s -> s.q) sv)
-                  ~on_input:(fun ev ->
-                    match ev with
-                    | Lui_protocol.TextChanged (_, v) -> on_input v
-                    | _ -> ())
-                  ~trailing:
-                    [ if_
-                        ~test:(reactive (fun s -> s.q <> "") sv)
-                        (Ui_components.with_props
-                           [ Lui_protocol.Opacity
-                           , Lui_protocol.FloatValue 0.5 ]
-                           (button ~key:"x" ~variant:`ghost ~padding:8
-                              ~on_press:(fun _ -> reset_q ())
-                              [ Icons.icon ~size:14. "x" ]))
-                    ]
-                  ())
-             sv ])
-     ; Ui_parts.class_signal sv
-         (fun s -> "bd " ^ tab_name s.tab)
-         (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
-            ~data_attrs:
-              [ ( "style"
-                , "padding: 96px 0.25rem 0.25rem; box-sizing: \
-                   border-box" ) ]
-            [ box
-                [ reactive
-                    ~equal:(fun (a : pstate) b ->
-                       a.q = b.q && a.tab = b.tab
-                       && a.emoji_results = b.emoji_results)
-                    content_view sv ] ])
-     ; Ui_components.with_props
-         [ P.Position, P.StringValue "absolute"
-         ; P.InsetTop, P.FloatValue (-1.)
-         ; P.InsetLeft, P.FloatValue 0. ]
-         (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
-            ~container_relative_frame:`horizontal
+        [ row ~key:"ft" ~cross:`center ~padding:12 ~height:40
             ~background:
               "var(--lx-gray-02, var(--ls-secondary-background-color, \
                 hsl(var(--popover))))"
@@ -478,15 +430,26 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                 , "box-sizing: border-box; border-top: 1px solid \
                    var(--lx-gray-05, var(--ls-border-color, \
                    hsl(var(--border))))" ) ]
-            ([ toggle_group ~key:"tabs" ~gap:8 ~grow:1. ~cross:`center
-              (List.map
-                 (fun (t, label) ->
-                   Ui_components.chip_toggle ~key:("tab-" ^ tab_name t)
-                     ~radius:4 ~pad_v:4 ~pad_h:8 ~font_size:"0.8125rem"
-                     ~off_opacity:0.5 ~text:label
-                     ~checked_signal:(Signal.map (fun s -> s.tab = t) sv)
-                     ~on_toggle:(fun _ -> set_tab t) ())
-                 tabs) ]
+            ([ box ~key:"tabs" ~grow:1.
+                 [ Ui_components.with_props
+                     [ P.CornerRadius, P.IntValue 8 ]
+                     (row ~gap:2 ~padding:2
+                        ~background:
+                          "var(--lx-gray-03, var(--ls-tertiary-background-color, \
+                           hsl(var(--muted))))"
+                        (List.map
+                           (fun (t, label) ->
+                             Ui_components.chip_toggle ~key:("tab-" ^ tab_name t)
+                               ~radius:6 ~pad_v:4 ~pad_h:12
+                               ~font_size:"0.8125rem" ~off_opacity:0.55
+                               ~on_border:false
+                               ~on_background:
+                                 "var(--lx-gray-01, var(--ls-primary-background-color, \
+                                  hsl(var(--popover))))"
+                               ~text:label
+                               ~checked_signal:(Signal.map (fun s -> s.tab = t) sv)
+                               ~on_toggle:(fun _ -> set_tab t) ())
+                           tabs)) ] ]
           (* cljs hides the color picker on the emoji tab *)
           @
           [ if_
@@ -521,7 +484,49 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ~label:(I.t "ui/delete")
                  ~on_press:(fun _ -> choose Remove)
                  [ icon_el ~size:17. ("tabler-icon", "trash") ] ]
-           else []))) ]))
+           else []))
+     ; box ~key:"hd" ~background:"hsl(var(--popover))"
+         ~padding_horizontal:12 ~padding_vertical:4
+         [ reactive
+             ~equal:(fun (a : pstate) b ->
+                a.tab = b.tab && a.reset = b.reset)
+             (fun s ->
+                Ui_components.search_row
+                  ~key:
+                    ("sr-" ^ tab_name s.tab ^ "-" ^ string_of_int s.reset)
+                  ~height:32 ~pad_left:32 ~borderless:true ~autofocus:true
+                  ~background:
+                    "var(--lx-gray-03, var(--ls-tertiary-background-color, \
+                     hsl(var(--muted))))"
+                  ~placeholder:(placeholder_of s.tab)
+                  ~text_signal:(Signal.map (fun s -> s.q) sv)
+                  ~on_input:(fun ev ->
+                    match ev with
+                    | Lui_protocol.TextChanged (_, v) -> on_input v
+                    | _ -> ())
+                  ~trailing:
+                    [ if_
+                        ~test:(reactive (fun s -> s.q <> "") sv)
+                        (Ui_components.with_props
+                           [ Lui_protocol.Opacity
+                           , Lui_protocol.FloatValue 0.5 ]
+                           (button ~key:"x" ~variant:`ghost ~padding:8
+                              ~on_press:(fun _ -> reset_q ())
+                              [ Icons.icon ~size:14. "x" ]))
+                    ]
+                  ())
+             sv ]
+     ; Ui_parts.class_signal sv
+         (fun s -> "bd " ^ tab_name s.tab)
+         (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
+            ~padding_horizontal:4 ~padding_vertical:4
+            [ box
+                [ reactive
+                    ~equal:(fun (a : pstate) b ->
+                       a.q = b.q && a.tab = b.tab
+                       && a.preset = b.preset
+                       && a.emoji_results = b.emoji_results)
+                    content_view sv ] ]) ]))
     context parent
 ;;
 

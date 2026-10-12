@@ -388,11 +388,29 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 
 (* -- content vs editor -- *)
 
+(* cljs .with-bg-color: the built-in closed values resolve to their
+   color title ("yellow" …), custom colors to a hex string — either way
+   the value doubles as a CSS color. *)
+let block_bg_css = function
+  | "yellow" -> "var(--ls-highlight-color-yellow, #fef2a4)"
+  | "red" -> "var(--ls-highlight-color-red, #fdd8d8)"
+  | "pink" -> "var(--ls-highlight-color-pink, #f9d8ec)"
+  | "green" -> "var(--ls-highlight-color-green, #ccebd7)"
+  | "blue" -> "var(--ls-highlight-color-blue, #cee7fe)"
+  | "purple" -> "var(--ls-highlight-color-purple, #eddbf9)"
+  | "gray" -> "var(--ls-highlight-color-gray, #e8e8e8)"
+  | c -> c
+
 let content_el uuid (b : Model.block) : t =
+  let title_bg =
+    match b.Model.block_bg_color with
+    | Some c -> block_bg_css c
+    | None -> "transparent"
+  in
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   box ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~min_height:24 ~main:`center
+    ~min_height:24 ~main:`center ~grow:1. ~background:title_bg
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)

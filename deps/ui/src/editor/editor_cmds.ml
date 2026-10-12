@@ -210,9 +210,13 @@ let run ~command ~block ~value : outcome =
           | "set-color" -> (
               match value with
               | Some c when c <> "" ->
+                  (* the worker's set-block-property resolves a string
+                     value into the property's closed-value entity
+                     (creating it when missing), the same call cljs
+                     set-block-property! makes *)
                   apply_soft
-                    [ batch_set [ uuid ] "logseq.property/background-color"
-                        (W.String c) ];
+                    [ batch_set [ uuid ]
+                        "logseq.property/background-color" (W.String c) ];
                   Handled
               | _ ->
                   apply_soft

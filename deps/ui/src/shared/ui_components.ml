@@ -734,7 +734,10 @@ let nav_item ~key ~data_id ~icon:icon_ ~text ~selected_signal:selected
    no background/opacity signal channels, so the paint rides a reactive
    rebuild on `checked`. *)
 let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
-    ~checked_signal:checked ?(off_opacity = 0.7) ~on_toggle () : t =
+    ~checked_signal:checked ?(off_opacity = 0.7) ?(on_border = true)
+    ?(on_background =
+        "var(--lx-gray-04, var(--ls-tertiary-background-color, \
+         hsl(var(--muted))))") ~on_toggle () : t =
   reactive ~equal:( = ) (fun c ->
     with_props
       [ P.Cursor, sv "pointer"
@@ -744,14 +747,11 @@ let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
       ]
       (toggle_button ~key ~variant:`ghost ~text ~checked:c ~on_toggle
          ~min_height:0 ~height:(pad_v * 2 + 14) ~padding_vertical:pad_v
-         ~padding_horizontal:pad_h ~corner_radius:radius ~border_width:1
+         ~padding_horizontal:pad_h ~corner_radius:radius
+         ~border_width:(if on_border then 1 else 0)
          ~border_color:
            "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
-         ~background:
-           (if c then
-              "var(--lx-gray-04, var(--ls-tertiary-background-color, \
-               hsl(var(--muted))))"
-            else "transparent")
+         ~background:(if c then on_background else "transparent")
          []))
     checked
 

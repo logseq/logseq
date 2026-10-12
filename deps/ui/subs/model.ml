@@ -77,6 +77,8 @@ type block =
   ; block_hl_type : string option (* logseq.property.pdf/hl-type *)
   ; block_hl_page : int option (* logseq.property.pdf/hl-page *)
   ; block_hl_color : string option (* hl-value properties.color *)
+  ; block_bg_color : string option
+    (* logseq.property/background-color — closed-value title *)
   ; block_hl : hl option (* logseq.property.pdf/hl-value *)
   ; block_asset_ref : int option (* logseq.property/asset ref db/id *)
   ; block_hl_image : int option (* logseq.property.pdf/hl-image ref db/id *)
@@ -336,6 +338,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_hl_type = None
   ; block_hl_page = None
   ; block_hl_color = None
+  ; block_bg_color = None
   ; block_hl = None
   ; block_asset_ref = None
   ; block_hl_image = None

@@ -451,6 +451,7 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_hl_type = prop_label w "logseq.property.pdf/hl-type"
   ; block_hl_page = num_prop "logseq.property.pdf/hl-page"
   ; block_hl_color = hl_color
+  ; block_bg_color = prop_label w "logseq.property/background-color"
   ; block_hl = hl
   ; block_asset_ref =
       (match Wire.get w "logseq.property/asset" with
