@@ -79,7 +79,7 @@ let fetch (req : request) : response =
       in
       let meth = Httpun.Method.of_string req.method_ in
       let headers =
-        Httpun.Headers.of_list (("host", host) :: ("connection", "close") :: req.headers)
+        Httpun.Headers.of_list (("host", host) :: req.headers)
       in
       let req' =
         Httpun.Request.create ~headers meth target
@@ -89,14 +89,20 @@ let fetch (req : request) : response =
       in
       Option.iter (fun b -> Httpun.Body.Writer.write_string writer b) req.body;
       Httpun.Body.Writer.close writer;
-      Eio.Fiber.fork ~sw (fun () ->
+      let pump () =
         try Net_eio.pump (module Httpun.Client_connection) conn flow
         with
+        | Eio.Cancel.Cancelled _ as exn -> raise exn
         | exn ->
-            Httpun.Client_connection.report_exn conn exn);
+            Httpun.Client_connection.report_exn conn exn
+      in
       let timed_out =
         Eio.Fiber.first
-          (fun () -> Eio.Promise.await done_p; false)
+          (fun () ->
+             Eio.Fiber.first
+               (fun () -> pump (); Eio.Promise.await done_p)
+               (fun () -> Eio.Promise.await done_p);
+             false)
           (fun () ->
              let rec watch () =
                Eio.Time.sleep clock 1.0;
@@ -106,6 +112,7 @@ let fetch (req : request) : response =
              in
              watch ())
       in
+      Httpun.Client_connection.shutdown conn;
       flow.close ();
       if timed_out then failwith "Http: request timed out";
       match !error_ref with
