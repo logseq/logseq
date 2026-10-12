@@ -1820,43 +1820,101 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defn- row-container-id
+  [node]
+  (some-> (util/rec-get-node node "blocks-container") get-node-container-id))
+
+(defn- row-container-ids
+  "block id -> the container its selected row is drawn in (a block can also
+  be drawn in an embed or the sidebar)."
+  [rows]
+  (into {} (keep (fn [node]
+                   (when-let [id (dom/attr node "blockid")]
+                     [id (row-container-id node)])))
+        rows))
+
+(defn- row-in-container
+  "Of `rows` (the rows drawn for block `id`), the one in the container the
+  block was selected in, else the first."
+  [id rows container-ids]
+  (let [container-id (get container-ids id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
+(defn- reselect-moved-rows?
+  "Select the moved rows only when each was found and the selection is still
+  the one that was moved: a click or Escape during the move wins."
+  [ids nodes selected-before selected-now]
+  (and (= (count nodes) (count ids))
+       (identical? selected-before selected-now)))
+
+(defn- <move-up-down!
+  [up?]
+  (let [repo (state/get-current-repo)
+        edit-block-id (:block/uuid (state/get-edit-block))
+        move-nodes (fn [blocks]
+                     (let [blocks' (block-handler/get-top-level-blocks blocks)
+                           result (ui-outliner-tx/transact!
+                                   (merge {:outliner-op :move-blocks}
+                                          (block-handler/outliner-tx-meta (first blocks')))
+                                   (outliner-op/move-blocks-up-down! blocks' up?))]
+                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                         (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
+                       result))]
+    (p/let [root-block (get-focused-root-block)]
+      (if edit-block-id
+        (p/let [block (db-async/<get-block repo edit-block-id {:children? false})]
+          (let [blocks [(assoc block :block/title (state/get-edit-content))]
+                blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
+                container-id (get-new-container-id (if up? :move-up :move-down) {})]
+            (when (seq blocks)
+              (p/do!
+               (save-current-block!)
+               (move-nodes blocks)
+               (if container-id
+                 (state/set-editing-block-id! [container-id edit-block-id])
+                 (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
+                   (.focus input)
+                   (util/scroll-editor-cursor input)))))))
+        (let [ids (state/get-selection-block-ids)
+              direction (state/get-selection-direction)
+              selected-before (state/get-unsorted-selection-blocks)
+              container-ids (row-container-ids selected-before)
+              new-row #(row-in-container (str %) (util/get-blocks-by-id %) container-ids)]
+          (when (seq ids)
+            (p/let [results (db-async/<get-blocks repo ids {:children? false})
+                    loaded-blocks (unwrap-block-results results)
+                    blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
+              (when (seq blocks)
+                (p/do!
+                 (move-nodes blocks)
+                 ;; The transaction flushes its delta before settling, so moved
+                 ;; rows can be resolved in their original view.
+                 (let [nodes (keep new-row ids)
+                       nodes (if (= direction :up) (reverse nodes) nodes)]
+                   (when (reselect-moved-rows? ids nodes selected-before
+                                             (state/get-unsorted-selection-blocks))
+                     (state/set-selection-blocks! nodes direction))))))))))))
+
+(defonce ^:private *move-up-down-tail (atom nil))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
-    (let [edit-block-id (:block/uuid (state/get-edit-block))
-          move-nodes (fn [blocks]
-                       (let [blocks' (block-handler/get-top-level-blocks blocks)
-                             result (ui-outliner-tx/transact!
-                                     (merge {:outliner-op :move-blocks}
-                                            (block-handler/outliner-tx-meta (first blocks')))
-                                     (outliner-op/move-blocks-up-down! blocks' up?))]
-                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
-                         result))]
-      (p/let [root-block (get-focused-root-block)]
-        (if edit-block-id
-          (p/let [block (db-async/<get-block (state/get-current-repo) edit-block-id {:children? false})]
-            (let [blocks [(assoc block :block/title (state/get-edit-content))]
-                  blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
-                  container-id (get-new-container-id (if up? :move-up :move-down) {})]
-              (when (seq blocks)
-                (p/do!
-                 (save-current-block!)
-                 (move-nodes blocks)
-                 (if container-id
-                   (state/set-editing-block-id! [container-id edit-block-id])
-                   (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
-                     (.focus input)
-                     (util/scroll-editor-cursor input)))))))
-          (let [ids (state/get-selection-block-ids)]
-            (when (seq ids)
-              (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
-                      loaded-blocks (unwrap-block-results results)
-                      blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
-                (when (seq blocks)
-                  (move-nodes blocks))))))))))
+    (let [previous (or @*move-up-down-tail (p/resolved nil))
+          result (p/then previous (fn [_] (<move-up-down! up?)))
+          tail (p/catch result (constantly nil))]
+      ;; Register the whole task before its first async read. Later shortcuts
+      ;; wait for both the transaction and the selection update.
+      (reset! *move-up-down-tail tail)
+      (p/finally tail
+                 (fn []
+                   (when (identical? @*move-up-down-tail tail)
+                     (reset! *move-up-down-tail nil))))
+      result)))
 
 (defn get-selected-ordered-blocks
   []
