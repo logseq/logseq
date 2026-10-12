@@ -147,6 +147,51 @@ let registered_tag tag = List.mem tag tags
 
 let fallback_tag = function _ -> "span"
 
+(* Typed ext props -> CSS declarations for the web twin, so a callsite
+   can declare layout once (typed) and both twins honor it. Unknown
+   names are dropped; values follow the native prop encoding. *)
+let css_of_ext_prop (name, (v : Lui_protocol.wire_value)) =
+  let px f = Printf.sprintf "%gpx" f in
+  let num = function
+    | FloatValue f -> Some (px f)
+    | IntValue i -> Some (px (float_of_int i))
+    | StringValue s when s <> "" -> Some s
+    | _ -> None
+  in
+  let pad s =
+    String.split_on_char ' ' s
+    |> List.filter (( <> ) "")
+    |> List.map (fun t ->
+           match float_of_string_opt t with Some f -> px f | None -> t)
+    |> String.concat " "
+  in
+  match name, v with
+  | ("font-size" | "line-height" | "width" | "height" | "min-width"
+    | "min-height" | "max-width" | "max-height" | "gap"), _ ->
+      Option.map (fun x -> name ^ ":" ^ x) (num v)
+  | "corner-radius", _ ->
+      Option.map (fun x -> "border-radius:" ^ x) (num v)
+  | "padding", StringValue s -> Some ("padding:" ^ pad s)
+  | "padding", _ -> Option.map (fun x -> "padding:" ^ x) (num v)
+  | "main", StringValue m ->
+      Some ("display:flex;justify-content:" ^ m)
+  | "cross", StringValue c -> Some ("display:flex;align-items:" ^ c)
+  | ("background" | "foreground"), StringValue c when c <> "" ->
+      Some ((if name = "background" then "background:" else "color:") ^ c)
+  | "font-weight", (IntValue _ | FloatValue _) ->
+      Option.map (fun x -> "font-weight:" ^ String.sub x 0 (String.length x - 2))
+        (num v)
+  | _ -> None
+
+let merge_ext_style ext_css attrs =
+  if ext_css = "" then attrs
+  else
+    match List.assoc_opt "style" attrs with
+    | Some st ->
+        (* callsite style string still wins over the typed defaults *)
+        ("style", ext_css ^ ";" ^ st) :: List.remove_assoc "style" attrs
+    | None -> ("style", ext_css) :: attrs
+
 (* [el ?key ?tag ?attrs ?events ?style_class ?id ?text ?on_dom_event
    children] — the raw-element escape.
    - attrs: (name, value) pairs emitted as one JSON "attrs" prop
@@ -158,9 +203,9 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
     ?(text_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id_signal : Lui_protocol.wire_value Signal.signal option)
-    (* ext_props/ext_prop_signals carry typed layout props on the native
-       twin; the web twin reads the same declarations from the attrs
-       style string / attrs_signal instead, so both are ignored here *)
+    (* ext_props: typed layout props; the web twin lowers them to
+       inline CSS merged ahead of the attrs style. ext_prop_signals stay
+       native-only — reactive web styling rides attrs_signal_v. *)
     ?(ext_props : (string * Lui_protocol.wire_value) list = [])
     ?(ext_prop_signals :
        (string * Lui_protocol.wire_value Signal.signal) list =
@@ -168,11 +213,35 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
-  ignore ext_props;
   ignore ext_prop_signals;
+  let ext_css =
+    String.concat ";" (List.filter_map css_of_ext_prop ext_props)
+  in
   let tag, attrs =
     if registered_tag tag then (tag, attrs)
     else (fallback_tag tag, attrs @ [ ("data-tag", tag) ])
+  in
+  let attrs = merge_ext_style ext_css attrs in
+  let attrs_signal_v =
+    if ext_css = "" then attrs_signal_v
+    else
+      Option.map
+        (Signal.map (fun w ->
+             match w with
+             | StringValue json -> (
+                 match Js.Json.decodeObject (Js.Json.parseExn json) with
+                 | Some o ->
+                     let kv =
+                       Js.Dict.entries o |> Array.to_list
+                       |> List.filter_map (fun (k, v) ->
+                              Option.map (fun s -> (k, s))
+                                (Js.Json.decodeString v))
+                     in
+                     StringValue (attrs_json (merge_ext_style ext_css kv))
+                 | None -> w
+                 | exception _ -> w)
+             | w -> w))
+        attrs_signal_v
   in
   let node = Lui_ui.extension context (identifier tag) in
   Option.iter (Lui_ui.key context node) key;

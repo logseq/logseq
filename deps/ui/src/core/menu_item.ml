@@ -84,10 +84,10 @@ let dots_menu ~key ?(menu_cls = "") items : t =
    .chosen CSS rule is kept (autocomplete rows). [plain_bg] neutralizes
    the inherited .menu-link:hover background (cp__select rows paint
    selection through the class rules instead). *)
+(* font-size/line-height/padding/flex/radius are declared once as
+   typed ext_props on [menu_link]; both twins lower them *)
 let menu_link_base_style =
-  "color:hsl(var(--popover-foreground) / 0.75);user-select:none;\
-   font-size:0.875rem;line-height:1.25rem;padding:0.375rem 0.5rem;\
-   display:flex;justify-content:space-between;border-radius:0.25rem"
+  "color:hsl(var(--popover-foreground) / 0.75);user-select:none"
 
 let ac_chosen_bg =
   "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))"
@@ -125,8 +125,7 @@ let menu_link ~key ~id ~on_click ?(transition = true) ?(plain_bg = false)
             Logseq_el.attrs_signal s (fun c ->
                 [ ("tabindex", "0"); ("style", style_of c) ]))
          chosen_signal)
-    (* menu_link_base_style as typed props — the web twin reads the
-       same declarations from the attrs style string *)
+    (* single source for menu-link layout on both twins *)
     ~ext_props:
       ([ ("font-size", Lui_protocol.FloatValue 14.)
        ; ("line-height", Lui_protocol.FloatValue 20.)
