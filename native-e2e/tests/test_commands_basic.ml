@@ -394,6 +394,93 @@ let priority ctx =
          "Urgent", "priority-lvl-urgent"];
       validate_graph ctx app)
 
+let number_list ctx =
+  Suite.with_app ~label:"number-list" ctx (fun app ->
+      open_page app "Number List Command";
+      add_block app "";
+      input_command ~label:"Number list" app "number list";
+      let uuids = List.mapi (fun index title ->
+          if index > 0 then begin
+            Client.press app "Enter";
+            ignore (wait_editor_text app "")
+          end;
+          Client.text app title;
+          ignore (wait_editor_text app title);
+          (Client.sdk_call app "check_editing" [] |> to_string, title))
+          ["a"; "b"; "c"] in
+      let markers () = Client.query app ".typed-list" |> List.map Client.text_content in
+      let assert_markers expected =
+        ignore (Client.poll "Ordered-list marker sequence" (fun () ->
+            if markers () = expected then Some () else None));
+        Suite.equal ctx "Ordered-list markers have the exact source sequence"
+          (markers ()) expected
+      in
+      assert_markers ["1."; "2."; "3."];
+      Client.press app "Enter";
+      assert_markers ["1."; "2."; "3."; "4."];
+      ignore (wait_editor_text app "");
+      Client.press app "Enter";
+      assert_markers ["1."; "2."; "3."];
+      List.iter (fun (uuid, title) ->
+          let result () = Client.q ~inputs:[Wire.Uuid uuid] app
+              "[:find ?title :in $ ?uuid :where [?b :block/uuid ?uuid] [?b :block/title ?title]]" in
+          let expected = Wire.Set [Wire.Array [Wire.String title]] in
+          ignore (Client.poll "Ordered title persists in the real worker" (fun () ->
+              if result () = expected then Some () else None));
+          Suite.equal ctx "Ordered-list source title is persisted" (result ()) expected)
+        uuids;
+      validate_graph ctx app)
+
+let cloze ctx =
+  Suite.with_app ~label:"cloze" ctx (fun app ->
+      let page = "Cloze Command" in
+      open_page app page;
+      add_block app "";
+      input_command ~label:"Cloze" app "cloze";
+      Client.text app "hidden answer";
+      Suite.equal ctx "Cloze command inserts the original source syntax"
+        (wait_editor_text app "{{cloze hidden answer}}") "{{cloze hidden answer}}";
+      exit_edit app;
+      ignore (Client.wait_for app ".cloze");
+      Client.click app ".cloze";
+      ignore (Client.wait_for ~text:"[hidden answer]" app ".cloze-revealed");
+      Suite.check ctx "Click reveals the actual cloze answer"
+        (Client.query app ".cloze-revealed"
+         |> List.exists (fun el -> Client.text_content el = "[hidden answer]" && visible el));
+      assert_persisted_title ctx app page "{{cloze hidden answer}}";
+      validate_graph ctx app)
+
+let date_picker_month_select ctx =
+  Suite.with_app ~label:"date-picker-month-select" ctx (fun app ->
+      open_page app "Date Picker Month Select";
+      add_block app "date picker month select test";
+      input_command ~label:"Date picker" app "date picker";
+      ignore (Client.wait_for app ".ui__calendar button.ui__calendar-day");
+      let current = Client.wait_for app ".ls-date-month-select" |> List.hd
+                    |> Client.text_content |> String.trim in
+      let target = if current = "August" then "March" else "August" in
+      Client.click app ".ls-date-month-select";
+      ignore (Client.wait_for ~text:target app ".ls-date-month-menu menuitem");
+      let menu = Client.wait_for app ".ls-date-month-menu" |> List.hd in
+      let viewport = Client.rect menu in
+      Client.move app (int_of_float (viewport.x +. viewport.width /. 2.))
+        (int_of_float (viewport.y +. viewport.height /. 2.));
+      let option = Client.wait_for ~text:target app ".ls-date-month-menu menuitem"
+                   |> List.hd in
+      let option_rect = Client.rect option in
+      if option_rect.y +. option_rect.height > viewport.y +. viewport.height then
+        Client.wheel app (-3);
+      Client.click ~text:target app ".ls-date-month-menu menuitem";
+      wait_absent app ".ls-date-month-menu";
+      let shown = Client.wait_for app ".ls-date-month-select" |> List.hd
+                  |> Client.text_content |> String.trim in
+      Suite.equal ctx "Month selector displays the selected month" shown target;
+      Suite.check ctx "Calendar displays the selected month"
+        (Client.query app ".ui__calendar"
+         |> List.exists (fun el -> contains (Client.text_content el) target));
+      ignore (Client.screenshot ~name:"month-selected.png" app);
+      validate_graph ctx app)
+
 let tests =
   [ Suite.test
       ~covers:["ocaml-e2e/test/test_commands_basic.ml::command-trigger-test"]
@@ -423,4 +510,10 @@ let tests =
   ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::status-test"]
       "status-test" status
   ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::priority-test"]
-      "priority-test" priority ]
+      "priority-test" priority
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::number-list-test"]
+      "number-list-test" number_list
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::cloze-test"]
+      "cloze-test" cloze
+  ; Suite.test ~covers:["ocaml-e2e/test/test_commands_basic.ml::date-picker-month-select-test"]
+      "date-picker-month-select-test" date_picker_month_select ]
