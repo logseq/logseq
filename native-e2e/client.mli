@@ -5,7 +5,7 @@ type sdk_namespace = Api | Ui | Utils | Assets | Experiments | Debug
 exception Timeout of string
 
 val poll : ?timeout:float -> string -> (unit -> 'a option) -> 'a
-val create : ?root:string -> ?on_input:(unit -> unit) -> repo:string -> artifacts:string -> label:string -> unit -> t
+val create : ?root:string -> ?on_input:(unit -> unit) -> ?on_sdk_call:(unit -> unit) -> repo:string -> artifacts:string -> label:string -> unit -> t
 val start : t -> unit
 val close : t -> unit
 val request : t -> string -> (string * Yojson.Safe.t) list -> Yojson.Safe.t
@@ -43,3 +43,4 @@ val root : t -> string
 val settings : t -> string
 val artifacts : t -> string
 val input_count : t -> int
+val sdk_calls : t -> int

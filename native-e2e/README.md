@@ -11,6 +11,9 @@ registrations in 30 `ocaml-e2e/test/test_*.ml` files are **pending ports**, not
 passing native coverage. `upstream.json` is an inventory/ownership contract,
 not execution evidence. Three `test_graph.ml` cases are pure helper contracts;
 they must remain `Suite.Helper`, not fabricated desktop scenarios.
+The audited contract split is Desktop 231 / Api 15 / Helper 3. Exactly the 15
+`test_plugins_basic.ml` registrations use `Suite.Api`: their tested actions are
+production SDK calls, including three cases that also require UI/render checks.
 
 `inventory.exe` uses OCaml compiler-libs `Parse.implementation` and AST traversal.
 It identifies literal `Fest.Promise.test` registrations and genuine top-level
@@ -117,6 +120,20 @@ Unmarked zero-covers tests are rejected. All identity, assertion and desktop
 input guards still apply to additional cases. Output reports declared parity
 and additional native-case counts separately; result JSON records `additional`
 per case and `declared_parity_cases`/`declared_additional_cases` for the registry.
+Every parity test must have **exactly one** `covers` ID. Source-internal loops
+over types/parameters remain part of that one canonical case. A single tiny body
+cannot bulk-claim multiple registrations; marked additional cases still require
+zero IDs.
+
+Use `~contract:Suite.Api` only for audited SDK-under-test cases. Api cases require
+executed assertions, a real app started by the fixture, and at least one
+completed production SDK result. Successful results and asserted expected SDK
+errors count; unknown methods/transport failures do not. Worker `read`, `q`,
+`validate` and `invoke_fixture` never count. Desktop still requires real SDL input;
+Helper remains the three dependency-injected graph state-machine contracts.
+Result JSON records `contract`, `sdk_calls` and `real_apps`. These evidence guards
+do not replace source-equivalent data or UI assertions: preserve all render checks
+in API+render source cases, without inventing unrelated clicks to satisfy a guard.
 
 ## OCaml client/fixture contract
 
@@ -126,10 +143,20 @@ Nested calls create simultaneous clients with separate daemon roots/settings.
 Every start/reload/restart forces `LOGSEQ_NO_LOGIN_DAEMON=1` in the host's
 environment, overriding caller values. Fixtures must not install per-root login
 LaunchAgents that outlive their deleted graph roots.
+`Suite.with_app ?initialize` runs `initialize app` after private root/settings
+creation and before boot, inside protected failure evidence/cleanup. This is a
+fixture hook for production-format settings (e.g. RTC), not reducer dispatch.
+Native settings are a `ui-state.json` object mapping keys to stored string values;
+the current codec is `deps/ui/native/services/platform_native.ml`. Seed it under
+`Client.settings app`; do not bypass the production codec or invent test-only
+storage. An initializer exception still cleans all private directories.
 `Client.create/start/close` is the lower-level lifecycle interface; always protect
 `close`. Optional `root` shares an explicitly caller-owned graph root for RTC or
 multi-client scenarios; the caller must remove that external root after all
 clients close. Settings and socket directories remain private per app.
+`Client.start` does not report readiness at the first nonempty retained tree:
+it waits for the real daemon, native renderer and the default graph page title
+before returning. This prevents early SDK calls from racing repo activation.
 
 - Inputs: `press` (e.g. `Mod+k`, `Enter`, `Escape`, `Down`/`ArrowDown`), raw SDL
   scancode `key`, UTF-8 `text`, `fill`, `move`, `button`, `click_at`, semantic
@@ -159,16 +186,22 @@ clients close. Settings and socket directories remain private per app.
   `thread-api/validate-db`. Assert a non-nil result, nil `errors`, and empty
   `invalid-entity-ids` in the returned map as appropriate. Unrestricted
   `validate-db` is **not** a read oracle: omitted options default to repair/mutation.
+  `thread-api/db-sync-status` is an audited read oracle accepting `[repo]`.
+  It returns the daemon's actual per-replica pending/tx/ws/checksum wire map;
+  missing/nil fields remain missing/nil, never synthetic zero/default values.
 - SDK: `sdk_call ?namespace` uses closed `Api | Ui | Utils | Assets | Experiments
   | Debug` namespaces and invokes the same production `Sdk_api` registry as
   `window.logseq.api`/`sdk.*`, with at most four JSON arguments and async polling.
   It is for original API-specific cases, fixtures and oracles, not reducer
   dispatch or a substitute for UI interaction. Unknown methods/namespaces fail.
   JSON is transport only; the client, runner, fixtures and cases are OCaml.
-  Some original plugin tests exercise SDK actions rather than UI actions.
-  Those need a separately audited API test contract with real SDK-call evidence;
-  do not fabricate SDL input or relabel them as pure helpers. Coordinate category
-  changes with the parent/assets owner; the 249-case manifest is unchanged here.
+  `Client.sdk_calls`/the fixture callback count only consumed actual registry
+  completions, including expected SDK errors; synchronous registry exceptions
+  enter the same consumable error-result path as rejected promises. Namespace,
+  method and arity validation failures occur before invocation and do not count.
+  Do not fabricate SDL input or relabel SDK cases as pure helpers. Other source
+  groups keep their existing categories; only the 15 audited plugin API cases
+  were reclassified with parent/assets authorization.
 - Lifecycle: `reload` restarts only the host with the same settings/daemon;
   `restart ()` restarts host and owned daemon, preserving the isolated disk graph.
   Cleanup verifies daemon executable/root ownership before sending signals,
