@@ -230,7 +230,17 @@
 
       (is (seq new-property-values) "New property values created")
       (is (= #{3 4 5} (set (map db-property/property-value-content new-property-values)))
-          "Property value has correct content"))))
+          "Property value has correct content")))
+
+  (testing "Create a default value for a :number property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:num {:logseq.property/type :number}}})
+          property-id (:db/id (d/entity @conn :user.property/num))
+          ;; Use same args as outliner.op
+          _ (outliner-property/create-property-text-block! conn property-id :logseq.property/default-value "5" {})
+          default-value (:logseq.property/default-value (d/entity @conn property-id))]
+      (is (= 5 (db-property/property-value-content default-value))
+          "Default value is stored as a number"))))
 
 (deftest set-block-property-basic-cases
   (testing "Set a :number value with existing value"
