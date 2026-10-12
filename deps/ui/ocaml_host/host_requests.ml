@@ -401,7 +401,15 @@ let dom_op (e : env) (op : string) (body : string) =
   | "measure-node" ->
     (match target with
      | Some id ->
-       let r = e.rect_of id in
+       (* Painted rects are the truth for out-of-flow nodes: a popup's
+          flex absolute_layout keeps its in-flow placeholder (stretched
+          inside the overlay container), while the scene cache records
+          the rect actually painted. Fall back to the on-demand rect
+          only while the node has not painted yet. *)
+       let r =
+         let p = Rects.get e.rects id in
+         if Lui_scene.rect_empty p then e.rect_of id else p
+       in
        reply "node-rect"
          (`Assoc
             [ ("nodeId", `Int id)

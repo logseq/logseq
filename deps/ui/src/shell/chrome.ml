@@ -1003,10 +1003,12 @@ let main_content (ms : Model.t Signal.signal) =
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
   if Ui_services.env_publishing () then
-    box ~style_class:"cp__overlays" [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms; Toasts_view.render ms ]
+    Ui_parts.viewport_cover
+      (box ~style_class:"cp__overlays" [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms; Toasts_view.render ms ])
   else
-  box ~key:"overlays" ~style_class:"cp__overlays"
-    [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
+    Ui_parts.viewport_cover
+      (box ~key:"overlays" ~style_class:"cp__overlays"
+        [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms
@@ -1053,7 +1055,7 @@ let overlays (ms : Model.t Signal.signal) =
           | Some pos -> Settings_page.appearance_body pos
           | None -> spacer ~key:"app-none" [])
         ms
-    ]
+        ])
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup *)

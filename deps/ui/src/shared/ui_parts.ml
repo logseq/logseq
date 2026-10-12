@@ -90,13 +90,17 @@ let ghost_btn_cls ?(extra = "") () =
 
 (* Cover a layer host with the frame: mounted popups measure and place
    against their nearest out-of-flow ancestor, so a content-sized host
-   collapses them into a zero-width strip at the window center. The
-   viewport props pin the cover the web positioner gives the layer via
-   inset:0 (and the native host gives via its class dictionary). *)
+   collapses them into a zero-width strip at the window center — and an
+   in-flow host (the web stylesheet gives the layer position:fixed;
+   inset:0) drags every child's painted origin along with it. The
+   fixed+inset props pin the cover to the viewport; the viewport props
+   give it the layer's full size. *)
 let viewport_cover (elem : t) : t =
  fun context parent ->
   let node = elem context parent in
   ignore (standard_kind context node);
+  Lui_ui.position context node "fixed";
+  Lui_ui.inset context node 0.;
   Lui_ui.width_viewport context node 1.;
   Lui_ui.height_viewport context node 1.;
   node

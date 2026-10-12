@@ -430,6 +430,14 @@ let ac_popover (st : S.t) : t =
               | Some a -> S.ac_class_of_kind a.S.kind
               | None -> ""))
          (box ~key:"ac-c"
+            (* cljs page-search/commands cards are fixed-width
+               (width:288px / width:512px + vw clamp) — the style
+               data_attr reaches web only, so carry the same width as
+               a typed prop for hosts that lay the box out themselves *)
+            ~width:
+              (match (Signal.get vs).S.ac with
+               | Some a -> (match a.S.kind with S.Slash -> 288 | _ -> 512)
+               | None -> 512)
             ~data_attrs_signal:
               (Logseq_el.own context
                  (Signal.map
@@ -473,7 +481,8 @@ let ac_popover (st : S.t) : t =
                         (fun (v : S.view) ->
                           match v.S.ac with
                           | Some a ->
-                              a.S.kind = S.Tag_search && a.S.query <> ""
+                              a.S.kind = S.Tag_search
+                              && a.S.query <> ""
                               && String.lowercase_ascii a.S.query <> "page"
                           | None -> false)
                         vs))
@@ -484,9 +493,10 @@ let ac_popover (st : S.t) : t =
                       ~cross:`center ~gap:8 ~opacity:0.5
                       ~data_attrs:
                         [ ("style", "margin:8px 0;padding:0 0.25rem") ]
-                   [ (* shui/shortcut "mod+enter" → combo glow container
-                        inside a span *)
-                     text ~key:"scw"
+                   [ (* shui/shortcut "mod+enter" → combo glow container;
+                        a row, not text — native text elements only lay
+                        out text-kind children *)
+                     row ~key:"scw"
                        [ box ~key:"sc"
                            ~style_class:"shui-shortcut-combo shui-shortcut-glow"
                            [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"

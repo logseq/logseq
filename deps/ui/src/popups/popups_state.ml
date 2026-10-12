@@ -1055,7 +1055,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
      the popup can actually render on either side) *)
   let rec measure tries =
     match (get t).ac with
-    | Some a when a.flip = None && a.kind = kind -> (
+    | Some a when a.kind = kind -> (
         (* cljs pins the popup at the caret position captured when it
            opened — typing further must not re-anchor it. Only the
            open-time fallback (0,0,0) keeps re-reading popup_pos: on
@@ -1088,7 +1088,21 @@ let open_ac ?tpos ?(autopair = true) t kind =
                    is not visible to the user. *)
                 pop.Ui_services.set_style "--available-height"
                   "2000px";
-                let _rx, _ry, w, h = pop.Ui_services.rect () in
+                let _rx, _ry, w, h_measured = pop.Ui_services.rect () in
+                (* Hosts whose element-rect reads report the popover's
+                   in-flow placeholder (the content box stretches to the
+                   overlay container on native) cannot measure the
+                   rendered popup — estimate the height from the item
+                   list instead: menu-link rows paint ~24px plus card
+                   chrome. The flip only needs an overflow check, not
+                   pixels; w still reads the (conservative) box width
+                   for the right-edge flip. *)
+                let h =
+                  if h_measured > 0. && h_measured < 460. then h_measured
+                  else
+                    Float.max 40.
+                      (12. +. (24. *. float (List.length a.items)))
+                in
                 (* base-ui flips align start->end when the popup would
                    overflow the right viewport edge — the right edge
                    lands at the caret; clamp to the margin when even
@@ -1104,19 +1118,29 @@ let open_ac ?tpos ?(autopair = true) t kind =
                   Ui_services.dom_viewport_height () -. a.y -. 5.
                 in
                 let above = a.cy -. 5. in
-                if h > below && above > below then (
-                  (* avail is the constraint, h the measured render —
-                     the inner's own max-height subtracts chrome from
-                     avail, so pass the whole space and place the top
-                     so the bottom edge lands just above the caret *)
-                  let avail = above in
-                  let h_eff = Float.min h avail in
-                  let top' = Float.max 5.0 (a.cy -. 5. -. h_eff) in
-                  set_ac t (Some { a with flip = Some (top', avail) }))
-                else if tries <= 0 then
+                (* base-ui avoidCollisions re-checks continuously: a
+                   flip recorded while the list was still long must
+                   release again once filtered items shrink the popup
+                   enough to fit below, so re-evaluate every tick for
+                   the whole retry window rather than setting once.
+                   avail is the constraint, h the measured render — the
+                   inner's own max-height subtracts chrome from avail,
+                   so pass the whole space and place the top so the
+                   bottom edge lands just above the caret *)
+                let flip' =
+                  if h > below && above > below then
+                    let avail = above in
+                    let h_eff = Float.min h avail in
+                    Some (Float.max 5.0 (a.cy -. 5. -. h_eff), avail)
+                  else None
+                in
+                if flip' <> a.flip then
+                  set_ac t (Some { a with flip = flip' });
+                if tries <= 0 then
                   pop.Ui_services.set_style "--available-height"
                     (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 5.))
-                else retry tries            | None -> retry tries)
+                else retry tries
+            | None -> retry tries)
         | None -> retry tries)
     | None -> retry tries
     | _ -> ()
