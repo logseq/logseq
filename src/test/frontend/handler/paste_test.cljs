@@ -370,6 +370,20 @@
                (mapv #(select-keys % [:block/title :logseq.property/heading])
                      @actual-blocks)))))))
 
+(deftest-async paste-text-parseable-keeps-tag-syntax
+  (let [actual-blocks (atom nil)]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/get-edit-block (constantly {:db/id 10})
+                    db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "paste target"}))
+                    state/<invoke-db-worker (fn [& _] (p/resolved nil))
+                    editor-handler/paste-blocks (fn [blocks _opts]
+                                                  (reset! actual-blocks blocks)
+                                                  (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-text-parseable :markdown "- 42 #[[Beta Gamma]] and [[Alpha]]")]
+        (is (re-matches #"42 #\[\[[0-9a-f-]{36}\]\] and \[\[[0-9a-f-]{36}\]\]"
+                        (:block/title (first @actual-blocks)))
+            "a pasted #tag stays a #tag ref, as saving the block stores it; a page ref stays a page ref")))))
+
 (deftest-async paste-text-parseable-does-not-create-empty-page-ref
   (let [actual-blocks (atom nil)
         parsed-blocks [{:block/title "## [[2026-06-15]]"

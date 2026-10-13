@@ -64,9 +64,9 @@
                                        (assoc :block/refs refs))
                                      (cond-> (:logseq.property/heading block)
                                        (update :block/title commands/clear-markdown-heading))
-                                     (update :block/title (fn [title]
-                                                            (let [title' (db-content/replace-tags-with-id-refs title refs)]
-                                                              (db-content/title-ref->id-ref title' refs)))))))
+                                     ;; `#tag` and `#[[a tag]]` become `#[[uuid]]`, as saving a
+                                     ;; block stores them; not a plain `[[uuid]]` page ref
+                                     (update :block/title #(db-content/title-ref->id-ref % refs)))))
                              blocks))]
         (editor-handler/paste-blocks blocks' {:keep-uuid? true
                                               :outliner-real-op :paste-text})))))
