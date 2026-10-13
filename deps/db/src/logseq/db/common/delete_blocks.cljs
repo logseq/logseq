@@ -23,9 +23,7 @@
                             block-content))))
 
 (defn- build-retracted-tx
-  ([retracted-blocks]
-   (build-retracted-tx retracted-blocks #{} []))
-  ([retracted-blocks extra-retract-ids retracted-pages]
+  [retracted-blocks extra-retract-ids retracted-pages]
   (let [refs (->> (mapcat (fn [block] (:block/_refs block)) retracted-blocks)
                   (common-util/distinct-by :db/id))
         retract-ids (into (set (map :db/id retracted-blocks)) extra-retract-ids)
@@ -51,7 +49,7 @@
                   replaced-title
                   (conj [:db/add id :block/title replaced-title]))]
          tx))
-     refs))))
+     refs)))
 
 (defn- block-entity?
   [entity]
