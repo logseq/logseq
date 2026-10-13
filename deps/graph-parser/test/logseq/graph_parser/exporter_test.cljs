@@ -676,6 +676,28 @@ abc
         (is (= expected-tags (set (map :block/title (:block/tags block))))
             "All explicit tags are preserved")))))
 
+(deftest-async import-code-block-with-properties-after-its-fence
+  (let [code-uuid #uuid "11111111-1111-4111-8111-111111111112"]
+    (p/let [file (write-temp-graph-file
+                  "pages/C.md"
+                  (str "- ```clojure\n"
+                       "  (x 1)\n"
+                       "  ```\n"
+                       "  id:: " code-uuid "\n"
+                       "  rating:: 5\n"
+                       "- {{embed ((" code-uuid "))}}\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [file] conn {})
+            code (d/entity @conn [:block/uuid code-uuid])]
+      (is (= "(x 1)" (:block/title code))
+          "the property lines after the closing fence are not part of the code")
+      (is (= :code (:logseq.property.node/display-type code))
+          "the block is a code block")
+      (is (= "clojure" (:logseq.property.code/lang code)))
+      (is (some? (get code :user.property/rating))
+          "the property after the fence is the block's property"))))
+
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"

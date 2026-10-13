@@ -168,8 +168,21 @@
 
     (not= format :org)
     (let [lines (string/split-lines content)
-          lines (if (simplified-property? (first lines))
+          fence (some->> (first lines) string/trim (re-find #"^(?:```|\$\$)"))
+          ;; a block that starts with a code or math fence has its properties
+          ;; after the closing fence (inside the fence they would be code)
+          closing (when fence
+                    (some (fn [[i line]] (when (string/starts-with? (string/trim line) fence) i))
+                          (map-indexed vector (rest lines))))
+          lines (cond
+                  closing
+                  (let [[fenced after] (split-at (+ 2 closing) lines)]
+                    (concat fenced (drop-while simplified-property? after)))
+
+                  (simplified-property? (first lines))
                   (drop-while simplified-property? lines)
+
+                  :else
                   (cons (first lines)
                         (drop-while simplified-property? (rest lines))))]
       (string/join "\n" lines))
