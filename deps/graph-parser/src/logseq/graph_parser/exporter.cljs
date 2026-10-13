@@ -1118,8 +1118,10 @@
                      (when (or preserve-empty-properties?
                                (not (string/blank? val)))
                        [prop
-                       ;; handle float strings b/c graph-parser doesn't
-                        (or (parse-double val) val)])
+                       ;; handle float strings b/c graph-parser doesn't; only when the
+                       ;; number keeps the text (`0000.00000` or `2401.10000` stay text)
+                        (let [n (parse-double val)]
+                          (if (and n (= (str n) (string/trim val))) n val))])
                      [prop val])
                    [prop val])))
          (into {}))))
