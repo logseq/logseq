@@ -289,10 +289,26 @@
   [db b]
   (some? (:logseq.property/background-color (d/entity db (:db/id b)))))
 
+(defn- keep-line-start-backslashes
+  "A backslash the block's text has at the start of a line: mldoc reads it as an
+  escape and drops it (`\\TODO x` parses as the text `TODO x`), so the export
+  would lose it. Doubled, mldoc reads it as one literal backslash. Lines inside
+  a code fence are left alone."
+  [content]
+  (loop [[line & more] (string/split-lines content) in-fence? false acc []]
+    (if (nil? line)
+      (string/join "\n" acc)
+      (let [fence? (boolean (re-find #"^\s*```" line))
+            line' (if (and (not in-fence?) (not fence?))
+                    (string/replace-first line #"^(\s*)\\" "$1\\\\")
+                    line)]
+        (recur more (if fence? (not in-fence?) in-fence?) (conj acc line'))))))
+
 (defn- escape-block-markers-in-later-lines
-  "A later line of a block's text that starts with `- ` or a `#` heading marker
-  is shown by the block as a line of text, but in exported Markdown it would
-  start a new block or a heading. A backslash keeps it text (mldoc reads `\\- x`
+  "A later line of a block's text that starts with a list marker (`- `, `+ `),
+  a `#` heading marker or a quote (`>` followed by text) is shown by the
+  block as a line of text, but in exported Markdown it would start a new block,
+  a list, a heading or a quote. A backslash keeps it text (mldoc reads `\\- x`
   as the text `- x`). Lines inside a code fence are left alone."
   [content]
   (let [[first-line & more] (string/split-lines content)]
@@ -303,7 +319,8 @@
           (string/join "\n" acc)
           (let [fence? (boolean (re-find #"^\s*```" line))
                 line' (if (and (not in-fence?) (not fence?)
-                               (re-find #"^\s*(?:-(?:\s|$)|#+(?:\s|$))" line))
+                               ;; `* ` is left as is: the export writes such a list back as `* `
+                               (re-find #"^\s*(?:[-+](?:\s|$)|#+(?:\s|$)|>\s*\S)" line))
                         (let [[_ leading text] (re-matches #"(\s*)(.*)" line)]
                           (str leading "\\" text))
                         line)]
@@ -312,9 +329,9 @@
 (defn- escape-quote-marker-in-first-line
   "A block that is not a quote block but whose text starts with `>`: the export
   writes a quote block as `> text`, so without a backslash the two would be
-  read back the same."
+  read back the same. A lone `>` is text to mldoc and is left as is."
   [content]
-  (if (re-find #"^\s*>" content)
+  (if (re-find #"^\s*>\s*\S" content)
     (let [[_ leading text] (re-matches #"(?s)(\s*)(.*)" content)]
       (str leading "\\" text))
     content))
@@ -349,7 +366,7 @@
         property-spaces-tabs (str spaces-tabs "  ")
         content (if (and (:escape-block-markers? context)
                          (not (:logseq.property.node/display-type b)))
-                  (-> content escape-block-markers-in-later-lines escape-quote-marker-in-first-line)
+                  (-> content keep-line-start-backslashes escape-block-markers-in-later-lines escape-quote-marker-in-first-line)
                   content)
         content (if heading-to-list?
                   (strip-heading-prefix content)

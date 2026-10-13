@@ -22,16 +22,18 @@
          block-ast->simple-ast)
 
 (def ^:private block-title-start-markup
-  "Text at the start of a block's first line that mldoc reads as structure: a
-  heading, a quote or a task marker. mldoc gives plain text starting like this
-  only when it was escaped (`\\# x` parses as the text `# x`)."
-  #"^(?:#+(?:\s|$)|>|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
+  "Text at the start of a block's first line that the DB graph's mldoc reads as
+  structure: a heading, or a quote (`>` followed by text; a lone `>` is text).
+  Task words are not: DB graphs parse with `parse_marker false`. mldoc gives
+  plain text starting like this only when it was escaped (`\\# x` parses as the
+  text `# x`)."
+  #"^(?:#+(?:\s|$)|>\s*\S)")
 
 (def ^:private line-start-markup
-  "Text at the start of a later line of a block that mldoc reads as structure:
-  a heading, a list item, a quote, a task marker. mldoc gives plain text
-  starting like this only when it was escaped."
-  #"^(?:#+(?:\s|$)|[-*+](?:\s|$)|>|\d+[.)](?:\s|$)|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
+  "Text at the start of a later line of a block that the DB graph's mldoc reads
+  as structure: a heading, a list item, a quote (`>` followed by text). mldoc
+  gives plain text starting like this only when it was escaped."
+  #"^(?:#+(?:\s|$)|[-*+](?:\s|$)|>\s*\S|\d+[.)](?:\s|$))")
 
 (defn- escape-plain-start
   "The inlines with a backslash before a first plain inline matching markup, so

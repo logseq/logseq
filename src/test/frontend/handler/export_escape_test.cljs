@@ -23,6 +23,13 @@
    "line\n\\# not a heading on line 2"
    "line\n\\> not a quote"
    "1. numbered text"
+   "TODO plain text, not a task"
+   "line\nTODO on line 2"
+   "line\n>"
+   "line\n1. numbered on line 2"
+   ">"
+   "line\n\\TODO typed with a backslash"
+   "\\\\ two backslashes"
    "plain text"
    "line\n* a list inside the block"
    "line\n```\n- in a code fence\n```"])
@@ -33,6 +40,8 @@
   {"line\n- a dash line" "line\n\\- a dash line"
    "line\n  - an indented dash line" "line\n  \\- an indented dash line"
    "line\n# a hash line" "line\n\\# a hash line"
+   "line\n+ plus on line 2" "line\n\\+ plus on line 2"
+   "line\n> quote on line 2" "line\n\\> quote on line 2"
    "> a plain block starting with >" "\\> a plain block starting with >"})
 
 (def ^:private all-titles (into titles (keys unescaped-titles)))
