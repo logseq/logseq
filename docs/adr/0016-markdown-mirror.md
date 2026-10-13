@@ -211,14 +211,14 @@ builds do not have the same graph-directory filesystem guarantees.
    and keep the Logseq property marker, for example `* owner:: [[Alice]]`.
 6. Open default property values are exported as nested value blocks below the
    property key. Closed values remain inline with the property key.
-7. Node property values are exported as Logseq page references, for example
-   `[[Node title]]`, rather than block reference syntax.
-8. Task status is encoded on the block line, for example `- TODO ship`, and is
+7. Node property values that are pages are exported as Logseq page references, for example `[[Node title]]`. A node property value that is a block is exported as a block reference, `((uuid))`.
+8. A block that something points at (a block reference, a block embed, a node property value) carries an `id:: <uuid>` line right after its first line, so any reader of the files can resolve what points at it. Block references are exported as `((uuid))` and block embeds as `{{embed ((uuid))}}`; the embedded content stays in the target block's own file.
+9. Task status is encoded on the block line, for example `- TODO ship`, and is
    not exported as a separate property list item.
-9. Assets are referenced as normal exported Markdown references. This ADR does
+10. Assets are referenced as normal exported Markdown references. This ADR does
    not copy assets into `mirror/markdown/`.
-10. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
-11. Ambiguous page references caused by duplicate page titles are an accepted
+11. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
+12. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
 

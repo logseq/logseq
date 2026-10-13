@@ -59,6 +59,29 @@
        (map #(property-value->string db property % context))
        (string/join ", ")))
 
+(defn- block-node?
+  [entity]
+  (and (:block/uuid entity) (not (ldb/page? entity))))
+
+(defn- block-ref
+  [block-uuid]
+  (str "((" block-uuid "))"))
+
+(def ^:private uuid-page-ref-re
+  #"\[\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\]")
+
+(defn- uuid-refs->block-refs
+  "`[[uuid]]` of a block (not a page) as `((uuid))`: the block ref syntax a
+  Markdown reader resolves through the target's `id::` line."
+  [db content]
+  (if (string? content)
+    (string/replace content uuid-page-ref-re
+                    (fn [[whole id]]
+                      (if (block-node? (d/entity db [:block/uuid (uuid id)]))
+                        (block-ref id)
+                        whole)))
+    content))
+
 (defn- property-value->string
   [db property v context]
   (letfn [(entity-map [x]
@@ -75,8 +98,17 @@
                      (string? content)
                      (not (string/blank? content)))
               (page-ref/->page-ref content)
-              content))]
+              content))
+          (block-node-ref [x]
+            (when (and (:export-block-refs-as-uuid-refs? context)
+                       (= :node (:logseq.property/type property)))
+              (let [entity (some->> (:db/id (entity-map x)) (d/entity db))]
+                (when (block-node? entity)
+                  (block-ref (:block/uuid entity))))))]
     (cond
+      (block-node-ref v)
+      (block-node-ref v)
+
       (some? (entity-content v))
       (str (node-ref-content (entity-content v)))
 
@@ -110,10 +142,11 @@
               (map? x) x
               (de/entity? x) (into {} x)))]
     (if-let [id (:db/id (entity-map v))]
-      (db-content/recur-replace-uuid-in-block-title
-       (d/entity db id)
-       10
-       {:replace-block-refs? (not (:preserve-block-refs? context))})
+      (cond->> (db-content/recur-replace-uuid-in-block-title
+                (d/entity db id)
+                10
+                {:replace-block-refs? (not (:preserve-block-refs? context))})
+        (:export-block-refs-as-uuid-refs? context) (uuid-refs->block-refs db))
       (property-value->string db property v context))))
 
 (defn- property-value-children-content
@@ -220,10 +253,11 @@
 (defn- block-title-content
   [db b context]
   (or (property-value-block-content db b context)
-      (db-content/recur-replace-uuid-in-block-title
-       (d/entity db (:db/id b))
-       10
-       {:replace-block-refs? (not (:preserve-block-refs? context))})))
+      (cond->> (db-content/recur-replace-uuid-in-block-title
+                (d/entity db (:db/id b))
+                10
+                {:replace-block-refs? (not (:preserve-block-refs? context))})
+        (:export-block-refs-as-uuid-refs? context) (uuid-refs->block-refs db))))
 
 (defn- bounded-heading-level
   [heading level]
