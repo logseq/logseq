@@ -1159,8 +1159,66 @@ let () =
     dom_down_node := 0;
     dom_down_clicks := 0
   in
+  (* Mouse cursor: SDL never sets one, so the window inherited the X
+     root cursor (a black "X" on bare X servers) and showed no I-beam
+     over text or hand over links. Resolve the CSS-ish [cursor] prop
+     up the hovered path (editor sinks and text inputs read as text). *)
+  let cursor_cache = Hashtbl.create 8 in
+  let current_cursor = ref "" in
+  let sys_cursor name =
+    match Hashtbl.find_opt cursor_cache name with
+    | Some c -> Some c
+    | None ->
+      let kind =
+        match name with
+        | "pointer" -> Sdl.System_cursor.hand
+        | "text" -> Sdl.System_cursor.ibeam
+        | "not-allowed" -> Sdl.System_cursor.no
+        | "wait" | "progress" -> Sdl.System_cursor.waitarrow
+        | "col-resize" | "ew-resize" -> Sdl.System_cursor.size_we
+        | "row-resize" | "ns-resize" -> Sdl.System_cursor.size_ns
+        | "move" | "grab" | "grabbing" -> Sdl.System_cursor.size_all
+        | _ -> Sdl.System_cursor.arrow
+      in
+      (match Sdl.create_system_cursor kind with
+       | Ok c -> Hashtbl.replace cursor_cache name c; Some c
+       | Error _ -> None)
+  in
+  let cursor_for node =
+    let rec up id depth =
+      if id <= 0 || depth > 64 then "default"
+      else
+        let kind = Lui_store.kind store id in
+        match Lui_store.string_prop store id "cursor" with
+        | Some c when c <> "" && c <> "auto" && c <> "inherit" -> c
+        | _ ->
+          if kind = "extension:logseq-editor" || kind = "text-field"
+             || kind = "textarea" || kind = "input"
+             || kind = "search-field" || kind = "secure-field"
+          then "text"
+          else if kind = "link" || kind = "button" || kind = "menu-item"
+                  || kind = "toggle" || kind = "checkbox"
+          then "pointer"
+          else
+            match Lui_store.parent store id with
+            | Some p -> up p (depth + 1)
+            | None -> "default"
+    in
+    up node 0
+  in
+  let update_cursor node =
+    let name = cursor_for node in
+    if name <> !current_cursor then begin
+      current_cursor := name;
+      match sys_cursor name with
+      | Some c -> Sdl.set_cursor (Some c)
+      | None -> ()
+    end
+  in
+  ignore (sys_cursor "default" |> Option.map (fun c -> Sdl.set_cursor (Some c)));
   let on_dom_motion ~x ~y ~rx ~ry ~mods =
     let node = dom_hit ~x:(float x) ~y:(float y) in
+    update_cursor node;
     let now = Unix.gettimeofday () in
     let last_node, last_t = !last_move_emit in
     let skip =
