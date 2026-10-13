@@ -142,6 +142,9 @@
 
 ;; ---- import result / import file reading ----
 
+;; Fails if, in `org-file?`, the body becomes `nil`.
+;; Fails if, in `compact-error-notification`, the body becomes `nil`, the `:msg` key is dropped or the `:level` key is dropped.
+;; Fails if, in `compact-import-result`, `=` becomes `not=` or the `:count` key is dropped.
 (deftest compact-import-result-counts-and-logs-test
   (let [compact @#'db-core/compact-import-result
         out (atom nil)
@@ -166,6 +169,7 @@
             {:import-validation-errors {:count 4}}]
            messages))))
 
+;; Fails if, in `compact-import-result`, `seq` becomes `empty?`, `when` becomes `when-not`, the `:ignored-assets-count` key is dropped or the `:notifications` key is dropped.
 (deftest compact-import-result-logs-nothing-when-clean-test
   (let [compact @#'db-core/compact-import-result
         out (atom nil)
@@ -180,6 +184,8 @@
            @out))
     (is (= [] messages))))
 
+;; Fails if, in `<request-import-file`, the `:timeout-ms` key is dropped or the `:hint` key is dropped.
+;; Fails if, in `<read-import-file-content`, the `:path` key is dropped.
 (deftest read-import-file-content-sources-test
   (async done
     (let [read-content @#'db-core/<read-import-file-content
@@ -212,6 +218,7 @@
               (is (= {:path 5} (ex-data (second missing-all))))))))
        done))))
 
+;; Fails if, in `import-file-payload`, the body becomes `nil`.
 (deftest import-file-payload-normalizes-binary-inputs-test
   (let [payload @#'db-core/import-file-payload
         data (js/Uint8Array. #js [1 2])]
@@ -222,6 +229,7 @@
     (is (= [3 4] (vec (payload #js [3 4]))))
     (is (nil? (payload "text")))))
 
+;; Fails if, in `set-import-ui-state!`, the `(p/catch (fn [_error] nil))` step is dropped.
 (deftest set-import-ui-state-ignores-main-thread-failure-test
   (async done
     (finish!
@@ -233,6 +241,7 @@
 
 ;; ---- sqlite storage ----
 
+;; Fails if, in `restore-data-from-addr`, `and` becomes `or`.
 (deftest restore-data-from-addr-merges-addresses-only-into-map-data-test
   (let [restore db-core/restore-data-from-addr
         db-for (fn [row] #js {:exec (fn [_] #js [row])})
@@ -244,6 +253,7 @@
     (is (= {:a 1} no-addresses))
     (is (= [1 2 3] non-map))))
 
+;; Fails if, in `init-sqlite-module!`, the body becomes `nil`, `when-not` becomes `when` or `or` becomes `and`.
 (deftest init-sqlite-module-initializes-once-test
   (async done
     (finish!
@@ -269,18 +279,21 @@
                 (is (false? @db-core/*publishing?))))))))
      done)))
 
+;; Fails if, in `checkpoint-db!`, the body becomes `nil`.
 (deftest checkpoint-db-single-arity-runs-wal-checkpoint-test
   (let [calls (atom [])
         db #js {:exec (fn [sql] (swap! calls conj sql))}]
     (#'db-core/checkpoint-db! db)
     (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @calls))))
 
+;; Fails if, in `disable-sqlite-auto-checkpoint!`, the body becomes `nil`.
 (deftest disable-sqlite-auto-checkpoint-test
   (let [calls (atom [])
         db #js {:exec (fn [sql] (swap! calls conj sql))}]
     (#'db-core/disable-sqlite-auto-checkpoint! db)
     (is (= ["PRAGMA wal_autocheckpoint=0"] @calls))))
 
+;; Fails if, in `schedule-wal-checkpoint!`, the body becomes `nil`.
 (deftest schedule-wal-checkpoint-cancels-previous-timer-test
   (async done
     (let [timers @#'db-core/*wal-checkpoint-timers
@@ -294,6 +307,7 @@
                        (swap! timers dissoc repo)
                        (done)))))))
 
+;; Fails if, in `run-client-ops-cleanup!`, the body becomes `nil`.
 (deftest run-client-ops-cleanup-passes-protected-tx-ids-test
   (let [calls (atom [])]
     (with-redefs [worker-undo-redo/referenced-history-tx-ids (fn [_repo] #{7})
@@ -303,6 +317,7 @@
 
 ;; ---- export / remove ----
 
+;; Fails if, in `<export-db-file-with-paths`, the `(filter string?)` step is dropped, the `(remove string/blank?)` step is dropped or the `distinct` step is dropped.
 (deftest export-db-file-with-paths-filters-and-dedupes-paths-test
   (async done
     (finish!
@@ -318,6 +333,7 @@
             (is (= ["a" "b"] @paths))))))
      done)))
 
+;; Fails if, in `(top level)`, the `.-filename` step is dropped.
 (deftest export-client-ops-db-binary-tries-the-db-filename-first-test
   (async done
     (finish!
@@ -335,6 +351,7 @@
             (is (= ["mut3-client-ops.sqlite"] @paths))))))
      done)))
 
+;; Fails if, in `remove-vfs!`, the body becomes `nil` or `when` becomes `when-not`.
 (deftest remove-vfs-passes-existing-pool-only-test
   (let [removed (atom [])]
     (restoring-state
@@ -345,6 +362,7 @@
        (#'db-core/remove-vfs! :pool)
        (is (= [:pool] @removed))))))
 
+;; Fails if, in `(top level)`, the `:code` key is dropped or the `:repo` key is dropped.
 (deftest backup-db-sqlite-errors-carry-code-and-repo-test
   (restoring-state
    (fn []
@@ -355,6 +373,7 @@
        (let [unsupported (try (backup repo "/tmp/x") (catch :default e e))]
          (is (= {:code :backup-not-supported :repo repo} (ex-data unsupported))))))))
 
+;; Fails if, in `remote-binary-function`, `if` becomes `if-not`.
 (deftest remote-binary-function-transfers-uint8array-results-test
   (async done
     (let [f (get db-core/fns "remoteInvokeBinary")
@@ -388,6 +407,7 @@
 
 ;; ---- invalidate search db / get-dbs ----
 
+;; Fails if, in `<invalidate-search-db!`, the body becomes `nil`.
 (deftest invalidate-search-db-truncates-open-search-db-test
   (async done
     (finish!
@@ -403,6 +423,7 @@
               (is (= [[:table :search-db] [:vector :vector-index]] @truncated)))))))
      done)))
 
+;; Fails if, in `<invalidate-search-db!`, `when-not` becomes `when`, the `:sqlite` key is dropped, the `:pool` key is dropped, the `:path` key is dropped or the `:mode` key is dropped.
 (deftest invalidate-search-db-opens-and-closes-search-db-when-not-open-test
   (async done
     (finish!
@@ -432,6 +453,7 @@
                 (is (= 1 (count @opens)))))))))
      done)))
 
+;; Fails if, in `get-dbs`, `when` becomes `when-not`, `and` becomes `or`, `some?` becomes `nil?`, the `:sqlite` key is dropped, the `:pool` key is dropped, the `:path` key is dropped or the `:dimension` key is dropped.
 (deftest get-dbs-opens-three-dbs-and-unpauses-empty-pool-test
   (async done
     (finish!
@@ -482,6 +504,7 @@
                 (is (= 1 @unpaused))))))))
      done)))
 
+;; Fails if, in `get-dbs`, the `:sqlite` key is dropped, the `:path` key is dropped or the `:mode` key is dropped.
 (deftest get-dbs-when-publishing-opens-two-in-memory-dbs-test
   (async done
     (finish!
@@ -506,6 +529,8 @@
 
 ;; ---- built-in sync repair ----
 
+;; Fails if, in `stable-built-in-sync-repair-item`, `and` becomes `or`.
+;; Fails if, in `built-in-sync-repair-tx-data`, the `(map (fn [b] (assoc b :logseq.propert...` step is dropped, `true` becomes `false`, `:db/ident` becomes `:db/missing-connection`, the `:db/ident` key is dropped, `and` becomes `or` or `first` becomes `last`.
 (deftest built-in-sync-repair-tx-data-orders-and-marks-built-in-items-test
   (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
         items (filterv #(and (map? %) (:block/uuid %)) tx-data)
@@ -523,6 +548,7 @@
             :when (not (contains? unordered (:db/ident item)))]
       (is (= order (:block/order item)) (pr-str (:db/ident item))))))
 
+;; Fails if, in `enqueue-built-in-sync-repair!`, the `:undo-redo` key is dropped, the `:forward-outliner-ops` key is dropped, the `:inverse-outliner-ops` key is dropped, the `:inferred-outliner-ops?` key is dropped or the `:reversed-tx-data` key is dropped.
 (deftest enqueue-built-in-sync-repair-upserts-pending-fix-entry-test
   (let [upserts (atom [])
         adjusts (atom [])]
@@ -638,6 +664,7 @@
   (<open-graph! repo (assoc open-opts
                             :invoke (fn [] ((get-thread-api :thread-api/create-or-open-db) repo create-opts)))))
 
+;; Fails if, in `<create-or-open-db!`, `or` becomes `and`, `when` becomes `when-not`, `filter` becomes `remove`, `:db/ident` becomes `:db/missing-connection`, `=` becomes `not=`, `:db/add` becomes `:db/ident`, the `(filter #(contains? ident-eids (:e %)))` step is dropped, the `(partition-all batch-size)` step is dropped or `remove` becomes `filter`.
 (deftest open-with-datoms-bootstraps-idents-before-other-datoms-test
   (async done
     (finish!
@@ -656,6 +683,7 @@
             (is (empty? handled))))))
      done)))
 
+;; Fails if, in `<create-or-open-db!`, `when` becomes `when-not` or the `(map to-tx)` step is dropped.
 (deftest open-with-debug-transit-raw-bootstraps-from-its-datoms-test
   (async done
     (finish!
@@ -670,6 +698,7 @@
                    (:block/title (d/entity @conn [:block/uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]))))))))
      done)))
 
+;; Fails if, in `debug-transit-raw->datoms`, the body becomes `nil` or `if` becomes `if-not`.
 (deftest debug-transit-raw->datoms-reads-datoms-and-dbs-test
   (let [->datoms @#'db-core/debug-transit-raw->datoms
         conn (d/create-conn db-schema/schema)
@@ -680,6 +709,7 @@
     (is (= [[1 :a 2]] from-vector))
     (is (= db-datoms (mapv (juxt :e :a :v) from-db)))))
 
+;; Fails if, in `bootstrap-transact!`, the `:initial-db?` key is dropped or `true` becomes `false`.
 (deftest bootstrap-transact-marks-initial-db-and-skips-empty-test
   (let [conn (d/create-conn db-schema/schema)
         metas (atom [])]
@@ -688,6 +718,7 @@
     (#'db-core/bootstrap-transact! conn [{:block/uuid #uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd"}])
     (is (= [{:initial-db? true}] @metas))))
 
+;; Fails if, in `<create-or-open-db!`, `nil?` becomes `some?`, `when` becomes `when-not`, `:logseq.class/Root` becomes `:logseq.class/Comment`, `and` becomes `or`, `:logseq.kv/db-type` becomes `:logseq.kv/graph-remote?` or `=` becomes `not=`.
 (deftest open-existing-graph-skips-initial-data-test
   (async done
     (finish!
@@ -716,6 +747,7 @@
               (is (seq (:tx-data (second (first (:handled result))))) (pr-str label)))))))
      done)))
 
+;; Fails if, in `<create-or-open-db!`, `when` becomes `when-not` or `when-not` becomes `when`.
 (deftest open-fresh-graph-creates-kvs-tables-and-client-ops-schema-test
   (async done
     (finish!
@@ -731,6 +763,7 @@
           (is (= {repo :vector-index} (:vector-indexes with-vector))))))
      done)))
 
+;; Fails if, in `<create-or-open-db!`, `when` becomes `when-not`, `and` becomes `or` or `nil?` becomes `some?`.
 (deftest open-creating-remote-graph-initializes-local-tx-test
   (async done
     (finish!
@@ -747,6 +780,7 @@
             (is (= [] (:local-tx-updates not-remote)))))))
      done)))
 
+;; Fails if, in `<create-or-open-db!`, `if` becomes `if-not`.
 (deftest open-existing-remote-graph-repairs-only-without-migration-test
   (async done
     (finish!
@@ -766,6 +800,7 @@
             (is (= [[repo :report-1] [repo :report-2]] (mapv (fn [[r x]] [r (if (keyword? x) x :initial-data)]) (:handled migrated))))))))
      done)))
 
+;; Fails if, in `(top level)`, the `:import-type` key is dropped.
 (deftest import-db-binary-restarts-db-with-import-type-test
   (async done
     (finish!
@@ -780,6 +815,7 @@
 
 ;; ---- start-db / thread apis ----
 
+;; Fails if, in `db-sync-dbs-open?`, `and` becomes `or`, the body becomes `nil` or `some?` becomes `nil?`.
 (deftest db-sync-dbs-open-needs-both-conns-test
   (let [open? @#'db-core/db-sync-dbs-open?]
     (restoring-state
@@ -796,6 +832,7 @@
   [closed]
   (reset! worker-state/*sqlite-conns {"mut3-other" {:db (fake-db {:closed closed :label :other})}}))
 
+;; Fails if, in `(top level)`, the `:close-other-db?` key is dropped.
 (deftest db-sync-start-keeps-other-dbs-open-test
   (async done
     (finish!
@@ -811,6 +848,7 @@
               (is (= [] @closed)))))))
      done)))
 
+;; Fails if, in `start-db!`, `when` becomes `when-not`.
 (deftest start-db-closes-other-dbs-unless-told-not-to-test
   (async done
     (finish!
@@ -826,6 +864,7 @@
               (is (= [:other] @closed)))))))
      done)))
 
+;; Fails if, in `on-become-master`, `when-not` becomes `when`.
 (deftest on-become-master-skips-start-db-for-imports-test
   (async done
     (finish!
@@ -839,6 +878,7 @@
               (is (= [] @closed)))))))
      done)))
 
+;; Fails if, in `(top level)`, `when-not` becomes `when` or the `:schema` key is dropped.
 (deftest create-or-open-db-resets-deleted-uuids-only-when-graph-switches-test
   (async done
     (finish!
@@ -859,6 +899,7 @@
               (is (= {} @worker-state/*deleted-block-uuid->db-id)))))))
      done)))
 
+;; Fails if, in `(top level)`, `:db/missing-connection` becomes `:db/add`, the `:type` key is dropped or the `:repo` key is dropped.
 (deftest create-or-open-db-rejects-without-connection-test
   (async done
     (finish!
@@ -870,6 +911,7 @@
             (is (= {:type :db/missing-connection :repo repo} (ex-data error)))))))
      done)))
 
+;; Fails if, in `(top level)`, `:thread-api/unsafe-unlink-db` becomes `:thread-api/backup-db-sqlite`, the `:reason` key is dropped, the `:repo` key is dropped or `:thread-api/db-sync-close-db` becomes `:thread-api/db-sync-import-finalize`.
 (deftest close-apis-cancel-ui-requests-with-their-reason-test
   (async done
     (finish!
@@ -900,6 +942,7 @@
           :proxy #js {}}
          extra))
 
+;; Fails if, in `<init-service!`, `and` becomes `or`.
 (deftest init-service-closes-previous-graph-only-when-switching-test
   (async done
     (finish!
@@ -921,6 +964,7 @@
               (is (= ["mut3-a"] @closed)))))))
      done)))
 
+;; Fails if, in `<init-service!`, the `:import?` key is dropped, `some?` becomes `nil?` or `when` becomes `when-not`.
 (deftest init-service-passes-import-flag-and-stores-ready-service-test
   (async done
     (finish!
@@ -940,6 +984,7 @@
               (is (= [{:import? true} {:import? false}] (mapv last @create-args))))))))
      done)))
 
+;; Fails if, in `notify-invalid-data`, the `:i18n-key` key is dropped, the `:error` key is dropped, the `:payload` key is dropped, the `:extra` key is dropped, the `:errors` key is dropped or the `:tx-meta` key is dropped.
 (deftest notify-invalid-data-broadcasts-and-captures-error-test
   (let [broadcasts (atom [])
         posts (atom [])]
@@ -960,6 +1005,7 @@
                         :tx-meta {:some "data"}}}
                (dissoc payload :error)))))))
 
+;; Fails if, in `build-proxy-object`, `when` becomes `when-not` or the `:client-id` key is dropped.
 (deftest build-proxy-object-records-worker-client-id-test
   (async done
     (finish!
@@ -990,6 +1036,7 @@
                 (is (= [] @posts))))))))
      done)))
 
+;; Fails if, in `build-proxy-object`, `:thread-api/sync-app-state` becomes `:thread-api/unsafe-unlink-db`.
 (deftest build-proxy-object-runs-sync-app-state-without-waiting-for-service-test
   (async done
     (let [direct-calls (atom [])

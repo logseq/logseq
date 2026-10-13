@@ -122,6 +122,7 @@
 
 ;; ---------------------------------------------------------------- wrappers
 
+;; Fails if, in `sync-counts`, the body becomes `nil`, the `:get-client-ops-conn` key is dropped, the `:get-pending-local-tx-count` key is dropped, the `:get-missing-asset-upload-files` key is dropped, the `:get-local-checksum` key is dropped, the `:latest-remote-tx` key is dropped or the `:latest-remote-checksum` key is dropped.
 (deftest sync-counts-hands-the-worker-accessors-to-presence-test
   (let [orig-tx @sync-apply/*repo->latest-remote-tx
         orig-checksum @sync-apply/*repo->latest-remote-checksum]
@@ -145,18 +146,7 @@
         (reset! sync-apply/*repo->latest-remote-tx orig-tx)
         (reset! sync-apply/*repo->latest-remote-checksum orig-checksum)))))
 
-(deftest presence-wrappers-delegate-to-sync-presence-test
-  (async done
-         (finish
-          (p/let [{:keys [result calls]} (<spied {} (fn []
-                                                      (#'sync-handle-message/update-online-users! :client [:u1])
-                                                      (#'sync-handle-message/current-client repo)))]
-            (is (= :current-client-result result))
-            (is (= [[:update-online-users :client [:u1]]
-                    [:current-client worker-state/*db-sync-client repo]]
-                   calls)))
-          done)))
-
+;; Fails if, in `enqueue-send-task!`, the `(p/catch (fn [_] nil))` step is dropped.
 (deftest enqueue-send-task-runs-the-task-after-earlier-failures-test
   (async done
          (let [ran* (atom 0)
@@ -173,6 +163,7 @@
               (is (= 3 @ran*)))
             done))))
 
+;; Fails if, in `enqueue-send-task!`, `or` becomes `and`.
 (deftest enqueue-send-task-runs-a-task-after-the-previous-one-finishes-test
   (async done
          (let [events (atom [])
@@ -192,6 +183,7 @@
               (is (= [:first-start :first-end :second-start] @events)))
             done))))
 
+;; Fails if, in `enqueue-send-task!`, the `(p/catch (fn [error]` step is dropped.
 (deftest enqueue-send-task-swallows-a-failing-task-test
   (async done
          (let [queue (atom nil)]
@@ -207,6 +199,8 @@
 (defn- thrown [f]
   (try (f) nil (catch :default e e)))
 
+;; Fails if, in `require-number`, the body becomes `nil` or `:db-sync/invalid-field` becomes `:db-sync/missing-field`.
+;; Fails if, in `require-seq`, the body becomes `nil`.
 (deftest require-fns-fail-fast-with-the-context-and-value-test
   (doseq [[require-f bad good] [[#'sync-handle-message/require-number "x" 1]
                                 [#'sync-handle-message/require-non-negative "x" 0]
@@ -222,6 +216,7 @@
 
 ;; ------------------------------------------------------------- request-pull!
 
+;; Fails if, in `request-pull!`, `and` becomes `or`.
 (deftest request-pull-sends-only-over-an-open-ws-test
   (async done
          (finish
@@ -238,6 +233,7 @@
             (is (= [] (calls-of (:calls closes-before-send) :send))))
           done)))
 
+;; Fails if, in `pending-local-tx?`, `or` becomes `and` or the body becomes `nil`.
 (deftest pending-local-tx-is-true-only-for-a-positive-count-test
   (async done
          (finish
@@ -249,6 +245,7 @@
 
 ;; ------------------------------------------------------ verify-sync-checksum!
 
+;; Fails if, in `verify-sync-checksum!`, the `:type` key is dropped, the `:repo` key is dropped, the `:local-tx` key is dropped, the `:remote-tx` key is dropped or `:db-sync/checksum-mismatch` becomes `:db-sync/handle-hello`.
 (deftest verify-sync-checksum-logs-a-mismatch-only-when-in-sync-test
   (async done
          (finish
@@ -273,6 +270,7 @@
 
 ;; -------------------------------------------------------- handle-tx-reject!
 
+;; Fails if, in `handle-tx-reject!`, `when` becomes `when-not`, `and` becomes `or`, `seq` becomes `empty?`, `some?` becomes `nil?`, the `(filter inflight-set)` step is dropped, the `vec` step is dropped, the `:repo` key is dropped, the `:message-type` key is dropped or `:db-sync/tx-rejected` becomes `:db-sync/checksum-mismatch`.
 (deftest handle-tx-reject-marks-inflight-txs-and-fails-with-the-reject-data-test
   (async done
          (finish
@@ -326,6 +324,9 @@
             (is (= [] (calls-of (:calls stale) :rollback-and-mark-failed))))
           done)))
 
+;; Fails if, in `require-seq`, `:db-sync/invalid-field` becomes `:db-sync/missing-field`.
+;; Fails if, in `require-uuid`, the body becomes `nil` or `:db-sync/invalid-field` becomes `:db-sync/missing-field`.
+;; Fails if, in `handle-tx-reject!`, `:db-sync/missing-field` becomes `:db-sync/response-parse-failed`, the `:repo` key is dropped, the `:type` key is dropped, the `:field` key is dropped or the `:reason` key is dropped.
 (deftest handle-tx-reject-validates-the-message-fields-test
   (async done
          (finish
@@ -355,6 +356,9 @@
 
 ;; ------------------------------------------------------------- other handlers
 
+;; Fails if, in `handle-hello!`, `when` becomes `when-not`, `>` becomes `>=`, the body becomes `nil`, the `:repo` key is dropped, the `:type` key is dropped, the `:enqueue-asset-task-f` key is dropped, the `:current-client-f` key is dropped, the `:broadcast-rtc-state!-f` key is dropped or the `:fail-fast-f` key is dropped.
+;; Fails if, in `current-client`, the body becomes `nil`.
+;; Fails if, in `require-non-negative`, the body becomes `nil` or `:db-sync/invalid-field` becomes `:db-sync/missing-field`.
 (deftest handle-hello-requests-a-pull-and-enqueues-asset-and-flush-work-test
   (async done
          (finish
@@ -377,6 +381,8 @@
                    (error-info (:result negative)))))
           done)))
 
+;; Fails if, in `handle-online-users!`, `when` becomes `when-not`, `and` becomes `or`, `some?` becomes `nil?`, `not` becomes `identity`, `or` becomes `and`, the body becomes `nil`, `:db-sync/invalid-field` becomes `:db-sync/missing-field`, the `:repo` key is dropped, the `:type` key is dropped or the `:field` key is dropped.
+;; Fails if, in `update-online-users!`, the body becomes `nil`.
 (deftest handle-online-users-validates-and-defaults-users-test
   (async done
          (finish
@@ -390,6 +396,7 @@
             (is (= [] (:calls invalid))))
           done)))
 
+;; Fails if, in `handle-tx-batch-ok!`, the `:repo` key is dropped or the `:type` key is dropped.
 (deftest handle-tx-batch-ok-advances-local-tx-and-flushes-test
   (async done
          (finish
@@ -407,6 +414,7 @@
                    (error-info (:result negative)))))
           done)))
 
+;; Fails if, in `handle-changed!`, `<` becomes `<=`, the `:repo` key is dropped or the `:type` key is dropped.
 (deftest handle-changed-requests-a-pull-only-when-behind-test
   (async done
          (finish
@@ -421,6 +429,7 @@
 
 ;; ------------------------------------------------- latest remote state, routing
 
+;; Fails if, in `update-latest-remote-state!`, `and` becomes `or`, `<` becomes `<=`, the `:stale-remote-tx?` key is dropped or the `:latest-remote-tx-before` key is dropped.
 (deftest update-latest-remote-state-tracks-staleness-test
   (let [orig-tx @sync-apply/*repo->latest-remote-tx
         orig-checksum @sync-apply/*repo->latest-remote-checksum]
@@ -444,6 +453,7 @@
         (reset! sync-apply/*repo->latest-remote-tx orig-tx)
         (reset! sync-apply/*repo->latest-remote-checksum orig-checksum)))))
 
+;; Fails if, in `validate-local-tx!`, `when` becomes `when-not`, `and` becomes `or`, the body becomes `nil`, the `:repo` key is dropped, the `:message-type` key is dropped or the `:local-tx` key is dropped.
 (deftest validate-local-tx-rejects-invalid-local-tx-for-sync-messages-test
   (let [error (thrown #(#'sync-handle-message/validate-local-tx! repo {:type "hello"} -1))]
     (is (= "Invalid local tx" (ex-message error)))
@@ -453,6 +463,7 @@
   (is (nil? (thrown #(#'sync-handle-message/validate-local-tx! repo {:type "hello"} 0))))
   (is (nil? (thrown #(#'sync-handle-message/validate-local-tx! repo {:type "pong"} -1)))))
 
+;; Fails if, in `handle-message!`, `:db-sync/response-parse-failed` becomes `:db-sync/send-queue-task-failed`, the `:repo` key is dropped or the `:raw` key is dropped.
 (deftest handle-message-fails-fast-on-unparseable-messages-test
   (async done
          (finish
@@ -468,6 +479,8 @@
                 {:t t :outliner-op op :tx (sqlite-util/write-transit-str tx-data)})
               txs)})
 
+;; Fails if, in `handle-pull-ok!`, `>` becomes `>=`, `when` becomes `when-not`, `and` becomes `or`, `nil?` becomes `some?`, `if` becomes `if-not`, the `:t` key is dropped, the `:outliner-op` key is dropped, the `(p/then (fn [_]` step is dropped, the `(p/catch (fn [error]` step is dropped, `:db-sync/missing-field` becomes `:db-sync/response-parse-failed`, the `:repo` key is dropped, the `:field` key is dropped or the `:type` key is dropped.
+;; Fails if, in `verify-sync-checksum!`, the `:message-type` key is dropped.
 (deftest handle-pull-ok-applies-remote-txs-and-updates-state-test
   (async done
          (finish
@@ -512,6 +525,7 @@
             (is (= [] (calls-of (:calls up-to-date) :ensure-aes-key))))
           done)))
 
+;; Fails if, in `handle-pull-ok!`, the `:repo` key is dropped, the `:type` key is dropped or the `:field` key is dropped.
 (deftest handle-pull-ok-validates-its-input-test
   (async done
          (finish
