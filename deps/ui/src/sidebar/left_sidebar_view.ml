@@ -16,6 +16,16 @@ module P = Lui_protocol
 
 let t = Sidebar_state.t
 
+(* Column/row kinds admit Press but do not set press-enabled unless
+   asked. Without it the deepest text node swallows the click and
+   [on_press_detail] on the row never runs — the sidebar page click
+   draws a pointer and stays put. *)
+let arm_press (elem : Lui_elements.t) : Lui_elements.t =
+ fun ctx parent ->
+  let node = elem ctx parent in
+  enable ctx node P.PressEnabled;
+  node
+
 
 (* component icon: tabler names go through the `app:` registry (the only
    cljs name matching a builtin is chevron-right). The `ui__icon` class
@@ -607,48 +617,51 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
      navigate; shift opens in the right sidebar). The data-lp-* attrs
      still feed the document-level contextmenu handler in
      sidebar_state. *)
+  (* A real `url:"#"` link races the column press: the host follows
+     "#" and stomps the programmatic page hash. The column is
+     press-enabled so the click lands here instead of on the title
+     text; the dots button is a deeper press target and owns its menu. *)
+  let open_lp d =
+    (* cljs anchors the dots dropdown to the button element,
+       not the press point *)
+    let ax, atop, abot =
+      match
+        Option.bind (Ui_services.dom_element_at d.Lui_protocol.x d.y)
+          (fun hit ->
+            match hit.Ui_services.closest ".sidebar-page-actions" with
+            | Some btn -> Some btn
+            | None -> Some hit)
+      with
+      | Some btn -> Popups_state.anchor_of_el btn
+      | None ->
+        Popups_state.anchor_at_point ~x:d.Lui_protocol.x ~y:d.y
+    in
+    Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax ~atop
+      ~abot
+  in
+  let go_page shift =
+    (* navigate by title: #/page/<uuid> hashes hit the
+       Router.page_ref lookup-ref bug (see sidebar_state). *)
+    if shift then
+      match p.Model.page_uuid with
+      | Some u -> Sidebar_state.open_uuid st u
+      | None -> ()
+    else
+      Sidebar_state.navigate_to_page
+        (match p.Model.page_title with
+         | "" -> Option.value p.Model.page_uuid ~default:""
+         | title -> title)
+  in
   Ui_components.with_props
-    ([ Ui_components.Prop.font_weight 500 ]
+    ([ Ui_components.Prop.font_weight 500
+     ; Ui_components.Prop.cursor `pointer ]
      @ if recent then [ Ui_components.Prop.user_select `none ] else [])
+    (arm_press
     (column ~key ~style_class:li_class
        ~on_press_detail:(fun ev ->
       match ev with
       | Lui_protocol.PressDetail (_, d) ->
-          let cls = d.Lui_protocol.target_class in
-          if
-            Str_util.contains cls "sidebar-page-actions"
-            || Str_util.contains cls "ls-icon-dots"
-          then (
-            (* cljs anchors the dots dropdown to the button element,
-               not the press point *)
-            let ax, atop, abot =
-              match
-                Option.bind (Ui_services.dom_element_at d.x d.y)
-                  (fun hit ->
-                    match
-                      hit.Ui_services.closest ".sidebar-page-actions"
-                    with
-                    | Some btn -> Some btn
-                    | None -> Some hit)
-              with
-              | Some btn -> Popups_state.anchor_of_el btn
-              | None -> Popups_state.anchor_at_point ~x:d.x ~y:d.y
-            in
-            Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax
-              ~atop ~abot)
-          else
-            let shift = d.Lui_protocol.modifiers land 2 <> 0 in
-            (* navigate by title: #/page/<uuid> hashes hit the
-               Router.page_ref lookup-ref bug (see sidebar_state). *)
-            if shift then
-              match p.Model.page_uuid with
-              | Some u -> Sidebar_state.open_uuid st u
-              | None -> ()
-            else
-              Sidebar_state.navigate_to_page
-                (match p.Model.page_title with
-                 | "" -> Option.value p.Model.page_uuid ~default:""
-                 | title -> title)
+          go_page (d.Lui_protocol.modifiers land 2 <> 0)
       | _ -> ())
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative
@@ -656,7 +669,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         ; Ui_components.Prop.hover_opacity 1.
         ; Ui_components.Prop.hover_background
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
-        (link ~url:"#" ~target:`self_ ~style_class:"link-item group"
+        (row ~cross:`center ~main:`space_between
+           ~style_class:"link-item group"
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
              [ ("data-lp-ref", lp_ref)
@@ -672,12 +686,12 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
                [] ])
-        (* cljs .sidebar-page-actions dots button inside .link-item —
-           its class hooks (sidebar-page-actions, ls-icon-dots) still
-           reach the row's target_class check *)
+        (* Dots are a deeper press target than the row, so the click
+           never reaches the column's press-detail. *)
         ; Ui_components.with_props
             [ Ui_components.Prop.position `absolute
             ; Ui_components.Prop.inset_top 0.
+            ; Ui_components.Prop.inset_right 4.
             ; Ui_components.Prop.cursor `pointer
             ; Ui_components.Prop.user_select `none
             ; Ui_components.Prop.opacity 0.4
@@ -689,13 +703,20 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
             (button ~variant:`ghost ~size:`icon
                ~label:(t "ui/show-more")
-               ~height:28 ~padding_vertical:4 ~corner_radius:4
+               ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
                ~padding_horizontal:6
                ~style_class:"sidebar-page-actions ui__button"
+               (* press-enabled so this button, not the row, takes the
+                  click. The detail handler anchors the menu. *)
+               ~on_press:(fun _ -> ())
+               ~on_press_detail:(fun ev ->
+                 match ev with
+                 | Lui_protocol.PressDetail (_, d) -> open_lp d
+                 | _ -> ())
                ~data_attrs:
                  [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
                [ Icons.icon ~size:18. "dots" ])
-        ])
+        ]))
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always

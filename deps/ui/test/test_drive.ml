@@ -374,7 +374,14 @@ let test_left_sidebar () =
   let fav_items = find_where (fun n -> has_tok n "favorite-item") in
   let rec_items = find_where (fun n -> has_tok n "recent-item") in
   check "favorite-item row" (fav_items <> []);
-  check "recent-item row" (rec_items <> [])
+  check "recent-item row" (rec_items <> []);
+  (* a hash link races navigate_to_page; the row must not be url "#" *)
+  check "recent page row is not a hash link"
+    (not
+       (List.exists
+          (fun n ->
+            subtree_contains n (fun c -> M.string_prop c "url" = Some "#"))
+          rec_items))
 
 (* ---------------- right sidebar ---------------- *)
 
