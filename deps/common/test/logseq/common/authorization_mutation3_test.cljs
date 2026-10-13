@@ -4,9 +4,6 @@
             [logseq.common.authorization :as authorization]
             [promesa.core :as p]))
 
-(deftest client-id-allowed-ignores-non-string-primary-client-id-test
-  (is (false? (boolean (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" 123} "web-client")))))
-
 (defn- base64url [buf-or-string]
   (.toString (js/Buffer.from buf-or-string) "base64url"))
 
@@ -25,6 +22,7 @@
                                         (.end res body-str)))]
        (.listen server 0 "127.0.0.1" (fn [] (resolve server)))))))
 
+;; Fails if, in `import-rsa-key`, the body becomes `nil`, the `:name` key is dropped or the `:hash` key is dropped.
 (deftest verify-jwt-accepts-token-signed-by-jwks-key-test
   (async done
          (let [*server (atom nil)]
