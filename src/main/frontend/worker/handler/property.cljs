@@ -378,11 +378,7 @@
                                  (:block/name property))]
                (cond-> display-property
                  raw-title
-                 (assoc :block/raw-title raw-title)
-
-                 (:logseq.property/deleted-at property)
-                 (assoc :logseq.property/deleted-at
-                        (:logseq.property/deleted-at property)))))))))
+                 (assoc :block/raw-title raw-title))))))))
 
 (def-thread-api :thread-api/get-all-properties
   [repo opts]
@@ -821,12 +817,9 @@
 (defn- render-bottom-position-property?
   [db property]
   (let [property-id (:db/ident property)
-        property-type (:logseq.property/type property)
-        node-many? (and (= :node property-type)
-                        (= :db.cardinality/many (:db/cardinality property)))]
+        property-type (:logseq.property/type property)]
     (and (not (contains? #{:url :asset} property-type))
-         (or node-many?
-             (not= :default property-type)
+         (or (not= :default property-type)
              (property-has-closed-values? db property))
          (not (render-schema-or-tag-related-property? property-id)))))
 
