@@ -254,6 +254,16 @@
       true
       (#(reduce conj! % ast-coll)))))
 
+(defn- heading-before-embed!
+  "Before the first embed in a block's line, text before the embed stays the
+  block's own heading line, so it keeps the block's bullet instead of being
+  joined to the block above as a paragraph. A block that is only an embed is
+  replaced by the embedded content, as before. Returns blocks-tcoll."
+  [blocks-tcoll heading-exist? inlines-before ast-content]
+  (if (or heading-exist? (empty? inlines-before))
+    blocks-tcoll
+    (conj! blocks-tcoll ["Heading" (assoc ast-content :title (vec inlines-before))])))
+
 (defn- replace-block&page-embeds-in-heading
   [{inline-coll :title origin-level :level :as ast-content}]
   (set! *state* (assoc-in *state* [:replace-ref-embed :current-level] origin-level))
@@ -279,13 +289,17 @@
             (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
                 (recur other-inlines true []
                        (replace-block-embeds-helper
-                        current-paragraph-inlines block-uuid-or-page-name r origin-level)))
+                        (if (or heading-exist? (empty? current-paragraph-inlines)) current-paragraph-inlines []) block-uuid-or-page-name
+                        (heading-before-embed! r heading-exist? current-paragraph-inlines ast-content)
+                        origin-level)))
             (and (string/starts-with? block-uuid-or-page-name "[[")
                  (string/ends-with? block-uuid-or-page-name "]]"))
             (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
                 (recur other-inlines true []
                        (replace-page-embeds-helper
-                        current-paragraph-inlines block-uuid-or-page-name r origin-level)))
+                        (if (or heading-exist? (empty? current-paragraph-inlines)) current-paragraph-inlines []) block-uuid-or-page-name
+                        (heading-before-embed! r heading-exist? current-paragraph-inlines ast-content)
+                        origin-level)))
             :else ;; not ((block-uuid)) or [[page-name]], just drop the original ast
             (recur other-inlines heading-exist? current-paragraph-inlines r))
 

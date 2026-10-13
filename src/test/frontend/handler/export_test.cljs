@@ -102,7 +102,15 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
+     {:page {:block/title "page8"}
+      :blocks
+      [{:block/title "embedded text"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000801"}
+       {:block/title "before {{embed ((00000000-0000-4000-8000-000000000801))}}"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000802"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -481,6 +489,16 @@
       (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
           "a block that is only a ref to a missing block keeps the ref")
       (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
+(deftest export-blocks-as-markdown-text-before-embed-macro-keeps-its-block
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000801"
+                      #uuid "00000000-0000-4000-8000-000000000802"]
+                     {:remove-options #{}})]
+      (is (= "- embedded text\n- before\n- embedded text" (string/trim (string/replace content #" +\n" "\n")))
+          "the block with text before an embed keeps its own bullet; the embedded block follows at its level")
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
