@@ -926,7 +926,7 @@
         failed (atom [])
         report #(assoc {:tx-data [1]} :tx-meta %)
         rebased-report (report {:outliner-op :rebase :db-sync/rebased-local? true})
-        run! (fn [tx-ids pending-txs]
+        rollback! (fn [tx-ids pending-txs]
                (with-redefs [worker-state/get-datascript-conn (constantly conn)
                              sync-apply/pending-txs (fn [_repo & _] pending-txs)
                              sync-apply/reverse-local-txs! (fn [_conn txs] (swap! reversed conj txs) nil)
@@ -948,7 +948,7 @@
                                (when (:tx-reject-rollback? tx-meta)
                                  {:tx-data []}))]
                  (sync-apply/rollback-and-mark-failed-txs! "r" tx-ids)))]
-    (run! [u1 "not-a-uuid"] pending)
+    (rollback! [u1 "not-a-uuid"] pending)
     (is (= [[u1 u2 u3 u3 u4]] (mapv #(mapv :tx-id %) @reversed)))
     (is (vector? (first @reversed)))
     (is (= (mapv :tx-id (first @reversed)) (mapv :tx-id (subvec pending 1))))
@@ -962,7 +962,7 @@
     ;; a tx id that is not a uuid is no rejection
     (reset! reversed [])
     (reset! batches [])
-    (run! [1] [{:tx-id 1 :outliner-op :save-block :forward-outliner-ops replay-ops}])
+    (rollback! [1] [{:tx-id 1 :outliner-op :save-block :forward-outliner-ops replay-ops}])
     (is (empty? @reversed))
     (is (empty? @batches))))
 
