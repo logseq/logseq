@@ -17,8 +17,16 @@ let light_vars : (string, string) Hashtbl.t = Hashtbl.create 256
 let dark_vars : (string, string) Hashtbl.t = Hashtbl.create 256
 let mode : Lui_theme.mode ref = ref Lui_theme.Light
 
+(* Bumped whenever resolution can change (mode flip, new snapshot):
+   the paint cache holds resolved colors, so the host drops it on a
+   bump — otherwise a theme toggle only repainted the window clear and
+   left sidebars/text in the previous theme's colors. *)
+let generation = ref 0
+
 let set_dark is_dark =
-  mode := (if is_dark then Lui_theme.Dark else Lui_theme.Light)
+  let m = if is_dark then Lui_theme.Dark else Lui_theme.Light in
+  if m <> !mode then incr generation;
+  mode := m
 
 let vars_of_mode = function
   | Lui_theme.Dark -> dark_vars
@@ -37,6 +45,7 @@ let install_snapshot (payload : string) =
           (if mode_name = "dark" then Lui_theme.Dark else Lui_theme.Light)
       in
       Hashtbl.reset table;
+      incr generation;
       match j |> member "vars" with
       | `Assoc kvs ->
         List.iter

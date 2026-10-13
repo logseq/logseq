@@ -1645,6 +1645,7 @@ let () =
   let a11y = Lui_a11y.of_store store in
   (* Host_requests env: the dom-op/platform-request sink. *)
   let host_req_repaint = ref false in
+  let theme_gen_seen = ref !Theme_vars.generation in
   Host_requests.install
     { Host_requests.store;
       ui;
@@ -1804,6 +1805,12 @@ let () =
     if Ui.focused ui <> 0 then
       apply_actions
         (Ui.handle ui store rects (Input.Caret (caret_rect ())));
+    if !Theme_vars.generation <> !theme_gen_seen then begin
+      theme_gen_seen := !Theme_vars.generation;
+      Lui_host.invalidate_paint host;
+      Lui_host.invalidate_layout host;
+      host_req_repaint := true
+    end;
     let dirty = Ui.want_frame ui host || !host_req_repaint in
     if dirty then begin
       host_req_repaint := false;
