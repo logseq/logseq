@@ -15,11 +15,15 @@
             [logseq.graph-parser.property :as gp-property]))
 
 (defn- quote-display-block
-  "A block whose every line starts with `>` (Markdown quote, as the text export
-  writes a quote block) becomes a quote block of the unquoted lines."
+  "A block whose every line starts with `> ` or is a bare `>` (Markdown quote,
+  as the text export writes a quote block), with text on at least one line,
+  becomes a quote block of the unquoted lines. Only for paste: a block saved
+  from the editor keeps its text as typed."
   [block]
   (let [lines (some-> (:block/title block) string/trim string/split-lines)]
-    (if (and (seq lines) (every? #(re-find #"^>( |$)" %) lines))
+    (if (and (seq lines)
+             (every? #(re-find #"^>( |$)" %) lines)
+             (some #(re-find #"^> \s*\S" %) lines))
       (assoc block
              :block/title (string/join "\n" (map #(string/replace-first % #"^> ?" "") lines))
              :logseq.property.node/display-type :quote)
@@ -53,12 +57,12 @@
                :logseq.property.node/display-type :math)
 
         block)
-      (quote-display-block block))))
+      block)))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [page-name]}]
+  [blocks content format {:keys [page-name quote-blocks?]}]
   (try
     (let [blocks (gp-block/extract-blocks blocks content format
                                           {:user-config (state/get-config)
@@ -67,7 +71,9 @@ and handles unexpected failure."
                                            :page-name page-name
                                            :db-graph-mode? true})]
       (map (fn [block]
-             (let [block (standalone-display-block block)]
+             (let [block (cond-> (standalone-display-block block)
+                           (and quote-blocks? (nil? (:logseq.property.node/display-type block)))
+                           quote-display-block)]
                (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
                  (:block/properties block)
                  (merge (update-keys (:block/properties block)

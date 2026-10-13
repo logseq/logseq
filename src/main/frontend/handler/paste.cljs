@@ -52,7 +52,9 @@
               blocks (block/extract-blocks
                       (mldoc/->edn text format)
                       text format
-                      {:page-name (:block/name page-info)})
+                      {:page-name (:block/name page-info)
+                       ;; `>` lines are how the text export writes a quote block
+                       :quote-blocks? true})
               blocks (gp-block/with-parent-and-order (:db/id page-info) blocks)
               blocks' (p/all
                        (mapv (fn [block]

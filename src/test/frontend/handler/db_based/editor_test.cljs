@@ -35,6 +35,13 @@
           (db-editor-handler/wrap-parse-block {:block/title " \n$$\n  E = mc^2  \n$$\n "})
           [:block/title :logseq.property.node/display-type]))))
 
+(deftest wrap-parse-block-keeps-typed-quote-text-test
+  (is (= {:block/title "> hello"}
+         (select-keys
+          (db-editor-handler/wrap-parse-block {:block/title "> hello"})
+          [:block/title :logseq.property.node/display-type]))
+      "saving `> hello` keeps the text as typed and does not make a quote block"))
+
 (deftest wrap-parse-block-markdown-heading-test
   (testing "normal blocks save markdown heading syntax as heading property"
     (is (= {:block/title "Heading"

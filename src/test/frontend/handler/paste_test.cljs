@@ -317,10 +317,18 @@
                                     (p/resolved nil))]
       (p/let [_ (#'paste-handler/paste-text-parseable
                  :markdown
-                 "- > a quote\n  > second line\n- not > a quote")]
+                 (str "- > a quote\n  > second line\n"
+                      "- not > a quote\n"
+                      "- > only the first line\n  a plain second line\n"
+                      "- >\n"
+                      "- > a quote\n  >\n  > with an empty line"))]
         (is (= [{:block/title "a quote\nsecond line"
                  :logseq.property.node/display-type :quote}
-                {:block/title "not > a quote"}]
+                {:block/title "not > a quote"}
+                {:block/title "> only the first line\na plain second line"}
+                {:block/title ">"}
+                {:block/title "a quote\n\nwith an empty line"
+                 :logseq.property.node/display-type :quote}]
                (mapv #(select-keys % [:block/title :logseq.property.node/display-type])
                      @actual-blocks))
             "a block of > lines, as the text export writes a quote block, pastes back as a quote block")))))
