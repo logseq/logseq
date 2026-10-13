@@ -1516,7 +1516,19 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
     ((* cljs filters-row renders nil with no filters — mounting the
         empty box would still eat the column gap *)
      (if s.V.filters = [] then [] else [ filters ])
-    @ [ (if s.V.loading then
+    @ [ (let refs =
+           match inst.V.kind with
+           | V.KLinkedRefs | V.KUnlinkedRefs -> true
+           | _ -> false
+         in
+         (* a refetch keeps the rows already on screen (no flash back
+            to Loading); references never show the placeholder at all —
+            the section's head/count is already up and the rows land
+            within a frame or two *)
+         let has_data = (match s.V.data with Wr.VEmpty -> false | _ -> true) in
+         if s.V.loading && refs && not has_data then
+           box ~key:"ls-view-pending" []
+         else if s.V.loading && not has_data then
          text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
            []
        else
