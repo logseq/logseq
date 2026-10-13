@@ -245,7 +245,21 @@ let test_block_tree () =
        List.iter
          (fun n ->
            check "bullet container"
-             (subtree_contains n (fun c -> has_tok c "bullet-container")))
+             (subtree_contains n (fun c -> has_tok c "bullet-container"));
+           check "bullet uses the darker gray"
+             (subtree_contains n (fun c ->
+                  has_tok c "bullet"
+                  &&
+                  match M.string_prop c "background" with
+                  | Some bg ->
+                      let needle = "gray-09" in
+                      let nlen = String.length needle in
+                      let rec has i =
+                        i + nlen <= String.length bg
+                        && (String.sub bg i nlen = needle || has (i + 1))
+                      in
+                      has 0
+                  | None -> false)))
          [ b1; b2 ];
        ignore b2c
    | _ -> check "block rows present" false);

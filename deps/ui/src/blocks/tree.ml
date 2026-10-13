@@ -372,8 +372,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                         (box ~key:("b-" ^ uuid)
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
-                           ~opacity:0.8
-                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
+                           ~opacity:1.
+                           ~background:"var(--lx-gray-09, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
                      []))
