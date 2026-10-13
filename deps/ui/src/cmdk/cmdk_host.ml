@@ -46,7 +46,6 @@ let route_of_target = function
   | Svs.Nav_home -> Model.Home
   | Svs.Nav_journals -> Model.Journals
   | Svs.Nav_all_graphs -> Model.All_graphs
-  | Svs.Nav_graph_view -> Model.Graph_view
   | Svs.Nav_all_pages -> Model.All_pages
 
 let route_page () =

@@ -76,12 +76,12 @@ let sidebar_nav_context h =
     b.Shared_scenarios.toggle_sidebar ();
     flush h
   end;
-  h.toggle_nav "graph-view" false;
+  h.toggle_nav "all-pages" false;
   flush h;
-  check h "graph nav row removed" (absent_cls h "graph-view-nav");
+  check h "all-pages nav row removed" (absent_cls h "all-pages-nav");
   check h "nav choice persists to storage"
     (b.Shared_scenarios.storage_get "ls-sidebar-navigations"
-    = Some "(:flashcards :all-pages)");
+    = Some "(:flashcards)");
   b.Shared_scenarios.toggle_sidebar ();
   flush h;
   check h "sidebar closes for reopen" (not (left_sidebar_open h));
@@ -89,14 +89,14 @@ let sidebar_nav_context h =
   flush h;
   check h "sidebar reopens" (left_sidebar_open h);
   check h "nav choice survives sidebar reopen"
-    (absent_cls h "graph-view-nav");
-  check h "all-pages still rendered" (has_cls h "all-pages-nav");
-  h.toggle_nav "graph-view" true;
+    (absent_cls h "all-pages-nav");
+  check h "flashcards still rendered" (has_cls h "flashcards-nav");
+  h.toggle_nav "all-pages" true;
   flush h;
-  check h "graph nav restored" (has_cls h "graph-view-nav");
+  check h "all-pages nav restored" (has_cls h "all-pages-nav");
   check h "nav storage restored"
     (b.Shared_scenarios.storage_get "ls-sidebar-navigations"
-    = Some "(:flashcards :all-pages :graph-view)");
+    = Some "(:flashcards :all-pages)");
   (* leave the sidebar closed — the persisted flag is also a startup
      contract (native state-dir isolation test asserts it stays false) *)
   b.Shared_scenarios.toggle_sidebar ();

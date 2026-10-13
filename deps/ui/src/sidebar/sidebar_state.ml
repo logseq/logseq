@@ -19,7 +19,7 @@
 open Promise_ext
 let t = I18n.t
 
-let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
+let default_navs = [ "flashcards"; "all-pages" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
@@ -857,11 +857,6 @@ let open_sticky_item st kind =
         add_promise st (contents_item repo)
     | "help" when not (has_item st "help") ->
         (match static_item "help" "help" (t "nav/help") with
-         | Some it -> push_item st it
-         | None -> ())
-    | "page-graph" when not (has_item st "page-graph") ->
-        (match static_item "page-graph" "page-graph" (t "graph.page/title")
-         with
          | Some it -> push_item st it
          | None -> ())
     | (("rtc" | "undo-redo" | "profiler") as kind)

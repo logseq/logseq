@@ -201,8 +201,6 @@ let get_current_route _a _b _c _d =
       resolved (detail_obj [ ("to", Js.Json.string "all-pages") ])
   | Some Model.All_graphs ->
       resolved (detail_obj [ ("to", Js.Json.string "all-graphs") ])
-  | Some Model.Graph_view ->
-      resolved (detail_obj [ ("to", Js.Json.string "graph") ])
   | Some Model.Import ->
       resolved (detail_obj [ ("to", Js.Json.string "import") ])
   | Some Model.Settings ->

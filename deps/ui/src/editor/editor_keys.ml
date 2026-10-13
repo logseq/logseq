@@ -230,7 +230,6 @@ let nav r =
     | Model.Journals -> "#/all-journals"
     | Model.All_pages -> "#/all-pages"
     | Model.All_graphs -> "#/graphs"
-    | Model.Graph_view -> "#/graph"
     | Model.Settings -> "#/settings"
     | Model.Import -> "#/import"
     | Model.Page t -> "#/page/" ^ encode_uri_component t

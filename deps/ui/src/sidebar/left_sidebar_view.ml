@@ -75,7 +75,6 @@ let menu_sc caps =
 let nav_labels =
   [ ("flashcards", "nav/flashcards")
   ; ("all-pages", "sidebar.left/nav-all-pages")
-  ; ("graph-view", "nav/graph-view")
   ; ("tag/tasks", "nav/tasks")
   ; ("tag/assets", "nav/assets")
   ]
@@ -477,12 +476,6 @@ let nav_items ~sched ~active_route (checked, tag_titles) =
             (nav_route ~sched ~class_:"all-pages-nav"
                ~active:(active_route = Model.All_pages) ~title:(t "nav.all-pages/label")
                ~icon_name:"files" "#/all-pages")
-      | "graph-view" ->
-          Some
-            (nav_route ~sched ~class_:"graph-view-nav"
-               ~active:(active_route = Model.Graph_view)
-               ~title:(t "nav/graph-view") ~icon_name:"hierarchy"
-               ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~sched ~active_route "tasks" "nav/tasks" tag_titles
       | "tag/assets" ->
           tag_nav ~sched ~active_route "assets" "nav/assets" tag_titles

@@ -1382,7 +1382,6 @@ and run_command st repo (cid : string) =
         (let* (h, r) = st.svs.Svs.journals_target () in
          Ui_task.resolve (nav h r; st.svs.Svs.scroll_to_top ()))
   | "go/all-graphs" -> nav "#/graphs" Svs.Nav_all_graphs
-  | "go/graph-view" -> nav "#/graph" Svs.Nav_graph_view
   | "go/all-pages" -> nav "#/all-pages" Svs.Nav_all_pages
   | "ui/toggle-settings" ->
       (* cljs toggle-settings-modal! — toggles the settings dialog,

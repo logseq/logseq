@@ -82,8 +82,6 @@ let topbar st =
            ~data_attrs:[ ("style", "margin:0;overflow:auto") ]
            ([ topbar_btn "contents" (t "page/contents") (fun () ->
                   Sidebar_state.open_sticky_item st "contents")
-            ; topbar_btn "page-graph" (t "graph.page/title") (fun () ->
-                  Sidebar_state.open_sticky_item st "page-graph")
             ; topbar_btn "help" (t "nav/help") (fun () ->
                   Sidebar_state.open_sticky_item st "help")
             ]
@@ -247,10 +245,6 @@ let item_title (it : Sidebar_state.item) =
   | [], "help" ->
       row ~key:"pt-help" ~cross:`center ~gap:8
         [ icon_ "help"; text ~value:it.title [] ]
-  | [], "page-graph" ->
-      (* cljs: (icon "hierarchy") + (t :graph.page/title) *)
-      row ~key:"pt-page-graph" ~cross:`center ~gap:8
-        [ icon_ "hierarchy"; text ~value:it.title [] ]
   | [], kind
     when kind = "rtc" || kind = "undo-redo" || kind = "profiler" ->
       (* cljs build-sidebar-item: icon + title in .flex.items-center *)
@@ -543,23 +537,7 @@ let item_body st idx (it : Sidebar_state.item) =
             (column ~key:("inner-" ^ it.key) ~gap:16
                ~style_class:"page-inner"
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
-            ((match it.Sidebar_state.kind with
-              | "page-graph" ->
-                  [ (* the link-graph canvas isn't ported — same
-                       explicit empty state the #/graph route shows *)
-                    column ~key:"pg-empty" ~cross:`center ~main:`center
-                      ~padding_vertical:64
-                      [ box ~key:"pg-i" ~margin_bottom:16
-                          [ icon_ ~size:48 "hierarchy" ]
-                      ; text ~key:"pg-t"
-                          ~value:(t "graph.page/title") []
-                      ; text ~key:"pg-d"
-                          ~value:"Graph view isn't available in this app yet."
-                          []
-                      ]
-                  ]
-              | _ -> [])
-            @ [ sidebar_props_row st it
+            ([ sidebar_props_row st it
               ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"

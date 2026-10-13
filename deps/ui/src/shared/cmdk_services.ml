@@ -64,7 +64,6 @@ type nav_target =
   | Nav_home
   | Nav_journals
   | Nav_all_graphs
-  | Nav_graph_view
   | Nav_all_pages
 
 type t =

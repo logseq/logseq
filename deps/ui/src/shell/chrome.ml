@@ -909,18 +909,11 @@ let main_content (ms : Model.t Signal.signal) =
               ~accessibility_identifier:"main-content-container"
               ~orientation:`vertical ~grow:1.
               ~style_class:"scrollbar-spacing"
-              ~data_attrs:[ ("style", "position:relative") ]
-              ~data_attrs_signal:
-                (Signal.map
-                   (fun (m : Model.t) ->
-                     (* cljs container.cljs: data-is-margin-less-pages is
-                        the :graph route — the only margin-less page *)
-                     [ ( "data-is-margin-less-pages"
-                       , match m.route with
-                         | Model.Graph_view -> "true"
-                         | _ -> "false" )
-                     ])
-                   ms)
+              ~data_attrs:
+                [ ("style", "position:relative")
+                ; (* cljs margin-less was the :graph route only, which
+                     this app does not have *)
+                  ("data-is-margin-less-pages", "false") ]
               [ (* cljs container.cljs: #main-content-container centers
                    the max-width column via flex justify-center — for
                    the grid-backed scroll kind the column's
@@ -940,17 +933,10 @@ let main_content (ms : Model.t Signal.signal) =
                          (* cljs container.cljs: margin-less for :graph;
                             full-width adds all-files/all-pages/my-publishing
                             (LUI routes: All_pages only today) *)
-                         let margin_less =
-                           match m.route with
-                           | Model.Graph_view -> true
-                           | _ -> false
-                         in
-                         [ ("data-is-margin-less-pages", string_of_bool margin_less)
+                         [ ("data-is-margin-less-pages", "false")
                          ; ( "data-is-full-width"
                            , string_of_bool
-                               (margin_less
-                                ||
-                                match m.route with
+                               (match m.route with
                                 | Model.All_pages -> true
                                 | _ -> false) )
                          ])

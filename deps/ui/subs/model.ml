@@ -8,7 +8,6 @@ type route =
   | Library
   | All_pages
   | All_graphs
-  | Graph_view
   | Import
   | Settings
   | File of string (* cljs /file/:path — raw file editor (config.edn etc.) *)
