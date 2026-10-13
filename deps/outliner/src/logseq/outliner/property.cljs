@@ -188,12 +188,9 @@
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
-    (let [old-value (get block property-id)
-          property (d/entity @conn property-id)
+    (let [property (d/entity @conn property-id)
           multiple-values? (= :db.cardinality/many (:db/cardinality property))
           retract-multiple-values? (and multiple-values? (sequential? value))
-          multiple-values-empty? (and (sequential? old-value)
-                                      (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
           tx-value (if extends?
                      (let [value' (normalize-extends-value @conn value)]
@@ -207,8 +204,6 @@
                             (= :logseq.property/template-applied-to property-id)
                             (assoc :block/tags :logseq.class/Template))]
       (cond-> []
-        multiple-values-empty?
-        (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
