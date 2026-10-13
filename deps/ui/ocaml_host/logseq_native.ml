@@ -1699,6 +1699,11 @@ let () =
      Sdl.start_text_input ()
    | None -> ());
   Daemon_client.boot_mark "autofocus";
+  (* app-icons is queued during init, before this thread drains the
+     mailbox. Without a drain the startup line always reports icons=0
+     and the first frame paints with an empty registry. *)
+  Host_requests.drain ();
+  Daemon_client.boot_mark "icons drained";
   log "logseq_native: %dx%d drawable (scale %.2f), renderer=%s, icons=%d"
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
