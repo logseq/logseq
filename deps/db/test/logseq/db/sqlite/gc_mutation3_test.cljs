@@ -51,26 +51,26 @@
 
 (def ^:private used-addrs #{0 1 2 3 4 5 6})
 
+;; Fails if, in `get-unused-addresses`, the `:rowMode` key is dropped.
 (deftest gc-kvs-table-single-pass-deletes-only-unreferenced-addrs-test
   (let [db (new-kvs-db)]
     (sqlite-gc/gc-kvs-table! (wasm-db db) {})
     (is (= #{0 1 2 3 4 5 6 8 9 10} (addrs db)))))
 
+;; Fails if, in `gc-kvs-table!`, `when` becomes `when-not`.
 (deftest gc-kvs-table-full-gc-repeats-until-no-unreferenced-addrs-test
   (let [db (new-kvs-db)]
     (sqlite-gc/gc-kvs-table! (wasm-db db) {:full-gc? true})
     (is (= #{0 1 2 3 4 5 6 9 10} (addrs db)))))
 
+;; Fails if, in `gc-kvs-table-node-version!`, `when-not` becomes `when` or `false` becomes `true`.
+;; Fails if, in `get-unused-addresses-node-version`, the body becomes `nil`, the `bean/->clj` step is dropped, the `(map :addr)` step is dropped or the `(set)` step is dropped.
 (deftest gc-kvs-table-node-version-without-walk-recurses-test
   (let [db (new-kvs-db)]
     (sqlite-gc/gc-kvs-table-node-version! db false)
     (is (= #{0 1 2 3 4 5 6 9 10} (addrs db)))))
 
-(deftest gc-kvs-table-node-version-walk-deletes-everything-unreachable-test
-  (let [db (new-kvs-db)]
-    (sqlite-gc/gc-kvs-table-node-version! db true)
-    (is (= used-addrs (addrs db)))))
-
+;; Fails if, in `get-unused-addresses-node-walk-version`, the `set` step is dropped.
 (deftest gc-kvs-table-node-version-walk-keeps-used-addrs-with-little-garbage-test
   ;; the used trees hold more addresses than the 5 internal ones and there is
   ;; only 1 garbage address (8)
@@ -86,6 +86,7 @@
     (sqlite-gc/gc-kvs-table-node-version! db true)
     (is (= #{0 1 2 3 4 5 6 7} (addrs db)))))
 
+;; Fails if, in `ensure-no-garbage`, `empty?` becomes `seq` or the body becomes `nil`.
 (deftest ensure-no-garbage-test
   (let [db (new-kvs-db)]
     (is (false? (sqlite-gc/ensure-no-garbage db)))

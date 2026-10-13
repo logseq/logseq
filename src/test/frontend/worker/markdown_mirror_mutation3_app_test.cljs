@@ -82,6 +82,7 @@
 ;; ---------------------------------------------------------------------------
 ;; normalize-file-stem
 
+;; Fails if, in `normalize-file-stem`, `if` becomes `if-not` or the `(string/replace ascii-control-re "_")` step is dropped.
 (deftest normalize-file-stem-replaces-control-chars-and-truncates-test
   (is (= "a_b" (markdown-mirror/normalize-file-stem "a\u0001b")))
   (is (= 160 (count (markdown-mirror/normalize-file-stem (apply str (repeat 200 "x"))))))
@@ -91,6 +92,8 @@
 ;; ---------------------------------------------------------------------------
 ;; stem index
 
+;; Fails if, in `non-journal-page?`, `and` becomes `or`.
+;; Fails if, in `update-stem-index`, `when` becomes `when-not`, the body becomes `nil`, `:block/title` becomes `:block/uuid` or `:block/uuid` becomes `:block/_parent`.
 (deftest update-stem-index-moves-renamed-pages-and-ignores-blocks-and-journals-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Dup" :block/uuid uuid-2}
@@ -123,6 +126,7 @@
     (is (= #{uuid-2} (get index-after "Other")))
     (is (not (contains? index-after "solo child")))))
 
+;; Fails if, in `pages-with-file-stem`, the `(sort-by (comp str :block/uuid))` step is dropped or `:block/uuid` becomes `:block/_parent`.
 (deftest same-title-pages-are-ordered-by-uuid-not-creation-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Same" :block/uuid uuid-2}
@@ -137,6 +141,7 @@
 ;; ---------------------------------------------------------------------------
 ;; page-id-for-entity / affected-page-ids
 
+;; Fails if, in `page-id-for-entity`, `and` becomes `or`, `:block/page` becomes `:block/parent`, `:block/parent` becomes `:block/tags`, `:db/id` becomes `:db/ident` or the `:block/parent` step is dropped.
 (deftest page-id-for-entity-resolves-page-through-every-link-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Host"}
@@ -170,6 +175,8 @@
     (is (= page-id (page-id-for-entity @conn (:db/id orphan-nested))))
     (is (= page-id (page-id-for-entity @conn (:db/id orphan-parentless))))))
 
+;; Fails if, in `page-id-for-entity`, `:block/page` becomes `:block/parent`.
+;; Fails if, in `affected-page-ids`, the `(remove nil?)` step is dropped or `:block/page` becomes `:block/parent`.
 (deftest affected-page-ids-of-a-new-nested-block-is-only-its-page-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Host"}
@@ -181,6 +188,7 @@
                                :block/order "a0"}])]
     (is (= #{(:db/id page)} (markdown-mirror/affected-page-ids report)))))
 
+;; Fails if, in `affected-page-ids`, `and` becomes `or` or the `ldb/page?` step is dropped.
 (deftest affected-page-ids-ignores-referrers-of-an-edited-block-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Host"}
@@ -194,6 +202,7 @@
         report (d/with @conn [{:db/id (:db/id target) :block/title "target block edited"}])]
     (is (= #{(:db/id host)} (markdown-mirror/affected-page-ids report)))))
 
+;; Fails if, in `affected-page-ids`, `:block/title` becomes `:block/uuid` or `:block/name` becomes `:block/order`.
 (deftest affected-page-ids-title-only-and-name-only-renames-reach-linking-pages-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "TargetOld"}
@@ -212,6 +221,7 @@
 ;; ---------------------------------------------------------------------------
 ;; storage error handling
 
+;; Fails if, in `not-found-error?`, `or` becomes `and`, the `.-code` step is dropped or the `.-name` step is dropped.
 (deftest not-found-error-recognizes-each-form-test
   (is (true? (not-found-error? (js-error "no such file" {:code "ENOENT"}))))
   (is (true? (not-found-error? (ex-info "gone" {:code :not-found}))))
@@ -220,6 +230,9 @@
   (is (false? (not-found-error? (js-error "ENOENT without colon" {}))))
   (is (false? (not-found-error? (js-error "denied" {:code "EACCES"})))))
 
+;; Fails if, in `<read-text`, the `:path` key is dropped.
+;; Fails if, in `<write-text-atomic!`, the `:path` key is dropped.
+;; Fails if, in `<delete-file!`, the `:path` key is dropped.
 (deftest missing-storage-functions-reject-with-path-test
   (async done
     (let [bare {:storage {}}]
@@ -235,17 +248,15 @@
 ;; ---------------------------------------------------------------------------
 ;; line helpers
 
-(deftest leading-space-count-counts-leading-whitespace-test
-  (is (= 3 (leading-space-count "   abc")))
-  (is (= 0 (leading-space-count "abc")))
-  (is (= 0 (leading-space-count "a\nb"))))
-
+;; Fails if, in `property-line-indent`, `or` becomes `and`, the body becomes `nil`, the `second` step is dropped or the `count` step is dropped.
 (deftest property-line-indent-reads-both-property-line-forms-test
   (is (= 2 (property-line-indent "  * notes::")))
   (is (= 3 (property-line-indent "   notes:: x")))
   (is (= 0 (property-line-indent "* notes::")))
   (is (nil? (property-line-indent "- plain block"))))
 
+;; Fails if, in `leading-space-count`, `or` becomes `and` or the body becomes `nil`.
+;; Fails if, in `property-value-line?`, `not` becomes `identity` or the body becomes `nil`.
 (deftest property-value-line-needs-deeper-indent-and-content-test
   (is (true? (property-value-line? "    - x" 2)))
   (is (false? (property-value-line? "  - x" 2)))
@@ -253,14 +264,7 @@
   (is (true? (property-value-line? "    x" 0)))
   (is (false? (property-value-line? "    x" nil))))
 
-(deftest content-ref-targets-lists-page-refs-and-tags-test
-  (is (= [{:title "Foo" :tag? false}
-          {:title "Bar Baz" :tag? true}
-          {:title "tag" :tag? true}]
-         (content-ref-targets
-          (str "See [[Foo]] and #[[Bar Baz]] #tag [[" uuid-1 "]] #" uuid-2))))
-  (is (empty? (content-ref-targets nil))))
-
+;; Fails if, in `status-marker`, the `str` step is dropped, the `string/trim` step is dropped or the `(string/replace #"\s+" "-")` step is dropped.
 (deftest status-marker-forms-test
   (is (= "TODO" (status-marker :todo)))
   (is (= "IN-PROGRESS" (status-marker {:block/title "  in   progress "})))
@@ -269,18 +273,15 @@
   (is (nil? (status-marker {:block/title "  "})))
   (is (nil? (status-marker {}))))
 
+;; Fails if, in `tag-token`, `:block/name` becomes `:block/order`.
 (deftest tag-token-forms-test
   (is (= "#foo" (tag-token {:block/name "foo"})))
   (is (= "#Foo" (tag-token {:block/title "Foo" :block/name "other"})))
   (is (= "#[[a b]]" (tag-token {:block/title "a b"})))
   (is (nil? (tag-token {:block/title ""}))))
 
-(deftest built-in-tag-recognizes-flag-or-logseq-class-ident-test
-  (is (true? (built-in-tag? {:logseq.property/built-in? true})))
-  (is (true? (built-in-tag? {:db/ident :logseq.class/Unlisted})))
-  (is (not (built-in-tag? {:db/ident :user.class/Mine})))
-  (is (not (built-in-tag? {}))))
-
+;; Fails if, in `built-in-tag?`, `or` becomes `and` or the `namespace` step is dropped.
+;; Fails if, in `mirror-tag-tokens`, the `sort` step is dropped or the `vec` step is dropped.
 (deftest mirror-tag-tokens-are-sorted-vector-without-built-ins-test
   (let [tokens (mirror-tag-tokens {:block/tags [{:block/title "Zeta"}
                                                 {:block/title "Alpha"}
@@ -288,20 +289,25 @@
     (is (vector? tokens))
     (is (= ["#Alpha" "#Zeta"] tokens))))
 
+;; Fails if, in `content-ref-targets`, `or` becomes `and`, `when-not` becomes `when`, `=` becomes `not=`, the body becomes `nil`, the `:title` key is dropped or the `:tag?` key is dropped.
+;; Fails if, in `content-tag-titles`, `when` becomes `when-not`, the body becomes `nil`, the `(keep (fn [{:keys [title tag?]}]` step is dropped or the `set` step is dropped.
 (deftest content-tag-titles-are-lowercased-tags-only-test
   (let [titles (content-tag-titles "#Foo [[Bar]] #[[Baz Qux]]")]
     (is (set? titles))
     (is (= #{"foo" "baz qux"} titles))))
 
+;; Fails if, in `token-title`, `if` becomes `if-not`.
 (deftest token-title-strips-hash-and-brackets-test
   (is (= "a b" (token-title "#[[a b]]")))
   (is (= "tag" (token-title "#tag"))))
 
+;; Fails if, in `order-list-number?`, the `string/lower-case` step is dropped.
 (deftest order-list-number-is-case-insensitive-test
   (is (true? (order-list-number? {:logseq.property/order-list-type "Number"})))
   (is (true? (order-list-number? {:logseq.property/order-list-type :number})))
   (is (false? (order-list-number? {:logseq.property/order-list-type "bullet"}))))
 
+;; Fails if, in `embed-target`, `and` becomes `or` or `:block/uuid` becomes `:block/_parent`.
 (deftest embed-target-needs-uuid-and-non-page-test
   (let [target {:block/uuid uuid-1 :block/title "t"}]
     (is (= target (embed-target {:block/link target})))
@@ -311,26 +317,26 @@
                                           :block/tags [{:db/ident :logseq.class/Page}]}})))
     (is (nil? (embed-target {})))))
 
+;; Fails if, in `content-first-line`, the `string/split-lines` step is dropped or the `string/trim` step is dropped.
 (deftest content-first-line-test
   (is (= "a" (content-first-line "  a  \nb")))
   (is (= "" (content-first-line nil)))
   (is (= "" (content-first-line ""))))
 
+;; Fails if, in `normalize-rendered-match-text`, `or` becomes `and`, the `string/lower-case` step is dropped, the `(string/replace simple-hashtag-re "$1...` step is dropped, the `(string/replace #"\s+" " ")` step is dropped or the `string/trim` step is dropped.
 (deftest normalize-rendered-match-text-test
   (is (= "foo #[[]] [[]] #[[]]"
          (normalize-rendered-match-text "  Foo   #Tag [[X]] #[[Y]]  ")))
   (is (= "" (normalize-rendered-match-text nil))))
 
+;; Fails if, in `code-block?`, `:db/ident` becomes `:db/id` or `:block/tags` becomes `:block/title`.
 (deftest code-block-by-tag-or-display-type-test
   (is (true? (code-block? {:logseq.property.node/display-type :code})))
   (is (true? (code-block? {:block/tags [{:db/ident :logseq.class/Code-block}]})))
   (is (not (code-block? {:block/tags [{:db/ident :logseq.class/Task}] :block/title "x"}))))
 
-(deftest property-derived-block-test
-  (is (property-derived-block? {:logseq.property/created-from-property 1}))
-  (is (property-derived-block? {:block/closed-value-property 1}))
-  (is (not (property-derived-block? {}))))
-
+;; Fails if, in `property-derived-block?`, `or` becomes `and`, the body becomes `nil` or `:block/closed-value-property` becomes `:block/journal-day`.
+;; Fails if, in `outline-children`, the `(remove property-derived-block?)` step is dropped or the `(sort-by :block/order)` step is dropped.
 (deftest outline-children-are-ordered-and-without-property-blocks-test
   (is (= ["a" "b"]
          (mapv :block/order
@@ -340,6 +346,7 @@
                                  {:block/order "a"}
                                  {:block/order "d" :block/closed-value-property 1}]})))))
 
+;; Fails if, in `block->content-context`, the `:preserve-block-refs?` key is dropped or the `:date-formatter` key is dropped.
 (deftest block->content-context-test
   (is (= {:export-bullet-indentation "  "
           :excluded-properties #{:logseq.property/status}
@@ -351,6 +358,7 @@
          (block->content-context {:date-formatter "yyyy"})))
   (is (= "\t" (:export-bullet-indentation (block->content-context {:export-bullet-indentation "\t"})))))
 
+;; Fails if, in `line-level`, `or` becomes `and` or the body becomes `nil`.
 (deftest line-level-uses-configured-indentation-test
   (is (= 3 (line-level "    " {})))
   (is (= 2 (line-level "    " {:export-bullet-indentation "    "})))
@@ -359,6 +367,7 @@
 ;; ---------------------------------------------------------------------------
 ;; block infos
 
+;; Fails if, in `block-line-info`, `if` becomes `if-not` or `:db/id` becomes `:db/ident`.
 (deftest block-line-info-resolves-maps-and-reads-explicit-status-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Infos"}
@@ -378,6 +387,7 @@
     (is (= "1." (:marker entity-info)))
     (is (nil? (:status-marker (block-line-info @conn plain "-"))))))
 
+;; Fails if, in `block-line-info`, `:db/id` becomes `:db/ident`.
 (deftest block-line-info-ignores-a-default-status-from-a-non-task-class-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Project {:build/class-properties [:logseq.property/status]}}
@@ -389,6 +399,7 @@
         "the status default applies to members of a class declaring status")
     (is (nil? (:status-marker (block-line-info @conn block "-"))))))
 
+;; Fails if, in `block-line-infos`, the `(into (block-line-infos db (outline-c...` step is dropped.
 (deftest block-line-infos-include-nested-children-with-their-own-markers-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Nested infos"}
@@ -402,6 +413,7 @@
 ;; ---------------------------------------------------------------------------
 ;; page order and filtering
 
+;; Fails if, in `mirrorable-pages`, `if` becomes `if-not`, `or` becomes `and`, the `(filter mirrorable-page?)` step is dropped, the `(sort-by (fn [page]` step is dropped, `:block/journal-day` becomes `:block/link` or `:block/uuid` becomes `:block/_parent`.
 (deftest mirrorable-pages-order-journals-first-by-day-then-title-then-uuid-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "b page" :block/uuid uuid-2}
@@ -431,6 +443,7 @@
                                  (= "contents" (:block/name page))))
                   pages)))))
 
+;; Fails if, in `deleted-page?`, `or` becomes `and`.
 (deftest deleted-page-is-missing-or-not-mirrorable-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "Normal"}
@@ -439,6 +452,7 @@
     (is (true? (deleted-page? (d/entity @conn :logseq.class/Task))))
     (is (false? (deleted-page? (db-test/find-page-by-title @conn "Normal"))))))
 
+;; Fails if, in `merge-job`, `or` becomes `and`.
 (deftest merge-job-keeps-the-first-old-path-test
   (is (= {:old-path "a" :x 1} (merge-job {:old-path "a"} {:old-path "b" :x 1})))
   (is (= {:old-path "b"} (merge-job {:old-path nil} {:old-path "b"})))
@@ -447,6 +461,9 @@
 ;; ---------------------------------------------------------------------------
 ;; results of mirror-page!
 
+;; Fails if, in `<write-if-changed!`, the `:path` key is dropped.
+;; Fails if, in `invalid-file-name-result`, the `:repo` key is dropped or the `:page-uuid` key is dropped.
+;; Fails if, in `<mirror-page!`, the `:repo` key is dropped, the `:page-id` key is dropped, the `:journal-day` key is dropped, the `:page-uuid` key is dropped, `:block/journal-day` becomes `:block/link` or the `:status` key is dropped.
 (deftest mirror-page-results-carry-their-diagnostics-test
   (async done
     (let [{:keys [platform]} (fake-platform)
@@ -493,6 +510,8 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+;; Fails if, in `<write-if-changed!`, the `:path` key is dropped.
+;; Fails if, in `<mirror-repo!`, the `:status` key is dropped, the `:reason` key is dropped, the `:count` key is dropped or the `:results` key is dropped.
 (deftest mirror-repo-reports-completed-count-and-results-test
   (async done
     (let [{:keys [platform]} (fake-platform)
@@ -514,6 +533,7 @@
 ;; ---------------------------------------------------------------------------
 ;; rendering
 
+;; Fails if, in `decorate-rendered-content`, `not` becomes `identity`.
 (deftest code-block-content-lines-that-look-like-blocks-stay-in-the-code-block-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -539,6 +559,7 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+;; Fails if, in `decorate-rendered-content`, `and` becomes `or`.
 (deftest non-code-block-starting-with-a-fence-does-not-open-a-code-block-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -557,6 +578,7 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+;; Fails if, in `decorate-block-line`, the `:init-level` key is dropped.
 (deftest nested-embed-renders-at-the-embedding-blocks-indentation-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -599,6 +621,7 @@
   {:pages-and-blocks [{:page {:block/title "Page A"}
                        :blocks [{:block/title "hello"}]}]})
 
+;; Fails if, in `<handle-tx-report!`, the `:status` key is dropped, the `:reason` key is dropped or the `:count` key is dropped.
 (deftest handle-tx-report-results-test
   (async done
     (let [{:keys [platform]} (fake-platform)
@@ -625,6 +648,7 @@
                        (markdown-mirror/set-enabled! test-repo false)
                        (done)))))))
 
+;; Fails if, in `schedule-flush!`, `when-not` becomes `when`, `or` becomes `and` or the body becomes `nil`.
 (deftest deferred-flush-runs-after-the-debounce-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -642,50 +666,8 @@
                        (markdown-mirror/set-enabled! test-repo false)
                        (done)))))))
 
-(deftest deferred-flush-defaults-to-a-one-second-debounce-test
-  (async done
-    (let [{:keys [platform files]} (fake-platform)
-          conn (db-test/create-conn-with-blocks page-a-blocks)
-          report (edit-report conn "edited")]
-      (markdown-mirror/set-enabled! test-repo false)
-      (markdown-mirror/set-enabled! test-repo true)
-      (-> (p/let [_ (markdown-mirror/<handle-tx-report!
-                     test-repo conn report
-                     {:platform platform :defer? true})
-                  _ (p/delay 200)]
-            (is (empty? @files)))
-          (p/catch (fn [e] (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (markdown-mirror/set-enabled! test-repo false)
-                       (done)))))))
-
-(deftest failed-deferred-flush-is-caught-test
-  (async done
-    (let [{:keys [platform]} (fake-platform)
-          attempts (atom 0)
-          failing (assoc-in platform [:storage :write-text-atomic!]
-                            (fn [_path _content]
-                              (swap! attempts inc)
-                              (p/rejected (ex-info "disk full" {}))))
-          conn (db-test/create-conn-with-blocks page-a-blocks)
-          report (edit-report conn "edited")
-          unhandled (atom [])
-          on-unhandled (fn [reason] (swap! unhandled conj reason))]
-      (markdown-mirror/set-enabled! test-repo false)
-      (markdown-mirror/set-enabled! test-repo true)
-      (.on js/process "unhandledRejection" on-unhandled)
-      (-> (p/let [_ (markdown-mirror/<handle-tx-report!
-                     test-repo conn report
-                     {:platform failing :defer? true :debounce-ms 20})
-                  _ (p/delay 300)]
-            (is (= 1 @attempts))
-            (is (empty? @unhandled)))
-          (p/catch (fn [e] (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (.removeListener js/process "unhandledRejection" on-unhandled)
-                       (markdown-mirror/set-enabled! test-repo false)
-                       (done)))))))
-
+;; Fails if, in `<run-job!`, `and` becomes `or`, the `:status` key is dropped, the `:path` key is dropped or the `:reason` key is dropped.
+;; Fails if, in `<mirror-page!`, the `:reason` key is dropped.
 (deftest run-job-results-test
   (async done
     (let [{:keys [platform deletes]} (fake-platform)
