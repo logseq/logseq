@@ -457,39 +457,66 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(defn- assert-arxiv-tag-and-property
+  "A Property titled arxiv, and the page with the value has it. With
+  convert-all-tags?, also a distinct Tag titled arxiv, and the tagged page is
+  tagged arxiv."
+  [db value-page-title tagged-page-title convert-all-tags?]
+  (let [entities-titled (fn [class-ident]
+                          (d/q '[:find [?e ...] :in $ ?title ?class
+                                 :where [?e :block/title ?title] [?c :db/ident ?class] [?e :block/tags ?c]]
+                               db "arxiv" class-ident))
+        [tag-id] (entities-titled :logseq.class/Tag)
+        [property-id] (entities-titled :logseq.class/Property)
+        property (some->> property-id (d/entity db))
+        value-page (db-test/find-page-by-title db value-page-title)
+        tagged-page (db-test/find-page-by-title db tagged-page-title)]
+    (is (some? property-id) "a Property titled arxiv")
+    (is (= "2401.12345"
+           (some-> (get value-page (:db/ident property)) db-property/property-value-content str))
+        "the page keeps its arxiv value")
+    (when convert-all-tags?
+      (is (some? tag-id) "a Tag titled arxiv")
+      (is (not= tag-id property-id) "the tag and the property are distinct entities")
+      (is (contains? (set (map :db/id (:block/tags tagged-page))) tag-id)
+          "the tagged page is tagged arxiv"))))
+
 (deftest-async import-page-with-property-and-tag-of-same-name
   (p/let [file (write-temp-graph-file
                  "pages/paper.md"
-                 "tags:: [[research]], [[arxiv]]\narxiv:: 0000.00000\n\n- Dummy note\n")
+                 "tags:: [[research]], [[arxiv]]\narxiv:: 2401.12345\n\n- Dummy note\n")
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-files-to-db [file] conn {})]
     (is (some? (db-test/find-block-by-content @conn #"Dummy note"))
         "Page with a property and a tag of the same name imports")
+    (assert-arxiv-tag-and-property @conn "paper" "paper" false)
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
 (deftest-async import-property-page-then-tag-of-same-name-convert-all-tags
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}"
-                "pages/A_paper.md" "arxiv:: 0000.00000\n\n- Dummy note\n"
+                "pages/A_paper.md" "arxiv:: 2401.12345\n\n- Dummy note\n"
                 "pages/B_other.md" "tags:: [[research]], [[arxiv]]\n\n- Other note\n"})
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
     (is (some? (db-test/find-block-by-content @conn #"Other note")))
+    (assert-arxiv-tag-and-property @conn "A_paper" "B_other" true)
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
 (deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
   (p/let [file (write-temp-graph-file
                  "pages/paper.md"
-                 "tags:: [[research]], [[arxiv]]\narxiv:: 0000.00000\n\n- Dummy note\n")
+                 "tags:: [[research]], [[arxiv]]\narxiv:: 2401.12345\n\n- Dummy note\n")
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-files-to-db [file] conn {:convert-all-tags? true})]
     (is (some? (db-test/find-block-by-content @conn #"Dummy note"))
         "Page with a property and a tag of the same name imports")
+    (assert-arxiv-tag-and-property @conn "paper" "paper" true)
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
