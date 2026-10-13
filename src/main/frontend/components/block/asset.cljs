@@ -5,7 +5,7 @@
   protocol URLs. These helpers normalize the display-facing parts of an asset
   without assuming that the URL itself contains a file extension."
   (:require [clojure.string :as string]
-            [frontend.config :as frontend-config]
+            [frontend.config :as config]
             [frontend.util :as util]
             [logseq.common.config :as common-config]))
 
@@ -26,8 +26,8 @@
   [block]
   (let [asset-type (asset-type->keyword (:logseq.property.asset/type block))]
     (or (contains? (common-config/img-formats) asset-type)
-        (contains? frontend-config/audio-formats asset-type)
-        (contains? frontend-config/video-formats asset-type))))
+        (contains? config/audio-formats asset-type)
+        (contains? config/video-formats asset-type))))
 
 (defn link-ext
   "Resolves the extension keyword for an asset link.
