@@ -758,6 +758,15 @@ abc
         "A multi-line display math block is a math block")
     (is (= "last" (:block/title (nth blocks 4))))))
 
+(deftest-async import-thematic-break-block
+  (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          blocks (->> (:block/_page (db-test/find-page-by-title @conn "H")) (sort-by :block/order))]
+    (is (= ["a" "---" "b"] (mapv :block/title blocks))
+        "a block whose text is a thematic break keeps it")))
+
 (deftest-async import-multiline-math-as-first-block
   (p/let [source-file (write-temp-graph-file
                        "pages/M.md"

@@ -2983,8 +2983,9 @@
    Render/editor never call this path."
   [format content]
   (and (contains? #{:markdown :md} format)
-       ;; `$$`: an outline parse drops a display math block's body, so its formula is lost
-       (not (re-find #"(?im)```|\$\$|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::" content))))
+       ;; an outline parse drops a block's body: a display math block (`$$`) loses its
+       ;; formula, a thematic break (`---`) its text
+       (not (re-find #"(?im)```|\$\$|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::|^\s*(?:[-*+]\s+)?(?:-{3,}|\*{3,}|_{3,})\s*$" content))))
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
