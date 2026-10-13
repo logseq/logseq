@@ -625,6 +625,24 @@ function directoryIdentity(directory) {
 function sameDirectory(a, b) {
   return a && b && a.dev === b.dev && a.ino === b.ino;
 }
+function mistakenPrefixedAssetDir(ctx) {
+  // Native asset_store used to keep the logseq_db_ prefix and only rewrite
+  // / \ : so assets landed in a sibling of the real graph directory.
+  const prefixed = `logseq_db_${ctx.repo}`.replace(/[/\\:]/g, '-');
+  const dir = path.join(ctx.graphsDir, prefixed);
+  if (path.resolve(dir) === path.resolve(ctx.graphDir)) return null;
+  return dir;
+}
+function removeMistakenPrefixedAssetDir(ctx) {
+  const dir = mistakenPrefixedAssetDir(ctx);
+  if (!dir || !fs.existsSync(dir)) return;
+  const stat = fs.statSync(dir);
+  if (!stat.isDirectory()) return;
+  if (fs.existsSync(path.join(dir, 'db.sqlite'))) return;
+  const names = fs.readdirSync(dir).filter(name => !name.startsWith('.'));
+  if (!(names.length === 1 && names[0] === 'assets')) return;
+  fs.rmSync(dir, { recursive: true, force: true });
+}
 async function deleteGraph(storage, repo, commit) {
   const ctx = context(storage, repo);
   const observed = snapshot(storage, repo);
@@ -634,7 +652,10 @@ async function deleteGraph(storage, repo, commit) {
       fail('Graph generation changed', 'graph-not-exists');
     if (observed?.deletion && observed.deletion.id !== current.deletion?.id)
       fail('Graph deletion operation changed', 'graph-not-exists');
-    if (current.phase === 'deleted') return { existed: false, destination: null };
+    if (current.phase === 'deleted') {
+      removeMistakenPrefixedAssetDir(ctx);
+      return { existed: false, destination: null };
+    }
     if (!current.deletion) current.deletion = { id: id(), generation: current.generation, moved: false };
     const operation = current.deletion;
     if (operation.generation !== current.generation) fail('Graph deletion generation changed', 'graph-not-exists');
@@ -677,6 +698,7 @@ async function deleteGraph(storage, repo, commit) {
         const result = await commit();
         if (!result.ok) fail(result.error);
       }
+      removeMistakenPrefixedAssetDir(ctx);
       current.phase = 'deleted';
       delete current.error;
       writeJSON(ctx.stateFile, current);
