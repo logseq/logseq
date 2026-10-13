@@ -662,13 +662,14 @@ let platform_event payload =
 let dispose () : string =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
-  Queue.clear pending_batches;
-  (match !current_app with
-   | Some app ->
-       ignore (Lui_app.dispose app);
-       current_app := None
-   | None -> ());
-  take_patches ()
+  with_entry_lock (fun () ->
+    Queue.clear pending_batches;
+    (match !current_app with
+     | Some app ->
+         ignore (Lui_app.dispose app);
+         current_app := None
+     | None -> ());
+    take_patches ())
 
 let root_node () =
   match !current_app with

@@ -42,10 +42,11 @@ type t = {
   scale : unit -> float;
   store : unit -> Lui_store.t;
   slots : (glyph_key, slot option) Hashtbl.t;
+  layouts : Lui_text.Cache.t;
 }
 
 let create ~scene ~scale ~store =
-  { scene; scale; store; slots = Hashtbl.create 512 }
+  { scene; scale; store; slots = Hashtbl.create 512; layouts = Lui_text.Cache.create 2048 }
 
 (* ---- font + text prop plumbing ---- *)
 
@@ -298,8 +299,7 @@ let emit_glyph t scene ~scale ~pen ~baseline ~font ~gid ~g_y ~fg =
     scene.glyphs <- gl :: scene.glyphs;
     true
 
-let text_ops t id r fg s =
-  let scene = t.scene () in
+let text_layout t id (r : Lui_scene.rect) s =
   let scale = t.scale () in
   let store = t.store () in
   let font = font_of store id in
@@ -323,19 +323,23 @@ let text_ops t id r fg s =
       (w' +. 1.) /. scale
     | _ -> 0.
   in
-  let lines = Lui_text.shape font s ~width:wrap_w in
+  let layout = Lui_text.Cache.layout t.layouts font s ~width:wrap_w in
   (* Vertical centering inside the node's rect, device pixels. *)
-  let text_h =
-    Array.fold_left
-      (fun acc (l : Lui_text.line) ->
-         acc +. l.ascent +. l.descent +. l.leading)
-      0. lines
-    *. scale
-  in
+  let text_h = layout.lay_height *. scale in
   let y0 =
     if tp.tp_top then r.y +. (tp.tp_pad_y *. scale)
     else r.y +. Float.max 0. ((r.h -. text_h) /. 2.)
   in
+  (layout, x0, y0)
+
+let text_ops t id r fg s =
+  let scene = t.scene () in
+  let scale = t.scale () in
+  let store = t.store () in
+  let tp = Lui_paint.text_placement_of store id in
+  let layout, x0, y0 = text_layout t id r s in
+  let w' = Float.max 0. (r.w -. (2. *. tp.tp_pad_x *. scale)) in
+  let lines = Array.map (fun (l : Lui_text.line_layout) -> l.ll_line) layout.lay_lines in
   let gstart = List.length scene.glyphs in
   let line_y = ref 0. in
   Array.iter
@@ -409,5 +413,5 @@ let measure_text ?(width = 0.) t id s =
     let width =
       if Float.is_finite width && width > 0. then width /. scale else 0.
     in
-    let w, h = Lui_text.measure ~width (font_of (t.store ()) id) s in
+    let w, h = Lui_text.Cache.measure t.layouts ~width (font_of (t.store ()) id) s in
     (w *. scale, h *. scale)

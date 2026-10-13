@@ -293,17 +293,8 @@ let () =
   in
   let dw, dh = drawable () in
   let scale = Float.max 0.01 (float dw /. float width) in
-  let noop_renderer =
-    { Lui_host.name = "noop";
-      Lui_host.render =
-        (fun s ->
-           Bytes.create (s.Lui_scene.width * s.Lui_scene.height * 4)) }
-  in
   let unavailable_renderer message =
-    if Host_platform.is_macos then begin
-      warn "%s" message;
-      (noop_renderer, false, None)
-    end
+    if Host_platform.is_macos then failwith message
     else failwith
         (message ^ "; verify the graphics driver or select LUI_GPU=cpu")
   in
@@ -329,15 +320,25 @@ let () =
            Lui_blit.present b;
            img.Lui_raster.Image.pix) }
   in
+  let metrics = Host_metrics.create ~now:(perf_s ()) in
   let renderer, gl_live, blit =
     match metal with
     | Some m ->
       log "renderer: lui_metal";
+      Lui_metal.set_frame_rate m 120;
       ( { Lui_host.name = "lui_metal";
           Lui_host.render =
             (fun s ->
-               Lui_metal.render m s;
-               Lui_metal.present m;
+               if Lui_metal.ready m then begin
+                 let completed_ms = Lui_metal.gpu_ms m in
+                 if completed_ms > 0. then Host_metrics.record_phase metrics Gpu_execute completed_ms;
+                 let started = perf_s () in
+                 Lui_metal.render m s;
+                 metrics.gpu_submit_ms <- (perf_s () -. started) *. 1000.;
+                 Host_metrics.record_phase metrics Gpu_submit metrics.gpu_submit_ms;
+                 metrics.gpu_submitted <- metrics.gpu_submitted + 1;
+                 Lui_metal.present_async m
+               end else metrics.gpu_busy_skips <- metrics.gpu_busy_skips + 1;
                Bytes.empty) }
       , false, None )
     | None -> (
@@ -364,6 +365,7 @@ let () =
                 unavailable_renderer ("lui_gl.init failed: " ^ m)))
   in
   Daemon_client.boot_mark "renderer ready";
+  let paint_metrics = ref (fun (_ : Lui_scene.t) -> []) in
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
   let blit_cell = ref blit and gctx_cell = ref gctx in
   (* Runs between the scene's seal and the active renderer, for
@@ -371,14 +373,33 @@ let () =
      installed further down is its only user. *)
   let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let renderer_live =
-    { Lui_host.name = "lui (resilient)";
+    { Lui_host.name = "lui";
       Lui_host.render =
         (fun s ->
-           !pre_render s;
-           if Host_platform.is_macos then
-             try (!renderer_cell).Lui_host.render s
-             with _ -> noop_renderer.render s
-           else (!renderer_cell).Lui_host.render s) }
+           let retained_ops = s.Lui_scene.ops and retained_glyphs = s.Lui_scene.glyphs in
+           let retained_width = s.Lui_scene.width in
+           let render_started = perf_s () in
+           let submitted_before = metrics.gpu_submitted in
+           Fun.protect ~finally:(fun () ->
+             s.Lui_scene.ops <- retained_ops;
+             s.Lui_scene.glyphs <- retained_glyphs;
+             s.Lui_scene.width <- retained_width;
+             metrics.render_ms <- (perf_s () -. render_started) *. 1000.;
+             let gpu_submit_ms = if metrics.gpu_submitted > submitted_before then metrics.gpu_submit_ms else 0. in
+             Host_metrics.record_phase metrics Overlay (max 0. (metrics.render_ms -. gpu_submit_ms)))
+             (fun () ->
+                !pre_render s;
+                s.Lui_scene.glyphs <- List.rev retained_glyphs;
+                let color =
+                  Option.get (Theme_vars.color_of
+                    "var(--ls-caret-color, var(--ls-primary-text-color, foreground))")
+                in
+                s.Lui_scene.ops <- s.Lui_scene.ops
+                  @ Host_requests.editor_caret_ops ~color
+                  @ !paint_metrics s;
+                Host_interaction.seal_overlay s;
+                if s.Lui_scene.ops != retained_ops then Lui_scene.touch s;
+                (!renderer_cell).Lui_host.render s)) }
   in
   let host_cell = ref None in
   let rects = Rects.create () in
@@ -398,15 +419,24 @@ let () =
       Option.value ~default:Rects.zero (Lui_host.layout_rect h id)
     | None -> Rects.zero
   in
-  let scroll_shift_of id =
-    let rec sum aid (sx, sy) =
-      match Lui_store.parent (store_of ()) aid with
-      | Some p ->
-        sum p
-          (sx +. Ui.scroll_offset_x ui p, sy +. Ui.scroll_offset ui p)
-      | None -> (sx, sy)
-    in
-    sum id (0., 0.)
+  let shifts = Hashtbl.create 256 in
+  let shift_revision = ref (-1, -1) in
+  let rec scroll_shift_of id =
+    let store = store_of () in
+    let revision = Lui_store.revision store, Ui.scroll_epoch ui in
+    if !shift_revision <> revision then begin
+      Hashtbl.reset shifts; shift_revision := revision
+    end;
+    match Hashtbl.find_opt shifts id with
+    | Some shift -> shift
+    | None ->
+      let shift = match Lui_store.parent store id with
+        | None -> 0., 0.
+        | Some parent ->
+          let x, y = scroll_shift_of parent in
+          x +. Ui.scroll_offset_x ui parent, y +. Ui.scroll_offset ui parent
+      in
+      Hashtbl.replace shifts id shift; shift
   in
   let shifted_rect id =
     let r = engine_rect id in
@@ -415,8 +445,18 @@ let () =
       Lui_scene.x = r.Lui_scene.x -. sx;
       Lui_scene.y = r.Lui_scene.y -. sy }
   in
+  let content_bounds = Hashtbl.create 16 in
+  let bounds_revision = ref (-1, -1) in
   let content_box id =
-    List.fold_left
+    let host = Option.get !host_cell in
+    let revision = Lui_store.layout_rev (store_of ()), Lui_host.invalidation_count host in
+    if !bounds_revision <> revision then begin
+      Hashtbl.reset content_bounds; bounds_revision := revision
+    end;
+    match Hashtbl.find_opt content_bounds id with
+    | Some bounds -> bounds
+    | None ->
+    let bounds = List.fold_left
       (fun (l, t, rgt, b) d ->
          if d = id then (l, t, rgt, b)
          else
@@ -430,6 +470,8 @@ let () =
       , Float.min_float
       , Float.min_float )
       (Lui_store.preorder ~root:id (store_of ()))
+    in
+    Hashtbl.replace content_bounds id bounds; bounds
   in
   let rect_intersect a b =
     let x = Float.max a.Lui_scene.x b.Lui_scene.x
@@ -461,7 +503,7 @@ let () =
         scroll_of =
           (fun id ->
              let cap = Ui.scroll_cap ui id in
-             if cap <= 0.001 then None
+             if cap <= 0.001 || not (Ui.scrollbar_visible ui id) then None
              else
                let cr = engine_rect id in
                let _, top, _, bot = content_box id in
@@ -650,8 +692,18 @@ let () =
     Hashtbl.create 256
   in
   let measure_rev = ref (-1, -1) in
+  let module Timed_layout = struct
+    include Lui_layout
+    let sync ?scale ?measure ?hidden ?ctx_anchor ?vport ~width ~height t store =
+      let started = perf_s () and before = stat_syncs t in
+      sync ?scale ?measure ?hidden ?ctx_anchor ?vport ~width ~height t store;
+      metrics.layout_ms <- (perf_s () -. started) *. 1000.;
+      let runs = stat_syncs t - before in
+      if runs > 0 then Host_metrics.record_phase metrics Layout metrics.layout_ms;
+      metrics.layout_count <- metrics.layout_count + runs
+  end in
   let host =
-    Lui_host.create ~hooks ~layout:(module Lui_layout)
+    Lui_host.create ~hooks ~layout:(module Timed_layout)
       ~measure:(fun id text w _h ->
         (* Memoized per store revision: nested inline flex rows (a
            linked-reference block's "see [[Alpha]]" runs) re-measure
@@ -674,6 +726,7 @@ let () =
           measure_rev := rev
         end;
         let scale_now = text_engine.scale () in
+        let w = Host_interaction.measure_width w in
         let key = (id, text, w, scale_now) in
         match Hashtbl.find_opt measure_memo key with
         | Some r -> r
@@ -692,20 +745,106 @@ let () =
   host_cell := Some host;
   let store = Lui_host.store host in
   Daemon_client.boot_mark "host ready";
+  List.iter (fun property ->
+    Lui_store.set_extension_prop_mask store ~identifier:"logseq-editor" ~property
+      (Lui_store.d_input lor Lui_store.d_paint))
+    ["caret"; "composition"; "runs"; "block-id"];
+
   Lui_host.set_hidden host (Some (fun id -> Ui.hidden ui store id));
   Lui_host.set_ctx_anchor host
-    (Some (fun () -> Some (Ui.pointer ui)));
+    (Some (fun () ->
+       Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
   let apply_patch_json (s : string) =
     if s <> "" then begin
+      let started = perf_s () in
       List.iter
-        (fun b -> ignore (Lui_host.apply_batch host b))
+        (fun b ->
+           metrics.patch_ops <- metrics.patch_ops + List.length b.Lui_protocol.ops;
+           ignore (Lui_host.apply_batch host b))
         (Patch_decode.batches_of_string s);
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
-      Host_requests.flush_pending_focus ()
+      Host_requests.flush_pending_focus ();
+      Host_metrics.record_phase metrics Patch_apply ((perf_s () -. started) *. 1000.)
     end
   in
+  let content_width () =
+    Host_metrics.content_width metrics (float !win_w)
+  in
+  let metrics_button_down = ref false in
+  let resize_metrics_split () =
+    Lui_host.resize host ~width:(int_of_float (content_width () *. !scale_cell))
+      ~height:(int_of_float (float !win_h *. !scale_cell)) ~scale:!scale_cell;
+    Native_embed.platform_event
+      (Printf.sprintf "window-size\n{\"width\":%d,\"height\":%d}"
+         (int_of_float (content_width ())) !win_h)
+  in
+  paint_metrics := (fun (scene : Lui_scene.t) ->
+    let sc = !scale_cell in
+    scene.width <- int_of_float (float !win_w *. sc);
+    let fg = Option.get (Theme_vars.color_of "foreground") in
+    let bg = Option.get (Theme_vars.color_of "background") in
+    let accent = Option.get (Theme_vars.color_of "accent") in
+    let box x y w h color =
+      Lui_scene.Fill
+        { frect = Lui_scene.rect (x *. sc) (y *. sc) (w *. sc) (h *. sc);
+          fradii=(0.,0.,0.,0.); fcontinuous=false; fcolor=color;
+          fpaint=Lui_scene.Solid; fcolor2=color; fgradient=(0.,0.,0.,0.);
+          fborder=(0.,0.,0.,0.); fborder_color=Lui_scene.color 0 0 0 0;
+          fdashed=false; fwide=0; fopacity=1. }
+    in
+    let label x y w value =
+      Text_engine.text_ops text_engine 0
+        (Lui_scene.rect (x *. sc) (y *. sc) (w *. sc) (28. *. sc)) fg value
+    in
+    let button = Host_metrics.dialog_rect metrics (float !win_w) in
+    let ops =
+      box (button.x -. 115.) 7. 108. 32. bg
+      :: box button.x button.y button.w button.h accent
+      :: label (button.x -. 108.) 9. 100. (Printf.sprintf "%.0f FPS" metrics.fps)
+      @ label (button.x +. 12.) 9. 70. "dialog"
+    in
+    if not metrics.panel_open then ops
+    else
+      let x = content_width () in
+      let width = float !win_w -. x in
+      let gc = Gc.quick_stat () in
+      let lines =
+        [ "Native performance (Dev)"
+        ; Printf.sprintf "FPS: %.1f / %.0f" metrics.fps Host_metrics.target_fps
+        ; Printf.sprintf "Frame budget: %.2f ms" Host_metrics.frame_budget_ms
+        ; Printf.sprintf "Presented p50 / p95: %.2f / %.2f ms"
+            (Host_metrics.phase_summary metrics Presentation_interval).p50
+            (Host_metrics.phase_summary metrics Presentation_interval).p95
+        ; Printf.sprintf "Work p50 / p95: %.2f / %.2f ms"
+            (Host_metrics.percentile metrics 0.5) (Host_metrics.percentile metrics 0.95)
+        ; Printf.sprintf "Interaction p50 / p95: %.2f / %.2f ms"
+            (Host_metrics.phase_summary metrics Active_frame).p50
+            (Host_metrics.phase_summary metrics Active_frame).p95
+        ; Printf.sprintf "Over budget: %d frames" metrics.missed
+        ; Printf.sprintf "Input to host frame: %.2f ms" metrics.input_latency_ms
+        ; Printf.sprintf "Events: %.2f ms (%d total)" metrics.event_ms metrics.event_count
+        ; Printf.sprintf "Mailbox: %.2f ms" metrics.pump_ms
+        ; Printf.sprintf "Layout: %.2f ms (%d runs)" metrics.layout_ms metrics.layout_count
+        ; Printf.sprintf "Layout p95: %.2f ms" (Host_metrics.phase_summary metrics Layout).p95
+        ; Printf.sprintf "Paint + render: %.2f ms" metrics.paint_ms
+        ; Printf.sprintf "GPU submit / execute: %.2f / %.2f ms" metrics.gpu_submit_ms
+            (match metal with Some m -> Lui_metal.gpu_ms m | None -> 0.)
+        ; Printf.sprintf "GPU execute p95: %.2f ms" (Host_metrics.phase_summary metrics Gpu_execute).p95
+        ; Printf.sprintf "Hit geometry: %.2f ms" metrics.populate_ms
+        ; Printf.sprintf "Nodes: %d / scene ops: %d"
+            (Lui_store.node_count store) (List.length scene.ops)
+        ; Printf.sprintf "Patch ops: %d" metrics.patch_ops
+        ; Printf.sprintf "Heap: %.1f MB" (float gc.Gc.heap_words *. 8. /. 1048576.)
+        ; Printf.sprintf "GC minor / major: %d / %d" gc.minor_collections gc.major_collections
+        ; "Click dialog again to close this buffer."
+        ]
+      in
+      ops @ (box x 48. width (float !win_h -. 48.) bg
+        :: box x 48. 1. (float !win_h -. 48.) accent
+        :: List.concat (List.mapi (fun i line ->
+             label (x +. 18.) (64. +. float i *. 31.) (width -. 36.) line) lines)));
   (* on-demand rect with the same shift+clip math populate_rects bakes
      into the cache — for measure-node replies that arrive between
      repaints, when the cached entry is absent or stale *)
@@ -783,52 +922,29 @@ let () =
     in
     splice 0 ops
   in
+  let populate_revision = ref (-1, -1, -1) in
   let populate_rects () =
-    Hashtbl.reset rects;
-    sidebar_id_cell := -1;
-    List.iter
-      (fun id ->
-         let base = engine_rect id in
-         let rec walk aid ((sx, sy), clip) =
-           match Lui_store.parent store aid with
-           | None -> ((sx, sy), clip)
-           | Some p ->
-             let clip =
-               if Ui.scrollable store p then
-                 match Hashtbl.find_opt rects p with
-                 | Some pr when not (Lui_scene.rect_empty pr) ->
-                   rect_intersect clip pr
-                 | _ -> clip
-               else clip
-             in
-             walk p
-               ((sx +. Ui.scroll_offset_x ui p,
-                 sy +. Ui.scroll_offset ui p), clip)
-         in
-         let (sx, sy), clip = walk id ((0., 0.), unclipped) in
-         let r =
-           { base with
-             Lui_scene.x = base.Lui_scene.x -. sx;
-             Lui_scene.y = base.Lui_scene.y -. sy }
-         in
-         Hashtbl.replace rects id (rect_intersect r clip);
-         if !sidebar_id_cell < 0 then
-           match Lui_store.string_prop store id "style-class" with
-           | Some c when class_has c "cp__sidebar-left-layout" ->
-             sidebar_id_cell := id
-           | _ -> ())
-      (Lui_store.preorder store);
-    List.iter
-      (fun id ->
-         if Ui.scrollable store id then
-           let cr = engine_rect id in
-           let l, t, rgt, b = content_box id in
-           Ui.set_scroll_cap ui id
-             (Float.max 0. (b -. t -. cr.Lui_scene.h));
-           Ui.set_scroll_cap_x ui id
-             (Float.max 0. (rgt -. l -. cr.Lui_scene.w)))
-      (Lui_store.preorder store);
-    Ui.notify_layout ui
+    let revision = Lui_store.layout_rev store, Lui_host.invalidation_count host,
+      Ui.scroll_epoch ui in
+    if !populate_revision <> revision then begin
+      populate_revision := revision;
+      Host_interaction.refresh_rects ~store ~base:engine_rect
+        ~scroll_x:(Ui.scroll_offset_x ui) ~scroll_y:(Ui.scroll_offset ui)
+        ~scrollable:(Ui.scrollable store) rects;
+      sidebar_id_cell := -1;
+      List.iter (fun id ->
+        if !sidebar_id_cell < 0 then
+          (match Lui_store.string_prop store id "style-class" with
+           | Some c when class_has c "cp__sidebar-left-layout" -> sidebar_id_cell := id
+           | _ -> ());
+        if Ui.scrollable store id then begin
+          let cr = engine_rect id in
+          let l, t, rgt, b = content_box id in
+          Ui.set_scroll_cap ui id (Float.max 0. (b -. t -. cr.Lui_scene.h));
+          Ui.set_scroll_cap_x ui id (Float.max 0. (rgt -. l -. cr.Lui_scene.w))
+        end) (Lui_store.preorder store);
+      Ui.notify_layout ui
+    end
   in
   (* Metal + macOS only: keep the .sidebar NSVisualEffectView frame
      glued to the sidebar column and splice the hole into the display
@@ -875,15 +991,9 @@ let () =
      margin below the edge) — rows mount in place, pagination works. *)
   let lazy_fired : (int, unit) Hashtbl.t = Hashtbl.create 64 in
   let virt_end_fired : (int, float) Hashtbl.t = Hashtbl.create 8 in
-  let attrs_has id needle =
+  let attrs_has id name =
     match Lui_store.string_prop store id "attrs" with
-    | Some s -> (
-        let n = String.length s and m = String.length needle in
-        let rec found i =
-          i + m > n
-          || (String.sub s i m = needle || found (i + 1))
-        in
-        m = 0 || found 0)
+    | Some payload -> Host_interaction.has_attribute payload name
     | None -> false
   in
   let emit_dom_event name id =
@@ -1043,7 +1153,8 @@ let () =
        | None -> ());
       scale_cell := float dw /. float (max 1 !win_w);
       Ui.set_scale ui !scale_cell;
-      Lui_host.resize host ~width:dw ~height:dh ~scale:!scale_cell;
+      Lui_host.resize host ~width:(int_of_float (content_width () *. !scale_cell))
+        ~height:dh ~scale:!scale_cell;
       push_window_size ()
     | Focus_changed id ->
       if id = 0 then Sdl.stop_text_input ()
@@ -1058,7 +1169,8 @@ let () =
     (* Logical viewport size — Web_dom.win_inner_* drives the
        virtualizer and window-edge popup anchoring. *)
     let body =
-      Printf.sprintf "{\"width\":%d,\"height\":%d}" !win_w !win_h
+      Printf.sprintf "{\"width\":%d,\"height\":%d}"
+        (int_of_float (content_width ())) !win_h
     in
     Native_embed.platform_event ("window-size\n" ^ body)
   in
@@ -1401,6 +1513,7 @@ let () =
     | _ -> None
   in
   let on_dom_key ~down ~scancode ~keymod ~repeat =
+    if down then Host_metrics.note_key metrics (dom_key scancode);
     let mods = mods_of_keymod keymod in
     let target =
       let menu = Ui.open_menu ui in
@@ -1599,7 +1712,32 @@ let () =
     while !go do
       if Sdl.poll_event (Some e) then begin
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
-        (match input_of_event e with
+        metrics.event_count <- metrics.event_count + 1;
+        let input = input_of_event e in
+        (match input with
+         | Some (Input.Key_down _ | Input.Text_input _) -> Host_requests.ensure_ed_focus ()
+         | _ -> ());
+        (match input with
+         | Some (Input.Button_down _ | Input.Button_up _ | Input.Key_down _
+                | Input.Text_input _ | Input.Wheel _ | Input.Wheel_mods _) ->
+           let age = Int32.sub (Sdl.get_ticks ()) (Sdl.Event.get e Sdl.Event.timestamp) in
+           let at = perf_s () -. Int32.to_float age /. 1000. in
+           metrics.input_at <- Some (match metrics.input_at with None -> at | Some old -> min old at)
+         | _ -> ());
+        let consumed = match input with
+          | Some (Input.Button_down (x, y, Input.Left, _, _)) ->
+            Daemon_client.boot_mark (Printf.sprintf "button down %.0f,%.0f" x y);
+            metrics_button_down := Host_metrics.contains
+              (Host_metrics.dialog_rect metrics (float !win_w)) x y;
+            !metrics_button_down
+          | Some (Input.Button_up (_, _, Input.Left, _)) when !metrics_button_down ->
+            metrics_button_down := false;
+            Host_metrics.toggle_panel metrics;
+            resize_metrics_split (); true
+          | _ -> false
+        in
+        if not consumed then begin
+        (match input with
          | Some (Input.Resize (w, h)) ->
            win_w := w;
            win_h := h;
@@ -1609,6 +1747,7 @@ let () =
            apply_actions (Ui.handle ui store rects input);
            (match input with
             | Input.Text_input s ->
+              Host_metrics.note_text metrics s;
               (* the editor sink's conduit reads text commits as
                  "insert" — Ui.handle's TextChanged path stays unused
                  because the extension admits no such event *)
@@ -1622,6 +1761,7 @@ let () =
             | _ -> ())
          | None -> ());
         emit_dom_event e
+        end
       end
       else go := false
     done
@@ -1653,6 +1793,7 @@ let () =
       rect_of = live_rect;
       scale = (fun () -> !scale_cell);
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
+      text_layout = (fun id s -> Text_engine.text_layout text_engine id (live_rect id) s);
       apply_batch = (fun b -> ignore (Lui_host.apply_batch host b));
       apply_actions;
       set_ime_rect;
@@ -1700,9 +1841,17 @@ let () =
     | Some _ -> true
   in
   let raises_left = ref 3 in
+  let metrics_log = Option.map open_out (Sys.getenv_opt "LOGSEQ_NATIVE_METRICS") in
+  let last_metrics_export = ref (perf_s ()) in
+  let previous_loop = ref None in
+  let frame_deadline = ref (perf_s ()) in
   Daemon_client.boot_mark "loop";
   while not !quit do
     let t0 = perf_s () in
+    (match !previous_loop with
+     | Some previous -> Host_metrics.record_phase metrics Loop_interval ((t0 -. previous) *. 1000.)
+     | None -> ());
+    previous_loop := Some t0;
     Lui_shell.pump ();
     (* See the raise_window note above: re-raise briefly after boot so a
        racing frontmost app cannot permanently steal input routing. *)
@@ -1717,7 +1866,12 @@ let () =
       native_activate ();
       Daemon_client.boot_mark "raise end"
     end;
+    let events_before = metrics.event_count in
+    let events_started = perf_s () in
     drain_events ();
+    metrics.event_ms <- (perf_s () -. events_started) *. 1000.;
+    let had_events = metrics.event_count > events_before in
+    if had_events then Host_metrics.record_phase metrics Events metrics.event_ms;
     if !frame < 3 then Daemon_client.boot_mark "events drained";
     (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
        (id kind key class rect, indented) to the debug log. *)
@@ -1794,10 +1948,16 @@ let () =
         pump_all (n - 1)
       end
     in
+    let had_mailbox = Atomic.get Bridge.pending_wakeup in
+    let pump_started = perf_s () in
     pump_all 8;
+    metrics.pump_ms <- (perf_s () -. pump_started) *. 1000.;
+    if had_mailbox then Host_metrics.record_phase metrics Mailbox metrics.pump_ms;
     if !frame < 3 then Daemon_client.boot_mark "pumps drained";
     (* platform_request envelopes the app emitted are serviced here. *)
+    let requests_started = perf_s () in
     Host_requests.drain ();
+    Host_metrics.record_phase metrics Requests ((perf_s () -. requests_started) *. 1000.);
     apply_actions (Ui.store_changed ui store);
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
@@ -1811,23 +1971,58 @@ let () =
       Lui_host.invalidate_layout host;
       host_req_repaint := true
     end;
+    Ui.tick_scrollbars ui ~now_ms:(perf_s () *. 1000.);
     let dirty = Ui.want_frame ui host || !host_req_repaint in
     if dirty then begin
       host_req_repaint := false;
       Daemon_client.boot_mark "paint begin";
+      let paint_started = perf_s () in
+      let layout_before = metrics.layout_count in
+      Host_interaction.prepare_paint ui host;
       ignore (Lui_host.repaint host);
+      metrics.paint_ms <- (perf_s () -. paint_started) *. 1000.;
+      let layout_ms = if metrics.layout_count > layout_before then metrics.layout_ms else 0. in
+      Host_metrics.record_phase metrics Scene_build
+        (max 0. (metrics.paint_ms -. layout_ms -. metrics.render_ms));
       Daemon_client.boot_mark "paint done";
       if !debug then
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
+      let populate_started = perf_s () in
       populate_rects ();
       fire_viewport_events ();
+      metrics.populate_ms <- (perf_s () -. populate_started) *. 1000.;
+      Host_metrics.record_phase metrics Geometry metrics.populate_ms;
       Daemon_client.boot_mark "viewport";
+      let a11y_started = perf_s () in
       ignore (Lui_a11y.sync a11y);
+      Host_metrics.record_phase metrics Accessibility ((perf_s () -. a11y_started) *. 1000.);
       Daemon_client.boot_mark "a11y sync";
       if !gl_live_cell then Sdl.gl_swap_window !win;
       Ui.frame_done ui;
       incr frame
+    end
+    else begin
+      ignore (renderer_live.Lui_host.render (Lui_host.scene host));
+      if !gl_live_cell then Sdl.gl_swap_window !win
+    end;
+    (match metal with
+     | Some m -> Host_metrics.record_display_count metrics ~now:(perf_s ())
+         ~presented:(Lui_metal.presented_frames m)
+     | None -> ());
+    let work_ms = (perf_s () -. t0) *. 1000. in
+    if dirty || had_events || had_mailbox then Host_metrics.record_phase metrics Active_frame work_ms;
+    Host_metrics.record_present metrics ~now:(perf_s ()) ~work_ms;
+    let now = perf_s () in
+    if now -. !last_metrics_export >= 1. then begin
+      last_metrics_export := now;
+      (match metal with
+       | Some m ->
+           let total, values = Lui_metal.presentation_samples m in
+           Host_metrics.record_presentation_samples metrics ~total values
+       | None -> ());
+      Option.iter (fun channel ->
+        output_string channel (Host_metrics.snapshot metrics ~now ^ "\n"); flush channel) metrics_log
     end;
     (let iter_ms = (perf_s () -. t0) *. 1000. in
      if iter_ms > 20. then
@@ -1845,19 +2040,15 @@ let () =
          (st.Gc.top_heap_words * 8 / 1048576)
          (Lui_store.node_count store)
      end);
-    if dirty && not vsync then begin
-      (* Boot frames pace at ~2ms, not vsync: pacing sleeps delay the
-         wakeup-driven boot pumps behind every repaint. *)
-      let cap = if !frame < 60 then 2. else 16.6 in
-      let remaining = cap -. ((perf_s () -. t0) *. 1000.) in
-      if remaining > 0.5 then
-        Sdl.delay (Int32.of_int (int_of_float remaining))
+    if not vsync then begin
+      let now = perf_s () in
+      frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;
+      let remaining = !frame_deadline -. now in
+      if remaining > 0. then Thread.delay remaining
     end
-    else if not dirty then
-      (* 1ms during boot: wakeup-driven pumps otherwise wait a 4ms
-         sleep per hop across the serialized invoke chain. *)
-      Sdl.delay (if !frame < 60 then 1l else 4l)
+
   done;
+  Option.iter close_out metrics_log;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with
    | Some c -> Sdl.gl_delete_context c

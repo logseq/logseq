@@ -370,7 +370,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine host_platform host_platform_test))
+ (modules (:standard \ logseq_native native_embed native_lifecycle_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
@@ -407,9 +407,8 @@
 
 (executable
  (name logseq_native)
- (modules logseq_native native_embed bridge patch_decode host_requests
-   theme_vars host_icons text_engine)
- (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform
+ (modules logseq_native)
+ (libraries logseq_native_host_services logseq_ui_ocamlhost logseq_ocaml_host_platform logseq_native_entry logseq_native_interaction logseq_host_metrics
    lui
    lui.store
    lui.scene
@@ -434,10 +433,62 @@
    ocaml-signal
    unix
    threads.posix)
- (foreign_stubs
-  (language c)
-  (names ocaml_host_stubs)
-  (flags (:standard (:include host_c_flags.sexp))))
  (link_flags (:standard (:include host_link_flags.sexp)))
  (modes native)
  (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(library
+ (name logseq_native_host_services)
+ (wrapped false)
+ (modules patch_decode host_requests theme_vars host_icons text_engine)
+ (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform logseq_native_entry
+   logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
+   lui.layout lui.text lui.svg lui.theme lui.ime yojson str unix))
+
+(test
+ (name host_requests_test)
+ (modules host_requests_test)
+ (libraries logseq_native_host_services))
+
+(library
+ (name logseq_native_entry)
+ (wrapped false)
+ (modules native_embed bridge)
+ (libraries logseq_ui_ocamlhost)
+ (foreign_stubs
+  (language c)
+  (names ocaml_host_stubs)
+  (flags (:standard (:include host_c_flags.sexp)))))
+
+(test
+ (name native_lifecycle_test)
+ (modules native_lifecycle_test)
+ (libraries logseq_native_entry)
+ (link_flags (:standard (:include host_link_flags.sexp))))
+
+(library
+ (name logseq_native_interaction)
+ (wrapped false)
+ (modules host_interaction)
+ (libraries lui.store lui.scene lui.host lui.window))
+
+(test
+ (name host_interaction_test)
+ (modules host_interaction_test)
+ (libraries logseq_native_interaction lui.layout))
+
+(library
+ (name logseq_host_metrics)
+ (wrapped false)
+ (modules host_metrics)
+ (libraries lui.scene))
+
+(test
+ (name host_metrics_test)
+ (modules host_metrics_test)
+ (libraries logseq_host_metrics))
+
+(rule
+ (alias runtest)
+ (deps native_acceptance.py native_acceptance_test.py)
+ (action (run python3 -m unittest native_acceptance_test)))

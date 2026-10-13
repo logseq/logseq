@@ -45,6 +45,7 @@ type env = {
   rect_of : int -> Lui_scene.rect;
   scale : unit -> float;
   measure : int -> string -> float * float;
+  text_layout : int -> string -> Lui_text.layout * float * float;
   apply_batch : patch_batch -> unit;
   apply_actions : action list -> unit;
   set_ime_rect : Lui_scene.rect -> unit;
@@ -99,7 +100,7 @@ type ed_ctx = {
   nodes : int array;
 }
 
-let ed_ctx (e : env) (bid : string) : ed_ctx option =
+let ed_ctx_uncached (e : env) (bid : string) : ed_ctx option =
   match
     List.find_opt
       (fun id ->
@@ -140,6 +141,32 @@ let ed_ctx (e : env) (bid : string) : ed_ctx option =
         ; nodes = Array.of_list nodes
         })
 
+let context_store : Lui_store.t option ref = ref None
+let context_revision = ref (-1)
+let context_cache : (string, ed_ctx option) Hashtbl.t = Hashtbl.create 8
+
+let ed_ctx (e : env) bid =
+  let same_store = match !context_store with Some store -> store == e.store | None -> false in
+  let revision = Lui_store.revision e.store in
+  if not same_store || revision <> !context_revision then begin
+    Hashtbl.clear context_cache;
+    context_store := Some e.store;
+    context_revision := revision
+  end;
+  let cached = match Hashtbl.find_opt context_cache bid with
+    | Some ctx -> ctx
+    | None ->
+        let ctx = ed_ctx_uncached e bid in
+        Hashtbl.add context_cache bid ctx;
+        ctx in
+  Option.map (fun ctx ->
+    (* Scroll/resize can move geometry without changing the store. *)
+    let editor = match Lui_store.parent e.store ctx.sink with
+      | Some editor -> editor
+      | None -> invalid_arg "Cached editor sink has no parent" in
+    let rect = e.rect_of editor in
+    {ctx with ox=rect.Lui_scene.x; oy=rect.y}) cached
+
 (* Window-space rect of the n-th .ed-r node, as (x, y, h) relative to
    the block-editor origin. *)
 let run_rect e ctx i =
@@ -169,7 +196,7 @@ let caret_rect e ctx off =
   else begin
     let i = run_of_off ctx off in
     let lo, _ = run_at ctx i in
-    let x, y, h = run_rect e ctx i in
+    let _, _, h = run_rect e ctx i in
     if h <= 0. then (0., 0., 0.)
     else begin
       let text =
@@ -177,10 +204,11 @@ let caret_rect e ctx off =
           (Lui_store.string_prop e.store ctx.nodes.(i) "text")
       in
       let local = max 0 (min (off - lo) (String.length text)) in
-      let dx, _ =
-        e.measure ctx.nodes.(i) (String.sub text 0 local)
-      in
-      (x +. dx, y, h)
+      let layout, x0, y0 = e.text_layout ctx.nodes.(i) text in
+      let r = Lui_text.caret_rect layout local in
+      let scale = e.scale () in
+      (x0 +. r.rx *. scale -. ctx.ox,
+       y0 +. r.ry *. scale -. ctx.oy, r.rh *. scale)
     end
   end
 
@@ -213,19 +241,13 @@ let offset_at e ctx x y =
     let i = !best in
     let lo, hi = run_at ctx i in
     let id = ctx.nodes.(i) in
-    let r = e.rect_of id in
     let text =
       Option.value ~default:"" (Lui_store.string_prop e.store id "text")
     in
-    let len = String.length text in
-    (* widest prefix whose advance still precedes the point *)
-    let rec step k =
-      if k >= len then len
-      else
-        let w, _ = e.measure id (String.sub text 0 (k + 1)) in
-        if r.Lui_scene.x +. w <= wx then step (k + 1) else k
-    in
-    lo + min (hi - lo) (step 0)
+    let layout, x0, y0 = e.text_layout id text in
+    let scale = e.scale () in
+    lo + min (hi - lo)
+      (Lui_text.hit_test layout ((wx -. x0) /. scale, (wy -. y0) /. scale))
   end
 
 let line_ranges e ctx =
@@ -243,20 +265,24 @@ let line_ranges e ctx =
       end
     in
     for i = 0 to n - 1 do
-      let r = e.rect_of ctx.nodes.(i) in
-      let slo, shi = run_at ctx i in
-      if Float.is_nan !cur_y || abs_float (r.Lui_scene.y -. !cur_y) < 1.
-      then begin
-        cur_y := r.Lui_scene.y;
-        lo := min !lo slo;
-        hi := max !hi shi
-      end
-      else begin
-        flush ();
-        cur_y := r.Lui_scene.y;
-        lo := slo;
-        hi := shi
-      end
+      let id = ctx.nodes.(i) in
+      let base, stop = run_at ctx i in
+      let text = Option.value ~default:"" (Lui_store.string_prop e.store id "text") in
+      let layout, _, y0 = e.text_layout id text in
+      Array.iter (fun (line : Lui_text.line_layout) ->
+        let y = y0 +. line.ll_top *. e.scale () in
+        let slo = base + line.ll_line.start in
+        let shi = min stop (base + line.ll_line.stop) in
+        if Float.is_nan !cur_y || abs_float (y -. !cur_y) < 1. then begin
+          cur_y := y;
+          lo := min !lo slo;
+          hi := max !hi shi
+        end else begin
+          flush ();
+          cur_y := y;
+          lo := slo;
+          hi := shi
+        end) layout.lay_lines
     done;
     flush ();
     Buffer.contents b
@@ -509,18 +535,31 @@ let queue_input_focus bid focused =
    is left alone. Runs both after applied batches and after the frame
    loop's store_changed (dead-focus cleanup clears Ui.focused there,
    when no batch is pending to trigger this again). *)
+let focus_candidates = Host_interaction.editor_cache ()
+
 let ensure_ed_focus_ (e : env) =
-  if Ui.focused e.ui = 0 then
-    (match
-       List.find_map
-         (fun id ->
-           match Lui_store.prop e.store id "block-id" with
-           | Some (Lui_protocol.StringValue bid) -> Some bid
-           | _ -> None)
-         (Lui_store.preorder e.store)
-     with
-     | Some bid -> ignore (try_set_input_focus e bid true)
-     | None -> ())
+  if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
+    match Host_interaction.editor_candidate focus_candidates e.store with
+    | Some bid -> ignore (try_set_input_focus e bid true)
+    | None -> ()
+
+(* Draw the model caret using the same current glyph geometry used by
+   caret-rect replies. The input sink itself has no visible bounds. *)
+let editor_caret_ops ~color =
+  match !env with
+  | None -> []
+  | Some e ->
+    let sink = Ui.focused e.ui in
+    match Lui_store.string_prop e.store sink "block-id",
+          Lui_store.int_prop e.store sink "caret" with
+    | Some bid, Some off when off >= 0 ->
+      (match ed_ctx e bid with
+       | None -> []
+       | Some ctx ->
+         let x, y, h = caret_rect e ctx off in
+         Host_interaction.caret_ops ~scale:(e.scale ()) ~color
+           (Lui_scene.rect (ctx.ox +. x) (ctx.oy +. y) 0. h))
+    | _ -> []
 
 let ensure_ed_focus () =
   match !env with Some e -> ensure_ed_focus_ e | None -> ()

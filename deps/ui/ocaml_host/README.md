@@ -66,3 +66,50 @@ resources. The current CLI's resource option only bundles web assets;
 do not treat a package containing only the host executable as a complete
 Logseq distribution. LUI's existing `Lui_pkg` and platform packagers
 support explicit resources for future application packaging integration.
+
+## Interaction metrics and acceptance
+
+The FPS overlay counts actual Metal drawable presentations. Its dialog
+button opens a live metrics split. Scrollbars start hidden, appear during
+scrolling, and hide after 800 ms without movement.
+
+Set `LOGSEQ_NATIVE_METRICS` to a JSONL file path to retain phase timings,
+actual presentation intervals, and received key/text counters. Input
+latency measures the SDL event timestamp to host-frame completion;
+it excludes GPU/display delay. `LUI_FLEX_PROFILE=1` enables layout call
+counts. `LUI_METAL_CAPTURE` captures a serializable scene on frame 30;
+creating `<capture-path>.request` captures the next rendered scene.
+Close the app before an offscreen GPU replay to avoid competing workloads.
+
+`native_acceptance.py` validates a recorded scenario against CPU/GPU,
+display, input, and layout budgets. It requires observed functional
+evidence as well as timing data before reporting overall acceptance.
+For typing, the evidence contains `expected_text`, `actual_text`,
+`input_duration_s`, `caret_correct`, `ime_expected_text`, and
+`ime_actual_text`. It requires 200 characters at 20 characters/s and a
+correct non-ASCII IME commit. Enter evidence contains `expected_text`,
+`actual_text`, `input_duration_s`, `enter_presses`, `before_blocks`,
+`after_blocks`, and `final_block_focused`; 50 presses at 10 presses/s must
+create exactly 50 blocks and retain editor focus. Read persisted data from the same running worker;
+using a global CLI with a different revision can replace that worker.
+
+```sh
+python3 deps/ui/ocaml_host/native_acceptance.py recording.jsonl \
+  --scenario typing --refresh-hz 100 --warmup-s 5 --evidence typing-evidence.json
+```
+
+The workload target is 120 FPS (8.33 ms). Editing requires at least
+60 actual FPS, with CPU/layout p95 at most 16.67 ms. A lower-refresh
+display cannot certify 120 physical FPS. These budgets are enforced by
+the scenario validator and tested under `dune runtest ocaml_host`.
+Run hardware GPU budget tests with `dune runtest -j 1` and close the
+application first so other Metal test processes do not compete for the
+same GPU. The default Metal suite includes the native modal composition;
+captured-scene replay remains available for diagnosing a specific graph.
+
+On the affected macOS installation, SDL2-compat reports incorrect mouse
+coordinates. The development bundle uses the installed SDL 2.32.6 library
+in `Contents/Frameworks/libSDL2-2.0.0.dylib`, with the executable's SDL
+install name set to `@executable_path/../Frameworks/libSDL2-2.0.0.dylib`.
+Preserve that dependency when replacing the executable and sign the
+bundle again before launching it.
