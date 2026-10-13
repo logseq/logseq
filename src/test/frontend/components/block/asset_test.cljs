@@ -2,6 +2,17 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.block.asset :as block-asset]))
 
+(deftest media-asset?-test
+  (testing "treats image, audio, and video types as media embeds"
+    (is (true? (block-asset/media-asset? {:logseq.property.asset/type "png"})))
+    (is (true? (block-asset/media-asset? {:logseq.property.asset/type "mp3"})))
+    (is (true? (block-asset/media-asset? {:logseq.property.asset/type "mp4"}))))
+  (testing "treats PDF and other file types as clickable asset links"
+    (is (false? (block-asset/media-asset? {:logseq.property.asset/type "pdf"})))
+    (is (false? (block-asset/media-asset? {:logseq.property.asset/type "txt"})))
+    (is (false? (block-asset/media-asset? {:logseq.property.asset/type "xlsx"})))
+    (is (false? (block-asset/media-asset? {:logseq.property.asset/type "docx"})))))
+
 (deftest link-ext-test
   (testing "falls back to asset type when the URL has no extension"
     (is (= :pdf
