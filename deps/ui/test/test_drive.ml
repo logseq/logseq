@@ -259,7 +259,11 @@ let test_block_tree () =
                         && (String.sub bg i nlen = needle || has (i + 1))
                       in
                       has 0
-                  | None -> false)))
+                  | None -> false));
+           check "block text cursor is an i-beam"
+             (subtree_contains n (fun c ->
+                  has_tok c "block-content"
+                  && M.string_prop c "cursor" = Some "text")))
          [ b1; b2 ];
        ignore b2c
    | _ -> check "block rows present" false);

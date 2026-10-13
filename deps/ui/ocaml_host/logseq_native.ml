@@ -1251,7 +1251,17 @@ let () =
     end
   in
   ignore (sys_cursor "default" |> Option.map (fun c -> Sdl.set_cursor (Some c)));
+  (* Cursor changes only on the next motion. A modal (search) that
+     closes under a still pointer otherwise leaves the I-beam stuck
+     until the mouse moves. Re-hit after each layout. *)
+  let last_ptr : (int * int) option ref = ref None in
+  let refresh_cursor () =
+    match !last_ptr with
+    | Some (x, y) -> update_cursor (dom_hit ~x:(float x) ~y:(float y))
+    | None -> ()
+  in
   let on_dom_motion ~x ~y ~rx ~ry ~mods =
+    last_ptr := Some (x, y);
     let node = dom_hit ~x:(float x) ~y:(float y) in
     update_cursor node;
     let now = Unix.gettimeofday () in
@@ -1853,6 +1863,7 @@ let () =
           (List.length (Lui_host.scene host).Lui_scene.ops);
       populate_rects ();
       fire_viewport_events ();
+      refresh_cursor ();
       Daemon_client.boot_mark "viewport";
       ignore (Lui_a11y.sync a11y);
       Daemon_client.boot_mark "a11y sync";
