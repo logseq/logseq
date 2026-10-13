@@ -66,6 +66,31 @@
       (is (contains? full-ids :user.property/author))
       (is (not (contains? hidden-ids :user.property/author))))))
 
+(deftest display-properties-of-a-stored-block-leaves-out-recycled-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:node {:logseq.property/type :node}
+                            :nodes {:logseq.property/type :node
+                                    :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "target"}}
+                                  {:page {:block/title "kept"}}
+                                  {:page {:block/title "page"
+                                          :build/properties {:node [:build/page {:block/title "target"}]
+                                                             :nodes #{[:build/page {:block/title "target"}]
+                                                                      [:build/page {:block/title "kept"}]}}}}]})
+        target (db-test/find-page-by-title @conn "target")
+        kept (db-test/find-page-by-title @conn "kept")
+        page-id (:db/id (db-test/find-page-by-title @conn "page"))
+        display #(worker-property/display-properties @conn (d/entity @conn page-id) {:page-title? true} false)
+        full-values (fn [result property-id]
+                      (some #(when (= property-id (:property-id %)) (:value %)) (:full-properties result)))]
+    (is (= (:db/id target) (:db/id (full-values (display) :user.property/node))))
+    (d/transact! conn [[:db/add (:db/id target) :logseq.property/deleted-at 1]])
+    (let [result (display)]
+      (is (not-any? #(= :user.property/node (:property-id %)) (:full-properties result))
+          "a property whose only value is recycled is left out")
+      (is (= #{(:db/id kept)} (set (map :db/id (full-values result :user.property/nodes))))
+          "a recycled value is left out of a property's other values"))))
+
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
