@@ -75,6 +75,20 @@
   (p/let [text (.text response)]
     (js->clj (js/JSON.parse text) :keywordize-keys true)))
 
+(deftest handle-http-answers-500-when-an-async-route-fails-test
+  (async done
+         (let [request (js/Request. "http://localhost/sync/graph-1/tx/batch"
+                                    #js {:method "POST" :body "not json"})]
+           (-> (p/let [response (sync-handler/handle-http #js {} request)
+                       body (json-body response)]
+                 (is (= 500 (.-status response)))
+                 (is (= "server error" (:error body)))
+                 (is (string? (:debug-message body))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str "handle-http rejected: " error))
+                          (done)))))))
+
 (deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
   (async done
          (with-memory-sql-async
