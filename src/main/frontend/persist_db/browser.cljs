@@ -295,7 +295,12 @@
     (-> (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
                 _ (<sync-markdown-mirror-setting! repo)]
           result)
-        (p/catch sqlite-error-handler)))
+        (p/catch (fn [error]
+                   ;; nil schema legitimately means "not created yet", so a
+                   ;; dead db-worker must not be swallowed into a sqlite error
+                   (if (state/db-worker-uninitialized-error? error)
+                     (throw error)
+                     (sqlite-error-handler error))))))
 
   (<export-db [_this repo opts]
     (-> (if (util/electron?)

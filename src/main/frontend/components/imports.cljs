@@ -408,6 +408,13 @@
         (and (string? message)
              (string/includes? message "Failed to fetch")))))
 
+(defn- interrupted-import-error?
+  "Errors caused by the db-worker restarting mid-import rather than by the
+  imported content itself."
+  [error]
+  (or (transport-error? error)
+      (state/db-worker-uninitialized-error? error)))
+
 (defn- import-files-finished?
   "Keep-graph is safe only after export-file-graph returns (sqlite store +
   finalize). :finishing is set before those steps; current-idx reaches total
@@ -429,16 +436,17 @@
         (finish-file-graph-import! current-repo {}))
       (do
         (clear-file-graph-importing-ui!)
-        (when created-new-graph?
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
-                              :error)
-          (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
-        (when (and (not created-new-graph?)
-                   (= :file-graph-import/graph-not-created (:code (ex-data error))))
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
-                              :error))
+        (let [display (if (interrupted-import-error? error)
+                        (t :import/file-to-db-interrupted)
+                        (t :import/unexpected-error
+                           (or (.-message error) (str error))))]
+          (when created-new-graph?
+            (notification/show! display :error)
+            (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
+          (when (and (not created-new-graph?)
+                     (or (interrupted-import-error? error)
+                         (= :file-graph-import/graph-not-created (:code (ex-data error)))))
+            (notification/show! display :error)))
         nil))))
 
 (defn- import-file-graph

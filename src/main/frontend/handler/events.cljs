@@ -189,7 +189,7 @@
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]
-    (state/<invoke-db-worker :thread-api/set-context context)))
+    (state/<invoke-db-worker-when-ready :thread-api/set-context context)))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
