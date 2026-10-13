@@ -23,10 +23,21 @@
    "line\n\\# not a heading on line 2"
    "line\n\\> not a quote"
    "1. numbered text"
-   "plain text"])
+   "plain text"
+   "line\n* a list inside the block"
+   "line\n```\n- in a code fence\n```"])
+
+(def ^:private unescaped-titles
+  "Block text with an unescaped `- ` or `#` line after the first: the block shows
+  it as a line of text; it comes back as the same block, the line escaped."
+  {"line\n- a dash line" "line\n\\- a dash line"
+   "line\n  - an indented dash line" "line\n  \\- an indented dash line"
+   "line\n# a hash line" "line\n\\# a hash line"})
+
+(def ^:private all-titles (into titles (keys unescaped-titles)))
 
 (def ^:private uuids
-  (mapv (fn [i] (uuid (str "00000000-0000-4000-8000-0000000008" (.padStart (str i) 2 "0")))) (range (count titles))))
+  (mapv (fn [i] (uuid (str "00000000-0000-4000-8000-0000000008" (.padStart (str i) 2 "0")))) (range (count all-titles))))
 
 (use-fixtures :once
   {:before (fn []
@@ -35,7 +46,7 @@
                    (sqlite-build/build-blocks-tx
                     {:pages-and-blocks
                      [{:page {:block/title "escapes"}
-                       :blocks (mapv (fn [t u] {:block/title t :block/uuid u :build/keep-uuid? true}) titles uuids)}]})]
+                       :blocks (mapv (fn [t u] {:block/title t :block/uuid u :build/keep-uuid? true}) all-titles uuids)}]})]
                (d/transact! (conn/get-db test-helper/test-db false)
                             (concat (map #(select-keys % [:block/uuid]) init-tx) init-tx block-props-tx))))
    :after test-helper/destroy-test-db!})
@@ -64,11 +75,12 @@
   (async done
          (state/set-current-repo! test-helper/test-db)
          (-> (p/loop [i 0]
-               (when (< i (count titles))
-                 (let [title (nth titles i)]
+               (when (< i (count all-titles))
+                 (let [title (nth all-titles i)
+                       expected (get unescaped-titles title title)]
                    (p/let [{:keys [text blocks]} (<export-and-paste (nth uuids i))]
                      (testing (str (pr-str title) " exported as " (pr-str text))
-                       (is (= [title] (mapv :block/title blocks)))
+                       (is (= [expected] (mapv :block/title blocks)))
                        (is (nil? (:logseq.property/heading (first blocks))))
                        (is (not (string/blank? text))))
                      (p/recur (inc i))))))

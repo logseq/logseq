@@ -289,6 +289,26 @@
   [db b]
   (some? (:logseq.property/background-color (d/entity db (:db/id b)))))
 
+(defn- escape-block-markers-in-later-lines
+  "A later line of a block's text that starts with `- ` or a `#` heading marker
+  is shown by the block as a line of text, but in exported Markdown it would
+  start a new block or a heading. A backslash keeps it text (mldoc reads `\\- x`
+  as the text `- x`). Lines inside a code fence are left alone."
+  [content]
+  (let [[first-line & more] (string/split-lines content)]
+    (if (empty? more)
+      content
+      (loop [[line & more] more in-fence? false acc [first-line]]
+        (if (nil? line)
+          (string/join "\n" acc)
+          (let [fence? (boolean (re-find #"^\s*```" line))
+                line' (if (and (not in-fence?) (not fence?)
+                               (re-find #"^\s*(?:-(?:\s|$)|#+(?:\s|$))" line))
+                        (let [[_ leading text] (re-matches #"(\s*)(.*)" line)]
+                          (str leading "\\" text))
+                        line)]
+            (recur more (if fence? (not in-fence?) in-fence?) (conj acc line'))))))))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -317,6 +337,10 @@
                      (apply str))
         prefix (str spaces-tabs "-")
         property-spaces-tabs (str spaces-tabs "  ")
+        content (if (and (:escape-block-markers? context)
+                         (not (:logseq.property.node/display-type b)))
+                  (escape-block-markers-in-later-lines content)
+                  content)
         content (if heading-to-list?
                   (strip-heading-prefix content)
                   (format-markdown-block-content b content level heading-to-list?))

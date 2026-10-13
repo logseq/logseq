@@ -10,7 +10,10 @@
    ;; Encode block background-color highlights as ^^text^^ so they survive
    ;; Text/OPML/HTML export instead of being silently dropped (the property
    ;; is otherwise hidden from export like other :hide? true properties).
-   :encode-highlight-as-mark? true})
+   :encode-highlight-as-mark? true
+   ;; Escape later lines of a block that would start a block or a heading, so
+   ;; the text pastes back as the same block (not done for the Markdown mirror).
+   :escape-block-markers? true})
 
 (defn <export-blocks-as-format
   [repo root-block-uuids-or-page-uuid format-type options]
