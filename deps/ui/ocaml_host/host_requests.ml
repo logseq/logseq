@@ -713,6 +713,32 @@ let dom_op (e : env) (op : string) (body : string) =
     (match target with
      | Some id -> Ui.set_focused e.ui e.store id
      | None -> ())
+  | "set-selection-range" ->
+    (* The host owns the text session's selection and exposes no
+       range setter; the select-all case (cmdk restoring its last
+       query so typing replaces it, el.select()) maps onto the
+       session's own primary+A accelerator. Other ranges stay with
+       the session (caret kept). *)
+    (match target with
+     | Some id when id <> 0 ->
+       let len =
+         match Lui_store.string_prop e.store id "text" with
+         | Some t -> String.length t
+         | None -> 0
+       in
+       let s = int_of_float (jfloat "start" parsed)
+       and en = int_of_float (jfloat "end" parsed) in
+       if s = 0 && en > 0 && en >= len then begin
+         e.apply_actions (Ui.store_changed e.ui e.store);
+         if Ui.focused e.ui <> id then Ui.set_focused e.ui e.store id;
+         e.apply_actions
+           (Ui.handle e.ui e.store e.rects
+              (Input.Key_down
+                 ( Input.Other 4
+                 , { Input.mods_none with Input.ctrl = true }
+                 , false )))
+       end
+     | _ -> ())
   | "click" | "katex-pending" | "hljs-pending"
   | "imperative-attach" | "imperative-detach" -> ()
   | "caret-rect" | "offset-at" | "line-ranges" | "scroll-height" ->
