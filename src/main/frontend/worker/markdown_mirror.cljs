@@ -500,6 +500,11 @@
   [db block-uuid tree-opts options]
   (common-file/block->content db block-uuid tree-opts (block->content-context options)))
 
+(defn- block-id-line
+  [block-info spaces options]
+  (str spaces (or (:export-bullet-indentation options) "  ")
+       (id-property-line (:block-uuid block-info))))
+
 (defn- decorate-block-line
   [block-info line options]
   (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
@@ -511,10 +516,9 @@
       (cond-> [(str spaces marker
                     (when-not (string/blank? content) " ")
                     content)]
-        ;; the code fence would swallow the line
+        ;; a code block's id line goes after its closing fence (decorate-rendered-content)
         (and (:id-line? block-info) (not (:code-block? block-info)))
-        (conj (str spaces (or (:export-bullet-indentation options) "  ")
-                   (id-property-line (:block-uuid block-info))))))
+        (conj (block-id-line block-info spaces options))))
     [line]))
 
 (defn- decorate-rendered-content
@@ -525,17 +529,21 @@
            lines initial-lines
            seen-block? false
            property-indent nil
-           in-code-block? false]
+           in-code-block? false
+           fence-id-line nil]
       (if (nil? line)
         (string/join "\n" lines)
         (cond
           in-code-block?
-          (recur more
-                 (cons block-line-info' more-block-line-infos)
-                 (conj lines line)
-                 seen-block?
-                 property-indent
-                 (not (code-fence-block-line? line)))
+          (let [closing? (code-fence-block-line? line)]
+            (recur more
+                   (cons block-line-info' more-block-line-infos)
+                   (cond-> (conj lines line)
+                     (and closing? fence-id-line) (conj fence-id-line))
+                   seen-block?
+                   property-indent
+                   (not closing?)
+                   (when-not closing? fence-id-line)))
 
           (property-value-line? line property-indent)
           (recur more
@@ -543,35 +551,41 @@
                  (conj lines line)
                  seen-block?
                  property-indent
-                 false)
+                 false
+                 nil)
 
           :else
-          (if-let [[_ _ title] (re-matches markdown-block-line-re line)]
+          (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
             (if (rendered-line-matches-block? block-line-info' title)
               (let [lines' (cond-> lines
                              (and insert-blank-before-first-block?
                                   (not seen-block?)) (conj "")
-                             true (into (decorate-block-line block-line-info' line options)))]
+                             true (into (decorate-block-line block-line-info' line options)))
+                    fence? (and (:code-block? block-line-info')
+                                (code-fence-block-line? title))]
                 (recur more
                        more-block-line-infos
                        lines'
                        true
                        nil
-                       (and (:code-block? block-line-info')
-                            (code-fence-block-line? title))))
+                       fence?
+                       (when (and fence? (:id-line? block-line-info'))
+                         (block-id-line block-line-info' spaces options))))
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
                      property-indent
-                     false))
+                     false
+                     nil))
             (let [property-indent' (property-line-indent line)]
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
                      property-indent'
-                     false))))))))
+                     false
+                     nil))))))))
 
 (defn- add-page-id-to-rendered-content
   [db page content options]
