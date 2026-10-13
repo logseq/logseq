@@ -2299,6 +2299,49 @@ let test_views_wire () =
    | _ -> check "view data grouped-list" false);
   check "view data empty"
     (Views_wire.decode_view_data (Wire.Int 1) = Views_wire.VEmpty);
+  (* reference windows keep the decoded total and mount a prefix *)
+  let ent u =
+    wmap [ "kind", Wire.Keyword "entity"; "uuid", Wire.Uuid u ]
+  in
+  let grows n prefix =
+    List.init n (fun i -> prefix ^ string_of_int i)
+  in
+  let grouped =
+    Views_wire.VGrouped
+      [ { Views_wire.gv = ent "p1"; grows = grows 100 "a" }
+      ; { Views_wire.gv = ent "p2"; grows = grows 20 "b" } ]
+  in
+  check "ref window keeps the full count" (Views_wire.row_count grouped = 120);
+  (match Views_wire.slice_view_data grouped 48 with
+   | Views_wire.VGrouped [ g ] ->
+       check "slice keeps the first group only" (List.length g.grows = 48);
+       check "slice starts at the first row" (List.hd g.grows = "a0")
+   | _ -> check "slice keeps the first group only" false);
+  (match Views_wire.slice_view_data grouped 0 with
+   | Views_wire.VGrouped [] -> check "zero slice mounts nothing" true
+   | _ -> check "zero slice mounts nothing" false);
+  let w = Views_wire.row_window grouped ~start:48 ~stop:96 in
+  check "next window is 48 rows" (List.length w.rows = 48);
+  check "next window continues" (List.hd w.rows = "a48");
+  check "next window stays on the first page" (w.headers = [ "p1" ]);
+  let crossed = Views_wire.row_window grouped ~start:90 ~stop:110 in
+  check "crossed window length" (List.length crossed.rows = 20);
+  check "crossed window order"
+    (List.hd crossed.rows = "a90" && List.nth crossed.rows 10 = "b0");
+  check "crossed window includes both pages"
+    (crossed.headers = [ "p1"; "p2" ]);
+  let flat =
+    Views_wire.VFlat
+      { rows = [ "a"; "b"; "c" ]
+      ; count = 10
+      ; previews = Hashtbl.create 1
+      ; qprops = [] }
+  in
+  (match Views_wire.slice_view_data flat 2 with
+   | Views_wire.VFlat f ->
+       check "flat slice keeps the server count"
+         (f.rows = [ "a"; "b" ] && f.count = 10)
+   | _ -> check "flat slice keeps the server count" false);
   (* prop_text *)
   eqs "prop_text str" "s" (Views_wire.prop_text (Wire.String "s"));
   eqs "prop_text int" "5" (Views_wire.prop_text (Wire.Int 5));

@@ -448,9 +448,13 @@ let () =
   let hooks =
     Lui_paint.
       { color_of = Theme_vars.color_of;
-        (* the host walks every child; LUI virtual lists that publish a
-           mounted window are not used by this host yet *)
-        mounted_children = (fun _ -> None);
+        (* Virtual lists publish the mounted window. Every other kind
+           returns None and the walk stays the full child list. *)
+        mounted_children =
+          (fun id ->
+             match !host_cell with
+             | Some h -> Lui_host.layout_mounted_children h id
+             | None -> None);
         layout =
           (fun id -> Lui_paint.placement_of_rect (shifted_rect id));
         state_of =
@@ -696,6 +700,32 @@ let () =
   Lui_host.set_ctx_anchor host
     (Some (fun () -> Some (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
+  (* Content-space visible range for virtual-list nodes. Rects are
+     published after this callback on the sync that creates the list,
+     so a missing rect means "first screen", not "lay out every row". *)
+  let vport_of id =
+    if Lui_store.kind store id <> "virtual-list" then None
+    else
+      let er = engine_rect id in
+      let sx, sy = scroll_shift_of id in
+      let shifted =
+        { er with
+          Lui_scene.x = er.Lui_scene.x -. sx;
+          Lui_scene.y = er.Lui_scene.y -. sy }
+      in
+      let vw = float !win_w *. !scale_cell in
+      let vh = float !win_h *. !scale_cell in
+      let frame = Lui_scene.rect 0. 0. vw vh in
+      if er.Lui_scene.h < 1. || er.Lui_scene.w < 1. then
+        Some (0., vh *. 0.62)
+      else
+        let clip = rect_intersect shifted frame in
+        Some
+          ( Ui.scroll_offset ui id
+            +. Float.max 0. (clip.Lui_scene.y -. shifted.Lui_scene.y)
+          , Float.max 1. clip.Lui_scene.h )
+  in
+  Lui_host.set_vport host vport_of;
   let apply_patch_json (s : string) =
     if s <> "" then begin
       List.iter
@@ -875,8 +905,8 @@ let () =
      margin below the edge) — rows mount in place, pagination works. *)
   let lazy_fired : (int, unit) Hashtbl.t = Hashtbl.create 64 in
   let virt_end_fired : (int, float) Hashtbl.t = Hashtbl.create 8 in
-  let attrs_has id needle =
-    match Lui_store.string_prop store id "attrs" with
+  let prop_has id prop needle =
+    match Lui_store.string_prop store id prop with
     | Some s -> (
         let n = String.length s and m = String.length needle in
         let rec found i =
@@ -885,6 +915,9 @@ let () =
         in
         m = 0 || found 0)
     | None -> false
+  in
+  let attrs_has id needle =
+    prop_has id "attrs" needle || prop_has id "data-attrs" needle
   in
   let emit_dom_event name id =
     if !debug then warn "  dom-event %s id=%d" name id;

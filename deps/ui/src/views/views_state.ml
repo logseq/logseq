@@ -76,9 +76,11 @@ type vstate =
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
   ; fetch_limit : int
-        (* windowed view-data fetch size — 0 means one screen; grows as the
-           row stream reports its end near the viewport (cljs row-offset
-           refetch: each window doubles, capped by the result count) *)
+        (* all-pages/class-objects: server window, 0 means one screen.
+           linked/unlinked refs: how many decoded row uuids have block
+           entities yet. 0 means the first batch has not landed, so the
+           body mounts nothing while the header still shows the full
+           count. Those features must not send initial-row-count. *)
   ; ref_pages_count : (string * int) list
         (* view-data :ref-pages-count — [[title count]...] for the
            linked-refs filter dialog *)
