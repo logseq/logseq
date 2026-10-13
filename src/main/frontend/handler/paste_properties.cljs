@@ -5,7 +5,26 @@
   A line whose key or value cannot be resolved stays in the block's text."
   (:require [clojure.string :as string]
             [frontend.state :as state]
+            [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]))
+
+(defonce ^:private lookups
+  ;; Lookups made during one paste (a map, nil outside a paste), so a property,
+  ;; closed value, page or tag named on many lines or blocks is queried once.
+  (atom nil))
+
+(defn- cached
+  [k f]
+  (if-let [cache @lookups]
+    (or (get cache k)
+        (let [v (f)] (swap! lookups assoc k v) v))
+    (f)))
+
+(defn <with-lookups
+  "Calls f (returning a promise) with lookups shared until it settles."
+  [f]
+  (reset! lookups {})
+  (p/finally (p/let [v (f)] v) #(reset! lookups nil)))
 
 (def ^:private property-line-pattern #"^([^:\s][^:]*?)::(?:\s+(.*?))?\s*$")
 
@@ -39,7 +58,8 @@
 
 (defn- <property-by-title
   [repo title]
-  (p/let [properties (<q repo
+  (cached [:property (string/lower-case (string/trim title))]
+          #(p/let [properties (<q repo
                          '[:find [(pull ?p [:db/id :db/ident :logseq.property/type :db/cardinality]) ...]
                            :in $ ?name
                            :where
@@ -47,26 +67,36 @@
                            [?c :db/ident :logseq.class/Property]
                            [?p :block/tags ?c]]
                          (string/lower-case (string/trim title)))]
-    (first (filter settable-property? properties))))
+             (first (filter settable-property? properties)))))
 
 (defn- <closed-values
   [repo property-id]
-  (<q repo
-      '[:find [(pull ?v [:db/id :block/title :logseq.property/value]) ...]
-        :in $ ?p
-        :where [?v :block/closed-value-property ?p]]
-      property-id))
+  (cached [:closed-values property-id]
+          #(<q repo
+               '[:find [(pull ?v [:db/id :block/title :logseq.property/value]) ...]
+                 :in $ ?p
+                 :where [?v :block/closed-value-property ?p]]
+               property-id)))
 
 (defn- strip-page-ref
   [s]
   (let [s (string/trim s)]
     (or (second (re-matches #"^\[\[(.*)\]\]$" s)) s)))
 
-(defn- <page-id
+(defn- <page
   [repo title]
-  (p/let [page (state/<invoke-db-worker :thread-api/pull repo [:db/id]
-                                        [:block/name (string/lower-case (strip-page-ref title))])]
-    (:db/id page)))
+  (let [page-name (string/lower-case (strip-page-ref title))]
+    (cached [:page page-name]
+            #(state/<invoke-db-worker :thread-api/pull repo [:db/id :block/journal-day]
+                                      [:block/name page-name]))))
+
+(defn- <page-id
+  "Id of the existing page a value names; for a :date property, only a journal
+  page, which is all the property accepts."
+  [repo type title]
+  (p/let [page (<page repo title)]
+    (when (or (not= :date type) (:block/journal-day page))
+      (:db/id page))))
 
 (defn- <value
   "Converts one exported value to what the outliner sets for the property, or nil."
@@ -88,11 +118,15 @@
       (= type :checkbox)
       (case s "true" true "false" false nil)
 
-      (contains? #{:default :url} type)
+      (= type :default)
       s
 
+      ;; what the property accepts; another value would fail the whole paste
+      (= type :url)
+      (when (or (db-property-type/url? s) (db-property-type/macro-url? s)) s)
+
       (contains? #{:date :node :page} type)
-      (<page-id repo s))))
+      (<page-id repo type s))))
 
 (defn- <tag-ids
   "Ids of the existing tags named in a `tags::` value (`a, #b, [[c d]]`), or
@@ -103,13 +137,14 @@
                    (remove string/blank?))]
     (when (seq names)
       (p/let [ids (p/all (map (fn [n]
-                                (<q repo
-                                    '[:find ?t . :in $ ?name
-                                      :where
-                                      [?t :block/name ?name]
-                                      [?c :db/ident :logseq.class/Tag]
-                                      [?t :block/tags ?c]]
-                                    n))
+                                (cached [:tag n]
+                                        #(<q repo
+                                             '[:find ?t . :in $ ?name
+                                               :where
+                                               [?t :block/name ?name]
+                                               [?c :db/ident :logseq.class/Tag]
+                                               [?t :block/tags ?c]]
+                                             n)))
                               names))]
         (when (every? some? ids) (vec ids))))))
 

@@ -189,6 +189,48 @@
              (p/catch (fn [e] (is false (str e))))
              (p/finally done))))
 
+(deftest values-the-property-does-not-accept-stay-text
+  (async done
+         (-> (p/let [{:keys [blocks assignments]} (<paste "- block\n  p-date:: [[Alpha]]\n  p-url:: not a url\n  p-number:: 7")]
+               (is (re-matches #"block\np-date:: \[\[[^\]]+\]\]\np-url:: not a url" (:block/title (first blocks)))
+                   "a date that is not a journal and a url that is not a URL stay text, so the paste does not fail")
+               (is (= {:user.property/p-number 7} assignments)
+                   "the other lines are still read"))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest properties-go-to-the-pasted-block-when-it-has-the-id-of-a-live-block
+  (async done
+         (-> (p/let [{:keys [blocks assignments]} (<paste (str "- copy\n  id:: " props-uuid "\n  p-number:: 7"))
+                     [copy] blocks]
+               ;; a DB graph keeps an `id::` line as text, so the pasted block has its own uuid
+               (is (not= props-uuid (:block/uuid copy))
+                   "the pasted block does not take the live block's uuid")
+               (is (= {:user.property/p-number 7} assignments)
+                   "its property is set on the pasted block, not on the live block"))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest lookups-are-shared-across-a-paste
+  (async done
+         (let [calls (atom 0)
+               ;; the property reader's lookups: queries, and pulls of a page by name
+               stub (fn [api & args]
+                      (when (or (= :thread-api/q api)
+                                (and (= :thread-api/pull api) (= [:db/id :block/journal-day] (second args))))
+                        (swap! calls inc))
+                      (apply worker-stub api args))]
+           (-> (p/with-redefs [state/<invoke-db-worker stub
+                               state/get-edit-block (constantly {:db/id 10})
+                               db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "paste target"}))
+                               editor-handler/paste-blocks (fn [_ _] (p/resolved nil))]
+                 (state/set-current-repo! test-helper/test-db)
+                 (p/let [_ (#'paste-handler/paste-text-parseable :markdown "- a\n  p-node:: [[Alpha]]\n- b\n  p-node:: [[Alpha]]\n- c\n  p-node:: [[Alpha]]")]
+                   ;; one property lookup, one closed-values lookup, one page lookup
+                   (is (= 3 @calls) "the same property and page named on three blocks are looked up once")))
+               (p/catch (fn [e] (is false (str e))))
+               (p/finally done)))))
+
 (deftest tags-line-with-unknown-tag-stays-text
   (async done
          (-> (p/let [{:keys [blocks assignments]} (<paste "- block\n  tags:: research, no-such-tag")]

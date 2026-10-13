@@ -55,7 +55,8 @@
                       text format
                       {:page-name (:block/name page-info)})
               blocks (gp-block/with-parent-and-order (:db/id page-info) blocks)
-              blocks+properties (p/all
+              blocks+properties (paste-properties/<with-lookups
+                                 #(p/all
                                  (mapv (fn [block]
                                          (p/let [[block' assignments] (paste-properties/<read-properties repo block)
                                                  ;; with its property lines read, a block may be only a
@@ -76,7 +77,7 @@
                                                                        (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                                          (db-content/title-ref->id-ref title' refs)))))
                                             assignments]))
-                                       blocks))]
+                                       blocks)))]
         (editor-handler/paste-blocks (mapv first blocks+properties)
                                      {:keep-uuid? true
                                       :outliner-real-op :paste-text
