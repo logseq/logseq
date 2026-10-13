@@ -526,12 +526,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     | None ->
         actions_timer :=
           Some
-            (Ui_services.timers_timeout
-               (fun () ->
+            (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 300 (fun () ->
                  actions_timer := None;
                  Signal.set actions_hover true;
-                 Runtime.flush ())
-               300)
+                 Runtime.flush ()))
   in
   let actions_hide () =
     (match !actions_timer with

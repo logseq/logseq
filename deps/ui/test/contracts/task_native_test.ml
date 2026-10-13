@@ -24,5 +24,6 @@ let () =
   if !callback_thread <> Some main_thread then failwith "callback did not run on the application thread";
   print_endline "PASS real native I/O completion enters the application thread";
   Ui_services_scenarios.run ();
+  Ui_effect_scenarios.run ~drain ();
   Ui_theme_scenarios.run ();
   Helper_scenarios.run ()

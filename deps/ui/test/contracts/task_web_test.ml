@@ -5,5 +5,6 @@ let () =
   let set_owner = function None -> !owner | Some value -> owner := value; value in
   Ui_task_scenarios.run ~enqueue ~drain ~set_owner ();
   Ui_services_scenarios.run ();
+  Ui_effect_scenarios.run ~drain ();
   Ui_theme_scenarios.run ();
   Helper_scenarios.run ()
