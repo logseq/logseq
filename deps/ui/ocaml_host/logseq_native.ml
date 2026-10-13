@@ -170,6 +170,8 @@ let input_of_event e =
   | `Quit -> Some Quit_input
   | _ -> None
 
+
+
 let () =
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
@@ -644,14 +646,47 @@ let () =
              in
              ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
            | _ -> []) };
+  let measure_memo : (int * string * float * float, (float * float) option) Hashtbl.t =
+    Hashtbl.create 256
+  in
+  let measure_rev = ref (-1, -1) in
   let host =
     Lui_host.create ~hooks ~layout:(module Lui_layout)
       ~measure:(fun id text w _h ->
-        let w, h = Text_engine.measure_text ~width:w text_engine id text in
-        let tp = Lui_paint.text_placement_of (text_engine.store ()) id in
-        let s = text_engine.scale () in
-        Some
-          (w +. (2. *. tp.tp_pad_x *. s), h +. (2. *. tp.tp_pad_y *. s)))
+        (* Memoized per store revision: nested inline flex rows (a
+           linked-reference block's "see [[Alpha]]" runs) re-measure
+           the same leaf at the same offered width tens of thousands
+           of times per layout pass — ~2.5s frames that held linked
+           references on "Loading...". Text shaping is pure in
+           (node font, text, width) and node fonts only move with a
+           store revision or a layout invalidation. *)
+        let store' = text_engine.store () in
+        (* a font that finished loading pokes invalidate_layout under
+           an unchanged store — that must drop the memo too *)
+        let rev =
+          ( Lui_store.revision store'
+          , match !host_cell with
+            | Some h -> Lui_host.invalidation_count h
+            | None -> 0 )
+        in
+        if rev <> !measure_rev then begin
+          Hashtbl.reset measure_memo;
+          measure_rev := rev
+        end;
+        let scale_now = text_engine.scale () in
+        let key = (id, text, w, scale_now) in
+        match Hashtbl.find_opt measure_memo key with
+        | Some r -> r
+        | None ->
+          let mw, mh = Text_engine.measure_text ~width:w text_engine id text in
+          let tp = Lui_paint.text_placement_of store' id in
+          let r =
+            Some
+              ( mw +. (2. *. tp.tp_pad_x *. scale_now)
+              , mh +. (2. *. tp.tp_pad_y *. scale_now) )
+          in
+          Hashtbl.replace measure_memo key r;
+          r)
       ~renderer:renderer_live ~width:dw ~height:dh ~scale ()
   in
   host_cell := Some host;
