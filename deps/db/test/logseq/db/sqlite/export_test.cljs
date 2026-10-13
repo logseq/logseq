@@ -970,6 +970,46 @@
            (db-content/recur-replace-uuid-in-block-title middle))
         "The referenced block's ref resolves, not a raw uuid")))
 
+(deftest import-selected-nodes-where-one-is-a-node-value-of-another
+  (let [alpha-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node
+                                                   :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "alpha" :block/uuid alpha-uuid :build/keep-uuid? true}
+                                            {:block/title "x"
+                                             :build/properties {:user.property/source #{[:block/uuid alpha-uuid]}}}]}]})
+        node-ids (->> (:block/_page (db-test/find-page-by-title @conn "page1"))
+                      (sort-by :block/order)
+                      (mapv #(vector :block/uuid (:block/uuid %))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        _ (validate-db @conn2)
+        x (db-test/find-block-by-content @conn2 "x")]
+    (is (= #{"alpha"} (set (map :block/title (:user.property/source x))))
+        "A selected block that is a many node value of another selected block keeps its uuid, so the value resolves")))
+
+(deftest import-block-with-node-value-whose-title-has-a-ref
+  (let [beta-uuid (random-uuid)
+        middle-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node
+                                                   :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "Beta" :block/uuid beta-uuid :build/keep-uuid? true}
+                                            {:block/title (str "middle " (page-ref/->page-ref beta-uuid))
+                                             :block/uuid middle-uuid :build/keep-uuid? true}
+                                            {:block/title "export"
+                                             :build/properties {:user.property/source #{[:block/uuid middle-uuid]}}}]}]})
+        conn2 (db-test/create-conn-with-blocks
+               {:pages-and-blocks [{:page {:block/title "page2"}
+                                    :blocks [{:block/title "import"}]}]})
+        _ (export-block-and-import-to-another-block conn conn2 #"^export" "import")
+        middle (d/entity @conn2 [:block/uuid middle-uuid])]
+    (is (= (str "middle " (page-ref/->page-ref "Beta"))
+           (db-content/recur-replace-uuid-in-block-title middle))
+        "A block that is a many node value is followed for the refs in its title")))
+
 (deftest export-selected-nodes-with-missing-node
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
