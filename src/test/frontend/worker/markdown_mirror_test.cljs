@@ -632,6 +632,32 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-decorates-blocks-after-a-math-block-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Math Page"}
+                                     :blocks [{:block/title "E = mc^2\n- x"
+                                               :build/tags [:logseq.class/Math-block]
+                                               :build/properties {:logseq.property.node/display-type :math}}
+                                              {:block/title "after"
+                                               :build/tags [:Next]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
+          page (db-test/find-page-by-title @conn "Math Page")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Math Page.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- $$\n"
+                                  "  E = mc^2\n"
+                                  "  - x\n"
+                                  "  $$\n"
+                                  "- TODO after #Next")
+                             content)
+                          "the block after a math block keeps its status and tags"))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-renders-embedded-node-content-and-tags-test
   (async done
     (let [{:keys [platform files]} (fake-platform)

@@ -387,9 +387,9 @@
   [block]
   (content-first-line (:block/title block)))
 
-(defn- code-fence-block-line?
-  [content]
-  (string/starts-with? (string/trim (or content "")) "```"))
+(defn- fence-line?
+  [fence content]
+  (string/starts-with? (string/trim (or content "")) fence))
 
 (defn- normalize-rendered-match-text
   [content]
@@ -408,8 +408,8 @@
           content* (normalize-rendered-match-text content)
           fragment* (normalize-rendered-match-text fragment)]
       (cond
-        (:code-block? block-info)
-        (code-fence-block-line? content)
+        (:fence block-info)
+        (fence-line? (:fence block-info) content)
 
         (string/blank? fragment)
         (string/blank? (string/trim content))
@@ -417,17 +417,25 @@
         :else
         (string/includes? content* fragment*)))))
 
-(defn- code-block?
-  [block]
-  (or (= :code (:logseq.property.node/display-type block))
-      (some #(= :logseq.class/Code-block (:db/ident %))
+(defn- display-type?
+  [block display-type class-ident]
+  (or (= display-type (:logseq.property.node/display-type block))
+      (some #(= class-ident (:db/ident %))
             (:block/tags block))))
+
+(defn- block-fence
+  "The line a code or math block is written between: its first rendered line
+  is the fence, not the block's first title line."
+  [block]
+  (cond
+    (display-type? block :code :logseq.class/Code-block) "```"
+    (display-type? block :math :logseq.class/Math-block) "$$"))
 
 (defn- block-line-info
   [db block marker]
   (let [block (if (de/entity? block) block (d/entity db (:db/id block)))]
     {:first-line-fragment (block-first-line-fragment block)
-     :code-block? (code-block? block)
+     :fence (block-fence block)
      :status-marker (when (or (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                               (ldb/class-instance? (d/entity db :logseq.class/Task) block))
                       (some-> (:logseq.property/status block) status-marker))
@@ -515,17 +523,17 @@
            lines initial-lines
            seen-block? false
            property-indent nil
-           in-code-block? false]
+           open-fence nil]
       (if (nil? line)
         (string/join "\n" lines)
         (cond
-          in-code-block?
+          open-fence
           (recur more
                  (cons block-line-info' more-block-line-infos)
                  (conj lines line)
                  seen-block?
                  property-indent
-                 (not (code-fence-block-line? line)))
+                 (when-not (fence-line? open-fence line) open-fence))
 
           (property-value-line? line property-indent)
           (recur more
@@ -533,7 +541,7 @@
                  (conj lines line)
                  seen-block?
                  property-indent
-                 false)
+                 nil)
 
           :else
           (if-let [[_ _ title] (re-matches markdown-block-line-re line)]
@@ -547,21 +555,21 @@
                        lines'
                        true
                        nil
-                       (and (:code-block? block-line-info')
-                            (code-fence-block-line? title))))
+                       (when-let [fence (:fence block-line-info')]
+                         (when (fence-line? fence title) fence))))
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
                      property-indent
-                     false))
+                     nil))
             (let [property-indent' (property-line-indent line)]
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
                      property-indent'
-                     false))))))))
+                     nil))))))))
 
 (defn- add-page-id-to-rendered-content
   [db page content options]
