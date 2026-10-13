@@ -27,8 +27,12 @@ let clamp_initial_rows ctx n =
    host spine) can deliver "lazy-mount"/"virt-end" dom-events; on every
    other host rows must mount eagerly. *)
 let lazy_spine ctx =
+  (* GenericHost/SDL has no real lazy spine: the spacer's min-height
+     lives in a style string the host does not lay out, so a row that
+     misses the first viewport band stays 0px. SwiftUI's LazyVStack is
+     the host that actually delivers lazy-mount. *)
   match Lui_ui.host ctx with
-  | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost -> true
+  | Lui_protocol.SwiftUIHost -> true
   | _ -> false
 
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)

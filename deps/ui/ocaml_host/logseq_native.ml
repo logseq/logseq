@@ -1700,6 +1700,36 @@ let () =
     | Some _ -> true
   in
   let raises_left = ref 3 in
+  (* Retained fragments bake the scroll-shifted rects the paint hook
+     returns. Lui_window.Assembly.repaint feeds Ui.paint_hints into
+     the cache; this loop owns the frame itself and never did, so a
+     set-scroll-top after the nodes were planned (journals restored
+     under a parked scroller, then reset to 0) replays the
+     off-screen fragments and the main column stays white while hit
+     testing still finds the text. *)
+  let scroll_epoch_seen = ref (-1) in
+  let scroll_off : (int, float * float) Hashtbl.t = Hashtbl.create 4 in
+  let sync_scroll_paint () =
+    let epoch = Ui.scroll_epoch ui in
+    if epoch <> !scroll_epoch_seen then begin
+      scroll_epoch_seen := epoch;
+      List.iter
+        (fun id ->
+          if Ui.scrollable store id then
+            let xy = (Ui.scroll_offset_x ui id, Ui.scroll_offset ui id) in
+            match Hashtbl.find_opt scroll_off id with
+            | Some prev when prev = xy -> ()
+            | _ ->
+              Hashtbl.replace scroll_off id xy;
+              (* Thumb metrics are not a translation of the scroller
+                 box; descendants only shift. *)
+              Lui_host.note_paint host id;
+              Lui_host.note_moveds host
+                (List.filter (( <> ) id)
+                   (Lui_store.preorder ~root:id store)))
+        (Lui_store.preorder store)
+    end
+  in
   Daemon_client.boot_mark "loop";
   while not !quit do
     let t0 = perf_s () in
@@ -1814,6 +1844,7 @@ let () =
     let dirty = Ui.want_frame ui host || !host_req_repaint in
     if dirty then begin
       host_req_repaint := false;
+      sync_scroll_paint ();
       Daemon_client.boot_mark "paint begin";
       ignore (Lui_host.repaint host);
       Daemon_client.boot_mark "paint done";

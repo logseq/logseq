@@ -1028,6 +1028,25 @@ let journal_day ?(uuid = "jd1") blocks : Model.page =
   ; page_journal_day = Some 20261004
   ; page_title = "Oct 4th, 2026" }
 
+(* Leaving journals and coming back must still show the loaded day.
+   Navigate_to keeps model.journals; the region remounts on the route
+   change and has to paint the same day title and blocks. *)
+let test_journal_roundtrip () =
+  Stub_dom.set_rtc_test_mode ();
+  send (Action.Navigate_to Model.Home);
+  send
+    (Action.Journals_loaded
+       [ journal_day ~uuid:"jd-back" [ block "jb1" "Hello LUI" ] ]);
+  flush ();
+  has "text:\"Oct 4th, 2026\"";
+  has "text:\"Hello LUI\"";
+  send (Action.Navigate_to (Model.Page "Alpha"));
+  flush ();
+  send (Action.Navigate_to Model.Journals);
+  flush ();
+  has "text:\"Oct 4th, 2026\"";
+  has "text:\"Hello LUI\""
+
 let test_journal_splice_row_level () =
   (* eager journal items: the virt scroller needs real layout, absent
      in the drive harness *)
@@ -1875,6 +1894,7 @@ let run ~finish =
   test_views_table ();
   test_render_libs_dom ();
   test_embed_parity ();
+  test_journal_roundtrip ();
   test_journal_splice_row_level ();
   test_page_splice_row_level ();
   test_journal_reorder_move_collapse ();

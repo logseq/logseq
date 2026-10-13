@@ -70,7 +70,14 @@ let uuids_of_payload payload =
    journals page and the web gate lives in the outer list. *)
 let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
  fun ctx parent ->
-  if Lui_ui.host ctx <> Lui_protocol.GenericHost then
+  (* GenericHost used to gate each row on a style-string min-height.
+     The native style parser ignores min-height, so the spacer is 0px:
+     the first visit can still lazy-mount a zero rect that happens to
+     sit in the viewport, and a later visit reuses a disposed near
+     latch and never paints the blocks. Every host mounts eagerly.
+     The else branch stays typechecked for the Swift lazy-mount shape. *)
+  if Lui_ui.host ctx = Lui_protocol.GenericHost
+     || Lui_ui.host ctx <> Lui_protocol.GenericHost then
     (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in
