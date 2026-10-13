@@ -407,6 +407,41 @@ let test_storage_list_graphs_ignores_backup_root () =
    OPFS SAH pool and calls (:remove-vfs! storage) on it; the observable
    contract is "the repo dir's entries are gone". Native remove_vfs
    deletes every entry under <LOGSEQ_WORKER_DB_DIR>/<encoded-repo>. *)
+(* Native assets must share the encoded graph directory with db.sqlite.
+   The old path kept the logseq_db_ prefix, so a graph stored at
+   docs-master1 grew a sibling logseq_db_docs-master1/assets that the
+   desktop scanner listed again after the real graph was deleted. *)
+let test_asset_path_uses_encoded_graph_dir () =
+  with_tmp_dir (fun root ->
+      with_env "LOGSEQ_WORKER_DB_DIR" (Some root) (fun () ->
+          let repo = "logseq_db_docs-master1" in
+          let path = Asset_store.path ~repo ~name:"pic.png" in
+          let graph =
+            match Graph_dir.repo_to_encoded_graph_dir_name repo with
+            | Some dir -> dir
+            | None -> failwith "cannot encode repo"
+          in
+          check "prefixed repo assets sit beside db.sqlite"
+            (path
+             = Filename.concat
+                 (Filename.concat (Filename.concat root graph) "assets")
+                 "pic.png");
+          check "asset dir is not the prefixed sibling"
+            (Filename.basename (Filename.dirname (Filename.dirname path))
+             <> "logseq_db_docs-master1");
+          let slash_repo = "logseq_db_foo/bar" in
+          let slash_path = Asset_store.path ~repo:slash_repo ~name:"a.png" in
+          let encoded =
+            match Graph_dir.repo_to_encoded_graph_dir_name slash_repo with
+            | Some dir -> dir
+            | None -> failwith "cannot encode slash repo"
+          in
+          check "slash repo is encoded, not sanitized"
+            (slash_path
+             = Filename.concat
+                 (Filename.concat (Filename.concat root encoded) "assets")
+                 "a.png")))
+
 let test_remove_vfs_clears_graph_resources () =
   let repo = "logseq_db_demo" in
   with_tmp_dir (fun root ->
@@ -466,5 +501,7 @@ let cases =
     , test_sqlite_backup_db_creates_importable_copy
     ; "storage-list-graphs-ignores-backup-root"
     , test_storage_list_graphs_ignores_backup_root
+    ; "asset-path-uses-encoded-graph-dir"
+    , test_asset_path_uses_encoded_graph_dir
     ; "remove-vfs-clears-graph-resources"
     , test_remove_vfs_clears_graph_resources ]
