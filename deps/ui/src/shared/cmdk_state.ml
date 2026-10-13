@@ -1042,8 +1042,14 @@ let create_page st title =
       (* a fresh page has no blocks; append_block inserts the first
          block and enters edit mode on it — wait for the navigation's
          Page_loaded so it lands on the new page *)
+      (* Page_loaded effects run before the reducer commits the new
+         route_page, so append_block called inline still sees the
+         previous route (no page / the old page) and silently does
+         nothing — the new page opened with no editing block and the
+         first keystrokes were lost. Defer one tick so it reads the
+         loaded page. *)
       st.svs.Svs.on_page_loaded uuid (fun () ->
-          st.svs.Svs.append_block ());
+          st.svs.Svs.set_timeout (fun () -> st.svs.Svs.append_block ()) 0);
       goto_page st repo uuid)
 
 (* cljs cmdk "#tag" create: <create-class! without redirect, then the

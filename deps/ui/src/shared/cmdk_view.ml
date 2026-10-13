@@ -564,7 +564,7 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
           && a.S.gexpanded = b.S.gexpanded
           && a.S.gfilter_active = b.S.gfilter_active)
         (fun g ->
-          if g.S.gid = S.G_create then spacer ~key:"gheader" []
+          if g.S.gid = S.G_create then spacer ~key:"gheader" ~grow:0. ~height:0 []
           else group_header svs st g)
         group_sig
     ; column ~key:"results" ~style_class:"search-results"
@@ -613,7 +613,7 @@ let scroller svs st : t =
         (fun (v : S.view) ->
           match v.S.filter with
           | Some gid -> search_only_chip svs st gid
-          | None -> spacer ~key:"chip" [])
+          | None -> spacer ~key:"chip" ~grow:0. ~height:0 [])
         view_sig
     ; groups_body svs st
     ; if_

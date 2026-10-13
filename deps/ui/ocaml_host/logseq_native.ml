@@ -116,7 +116,14 @@ let input_of_event e =
          , mods_of_keymod (Sdl.Event.get e Sdl.Event.keyboard_keymod)
          , Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0 ))
   | `Text_input ->
-    Some (Text_input (Sdl.Event.get e Sdl.Event.text_input_text))
+    (* SDL on X11 still commits TEXTINPUT for Ctrl/Super chords whose
+       keysym is not a letter (Ctrl+, Ctrl+. Ctrl+/ ...), so a shortcut
+       also typed its punctuation into the focused editor. Browsers never
+       insert text for a Ctrl/Meta chord; drop it here. Ctrl+Alt stays
+       (Windows AltGr layouts report it). *)
+    let m = mods_of_keymod (Sdl.get_mod_state ()) in
+    if (m.Input.ctrl && not m.Input.alt) || m.Input.meta then None
+    else Some (Text_input (Sdl.Event.get e Sdl.Event.text_input_text))
   | `Text_editing ->
     Some
       (Text_editing
@@ -439,6 +446,9 @@ let () =
   let hooks =
     Lui_paint.
       { color_of = Theme_vars.color_of;
+        (* the host walks every child; LUI virtual lists that publish a
+           mounted window are not used by this host yet *)
+        mounted_children = (fun _ -> None);
         layout =
           (fun id -> Lui_paint.placement_of_rect (shifted_rect id));
         state_of =
@@ -1371,6 +1381,14 @@ let () =
          && Lui_store.kind store target = "extension:logseq-editor"
       then begin
         dbg "editor key %s" (dom_key scancode);
+        (* the document keydown above is only enqueued; the sink event
+           below dispatches synchronously. Drain the document listener
+           first so it sees the pre-key editing state, as the browser's
+           single dispatch does — otherwise an Enter that the sink
+           already split reaches the document handler with editing on
+           the new block and pending focus armed, and is replayed into
+           it as a second split (an extra empty block per Enter). *)
+        apply_patch_json (Native_embed.pump ());
         apply_patch_json
           (Native_embed.extension_event target "logseq-editor" "key"
              (String.concat ""
