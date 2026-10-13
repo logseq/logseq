@@ -181,6 +181,10 @@ let test_parse_property () =
     ; "collapsed", "collapsed", "false", [], Bool false
     ; "created-at", "created-at", "1609233702047", [],
       Int64 1609233702047L
+    ; "above-32-bit", "created-at", "2147483648", [],
+      Int64 2147483648L
+    ; "above-int64", "id-number", "9223372036854775808", [],
+      String "9223372036854775808"
     ; "background-color", "background-color", "#533e7d", [],
       String "#533e7d" ]
 
