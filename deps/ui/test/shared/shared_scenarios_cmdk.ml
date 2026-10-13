@@ -267,6 +267,37 @@ let close_persists (h : ('m, 'a) Shared_scenarios.host) =
      | Some s -> contains "\"seeded\"" s
      | None -> false)
 
+(* command-palette/toggle forces "Search only: Commands". That session
+   must not become the next Cmd-K's restored filter — pages and blocks
+   stay searchable. *)
+let command_palette_filter_does_not_stick
+    (h : ('m, 'a) Shared_scenarios.host) =
+  let search_only () =
+    List.exists
+      (fun n -> M.string_prop n "text" = Some "Search only:")
+      (H.nodes h)
+  in
+  open_palette h;
+  let input = input_node h in
+  S.text_changed (h.session ()) input.M.id "seeded-pages";
+  h.flush ();
+  close_palette h;
+  h.command "command-palette/toggle";
+  h.flush ();
+  h.flush ();
+  h.H.check "command palette opens on commands"
+    (search_only () && H.exists_class h "cp__cmdk__modal");
+  close_palette h;
+  h.H.check "command palette does not overwrite the last search"
+    (match h.storage_get "ls-cmdk-last-search" with
+     | Some s ->
+         contains "\"seeded-pages\"" s && not (contains "\"commands\"" s)
+     | None -> false);
+  open_palette h;
+  h.H.check "cmd-k searches everything after the command palette"
+    (H.exists_class h "cp__cmdk__modal" && not (search_only ()));
+  close_palette h
+
 let structure_props (h : ('m, 'a) Shared_scenarios.host) =
   open_palette h;
   let input = input_node h in
@@ -499,6 +530,7 @@ let run h =
   enter_navigates h;
   escape_close h;
   close_persists h;
+  command_palette_filter_does_not_stick h;
   structure_props h;
   move_mode_placeholder h;
   results_top_aligned h
