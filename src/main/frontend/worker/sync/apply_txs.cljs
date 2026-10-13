@@ -929,27 +929,24 @@
           ;; (cljs.pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
           ;; (prn :debug :tx-meta)
           ;; (cljs.pprint/pprint tx-meta)
-        (if (seq ops')
-          (try
-            (when (seq ops)
-              (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
-            (ldb/batch-transact-with-temp-conn!
-             conn
-             tx-meta'
-             (fn [conn]
-               (doseq [op ops']
-                 (replay-canonical-outliner-op! conn op nil))))
-            {:applied? true
-             :history-tx-id history-tx-id}
-            (catch :default e
-              (let [reason (history-action-error-reason e)]
-                (when-not (expected-history-action-error-reason? reason)
-                  (log/error ::undo-redo-failed e))
-                {:applied? false
-                 :reason reason
-                 :action action})))
-          {:applied? false :reason :unsupported-history-action
-           :action action})))
+        (try
+          (when (seq ops)
+            (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
+          (ldb/batch-transact-with-temp-conn!
+           conn
+           tx-meta'
+           (fn [conn]
+             (doseq [op ops']
+               (replay-canonical-outliner-op! conn op nil))))
+          {:applied? true
+           :history-tx-id history-tx-id}
+          (catch :default e
+            (let [reason (history-action-error-reason e)]
+              (when-not (expected-history-action-error-reason? reason)
+                (log/error ::undo-redo-failed e))
+              {:applied? false
+               :reason reason
+               :action action})))))
       {:applied? false
        :reason :missing-history-action
        :tx-id tx-id})
