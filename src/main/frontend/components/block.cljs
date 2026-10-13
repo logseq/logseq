@@ -1285,13 +1285,6 @@
        progress-view]
       content)))
 
-(defn- img-audio-video?
-  [block]
-  (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
-    (or (contains? (common-config/img-formats) asset-type)
-        (contains? config/audio-formats asset-type)
-        (contains? config/video-formats asset-type))))
-
 (defn- block-tagged-with?
   [block tag-ident]
   (some (fn [tag]
@@ -1336,7 +1329,7 @@
                        (not contents-page?))]
     (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
       (cond
-        (and asset? (img-audio-video? block))
+        asset?
         (asset-cp config block)
 
         (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
@@ -2807,7 +2800,7 @@
       [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
-           (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
+           (not (block-asset/media-asset? block)))
       (asset-cp config block)
 
       (:raw-title? config)
@@ -3727,7 +3720,7 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (and (ldb/asset? block) (block-asset/media-asset? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
