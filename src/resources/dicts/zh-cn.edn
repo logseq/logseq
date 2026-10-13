@@ -2033,6 +2033,10 @@
  :view.table/total-refs-count "总引用数"
  :view.table/unpin "取消固定"
 
+ :web.test-site/help-test "我想帮忙测试"
+ :web.test-site/open-app "打开 app.logseq.com"
+ :web.test-site/warning "test.logseq.com 用于测试新功能，可能不稳定。如果你正在用 Logseq 处理正式工作，请切换到 app.logseq.com。"
+
  :window/close "关闭"
  :window/exit-fullscreen "退出全屏"
  :window/maximize "最大化"
