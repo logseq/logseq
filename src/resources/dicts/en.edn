@@ -2033,6 +2033,10 @@
  :view.table/total-refs-count "Total refs count"
  :view.table/unpin "Unpin"
 
+ :web.test-site/help-test "I want to help test"
+ :web.test-site/open-app "Open app.logseq.com"
+ :web.test-site/warning "test.logseq.com is for testing new features and may be unstable. If you're using Logseq for real work, please switch to app.logseq.com."
+
  :window/close "Close"
  :window/exit-fullscreen "Exit full screen"
  :window/maximize "Maximize"
