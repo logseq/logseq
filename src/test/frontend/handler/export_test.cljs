@@ -103,8 +103,12 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
-     {:page {:block/title "page7"}
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+
+(def ^:private block-embed-test-page
+  "Block embeds: a block whose :block/link is the embedded block (links set in
+  load-export-test-files!)."
+  {:page {:block/title "page7"}
       :blocks
       [{:block/title "embedded"
         :build/keep-uuid? true
@@ -135,12 +139,12 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000709"
         :build/children [{:block/title ""
                           :build/keep-uuid? true
-                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}]}]))
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}]})
 
 (defn- load-export-test-files!
   []
   (let [{:keys [init-tx block-props-tx]}
-        (sqlite-build/build-blocks-tx {:pages-and-blocks test-files
+        (sqlite-build/build-blocks-tx {:pages-and-blocks (conj test-files block-embed-test-page)
                                        :auto-create-ontology? true})
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     (d/transact! (conn/get-db test-helper/test-db false)
@@ -547,7 +551,7 @@
 
 (deftest export-blocks-as-markdown-block-embed-cycle-and-options
   (async done
-    (p/let [cycle (<export-blocks-as-markdown
+    (p/let [embed-cycle (<export-blocks-as-markdown
                    [#uuid "00000000-0000-4000-8000-000000000704"]
                    {:remove-options #{}})
             own-child (<export-blocks-as-markdown
@@ -557,7 +561,7 @@
                        [#uuid "00000000-0000-4000-8000-000000000709"]
                        {:remove-options #{:property}
                         :other-options {:open-blocks-only true}})]
-      (is (= "-" (string/trim cycle))
+      (is (= "-" (string/trim embed-cycle))
           "A embeds B embeds A: the cycle stops at B, written as itself")
       (is (= "- embedded\n\t- embedded child" (string/trim own-child))
           "the embed shows the embedded block's children, not the embedding block's own")
