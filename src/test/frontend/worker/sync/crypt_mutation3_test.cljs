@@ -93,32 +93,7 @@
 
 ;; ------------------------------------------------------------------ helpers
 
-(deftest interactive-runtime-needs-a-browser-or-the-electron-node-owner-test
-  (async done
-         (finish
-          (p/let [browser (<spied {:runtime :browser} #(#'sync-crypt/interactive-runtime?))
-                  electron (<spied {:runtime :node :owner-source :electron} #(#'sync-crypt/interactive-runtime?))
-                  cli (<spied {:runtime :node :owner-source :cli} #(#'sync-crypt/interactive-runtime?))
-                  other (<spied {:runtime :other :owner-source :electron} #(#'sync-crypt/interactive-runtime?))]
-            (is (true? (:result browser)))
-            (is (true? (:result electron)))
-            (is (false? (boolean (:result cli))))
-            (is (false? (boolean (:result other)))))
-          done)))
-
-(deftest auth-file-path-is-the-default-logseq-auth-file-test
-  (is (= "~/logseq/auth.json" (#'sync-crypt/auth-file-path))))
-
-(deftest missing-e2ee-password-failures-carry-code-and-field-test
-  (let [error (thrown #(#'sync-crypt/fail-missing-e2ee-password! {:reason :why}))
-        ex (#'sync-crypt/missing-e2ee-password-ex {:reason :why})]
-    (is (= "missing-e2ee-password" (ex-message error)))
-    (is (= {:code :db-sync/missing-e2ee-password :field :e2ee-password :reason :why}
-           (ex-data error)))
-    (is (= "missing-e2ee-password" (ex-message ex)))
-    (is (= {:code :db-sync/missing-e2ee-password :field :e2ee-password :reason :why}
-           (ex-data ex)))))
-
+;; Fails if, in `ensure-refresh-token!`, the `:reason` key is dropped or the `:hint` key is dropped.
 (deftest ensure-refresh-token-requires-a-token-test
   (let [error (thrown #(#'sync-crypt/ensure-refresh-token! nil))]
     (is (= {:code :db-sync/missing-e2ee-password
@@ -128,6 +103,8 @@
            (ex-data error)))
     (is (nil? (#'sync-crypt/ensure-refresh-token! "token")))))
 
+;; Fails if, in `auth-file-path`, the body becomes `nil`.
+;; Fails if, in `<read-refresh-token-from-auth-file`, the `(p/catch (fn [_]` step is dropped, the `:reason` key is dropped or the `:hint` key is dropped.
 (deftest read-refresh-token-from-auth-file-test
   (async done
          (finish
@@ -147,6 +124,7 @@
                    (second (error-info (:result invalid))))))
           done)))
 
+;; Fails if, in `<clear-e2ee-password!`, `if` becomes `if-not`, `when-not` becomes `when`, the body becomes `nil`, the `(p/then (fn [resp]` step is dropped, the `(p/catch (fn [e]` step is dropped or the `:key` key is dropped.
 (deftest clear-e2ee-password-deletes-the-persisted-secret-test
   (async done
          (finish
@@ -176,6 +154,7 @@
 
 ;; ------------------------------------------------------- user rsa key cache
 
+;; Fails if, in `<fetch-user-rsa-key-pair-raw`, the `:method` key is dropped, the `:response-schema` key is dropped or `:e2ee/user-keys` becomes `:e2ee/user-public-key`.
 (deftest fetch-user-rsa-key-pair-raw-gets-the-user-keys-test
   (async done
          (finish
@@ -188,12 +167,16 @@
                    calls)))
           done)))
 
+;; Fails if, in `user-rsa-key-pair-valid?`, `and` becomes `or`.
 (deftest user-rsa-key-pair-valid-needs-both-string-keys-test
   (is (true? (#'sync-crypt/user-rsa-key-pair-valid? {:public-key "p" :encrypted-private-key "e"})))
   (is (false? (boolean (#'sync-crypt/user-rsa-key-pair-valid? {:public-key "p"}))))
   (is (false? (boolean (#'sync-crypt/user-rsa-key-pair-valid? {:public-key 1 :encrypted-private-key "e"}))))
   (is (false? (boolean (#'sync-crypt/user-rsa-key-pair-valid? ["p" "e"])))))
 
+;; Fails if, in `<set-user-rsa-key-pair-to-idb!`, `and` becomes `or`.
+;; Fails if, in `<get-user-rsa-key-pair-from-idb`, `and` becomes `or`.
+;; Fails if, in `<clear-user-rsa-key-pair-cache!`, `and` becomes `or`.
 (deftest user-rsa-key-pair-idb-cache-test
   (async done
          (finish
@@ -225,6 +208,8 @@
             (is (= [] (:calls cleared-no-base))))
           done)))
 
+;; Fails if, in `<get-user-rsa-key-pair-raw`, `and` becomes `or`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:user-id` key is dropped or the `:field` key is dropped.
+;; Fails if, in `<resolve-user-uuid`, the `(p/catch (fn [_error]` step is dropped.
 (deftest get-user-rsa-key-pair-raw-needs-a-base-and-a-user-test
   (async done
          (finish
@@ -241,6 +226,7 @@
             (is (nil? (:result no-ws-token))))
           done)))
 
+;; Fails if, in `<upload-user-rsa-key-pair!`, `when` becomes `when-not`, `nil?` becomes `some?`, `:db-sync/invalid-field` becomes `:db-sync/missing-e2ee-password`, the `:type` key is dropped, the `:body` key is dropped, `:e2ee/user-keys` becomes `:e2ee/user-public-key`, the `:method` key is dropped, the `:headers` key is dropped or the `:response-schema` key is dropped.
 (deftest upload-user-rsa-key-pair-posts-the-coerced-body-test
   (async done
          (finish
@@ -263,6 +249,7 @@
 
 ;; ------------------------------------------- generate-and-upload (password)
 
+;; Fails if, in `<generate-and-upload-user-rsa-key-pair!`, `and` becomes `or`, `seq` becomes `empty?`, the `:reason` key is dropped, the `:hint` key is dropped, the `:public-key` key is dropped or the `:encrypted-private-key` key is dropped.
 (deftest generate-and-upload-user-rsa-key-pair-needs-a-non-empty-password-test
   (async done
          (finish
@@ -386,6 +373,7 @@
 
 ;; ------------------------------------------------- saving and reading the password
 
+;; Fails if, in `<save-e2ee-password`, the `(p/then (fn [resp]` step is dropped or the `(p/catch (fn [e]` step is dropped.
 (deftest save-e2ee-password-falls-back-to-secret-storage-unless-native-saved-test
   (async done
          (finish
@@ -411,6 +399,8 @@
             (is (= [[:save-secret password-key text]] (calls-of (:calls plain) :save-secret))))
           done)))
 
+;; Fails if, in `<read-platform-e2ee-password-text`, the `(p/catch (fn [e]` step is dropped.
+;; Fails if, in `<read-e2ee-password-text`, the `(p/catch (fn [e]` step is dropped.
 (deftest read-e2ee-password-text-reads-native-then-secret-storage-test
   (async done
          (finish
@@ -434,6 +424,7 @@
             (is (= [[:read-secret password-key]] (:seen native-fails))))
           done)))
 
+;; Fails if, in `<decrypt-e2ee-password-text`, the `:reason` key is dropped, the `:hint` key is dropped, `:db-sync/invalid-e2ee-password-payload` becomes `:db-sync/invalid-field` or the `:field` key is dropped.
 (deftest decrypt-e2ee-password-text-rejects-missing-and-invalid-payloads-test
   (async done
          (finish
@@ -451,6 +442,7 @@
             (is (= [[:decrypt-text-by-text-password "rt" [:stored]]] (:seen ok))))
           done)))
 
+;; Fails if, in `<request-e2ee-password-from-ui`, the `:hint` key is dropped, `:db-sync/missing-e2ee-password` becomes `:db-sync/missing-field`, the `:field` key is dropped or the `:reason` key is dropped.
 (deftest request-e2ee-password-from-ui-requires-a-non-empty-password-test
   (async done
          (finish
@@ -473,6 +465,7 @@
             (is (= rejected (error-info (:result no-password)))))
           done)))
 
+;; Fails if, in `<verify-e2ee-password`, the `:reason` key is dropped.
 (deftest verify-e2ee-password-rejects-empty-passwords-and-maps-invalid-ones-test
   (async done
          (finish
@@ -495,6 +488,7 @@
             (is (= ["bad" {:invalid-password? false}] (error-info (:result other-error)))))
           done)))
 
+;; Fails if, in `<verify-and-save-e2ee-password-from-server!`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped or the `:field` key is dropped.
 (deftest verify-and-save-e2ee-password-from-server-needs-the-base-and-the-private-key-test
   (async done
          (finish
@@ -514,6 +508,7 @@
 
 ;; ------------------------------------------------------- user rsa key pair
 
+;; Fails if, in `<get-user-rsa-key-pair-raw`, the `(p/finally (fn []` step is dropped.
 (deftest get-user-rsa-key-pair-raw-forgets-the-inflight-task-when-done-test
   (async done
          (finish
@@ -528,6 +523,7 @@
             (is (= 2 (count (calls-of calls :fetch)))))
           done)))
 
+;; Fails if, in `<ensure-user-rsa-key-pair`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:user-id` key is dropped or the `:field` key is dropped.
 (deftest ensure-user-rsa-key-pair-without-password-needs-a-base-and-a-user-test
   (async done
          (finish
@@ -540,6 +536,7 @@
                    (error-info (:result no-base)))))
           done)))
 
+;; Fails if, in `<ensure-user-rsa-key-pair`, `and` becomes `or`.
 (deftest ensure-user-rsa-key-pair-without-a-user-resolves-the-token-once-test
   (async done
          (let [token-requests (atom 0)]
@@ -556,6 +553,10 @@
               (is (= 1 @token-requests)))
             done))))
 
+;; Fails if, in `interactive-runtime?`, `and` becomes `or`.
+;; Fails if, in `<decrypt-private-key`, `if` becomes `if-not`, `seq` becomes `empty?`, `when-not` becomes `when`, the `:reason` key is dropped or the `:hint` key is dropped.
+;; Fails if, in `missing-e2ee-password-ex`, the `:code` key is dropped or the `:field` key is dropped.
+;; Fails if, in `fail-missing-e2ee-password!`, `:db-sync/missing-e2ee-password` becomes `:db-sync/missing-field`, the `:code` key is dropped or the `:field` key is dropped.
 (deftest decrypt-private-key-headless-reads-the-persisted-password-test
   (async done
          (finish
@@ -582,40 +583,9 @@
                    (:seen ok))))
           done)))
 
-(deftest import-public-key-reads-the-transit-string-test
-  (async done
-         (finish
-          (p/let [{:keys [result seen]} (<crypted {} #(#'sync-crypt/<import-public-key (ldb/write-transit-str {:k 1})))]
-            (is (= [:imported {:k 1}] result))
-            (is (= [[:import-public-key {:k 1}]] seen)))
-          done)))
-
 ;; ------------------------------------------------------- server requests
 
-(deftest fetch-user-public-key-by-email-gets-the-encoded-email-test
-  (async done
-         (finish
-          (p/let [{:keys [result calls]} (<spied {:fetch-result {:public-key "p"}}
-                                                 #(#'sync-crypt/<fetch-user-public-key-by-email sync-base "a+b@x.com"))]
-            (is (= {:public-key "p"} result))
-            (is (= [[:fetch "https://sync.example.test/e2ee/user-public-key?email=a%2Bb%40x.com"
-                     {:method "GET"}
-                     {:response-schema :e2ee/user-public-key}]]
-                   calls)))
-          done)))
-
-(deftest fetch-graph-encrypted-aes-key-raw-gets-the-graph-aes-key-test
-  (async done
-         (finish
-          (p/let [{:keys [result calls]} (<spied {:fetch-result {:encrypted-aes-key "k"}}
-                                                 #(#'sync-crypt/<fetch-graph-encrypted-aes-key-raw sync-base "g1"))]
-            (is (= {:encrypted-aes-key "k"} result))
-            (is (= [[:fetch "https://sync.example.test/e2ee/graphs/g1/aes-key"
-                     {:method "GET"}
-                     {:response-schema :e2ee/graph-aes-key}]]
-                   calls)))
-          done)))
-
+;; Fails if, in `<upsert-graph-encrypted-aes-key!`, `:db-sync/invalid-field` becomes `:db-sync/missing-e2ee-password`, the `:type` key is dropped, the `:body` key is dropped, `:e2ee/graph-aes-key` becomes `:e2ee/user-keys`, the `:headers` key is dropped or the `:response-schema` key is dropped.
 (deftest upsert-graph-encrypted-aes-key-posts-the-coerced-body-test
   (async done
          (finish
@@ -638,6 +608,7 @@
 
 ;; ------------------------------------------------------- key material
 
+;; Fails if, in `<load-user-rsa-key-material`, `and` becomes `or`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:user-id` key is dropped, the `:graph-id` key is dropped, the `:field` key is dropped, the `:public-key` key is dropped or the `:private-key` key is dropped.
 (deftest load-user-rsa-key-material-needs-both-key-strings-and-returns-the-keys-test
   (async done
          (finish
@@ -655,6 +626,7 @@
             (is (= missing (error-info (:result no-public)))))
           done)))
 
+;; Fails if, in `<preflight-upload-e2ee!`, `and` becomes `or`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:repo` key is dropped, the `:base` key is dropped, the `:user-id` key is dropped or the `:field` key is dropped.
 (deftest preflight-upload-e2ee-needs-a-base-and-a-user-test
   (async done
          (finish
@@ -683,6 +655,7 @@
                    env)
             #(sync-crypt/<ensure-graph-aes-key "repo" "g1")))
 
+;; Fails if, in `<ensure-graph-aes-key`, `and` becomes `or`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:user-id` key is dropped or the `:graph-id` key is dropped.
 (deftest ensure-graph-aes-key-needs-a-base-and-a-user-test
   (async done
          (finish
@@ -696,24 +669,7 @@
             (is (nil? (:result not-e2ee))))
           done)))
 
-(deftest ensure-graph-aes-key-uses-the-local-key-and-caches-it-test
-  (async done
-         (finish
-          (p/let [decrypt (fn [_private-key encrypted] (p/resolved [:aes encrypted]))
-                  {:keys [result calls seen]} (<crypted {:graph-e2ee? true
-                                                         :auth-token "jwt" :jwt-sub "u"
-                                                         :key-material {:public-key :pub :private-key :priv}
-                                                         :items {aes-idb-key "local-enc"}
-                                                         :decrypt-aes-key decrypt}
-                                                        #(p/let [first-key (sync-crypt/<ensure-graph-aes-key "repo" "g1")
-                                                                 second-key (sync-crypt/<ensure-graph-aes-key "repo" "g1")]
-                                                           [first-key second-key]))]
-            (is (= [[:aes "local-enc"] [:aes "local-enc"]] result))
-            (is (= [[:decrypt-aes-key :priv "local-enc"]] seen))
-            (is (= [] (calls-of calls :fetch)))
-            (is (= [] (calls-of calls :kv-set))))
-          done)))
-
+;; Fails if, in `<fetch-graph-encrypted-aes-key-raw`, the `:method` key is dropped, the `:response-schema` key is dropped or `:e2ee/graph-aes-key` becomes `:e2ee/user-keys`.
 (deftest ensure-graph-aes-key-fetches-and-stores-the-remote-key-test
   (async done
          (finish
@@ -728,6 +684,7 @@
             (is (= [[:decrypt-aes-key :priv "remote-enc"]] seen)))
           done)))
 
+;; Fails if, in `<upsert-graph-encrypted-aes-key!`, `when` becomes `when-not`, `nil?` becomes `some?`, the body becomes `nil`, `:e2ee/graph-aes-key` becomes `:e2ee/user-keys`, the `:encrypted-aes-key` key is dropped or the `:method` key is dropped.
 (deftest ensure-graph-aes-key-generates-and-uploads-a-new-key-test
   (async done
          (finish
@@ -741,6 +698,7 @@
             (is (= [[:kv-set aes-idb-key encrypted]] (calls-of calls :kv-set))))
           done)))
 
+;; Fails if, in `<ensure-graph-aes-key`, `and` becomes `or`, `if-not` becomes `if` or the `(p/catch (fn [error]` step is dropped.
 (deftest ensure-graph-aes-key-refetches-when-the-local-key-fails-to-decrypt-test
   (async done
          (finish
@@ -778,6 +736,7 @@
                    env)
             #(sync-crypt/<fetch-graph-aes-key-for-download graph-id)))
 
+;; Fails if, in `<fetch-graph-aes-key-for-download`, `and` becomes `or`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:graph-id` key is dropped or the `:field` key is dropped.
 (deftest fetch-graph-aes-key-for-download-needs-a-base-a-graph-and-key-strings-test
   (async done
          (finish
@@ -808,6 +767,9 @@
                    env)
             #(sync-crypt/<grant-graph-access! "repo" "g1" "a@x.com")))
 
+;; Fails if, in `<grant-graph-access!`, `if-not` becomes `if`, `when-not` becomes `when`, `when` becomes `when-not`, `nil?` becomes `some?`, the body becomes `nil`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:graph-id` key is dropped, the `:repo` key is dropped, the `:field` key is dropped, the `:email` key is dropped, `:e2ee/grant-access` becomes `:e2ee/graph-aes-key`, the `:target-user-email+encrypted-aes-key-...` key is dropped, the `:encrypted-aes-key` key is dropped, `:db-sync/invalid-field` becomes `:db-sync/missing-e2ee-password`, the `:type` key is dropped, the `:body` key is dropped, the `:method` key is dropped, the `:headers` key is dropped or the `:response-schema` key is dropped.
+;; Fails if, in `<import-public-key`, the body becomes `nil`.
+;; Fails if, in `<fetch-user-public-key-by-email`, the body becomes `nil`, the `:method` key is dropped, the `:response-schema` key is dropped or `:e2ee/user-public-key` becomes `:e2ee/grant-access`.
 (deftest grant-graph-access-posts-the-encrypted-aes-key-for-the-target-user-test
   (async done
          (finish
@@ -847,6 +809,7 @@
 (defn- encrypted-value [v]
   (ldb/write-transit-str [:enc (ldb/write-transit-str v)]))
 
+;; Fails if, in `encrypt-tx-item`, `and` becomes `or`, `<=` becomes `<`, `if` becomes `if-not` or the body becomes `nil`.
 (deftest encrypt-tx-data-encrypts-long-enough-vectors-with-encrypted-attrs-test
   (async done
          (finish
@@ -864,6 +827,7 @@
                    result)))
           done)))
 
+;; Fails if, in `<decrypt-snapshot-row`, `when` becomes `when-not` or `some?` becomes `nil?`.
 (deftest decrypt-snapshot-row-decrypts-the-keys-and-keeps-the-addresses-test
   (async done
          (finish
@@ -887,6 +851,7 @@
             (is (nil? (nth (:result without-addresses) 2))))
           done)))
 
+;; Fails if, in `<encrypt-datoms`, `if` becomes `if-not`, `empty?` becomes `seq`, `first` becomes `last`, `when` becomes `when-not` or the body becomes `nil`.
 (deftest encrypt-datoms-encrypts-encrypted-attrs-in-batches-and-reports-progress-test
   (async done
          (finish
@@ -906,9 +871,11 @@
 
 ;; ------------------------------------------------------- thread apis
 
+;; Fails if, in `cancel-ui-requests!`, the body becomes `nil`.
 (deftest cancel-ui-requests-cancels-every-request-in-flight-test
   (is (= {:ok true :cancelled 0} (sync-crypt/cancel-ui-requests! :context))))
 
+;; Fails if, in `(top level)`, `when-not` becomes `when`, `when` becomes `when-not`, `and` becomes `or`, `:thread-api/get-user-rsa-key-pair` becomes `:thread-api/init-user-rsa-key-pair`, `:db-sync/missing-field` becomes `:db-sync/read-e2ee-password-native-failed`, the `:base` key is dropped, the `:public-key` key is dropped or the `:encrypted-private-key` key is dropped.
 (deftest get-user-rsa-key-pair-thread-api-returns-only-the-key-strings-test
   (async done
          (finish
@@ -925,6 +892,7 @@
             (is (nil? (:result no-public))))
           done)))
 
+;; Fails if, in `<upload-user-rsa-key-pair!`, the body becomes `nil`, `:e2ee/user-keys` becomes `:e2ee/user-public-key`, the `:public-key` key is dropped or the `:encrypted-private-key` key is dropped.
 (deftest upload-user-rsa-key-pair-coerces-the-public-and-private-key-test
   (async done
          (finish

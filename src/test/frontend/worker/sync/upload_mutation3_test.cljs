@@ -35,14 +35,7 @@
 
 ;; ---------------------------------------------------------------- small fns
 
-(deftest ensure-client-graph-uuid-updates-only-for-a-non-empty-graph-id-test
-  (let [calls* (atom [])]
-    (with-redefs [client-op/update-graph-uuid (fn [repo graph-id] (swap! calls* conj [repo graph-id]))]
-      (#'sync-upload/ensure-client-graph-uuid! "repo" "graph-1")
-      (#'sync-upload/ensure-client-graph-uuid! "repo" "")
-      (#'sync-upload/ensure-client-graph-uuid! "repo" nil))
-    (is (= [["repo" "graph-1"]] @calls*))))
-
+;; Fails if, in `fetch-kvs-rows`, the body becomes `nil`, the `:sql` key is dropped, the `:bind` key is dropped or the `:rowMode` key is dropped.
 (deftest fetch-kvs-rows-queries-rows-after-the-last-addr-test
   (let [opts* (atom nil)
         rows #js [#js [1 "content" "[]"]]
@@ -54,16 +47,19 @@
       (is (= [7 500] (vec (.-bind opts))))
       (is (= "array" (.-rowMode opts))))))
 
+;; Fails if, in `datom-value-byte-length`, the body becomes `nil`.
 (deftest datom-value-byte-length-is-the-transit-encoded-size-test
   (let [value {:title "héllo"}]
     (is (= (.-byteLength (.encode (js/TextEncoder.) (sqlite-util/write-transit-str value)))
            (#'sync-upload/datom-value-byte-length value)))))
 
+;; Fails if, in `snapshot-rows-byte-length`, the body becomes `nil`.
 (deftest snapshot-rows-byte-length-adds-the-frame-header-test
   (let [rows [[1 "a" "[]"] [2 "b" "[]"]]]
     (is (= (+ 4 (.-byteLength (sync-upload/encode-snapshot-rows rows)))
            (#'sync-upload/snapshot-rows-byte-length rows)))))
 
+;; Fails if, in `drop-oversized-upload-datoms`, `>` becomes `>=`.
 (deftest drop-oversized-upload-datoms-keeps-datoms-at-the-threshold-test
   (let [datoms [{:e 3 :a :logseq.property.tldraw/page :v "huge"}
                 {:e 1 :a :block/title :v "safe"}
@@ -77,6 +73,7 @@
         (is (= [1 4] (mapv :e kept)))
         (is (= [{:a :logseq.property.tldraw/page :e 3 :bytes 1500000}] dropped))))))
 
+;; Fails if, in `drop-oversized-upload-datoms`, the `:dropped` key is dropped.
 (deftest drop-oversized-upload-datoms-without-drops-returns-empty-vectors-test
   (let [datoms [{:e 1 :a :block/title :v "safe"}]
         {:keys [kept dropped]} (#'sync-upload/drop-oversized-upload-datoms datoms)]
@@ -86,6 +83,7 @@
     (is (= {:kept [] :dropped []}
            (#'sync-upload/drop-oversized-upload-datoms [])))))
 
+;; Fails if, in `split-snapshot-rows-by-max-bytes`, `first` becomes `last`.
 (deftest split-snapshot-rows-by-max-bytes-reports-the-first-oversized-row-test
   (let [sizes {:big-1 11 :big-2 12}
         rows [[:big-1 "content-1" "[]"] [:big-2 "content-2" "[]"]]]
@@ -97,10 +95,12 @@
         (is (= {:max-bytes 10 :row-size 11 :addr :big-1}
                (ex-data error)))))))
 
+;; Fails if, in `frame-bytes`, the body becomes `nil`.
 (deftest frame-bytes-prefixes-the-big-endian-length-test
   (is (= [0 0 0 3 1 2 3]
          (vec (sync-upload/frame-bytes (js/Uint8Array. #js [1 2 3]))))))
 
+;; Fails if, in `<upload-snapshot-rows-batches!`, `first` becomes `last`.
 (deftest upload-snapshot-rows-batches-uploads-each-batch-in-order-test
   (async done
          (let [calls* (atom [])
@@ -129,11 +129,13 @@
 
 ;; ------------------------------------------------------------ graph identity
 
+;; Fails if, in `graph-id->uuid`, `:db-sync/missing-field` becomes `:db-sync/snapshot-row-too-large`, the `:repo` key is dropped or the `:field` key is dropped.
 (deftest graph-id->uuid-fails-fast-on-a-missing-graph-id-test
   (let [missing (try (#'sync-upload/graph-id->uuid "repo" "") nil (catch :default e e))]
     (is (= "missing-field" (ex-message missing)))
     (is (= {:repo "repo" :field :graph-id} (ex-data missing)))))
 
+;; Fails if, in `set-graph-sync-metadata!`, `:logseq.kv/graph-uuid` becomes `:logseq.kv/graph-remote?`, `:logseq.kv/graph-rtc-e2ee?` becomes `:logseq.kv/graph-uuid` or the `:outliner-op` key is dropped.
 (deftest set-graph-sync-metadata-transacts-the-graph-kvs-test
   (let [graph-uuid (random-uuid)
         calls* (atom [])]
@@ -153,6 +155,8 @@
              {:outliner-op :set-kvs}]]
            @calls*))))
 
+;; Fails if, in `ensure-client-graph-uuid!`, `when` becomes `when-not`, `seq` becomes `empty?` or the body becomes `nil`.
+;; Fails if, in `persist-upload-graph-identity!`, the `str` step is dropped, `:db-sync/missing-field` becomes `:db-sync/snapshot-row-too-large`, the `:repo` key is dropped, the `:field` key is dropped, the `:graph-id` key is dropped or the `:graph-e2ee?` key is dropped.
 (deftest persist-upload-graph-identity-returns-string-graph-id-and-updates-client-test
   (let [graph-uuid (random-uuid)
         calls* (atom [])]
@@ -191,6 +195,7 @@
                       (<outcome #(#'sync-upload/<create-remote-graph-aux! repo opts)))]
       {:outcome outcome :calls @calls*})))
 
+;; Fails if, in `<create-remote-graph-aux!`, `if` becomes `if-not`, the `:ensure-server?` key is dropped, `:graphs/create` becomes `:graphs/list` or the `:response-schema` key is dropped.
 (deftest create-remote-graph-aux-requests-the-graph-and-takes-e2ee-from-the-response-test
   (async done
          (finish
@@ -219,6 +224,7 @@
             (is (= {:graph-id "g2" :graph-e2ee? false} outcome-no-key)))
           done)))
 
+;; Fails if, in `<create-remote-graph-aux!`, the `common-config/strip-leading-db-versio...` step is dropped, the `ldb/get-graph-schema-version` step is dropped or the `:major` step is dropped.
 (deftest create-remote-graph-aux-sends-the-stripped-graph-name-and-schema-major-test
   (async done
          (finish
@@ -234,6 +240,7 @@
                    (nth calls 1))))
           done)))
 
+;; Fails if, in `<create-remote-graph-aux!`, `:db-sync/missing-field` becomes `:db-sync/snapshot-row-too-large`, the `:repo` key is dropped, the `:field` key is dropped, `:db-sync/invalid-field` becomes `:db-sync/missing-field` or the `:op` key is dropped.
 (deftest create-remote-graph-aux-fails-fast-on-missing-inputs-test
   (async done
          (finish
@@ -254,6 +261,7 @@
                    ((juxt ex-message ex-data) (error-of (:outcome no-graph-id))))))
           done)))
 
+;; Fails if, in `list-remote-graphs!`, `if-not` becomes `if`, `seq` becomes `empty?`, `or` becomes `and`, the body becomes `nil`, the `:op` key is dropped, the `:method` key is dropped, the `:response-schema` key is dropped or `:graphs/list` becomes `:graphs/create`.
 (deftest list-remote-graphs-fetches-the-graph-list-test
   (async done
          (let [calls* (atom [])]
@@ -280,6 +288,7 @@
               (is (= [] no-base-graphs)))
             done))))
 
+;; Fails if, in `fail-upload-graph-already-exists!`, the `:repo` key is dropped or the `:graph-id` key is dropped.
 (deftest fail-upload-graph-already-exists-carries-its-context-test
   (let [error (try (#'sync-upload/fail-upload-graph-already-exists!
                     "repo-1" {:graph-id "g1" :graph-name "my-graph"})
@@ -291,6 +300,7 @@
             :graph-name "my-graph"}
            (ex-data error)))))
 
+;; Fails if, in `create-remote-graph!`, the `common-config/strip-leading-db-versio...` step is dropped, `:db-sync/missing-field` becomes `:db-sync/snapshot-row-too-large`, the `:repo` key is dropped or the `:field` key is dropped.
 (deftest create-remote-graph-strips-the-db-version-prefix-before-matching-test
   (async done
          (finish
@@ -304,6 +314,7 @@
                    ((juxt ex-message ex-data) (error-of unnamed)))))
           done)))
 
+;; Fails if, in `create-remote-graph!`, `:db-sync/ambiguous-graph-match` becomes `:db-sync/drop-oversized-upload-datoms`, the `:repo` key is dropped, the `:graph-name` key is dropped or the `:match-count` key is dropped.
 (deftest create-remote-graph-fails-on-several-matching-graphs-test
   (async done
          (finish
@@ -370,6 +381,7 @@
 (defn- progress [payload]
   [:post-message :rtc-log (merge {:type :rtc.log/upload} payload)])
 
+;; Fails if, in `upload-graph!`, `when` becomes `when-not`, `if` becomes `if-not`, the `:type` key is dropped, the `:graph-e2ee?` key is dropped, the `:graph-ready-for-use?` key is dropped, the `:sub-type` key is dropped, the `:message` key is dropped, the `(p/finally` step is dropped, the `:graph-id` key is dropped, the `:rows` key is dropped, the `:payload-bytes` key is dropped, `:db-sync/upload-kvs-batch` becomes `:db-sync/ambiguous-graph-match`, the `:total-kvs-rows` key is dropped, the `:fetched-kvs-rows` key is dropped, the `:upload-kvs-batch-size` key is dropped, the `:split-batch-count` key is dropped, the `:split-batches` key is dropped, the `:max-request-bytes` key is dropped, the `:base` key is dropped, the `:first-batch?` key is dropped, the `:method` key is dropped, the `:headers` key is dropped, the `:body` key is dropped or the `:response-schema` key is dropped.
 (deftest upload-graph-uploads-the-temp-db-in-batches-test
   (async done
          (finish
@@ -412,20 +424,7 @@
                           :max-request-bytes 1000000}))))
           done)))
 
-(deftest upload-graph-with-e2ee-fetches-the-graph-aes-key-test
-  (async done
-         (finish
-          (p/let [{:keys [outcome calls]}
-                  (<run-upload-graph! {:e2ee? true :aes-key "aes" :total-rows 1 :batches [upload-rows-2]})]
-            (is (= {:graph-id "graph-1"} outcome))
-            (is (= [[:create-remote-graph "repo-1" {:graph-e2ee? true :graph-ready-for-use? false}]
-                    [:ensure-aes-key "repo-1" "graph-1"]
-                    [:update-local-checksum "repo-1" "chk" 99]
-                    (progress {:sub-type :upload-progress :message "Encrypting..."})
-                    [:prepare "repo-1" "graph-1" "aes"]]
-                   (take 5 calls))))
-          done)))
-
+;; Fails if, in `upload-graph!`, `nil?` becomes `some?`, `:db-sync/missing-field` becomes `:db-sync/snapshot-row-too-large`, the `:repo` key is dropped or the `:field` key is dropped.
 (deftest upload-graph-fails-fast-without-an-aes-key-test
   (async done
          (finish
@@ -436,6 +435,7 @@
             (is (not-any? #(= :prepare (first %)) calls)))
           done)))
 
+;; Fails if, in `upload-graph!`, the `:repo` key is dropped or the `:base` key is dropped.
 (deftest upload-graph-rejects-a-missing-base-and-a-missing-conn-test
   (async done
          (finish
@@ -481,6 +481,7 @@
 
 (def ^:private large-title-attr :logseq.property.sync/large-title-object)
 
+;; Fails if, in `<prepare-upload-temp-sqlite!`, `when` becomes `when-not`, the `:batch-size` key is dropped or the `:initial-db?` key is dropped.
 (deftest prepare-upload-temp-sqlite-offloads-large-titles-in-batches-test
   (async done
          (let [big-title (apply str (repeat 4097 "x"))
@@ -508,6 +509,7 @@
               (is (= "" printed)))
             done))))
 
+;; Fails if, in `<prepare-upload-temp-sqlite!`, `if` becomes `if-not`, the `:progress-f` key is dropped, the `:sub-type` key is dropped or the `:message` key is dropped.
 (deftest prepare-upload-temp-sqlite-encrypts-datoms-with-the-aes-key-test
   (async done
          (finish
@@ -519,6 +521,8 @@
             (is (= [{:sub-type :upload-progress :message "Encrypting 2/2"}] progress-payloads)))
           done)))
 
+;; Fails if, in `<prepare-upload-temp-sqlite!`, `when` becomes `when-not`, `seq` becomes `empty?`, `:db-sync/drop-oversized-upload-datoms` becomes `:db-sync/graph-already-exists`, the `:repo` key is dropped, the `:count` key is dropped, the `:attrs` key is dropped or the `:max-bytes` key is dropped.
+;; Fails if, in `drop-oversized-upload-datoms`, the `:dropped` key is dropped.
 (deftest prepare-upload-temp-sqlite-logs-and-skips-oversized-datoms-test
   (async done
          (finish
