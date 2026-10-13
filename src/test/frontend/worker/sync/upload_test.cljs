@@ -9,6 +9,15 @@
             [promesa.core :as p]
             [clojure.string :as string]))
 
+(deftest graph-id->uuid-rejects-an-id-that-is-not-a-uuid-test
+  (is (= #uuid "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+         (#'sync-upload/graph-id->uuid "repo" "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d")))
+  (let [error (try (#'sync-upload/graph-id->uuid "repo" "not-a-uuid")
+                   nil
+                   (catch :default e e))]
+    (is (= :graph-id (:field (ex-data error))))
+    (is (= "not-a-uuid" (:value (ex-data error))))))
+
 (deftest split-snapshot-rows-by-max-bytes-splits-rows-into-byte-capped-batches-test
   (let [sizes {:a 4
                :b 4
