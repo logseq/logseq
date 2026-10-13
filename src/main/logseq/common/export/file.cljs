@@ -309,6 +309,16 @@
                         line)]
             (recur more (if fence? (not in-fence?) in-fence?) (conj acc line'))))))))
 
+(defn- escape-quote-marker-in-first-line
+  "A block that is not a quote block but whose text starts with `>`: the export
+  writes a quote block as `> text`, so without a backslash the two would be
+  read back the same."
+  [content]
+  (if (re-find #"^\s*>" content)
+    (let [[_ leading text] (re-matches #"(?s)(\s*)(.*)" content)]
+      (str leading "\\" text))
+    content))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -339,7 +349,7 @@
         property-spaces-tabs (str spaces-tabs "  ")
         content (if (and (:escape-block-markers? context)
                          (not (:logseq.property.node/display-type b)))
-                  (escape-block-markers-in-later-lines content)
+                  (-> content escape-block-markers-in-later-lines escape-quote-marker-in-first-line)
                   content)
         content (if heading-to-list?
                   (strip-heading-prefix content)

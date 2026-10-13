@@ -32,7 +32,8 @@
   it as a line of text; it comes back as the same block, the line escaped."
   {"line\n- a dash line" "line\n\\- a dash line"
    "line\n  - an indented dash line" "line\n  \\- an indented dash line"
-   "line\n# a hash line" "line\n\\# a hash line"})
+   "line\n# a hash line" "line\n\\# a hash line"
+   "> a plain block starting with >" "\\> a plain block starting with >"})
 
 (def ^:private all-titles (into titles (keys unescaped-titles)))
 

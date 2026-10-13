@@ -23,9 +23,9 @@
 
 (def ^:private block-title-start-markup
   "Text at the start of a block's first line that mldoc reads as structure: a
-  heading or a task marker. mldoc gives plain text starting like this only when
-  it was escaped (`\\# x` parses as the text `# x`)."
-  #"^(?:#+(?:\s|$)|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
+  heading, a quote or a task marker. mldoc gives plain text starting like this
+  only when it was escaped (`\\# x` parses as the text `# x`)."
+  #"^(?:#+(?:\s|$)|>|(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$))")
 
 (def ^:private line-start-markup
   "Text at the start of a later line of a block that mldoc reads as structure:
