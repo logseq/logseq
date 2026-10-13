@@ -28,6 +28,13 @@
      :logseq.property.node/display-type :code
      :logseq.property.code/lang "text"}))
 
+(deftest wrap-parse-block-leaves-out-file-graph-scheduled-and-deadline-test
+  (testing "SCHEDULED:/DEADLINE: lines do not produce the file-graph attributes, which the DB schema does not allow"
+    (let [block (db-editor-handler/wrap-parse-block
+                 {:block/title "task\nSCHEDULED: <2024-01-02 Tue>\nDEADLINE: <2024-01-03 Wed>"})]
+      (is (not (contains? block :block/scheduled)))
+      (is (not (contains? block :block/deadline))))))
+
 (deftest wrap-parse-block-standalone-display-math-test
   (is (= {:block/title "E = mc^2"
           :logseq.property.node/display-type :math}
