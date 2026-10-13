@@ -30,9 +30,20 @@ let unsigned_hex n = Printf.sprintf "%08x" n
 
 let parse_hex32 s =
   if String.length s = 8 then
-    match int_of_string_opt ("0x" ^ s) with
-    | Some n -> Some (mask32 n)
-    | None -> None
+    match Int64.of_string_opt ("0x" ^ s) with
+    | Some n
+      when Int64.compare n 0L >= 0 && Int64.compare n 0xffffffffL <= 0 ->
+        (* Native keeps the positive 32-bit quantity mask32 uses.
+           Melange int is 32-bit signed, so the high bit has to stay the
+           signed bit pattern of the in-memory hash. Int32.to_int on
+           native sign-extends 0xffffffff to -1 and would change
+           checksums. *)
+        let i =
+          if Sys.int_size > 32 then Int64.to_int n
+          else Int32.to_int (Int64.to_int32 n)
+        in
+        Some (mask32 i)
+    | _ -> None
   else None
 
 let checksum_of_state (fnv, djb) = unsigned_hex fnv ^ unsigned_hex djb

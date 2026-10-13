@@ -122,10 +122,11 @@ let journal_day_plus (day : int) (n : int) : int option =
           (Time.civil ~year ~month ~day:mday ~hour:0 ~minute:0 ~second:0
              ~ms:0)
       in
+      (* n * 86_400_000 overflows 32-bit int at 25 days. *)
       let shifted =
         Time.epoch_ms
           (Int64.add (Time.epoch_ms_to_int64 utc_midnight)
-             (Int64.of_int (n * 86_400_000)))
+             (Int64.mul (Int64.of_int n) 86_400_000L))
       in
       let year', month', day', _, _, _, _ =
         Time.civil_fields (Time.civil_of_epoch_ms Time.utc shifted)
@@ -439,14 +440,15 @@ let epoch_ms_of_iso (s : string) : int64 option =
             in
             scan 19
           in
+          (* Day-seconds in int64: days * 86400 overflows 32-bit int after
+             2038-01-19. Hour, minute, and second still fit in int. *)
+          let seconds =
+            Int64.add (Int64.mul (Int64.of_int days) 86400L)
+              (Int64.of_int ((h * 3600) + (mi * 60) + sec))
+          in
           Some
             (Int64.sub
-               (Int64.add
-                  (Int64.mul
-                     (Int64.of_int
-                        (((days * 86400) + (h * 3600) + (mi * 60) + sec)))
-                     1000L)
-                  (Int64.of_int frac))
+               (Int64.add (Int64.mul seconds 1000L) (Int64.of_int frac))
                (Int64.of_int (offset_min * 60000)))
       | _ -> None
 
@@ -628,11 +630,16 @@ let js_date_parse (s0 : string) : int64 option =
                     | Some (ms, tz') -> (y, mo, d, iso, Some ms, tz')
                     | None -> (y, mo, d, iso, t, tz))
                  else if all_digits tok then
-                   let n = int_of_string tok in
-                   if String.length tok >= 4 || n > 31 then
-                     (Some n, mo, d, iso, t, tz)
-                   else if d = None then (y, mo, Some n, iso, t, tz)
-                   else (Some n, mo, d, iso, t, tz)
+                   (* A token that does not fit in int is not a year or day.
+                      int_of_string raises on Melange for a 13-digit
+                      epoch-ms token and would abort the parse. *)
+                   (match int_of_string_opt tok with
+                    | None -> (y, mo, d, iso, t, tz)
+                    | Some n ->
+                        if String.length tok >= 4 || n > 31 then
+                          (Some n, mo, d, iso, t, tz)
+                        else if d = None then (y, mo, Some n, iso, t, tz)
+                        else (Some n, mo, d, iso, t, tz))
                  else
                    (* bare tz token *)
                    (match String.lowercase_ascii tok with

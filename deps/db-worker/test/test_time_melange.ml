@@ -285,4 +285,54 @@ let () =
         (fun (_name, ms) -> epoch_civil_roundtrip local ms)
         (instants
          @ [ ("summer-2024-07-15", 1721070000000L) (* 2024-07-15T19:00Z *)
-           ]))
+           ]));
+
+  (* Same 32-bit overflow cases as test/native/test_common_native.ml.
+     This runner is Melange, so values above 2^31-1 fail the old int
+     path here even when they fit in native int. *)
+  let read s = Edn_util.read_string s in
+  let high32 n =
+    if Sys.int_size > 32 then Int64.to_int n
+    else Int32.to_int (Int64.to_int32 n)
+  in
+  Fest.test "int64-bigint-above-31-bits" (fun () ->
+      ok (read "2147483648N" = Datascript.Int64 2147483648L);
+      ok (read "3000000000N" = Datascript.Int64 3000000000L);
+      ok (read "-2147483649N" = Datascript.Int64 (-2147483649L));
+      ok (read "4611686018427387904N" = Datascript.Int64 4611686018427387904L);
+      ok (read "9223372036854775807N" = Datascript.Int64 Int64.max_int);
+      ok (read "-9223372036854775808N" = Datascript.Int64 Int64.min_int);
+      ok (read "9223372036854775808N" = Datascript.Int64 0L);
+      ok (read "42N" = Datascript.Int64 42L));
+
+  Fest.test "journal-day-plus-25" (fun () ->
+      ok (Date_time_util.journal_day_plus 20260928 24 = Some 20261022);
+      ok (Date_time_util.journal_day_plus 20260928 25 = Some 20261023);
+      ok (Date_time_util.journal_day_plus 20260228 25 = Some 20260325);
+      ok (Date_time_util.journal_day_plus 20261023 (-25) = Some 20260928));
+
+  Fest.test "epoch-ms-after-2038" (fun () ->
+      let eq s expected =
+        ok (Date_time_util.epoch_ms_of_iso s = Some expected)
+      in
+      eq "2038-01-19T03:14:07Z" 2147483647000L;
+      eq "2038-01-19T03:14:08Z" 2147483648000L;
+      eq "2100-01-01T00:00:00Z" 4102444800000L;
+      eq "2040-06-15T12:30:45.123+02:00" 2223369045123L;
+      eq "1969-12-31T23:59:59Z" (-1000L));
+
+  Fest.test "js-date-parse-oversized-token" (fun () ->
+      ok (Date_time_util.js_date_parse "1704067200000" = None);
+      ok (Date_time_util.js_date_parse "9223372036854775808" = None);
+      ok (Date_time_util.js_date_parse "2024-01-15" = Some 1705276800000L));
+
+  Fest.test "checksum-hex-0x80000000-round-trip" (fun () ->
+      let round_trip hex =
+        let state = Db_sync_checksum.state_of_checksum hex in
+        ok (Db_sync_checksum.checksum_of_state state = hex)
+      in
+      round_trip "80000000ffffffff";
+      let fnv, djb = Db_sync_checksum.state_of_checksum "80000000ffffffff" in
+      ok (fnv = high32 0x80000000L && djb = high32 0xffffffffL);
+      round_trip "811c9dc500001505";
+      round_trip "0000000100001505")

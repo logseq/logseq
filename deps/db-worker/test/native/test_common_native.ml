@@ -469,6 +469,82 @@ let test_ignored_markdown_mirror_path () =
   check "not ignored mirror/markdown2/foo.md"
     (not (Common_graph.ignored_path dir (dir ^ "/mirror/markdown2/foo.md")))
 
+(* ---------- 32-bit int width ----------
+
+   Melange int is 32-bit signed. These cases are the overflows that
+   path hits: N-suffixed integers above 2^31-1, a journal shift of 25
+   days, an ISO instant after 2038-01-19, a digit token that does not
+   fit in int, and a checksum hex word with the high bit set. Integers
+   above native max_int fail the old int_of_string path on this runner. *)
+
+let value_eq name actual expected =
+  Alcotest.(check (testable (fun ppf v ->
+      Format.pp_print_string ppf (Edn_util.pr_str v)) ( = )))
+    name expected actual
+
+let int64_opt_eq name actual expected =
+  Alcotest.(check (option int64)) name expected actual
+
+let int_opt_eq name actual expected =
+  Alcotest.(check (option int)) name expected actual
+
+let high32 n =
+  if Sys.int_size > 32 then Int64.to_int n
+  else Int32.to_int (Int64.to_int32 n)
+
+let test_int64_bigint_above_31_bits () =
+  let read s = Edn_util.read_string s in
+  value_eq "2^31 bigint" (read "2147483648N") (Int64 2147483648L);
+  value_eq "above 2^31 bigint" (read "3000000000N") (Int64 3000000000L);
+  value_eq "negative above 2^31" (read "-2147483649N") (Int64 (-2147483649L));
+  value_eq "above native int still int64"
+    (read "4611686018427387904N") (Int64 4611686018427387904L);
+  value_eq "int64 max" (read "9223372036854775807N") (Int64 Int64.max_int);
+  value_eq "int64 min" (read "-9223372036854775808N") (Int64 Int64.min_int);
+  value_eq "above int64 stays 0" (read "9223372036854775808N") (Int64 0L);
+  value_eq "small bigint" (read "42N") (Int64 42L)
+
+let test_journal_day_plus_25 () =
+  int_opt_eq "journal-day-plus +24" (Date_time_util.journal_day_plus 20260928 24)
+    (Some 20261022);
+  int_opt_eq "journal-day-plus +25" (Date_time_util.journal_day_plus 20260928 25)
+    (Some 20261023);
+  int_opt_eq "journal-day-plus +25 month rollover"
+    (Date_time_util.journal_day_plus 20260228 25) (Some 20260325);
+  int_opt_eq "journal-day-plus -25"
+    (Date_time_util.journal_day_plus 20261023 (-25)) (Some 20260928)
+
+let test_epoch_ms_after_2038 () =
+  let eq name s expected =
+    int64_opt_eq name (Date_time_util.epoch_ms_of_iso s) (Some expected)
+  in
+  eq "last 32-bit unix second" "2038-01-19T03:14:07Z" 2147483647000L;
+  eq "first instant after 2038-01-19" "2038-01-19T03:14:08Z" 2147483648000L;
+  eq "2100-01-01" "2100-01-01T00:00:00Z" 4102444800000L;
+  eq "fraction and offset after 2038" "2040-06-15T12:30:45.123+02:00"
+    2223369045123L;
+  eq "pre-epoch still signed" "1969-12-31T23:59:59Z" (-1000L)
+
+let test_js_date_parse_oversized_token () =
+  int64_opt_eq "13-digit epoch-ms token is not a date"
+    (Date_time_util.js_date_parse "1704067200000") None;
+  int64_opt_eq "digit token above int does not raise"
+    (Date_time_util.js_date_parse "9223372036854775808") None;
+  int64_opt_eq "iso date still parses"
+    (Date_time_util.js_date_parse "2024-01-15") (Some 1705276800000L)
+
+let test_checksum_hex_high_bit_round_trip () =
+  let round_trip hex =
+    let state = Db_sync_checksum.state_of_checksum hex in
+    Db_sync_checksum.checksum_of_state state = hex
+  in
+  check "0x80000000 round-trip" (round_trip "80000000ffffffff");
+  let fnv, djb = Db_sync_checksum.state_of_checksum "80000000ffffffff" in
+  check "0x80000000 stays the in-memory 32-bit pattern"
+    (fnv = high32 0x80000000L && djb = high32 0xffffffffL);
+  check "fnv offset hex round-trip" (round_trip "811c9dc500001505");
+  check "small checksum round-trip" (round_trip "0000000100001505")
+
 (* ---------- suite ---------- *)
 
 let () =
@@ -520,4 +596,15 @@ let () =
       , [ Alcotest.test_case "get-files" `Quick test_get_files
         ; Alcotest.test_case
             "ignored-markdown-mirror-path-honors-directory-boundary-test"
-            `Quick test_ignored_markdown_mirror_path ] ) ]
+            `Quick test_ignored_markdown_mirror_path ] )
+    ; ( "int32-width"
+      , [ Alcotest.test_case "int64-bigint-above-31-bits" `Quick
+            test_int64_bigint_above_31_bits
+        ; Alcotest.test_case "journal-day-plus-25" `Quick
+            test_journal_day_plus_25
+        ; Alcotest.test_case "epoch-ms-after-2038" `Quick
+            test_epoch_ms_after_2038
+        ; Alcotest.test_case "js-date-parse-oversized-token" `Quick
+            test_js_date_parse_oversized_token
+        ; Alcotest.test_case "checksum-hex-0x80000000-round-trip" `Quick
+            test_checksum_hex_high_bit_round_trip ] ) ]

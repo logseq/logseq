@@ -5,6 +5,20 @@ open Datascript
 
 exception Edn_error of string
 
+(* Melange Int64.of_string accepts the unsigned 64-bit range and wraps.
+   A sign that does not match the parsed value is outside signed int64.
+   Those stay 0, same as native of_string_opt returning None. *)
+let int64_of_bigint_literal s =
+  match Int64.of_string_opt s with
+  | None -> 0L
+  | Some n ->
+      let negative = s <> "" && s.[0] = '-' in
+      if
+        (negative && Int64.compare n 0L > 0)
+        || ((not negative) && Int64.compare n 0L < 0)
+      then 0L
+      else n
+
 (* ---- EDN -> value ---- *)
 
 let rec value_of_edn (Edn_parser.Any v) : value =
@@ -16,7 +30,10 @@ let rec value_of_edn (Edn_parser.Any v) : value =
   | Edn_parser.Symbol s -> Symbol s
   | Edn_parser.Keyword k -> Keyword (Edn_parser.keyword_to_string k)
   | Edn_parser.Int n -> Common_util.value_of_ms n
-  | Edn_parser.Bigint s -> Int64 (Int64.of_int (int_of_string_opt s |> Option.value ~default:0))
+  (* N-suffixed integers are int64. Melange int is 32-bit, so int_of_string
+     turns values above 2^31-1 into the 0 fallback. Values outside int64
+     stay 0. *)
+  | Edn_parser.Bigint s -> Int64 (int64_of_bigint_literal s)
   | Edn_parser.Float f -> Float f
   | Edn_parser.Decimal s -> Float (float_of_string_opt s |> Option.value ~default:0.0)
   | Edn_parser.Ratio s -> Float (float_of_string_opt s |> Option.value ~default:0.0)
