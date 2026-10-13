@@ -10,7 +10,10 @@
    ;; Encode block background-color highlights as ^^text^^ so they survive
    ;; Text/OPML/HTML export instead of being silently dropped (the property
    ;; is otherwise hidden from export like other :hide? true properties).
-   :encode-highlight-as-mark? true})
+   :encode-highlight-as-mark? true
+   ;; Write a block embed as the embedded block and its children, as the embed
+   ;; shows them (not done for the Markdown mirror, which writes one line per block).
+   :inline-block-embeds? true})
 
 (defn <export-blocks-as-format
   [repo root-block-uuids-or-page-uuid format-type options]
