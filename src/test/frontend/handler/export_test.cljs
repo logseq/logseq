@@ -117,7 +117,27 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000702"}
        {:block/title ""
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000703"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000703"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000704"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000705"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000706"
+        :build/children [{:block/title "own child of the embed"}]}
+       {:block/title "collapsed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000707"
+        :build/children [{:block/title "hidden child"}]}
+       {:block/title "parent of an embed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000709"
+        :build/children [{:block/title ""
+                          :build/keep-uuid? true
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}]}]))
 
 (defn- load-export-test-files!
   []
@@ -132,7 +152,17 @@
                  [[:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000702"]
                    :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
                   [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]
-                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]]])))
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]]
+                  ;; 704 embeds 705, which embeds 704
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000704"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000705"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000705"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000704"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000706"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000708"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"] :block/collapsed? true]])))
 
 (use-fixtures :once
   {:before (fn []
@@ -514,7 +544,27 @@
                         {:remove-options #{}})]
       (is (= "- embedded\n\t- embedded child" (string/trim embed))
           "a block embed exports the embedded block and its children")
-      (is (string? self-embed) "an embed of itself does not loop")
+      (is (= "-" (string/trim self-embed)) "an embed of itself is written as the block itself")
+      (done))))
+
+(deftest export-blocks-as-markdown-block-embed-cycle-and-options
+  (async done
+    (p/let [cycle (<export-blocks-as-markdown
+                   [#uuid "00000000-0000-4000-8000-000000000704"]
+                   {:remove-options #{}})
+            own-child (<export-blocks-as-markdown
+                       [#uuid "00000000-0000-4000-8000-000000000706"]
+                       {:remove-options #{}})
+            open-only (<export-blocks-as-markdown
+                       [#uuid "00000000-0000-4000-8000-000000000709"]
+                       {:remove-options #{:property}
+                        :other-options {:open-blocks-only true}})]
+      (is (= "-" (string/trim cycle))
+          "A embeds B embeds A: the cycle stops at B, written as itself")
+      (is (= "- embedded\n\t- embedded child" (string/trim own-child))
+          "the embed shows the embedded block's children, not the embedding block's own")
+      (is (= "- parent of an embed\n\t- collapsed" (string/trim open-only))
+          "the export's open-blocks-only option applies inside the embed")
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
