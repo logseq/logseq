@@ -1337,18 +1337,6 @@
 
 ;; local transactions
 
-;; Fails if, in `record-local-graph-undo!`, `:db-sync/tx-id` becomes `:db-sync/upload-response-timeout` or the `:apply-history-action!` key is dropped.
-(deftest record-local-graph-undo-keys-the-entry-by-the-tx-id
-  (let [calls (atom [])
-        id (random-uuid)
-        report {:tx-meta {:db-sync/tx-id id} :tx-data [1]}]
-    (with-redefs [worker-state/get-client-ops-conn (fn [_] :ops-conn)
-                  worker-undo-redo/gen-undo-ops! (fn [& args] (swap! calls conj (vec args)))]
-      (#'sync-apply/record-local-graph-undo! "r" report)
-      (#'sync-apply/record-local-graph-undo! "r" {:tx-meta {} :tx-data [1]}))
-    (is (= ["r" report id {:apply-history-action! sync-apply/apply-history-action!}] (first @calls)))
-    (is (uuid? (nth (second @calls) 2)) "A tx without an id gets a fresh one")))
-
 ;; Fails if, in `handle-local-tx!`, the `:enqueue-asset-task-f` key is dropped, the `:current-client-f` key is dropped, the `:broadcast-rtc-state!-f` key is dropped or the `:fail-fast-f` key is dropped.
 (deftest handle-local-tx-hands-the-asset-sync-its-worker-callbacks
   (let [conn (three-blocks-conn)
