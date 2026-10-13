@@ -173,6 +173,122 @@ let column_size (c : V.column) =
   | "block/created-at" | "block/updated-at" -> 160
   | _ -> 180
 
+(* Both docks leave the main track narrower than the natural column
+   sum. The nested horizontal scroller cannot shrink under the page's
+   vertical scroll, and this host paints no horizontal bar, so the
+   right-hand columns are clipped. Fit the row to the live track:
+   keep the select checkbox, keep datetimes wide enough for a full
+   timestamp, and give the leftover width to the text columns. *)
+let datetime_lock = 148
+let col_floor = 72
+
+let is_select_col (c : V.column) = c.V.c_id = "select"
+
+let is_datetime_col (c : V.column) =
+  match c.V.c_id with
+  | "block/created-at" | "block/updated-at" -> true
+  | _ -> false
+
+let fitted_px ~avail (c : V.column) (cols : V.column list) : int =
+  let base = column_size c in
+  let sum = List.fold_left (fun a col -> a + column_size col) 0 cols in
+  if avail <= 0 || sum <= avail || is_select_col c then base
+  else
+    let select_sum =
+      List.fold_left
+        (fun a col -> if is_select_col col then a + column_size col else a)
+        0 cols
+    in
+    let room = max 0 (avail - select_sum) in
+    let dt_lock col = min (column_size col) datetime_lock in
+    let dt_sum =
+      List.fold_left
+        (fun a col -> if is_datetime_col col then a + dt_lock col else a)
+        0 cols
+    in
+    let others =
+      List.filter
+        (fun col -> not (is_select_col col || is_datetime_col col))
+        cols
+    in
+    let other_sum =
+      List.fold_left (fun a col -> a + column_size col) 0 others
+    in
+    let min_others = List.length others * col_floor in
+    if other_sum > 0 && dt_sum + other_sum <= room then
+      if is_datetime_col c then dt_lock c else base
+    else if other_sum > 0 && dt_sum + min_others <= room then
+      if is_datetime_col c then dt_lock c
+      else
+        let rest = room - dt_sum in
+        max col_floor (min base (base * rest / other_sum))
+    else
+      let flex_sum = sum - select_sum in
+      if flex_sum <= 0 then base
+      else
+        let raw = base * room / flex_sum in
+        let floored =
+          List.fold_left
+            (fun a col ->
+              if is_select_col col then a
+              else a + max col_floor (column_size col * room / flex_sum))
+            0 cols
+        in
+        if floored <= room then max col_floor (min base raw)
+        else max 48 (min base raw)
+
+(* Sidebar fractions are viewport fractions of the content track.
+   Absent during unit tests — callers keep [column_size]. *)
+let avail_sig_cell : int Signal.signal option ref = ref None
+
+let main_track_avail () : int Signal.signal option =
+  match !avail_sig_cell with
+  | Some s -> Some s
+  | None -> (
+      match !Sidebar_state.st_ref, !Sidebar_state.model_signal with
+      | None, _ | _, None -> None
+      | Some st, Some ms ->
+          let packed =
+            Signal.map2
+              (fun a b -> (a, b))
+              (Signal.map2
+                 (fun (m : Model.t) lf -> (m, lf))
+                 ms
+                 (Signal.value st.Sidebar_state.left_fraction))
+              (Signal.map2
+                 (fun rf vw -> (rf, vw))
+                 (Signal.value st.Sidebar_state.right_fraction)
+                 (Signal.value st.Sidebar_state.viewport_w))
+          in
+          let s =
+            Signal.map
+              (fun ((m, lf), (rf, vw)) ->
+                let vw =
+                  if vw <= 1. then Ui_services.dom_viewport_width () else vw
+                in
+                let content =
+                  if m.Model.right_sidebar_open then vw *. (1. -. rf) else vw
+                in
+                let left =
+                  if Sidebar_state.left_docked m.Model.left_sidebar_open vw
+                  then lf *. content
+                  else 0.
+                in
+                (* 24px: split gap + the page wrap's horizontal pad *)
+                max 280 (int_of_float (content -. left -. 24.)))
+              packed
+          in
+          avail_sig_cell := Some s;
+          Some s)
+
+let sized (c : V.column) (cols : V.column list) (node : t) : t =
+  match main_track_avail () with
+  | None -> node
+  | Some avail ->
+      let w = Signal.map (fun a -> fitted_px ~avail:a c cols) avail in
+      Ui_parts.int_prop_signal Lui_protocol.WidthValue w Fun.id
+        (Ui_parts.int_prop_signal Lui_protocol.MinWidth w Fun.id node)
+
 let inner_cell children =
   (* .ls-table-cell > div: height:100% has no prop channel *)
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
@@ -523,9 +639,12 @@ let prop_cell ~blk (c : V.column) : t =
       inner_cell [ checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
-let cell_el inst ~row_uuid ~blk (c : V.column) : t =
-  (* the cljs `title` tooltip and tabindex have no component props *)
-  Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
+let cell_el inst ~row_uuid ~blk ~cols (c : V.column) : t =
+  (* the cljs `title` tooltip and tabindex have no component props.
+     [sized] overrides width from the live main-track when both docks
+     are open; the static width is the natural size (and the test size). *)
+  sized c cols
+  (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
   (box ~style_class:"ls-table-cell" ~width:(column_size c)
     ~min_width:(column_size c) ~height:32
     [ (match c.V.c_id with
@@ -552,7 +671,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view ~hover:None pctx row ]
-           | None -> prop_cell ~blk c)) ])
+           | None -> prop_cell ~blk c)) ]))
 
 (* ---------- header ---------- *)
 
@@ -709,8 +828,9 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
 let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
-let header_cell inst (c : V.column) : t =
-  if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
+let header_cell inst ~cols (c : V.column) : t =
+  sized c cols
+  (if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
   let fg = "var(--muted-foreground, var(--ls-secondary-text-color))" in
   match c.V.c_id with
   | "select" ->
@@ -758,7 +878,7 @@ let header_cell inst (c : V.column) : t =
               ; (* resize-handle stays a hook — the opacity 0/.7/1 state
                    ladder can't ride props (inline opacity beats :where
                    hover/pressed) *)
-                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ]))
+                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ])))
 
 (* ---------- action bar ---------- *)
 
@@ -995,7 +1115,7 @@ let table_row_keydown inst ~row_uuid name payload =
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
-  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk c ] in
+  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk ~cols c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
@@ -1093,7 +1213,7 @@ let row_stream inst cols uuids : t =
    reactive prop off the inst signal *)
 let table_header inst cols : t =
   let cell_item c =
-    let cell = header_cell inst c in
+    let cell = header_cell inst ~cols c in
     if c.V.c_id = "select" then
       box ~accessibility_identifier:"Select" [ cell ]
     else box [ cell ]
