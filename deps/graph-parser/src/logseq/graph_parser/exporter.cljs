@@ -2176,29 +2176,66 @@
             (assoc :logseq.property.code/lang lang)))
         code-segs))
 
+(def ^:private embed-macro-re #"\s*\{\{embed\s+(.+?)\s*\}\}")
+
+(defn- title-without-embed
+  "The block's text besides its embed macro, or nil when the block is only the embed"
+  [title]
+  (when (string? title)
+    (let [text (string/trim (string/replace title embed-macro-re ""))]
+      (when-not (string/blank? text) text))))
+
 (defn- handle-embeds
-  "If a block contains page or block embeds, converts block to a :block/link based embed"
+  "If a block contains page or block embeds, converts block to a :block/link based embed.
+  A DB block is either text or an embed, so a block with text besides the embed
+  keeps its text and gets the embed as a child block (built in complete-block-tx-data)."
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
   (if-let [embed-node (first embeds)]
-    (cond
-      (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
-      (let [page-uuid (get-page-uuid page-names-to-uuids
-                                     (some-> (text/get-page-name (first (:arguments (second embed-node))))
-                                             common-util/page-name-sanity-lc)
-                                     {:block block})]
+    (let [arg (str (first (:arguments (second embed-node))))
+          target-uuid (cond
+                        (page-ref/page-ref? arg)
+                        (let [page-name (text/get-page-name arg)]
+                          ;; a [[uuid]] embed is the DB form of a block embed
+                          (if (common-util/uuid-string? page-name)
+                            (uuid page-name)
+                            (or (try
+                                  (get-page-uuid page-names-to-uuids
+                                                 (some-> page-name common-util/page-name-sanity-lc)
+                                                 {:block block})
+                                  (catch :default _ nil))
+                                (log-fn :missing-embed-page "Ignore embed of a page that is not found" :page-name page-name))))
+
+                        (block-ref/block-ref? arg)
+                        (uuid (block-ref/get-block-ref-id arg))
+
+                        :else
+                        (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node))))
+          text (title-without-embed (:block/title block))]
+      (cond
+        (not (uuid? target-uuid))
+        block
+
+        text
+        (assoc block
+               :block/title text
+               :block.temp/embed-link [:block/uuid target-uuid])
+
+        :else
         (merge block
                {:block/title ""
-                :block/link [:block/uuid page-uuid]}))
-      (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
-      (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid block-uuid]}))
-      :else
-      (do
-        (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
-        block))
+                :block/link [:block/uuid target-uuid]})))
     block))
+
+(defn- build-embed-child-block
+  "The embed of a block that also has text, as its child block"
+  [parent-block link]
+  (sqlite-util/block-with-timestamps
+   {:block/uuid (d/squuid)
+    :block/title ""
+    :block/link link
+    :block/parent [:block/uuid (:block/uuid parent-block)]
+    :block/page (:block/page parent-block)
+    :block/order (db-order/gen-key)}))
 
 (defn- dissoc-nil-block-refs
   [block]
@@ -2289,8 +2326,11 @@
                    (update-block-heading)
                    (add-missing-timestamps options)
                    (dissoc :block/format :block.temp/ast-blocks))
-        [final-block code-children-tx] (handle-code-blocks block' options)]
-    (concat properties-tx asset-blocks-tx [final-block] code-children-tx)))
+        embed-link (:block.temp/embed-link block')
+        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-link) options)]
+    (concat properties-tx asset-blocks-tx [final-block]
+            (when embed-link [(build-embed-child-block final-block embed-link)])
+            code-children-tx)))
 
 (defn- import-progress!
   [options m]
@@ -2943,7 +2983,8 @@
    Render/editor never call this path."
   [format content]
   (and (contains? #{:markdown :md} format)
-       (not (re-find #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::" content))))
+       ;; `$$`: an outline parse drops a display math block's body, so its formula is lost
+       (not (re-find #"(?im)```|\$\$|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::" content))))
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"

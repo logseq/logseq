@@ -725,6 +725,51 @@ abc
         "a math block that is a task is a math block")
     (is (= #{:logseq.class/Task :logseq.class/Math-block} (tag-idents math))
         "a math block that is a task keeps its Task tag")))
+(deftest-async import-keeps-text-around-embeds-unknown-embeds-and-multiline-math
+  (p/let [source-file (write-temp-graph-file
+                       "pages/A.md"
+                       (str "- Beta {{embed [[Alpha]]}} after\n"
+                            "- {{embed [[Gamma]]}}\n"
+                            "- b {{embed [[10307562-adaf-4557-89c4-bc8bbcd0d20e]]}}\n"
+                            "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"
+                            "- last\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          gamma-file (write-temp-graph-file "pages/Gamma.md" "- gamma\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file gamma-file] conn {})
+          page-a (db-test/find-page-by-title @conn "A")
+          blocks (->> (:block/_parent page-a) (sort-by :block/order) vec)]
+    (is (= 5 (count blocks))
+        "The whole file imports")
+    (is (= "Beta after" (:block/title (nth blocks 0)))
+        "Text around an embed is kept")
+    (is (= ["Alpha"] (map (comp :block/title :block/link) (:block/_parent (nth blocks 0))))
+        "The embed of a block with text is its child block")
+    (is (= "Gamma" (:block/title (:block/link (nth blocks 1))))
+        "A block that is only an embed links its target")
+    (is (string/starts-with? (:block/title (nth blocks 2)) "b")
+        "An embed of an unknown page keeps the block")
+    (is (= "E = mc^2" (:block/title (nth blocks 3)))
+        "A multi-line display math block keeps its formula")
+    (is (= :math (:logseq.property.node/display-type (nth blocks 3)))
+        "A multi-line display math block is a math block")
+    (is (= "last" (:block/title (nth blocks 4))))))
+
+(deftest-async import-multiline-math-as-first-block
+  (p/let [source-file (write-temp-graph-file
+                       "pages/M.md"
+                       (str "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          block (first (:block/_page (db-test/find-page-by-title @conn "M")))]
+    (is (= "E = mc^2" (:block/title block)))
+    (is (= :math (:logseq.property.node/display-type block)))))
 
 (deftest-async import-keeps-numeric-looking-text-a-number-would-change
   (p/let [file (write-temp-graph-file
