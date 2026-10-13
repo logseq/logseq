@@ -41,6 +41,8 @@
    "line\n  - an indented dash line" "line\n  \\- an indented dash line"
    "line\n# a hash line" "line\n\\# a hash line"
    "line\n+ plus on line 2" "line\n\\+ plus on line 2"
+   ;; mldoc reads the `#` line as a heading, so `[[` here was never a page ref
+   "see [[a page\n# named over two lines]]" "see [[a page\n\\# named over two lines]]"
    "line\n> quote on line 2" "line\n\\> quote on line 2"
    "> a plain block starting with >" "\\> a plain block starting with >"})
 
