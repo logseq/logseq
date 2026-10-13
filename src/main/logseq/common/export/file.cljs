@@ -336,6 +336,19 @@
       (str leading "\\" text))
     content))
 
+(def ^:private first-line-task-marker-re
+  #"^(?:TODO|DOING|DONE|LATER|NOW|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)(?:\s|$)")
+
+(defn- escape-structure-in-first-line
+  "A block whose text starts like a heading or a task while the block has no
+  heading or status: a backslash keeps a Markdown reader from taking the text
+  as structure (mldoc reads `\\# x` as the text `# x`)."
+  [b content]
+  (if (or (and (re-find #"^#+(?:\s|$)" content) (not (:logseq.property/heading b)))
+          (and (re-find first-line-task-marker-re content) (not (:logseq.property/status b))))
+    (str "\\" content)
+    content))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -366,7 +379,8 @@
         property-spaces-tabs (str spaces-tabs "  ")
         content (if (and (:escape-block-markers? context)
                          (not (:logseq.property.node/display-type b)))
-                  (-> content keep-line-start-backslashes escape-block-markers-in-later-lines escape-quote-marker-in-first-line)
+                  (cond->> (-> content keep-line-start-backslashes escape-block-markers-in-later-lines escape-quote-marker-in-first-line)
+                    (:escape-first-line-markup? context) (escape-structure-in-first-line b))
                   content)
         content (if heading-to-list?
                   (strip-heading-prefix content)

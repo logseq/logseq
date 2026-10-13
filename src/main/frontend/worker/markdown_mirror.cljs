@@ -478,6 +478,9 @@
    :export-node-property-values-as-page-refs? true
    :export-default-property-values-as-blocks? true
    :preserve-block-refs? true
+   ;; text that a Markdown reader would take as structure gets a backslash
+   :escape-block-markers? true
+   :escape-first-line-markup? true
    :date-formatter (:date-formatter options)})
 
 (defn- block-content

@@ -291,7 +291,8 @@
           (p/then (fn [_]
                     (is (= (str (page-marker page-uuid) "\n\n"
                                 "- first line\n"
-                                "  - not a child\n"
+                                ;; escaped, so a Markdown reader does not take it as a child block
+                                "  \\- not a child\n"
                                 "- after multiline")
                            (get @files (page-path "pages/Multiline List.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -806,6 +807,33 @@
                                   "  * p3::\n"
                                   "    - Author 1")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-escapes-text-that-reads-as-structure-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Plain Text"}
+                                     :blocks [{:block/title "DONE is better than perfect"}
+                                              {:block/title "# not a heading"}
+                                              {:block/title "> not a quote"}
+                                              {:block/title "line\n- not a block"}
+                                              {:block/title "a task"
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
+          page (db-test/find-page-by-title @conn "Plain Text")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Plain Text.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- \\DONE is better than perfect\n"
+                                  "- \\# not a heading\n"
+                                  "- \\> not a quote\n"
+                                  "- line\n"
+                                  "  \\- not a block\n"
+                                  "- TODO a task")
+                             content)
+                          "plain text that reads as a task, heading, quote or block gets a backslash; a real task does not"))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
