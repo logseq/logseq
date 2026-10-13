@@ -16,6 +16,7 @@
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
+            [frontend.worker.handler.view :as worker-handler-view]
             [goog.object :as gobj]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
@@ -223,6 +224,53 @@
   (is (nil? (#'views/selected-groups-sort-desc true false))
       "Unchecking the previous menu item must not overwrite the newly selected group order.")
   (is (nil? (#'views/selected-groups-sort-desc false false))))
+
+(deftest is-operator-change-keeps-empty-filter-clause
+  "db-test#1434: switching is <-> is-not on Tags Empty used to drop the value
+  and persist a 2-element clause that valid-filters? rejects."
+  (let [normalize #'worker-handler-view/view-filter-value-after-operator-change
+        filter-clause #'views/filter-operator-clause
+        valid-filters? #'worker-view/valid-filters?
+        require-view-context! #'worker-view/require-view-context!
+        property :block/tags
+        context (fn [filters]
+                  {:feature-type :all-pages
+                   :sorting [{:id :block/title :asc? true}]
+                   :input ""
+                   :filters filters})
+        is-empty-clause (filter-clause property :is (normalize :is :empty) :empty)
+        is-not-empty-clause (filter-clause property :is-not (normalize :is-not :empty) :empty)
+        filters-is {:or? false :filters [is-empty-clause]}
+        filters-is-not {:or? false :filters [is-not-empty-clause]}]
+    (is (= :empty (normalize :is-not :empty)))
+    (is (= :empty (normalize :is :empty)))
+    (is (= [property :is-not :empty] is-not-empty-clause))
+    (is (= [property :is :empty] is-empty-clause))
+    (is (= [property :is-not :empty]
+           (filter-clause property :is-not (normalize :is-not :empty) :empty))
+        "is -> is-not keeps Empty as a 3-tuple.")
+    (is (= [property :is :empty]
+           (filter-clause property :is (normalize :is :empty) :empty))
+        "is-not -> is keeps Empty as a 3-tuple.")
+    (is (true? (valid-filters? filters-is-not)))
+    (is (true? (valid-filters? filters-is)))
+    (is (= (context filters-is-not) (require-view-context! (context filters-is-not)))
+        "Tags is not Empty must pass the view resource context check that crashed the app.")
+    (is (= (context filters-is) (require-view-context! (context filters-is))))
+    (is (= [property :is-not :empty]
+           (filter-clause property :is-not nil :empty))
+        "The UI fallback keeps Empty if the worker value is missing.")
+    (is (false? (valid-filters? {:or? false :filters [[property :is]]}))
+        "A 2-element is/is-not clause is still invalid if it is not normalized.")
+    (is (= {:or? false :filters []}
+           (#'views/view-resource-filters :all-pages {:or? false :filters [[property :is]]}))
+        "Already-persisted 2-element clauses are dropped before the view resource request.")
+    (is (= (context {:or? false :filters []})
+           (require-view-context!
+            (context (#'views/view-resource-filters
+                      :all-pages
+                      {:or? false :filters [[property :is]]}))))
+        "Sanitized broken Empty filters must not crash existing graphs.")))
 
 (deftest filters-include-properties-and-supported-db-attributes-test
   (let [property-column {:id :user.property/status

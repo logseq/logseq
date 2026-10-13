@@ -1874,6 +1874,19 @@
     :number-lte "<="
     :between (t :view.filter/operator-between)))
 
+(defn- filter-operator-clause
+  [property operator value' old-value]
+  (cond
+    (some? value')
+    [property operator value']
+
+    (and (contains? #{:is :is-not} operator)
+         (or (set? old-value) (= :empty old-value)))
+    [property operator old-value]
+
+    :else
+    [property operator]))
+
 (hsx/defc filter-operator
   [property operator filters set-filters! idx]
   (let [[operators set-operators!] (hooks/use-state nil)]
@@ -1898,16 +1911,14 @@
          {:on-click (fn []
                       (p/let [data (db-async/<get-view-filter-data property
                                                                     {:operator operator
-                                                                     :value (nth (get-in filters [:filters idx]) 2)})
+                                                                     :value (nth (get-in filters [:filters idx]) 2 nil)})
                               value' (:value-after-operator-change data)]
                         (set-filters!
                          (update filters :filters
                                  (fn [col]
                                    (update col idx
-                                           (fn [[property _old-operator _value]]
-                                             (if value'
-                                               [property operator value']
-                                               [property operator]))))))))}
+                                           (fn [[property _old-operator old-value]]
+                                             (filter-operator-clause property operator value' old-value))))))))}
          (operator->text operator)))))))
 
 (hsx/defc between
@@ -3915,11 +3926,20 @@
        (vector? clause)
        (contains? #{nil :block.temp/refs-count} (first clause))))
 
+(defn- incomplete-view-filter-clause?
+  [clause]
+  (or (not (vector? clause))
+      (not= 3 (count clause))))
+
 (defn- view-resource-filters
   [view-feature-type filters]
   (some-> filters
           (update :filters (fn [clauses]
-                             (into [] (remove #(unsupported-view-filter-clause? view-feature-type %)) clauses)))))
+                             (into []
+                                   (remove (fn [clause]
+                                             (or (incomplete-view-filter-clause? clause)
+                                                 (unsupported-view-filter-clause? view-feature-type clause))))
+                                   clauses)))))
 
 (defn- view-resource-context
   [view-feature-type sorting filters input group-by-property-ident
