@@ -358,8 +358,10 @@
   (->
    (if (= name "cloze")
      (string/join "," arguments)
+     ;; Logseq's macro syntax, `{{name arg1, arg2}}`: mldoc reads `{{name(args)}}`
+     ;; as one argument that includes the parentheses
      (let [l (cond-> ["{{" name]
-               (pos? (count arguments)) (conj "(" (string/join "," arguments) ")")
+               (pos? (count arguments)) (conj " " (string/join ", " arguments))
                true (conj "}}"))]
        (string/join l)))
    raw-text

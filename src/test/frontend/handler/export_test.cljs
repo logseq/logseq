@@ -102,7 +102,16 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
+     {:page {:block/title "page9"}
+      :blocks
+      [{:block/title "with an embed in a property value"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000901"
+        :build/properties {:user.property/notes "see {{embed [[page1]]}} for more"}}
+       {:block/title "{{query (task TODO)}}"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000902"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -481,6 +490,25 @@
       (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
           "a block that is only a ref to a missing block keeps the ref")
       (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
+(deftest export-blocks-as-markdown-keeps-embed-macro-in-property-value
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000901"]
+                     {:remove-options #{}})]
+      (is (= "- with an embed in a property value\n  notes:: see {{embed [[page1]]}} for more"
+             (string/trim (string/replace content #" +\n" "\n")))
+          "a property value keeps its embed macro as text, on its line")
+      (done))))
+
+(deftest export-blocks-as-markdown-writes-macros-in-logseq-syntax
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000902"]
+                     {:remove-options #{}})]
+      (is (= "- {{query (task TODO)}}" (string/trim content))
+          "a macro is exported as {{name args}}, which reads back with the same arguments")
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting

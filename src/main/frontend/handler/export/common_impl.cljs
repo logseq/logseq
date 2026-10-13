@@ -360,6 +360,16 @@
        (vector "Quote")
        vector))
 
+(defn- property-lines-paragraph?
+  "Whether a paragraph is a block's `key:: value` property lines. A property
+  value is written as its text: an embed macro in it is not replaced by the
+  embedded content (that would break the value across lines)."
+  [inline-coll]
+  (let [[[ast-type ast-content]] inline-coll]
+    (and (= "Plain" ast-type)
+         (string? ast-content)
+         (boolean (re-find #"^\s*[^:\s][^:]*::(?:\s|$)" ast-content)))))
+
 (defn- replace-block&page-embeds
   [block-ast]
   (let [[ast-type ast-content] block-ast]
@@ -367,7 +377,9 @@
       "Heading"
       (replace-block&page-embeds-in-heading ast-content)
       "Paragraph"
-      (replace-block&page-embeds-in-paragraph ast-content (meta block-ast))
+      (if (property-lines-paragraph? ast-content)
+        [block-ast]
+        (replace-block&page-embeds-in-paragraph ast-content (meta block-ast)))
       "List"
       (replace-block&page-embeds-in-list ast-content)
       "Quote"
