@@ -717,6 +717,39 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-writes-a-code-block-id-after-its-fence-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          code-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Code Page"}
+                   :blocks [{:block/title "(x 1)"
+                             :block/uuid code-uuid
+                             :build/keep-uuid? true
+                             :build/tags [:logseq.class/Code-block]
+                             :build/properties {:logseq.property.node/display-type :code
+                                                :logseq.property.code/lang "clojure"}}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid code-uuid]))}])
+          page (db-test/find-page-by-title @conn "Code Page")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- ```clojure\n"
+                                "  (x 1)\n"
+                                "  ```\n"
+                                "  id:: " code-uuid "\n"
+                                "- {{embed ((" code-uuid "))}}")
+                           (get @files (page-path "pages/Code Page.md")))
+                        "a code block that is embedded carries its id after its closing fence, as file graphs write it")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-writes-embedded-node-as-embed-macro-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
