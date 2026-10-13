@@ -369,15 +369,23 @@
   cleaning :block/tags when a block is tagged with a namespace page"
   [tags db per-file-state user-options all-idents]
   ;; vec needed is needed so that tags are built in order
-  (let [tags' (vec (keep #(if (logseq-class-ident? %)
-                            %
-                            (convert-tag-to-class db % per-file-state user-options all-idents))
-                         tags))]
-    ;; Only associate leaf child tag with block as other tags are only used to define tag parents.
-    ;; This assumes that extract/extract returns :block/tags with their leaf child first and then its parents
-    (if-let [child-tag (and (some :block/namespace tags) (first tags'))]
-      [child-tag]
-      tags')))
+  (let [;; vec: every tag is converted (classes for namespace parents too), in order
+        converted (mapv #(if (logseq-class-ident? %)
+                           %
+                           (convert-tag-to-class db % per-file-state user-options all-idents))
+                        tags)
+        ;; The pages above a namespaced tag (`ns` for `ns/child`) are in :block/tags only to
+        ;; define the tag's parents; the block is not tagged with them. Its other tags stay.
+        parent-names (->> tags
+                          (keep #(when (:block/namespace %) (:block/name %)))
+                          (mapcat (fn [tag-name]
+                                    (let [parts (string/split tag-name #"/")]
+                                      (map #(string/join "/" (take % parts)) (range 1 (count parts))))))
+                          set)]
+    (vec (keep (fn [[tag class]]
+                 (when (and class (not (contains? parent-names (:block/name tag))))
+                   class))
+               (map vector tags converted)))))
 
 (defn- update-page-tags
   [block db user-options per-file-state all-idents]
