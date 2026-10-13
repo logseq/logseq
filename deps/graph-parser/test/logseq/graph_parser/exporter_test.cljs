@@ -758,6 +758,22 @@ abc
         "A multi-line display math block is a math block")
     (is (= "last" (:block/title (nth blocks 4))))))
 
+(deftest-async import-embed-with-heading-or-status
+  (p/let [source-file (write-temp-graph-file
+                       "pages/E.md"
+                       (str "- ### {{embed [[Alpha]]}}\n"
+                            "- DONE {{embed [[Alpha]]}}\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file] conn {})
+          [heading-embed done-embed :as blocks] (->> (:block/_parent (db-test/find-page-by-title @conn "E")) (sort-by :block/order))]
+    (is (= 2 (count blocks)) "no extra child blocks")
+    (is (= "Alpha" (:block/title (:block/link heading-embed))) "an embed with a heading is an embed block")
+    (is (= 3 (:logseq.property/heading heading-embed)))
+    (is (= "Alpha" (:block/title (:block/link done-embed))) "an embed with a status is an embed block")
+    (is (= :logseq.property/status.done (:db/ident (:logseq.property/status done-embed))))))
+
 (deftest-async import-thematic-break-block
   (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
           conn (db-test/create-conn)
