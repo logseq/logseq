@@ -4,10 +4,8 @@
             [datascript.impl.entity :as de]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.handler.property :as worker-property]
-            [frontend.worker.plain-value :as worker-plain]
             [frontend.worker.state :as worker-state]
             [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
@@ -550,9 +548,9 @@
                               :logseq.property/type :default}])
         db @conn
         page (db-test/find-page-by-title db "page")
-        idents (fn [opts] (mapv :db/ident (worker-property/get-all-properties db opts)))
+        idents (fn [opts] (mapv :db/ident (#'worker-property/get-all-properties db opts)))
         by-ident (fn [opts] (into {} (map (juxt :db/ident identity))
-                                  (worker-property/get-all-properties db opts)))]
+                                  (#'worker-property/get-all-properties db opts)))]
     (testing "plugin properties sort after user properties"
       (is (= :plugin.property.demo/aaa (last (idents {})))))
     (testing "display titles"
@@ -564,7 +562,7 @@
       (d/transact! conn [{:db/ident :user.property/zzz
                           :logseq.property/description {:block/uuid (random-uuid) :block/title "About zzz"}}])
       (let [m (get (into {} (map (juxt :db/ident identity))
-                         (worker-property/get-all-properties @conn {}))
+                         (#'worker-property/get-all-properties @conn {}))
                    :user.property/zzz)]
         (is (some? (:logseq.property/description m)))
         (is (not (contains? m :logseq.property/deleted-at)))))
