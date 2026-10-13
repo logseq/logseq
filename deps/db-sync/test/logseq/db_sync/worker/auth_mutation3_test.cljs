@@ -10,6 +10,7 @@
 (defn- jwt-with-payload [payload-json]
   (str (base64url "{\"alg\":\"RS256\"}") "." (base64url payload-json) ".signature"))
 
+;; Fails if, in `decode-jwt-part`, the `(string/replace "-" "+")` step is dropped or the `(string/replace "_" "/")` step is dropped.
 (deftest unsafe-jwt-claims-decodes-url-safe-base64-test
   (let [payload-json "{\"x\":\"???>>>\"}"
         payload-part (base64url payload-json)
@@ -18,6 +19,7 @@
     (is (re-find #"_" payload-part))
     (is (= "???>>>" (aget claims "x")))))
 
+;; Fails if, in `recoverable-auth-error?`, `or` becomes `and` or the `.-message` step is dropped.
 (deftest auth-claims-recoverable-error-without-ex-message-returns-nil-test
   (async done
          (let [request (js/Request. "http://localhost/graphs"
@@ -32,6 +34,7 @@
                           (is false (str error))
                           (done)))))))
 
+;; Fails if, in `expired-token?`, `<=` becomes `<`.
 (deftest auth-claims-token-expiring-this-second-is-expired-test
   (async done
          (let [original-now (.-now js/Date)
