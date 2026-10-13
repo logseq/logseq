@@ -122,8 +122,16 @@
             ;; Re-uploading an existing file should still insert a reference when
             ;; the user is dropping/pasting into a block. Property pickers and
             ;; other callers without an editor target only need the entity.
+            ;; Reuse the empty editor block's uuid so replace-empty-target? and
+            ;; the later edit-block! keep the editor in sync (otherwise exit-edit
+            ;; saves the stale empty title over the inserted ref).
             ref-blocks (when (or edit-block target-block)
-                         (map existing-asset-ref-block existing-assets))
+                         (map-indexed
+                          (fn [idx asset]
+                            (cond-> (existing-asset-ref-block asset)
+                              (and (zero? idx) empty-target? (:block/uuid edit-block))
+                              (assoc :block/uuid (:block/uuid edit-block))))
+                          existing-assets))
             blocks (concat new-asset-blocks ref-blocks)
             insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (not pdf-area?)))
             target (cond
@@ -153,9 +161,15 @@
        (p/let [results (if (seq new-asset-blocks)
                          (db-async/<get-blocks repo (map :block/uuid new-asset-blocks) {:children? false})
                          [])
-               fetched (editor/unwrap-block-results results)]
-         (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) fetched)]
-           (editor/edit-block! block :max))
+               fetched (editor/unwrap-block-results results)
+               edit-target (or (some (fn [block]
+                                       (when (= (:block/uuid block) (:block/uuid edit-block))
+                                         block))
+                                     fetched)
+                               (when (and empty-target? (seq ref-blocks) (:block/uuid edit-block))
+                                 (assoc edit-block :block/title (:block/title (first ref-blocks)))))]
+         (when edit-target
+           (editor/edit-block! edit-target :max))
          (concat fetched existing-assets))))))
 
 

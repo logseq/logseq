@@ -133,6 +133,7 @@
                                ".txt")))
       (b/new-block "")
       (util/input-command "Upload an asset")
+      (w/wait-for (util/get-by-text "Asset exists already" false))
       (util/exit-edit)
       (assert/assert-have-count ".ls-page-blocks a.asset-ref" 2)
       (.offFileChooser page chooser-handler))))

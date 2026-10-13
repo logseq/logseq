@@ -874,6 +874,52 @@
                "Property pickers should not insert a stray page-ref under the Asset page")
            (is (= [existing-asset] (vec result))))))))
 
+(deftest-async db-based-save-assets-replaces-empty-block-with-existing-ref
+  (let [existing-uuid (random-uuid)
+        existing-asset {:block/uuid existing-uuid
+                        :block/title "notes"
+                        :logseq.property.asset/type "txt"}
+        edit-uuid (random-uuid)
+        edit-block {:block/uuid edit-uuid
+                    :block/title ""}
+        inserted (atom nil)
+        edited (atom nil)]
+    (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                            (p/resolved ["/repo" "assets"]))
+                        assets-handler/get-file-checksum (constantly "duplicate-checksum")
+                        db-async/<get-asset-with-checksum (fn [& _] (p/resolved existing-asset))
+                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
+                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved {:block/uuid (random-uuid)
+                                                                                 :block/title "today"}))
+                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
+                        state/get-edit-block (constantly edit-block)
+                        state/get-edit-content (constantly "")
+                        notification/show! (fn [& _] nil)
+                        editor/edit-block! (fn [block pos]
+                                             (reset! edited {:block block :pos pos}))
+                        frontend-outliner-op/insert-blocks! (fn [blocks target opts]
+                                                             (reset! inserted {:blocks blocks
+                                                                               :target target
+                                                                               :opts opts})
+                                                             [:insert-blocks [blocks target opts]])
+                        db-async/<get-blocks (fn [_repo block-ids _opts]
+                                               (p/resolved
+                                                (mapv (fn [block-id]
+                                                        {:block/uuid block-id})
+                                                      block-ids)))]
+          (editor-assets/db-based-save-assets! "repo" [{:src "notes.txt"
+                                                        :title "notes"}]))
+        (p/then
+         (fn [result]
+           (is (= edit-uuid (:block/uuid (first (:blocks @inserted))))
+               "Empty editor block is reused for the existing-asset reference")
+           (is (= [(ref/->page-ref existing-uuid)]
+                  (map :block/title (:blocks @inserted))))
+           (is (= (ref/->page-ref existing-uuid)
+                  (get-in @edited [:block :block/title]))
+               "Editor is synced to the inserted ref so exit-edit cannot wipe it")
+           (is (= [existing-asset] (vec result))))))))
+
 (deftest-async ensure-comments-area-for-selected-blocks
   (let [first-uuid (random-uuid)
         second-uuid (random-uuid)
