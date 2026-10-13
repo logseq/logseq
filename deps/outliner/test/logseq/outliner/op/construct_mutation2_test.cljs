@@ -1,7 +1,6 @@
 (ns logseq.outliner.op.construct-mutation2-test
   "Second-run mutation survivors of logseq.outliner.op.construct."
-  (:require [clojure.string :as string]
-            [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]

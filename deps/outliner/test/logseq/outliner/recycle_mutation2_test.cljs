@@ -200,7 +200,7 @@
   (let [conn (db-test/create-conn)
         {:keys [parent-uuid child-uuids]} (create-namespace-pages! conn "Foo" ["Bar" "Baz" "Qux"])
         [bar-uuid baz-uuid qux-uuid] child-uuids
-        id-of (fn [uuid] (:db/id (d/entity @conn [:block/uuid uuid])))
+        id-of (fn [u] (:db/id (d/entity @conn [:block/uuid u])))
         parent-id (id-of parent-uuid)
         bar-id (id-of bar-uuid)
         order-low (db-order/gen-key nil nil)
@@ -268,7 +268,7 @@
         page (ldb/get-page @conn "P")
         {:keys [child-uuids]} (create-namespace-pages! conn "P" ["C1" "C2"])
         [c1-uuid c2-uuid] child-uuids
-        id-of (fn [uuid] (:db/id (d/entity @conn [:block/uuid uuid])))
+        id-of (fn [u] (:db/id (d/entity @conn [:block/uuid u])))
         order-low (db-order/gen-key nil nil)
         order-high (next-order order-low)
         b1-id (find-id conn "b1")
