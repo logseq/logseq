@@ -502,13 +502,18 @@
       (:pages-and-blocks merged-map)
       (update :pages-and-blocks sort-pages-and-blocks))))
 
+(defn- property-value-entities
+  "The entities a node's property values point at; a many value is a set."
+  [props]
+  (->> (vals props)
+       (mapcat #(if (set? %) % [%]))
+       (filter de/entity?)))
+
 (defn- build-block-export
   "Exports block for given block eid"
   [db eid]
   (let [block-entity (d/entity db eid)
-        property-value-ents (->> (dissoc (db-property/properties block-entity) :block/tags)
-                                 vals
-                                 (filter de/entity?))
+        property-value-ents (property-value-entities (dissoc (db-property/properties block-entity) :block/tags))
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into [block-entity] property-value-ents))
         node-export (build-node-export db block-entity {:include-uuid-fn content-ref-uuids})
@@ -674,14 +679,15 @@
   [db rows {:keys [group-by?]}]
   (let [eids (if group-by? (mapcat second rows) rows)
         nodes (map #(d/entity db (if (uuid? %) [:block/uuid %] %)) eids)
-        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
-                                          vals
-                                          (filter de/entity?))
+        property-value-ents (mapcat #(property-value-entities
+                                      (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties))
                                     nodes)
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? false})
+        ;; an exported node that is another one's property value keeps its uuid
+        (build-nodes-export db nodes {:include-uuid-fn (into (set content-ref-uuids) (keep :block/uuid) property-value-ents)
+                                      :include-children? false})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
@@ -696,14 +702,15 @@
                             (mapcat #(rest (ldb/get-block-and-children db (:block/uuid %))))
                             (remove :logseq.property/created-from-property))
         nodes (concat top-level-nodes children-nodes)
-        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
-                                          vals
-                                          (filter de/entity?))
+        property-value-ents (mapcat #(property-value-entities
+                                      (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties))
                                     nodes)
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? true})
+        ;; an exported node that is another one's property value keeps its uuid
+        (build-nodes-export db nodes {:include-uuid-fn (into (set content-ref-uuids) (keep :block/uuid) property-value-ents)
+                                      :include-children? true})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
