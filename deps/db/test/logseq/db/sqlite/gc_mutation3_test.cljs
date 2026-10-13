@@ -49,8 +49,6 @@
     (set! (.-transaction shim) (fn [f] (f shim)))
     shim))
 
-(def ^:private used-addrs #{0 1 2 3 4 5 6})
-
 ;; Fails if, in `get-unused-addresses`, the `:rowMode` key is dropped.
 (deftest gc-kvs-table-single-pass-deletes-only-unreferenced-addrs-test
   (let [db (new-kvs-db)]

@@ -16,11 +16,11 @@
 
 (defn- serve-json [body-str]
   (p/create
-   (fn [resolve _reject]
+   (fn [resolve! _reject]
      (let [server (.createServer http (fn [_req res]
                                         (.writeHead res 200 #js {"content-type" "application/json"})
                                         (.end res body-str)))]
-       (.listen server 0 "127.0.0.1" (fn [] (resolve server)))))))
+       (.listen server 0 "127.0.0.1" (fn [] (resolve! server)))))))
 
 ;; Fails if, in `import-rsa-key`, the body becomes `nil`, the `:name` key is dropped or the `:hash` key is dropped.
 (deftest verify-jwt-accepts-token-signed-by-jwks-key-test
