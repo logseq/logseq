@@ -315,7 +315,12 @@ let text_ops t id r fg s =
     match Lui_store.kind store id with
     | "text" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
     | "popover" | "alert" ->
-      w' /. scale
+      (* LUI's pixel-snapping contract edge-rounds every exported rect,
+         which can trim up to 1 device px off a box layout sized to its
+         fractional intrinsic width (0.5 px per edge). Wrapping at the
+         snapped width then broke shrink-wrapped single lines ("Oct
+         13th, / 2026", "Secon-d"). Give the wrap that 1 px back. *)
+      (w' +. 1.) /. scale
     | _ -> 0.
   in
   let lines = Lui_text.shape font s ~width:wrap_w in

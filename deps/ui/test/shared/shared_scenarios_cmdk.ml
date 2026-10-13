@@ -468,6 +468,31 @@ let move_mode_placeholder (h : ('m, 'a) Shared_scenarios.host) =
      && M.string_prop input' "placeholder" = Some "Move blocks to");
   close_palette h
 
+(* Native layout gives a spacer with no explicit grow flex-grow 1, so a
+   fixed-height spacer in the results column (filter-chip placeholder,
+   group pads) used to soak up the free space of
+   the 65vh scroller and center a short result list vertically. Every
+   fixed-height spacer in the palette must pin grow = 0. *)
+let results_top_aligned (h : ('m, 'a) Shared_scenarios.host) =
+  open_palette h;
+  let input = input_node h in
+  S.text_changed (h.session ()) input.M.id "zzqq-no-match";
+  h.flush ();
+  h.flush ();
+  let spacers =
+    List.filter
+      (fun n ->
+        n.M.kind = "spacer" && in_palette h n
+        && Hashtbl.mem n.M.props "height"
+        (* fixed-width insets live in shrink-wrapped rows *)
+        && not (Hashtbl.mem n.M.props "width"))
+      (H.nodes h)
+  in
+  h.H.check "palette has fixed-height spacers" (spacers <> []);
+  h.H.check "fixed-height palette spacers never grow"
+    (List.for_all (fun n -> float_prop_eq n "grow" 0.0) spacers);
+  close_palette h
+
 let run h =
   results_order h;
   selection_moves h;
@@ -475,4 +500,5 @@ let run h =
   escape_close h;
   close_persists h;
   structure_props h;
-  move_mode_placeholder h
+  move_mode_placeholder h;
+  results_top_aligned h

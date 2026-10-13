@@ -148,7 +148,7 @@ let cmdk_scroller ~key ~bottom_pad children =
        ~background:"var(--lx-gray-02, var(--rx-gray-02, #f8f8f8))"
        [ column ~key:"scroller-body" ~grow:1.
            (children
-           @ [ spacer ~key:"scrollpad" ~height:bottom_pad ~width:1 [] ])
+           @ [ spacer ~key:"scrollpad" ~grow:0. ~height:bottom_pad ~width:1 [] ])
        ])
 
 (* -- cmdk groups ----------------------------------------------------- *)
@@ -166,7 +166,7 @@ let cmdk_group ~key ~kind ~last_signal ~pad children =
   column ~key ~cross:`stretch ~gap:0
     ~data_attrs:[ "data-cmdk-group-kind", kind ]
     (children
-    @ [ spacer ~key:"gpad" ~height:pad []
+    @ [ spacer ~key:"gpad" ~grow:0. ~height:pad []
       ; if_
           ~test:(reactive not last_signal)
           (cmdk_group_hairline ~key:"gline")
