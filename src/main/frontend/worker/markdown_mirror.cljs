@@ -179,7 +179,11 @@
                    (and added
                         (#{:block/title :block/name} a)
                         (some-> (d/entity db-after e) ldb/page?))
-                   (into (referring-page-ids db-after e)))))
+                   (into (referring-page-ids db-after e))
+                   ;; the target's file shows `id::` only while something points at it
+                   (#{:block/refs :block/link} a)
+                   (conj (page-id-for-entity db-before v)
+                         (page-id-for-entity db-after v)))))
        (remove nil?)
        set))
 
@@ -357,8 +361,6 @@
       (str content " " (string/join " " tag-tokens'))
       content)))
 
-(declare decorate-rendered-content)
-
 (defn- order-list-number?
   [block]
   (let [v (:logseq.property/order-list-type block)
@@ -395,6 +397,8 @@
   [content]
   (-> (or content "")
       string/lower-case
+      ;; a block ref is written as ((uuid)) while the block title holds [[uuid]]
+      (string/replace #"\(\(([0-9a-f-]{36})\)\)" "[[$1]]")
       (string/replace ref-or-tag-re "$1[[]]")
       (string/replace simple-hashtag-re "$1#[[]]")
       (string/replace #"\s+" " ")
@@ -423,10 +427,21 @@
       (some #(= :logseq.class/Code-block (:db/ident %))
             (:block/tags block))))
 
+(defn- referenced-block?
+  "A block that something points at (a block ref, an embed, a node property
+  value). Its line carries `id:: <uuid>`, so a reader of the files can resolve
+  the `((uuid))` that points at it."
+  [block]
+  (and (not (ldb/page? block))
+       (boolean (or (seq (:block/_refs block))
+                    (seq (:block/_link block))))))
+
 (defn- block-line-info
   [db block marker]
   (let [block (if (de/entity? block) block (d/entity db (:db/id block)))]
-    {:first-line-fragment (block-first-line-fragment block)
+    {:block-uuid (:block/uuid block)
+     :id-line? (referenced-block? block)
+     :first-line-fragment (block-first-line-fragment block)
      :code-block? (code-block? block)
      :status-marker (when (or (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                               (ldb/class-instance? (d/entity db :logseq.class/Task) block))
@@ -478,37 +493,32 @@
    :export-node-property-values-as-page-refs? true
    :export-default-property-values-as-blocks? true
    :preserve-block-refs? true
+   :export-block-refs-as-uuid-refs? true
    :date-formatter (:date-formatter options)})
 
 (defn- block-content
   [db block-uuid tree-opts options]
   (common-file/block->content db block-uuid tree-opts (block->content-context options)))
 
-(defn- line-level
-  [spaces options]
-  (let [indent-width (max 1 (count (or (:export-bullet-indentation options) "  ")))]
-    (inc (quot (count spaces) indent-width))))
-
 (defn- decorate-block-line
-  [db block-info line options]
+  [block-info line options]
   (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
-    (if-let [target (:embed-target block-info)]
-      (string/split-lines
-       (decorate-rendered-content
-        db
-        (block-content db (:block/uuid target) {:init-level (line-level spaces options)} options)
-        (block-line-infos db [target])
-        options
-        {:initial-lines []}))
-      (let [content (decorate-block-content block-info title)
-            marker (or (:marker block-info) "-")]
-        [(str spaces marker
-              (when-not (string/blank? content) " ")
-              content)]))
+    (let [target (:embed-target block-info)
+          content (decorate-block-content
+                   block-info
+                   (if target (str "{{embed ((" (:block/uuid target) "))}}") title))
+          marker (or (:marker block-info) "-")]
+      (cond-> [(str spaces marker
+                    (when-not (string/blank? content) " ")
+                    content)]
+        ;; the code fence would swallow the line
+        (and (:id-line? block-info) (not (:code-block? block-info)))
+        (conj (str spaces (or (:export-bullet-indentation options) "  ")
+                   (id-property-line (:block-uuid block-info))))))
     [line]))
 
 (defn- decorate-rendered-content
-  [db content line-infos options {:keys [initial-lines insert-blank-before-first-block?]}]
+  [content line-infos options {:keys [initial-lines insert-blank-before-first-block?]}]
   (let [initial-lines (or initial-lines [])]
     (loop [[line & more] (string/split-lines (or content ""))
            [block-line-info' & more-block-line-infos] line-infos
@@ -541,7 +551,7 @@
               (let [lines' (cond-> lines
                              (and insert-blank-before-first-block?
                                   (not seen-block?)) (conj "")
-                             true (into (decorate-block-line db block-line-info' line options)))]
+                             true (into (decorate-block-line block-line-info' line options)))]
                 (recur more
                        more-block-line-infos
                        lines'
@@ -566,7 +576,6 @@
 (defn- add-page-id-to-rendered-content
   [db page content options]
   (decorate-rendered-content
-   db
    content
    (rendered-block-line-infos db page)
    options
