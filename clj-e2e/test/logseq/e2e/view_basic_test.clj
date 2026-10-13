@@ -163,6 +163,31 @@
     (assert/assert-is-visible
      (loc/filter ".views > button" :has-text "All"))))
 
+(deftest all-pages-tags-empty-filter-operator-toggle-test
+  (util/search-and-click "Go to all pages")
+  (assert/assert-is-visible ".ls-all-pages")
+  (w/click (view-action-button "filter"))
+  (w/click (loc/filter ".cp__select-results a" :has-text "Tags"))
+  (w/click (util/get-by-text "Is Empty" true))
+  (assert/assert-is-visible ".filters-row")
+  (assert/assert-is-visible (loc/filter ".filters-row" :has-text "Empty"))
+  (util/double-esc)
+  (w/click (loc/filter ".filters-row button" :has-text "is"))
+  (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "is not"))
+  (w/click (util/get-by-text "is not" true))
+  (assert/assert-is-visible ".ls-all-pages")
+  (assert/assert-is-visible ".filters-row")
+  (assert/assert-is-visible (loc/filter ".filters-row" :has-text "is not"))
+  (assert/assert-is-visible (loc/filter ".filters-row" :has-text "Empty"))
+  (assert/assert-have-count (loc/filter :has-text "Error caught by UI") 0)
+  (assert/assert-have-count (loc/filter :has-text "Something went wrong") 0)
+  (w/click (loc/filter ".filters-row button" :has-text "is not"))
+  (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "is"))
+  (w/click (util/get-by-text "is" true))
+  (assert/assert-is-visible ".ls-all-pages")
+  (assert/assert-is-visible (loc/filter ".filters-row" :has-text "Empty"))
+  (assert/assert-have-count (loc/filter :has-text "Error caught by UI") 0))
+
 (deftest table-view-search-filter-and-new-record-actions-test
   (seed-table-view! "table-search-filter-actions")
 

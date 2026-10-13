@@ -29,7 +29,7 @@
   [operator value]
   (case operator
     (:is :is-not)
-    (when (set? value) value)
+    (when (or (set? value) (= :empty value)) value)
 
     (:text-contains :text-not-contains)
     (when (string? value) value)
