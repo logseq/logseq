@@ -14,7 +14,10 @@
    ;; is otherwise hidden from export like other :hide? true properties).
    :encode-highlight-as-mark? true
    ;; Include Text property values and their descendants in formatted exports.
-   :export-default-property-values-as-blocks? true})
+   :export-default-property-values-as-blocks? true
+   ;; Write a block embed as the embedded block and its children, as the embed
+   ;; shows them (not done for the Markdown mirror, which writes one line per block).
+   :inline-block-embeds? true})
 
 (defn <export-blocks-as-format
   [repo root-block-uuids-or-page-uuid format-type options]

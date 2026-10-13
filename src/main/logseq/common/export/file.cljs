@@ -396,12 +396,18 @@
 
 (defn- embed-content
   "Content of a block that embeds another block (:block/link): the embedded
-  block and its children, as the embed shows them; nil for an embed cycle."
-  [db f level context]
-  (when-let [linked (some->> (:block/link f) :db/id (d/entity db))]
-    (when-not (contains? *embedding-ids* (:db/id linked))
-      (binding [*embedding-ids* (conj *embedding-ids* (:db/id linked))]
-        (block->content db (:block/uuid linked) {:init-level level} context)))))
+  block and its children, as the embed shows them, with the export's tree
+  options; nil for an embed cycle (the block is then written as itself). Only when the context asks for inlined
+  embeds (the text export); the Markdown mirror writes one line per block."
+  [db f level tree-opts context]
+  (when (:inline-block-embeds? context)
+    (when-let [linked (some->> (:block/link f) :db/id (d/entity db))]
+      (when-not (contains? *embedding-ids* (:db/id linked))
+        (binding [*embedding-ids* (conj *embedding-ids* (:db/id f) (:db/id linked))]
+          (block->content db (:block/uuid linked)
+                          (assoc (select-keys tree-opts [:open-blocks-only? :include-properties?])
+                                 :init-level level)
+                          context))))))
 
 (defn- tree->file-content-aux
   [db tree {:keys [init-level link] :as opts} context]
@@ -410,7 +416,7 @@
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
-              embed (when-not page? (embed-content db f level context))
+              embed (when-not page? (embed-content db f level opts context))
               content (cond
                         embed
                         embed
@@ -425,7 +431,7 @@
                         :else
                         (transform-content db f level opts context))
               new-content
-              (if-let [children (seq (:block/children f))]
+              (if-let [children (and (not embed) (seq (:block/children f)))]
                 (cons content (tree->file-content-aux db children
                                                     (assoc (dissoc opts :link :include-page-properties?)
                                                            :init-level (inc level))
@@ -487,6 +493,7 @@
         tree (if (:open-blocks-only? tree->file-opts)
                (remove-collapsed-descendants tree)
                tree)]
+    ;; :open-blocks-only? stays in the options for block embeds inside the tree
     (tree->file-content db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))
