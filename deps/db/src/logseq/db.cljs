@@ -34,7 +34,6 @@
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
-(defonce *debounce-fn (atom nil))
 (def ^:dynamic *batch-tx-report?* false)
 
 (defn register-transact-fn!
@@ -46,9 +45,6 @@
 (defn register-transact-pipeline-fn!
   [f]
   (when f (reset! *transact-pipeline-fn f)))
-(defn register-debounce-fn!
-  [f]
-  (when f (reset! *debounce-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -99,16 +95,6 @@
                                   (not (entity-util/page? (d/entity db (:v d)))))))) tx-data)
     (throw (ex-info "Page can't have block as parent"
                     {:tx-count (count tx-data)}))))
-
-(comment
-  (defn debounced-store-db
-   [conn]
-   (when-some [_storage (storage/storage @conn)]
-     (when-not (:batch-tx? @conn)
-       (let [f (if (exists? js/process)
-                 d/store
-                 (or @*debounce-fn d/store))]
-         (f @conn))))))
 
 (defn- should-run-transact-pipeline?
   [conn db tx-meta]
