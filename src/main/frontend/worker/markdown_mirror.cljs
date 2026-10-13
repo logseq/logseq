@@ -415,8 +415,9 @@
         (:code-block? block-info)
         (code-fence-block-line? content)
 
+        ;; an empty block with a heading renders as its heading marker
         (string/blank? fragment)
-        (string/blank? (string/trim content))
+        (string/blank? (string/replace (string/trim content) #"^#+$" ""))
 
         :else
         (string/includes? content* fragment*)))))
@@ -505,13 +506,21 @@
   (str spaces (or (:export-bullet-indentation options) "  ")
        (id-property-line (:block-uuid block-info))))
 
+(defn- heading-prefix
+  "The heading marker a rendered line starts with (`### x` -> `###`)."
+  [title]
+  (second (re-find #"^(#+)(?:\s|$)" (or title ""))))
+
 (defn- decorate-block-line
   [block-info line options]
   (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
     (let [target (:embed-target block-info)
           content (decorate-block-content
                    block-info
-                   (if target (str "{{embed ((" (:block/uuid target) "))}}") title))
+                   (if target
+                     ;; an embed block keeps its heading
+                     (str (some-> (heading-prefix title) (str " ")) "{{embed ((" (:block/uuid target) "))}}")
+                     title))
           marker (or (:marker block-info) "-")]
       (cond-> [(str spaces marker
                     (when-not (string/blank? content) " ")

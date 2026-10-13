@@ -717,6 +717,31 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-writes-an-embed-block-heading-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Heading Embed"}
+                   :blocks [{:block/title "Target" :block/uuid target-uuid :build/keep-uuid? true}
+                            {:block/title "" :block/uuid embed-uuid :build/keep-uuid? true
+                             :build/properties {:logseq.property/heading 2}}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Heading Embed")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- Target\n"
+                                "  id:: " target-uuid "\n"
+                                "- ## {{embed ((" target-uuid "))}}")
+                           (get @files (page-path "pages/Heading Embed.md")))
+                        "an embed block keeps its heading")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-writes-a-code-block-id-after-its-fence-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
