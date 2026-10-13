@@ -546,9 +546,18 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
    (Commands_data.table), so every cljs binding resolves to the same
    command id and dispatches through Cmdk_state.dispatch_id. *)
 
+(* cljs/mousetrap "mod" is Cmd on macOS and Ctrl elsewhere: off macOS
+   a held Ctrl and a binding's "ctrl" both fold onto "mod", so
+   mod+shift+p (command palette), mod+shift+k, ... fire on Linux and
+   Windows *)
+let fold_ctrl_to_mod ms =
+  if Ui_services.env_is_mac () then ms
+  else List.sort_uniq compare (List.map (function "ctrl" -> "mod" | m -> m) ms)
+
 let canonical_binding b =
   match List.rev (String.split_on_char '+' b) with
-  | key :: ms -> String.concat "+" (List.sort compare ms @ [ key ])
+  | key :: ms ->
+      String.concat "+" (List.sort compare (fold_ctrl_to_mod ms) @ [ key ])
   | [] -> b
 
 (* (binding stroke sequence, command id) — one row per binding *)
@@ -632,7 +641,7 @@ let stroke_of ev =
         @ (if ev.Ui_services.ctrl then [ "ctrl" ] else [])
         @ (if ev.Ui_services.meta then [ "mod" ] else [])
       in
-      Some (String.concat "+" (List.sort compare ms @ [ key ]))
+      Some (String.concat "+" (List.sort compare (fold_ctrl_to_mod ms) @ [ key ]))
 
 (* gate per cljs category: editor/* ids are owned by the per-mode key
    paths (on_editor_key / on_normal_key) — the chord layer only needs
@@ -659,7 +668,8 @@ let on_global_key ev =
     match stroke_of ev with
     | None -> ()
     | Some stroke ->
-        if not (List.mem stroke owned_strokes) then begin
+        if not (List.exists (fun o -> canonical_binding o = stroke) owned_strokes)
+        then begin
           let now = Ui_services.time_now () in
           let seq =
             if now -. !chord_ms > chord_window_ms then [] else !chord_seq
