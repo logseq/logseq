@@ -378,10 +378,19 @@
   [db blocks*]
   (let [;; Remove property value blocks that can't have content refs
         blocks (remove :logseq.property/value blocks*)
-        block-links (->> (filter :block/link blocks)
-                         (map #(:block/uuid (:block/link %))))
-        content-ref-uuids (into (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
-                                block-links)
+        block-refs (fn [blocks]
+                     (into (set (mapcat #(let [title (block-title %)]
+                                           (when (string? title) (db-content/get-matched-ids title)))
+                                        blocks))
+                           (keep #(:block/uuid (:block/link %)) blocks)))
+        ;; A referenced block is exported with its title, so the refs in its title
+        ;; are followed too; otherwise they import as raw uuids
+        content-ref-uuids (loop [uuids (block-refs blocks)]
+                            (let [ref-blocks (->> uuids
+                                                  (keep #(d/entity db [:block/uuid %]))
+                                                  (remove entity-util/page?))
+                                  uuids' (into uuids (block-refs ref-blocks))]
+                              (if (= uuids uuids') uuids (recur uuids'))))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         {:keys [properties classes]}
@@ -447,10 +456,13 @@
       (not= @*classes (get-in opts [:graph-ontology :classes]))
       (assoc :classes @*classes))))
 
-(defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity]}]
+(defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity exported-nodes]}]
   (let [content-ref-blocks (set (remove entity-util/page? content-ref-ents))
-        uuid-block-ents-to-export (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
-                                          content-ref-blocks)
+        ;; a block already in the export (e.g. selected) is not exported a second time
+        exported-ids (set (keep :db/id exported-nodes))
+        uuid-block-ents-to-export (->> (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
+                                               content-ref-blocks)
+                                       (remove #(contains? exported-ids (:db/id %))))
         uuid-block-pages
         (when (seq uuid-block-ents-to-export)
           (->> uuid-block-ents-to-export
@@ -670,7 +682,7 @@
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
         (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? false})
-        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
 
@@ -692,7 +704,7 @@
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
         (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? true})
-        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
 
