@@ -37,7 +37,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
@@ -410,12 +409,10 @@
                                     (editor-handler/save-block! (state/get-current-repo) % requested-title))]
       (p/let [converted-block (if (or (not (nil? block-type))
                                       (and (not update-current-block?) (not (string/blank? block-title))))
-                                (p/let [result (ui-outliner-tx/transact!
-                                                {:outliner-op :insert-blocks}
-                                                ;; insert a new block
-                                                (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} db-block "")]
-                                                  (turn-type! block')))]
-                                  (when-let [id (:block/uuid (first (:blocks result)))]
+                                ;; insert a new block; insert-new-block-aux! returns a promise
+                                (p/let [[_ _ block'] (editor-handler/insert-new-block-aux! {} db-block "")
+                                        _ (turn-type! block')]
+                                  (when-let [id (:block/uuid block')]
                                     (<get-upsert-type-block repo id)))
                                 (p/let [_ (apply-requested-title! db-block)
                                         _ (turn-type! db-block)]

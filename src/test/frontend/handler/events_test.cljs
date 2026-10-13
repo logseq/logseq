@@ -1,11 +1,15 @@
 (ns frontend.handler.events-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.rtc.download-progress :as download-progress]
+            [frontend.db.async :as db-async]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]))
+            [frontend.test.helper :include-macros true :refer [deftest-async]]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (deftest download-graph-progress-surface-test
   (let [calls (atom [])]
@@ -28,6 +32,39 @@
         (download-progress/show! "My notes")
         (download-progress/hide!)
         (is (= [:popup :popup-hide] (mapv first @calls)))))))
+
+(deftest-async upsert-type-block-on-a-block-with-text-turns-a-new-block-into-code-test
+  (let [source-id #uuid "33333333-3333-3333-3333-333333333333"
+        new-id #uuid "44444444-4444-4444-4444-444444444444"
+        blocks {1 {:db/id 1 :block/uuid source-id :block/title "hello"}
+                new-id {:db/id 2 :block/uuid new-id :block/title ""}}
+        calls (atom [])
+        record! (fn [call] (swap! calls conj call) nil)
+        upsert! (get @@#'events/event-definitions :editor/upsert-type-block)]
+    (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                    db-async/<get-block (fn [_repo id & _] (p/resolved (get blocks id)))
+                    state/<invoke-db-worker (fn [& _] (p/resolved "clojure"))
+                    editor-handler/save-current-block! (fn [& _] nil)
+                    editor-handler/insert-new-block-aux! (fn [_config block value]
+                                                           (record! [:insert (:block/uuid block) value])
+                                                           (p/resolved [nil false {:block/uuid new-id}]))
+                    db-property-handler/set-block-properties! (fn [id m]
+                                                                (record! [:set-properties id m])
+                                                                (p/resolved nil))
+                    db-property-handler/set-block-property! (fn [id k v]
+                                                              (record! [:set-property id k v])
+                                                              (p/resolved nil))
+                    events/refocus-upsert-type-block! (fn [_source converted _]
+                                                        (record! [:refocus (:block/uuid converted)]))]
+      (p/do!
+       (upsert! [:editor/upsert-type-block {:block {:db/id 1 :block/uuid source-id :block/title "hello"}
+                                            :type :code}])
+       (p/delay 150)
+       (is (= [[:insert source-id ""]
+               [:set-properties new-id {:logseq.property.node/display-type :code
+                                        :logseq.property.code/lang "clojure"}]
+               [:refocus new-id]]
+              @calls))))))
 
 (deftest refocus-upsert-type-block-test
   (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
