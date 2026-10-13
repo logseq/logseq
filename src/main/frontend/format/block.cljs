@@ -14,7 +14,9 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
-(defn- standalone-display-block
+(defn standalone-display-block
+  "A block whose whole text is a code fence or `$$` math becomes a code or math
+  block of that content."
   [block]
   (let [raw-title (:block/title block)
         title (when (string? raw-title) (string/trim raw-title))

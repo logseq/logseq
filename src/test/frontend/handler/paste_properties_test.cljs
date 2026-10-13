@@ -21,6 +21,8 @@
 (def ^:private choice-joy #uuid "00000000-0000-4000-8000-0000000000c1")
 (def ^:private tagged-uuid #uuid "00000000-0000-4000-8000-000000000104")
 (def ^:private collapsed-uuid #uuid "00000000-0000-4000-8000-000000000105")
+(def ^:private code-uuid #uuid "00000000-0000-4000-8000-000000000106")
+(def ^:private math-uuid #uuid "00000000-0000-4000-8000-000000000107")
 
 (use-fixtures :once
   {:before (fn []
@@ -52,7 +54,18 @@
                         {:block/title "folded"
                          :block/uuid collapsed-uuid :build/keep-uuid? true
                          :block/collapsed? true
-                         :build/children [{:block/title "inside"}]}]}]
+                         :build/children [{:block/title "inside"}]}
+                        {:block/title "(+ 1 2)"
+                         :block/uuid code-uuid :build/keep-uuid? true
+                         :build/tags [:logseq.class/Code-block]
+                         :build/properties {:logseq.property.node/display-type :code
+                                            :logseq.property.code/lang "clojure"
+                                            :p-check true}}
+                        {:block/title "E = mc^2"
+                         :block/uuid math-uuid :build/keep-uuid? true
+                         :build/tags [:logseq.class/Math-block]
+                         :build/properties {:logseq.property.node/display-type :math
+                                            :p-check true}}]}]
                      :classes {:research {} :idea {}}
                      :properties {:p-text {:logseq.property/type :default}
                                   :p-number {:logseq.property/type :number}
@@ -158,6 +171,21 @@
                       (string/trim (string/replace text #" +\n" "\n"))))
                (is (= ["folded" "inside"] (mapv :block/title blocks)))
                (is (true? (:block/collapsed? (first blocks)))))
+             (p/catch (fn [e] (is false (str e))))
+             (p/finally done))))
+
+(deftest exported-code-and-math-blocks-with-properties-paste-back
+  (async done
+         (-> (p/let [code (<export-and-paste code-uuid)
+                     math (<export-and-paste math-uuid)]
+               (testing (str "code exported as " (pr-str (:text code)))
+                 (is (= "(+ 1 2)" (:block/title (first (:blocks code)))))
+                 (is (= :code (:logseq.property.node/display-type (first (:blocks code)))))
+                 (is (= {:user.property/p-check true} (:assignments code))))
+               (testing (str "math exported as " (pr-str (:text math)))
+                 (is (= "E = mc^2" (:block/title (first (:blocks math)))))
+                 (is (= :math (:logseq.property.node/display-type (first (:blocks math)))))
+                 (is (= {:user.property/p-check true} (:assignments math)))))
              (p/catch (fn [e] (is false (str e))))
              (p/finally done))))
 

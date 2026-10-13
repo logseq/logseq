@@ -245,7 +245,8 @@
 
 (defn- block-displayed-math
   [ast-content]
-  [space (raw-text "$$" ast-content "$$") space])
+  ;; ends its line, so a property line written after the block is not glued to `$$`
+  [space (raw-text "$$" ast-content "$$") (newline* 1)])
 
 (defn- block-drawer
   [[name lines]]

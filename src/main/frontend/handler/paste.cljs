@@ -57,7 +57,13 @@
               blocks (gp-block/with-parent-and-order (:db/id page-info) blocks)
               blocks+properties (p/all
                                  (mapv (fn [block]
-                                         (p/let [[block assignments] (paste-properties/<read-properties repo block)
+                                         (p/let [[block' assignments] (paste-properties/<read-properties repo block)
+                                                 ;; with its property lines read, a block may be only a
+                                                 ;; code fence or math: make it that block
+                                                 block (if (and (not= (:block/title block) (:block/title block'))
+                                                                (not (:logseq.property.node/display-type block')))
+                                                         (block/standalone-display-block (dissoc block' :block.temp/ast-body))
+                                                         block')
                                                  refs (some->> (:block/refs block)
                                                                (<with-ref-ids repo date-formatter))]
                                            [(-> block
