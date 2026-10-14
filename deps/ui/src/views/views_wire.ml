@@ -187,6 +187,145 @@ let group_value_uuid (v : W.t) : string option =
   | Some "entity" -> W.as_uuid (Option.value (W.get v "uuid") ~default:W.Nil)
   | _ -> None
 
+(* How many linked/unlinked reference rows to materialize at once.
+   The worker rejects initial-row-count on those features, so the
+   window is applied to the already-decoded result: the header keeps
+   the full count, and only this many row entities are fetched and
+   mounted. Zero means "first batch not in hand yet" — render no rows
+   rather than a Loading placeholder. *)
+let ref_window = 48
+
+let row_count = function
+  | VFlat { rows; count; _ } -> max count (List.length rows)
+  | VGrouped gs ->
+      List.fold_left (fun n g -> n + List.length g.grows) 0 gs
+  | VGroupedList gs ->
+      List.fold_left
+        (fun n g ->
+          n
+          + List.fold_left (fun n2 (_, rows) -> n2 + List.length rows) 0
+              g.glparts)
+        0 gs
+  | VEmpty -> 0
+
+let rec take_acc n acc = function
+  | _ when n <= 0 -> List.rev acc
+  | [] -> List.rev acc
+  | x :: xs -> take_acc (n - 1) (x :: acc) xs
+
+let take n xs = take_acc n [] xs
+
+(* Prefix of [n] rows. Groups and partitions past the window are
+   dropped so a page with thousands of reference groups does not mount
+   an empty foldable per group. [VFlat.count] is left alone: it is the
+   server total, not the mounted prefix. *)
+let slice_view_data (d : view_data) n : view_data =
+  if n <= 0 then
+    match d with
+    | VFlat f -> VFlat { f with rows = [] }
+    | VGrouped _ -> VGrouped []
+    | VGroupedList _ -> VGroupedList []
+    | VEmpty -> VEmpty
+  else
+    match d with
+    | VEmpty -> VEmpty
+    | VFlat f -> VFlat { f with rows = take n f.rows }
+    | VGrouped gs ->
+        let rec go n acc = function
+          | _ when n <= 0 -> List.rev acc
+          | [] -> List.rev acc
+          | g :: rest ->
+              let rows = take n g.grows in
+              let k = List.length rows in
+              if k = 0 then go n acc rest
+              else go (n - k) ({ g with grows = rows } :: acc) rest
+        in
+        VGrouped (go n [] gs)
+    | VGroupedList gs ->
+        let rec go_parts n acc = function
+          | _ when n <= 0 -> List.rev acc
+          | [] -> List.rev acc
+          | (bu, rows) :: rest ->
+              let rows' = take n rows in
+              let k = List.length rows' in
+              if k = 0 then go_parts n acc rest
+              else go_parts (n - k) ((bu, rows') :: acc) rest
+        in
+        let rec go_groups n acc = function
+          | _ when n <= 0 -> List.rev acc
+          | [] -> List.rev acc
+          | g :: rest ->
+              let parts = go_parts n [] g.glparts in
+              let k =
+                List.fold_left (fun a (_, rs) -> a + List.length rs) 0 parts
+              in
+              if k = 0 then go_groups n acc rest
+              else go_groups (n - k) ({ g with glparts = parts } :: acc) rest
+        in
+        VGroupedList (go_groups n [] gs)
+
+type row_window = { rows : string list; headers : string list }
+
+(* Row uuids with index in [start, stop), plus the group-value and
+   breadcrumb uuids of groups that overlap that range. Later groups are
+   not walked once [stop] is reached. *)
+let row_window (d : view_data) ~start ~stop : row_window =
+  if stop <= start || start < 0 then { rows = []; headers = [] }
+  else
+    let rows = ref [] in
+    let headers = ref [] in
+    let i = ref 0 in
+    let add_header u = headers := u :: !headers in
+    let eat_list xs =
+      let rec go = function
+        | _ when !i >= stop -> ()
+        | [] -> ()
+        | u :: rest ->
+            let k = !i in
+            incr i;
+            if k >= start && k < stop then rows := u :: !rows;
+            go rest
+      in
+      go xs
+    in
+    let note_overlap start_i uopt =
+      if start_i < stop && !i > start && !i > start_i then
+        match uopt with Some u -> add_header u | None -> ()
+    in
+    (match d with
+    | VEmpty -> ()
+    | VFlat { rows = rs; _ } -> eat_list rs
+    | VGrouped gs ->
+        let rec groups = function
+          | _ when !i >= stop -> ()
+          | [] -> ()
+          | g :: rest ->
+              let start_i = !i in
+              eat_list g.grows;
+              note_overlap start_i (group_value_uuid g.gv);
+              groups rest
+        in
+        groups gs
+    | VGroupedList gs ->
+        let rec groups = function
+          | _ when !i >= stop -> ()
+          | [] -> ()
+          | g :: rest ->
+              let start_i = !i in
+              List.iter
+                (fun (bu, rs) ->
+                  if !i < stop then begin
+                    let p0 = !i in
+                    eat_list rs;
+                    if p0 < stop && !i > start && !i > p0 then add_header bu
+                  end)
+                g.glparts;
+              note_overlap start_i (group_value_uuid g.glv);
+              groups rest
+        in
+        groups gs);
+    { rows = List.rev !rows; headers = List.rev !headers }
+
 let decode_view_data (v : W.t) : view_data =
   match v with
   | W.Map _ -> (

@@ -160,7 +160,7 @@ let block_of_result (w : W.t) : W.t =
   | None -> w
 
 let get_blocks uuids ?(metadata = false) ?(children = false)
-    ?(include_property_block = false) f =
+    ?(include_property_block = false) ?(on_error = fun () -> ()) f =
   (let* w =
     Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
       (W.Array
@@ -180,7 +180,10 @@ let get_blocks uuids ?(metadata = false) ?(children = false)
   in
   f (List.map block_of_result (W.args_list w));
   Js.Promise.resolve ())
-  |> catch_quiet
+  |> Js.Promise.catch (fun e ->
+         Ui_services.log_error ("views worker call failed", e);
+         on_error ();
+         Js.Promise.resolve ())
   |> ignore
 
 let q query_edn f =

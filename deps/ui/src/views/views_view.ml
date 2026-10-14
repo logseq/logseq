@@ -159,13 +159,25 @@ let body_eq (a : V.vstate) (b : V.vstate) =
    .flex.flex-col.gap-2.grid > foldable(key="view") with the whole body
    inside ls-foldable-content *)
 let view_el inst : t =
+  (* ref rows mount a prefix of the decoded result. [fetch_limit] is
+     that prefix; without it in the equality the body keeps the empty
+     first frame after the batch lands. Other features ignore it. *)
+  let equal a b =
+    body_eq a b
+    &&
+    match inst.V.kind with
+    | V.KLinkedRefs | V.KUnlinkedRefs ->
+        a.V.fetch_limit = b.V.fetch_limit
+        && V.Sset.equal a.V.collapsed_groups b.V.collapsed_groups
+    | _ -> true
+  in
   box ~grow:1.
     [ column ~gap:8 ~grow:1.
         [ column ~gap:8 ~grow:1.
             [ Views_table.foldable inst ~key:"view"
                 ~title:(Views_head.render_head inst)
                 ~body:
-                  (reactive ~equal:body_eq
+                  (reactive ~equal
                      (fun s ->
                        Views_table.body_el inst s
                          ~filters:(Views_head.filters_row inst))
@@ -247,21 +259,80 @@ let query_view_el inst : t =
 
 (* ---------- data load ---------- *)
 
-let load_blocks inst uuids f =
-  if uuids = [] then (
-    V.update inst (fun s -> { s with V.blocks = Hashtbl.create 64 });
-    f ())
+let ref_kind inst =
+  match inst.V.kind with
+  | V.KLinkedRefs | V.KUnlinkedRefs -> true
+  | _ -> false
+
+(* One in-flight reference batch per view. A second virt-end in the
+   same frame (or a stale get-blocks finishing after a refresh) must
+   not start another 48-uuid fetch or clear the newer ticket. *)
+let ref_inflight : (int, int) Hashtbl.t = Hashtbl.create 4
+let ref_ticket = ref 0
+
+let ref_busy inst = Hashtbl.mem ref_inflight inst.V.id
+
+let ref_begin inst =
+  incr ref_ticket;
+  let t = !ref_ticket in
+  Hashtbl.replace ref_inflight inst.V.id t;
+  t
+
+let ref_end inst t =
+  match Hashtbl.find_opt ref_inflight inst.V.id with
+  | Some t' when t' = t -> Hashtbl.remove ref_inflight inst.V.id
+  | _ -> ()
+
+let dedupe_uuids xs =
+  let seen = Hashtbl.create (max 1 (List.length xs)) in
+  List.filter
+    (fun u ->
+      if Hashtbl.mem seen u then false
+      else (
+        Hashtbl.add seen u ();
+        true))
+    xs
+
+let copy_blocks src =
+  let dst = Hashtbl.create (max 16 (Hashtbl.length src)) in
+  Hashtbl.iter (Hashtbl.add dst) src;
+  dst
+
+(* [~merge] copies the previous table into a fresh one so [blocks ==]
+   changes and a refetch does not wipe rows already on screen.
+   [~set_limit] is published in that same update: the body must not
+   mount a wider prefix until those entities are in the table.
+   [~fresh] drops a response whose snapshot was superseded. [~finally]
+   runs on success and on worker failure so the batch ticket clears. *)
+let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
+    ?(finally = fun () -> ()) inst uuids f =
+  let apply blocks =
+    Fun.protect ~finally (fun () ->
+        if fresh () then begin
+          V.update inst (fun s ->
+              let s = { s with V.blocks } in
+              match set_limit with
+              | None -> s
+              | Some n -> { s with V.fetch_limit = n });
+          f ()
+        end)
+  in
+  if uuids = [] then
+    apply
+      (if merge then copy_blocks (V.get inst).V.blocks else Hashtbl.create 64)
   else
-    Db.get_blocks uuids ~metadata:true (fun bs ->
-        let blocks = Hashtbl.create 64 in
+    let blocks =
+      if merge then copy_blocks (V.get inst).V.blocks
+      else Hashtbl.create (max 16 (List.length uuids))
+    in
+    Db.get_blocks uuids ~metadata:true ~on_error:finally (fun bs ->
         List.iter
           (fun b ->
             match W.map_get_uuid b "block/uuid" with
             | Some u -> Hashtbl.replace blocks u b
             | None -> ())
           bs;
-        V.update inst (fun s -> { s with V.blocks });
-        f ())
+        apply blocks)
 
 let load_props inst f =
   if (V.get inst).V.props_loaded then f ()
@@ -342,36 +413,78 @@ let load_view_data ?(fetch_limit = 0) inst =
               Ui_services.log_error ("view-data decode failed", e);
               Wr.VEmpty
           in
-          V.update inst (fun s ->
-              { s with
-                V.data = d
-              ; loading = false
-              ; ref_pages_count = Wr.decode_ref_counts v
-              ; query_idents =
-                  (match d with
-                   | Wr.VFlat { qprops; _ } -> qprops
-                   | _ -> s.V.query_idents)
-              });
-          let uuids =
-            (* group-value entity uuids ride along — the group header
-               titles resolve through inst.blocks like row titles *)
-            row_uuids_of d
-            @ (match d with
-               | Wr.VGrouped gs ->
-                   List.filter_map
-                     (fun g -> Wr.group_value_uuid g.Wr.gv)
-                     gs
-               | Wr.VGroupedList gs ->
-                   List.filter_map
-                     (fun g -> Wr.group_value_uuid g.Wr.glv)
-                     gs
-               | _ -> [])
-            @ (match (V.get inst).V.query_view with
-               | W.Nil -> []
-               | v -> Views_query.collect_uuids v [])
+          let continue () =
+            load_props inst (fun () -> build_columns inst)
           in
-          load_blocks inst uuids (fun () ->
-              load_props inst (fun () -> build_columns inst))
+          if ref_kind inst then begin
+            (* Keep every decoded uuid so the header count stays exact,
+               but get-blocks only the first window. initial-row-count
+               is rejected by the worker for reference features, and
+               pulling every inline ref of thousands of rows is what
+               stalls the first paint. fetch_limit stays 0 until those
+               entities land, so the body mounts no rows and no Loading
+               text. A refetch that already holds the prefix paints it
+               immediately. *)
+            let total = Wr.row_count d in
+            let n = min Wr.ref_window total in
+            let first = Wr.row_window d ~start:0 ~stop:n in
+            let have =
+              n > 0
+              && List.for_all
+                   (fun u -> Hashtbl.mem (V.get inst).V.blocks u)
+                   first.Wr.rows
+            in
+            V.update inst (fun s ->
+                { s with
+                  V.data = d
+                ; loading = false
+                ; fetch_limit = (if have then n else 0)
+                ; ref_pages_count = Wr.decode_ref_counts v
+                ; query_idents =
+                    (match d with
+                     | Wr.VFlat { qprops; _ } -> qprops
+                     | _ -> s.V.query_idents)
+                });
+            if n = 0 || have then continue ()
+            else
+              let ticket = ref_begin inst in
+              let uuids = dedupe_uuids (first.Wr.rows @ first.Wr.headers) in
+              load_blocks ~set_limit:n
+                ~fresh:(fun () -> V.fetch_fresh inst gen)
+                ~finally:(fun () -> ref_end inst ticket)
+                inst uuids (fun () -> continue ())
+          end
+          else begin
+            V.update inst (fun s ->
+                { s with
+                  V.data = d
+                ; loading = false
+                ; ref_pages_count = Wr.decode_ref_counts v
+                ; query_idents =
+                    (match d with
+                     | Wr.VFlat { qprops; _ } -> qprops
+                     | _ -> s.V.query_idents)
+                });
+            let uuids =
+              (* group-value entity uuids ride along — the group header
+                 titles resolve through inst.blocks like row titles *)
+              row_uuids_of d
+              @ (match d with
+                 | Wr.VGrouped gs ->
+                     List.filter_map
+                       (fun g -> Wr.group_value_uuid g.Wr.gv)
+                       gs
+                 | Wr.VGroupedList gs ->
+                     List.filter_map
+                       (fun g -> Wr.group_value_uuid g.Wr.glv)
+                       gs
+                 | _ -> [])
+              @ (match (V.get inst).V.query_view with
+                 | W.Nil -> []
+                 | v -> Views_query.collect_uuids v [])
+            in
+            load_blocks inst uuids (fun () -> continue ())
+          end
   in
   if Ui_services.env_publishing () && view_uuid = "" then
     let owner_ref = match inst.V.owner with
@@ -562,18 +675,46 @@ let export_edn inst =
           ; toast_kind = "success" });
      Ui_task.resolve ()))
 
+(* Next reference window. Does not refetch the snapshot: the decoded
+   uuid list is already complete. Skips while a batch is in flight, or
+   while the current prefix is not fully in [blocks], so virt-end
+   (which refires whenever a short list's tail sits inside the
+   viewport band) cannot stack get-blocks calls. *)
+let load_more_refs inst =
+  let s = V.get inst in
+  let total = Wr.row_count s.V.data in
+  if s.V.fetch_limit <= 0 || s.V.fetch_limit >= total || ref_busy inst then
+    ()
+  else
+    let have = Wr.row_window s.V.data ~start:0 ~stop:s.V.fetch_limit in
+    if not (List.for_all (fun u -> Hashtbl.mem s.V.blocks u) have.Wr.rows)
+    then ()
+    else
+      let stop = min total (s.V.fetch_limit + Wr.ref_window) in
+      let gen = !(inst.V.data_gen) in
+      let ticket = ref_begin inst in
+      let next = Wr.row_window s.V.data ~start:s.V.fetch_limit ~stop in
+      let uuids = dedupe_uuids (next.Wr.rows @ next.Wr.headers) in
+      load_blocks ~merge:true ~set_limit:stop
+        ~fresh:(fun () -> V.fetch_fresh inst gen)
+        ~finally:(fun () -> ref_end inst ticket)
+        inst uuids (fun () -> ())
+
 (* windowed view-data growth — the row stream's virt-end dom-event fires
    when its last child nears the viewport; each bump doubles the fetched
    window until it covers the full result count (cljs
-   offset-view-row-count) *)
+   offset-view-row-count). Reference features window the decoded uuids
+   instead of resending the snapshot. *)
 let load_more_rows inst =
-  match (V.get inst).V.data with
-  | Wr.VFlat { rows; count; _ }
-    when List.length rows < count ->
-      let limit = min count (2 * List.length rows) in
-      V.update inst (fun s -> { s with V.fetch_limit = limit });
-      load_view_data ~fetch_limit:limit inst
-  | _ -> ()
+  if ref_kind inst then load_more_refs inst
+  else
+    match (V.get inst).V.data with
+    | Wr.VFlat { rows; count; _ }
+      when List.length rows < count ->
+        let limit = min count (2 * List.length rows) in
+        V.update inst (fun s -> { s with V.fetch_limit = limit });
+        load_view_data ~fetch_limit:limit inst
+    | _ -> ()
 
 let add_new_object inst =
   match inst.V.kind with

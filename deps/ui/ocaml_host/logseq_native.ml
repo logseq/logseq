@@ -496,9 +496,13 @@ let () =
     Lui_paint.
       { color_of = Theme_vars.color_of;
         hidden = (fun _ -> false);
-        (* the host walks every child; LUI virtual lists that publish a
-           mounted window are not used by this host yet *)
-        mounted_children = (fun _ -> None);
+        (* Virtual lists publish the mounted window. Every other kind
+           returns None and the walk stays the full child list. *)
+        mounted_children =
+          (fun id ->
+             match !host_cell with
+             | Some h -> Lui_host.layout_mounted_children h id
+             | None -> None);
         layout =
           (fun id -> Lui_paint.placement_of_rect (shifted_rect id));
         state_of =
@@ -781,6 +785,32 @@ let () =
        Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
   overlay_viewport := (fun () -> (!win_w, !win_h, !scale_cell));
+  (* Content-space visible range for virtual-list nodes. Rects are
+     published after this callback on the sync that creates the list,
+     so a missing rect means "first screen", not "lay out every row". *)
+  let vport_of id =
+    if Lui_store.kind store id <> "virtual-list" then None
+    else
+      let er = engine_rect id in
+      let sx, sy = scroll_shift_of id in
+      let shifted =
+        { er with
+          Lui_scene.x = er.Lui_scene.x -. sx;
+          Lui_scene.y = er.Lui_scene.y -. sy }
+      in
+      let vw = float !win_w *. !scale_cell in
+      let vh = float !win_h *. !scale_cell in
+      let frame = Lui_scene.rect 0. 0. vw vh in
+      if er.Lui_scene.h < 1. || er.Lui_scene.w < 1. then
+        Some (0., vh *. 0.62)
+      else
+        let clip = Lui_scene.rect_intersect shifted frame in
+        Some
+          ( Ui.scroll_offset ui id
+            +. Float.max 0. (clip.Lui_scene.y -. shifted.Lui_scene.y)
+          , Float.max 1. clip.Lui_scene.h )
+  in
+  Lui_host.set_vport host vport_of;
   let apply_patch_json (s : string) =
     if s <> "" then begin
       let started = perf_s () in
@@ -1382,7 +1412,17 @@ let () =
     end
   in
   ignore (sys_cursor "default" |> Option.map (fun c -> Sdl.set_cursor (Some c)));
+  (* Cursor changes only on the next motion. A modal (search) that
+     closes under a still pointer otherwise leaves the I-beam stuck
+     until the mouse moves. Re-hit after each layout. *)
+  let last_ptr : (int * int) option ref = ref None in
+  let refresh_cursor () =
+    match !last_ptr with
+    | Some (x, y) -> update_cursor (dom_hit ~x:(float x) ~y:(float y))
+    | None -> ()
+  in
   let on_dom_motion ~x ~y ~rx ~ry ~mods =
+    last_ptr := Some (x, y);
     let node = dom_hit ~x:(float x) ~y:(float y) in
     update_cursor node;
     let now = Unix.gettimeofday () in
@@ -1714,9 +1754,11 @@ let () =
   Callback.register "ocaml_host_menu_command" menu_command;
   let e = Sdl.Event.create () in
   let drain_events () =
+    let n = ref 0 in
     let go = ref true in
     while !go do
       if Sdl.poll_event (Some e) then begin
+        incr n;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         metrics.event_count <- metrics.event_count + 1;
         let input = input_of_event e in
@@ -1775,7 +1817,8 @@ let () =
         end
       end
       else go := false
-    done
+    done;
+    !n
   in
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name "Logseq";
@@ -1835,6 +1878,11 @@ let () =
      focused_text_input id
    | None -> ());
   Daemon_client.boot_mark "autofocus";
+  (* app-icons is queued during init, before this thread drains the
+     mailbox. Without a drain the startup line always reports icons=0
+     and the first frame paints with an empty registry. *)
+  Host_requests.drain ();
+  Daemon_client.boot_mark "icons drained";
   log "logseq_native: %dx%d drawable (scale %.2f), renderer=%s, icons=%d"
     dw dh scale (!renderer_cell).Lui_host.name (Host_icons.count ());
   let frame = ref 0 in
@@ -1846,6 +1894,10 @@ let () =
     | Some _ -> true
   in
   let raises_left = ref 3 in
+  (* [last_busy] gates the idle sleep: any activity below refreshes
+     it, so the 1ms fast poll persists through bursts (boot, typing)
+     and the blocking wait only kicks in after sustained quiet. *)
+  let last_rev = ref 0 and last_busy = ref (perf_s ()) in
   let metrics_log = Option.map open_out (Sys.getenv_opt "LOGSEQ_NATIVE_METRICS") in
   let last_metrics_export = ref (perf_s ()) in
   let previous_loop = ref None in
@@ -1908,6 +1960,7 @@ let () =
     let populate_started = perf_s () in
     populate_rects ();
     fire_viewport_events ();
+    refresh_cursor ();
     metrics.populate_ms <- (perf_s () -. populate_started) *. 1000.;
     Host_metrics.record_phase metrics Geometry metrics.populate_ms;
     let a11y_started = perf_s () in
@@ -1965,7 +2018,7 @@ let () =
     end;
     let events_before = metrics.event_count in
     let events_started = perf_s () in
-    drain_events ();
+    if drain_events () > 0 then last_busy := t0;
     metrics.event_ms <- (perf_s () -. events_started) *. 1000.;
     let had_events = metrics.event_count > events_before in
     if had_events then Host_metrics.record_phase metrics Events metrics.event_ms;
@@ -2039,6 +2092,7 @@ let () =
        serializes a full paint into the pump path. *)
     let rec pump_all n =
       if n > 0 && Atomic.exchange Bridge.pending_wakeup false then begin
+        last_busy := t0;
         let r = Native_embed.pump () in
         if !debug then warn "pump -> %d bytes" (String.length r);
         apply_patch_json r;
@@ -2055,7 +2109,13 @@ let () =
     let requests_started = perf_s () in
     Host_requests.drain ();
     Host_metrics.record_phase metrics Requests ((perf_s () -. requests_started) *. 1000.);
-    apply_actions (Ui.store_changed ui store);
+    let rev_now = Lui_store.revision store in
+    if rev_now <> !last_rev then begin
+      last_rev := rev_now; last_busy := t0
+    end;
+    let sync_acts = Ui.store_changed ui store in
+    if sync_acts <> [] then last_busy := t0;
+    apply_actions sync_acts;
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
     Host_requests.ensure_ed_focus ();
@@ -2073,6 +2133,7 @@ let () =
     let retry = presentation.Host_interaction.pending in
     if dirty then begin
       paint_frame ();
+      last_busy := t0;
       last_render := perf_s ();
       if !debug then
         dbg "frame %d ops=%d" !frame
@@ -2126,6 +2187,17 @@ let () =
       let remaining = !frame_deadline -. now in
       if remaining > 0. then Thread.delay remaining
     end
+    else if not dirty then
+      (* Busy (recent event/wakeup/paint): 1ms — wakeup-driven pump
+         chains otherwise pay a sleep per hop across the serialized
+         invoke chain. Quiet for >2s: block in SDL_WaitEventTimeout —
+         input wakes immediately while the pump/sync poll cadence
+         drops from ~500Hz to ~60Hz. NULL event: the waking event
+         stays queued for drain_events. The old [!frame < 60] gate
+         never escaped because [frame] counts repaints, which stop
+         entirely once idle. *)
+      if perf_s () -. !last_busy < 2. then Sdl.delay 1l
+      else ignore (Sdl.wait_event_timeout None 16)
 
   done);
   Option.iter close_out metrics_log;

@@ -1206,6 +1206,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
       (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
   in
   (box ~key:"journals" ~accessibility_identifier:"journals"
+    ~grow:1. ~min_width:280
     ~data_attrs:[ ("style", "overflow-anchor:none;height:100%") ]
     [ box ~key:"js"
         [ box ~key:"jvp"
@@ -1277,6 +1278,16 @@ let page_route (r : Model.route) =
   | Model.Home ->
       true
   | _ -> false
+
+(* day identity only — a block splice keeps the same uuids and must
+   not remount the region (row-level repaint). An empty list becoming
+   the loaded days, or the reverse, does remount: the keyed collection
+   mounted against [] has missed publishes on the native host. *)
+let journal_keys (js : Model.page list) =
+  List.map
+    (fun (p : Model.page) ->
+      Option.value p.Model.page_uuid ~default:p.Model.page_title)
+    js
 
 let scope_of_route (r : Model.route) =
   match r with Model.Block_zoom u -> "zoom-" ^ u | _ -> "main"
@@ -1600,7 +1611,13 @@ let region (ms : Model.t Signal.signal) : t =
         && page_key a.route_page = page_key b.route_page
       in
       let r =
-        if page_route a.route && page_route b.route then shell
+        if page_route a.route && page_route b.route then
+          shell
+          &&
+          (match a.route, b.route with
+           | (Model.Journals | Model.Home), (Model.Journals | Model.Home) ->
+               journal_keys a.journals = journal_keys b.journals
+           | _ -> true)
         else
           shell
           && a.data_gen = b.data_gen

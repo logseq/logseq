@@ -2299,6 +2299,49 @@ let test_views_wire () =
    | _ -> check "view data grouped-list" false);
   check "view data empty"
     (Views_wire.decode_view_data (Wire.Int 1) = Views_wire.VEmpty);
+  (* reference windows keep the decoded total and mount a prefix *)
+  let ent u =
+    wmap [ "kind", Wire.Keyword "entity"; "uuid", Wire.Uuid u ]
+  in
+  let grows n prefix =
+    List.init n (fun i -> prefix ^ string_of_int i)
+  in
+  let grouped =
+    Views_wire.VGrouped
+      [ { Views_wire.gv = ent "p1"; grows = grows 100 "a" }
+      ; { Views_wire.gv = ent "p2"; grows = grows 20 "b" } ]
+  in
+  check "ref window keeps the full count" (Views_wire.row_count grouped = 120);
+  (match Views_wire.slice_view_data grouped 48 with
+   | Views_wire.VGrouped [ g ] ->
+       check "slice keeps the first group only" (List.length g.grows = 48);
+       check "slice starts at the first row" (List.hd g.grows = "a0")
+   | _ -> check "slice keeps the first group only" false);
+  (match Views_wire.slice_view_data grouped 0 with
+   | Views_wire.VGrouped [] -> check "zero slice mounts nothing" true
+   | _ -> check "zero slice mounts nothing" false);
+  let w = Views_wire.row_window grouped ~start:48 ~stop:96 in
+  check "next window is 48 rows" (List.length w.rows = 48);
+  check "next window continues" (List.hd w.rows = "a48");
+  check "next window stays on the first page" (w.headers = [ "p1" ]);
+  let crossed = Views_wire.row_window grouped ~start:90 ~stop:110 in
+  check "crossed window length" (List.length crossed.rows = 20);
+  check "crossed window order"
+    (List.hd crossed.rows = "a90" && List.nth crossed.rows 10 = "b0");
+  check "crossed window includes both pages"
+    (crossed.headers = [ "p1"; "p2" ]);
+  let flat =
+    Views_wire.VFlat
+      { rows = [ "a"; "b"; "c" ]
+      ; count = 10
+      ; previews = Hashtbl.create 1
+      ; qprops = [] }
+  in
+  (match Views_wire.slice_view_data flat 2 with
+   | Views_wire.VFlat f ->
+       check "flat slice keeps the server count"
+         (f.rows = [ "a"; "b" ] && f.count = 10)
+   | _ -> check "flat slice keeps the server count" false);
   (* prop_text *)
   eqs "prop_text str" "s" (Views_wire.prop_text (Wire.String "s"));
   eqs "prop_text int" "5" (Views_wire.prop_text (Wire.Int 5));
@@ -2622,7 +2665,25 @@ let test_views_table () =
     && not (Views_table.sortable { col_title with c_id = "select" })
     && not
          (Views_table.sortable
-            { col_title with c_id = "block.temp/refs-count" }))
+            { col_title with c_id = "block.temp/refs-count" }));
+  let fit_cols =
+    [ Views_table.select_column; Views_table.page_title_column
+    ; Views_table.tags_column; Views_table.created_column
+    ; Views_table.updated_column ]
+  in
+  let widths =
+    List.map (fun c -> Views_table.fitted_px ~avail:700 c fit_cols) fit_cols
+  in
+  let fit_sum = List.fold_left ( + ) 0 widths in
+  check "fitted select stays" (List.hd widths = 32);
+  check "fitted title shrinks"
+    (let w = List.nth widths 1 in w < 360 && w >= 72);
+  check "fitted created stays readable"
+    (let w = List.nth widths 3 in w < 160 && w >= 120);
+  check "fitted row fits the track" (fit_sum <= 700);
+  check "fitted wide track keeps the title"
+    (Views_table.fitted_px ~avail:2000 Views_table.page_title_column fit_cols
+     = 360)
 
 (* ---- popups_state ---- *)
 

@@ -245,7 +245,25 @@ let test_block_tree () =
        List.iter
          (fun n ->
            check "bullet container"
-             (subtree_contains n (fun c -> has_tok c "bullet-container")))
+             (subtree_contains n (fun c -> has_tok c "bullet-container"));
+           check "bullet uses the darker gray"
+             (subtree_contains n (fun c ->
+                  has_tok c "bullet"
+                  &&
+                  match M.string_prop c "background" with
+                  | Some bg ->
+                      let needle = "gray-09" in
+                      let nlen = String.length needle in
+                      let rec has i =
+                        i + nlen <= String.length bg
+                        && (String.sub bg i nlen = needle || has (i + 1))
+                      in
+                      has 0
+                  | None -> false));
+           check "block text cursor is an i-beam"
+             (subtree_contains n (fun c ->
+                  has_tok c "block-content"
+                  && M.string_prop c "cursor" = Some "text")))
          [ b1; b2 ];
        ignore b2c
    | _ -> check "block rows present" false);
@@ -356,7 +374,14 @@ let test_left_sidebar () =
   let fav_items = find_where (fun n -> has_tok n "favorite-item") in
   let rec_items = find_where (fun n -> has_tok n "recent-item") in
   check "favorite-item row" (fav_items <> []);
-  check "recent-item row" (rec_items <> [])
+  check "recent-item row" (rec_items <> []);
+  (* a hash link races navigate_to_page; the row must not be url "#" *)
+  check "recent page row is not a hash link"
+    (not
+       (List.exists
+          (fun n ->
+            subtree_contains n (fun c -> M.string_prop c "url" = Some "#"))
+          rec_items))
 
 (* ---------------- right sidebar ---------------- *)
 
@@ -1027,6 +1052,25 @@ let journal_day ?(uuid = "jd1") blocks : Model.page =
     Model.page_uuid = Some uuid
   ; page_journal_day = Some 20261004
   ; page_title = "Oct 4th, 2026" }
+
+(* Leaving journals and coming back must still show the loaded day.
+   Navigate_to keeps model.journals; the region remounts on the route
+   change and has to paint the same day title and blocks. *)
+let test_journal_roundtrip () =
+  Stub_dom.set_rtc_test_mode ();
+  send (Action.Navigate_to Model.Home);
+  send
+    (Action.Journals_loaded
+       [ journal_day ~uuid:"jd-back" [ block "jb1" "Hello LUI" ] ]);
+  flush ();
+  has "text:\"Oct 4th, 2026\"";
+  has "text:\"Hello LUI\"";
+  send (Action.Navigate_to (Model.Page "Alpha"));
+  flush ();
+  send (Action.Navigate_to Model.Journals);
+  flush ();
+  has "text:\"Oct 4th, 2026\"";
+  has "text:\"Hello LUI\""
 
 let test_journal_splice_row_level () =
   (* eager journal items: the virt scroller needs real layout, absent
@@ -1875,6 +1919,7 @@ let run ~finish =
   test_views_table ();
   test_render_libs_dom ();
   test_embed_parity ();
+  test_journal_roundtrip ();
   test_journal_splice_row_level ();
   test_page_splice_row_level ();
   test_journal_reorder_move_collapse ();

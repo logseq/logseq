@@ -154,7 +154,7 @@ let viewport_candidate_allocation () =
     (Host_interaction.viewport_candidates cache store = [30]);
   let other = Lui_store.create () in
   Lui_store.apply_op other (CreateNode (40, Column));
-  Lui_store.apply_op other (SetExtensionProp (40, "attrs", StringValue "data-lazy-mount"));
+  Lui_store.apply_op other (SetExtensionProp (40, "data-attrs", StringValue "data-lazy-mount"));
   check "Viewport candidate cache must not retain a previous graph's nodes"
     (Host_interaction.viewport_candidates cache other = [40])
 
@@ -240,7 +240,7 @@ let () =
   let store = Lui_store.create () in
   Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column); CreateNode (2, Column);
     SetExtensionProp (1,"attrs",StringValue "data-lazy-mount");
-    SetExtensionProp (2,"attrs",StringValue "data-virt-count") ]};
+    SetExtensionProp (2,"data-attrs",StringValue "data-virt-count") ]};
   let cache = Host_interaction.viewport_cache () in
   let lazy_fired = Hashtbl.create 2 and virt_end_fired = Hashtbl.create 2 in
   let emitted = ref [] and bottom = ref 300. in

@@ -64,6 +64,12 @@ let has_attribute payload name =
   let rec found i = i + m <= n && (matches i 0 || found (i + 1)) in
   m = 0 || found 0
 
+let node_has_attribute store id name =
+  let has prop = match Lui_store.string_prop store id prop with
+    | Some attributes -> has_attribute attributes name
+    | None -> false in
+  has "attrs" || has "data-attrs"
+
 let refresh_rects ~store ~base ~scroll_x ~scroll_y ~scrollable rects =
   let intersect (a : Lui_scene.rect) (b : Lui_scene.rect) =
     let x = max a.x b.x and y = max a.y b.y in
@@ -111,11 +117,10 @@ let viewport_candidates cache store =
     let ids = ref [] in
     Hashtbl.reset cache.viewport_members;
     Lui_store.iter_preorder store (fun id ->
-      match Lui_store.string_prop store id "attrs" with
-      | Some attributes when has_attribute attributes "data-lazy-mount"
-          || has_attribute attributes "data-virt-count" ->
-          Hashtbl.add cache.viewport_members id (); ids := id :: !ids
-      | _ -> ());
+      if node_has_attribute store id "data-lazy-mount"
+          || node_has_attribute store id "data-virt-count" then begin
+        Hashtbl.add cache.viewport_members id (); ids := id :: !ids
+      end);
     cache.viewport_ids <- List.rev !ids;
     cache.viewport_store <- Some store;
     cache.viewport_revision <- revision
@@ -131,8 +136,7 @@ let viewport_events ?(pinned=fun _ -> false) cache ~store ~rect_of ~height ~lazy
     Hashtbl.filter_map_inplace keep virt_end_fired
   end;
   let edge = height +. 768. in
-  let attrs_has id name = match Lui_store.string_prop store id "attrs" with
-    | Some attributes -> has_attribute attributes name | None -> false in
+  let attrs_has id name = node_has_attribute store id name in
   List.iter (fun id ->
     let r : Lui_scene.rect = rect_of id in
     if attrs_has id "data-lazy-mount" then begin

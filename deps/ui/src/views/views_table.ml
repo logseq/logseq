@@ -173,6 +173,122 @@ let column_size (c : V.column) =
   | "block/created-at" | "block/updated-at" -> 160
   | _ -> 180
 
+(* Both docks leave the main track narrower than the natural column
+   sum. The nested horizontal scroller cannot shrink under the page's
+   vertical scroll, and this host paints no horizontal bar, so the
+   right-hand columns are clipped. Fit the row to the live track:
+   keep the select checkbox, keep datetimes wide enough for a full
+   timestamp, and give the leftover width to the text columns. *)
+let datetime_lock = 148
+let col_floor = 72
+
+let is_select_col (c : V.column) = c.V.c_id = "select"
+
+let is_datetime_col (c : V.column) =
+  match c.V.c_id with
+  | "block/created-at" | "block/updated-at" -> true
+  | _ -> false
+
+let fitted_px ~avail (c : V.column) (cols : V.column list) : int =
+  let base = column_size c in
+  let sum = List.fold_left (fun a col -> a + column_size col) 0 cols in
+  if avail <= 0 || sum <= avail || is_select_col c then base
+  else
+    let select_sum =
+      List.fold_left
+        (fun a col -> if is_select_col col then a + column_size col else a)
+        0 cols
+    in
+    let room = max 0 (avail - select_sum) in
+    let dt_lock col = min (column_size col) datetime_lock in
+    let dt_sum =
+      List.fold_left
+        (fun a col -> if is_datetime_col col then a + dt_lock col else a)
+        0 cols
+    in
+    let others =
+      List.filter
+        (fun col -> not (is_select_col col || is_datetime_col col))
+        cols
+    in
+    let other_sum =
+      List.fold_left (fun a col -> a + column_size col) 0 others
+    in
+    let min_others = List.length others * col_floor in
+    if other_sum > 0 && dt_sum + other_sum <= room then
+      if is_datetime_col c then dt_lock c else base
+    else if other_sum > 0 && dt_sum + min_others <= room then
+      if is_datetime_col c then dt_lock c
+      else
+        let rest = room - dt_sum in
+        max col_floor (min base (base * rest / other_sum))
+    else
+      let flex_sum = sum - select_sum in
+      if flex_sum <= 0 then base
+      else
+        let raw = base * room / flex_sum in
+        let floored =
+          List.fold_left
+            (fun a col ->
+              if is_select_col col then a
+              else a + max col_floor (column_size col * room / flex_sum))
+            0 cols
+        in
+        if floored <= room then max col_floor (min base raw)
+        else max 48 (min base raw)
+
+(* Sidebar fractions are viewport fractions of the content track.
+   Absent during unit tests — callers keep [column_size]. *)
+let avail_sig_cell : int Signal.signal option ref = ref None
+
+let main_track_avail () : int Signal.signal option =
+  match !avail_sig_cell with
+  | Some s -> Some s
+  | None -> (
+      match !Sidebar_state.st_ref, !Sidebar_state.model_signal with
+      | None, _ | _, None -> None
+      | Some st, Some ms ->
+          let packed =
+            Signal.map2
+              (fun a b -> (a, b))
+              (Signal.map2
+                 (fun (m : Model.t) lf -> (m, lf))
+                 ms
+                 (Signal.value st.Sidebar_state.left_fraction))
+              (Signal.map2
+                 (fun rf vw -> (rf, vw))
+                 (Signal.value st.Sidebar_state.right_fraction)
+                 (Signal.value st.Sidebar_state.viewport_w))
+          in
+          let s =
+            Signal.map
+              (fun ((m, lf), (rf, vw)) ->
+                let vw =
+                  if vw <= 1. then Ui_services.dom_viewport_width () else vw
+                in
+                let content =
+                  if m.Model.right_sidebar_open then vw *. (1. -. rf) else vw
+                in
+                let left =
+                  if Sidebar_state.left_docked m.Model.left_sidebar_open vw
+                  then lf *. content
+                  else 0.
+                in
+                (* 24px: split gap + the page wrap's horizontal pad *)
+                max 280 (int_of_float (content -. left -. 24.)))
+              packed
+          in
+          avail_sig_cell := Some s;
+          Some s)
+
+let sized (c : V.column) (cols : V.column list) (node : t) : t =
+  match main_track_avail () with
+  | None -> node
+  | Some avail ->
+      let w = Signal.map (fun a -> fitted_px ~avail:a c cols) avail in
+      Ui_parts.int_prop_signal Lui_protocol.WidthValue w Fun.id
+        (Ui_parts.int_prop_signal Lui_protocol.MinWidth w Fun.id node)
+
 let inner_cell children =
   (* .ls-table-cell > div: height:100% has no prop channel *)
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
@@ -523,9 +639,12 @@ let prop_cell ~blk (c : V.column) : t =
       inner_cell [ checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
-let cell_el inst ~row_uuid ~blk (c : V.column) : t =
-  (* the cljs `title` tooltip and tabindex have no component props *)
-  Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
+let cell_el inst ~row_uuid ~blk ~cols (c : V.column) : t =
+  (* the cljs `title` tooltip and tabindex have no component props.
+     [sized] overrides width from the live main-track when both docks
+     are open; the static width is the natural size (and the test size). *)
+  sized c cols
+  (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
   (box ~style_class:"ls-table-cell" ~width:(column_size c)
     ~min_width:(column_size c) ~height:32
     [ (match c.V.c_id with
@@ -552,7 +671,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view ~hover:None pctx row ]
-           | None -> prop_cell ~blk c)) ])
+           | None -> prop_cell ~blk c)) ]))
 
 (* ---------- header ---------- *)
 
@@ -709,8 +828,9 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
 let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
-let header_cell inst (c : V.column) : t =
-  if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
+let header_cell inst ~cols (c : V.column) : t =
+  sized c cols
+  (if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
   let fg = "var(--muted-foreground, var(--ls-secondary-text-color))" in
   match c.V.c_id with
   | "select" ->
@@ -758,7 +878,7 @@ let header_cell inst (c : V.column) : t =
               ; (* resize-handle stays a hook — the opacity 0/.7/1 state
                    ladder can't ride props (inline opacity beats :where
                    hover/pressed) *)
-                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ]))
+                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ])))
 
 (* ---------- action bar ---------- *)
 
@@ -995,7 +1115,7 @@ let table_row_keydown inst ~row_uuid name payload =
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
-  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk c ] in
+  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk ~cols c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
@@ -1051,8 +1171,9 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
 (* rows keyed under a parent — Virt_list for >=64 rows, keyed
    reconciliation below that. The uuid set comes from the body snapshot
    (group membership is fixed per rebuild); the item stream keeps block
-   content live from the vstate. *)
-let row_stream inst cols uuids : t =
+   content live from the vstate. [~paginate] forces the virt-end
+   listener for a reference window shorter than the 64-row threshold. *)
+let row_stream ?(paginate = false) inst cols uuids : t =
  fun ctx parent ->
   let items_sig =
     Logseq_el.own ctx
@@ -1064,6 +1185,8 @@ let row_stream inst cols uuids : t =
   (* a windowed fetch that has more rows server-side still needs the
      virt-end listener even under the 64-row virtualization threshold *)
   let more_rows =
+    paginate
+    ||
     match (V.get inst).V.data with
     | Wr.VFlat { count; _ } -> List.length items < count
     | _ -> false
@@ -1093,7 +1216,7 @@ let row_stream inst cols uuids : t =
    reactive prop off the inst signal *)
 let table_header inst cols : t =
   let cell_item c =
-    let cell = header_cell inst c in
+    let cell = header_cell inst ~cols c in
     if c.V.c_id = "select" then
       box ~accessibility_identifier:"Select" [ cell ]
     else box [ cell ]
@@ -1174,7 +1297,7 @@ let add_row_footer inst : t =
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
    .force-visible-scrollbar > .relative > [header; body rows] *)
-let table_el inst (s : V.vstate) : t =
+let table_el ?(paginate = false) inst (s : V.vstate) : t =
   let cols = visible_columns s in
   box ~style_class:"ls-table" ~grow:1.
     [ (* .ls-table-rows font sweep migrated to props *)
@@ -1201,12 +1324,12 @@ let table_el inst (s : V.vstate) : t =
                         ~accessibility_identifier:"virtuoso-item-list"
                         ~data_attrs:
                           [ ("data-testid", "virtuoso-item-list") ]
-                        [ row_stream inst cols (all_row_uuids s) ] ] ]
+                        [ row_stream ~paginate inst cols (all_row_uuids s) ] ] ]
             ; add_row_footer inst ]) ]) ]
 
 (* cljs renders a full inner view-table per group — its own column
    header row plus the group's rows *)
-let grouped_table inst ~rows : t =
+let grouped_table ?(paginate = false) inst ~rows : t =
  fun ctx parent ->
   let s = V.get inst in
   let cols = visible_columns s in
@@ -1224,7 +1347,7 @@ let grouped_table inst ~rows : t =
                 ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
-                [ row_stream inst cols rows ]
+                [ row_stream ~paginate inst cols rows ]
             ])
         ]
     )]
@@ -1361,8 +1484,28 @@ let group_title s gv =
 
 (* ---------- body dispatch ---------- *)
 
-(* rows for the list display: same (uuid, blk) stream, ls-block markup *)
-let list_stream inst uuids : t =
+let ref_view inst =
+  match inst.V.kind with
+  | V.KLinkedRefs | V.KUnlinkedRefs -> true
+  | _ -> false
+
+(* Mount only the materialized prefix. The header reads the unwindowed
+   vstate, so the count stays the full decoded total. *)
+let windowed inst (s : V.vstate) =
+  if ref_view inst then
+    { s with V.data = Wr.slice_view_data s.V.data s.V.fetch_limit }
+  else s
+
+let more_ref_rows inst (s : V.vstate) =
+  ref_view inst
+  && s.V.fetch_limit > 0
+  && s.V.fetch_limit < Wr.row_count s.V.data
+
+(* rows for the list display: same (uuid, blk) stream, ls-block markup.
+   [~paginate] is set only on the tail list of a reference window so
+   earlier groups, whose bottoms sit inside the viewport, do not each
+   fire virt-end and walk the rest of the result. *)
+let list_stream ?(paginate = false) inst uuids : t =
  fun ctx parent ->
   let items_sig =
     Logseq_el.own ctx
@@ -1378,6 +1521,8 @@ let list_stream inst uuids : t =
   in
   let _ = title_of in
   let more_rows =
+    paginate
+    ||
     match (V.get inst).V.data with
     | Wr.VFlat { count; _ } -> List.length items < count
     | _ -> false
@@ -1403,12 +1548,121 @@ let list_stream inst uuids : t =
         list_row_el_sig inst ~row_uuid:u item_sig)
       ctx parent
 
+(* Reference rows are full block trees. Laying every fetched row out in
+   one flex pass is what made Hub's first screen take ~9s. A virtual-list
+   keeps every fetched row in the store (the header count stays exact)
+   but the host only builds flex trees for the visible window. *)
+let ref_vlist inst ~paginate ~item_extent (rows : t list) : t =
+ fun ctx parent ->
+  let node =
+    virtual_list ~key:"ref-window" ~grow:1. ~gap:4 ~item_extent
+      ~overscan:1
+      ~data_attrs:
+        (( "style"
+         , "border-top:1px solid var(--lui-c-border);padding-top:8px" )
+         ::
+         (if paginate then
+            [ ("data-virt-count", string_of_int (List.length rows)) ]
+          else []))
+      rows ctx parent
+  in
+  if paginate then
+    Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
+        (V.ops ()).V.o_load_more inst);
+  node
+
+let block_line (s : V.vstate) u : t =
+  match Hashtbl.find_opt s.V.blocks u with
+  | Some blk -> list_row_el ~row_uuid:u ~blk
+  | None -> box ~key:("miss-" ^ u) []
+
+let ref_header inst ~key ~title : t =
+  let collapsed = V.Sset.mem key (V.get inst).V.collapsed_groups in
+  row ~key:("h-" ^ key) ~cross:`center ~gap:4
+    ~style_class:"ls-foldable-header"
+    [ Ui_parts.pressable
+        ~on_press:(fun _ ->
+          V.update inst (fun st ->
+              { st with
+                V.collapsed_groups =
+                  (if V.Sset.mem key st.V.collapsed_groups then
+                     V.Sset.remove key st.V.collapsed_groups
+                   else V.Sset.add key st.V.collapsed_groups)
+              }))
+        (box ~width:14 ~height:16
+           [ icon ~name:(`app "caret-right") ~point_size:16
+               ~style_class:
+                 ("rotating-arrow "
+                  ^ if collapsed then "collapsed" else "not-collapsed")
+               [] ])
+    ; title ]
+
+(* One virtual row per header and per block, so a collapsed group drops
+   its blocks and an off-screen group is not laid out. *)
+let ref_grouped_lines inst (s : V.vstate) (gs : Wr.vrow_group list) : t list =
+  List.concat
+    (List.mapi
+       (fun i g ->
+         let key = "g" ^ string_of_int i in
+         let header =
+           ref_header inst ~key
+             ~title:(text ~value:(group_title s g.Wr.gv) [])
+         in
+         if V.Sset.mem key s.V.collapsed_groups then [ header ]
+         else header :: List.map (block_line s) g.Wr.grows)
+       gs)
+
+let ref_grouped_list_lines inst (s : V.vstate)
+    (gs : Wr.vrow_group_list list) : t list =
+  List.concat
+    (List.mapi
+       (fun i g ->
+         List.concat
+           (List.mapi
+              (fun j (buuid, rows) ->
+                let key =
+                  "g" ^ string_of_int i ^ "-" ^ string_of_int j
+                in
+                let pname =
+                  match rows with
+                  | u :: _ -> (
+                      match Hashtbl.find_opt s.V.blocks u with
+                      | Some blk ->
+                          Option.value
+                            (Decode.block_of_wire blk).Model.block_page_name
+                            ~default:(row_title s buuid)
+                      | None -> row_title s buuid)
+                  | [] -> row_title s buuid
+                in
+                let header =
+                  ref_header inst ~key
+                    ~title:
+                      (link
+                         ~url:
+                           ("#/page/"
+                            ^ Ui_services.uri_encode_component pname)
+                         ~target:`self_ ~style_class:"page-ref" ~text:pname
+                         [])
+                in
+                if V.Sset.mem key s.V.collapsed_groups then [ header ]
+                else header :: List.map (block_line s) rows)
+              g.Wr.glparts))
+       gs)
+
 let render_list inst s : t =
+  let more = more_ref_rows inst s in
+  let s = windowed inst s in
   match s.V.data with
+  | Wr.VGrouped gs when ref_view inst ->
+      ref_vlist inst ~paginate:more ~item_extent:44.
+        (ref_grouped_lines inst s gs)
   | Wr.VGrouped gs ->
       (* cljs grouped list: .flex.flex-col.border-t.pt-2.gap-2 wrapper +
          .group-list-view; each group body sits in div.-ml-2 (list rows
-         hang 8px left of the group title) *)
+         hang 8px left of the group title). virt-end rides the last
+         group only — every earlier group's tail is inside the viewport
+         and would otherwise page through the whole result. *)
+      let last = List.length gs - 1 in
       column ~gap:8
         ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
@@ -1417,17 +1671,22 @@ let render_list inst s : t =
                ~title:(text ~value:(group_title s g.Wr.gv) [])
                ~body:
                  (box ~margin_left:(-8) ~margin_top:4
-                    [ list_stream inst g.Wr.grows ]))
+                    [ list_stream ~paginate:(more && i = last) inst g.Wr.grows ]))
            gs)
+  | Wr.VGroupedList gs when ref_view inst ->
+      ref_vlist inst ~paginate:more ~item_extent:44.
+        (ref_grouped_list_lines inst s gs)
   | Wr.VGroupedList gs ->
       (* cljs renders each partition as a foldable whose title carries
          the page-ref link (caret + page name); the groups wrapper draws
          master's .border-t.pt-2.gap-2 above the partition list *)
+      let last_i = List.length gs - 1 in
       column ~gap:8
         ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.concat
            (List.mapi
               (fun i g ->
+                let last_j = List.length g.Wr.glparts - 1 in
                 List.mapi
                   (fun j (buuid, rows) ->
                     (* partition header = breadcrumb of the first row
@@ -1456,44 +1715,58 @@ let render_list inst s : t =
                            ~text:pname [])
                       ~body:
                         (box ~margin_left:(-8) ~margin_top:4
-                           [ list_stream inst rows ]))
+                           [ list_stream
+                               ~paginate:(more && i = last_i && j = last_j)
+                               inst rows ]))
                   g.Wr.glparts)
               gs))
-  | _ -> list_stream inst (all_row_uuids s)
+  | _ when ref_view inst ->
+      ref_vlist inst ~paginate:more ~item_extent:36.
+        (List.map (block_line s) (all_row_uuids s))
+  | _ -> list_stream ~paginate:more inst (all_row_uuids s)
 
 let render_gallery inst _s : t =
  fun ctx parent ->
   (* columns is a Grid-only property — on a row node GridColumns is
-     rejected and the whole mount batch dies *)
+     rejected and the whole mount batch dies. Cards follow the same
+     materialized prefix as the list, so a reference gallery does not
+     mount every row. *)
   grid ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
           (Logseq_el.own ctx
              (Signal.map
-                (fun (s' : V.vstate) -> flat_items s')
+                (fun (s' : V.vstate) -> flat_items (windowed inst s'))
                 (Signal.value (inst.V.st))))
         ~key:keyed_row_key ~cmp:String.compare
         ~mount:(fun item_sig -> gallery_card_el_sig inst item_sig) ]
     ctx parent
 
 let render_table inst s : t =
+  let more = more_ref_rows inst s in
+  let s = windowed inst s in
   match s.V.data with
   | Wr.VGrouped gs ->
       (* cljs grouped tables share the .flex.flex-col.border-t.pt-2.gap-2
          partition wrapper (no .group-list-view — that's list display) *)
+      let last = List.length gs - 1 in
       column ~gap:8
         ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.gv) [])
-               ~body:(grouped_table inst ~rows:g.Wr.grows))
+               ~body:
+                 (grouped_table ~paginate:(more && i = last) inst
+                    ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
+      let last_i = List.length gs - 1 in
       column ~gap:8
         ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
         (List.mapi
            (fun i g ->
+             let last_j = List.length g.Wr.glparts - 1 in
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.glv) [])
                ~body:
@@ -1503,13 +1776,16 @@ let render_table inst s : t =
                          foldable inst
                            ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
                            ~title:(text ~value:(row_title s buuid) [])
-                           ~body:(grouped_table inst ~rows))
+                           ~body:
+                             (grouped_table
+                                ~paginate:(more && i = last_i && j = last_j)
+                                inst ~rows))
                        g.Wr.glparts)))
            gs)
   | _ ->
       (* cljs view-table wraps the table in a random-uuid div *)
       box ~grow:1. ~accessibility_identifier:(Ui_services.env_random_uuid ())
-        [ table_el inst s ]
+        [ table_el ~paginate:more inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
   column ~gap:8 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.

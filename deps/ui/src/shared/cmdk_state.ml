@@ -116,6 +116,10 @@ type view =
   ; tip : int (* 0 = filter-results, 1 = open-sidebar (cljs rand-tip) *)
   ; sidebar : bool (* cljs :sidebar? — drops the hints row and the group
                       show-more link *)
+  ; persist : bool (* default-context search writes the last query.
+                      A command-palette session forces the Commands
+                      filter; persisting that would make the next
+                      Cmd-K open on "Search only: Commands". *)
   }
 
 type t =
@@ -127,7 +131,8 @@ type t =
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
   ; expanded = []; hl = -1; mouse = false; filter = None
-  ; recents = []; edited = false; tip = 0; sidebar = false }
+  ; recents = []; edited = false; tip = 0; sidebar = false
+  ; persist = true }
 
 let latest_vs : view Signal.signal option ref = ref None
 let latest_t : t option ref = ref None
@@ -897,7 +902,8 @@ let open_palette ?(move = false) st =
           ; filter =
               (if move then Some G_nodes
                else match saved with Some (_, g) -> g | None -> None)
-          ; tip });
+          ; tip
+          ; persist = true });
   set_in st (fun v -> { v with open_ = true });
   let q = (get st).input in
   (* prime synchronously so commands show before the search lands *)
@@ -913,9 +919,11 @@ let open_palette ?(move = false) st =
 let close st =
   let v = get st in
   (* cljs persist-cmdk-query-state! runs on unmount and every committed
-     action; move mode is outside the default context *)
-  if not v.move_mode then save_last_search st.svs v;
-  set_in st (fun v -> { v with open_ = false })
+     action; move mode is outside the default context. A command-palette
+     session (persist = false) must not overwrite the last real search
+     with its forced Commands filter. *)
+  if v.persist && not v.move_mode then save_last_search st.svs v;
+  set_in st (fun v -> { v with open_ = false; persist = true })
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });
@@ -1510,7 +1518,11 @@ let dispatch_id (cid : string) =
           if (get st).open_ then close st
           else begin
             open_palette st;
-            set_in st (fun v -> { v with filter = Some G_commands; input = "" });
+            (* forced Commands filter is session-local: do not write it
+               back as the next Cmd-K's restored search *)
+            set_in st (fun v ->
+                { v with filter = Some G_commands; input = ""; persist = false });
+            st.svs.Svs.set_input_value "";
             refresh st
           end
       | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->

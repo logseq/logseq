@@ -372,8 +372,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                         (box ~key:("b-" ^ uuid)
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
-                           ~opacity:0.8
-                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
+                           ~opacity:1.
+                           ~background:"var(--lx-gray-09, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
                      []))
@@ -411,8 +411,11 @@ let content_el uuid (b : Model.block) : t =
     | None -> "transparent"
   in
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
-     nonzero box so empty blocks stay clickable *)
-  box ~key:("content-" ^ uuid) ~style_class:"block-content"
+     nonzero box so empty blocks stay clickable. cursor:text in the style
+     string is ignored by the native host; the cursor prop is what it
+     reads, and an I-beam is the pointer for rendered block text. *)
+  Ui_components.with_props [ Ui_components.Prop.cursor `text ]
+  (box ~key:("content-" ^ uuid) ~style_class:"block-content"
     ~min_height:24 ~main:`center ~grow:1. ~background:title_bg
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
@@ -458,7 +461,7 @@ let content_el uuid (b : Model.block) : t =
                    Render.title_block ~self:uuid ~annot:true
                      ~resolved:(S.title_for uuid b.block_title)
                      b))       ]
-    ]
+    ])
 
 let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
 

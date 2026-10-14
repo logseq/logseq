@@ -229,6 +229,19 @@ let journal_summaries w =
       List.filter_map Decode.page_of_summary xs
   | _ -> []
 
+(* cljs util/scroll-to-top on the app scroller *)
+let scroll_to_top () =
+  match Ui_services.dom_by_id "main-content-container" with
+  | Some el -> el.Ui_services.set_scroll_top 0.
+  | None -> ()
+
+(* Navigate_to flushes before the host has laid out the new tree, and a
+   later focus/lazy pass can leave the scroller parked on the page we
+   just left. Reset once now and once after the next turn. *)
+let scroll_main_top () =
+  scroll_to_top ();
+  ignore (Ui_services.timers_timeout (fun () -> scroll_to_top ()) 0)
+
 (* a journals list shorter than the scroller fires no scroll event —
    after each commit, pull the next chunk until the content overflows
    or the db runs out of days. Goes through the journals_load_more hook
@@ -265,6 +278,7 @@ let load_journals () =
     (match Runtime.route () with
      | Model.Journals | Model.Home ->
          Runtime.send (Action.Journals_loaded js);
+         scroll_main_top ();
          maybe_fill_journals ()
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
@@ -343,12 +357,6 @@ let go_to_journals_target () : (string * Model.route) Js.Promise.t =
      with
      | Some _ -> ("#/all-journals", Model.Journals)
      | None -> ("#/", Model.Home))
-
-(* cljs util/scroll-to-top on the app scroller *)
-let scroll_to_top () =
-  match Ui_services.dom_by_id "main-content-container" with
-  | Some el -> el.Ui_services.set_scroll_top 0.
-  | None -> ()
 
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
@@ -753,7 +761,10 @@ let resolve () =
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();
       Option.iter jump_to_anchor (route_anchor ());
-      Runtime.flush ())
+      Runtime.flush ();
+      match route with
+      | Model.Journals | Model.Home -> scroll_main_top ()
+      | _ -> ())
 
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so

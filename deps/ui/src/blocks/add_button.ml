@@ -13,7 +13,14 @@ open Lui_elements
    children), opacity-50 otherwise; the row carries
    .ls-block-content-indent when the owner is a block (block routes and
    sidebar block items). Callers supply both flags per region —
-   constant for snapshot-backed lists, derived signals for live ones. *)
+   constant for snapshot-backed lists, derived signals for live ones.
+
+   On an empty page this row is the only bullet. The web fades it to
+   50% and relies on :hover { opacity: 1 }, which this host does not
+   apply. Compounded with the dot's own 0.8 that resting pixel is
+   about #e9e9e9 — the bullet the empty journal actually shows. Keep
+   the row hidden once real blocks exist, and paint the empty-page
+   dot at full opacity in the same gray as a block bullet. *)
 let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
   if Ui_services.env_publishing () then Logseq_el.nothing context parent
@@ -33,7 +40,7 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                  | None -> []))
           ~opacity:
             (reactive
-               (fun (has, _) -> if has then 0. else 0.5) fs)
+               (fun (has, _) -> if has then 0. else 1.) fs)
           [ row ~key:"bab-row"
               [ (* margin-left follows .ls-block-content-indent on the
                    outer column: 22px flat, 6px indented — bound to the
@@ -50,8 +57,8 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                           ~corner_radius:8
                           [ box ~key:"bab-b" ~style_class:"bullet"
                               ~transition:"transform 0.2s" ~width:6 ~height:6
-                              ~corner_radius:999 ~opacity:0.8
+                              ~corner_radius:999 ~opacity:1.
                               ~background:
-                                "var(--lx-gray-08, var(--ls-block-bullet-color))"
+                                "var(--lx-gray-09, var(--ls-block-bullet-color))"
                               [] ] ]) ] ]))
       context parent

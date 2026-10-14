@@ -72,6 +72,15 @@ let view_type_icon v =
 let view_tab_anchor_id inst (v : Wr.view_ent) =
   "view-tab-" ^ string_of_int inst.V.id ^ "-" ^ v.Wr.vu
 
+(* The built-in all-pages view is titled "All" (view/all). Next to the
+   table glyph and the row count that reads as "All 3 +", which is not
+   a page title. Show the nav name "Pages" for that default only. *)
+let tab_label inst (v : Wr.view_ent) =
+  let raw = V.display_title v in
+  match inst.V.kind with
+  | V.KAllPages when raw = I.all -> I18n.t "nav.all-pages/title"
+  | _ -> raw
+
 let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
  fun ctx parent ->
   (* icon/title/count ride v_sig — a rename or retype republishes the
@@ -91,7 +100,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   Ui_parts.float_prop_signal Lui_protocol.Opacity current_sig
     (fun cur -> if cur then 1. else 0.75)
     (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
-    (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
+    (button ~variant:`ghost ~size:`sm ~label:(tab_label inst v0)
        ~style_class:"ls-view-tab"
        ~height:24 ~min_height:24
        ~padding_horizontal:4 ~padding_vertical:2
@@ -144,7 +153,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      | V.KLinkedRefs | V.KUnlinkedRefs -> false
                      | _ -> true)
                    isig))
-           (row ~cross:`center ~style_class:"ls-icon-color-wrap"
+           (row ~cross:`center ~margin_right:6 ~style_class:"ls-icon-color-wrap"
               [ icon ~point_size:16
                   ~style_class:("ls-icon-" ^ view_type_icon v0)
                   ~name_signal:
@@ -155,7 +164,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                           v_sig))
                   [] ])
        ; text
-           ~value:(reactive (fun (v : Wr.view_ent) -> V.display_title v) v_sig)
+           ~value:(reactive (fun (v : Wr.view_ent) -> tab_label inst v) v_sig)
            []
        ; (* show-items-count? is set for linked-references but not
             unlinked — linked also appends /total when the unfiltered
