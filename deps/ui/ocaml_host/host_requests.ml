@@ -1,3 +1,5 @@
+module Lui_text = Host_platform.Text
+
 (* Platform-request service for the OCaml native host — the in-process
    host-side platform_request + dom-ops handlers — the OCaml host
    answers them in-process.
@@ -527,18 +529,28 @@ let queue_input_focus bid focused =
     (bid, focused)
     :: List.filter (fun (b, _) -> b <> bid) !pending_focus
 
-(* Restore the editor the app already focused, after a remount dropped
-   the sink node (Ui.focused goes to 0 or dead, with no new
-   set-input-focus). Do not scan the tree for the first block-id: that
-   steals focus onto a non-editable block, arms SDL text input, and the
-   next poll_event blocks inside XFilterEvent for an ibus/XIM timeout.
-   A focused popup, menu, or other input is left alone. *)
+(* Restore the editor after a remount dropped the focused sink
+   (Ui.focused goes to 0 or dead, with no new set-input-focus). Prefer
+   the block the app last focused; pointer-driven mounts never emit
+   set-input-focus, so fall back to a live editor sink. Never pick a
+   plain block-id node: that steals focus onto a non-editable block,
+   arms SDL text input, and the next poll_event blocks inside
+   XFilterEvent for an ibus/XIM timeout. A focused popup, menu, or
+   other input is left alone. *)
+let editor_sink_bid store =
+  List.find_map (fun id ->
+    if Lui_store.kind store id = "extension:logseq-editor"
+    then Lui_store.string_prop store id "block-id" else None)
+    (Lui_store.preorder store)
+
 let ensure_ed_focus_ (e : env) =
-  match !editor_focus_bid with
-  | None -> ()
-  | Some bid ->
-    if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
-      ignore (try_set_input_focus e bid true)
+  if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
+    match (match !editor_focus_bid with
+           | Some bid -> Some bid
+           | None -> editor_sink_bid e.store) with
+    | Some bid -> ignore (try_set_input_focus e bid true)
+    | None -> ()
+
 (* Draw the model caret using the same current glyph geometry used by
    caret-rect replies. The input sink itself has no visible bounds. *)
 let editor_caret_ops ~color =

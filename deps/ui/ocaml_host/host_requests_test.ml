@@ -1,3 +1,5 @@
+module Lui_text = Host_platform.Text
+
 open Lui_protocol
 
 let check message condition = if not condition then failwith message
