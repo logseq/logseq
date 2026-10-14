@@ -6,7 +6,7 @@ No dependency edits or pushes; additional-repository authorization is pending.
 Actual native Long Page: resize1280x900 →1100x700 →1280x900. Final tree shows
 root stack/row/split1280x900, but split's first column1100x900, header1100x48
 and page viewport1097x852. A later app layout mutation can restore the width.
-`../page-spacing/native-clamp-after-tree.log` preserves the actual tree.
+`../page-spacing/native-clamp-after-tree.txt` preserves the actual tree.
 
 Read-only independent installed-library probe:
 

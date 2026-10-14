@@ -1,0 +1,1695 @@
+icons=6192
+scroll-range id=92 viewport=12.0,300.0 0.0x160.0 bounds=12.0,300.0 28.0,460.0 cap=0.0 offset=0.0
+scroll-range id=98 viewport=3.0,48.0 1097.0x852.0 bounds=3.0,48.0 1100.0,1602.0 cap=702.0 offset=702.0
+1 stack key=- class=theme-container-inner ls-hl-colored h-full 0,0 1280x900
+  2 row key=- class=- grow=1 0,0 1280x900
+    3 split key=- class=- value=1 grow=1 0,0 1280x900
+      4 column key=- class=- grow=1 0,0 1100x900
+        5 row key=- class=cp__header height=48 0,0 1100x48
+          6 row key=- class=cp__header-l margin-left=0 0,8 80x32
+            7 button key=- class=- height=32 width=32 8,8 32x32
+              8 icon key=- class=ui__icon ls-icon-menu-2 height=20 width=20 name="app:menu-2" ires=ok:app:menu-2 14,14 20x20
+            134 button key=- class=- height=32 width=32 40,8 32x32
+              135 icon key=- class=ui__icon ls-icon-search height=20 width=20 name="search" ires=ok:search 46,14 20x20
+          9 row key=- class=cp__header-r grow=1 80,8 1020x32
+            10 box key=- class=- 999,24 0x0
+            807 button key=- class=- height=32 width=32 999,8 32x32
+              808 icon key=- class=ui__icon ls-icon-home height=20 width=20 name="app:home" ires=ok:app:home 1005,14 20x20
+            12 row key=- class=- 1031,8 64x32
+              13 button key=- class=toolbar-dots-btn height=32 width=32 1031,8 32x32
+                14 icon key=- class=ui__icon ls-icon-dots height=20 width=20 name="app:dots" ires=ok:app:dots 1037,14 20x20
+              15 button key=- class=- height=32 width=32 1063,8 32x32
+                16 icon key=- class=ui__icon ls-icon-layout-sidebar-right height=20 width=20 name="app:layout-sidebar-right" ires=ok:app:layout-sidebar-right 1069,14 20x20
+              17 spacer key=- class=- 1095,24 0x0
+        18 split key=- class=- value=0.0001 grow=1 0,48 1100x852
+          19 box key=- class=cp__sidebar-left-layout 0,48 0x852
+            20 row key=- class=- grow=1 0,48 0x852
+              21 column key=- class=left-sidebar-inner as-container grow=1 0,48 0x852
+                22 box key=- class=left-sidebar-top height=4 0,48 0x4
+                23 column key=- class=- grow=1 0,52 0x848
+                  24 column key=- class=sidebar-header-container 0,52 0x172
+                    25 box key=- class=- 0,52 24x32
+                      26 row key=- class=cp__graphs-selector 12,52 0x32
+                        27 button key=- class=item grow=1 opacity=0.9 12,52 8x32
+                          28 row key=- class=- grow=1 16,56 0x24
+                            29 row key=- class=thumb height=24 width=24 opacity=0.8 margin-left=-2 14,56 0x24
+                              30 icon key=- class=ui__icon height=16 width=16 name="app:topology-star" ires=ok:app:topology-star 14,60 0x16
+                            31 text key=- class=- grow=1 text="Demo" font-size="var(--text-sm)" font-weight=500 margin-left=4 22,68 0x0
+                            32 icon key=- class=ui__icon height=18 width=18 name="app:selector" ires=ok:app:selector 26,59 0x18
+                    33 box key=- class=sidebar-content-group is-expand 0,88 24x136
+                      34 column key=- class=sidebar-content-group-inner 12,88 0x136
+                        35 row key=- class=hd non-collapsable enter-show-more height=32 12,88 8x32
+                          36 box key=- class=a margin-left=4 20,88 0x32
+                            37 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,88 0x32
+                              38 text key=- class=- text="Navigations" font-size="0.75rem" 20,104 0x0
+                          39 box key=- class=b height=32 width=28 opacity=0 20,88 0x32
+                            40 row key=- class=as-edit opacity=0.8 20,97 0x14
+                              41 icon key=- class=ui__icon height=14 width=14 name="app:filter-edit" margin-left=7 ires=ok:app:filter-edit 27,97 0x14
+                        42 box key=- class=bd 12,120 0x104
+                          43 column key=- class=sidebar-navigations 12,124 0x100
+                            44 box key=- class=journals-nav 12,124 0x32
+                              45 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,124 4x32
+                                46 icon key=- class=ui__icon height=16 width=16 name="app:calendar" margin-left=4 ires=ok:app:calendar 18,132 0x16
+                                47 text key=- class=- grow=1 text="Journals" 26,140 0x0
+                                48 row key=- class=- 26,130 0x20
+                                  49 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,130 0x20
+                                    50 row key=- class=shui-shortcut-separate 30,130 0x20
+                                      51 row key=- class=- height=20 30,130 20x20
+                                        52 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,132 8x16
+                                      53 row key=- class=- height=20 54,130 20x20
+                                        54 kbd key=- class= text="J" font-size="var(--lx-text-header)" font-weight=400 61,132 6x16
+                                55 box key=- class=- 0,0 0x0
+                            56 box key=- class=flashcards-nav 12,158 0x32
+                              57 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,158 4x32
+                                58 icon key=- class=ui__icon height=16 width=16 name="app:cards" margin-left=4 ires=ok:app:cards 18,166 0x16
+                                59 text key=- class=- grow=1 text="Flashcards" 26,174 0x0
+                                60 row key=- class=- 26,164 0x20
+                                  61 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,164 0x20
+                                    62 row key=- class=shui-shortcut-separate 30,164 0x20
+                                      63 row key=- class=- height=20 30,164 20x20
+                                        64 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,166 8x16
+                                      65 row key=- class=- height=20 54,164 20x20
+                                        66 kbd key=- class= text="F" font-size="var(--lx-text-header)" font-weight=400 60,166 8x16
+                                67 box key=- class=- 0,0 0x0
+                            68 box key=- class=all-pages-nav 12,192 0x32
+                              69 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,192 4x32
+                                70 icon key=- class=ui__icon height=16 width=16 name="app:files" margin-left=4 ires=ok:app:files 18,200 0x16
+                                71 text key=- class=- grow=1 text="Pages" 26,208 0x0
+                                72 box key=- class=- 0,0 0x0
+                  73 column key=- class=sidebar-contents-container 0,228 24x236
+                    74 box key=- class=sidebar-content-group favorites is-expand 12,232 0x32
+                      75 column key=- class=sidebar-content-group-inner 12,232 0x32
+                        76 row key=- class=hd height=32 12,232 8x32
+                          77 box key=- class=a margin-left=4 20,232 0x32
+                            78 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,232 0x32
+                              79 text key=- class=- text="Favorites" font-size="0.75rem" 20,248 0x0
+                          80 box key=- class=b height=32 width=28 opacity=0.4 20,232 0x32
+                            81 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,241 15x15
+                        82 box key=- class=- 0,0 0x0
+                    83 box key=- class=sidebar-content-group recent has-children is-expand 12,268 0x192
+                      84 column key=- class=sidebar-content-group-inner 12,268 0x192
+                        85 row key=- class=hd height=32 12,268 8x32
+                          86 box key=- class=a margin-left=4 20,268 0x32
+                            87 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,268 0x32
+                              88 text key=- class=- text="Recent" font-size="0.75rem" 20,284 0x0
+                          89 box key=- class=b height=32 width=28 opacity=0.4 20,268 0x32
+                            90 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,277 15x15
+                        91 box key=- class=bd 12,300 0x160
+                          92 list key=- class= 12,300 0x160
+                            168 column key=- class=recent-item font-weight=500 12,300 0x32
+                              169 row key=- class=link-item group height=32 opacity=0.8 12,300 16x32
+                                170 row key=- class=page-icon 20,308 0x16
+                                  171 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,308 0x16
+                                172 text key=- class=page-title grow=1 text="Long Page" 24,316 0x0
+                              173 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,300 28x28
+                                174 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,305 16x18
+                            175 column key=- class=recent-item font-weight=500 12,332 0x32
+                              176 row key=- class=link-item group height=32 opacity=0.8 12,332 16x32
+                                177 row key=- class=page-icon 20,340 0x16
+                                  178 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,340 0x16
+                                179 text key=- class=page-title grow=1 text="Native focus verified" 24,348 0x0
+                              180 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,332 28x28
+                                181 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,337 16x18
+                            182 column key=- class=recent-item font-weight=500 12,364 0x32
+                              183 row key=- class=link-item group height=32 opacity=0.8 12,364 16x32
+                                184 row key=- class=page-icon 20,372 0x16
+                                  185 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,372 0x16
+                                186 text key=- class=page-title grow=1 text="Native creation context" 24,380 0x0
+                              187 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,364 28x28
+                                188 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,369 16x18
+                            189 column key=- class=recent-item font-weight=500 12,396 0x32
+                              190 row key=- class=link-item group height=32 opacity=0.8 12,396 16x32
+                                191 row key=- class=page-icon 20,404 0x16
+                                  192 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,404 0x16
+                                193 text key=- class=page-title grow=1 text="Native parity smoke" 24,412 0x0
+                              194 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,396 28x28
+                                195 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,401 16x18
+                            196 column key=- class=recent-item font-weight=500 12,428 0x32
+                              197 row key=- class=link-item group height=32 opacity=0.8 12,428 16x32
+                                198 row key=- class=page-icon 20,436 0x16
+                                  199 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,436 0x16
+                                200 text key=- class=page-title grow=1 text="Parity Home" 24,444 0x0
+                              201 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,428 28x28
+                                202 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,433 16x18
+          93 column key=- class=flex-1 flex grow=1 3,48 1097x852
+            94 extension:logseq-dom key=- class=- 3,48 1097x0
+            95 box key=- class=- 0,0 0x0
+              96 box key=- class=- 0,0 0x0
+              97 spacer key=- class=- 0,0 0x0
+            98 scroll key=- class=scrollbar-spacing grow=1 orientation="vertical" 3,48 1097x852
+              99 row key=- class=- grow=1 margin-left=16 35,48 1049x820
+                100 box key=- class=cp__sidebar-main-content grow=1 80,48 960x820
+                  101 column key=- class=mx-auto pb-24 80,48 960x820
+                    845 box key=- class=page cp__page-inner-wrap font-size="var(--ls-page-text-size, 16px)" 80,48 960x820
+                      846 column key=- class=page-inner 88,48 944x724
+                        847 box key=- class=- 3,48 0x0
+                          848 row key=- class=- 88,48 944x0
+                            849 extension:logseq-div key=- class=ls-page-title content title 88,48 188x0
+                              850 box key=- class=- grow=1 88,48 188x0
+                                851 column key=- class=ls-block 88,48 188x0
+                                  852 row key=- class=block-main-container is-page-title-row ls-pt-no-icon grow=1 margin-left=-30 58,48 218x0
+                                    853 row key=- class=is-with-icon bullet-hidden block-control-wrap height=24 width=24 58,48 24x0
+                                      854 box key=- class=block-control opacity=0.4 58,48 22x0
+                                        855 box key=- class=control-hide rotating-arrow not-collapsed 58,48 22x0
+                                          856 icon key=- class=- height=13 width=13 name="app:rotating-arrow" ires=ok:app:rotating-arrow 58,48 13x0
+                                    857 column key=- class=- grow=1 90,48 186x0
+                                      858 column key=- class=- 90,48 186x0
+                                        859 row key=- class=- 90,48 186x0
+                                          860 column key=- class=- grow=1 90,48 186x0
+                                            861 box key=- class=ls-page-title-container block-content-or-editor-wrap grow=1 font-size="var(--ls-page-title-size, 32px)" font-weight=500 90,48 186x0
+                                              862 box key=- class=block-content-or-editor-inner grow=1 90,48 186x0
+                                                863 row key=- class=block-row grow=1 90,48 186x0
+                                                  864 column key=- class=block-content-wrapper grow=1 90,48 182x0
+                                                    865 row key=- class=ls-page-title-actions opacity=0 90,48 182x0
+                                                      866 button key=- class=as-ghost height=24 text="Add icon" font-size="12px" 90,48 74x0
+                                                      867 button key=- class=as-ghost height=24 text="Set property" font-size="12px" 172,48 92x0
+                                                      868 box key=- class=- 272,48 0x0
+                                                    869 extension:logseq-div key=- class=block-content 90,48 182x0
+                                                      870 row key=- class=- 90,48 182x0
+                                                        871 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 90,48 182x0
+                                                          872 box key=- class=- 90,48 182x0
+                                                            873 text key=- class=block-title-wrap text="Long Page" 90,48 182x0
+                                                  874 row key=- class=ls-block-right 276,48 0x0
+                                                    875 box key=- class=- 276,48 0x0
+                                  876 column key=- class=- 88,48 188x0
+                              877 row key=- class=- 88,48 188x0
+                                878 box key=- class=- 88,48 0x0
+                            879 row key=- class=- 1032,48 0x0
+                              880 box key=- class=- 1032,48 0x0
+                          881 box key=- class=- 3,48 0x0
+                        882 box key=- class=- 3,48 0x0
+                        883 column key=- class=ls-page-blocks margin-left=-20 68,48 964x724
+                          884 box key=- class=page-blocks-inner 68,48 964x724
+                            885 box key=- class=- grow=1 68,48 964x696
+                              886 box key=- class=blocks-list-wrap 68,48 964x696
+                                887 column key=- class=ls-block swipe-item 68,48 964x0
+                                  888 row key=- class=block-main-container 68,48 964x0
+                                    889 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      890 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        891 box key=- class=control-hide opacity=0 70,48 13x0
+                                          892 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            893 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      894 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        895 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          896 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    897 column key=- class=- grow=1 110,48 922x0
+                                      898 column key=- class=- 110,48 922x0
+                                        899 row key=- class=- 110,48 922x0
+                                          900 column key=- class=- grow=1 110,48 922x0
+                                            901 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              902 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                903 row key=- class=block-row grow=1 110,48 922x0
+                                                  904 box key=- class=- 3,48 0x0
+                                                  905 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    906 box key=- class=block-content grow=1 110,48 918x0
+                                                      907 row key=- class=- 110,48 918x0
+                                                        908 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          909 row key=- class=- 110,48 330x0
+                                                            910 text key=- class=block-title-wrap text="Scroll row 01: repeatable long-page content" 110,48 330x0
+                                                    911 row key=- class=- 1028,48 0x0
+                                                  912 row key=- class=ls-block-right 1032,48 0x0
+                                                    913 box key=- class=- 3,48 0x0
+                                                    914 box key=- class=- 3,48 0x0
+                                            915 box key=- class=- 3,48 0x0
+                                      916 box key=- class=- 3,48 0x0
+                                  917 column key=- class=ls-block-content-indent 68,48 964x0
+                                918 column key=- class=ls-block swipe-item 68,48 964x0
+                                  919 row key=- class=block-main-container 68,48 964x0
+                                    920 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      921 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        922 box key=- class=control-hide opacity=0 70,48 13x0
+                                          923 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            924 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      925 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        926 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          927 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    928 column key=- class=- grow=1 110,48 922x0
+                                      929 column key=- class=- 110,48 922x0
+                                        930 row key=- class=- 110,48 922x0
+                                          931 column key=- class=- grow=1 110,48 922x0
+                                            932 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              933 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                934 row key=- class=block-row grow=1 110,48 922x0
+                                                  935 box key=- class=- 3,48 0x0
+                                                  936 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    937 box key=- class=block-content grow=1 110,48 918x0
+                                                      938 row key=- class=- 110,48 918x0
+                                                        939 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          940 row key=- class=- 110,48 333x0
+                                                            941 text key=- class=block-title-wrap text="Scroll row 02: repeatable long-page content" 110,48 333x0
+                                                    942 row key=- class=- 1028,48 0x0
+                                                  943 row key=- class=ls-block-right 1032,48 0x0
+                                                    944 box key=- class=- 3,48 0x0
+                                                    945 box key=- class=- 3,48 0x0
+                                            946 box key=- class=- 3,48 0x0
+                                      947 box key=- class=- 3,48 0x0
+                                  948 column key=- class=ls-block-content-indent 68,48 964x0
+                                949 column key=- class=ls-block swipe-item 68,48 964x0
+                                  950 row key=- class=block-main-container 68,48 964x0
+                                    951 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      952 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        953 box key=- class=control-hide opacity=0 70,48 13x0
+                                          954 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            955 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      956 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        957 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          958 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    959 column key=- class=- grow=1 110,48 922x0
+                                      960 column key=- class=- 110,48 922x0
+                                        961 row key=- class=- 110,48 922x0
+                                          962 column key=- class=- grow=1 110,48 922x0
+                                            963 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              964 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                965 row key=- class=block-row grow=1 110,48 922x0
+                                                  966 box key=- class=- 3,48 0x0
+                                                  967 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    968 box key=- class=block-content grow=1 110,48 918x0
+                                                      969 row key=- class=- 110,48 918x0
+                                                        970 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          971 row key=- class=- 110,48 333x0
+                                                            972 text key=- class=block-title-wrap text="Scroll row 03: repeatable long-page content" 110,48 333x0
+                                                    973 row key=- class=- 1028,48 0x0
+                                                  974 row key=- class=ls-block-right 1032,48 0x0
+                                                    975 box key=- class=- 3,48 0x0
+                                                    976 box key=- class=- 3,48 0x0
+                                            977 box key=- class=- 3,48 0x0
+                                      978 box key=- class=- 3,48 0x0
+                                  979 column key=- class=ls-block-content-indent 68,48 964x0
+                                980 column key=- class=ls-block swipe-item 68,48 964x0
+                                  981 row key=- class=block-main-container 68,48 964x0
+                                    982 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      983 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        984 box key=- class=control-hide opacity=0 70,48 13x0
+                                          985 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            986 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      987 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        988 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          989 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    990 column key=- class=- grow=1 110,48 922x0
+                                      991 column key=- class=- 110,48 922x0
+                                        992 row key=- class=- 110,48 922x0
+                                          993 column key=- class=- grow=1 110,48 922x0
+                                            994 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              995 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                996 row key=- class=block-row grow=1 110,48 922x0
+                                                  997 box key=- class=- 3,48 0x0
+                                                  998 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    999 box key=- class=block-content grow=1 110,48 918x0
+                                                      1000 row key=- class=- 110,48 918x0
+                                                        1001 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1002 row key=- class=- 110,48 334x0
+                                                            1003 text key=- class=block-title-wrap text="Scroll row 04: repeatable long-page content" 110,48 334x0
+                                                    1004 row key=- class=- 1028,48 0x0
+                                                  1005 row key=- class=ls-block-right 1032,48 0x0
+                                                    1006 box key=- class=- 3,48 0x0
+                                                    1007 box key=- class=- 3,48 0x0
+                                            1008 box key=- class=- 3,48 0x0
+                                      1009 box key=- class=- 3,48 0x0
+                                  1010 column key=- class=ls-block-content-indent 68,48 964x0
+                                1011 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1012 row key=- class=block-main-container 68,48 964x0
+                                    1013 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1014 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1015 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1016 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1017 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1018 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1019 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1020 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1021 column key=- class=- grow=1 110,48 922x0
+                                      1022 column key=- class=- 110,48 922x0
+                                        1023 row key=- class=- 110,48 922x0
+                                          1024 column key=- class=- grow=1 110,48 922x0
+                                            1025 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1026 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1027 row key=- class=block-row grow=1 110,48 922x0
+                                                  1028 box key=- class=- 3,48 0x0
+                                                  1029 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1030 box key=- class=block-content grow=1 110,48 918x0
+                                                      1031 row key=- class=- 110,48 918x0
+                                                        1032 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1033 row key=- class=- 110,48 333x0
+                                                            1034 text key=- class=block-title-wrap text="Scroll row 05: repeatable long-page content" 110,48 333x0
+                                                    1035 row key=- class=- 1028,48 0x0
+                                                  1036 row key=- class=ls-block-right 1032,48 0x0
+                                                    1037 box key=- class=- 3,48 0x0
+                                                    1038 box key=- class=- 3,48 0x0
+                                            1039 box key=- class=- 3,48 0x0
+                                      1040 box key=- class=- 3,48 0x0
+                                  1041 column key=- class=ls-block-content-indent 68,48 964x0
+                                1042 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1043 row key=- class=block-main-container 68,48 964x0
+                                    1044 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1045 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1046 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1047 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1048 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1049 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1050 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1051 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1052 column key=- class=- grow=1 110,48 922x0
+                                      1053 column key=- class=- 110,48 922x0
+                                        1054 row key=- class=- 110,48 922x0
+                                          1055 column key=- class=- grow=1 110,48 922x0
+                                            1056 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1057 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1058 row key=- class=block-row grow=1 110,48 922x0
+                                                  1059 box key=- class=- 3,48 0x0
+                                                  1060 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1061 box key=- class=block-content grow=1 110,48 918x0
+                                                      1062 row key=- class=- 110,48 918x0
+                                                        1063 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1064 row key=- class=- 110,48 333x0
+                                                            1065 text key=- class=block-title-wrap text="Scroll row 06: repeatable long-page content" 110,48 333x0
+                                                    1066 row key=- class=- 1028,48 0x0
+                                                  1067 row key=- class=ls-block-right 1032,48 0x0
+                                                    1068 box key=- class=- 3,48 0x0
+                                                    1069 box key=- class=- 3,48 0x0
+                                            1070 box key=- class=- 3,48 0x0
+                                      1071 box key=- class=- 3,48 0x0
+                                  1072 column key=- class=ls-block-content-indent 68,48 964x0
+                                1073 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1074 row key=- class=block-main-container 68,48 964x0
+                                    1075 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1076 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1077 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1078 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1079 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1080 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1081 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1082 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1083 column key=- class=- grow=1 110,48 922x0
+                                      1084 column key=- class=- 110,48 922x0
+                                        1085 row key=- class=- 110,48 922x0
+                                          1086 column key=- class=- grow=1 110,48 922x0
+                                            1087 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1088 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1089 row key=- class=block-row grow=1 110,48 922x0
+                                                  1090 box key=- class=- 3,48 0x0
+                                                  1091 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1092 box key=- class=block-content grow=1 110,48 918x0
+                                                      1093 row key=- class=- 110,48 918x0
+                                                        1094 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1095 row key=- class=- 110,48 332x0
+                                                            1096 text key=- class=block-title-wrap text="Scroll row 07: repeatable long-page content" 110,48 332x0
+                                                    1097 row key=- class=- 1028,48 0x0
+                                                  1098 row key=- class=ls-block-right 1032,48 0x0
+                                                    1099 box key=- class=- 3,48 0x0
+                                                    1100 box key=- class=- 3,48 0x0
+                                            1101 box key=- class=- 3,48 0x0
+                                      1102 box key=- class=- 3,48 0x0
+                                  1103 column key=- class=ls-block-content-indent 68,48 964x0
+                                1104 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1105 row key=- class=block-main-container 68,48 964x0
+                                    1106 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1107 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1108 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1109 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1110 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1111 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1112 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1113 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1114 column key=- class=- grow=1 110,48 922x0
+                                      1115 column key=- class=- 110,48 922x0
+                                        1116 row key=- class=- 110,48 922x0
+                                          1117 column key=- class=- grow=1 110,48 922x0
+                                            1118 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1119 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1120 row key=- class=block-row grow=1 110,48 922x0
+                                                  1121 box key=- class=- 3,48 0x0
+                                                  1122 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1123 box key=- class=block-content grow=1 110,48 918x0
+                                                      1124 row key=- class=- 110,48 918x0
+                                                        1125 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1126 row key=- class=- 110,48 333x0
+                                                            1127 text key=- class=block-title-wrap text="Scroll row 08: repeatable long-page content" 110,48 333x0
+                                                    1128 row key=- class=- 1028,48 0x0
+                                                  1129 row key=- class=ls-block-right 1032,48 0x0
+                                                    1130 box key=- class=- 3,48 0x0
+                                                    1131 box key=- class=- 3,48 0x0
+                                            1132 box key=- class=- 3,48 0x0
+                                      1133 box key=- class=- 3,48 0x0
+                                  1134 column key=- class=ls-block-content-indent 68,48 964x0
+                                1135 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1136 row key=- class=block-main-container 68,48 964x0
+                                    1137 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1138 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1139 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1140 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1141 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1142 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1143 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1144 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1145 column key=- class=- grow=1 110,48 922x0
+                                      1146 column key=- class=- 110,48 922x0
+                                        1147 row key=- class=- 110,48 922x0
+                                          1148 column key=- class=- grow=1 110,48 922x0
+                                            1149 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1150 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1151 row key=- class=block-row grow=1 110,48 922x0
+                                                  1152 box key=- class=- 3,48 0x0
+                                                  1153 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1154 box key=- class=block-content grow=1 110,48 918x0
+                                                      1155 row key=- class=- 110,48 918x0
+                                                        1156 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1157 row key=- class=- 110,48 333x0
+                                                            1158 text key=- class=block-title-wrap text="Scroll row 09: repeatable long-page content" 110,48 333x0
+                                                    1159 row key=- class=- 1028,48 0x0
+                                                  1160 row key=- class=ls-block-right 1032,48 0x0
+                                                    1161 box key=- class=- 3,48 0x0
+                                                    1162 box key=- class=- 3,48 0x0
+                                            1163 box key=- class=- 3,48 0x0
+                                      1164 box key=- class=- 3,48 0x0
+                                  1165 column key=- class=ls-block-content-indent 68,48 964x0
+                                1166 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1167 row key=- class=block-main-container 68,48 964x0
+                                    1168 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1169 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1170 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1171 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1172 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1173 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1174 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1175 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1176 column key=- class=- grow=1 110,48 922x0
+                                      1177 column key=- class=- 110,48 922x0
+                                        1178 row key=- class=- 110,48 922x0
+                                          1179 column key=- class=- grow=1 110,48 922x0
+                                            1180 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1181 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1182 row key=- class=block-row grow=1 110,48 922x0
+                                                  1183 box key=- class=- 3,48 0x0
+                                                  1184 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1185 box key=- class=block-content grow=1 110,48 918x0
+                                                      1186 row key=- class=- 110,48 918x0
+                                                        1187 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1188 row key=- class=- 110,48 330x0
+                                                            1189 text key=- class=block-title-wrap text="Scroll row 10: repeatable long-page content" 110,48 330x0
+                                                    1190 row key=- class=- 1028,48 0x0
+                                                  1191 row key=- class=ls-block-right 1032,48 0x0
+                                                    1192 box key=- class=- 3,48 0x0
+                                                    1193 box key=- class=- 3,48 0x0
+                                            1194 box key=- class=- 3,48 0x0
+                                      1195 box key=- class=- 3,48 0x0
+                                  1196 column key=- class=ls-block-content-indent 68,48 964x0
+                                1197 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1198 row key=- class=block-main-container 68,48 964x0
+                                    1199 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1200 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1201 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1202 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1203 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1204 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1205 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1206 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1207 column key=- class=- grow=1 110,48 922x0
+                                      1208 column key=- class=- 110,48 922x0
+                                        1209 row key=- class=- 110,48 922x0
+                                          1210 column key=- class=- grow=1 110,48 922x0
+                                            1211 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1212 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1213 row key=- class=block-row grow=1 110,48 922x0
+                                                  1214 box key=- class=- 3,48 0x0
+                                                  1215 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1216 box key=- class=block-content grow=1 110,48 918x0
+                                                      1217 row key=- class=- 110,48 918x0
+                                                        1218 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1219 row key=- class=- 110,48 326x0
+                                                            1220 text key=- class=block-title-wrap text="Scroll row 11: repeatable long-page content" 110,48 326x0
+                                                    1221 row key=- class=- 1028,48 0x0
+                                                  1222 row key=- class=ls-block-right 1032,48 0x0
+                                                    1223 box key=- class=- 3,48 0x0
+                                                    1224 box key=- class=- 3,48 0x0
+                                            1225 box key=- class=- 3,48 0x0
+                                      1226 box key=- class=- 3,48 0x0
+                                  1227 column key=- class=ls-block-content-indent 68,48 964x0
+                                1228 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1229 row key=- class=block-main-container 68,48 964x0
+                                    1230 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1231 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1232 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1233 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1234 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1235 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1236 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1237 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1238 column key=- class=- grow=1 110,48 922x0
+                                      1239 column key=- class=- 110,48 922x0
+                                        1240 row key=- class=- 110,48 922x0
+                                          1241 column key=- class=- grow=1 110,48 922x0
+                                            1242 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1243 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1244 row key=- class=block-row grow=1 110,48 922x0
+                                                  1245 box key=- class=- 3,48 0x0
+                                                  1246 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1247 box key=- class=block-content grow=1 110,48 918x0
+                                                      1248 row key=- class=- 110,48 918x0
+                                                        1249 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1250 row key=- class=- 110,48 330x0
+                                                            1251 text key=- class=block-title-wrap text="Scroll row 12: repeatable long-page content" 110,48 330x0
+                                                    1252 row key=- class=- 1028,48 0x0
+                                                  1253 row key=- class=ls-block-right 1032,48 0x0
+                                                    1254 box key=- class=- 3,48 0x0
+                                                    1255 box key=- class=- 3,48 0x0
+                                            1256 box key=- class=- 3,48 0x0
+                                      1257 box key=- class=- 3,48 0x0
+                                  1258 column key=- class=ls-block-content-indent 68,48 964x0
+                                1259 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1260 row key=- class=block-main-container 68,48 964x0
+                                    1261 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1262 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1263 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1264 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1265 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1266 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1267 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1268 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1269 column key=- class=- grow=1 110,48 922x0
+                                      1270 column key=- class=- 110,48 922x0
+                                        1271 row key=- class=- 110,48 922x0
+                                          1272 column key=- class=- grow=1 110,48 922x0
+                                            1273 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1274 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1275 row key=- class=block-row grow=1 110,48 922x0
+                                                  1276 box key=- class=- 3,48 0x0
+                                                  1277 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1278 box key=- class=block-content grow=1 110,48 918x0
+                                                      1279 row key=- class=- 110,48 918x0
+                                                        1280 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1281 row key=- class=- 110,48 330x0
+                                                            1282 text key=- class=block-title-wrap text="Scroll row 13: repeatable long-page content" 110,48 330x0
+                                                    1283 row key=- class=- 1028,48 0x0
+                                                  1284 row key=- class=ls-block-right 1032,48 0x0
+                                                    1285 box key=- class=- 3,48 0x0
+                                                    1286 box key=- class=- 3,48 0x0
+                                            1287 box key=- class=- 3,48 0x0
+                                      1288 box key=- class=- 3,48 0x0
+                                  1289 column key=- class=ls-block-content-indent 68,48 964x0
+                                1290 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1291 row key=- class=block-main-container 68,48 964x0
+                                    1292 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1293 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1294 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1295 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1296 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1297 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1298 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1299 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1300 column key=- class=- grow=1 110,48 922x0
+                                      1301 column key=- class=- 110,48 922x0
+                                        1302 row key=- class=- 110,48 922x0
+                                          1303 column key=- class=- grow=1 110,48 922x0
+                                            1304 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1305 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1306 row key=- class=block-row grow=1 110,48 922x0
+                                                  1307 box key=- class=- 3,48 0x0
+                                                  1308 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1309 box key=- class=block-content grow=1 110,48 918x0
+                                                      1310 row key=- class=- 110,48 918x0
+                                                        1311 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1312 row key=- class=- 110,48 330x0
+                                                            1313 text key=- class=block-title-wrap text="Scroll row 14: repeatable long-page content" 110,48 330x0
+                                                    1314 row key=- class=- 1028,48 0x0
+                                                  1315 row key=- class=ls-block-right 1032,48 0x0
+                                                    1316 box key=- class=- 3,48 0x0
+                                                    1317 box key=- class=- 3,48 0x0
+                                            1318 box key=- class=- 3,48 0x0
+                                      1319 box key=- class=- 3,48 0x0
+                                  1320 column key=- class=ls-block-content-indent 68,48 964x0
+                                1321 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1322 row key=- class=block-main-container 68,48 964x0
+                                    1323 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1324 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1325 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1326 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1327 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1328 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1329 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1330 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1331 column key=- class=- grow=1 110,48 922x0
+                                      1332 column key=- class=- 110,48 922x0
+                                        1333 row key=- class=- 110,48 922x0
+                                          1334 column key=- class=- grow=1 110,48 922x0
+                                            1335 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1336 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1337 row key=- class=block-row grow=1 110,48 922x0
+                                                  1338 box key=- class=- 3,48 0x0
+                                                  1339 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1340 box key=- class=block-content grow=1 110,48 918x0
+                                                      1341 row key=- class=- 110,48 918x0
+                                                        1342 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1343 row key=- class=- 110,48 329x0
+                                                            1344 text key=- class=block-title-wrap text="Scroll row 15: repeatable long-page content" 110,48 329x0
+                                                    1345 row key=- class=- 1028,48 0x0
+                                                  1346 row key=- class=ls-block-right 1032,48 0x0
+                                                    1347 box key=- class=- 3,48 0x0
+                                                    1348 box key=- class=- 3,48 0x0
+                                            1349 box key=- class=- 3,48 0x0
+                                      1350 box key=- class=- 3,48 0x0
+                                  1351 column key=- class=ls-block-content-indent 68,48 964x0
+                                1352 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1353 row key=- class=block-main-container 68,48 964x0
+                                    1354 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1355 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1356 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1357 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1358 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1359 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1360 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1361 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1362 column key=- class=- grow=1 110,48 922x0
+                                      1363 column key=- class=- 110,48 922x0
+                                        1364 row key=- class=- 110,48 922x0
+                                          1365 column key=- class=- grow=1 110,48 922x0
+                                            1366 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1367 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1368 row key=- class=block-row grow=1 110,48 922x0
+                                                  1369 box key=- class=- 3,48 0x0
+                                                  1370 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1371 box key=- class=block-content grow=1 110,48 918x0
+                                                      1372 row key=- class=- 110,48 918x0
+                                                        1373 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1374 row key=- class=- 110,48 330x0
+                                                            1375 text key=- class=block-title-wrap text="Scroll row 16: repeatable long-page content" 110,48 330x0
+                                                    1376 row key=- class=- 1028,48 0x0
+                                                  1377 row key=- class=ls-block-right 1032,48 0x0
+                                                    1378 box key=- class=- 3,48 0x0
+                                                    1379 box key=- class=- 3,48 0x0
+                                            1380 box key=- class=- 3,48 0x0
+                                      1381 box key=- class=- 3,48 0x0
+                                  1382 column key=- class=ls-block-content-indent 68,48 964x0
+                                1395 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1396 row key=- class=block-main-container 68,48 964x0
+                                    1397 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1398 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1399 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1400 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1401 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1402 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1403 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1404 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1405 column key=- class=- grow=1 110,48 922x0
+                                      1406 column key=- class=- 110,48 922x0
+                                        1407 row key=- class=- 110,48 922x0
+                                          1408 column key=- class=- grow=1 110,48 922x0
+                                            1409 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1410 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1411 row key=- class=block-row grow=1 110,48 922x0
+                                                  1412 box key=- class=- 3,48 0x0
+                                                  1413 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1414 box key=- class=block-content grow=1 110,48 918x0
+                                                      1415 row key=- class=- 110,48 918x0
+                                                        1416 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1417 row key=- class=- 110,48 328x0
+                                                            1418 text key=- class=block-title-wrap text="Scroll row 17: repeatable long-page content" 110,48 328x0
+                                                    1419 row key=- class=- 1028,48 0x0
+                                                  1420 row key=- class=ls-block-right 1032,48 0x0
+                                                    1421 box key=- class=- 3,48 0x0
+                                                    1422 box key=- class=- 3,48 0x0
+                                            1423 box key=- class=- 3,48 0x0
+                                      1424 box key=- class=- 3,48 0x0
+                                  1425 column key=- class=ls-block-content-indent 68,48 964x0
+                                1426 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1427 row key=- class=block-main-container 68,48 964x0
+                                    1428 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1429 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1430 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1431 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1432 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1433 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1434 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1435 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1436 column key=- class=- grow=1 110,48 922x0
+                                      1437 column key=- class=- 110,48 922x0
+                                        1438 row key=- class=- 110,48 922x0
+                                          1439 column key=- class=- grow=1 110,48 922x0
+                                            1440 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1441 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1442 row key=- class=block-row grow=1 110,48 922x0
+                                                  1443 box key=- class=- 3,48 0x0
+                                                  1444 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1445 box key=- class=block-content grow=1 110,48 918x0
+                                                      1446 row key=- class=- 110,48 918x0
+                                                        1447 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1448 row key=- class=- 110,48 330x0
+                                                            1449 text key=- class=block-title-wrap text="Scroll row 18: repeatable long-page content" 110,48 330x0
+                                                    1450 row key=- class=- 1028,48 0x0
+                                                  1451 row key=- class=ls-block-right 1032,48 0x0
+                                                    1452 box key=- class=- 3,48 0x0
+                                                    1453 box key=- class=- 3,48 0x0
+                                            1454 box key=- class=- 3,48 0x0
+                                      1455 box key=- class=- 3,48 0x0
+                                  1456 column key=- class=ls-block-content-indent 68,48 964x0
+                                1457 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1458 row key=- class=block-main-container 68,48 964x0
+                                    1459 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1460 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1461 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1462 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1463 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1464 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1465 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1466 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1467 column key=- class=- grow=1 110,48 922x0
+                                      1468 column key=- class=- 110,48 922x0
+                                        1469 row key=- class=- 110,48 922x0
+                                          1470 column key=- class=- grow=1 110,48 922x0
+                                            1471 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1472 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1473 row key=- class=block-row grow=1 110,48 922x0
+                                                  1474 box key=- class=- 3,48 0x0
+                                                  1475 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1476 box key=- class=block-content grow=1 110,48 918x0
+                                                      1477 row key=- class=- 110,48 918x0
+                                                        1478 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1479 row key=- class=- 110,48 330x0
+                                                            1480 text key=- class=block-title-wrap text="Scroll row 19: repeatable long-page content" 110,48 330x0
+                                                    1481 row key=- class=- 1028,48 0x0
+                                                  1482 row key=- class=ls-block-right 1032,48 0x0
+                                                    1483 box key=- class=- 3,48 0x0
+                                                    1484 box key=- class=- 3,48 0x0
+                                            1485 box key=- class=- 3,48 0x0
+                                      1486 box key=- class=- 3,48 0x0
+                                  1487 column key=- class=ls-block-content-indent 68,48 964x0
+                                1488 column key=- class=ls-block swipe-item 68,48 964x0
+                                  1489 row key=- class=block-main-container 68,48 964x0
+                                    1490 row key=- class=block-control-wrap height=24 68,48 38x0
+                                      1491 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x0
+                                        1492 box key=- class=control-hide opacity=0 70,48 13x0
+                                          1493 box key=- class=rotating-arrow not-collapsed 70,48 13x0
+                                            1494 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,48 13x0
+                                      1495 row key=- class=bullet-link-wrap margin-left=0 90,48 16x0
+                                        1496 box key=- class=bullet-container cursor height=16 width=16 90,48 16x0
+                                          1497 box key=- class=bullet height=6 width=6 opacity=1 95,48 6x0
+                                    1498 column key=- class=- grow=1 110,48 922x0
+                                      1499 column key=- class=- 110,48 922x0
+                                        1500 row key=- class=- 110,48 922x0
+                                          1501 column key=- class=- grow=1 110,48 922x0
+                                            1502 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x0
+                                              1503 box key=- class=block-content-or-editor-inner grow=1 110,48 922x0
+                                                1504 row key=- class=block-row grow=1 110,48 922x0
+                                                  1505 box key=- class=- 3,48 0x0
+                                                  1506 row key=- class=block-content-wrapper grow=1 110,48 918x0
+                                                    1507 box key=- class=block-content grow=1 110,48 918x0
+                                                      1508 row key=- class=- 110,48 918x0
+                                                        1509 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x0
+                                                          1510 row key=- class=- 110,48 333x0
+                                                            1511 text key=- class=block-title-wrap text="Scroll row 20: repeatable long-page content" 110,48 333x0
+                                                    1512 row key=- class=- 1028,48 0x0
+                                                  1513 row key=- class=ls-block-right 1032,48 0x0
+                                                    1514 box key=- class=- 3,48 0x0
+                                                    1515 box key=- class=- 3,48 0x0
+                                            1516 box key=- class=- 3,48 0x0
+                                      1517 box key=- class=- 3,48 0x0
+                                  1518 column key=- class=ls-block-content-indent 68,48 964x0
+                                1519 column key=- class=ls-block swipe-item 68,48 964x24
+                                  1520 row key=- class=block-main-container 68,48 964x22
+                                    1521 row key=- class=block-control-wrap height=24 68,48 38x22
+                                      1522 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,48 22x22
+                                        1523 box key=- class=control-hide opacity=0 70,50 13x18
+                                          1524 box key=- class=rotating-arrow not-collapsed 70,50 13x13
+                                            1525 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,50 13x13
+                                      1526 row key=- class=bullet-link-wrap margin-left=0 90,50 16x16
+                                        1527 box key=- class=bullet-container cursor height=16 width=16 90,50 16x16
+                                          1528 box key=- class=bullet height=6 width=6 opacity=1 95,55 6x6
+                                    1529 column key=- class=- grow=1 110,48 922x22
+                                      1530 column key=- class=- 110,48 922x22
+                                        1531 row key=- class=- 110,48 922x22
+                                          1532 column key=- class=- grow=1 110,48 922x22
+                                            1533 box key=- class=block-content-or-editor-wrap grow=1 110,48 922x22
+                                              1534 box key=- class=block-content-or-editor-inner grow=1 110,48 922x22
+                                                1535 row key=- class=block-row grow=1 110,48 922x22
+                                                  1536 box key=- class=- 3,48 0x0
+                                                  1537 row key=- class=block-content-wrapper grow=1 110,48 918x22
+                                                    1538 box key=- class=block-content grow=1 110,48 918x22
+                                                      1539 row key=- class=- 110,48 918x22
+                                                        1540 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,48 918x22
+                                                          1541 row key=- class=- 110,48 330x22
+                                                            1542 text key=- class=block-title-wrap text="Scroll row 21: repeatable long-page content" 110,48 330x22
+                                                    1543 row key=- class=- 1028,48 0x22
+                                                  1544 row key=- class=ls-block-right 1032,58 0x0
+                                                    1545 box key=- class=- 3,48 0x0
+                                                    1546 box key=- class=- 3,48 0x0
+                                            1547 box key=- class=- 3,48 0x0
+                                      1548 box key=- class=- 3,48 0x0
+                                  1549 column key=- class=ls-block-content-indent 68,70 964x0
+                                1550 column key=- class=ls-block swipe-item 68,72 964x28
+                                  1551 row key=- class=block-main-container 68,74 964x24
+                                    1552 row key=- class=block-control-wrap height=24 68,74 38x24
+                                      1553 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,76 22x22
+                                        1554 box key=- class=control-hide opacity=0 70,78 13x18
+                                          1555 box key=- class=rotating-arrow not-collapsed 70,78 13x13
+                                            1556 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,78 13x13
+                                      1557 row key=- class=bullet-link-wrap margin-left=0 90,78 16x16
+                                        1558 box key=- class=bullet-container cursor height=16 width=16 90,78 16x16
+                                          1559 box key=- class=bullet height=6 width=6 opacity=1 95,83 6x6
+                                    1560 column key=- class=- grow=1 110,74 922x24
+                                      1561 column key=- class=- 110,74 922x24
+                                        1562 row key=- class=- 110,74 922x24
+                                          1563 column key=- class=- grow=1 110,74 922x24
+                                            1564 box key=- class=block-content-or-editor-wrap grow=1 110,74 922x24
+                                              1565 box key=- class=block-content-or-editor-inner grow=1 110,74 922x24
+                                                1566 row key=- class=block-row grow=1 110,74 922x24
+                                                  1567 box key=- class=- 3,48 0x0
+                                                  1568 row key=- class=block-content-wrapper grow=1 110,74 918x24
+                                                    1569 box key=- class=block-content grow=1 110,74 918x24
+                                                      1570 row key=- class=- 110,74 918x24
+                                                        1571 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,74 918x24
+                                                          1572 row key=- class=- 110,74 333x24
+                                                            1573 text key=- class=block-title-wrap text="Scroll row 22: repeatable long-page content" 110,74 333x24
+                                                    1574 row key=- class=- 1028,74 0x24
+                                                  1575 row key=- class=ls-block-right 1032,86 0x0
+                                                    1576 box key=- class=- 3,48 0x0
+                                                    1577 box key=- class=- 3,48 0x0
+                                            1578 box key=- class=- 3,48 0x0
+                                      1579 box key=- class=- 3,48 0x0
+                                  1580 column key=- class=ls-block-content-indent 68,98 964x0
+                                1581 column key=- class=ls-block swipe-item 68,100 964x28
+                                  1582 row key=- class=block-main-container 68,102 964x24
+                                    1583 row key=- class=block-control-wrap height=24 68,102 38x24
+                                      1584 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,104 22x22
+                                        1585 box key=- class=control-hide opacity=0 70,106 13x18
+                                          1586 box key=- class=rotating-arrow not-collapsed 70,106 13x13
+                                            1587 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,106 13x13
+                                      1588 row key=- class=bullet-link-wrap margin-left=0 90,106 16x16
+                                        1589 box key=- class=bullet-container cursor height=16 width=16 90,106 16x16
+                                          1590 box key=- class=bullet height=6 width=6 opacity=1 95,111 6x6
+                                    1591 column key=- class=- grow=1 110,102 922x24
+                                      1592 column key=- class=- 110,102 922x24
+                                        1593 row key=- class=- 110,102 922x24
+                                          1594 column key=- class=- grow=1 110,102 922x24
+                                            1595 box key=- class=block-content-or-editor-wrap grow=1 110,102 922x24
+                                              1596 box key=- class=block-content-or-editor-inner grow=1 110,102 922x24
+                                                1597 row key=- class=block-row grow=1 110,102 922x24
+                                                  1598 box key=- class=- 3,48 0x0
+                                                  1599 row key=- class=block-content-wrapper grow=1 110,102 918x24
+                                                    1600 box key=- class=block-content grow=1 110,102 918x24
+                                                      1601 row key=- class=- 110,102 918x24
+                                                        1602 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,102 918x24
+                                                          1603 row key=- class=- 110,102 333x24
+                                                            1604 text key=- class=block-title-wrap text="Scroll row 23: repeatable long-page content" 110,102 333x24
+                                                    1605 row key=- class=- 1028,102 0x24
+                                                  1606 row key=- class=ls-block-right 1032,114 0x0
+                                                    1607 box key=- class=- 3,48 0x0
+                                                    1608 box key=- class=- 3,48 0x0
+                                            1609 box key=- class=- 3,48 0x0
+                                      1610 box key=- class=- 3,48 0x0
+                                  1611 column key=- class=ls-block-content-indent 68,126 964x0
+                                1612 column key=- class=ls-block swipe-item 68,128 964x28
+                                  1613 row key=- class=block-main-container 68,130 964x24
+                                    1614 row key=- class=block-control-wrap height=24 68,130 38x24
+                                      1615 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,132 22x22
+                                        1616 box key=- class=control-hide opacity=0 70,134 13x18
+                                          1617 box key=- class=rotating-arrow not-collapsed 70,134 13x13
+                                            1618 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,134 13x13
+                                      1619 row key=- class=bullet-link-wrap margin-left=0 90,134 16x16
+                                        1620 box key=- class=bullet-container cursor height=16 width=16 90,134 16x16
+                                          1621 box key=- class=bullet height=6 width=6 opacity=1 95,139 6x6
+                                    1622 column key=- class=- grow=1 110,130 922x24
+                                      1623 column key=- class=- 110,130 922x24
+                                        1624 row key=- class=- 110,130 922x24
+                                          1625 column key=- class=- grow=1 110,130 922x24
+                                            1626 box key=- class=block-content-or-editor-wrap grow=1 110,130 922x24
+                                              1627 box key=- class=block-content-or-editor-inner grow=1 110,130 922x24
+                                                1628 row key=- class=block-row grow=1 110,130 922x24
+                                                  1629 box key=- class=- 3,48 0x0
+                                                  1630 row key=- class=block-content-wrapper grow=1 110,130 918x24
+                                                    1631 box key=- class=block-content grow=1 110,130 918x24
+                                                      1632 row key=- class=- 110,130 918x24
+                                                        1633 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,130 918x24
+                                                          1634 row key=- class=- 110,130 333x24
+                                                            1635 text key=- class=block-title-wrap text="Scroll row 24: repeatable long-page content" 110,130 333x24
+                                                    1636 row key=- class=- 1028,130 0x24
+                                                  1637 row key=- class=ls-block-right 1032,142 0x0
+                                                    1638 box key=- class=- 3,48 0x0
+                                                    1639 box key=- class=- 3,48 0x0
+                                            1640 box key=- class=- 3,48 0x0
+                                      1641 box key=- class=- 3,48 0x0
+                                  1642 column key=- class=ls-block-content-indent 68,154 964x0
+                                1643 column key=- class=ls-block swipe-item 68,156 964x28
+                                  1644 row key=- class=block-main-container 68,158 964x24
+                                    1645 row key=- class=block-control-wrap height=24 68,158 38x24
+                                      1646 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,160 22x22
+                                        1647 box key=- class=control-hide opacity=0 70,162 13x18
+                                          1648 box key=- class=rotating-arrow not-collapsed 70,162 13x13
+                                            1649 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,162 13x13
+                                      1650 row key=- class=bullet-link-wrap margin-left=0 90,162 16x16
+                                        1651 box key=- class=bullet-container cursor height=16 width=16 90,162 16x16
+                                          1652 box key=- class=bullet height=6 width=6 opacity=1 95,167 6x6
+                                    1653 column key=- class=- grow=1 110,158 922x24
+                                      1654 column key=- class=- 110,158 922x24
+                                        1655 row key=- class=- 110,158 922x24
+                                          1656 column key=- class=- grow=1 110,158 922x24
+                                            1657 box key=- class=block-content-or-editor-wrap grow=1 110,158 922x24
+                                              1658 box key=- class=block-content-or-editor-inner grow=1 110,158 922x24
+                                                1659 row key=- class=block-row grow=1 110,158 922x24
+                                                  1660 box key=- class=- 3,48 0x0
+                                                  1661 row key=- class=block-content-wrapper grow=1 110,158 918x24
+                                                    1662 box key=- class=block-content grow=1 110,158 918x24
+                                                      1663 row key=- class=- 110,158 918x24
+                                                        1664 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,158 918x24
+                                                          1665 row key=- class=- 110,158 333x24
+                                                            1666 text key=- class=block-title-wrap text="Scroll row 25: repeatable long-page content" 110,158 333x24
+                                                    1667 row key=- class=- 1028,158 0x24
+                                                  1668 row key=- class=ls-block-right 1032,170 0x0
+                                                    1669 box key=- class=- 3,48 0x0
+                                                    1670 box key=- class=- 3,48 0x0
+                                            1671 box key=- class=- 3,48 0x0
+                                      1672 box key=- class=- 3,48 0x0
+                                  1673 column key=- class=ls-block-content-indent 68,182 964x0
+                                1674 column key=- class=ls-block swipe-item 68,184 964x28
+                                  1675 row key=- class=block-main-container 68,186 964x24
+                                    1676 row key=- class=block-control-wrap height=24 68,186 38x24
+                                      1677 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,188 22x22
+                                        1678 box key=- class=control-hide opacity=0 70,190 13x18
+                                          1679 box key=- class=rotating-arrow not-collapsed 70,190 13x13
+                                            1680 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,190 13x13
+                                      1681 row key=- class=bullet-link-wrap margin-left=0 90,190 16x16
+                                        1682 box key=- class=bullet-container cursor height=16 width=16 90,190 16x16
+                                          1683 box key=- class=bullet height=6 width=6 opacity=1 95,195 6x6
+                                    1684 column key=- class=- grow=1 110,186 922x24
+                                      1685 column key=- class=- 110,186 922x24
+                                        1686 row key=- class=- 110,186 922x24
+                                          1687 column key=- class=- grow=1 110,186 922x24
+                                            1688 box key=- class=block-content-or-editor-wrap grow=1 110,186 922x24
+                                              1689 box key=- class=block-content-or-editor-inner grow=1 110,186 922x24
+                                                1690 row key=- class=block-row grow=1 110,186 922x24
+                                                  1691 box key=- class=- 3,48 0x0
+                                                  1692 row key=- class=block-content-wrapper grow=1 110,186 918x24
+                                                    1693 box key=- class=block-content grow=1 110,186 918x24
+                                                      1694 row key=- class=- 110,186 918x24
+                                                        1695 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,186 918x24
+                                                          1696 row key=- class=- 110,186 333x24
+                                                            1697 text key=- class=block-title-wrap text="Scroll row 26: repeatable long-page content" 110,186 333x24
+                                                    1698 row key=- class=- 1028,186 0x24
+                                                  1699 row key=- class=ls-block-right 1032,198 0x0
+                                                    1700 box key=- class=- 3,48 0x0
+                                                    1701 box key=- class=- 3,48 0x0
+                                            1702 box key=- class=- 3,48 0x0
+                                      1703 box key=- class=- 3,48 0x0
+                                  1704 column key=- class=ls-block-content-indent 68,210 964x0
+                                1705 column key=- class=ls-block swipe-item 68,212 964x28
+                                  1706 row key=- class=block-main-container 68,214 964x24
+                                    1707 row key=- class=block-control-wrap height=24 68,214 38x24
+                                      1708 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,216 22x22
+                                        1709 box key=- class=control-hide opacity=0 70,218 13x18
+                                          1710 box key=- class=rotating-arrow not-collapsed 70,218 13x13
+                                            1711 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,218 13x13
+                                      1712 row key=- class=bullet-link-wrap margin-left=0 90,218 16x16
+                                        1713 box key=- class=bullet-container cursor height=16 width=16 90,218 16x16
+                                          1714 box key=- class=bullet height=6 width=6 opacity=1 95,223 6x6
+                                    1715 column key=- class=- grow=1 110,214 922x24
+                                      1716 column key=- class=- 110,214 922x24
+                                        1717 row key=- class=- 110,214 922x24
+                                          1718 column key=- class=- grow=1 110,214 922x24
+                                            1719 box key=- class=block-content-or-editor-wrap grow=1 110,214 922x24
+                                              1720 box key=- class=block-content-or-editor-inner grow=1 110,214 922x24
+                                                1721 row key=- class=block-row grow=1 110,214 922x24
+                                                  1722 box key=- class=- 3,48 0x0
+                                                  1723 row key=- class=block-content-wrapper grow=1 110,214 918x24
+                                                    1724 box key=- class=block-content grow=1 110,214 918x24
+                                                      1725 row key=- class=- 110,214 918x24
+                                                        1726 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,214 918x24
+                                                          1727 row key=- class=- 110,214 332x24
+                                                            1728 text key=- class=block-title-wrap text="Scroll row 27: repeatable long-page content" 110,214 332x24
+                                                    1729 row key=- class=- 1028,214 0x24
+                                                  1730 row key=- class=ls-block-right 1032,226 0x0
+                                                    1731 box key=- class=- 3,48 0x0
+                                                    1732 box key=- class=- 3,48 0x0
+                                            1733 box key=- class=- 3,48 0x0
+                                      1734 box key=- class=- 3,48 0x0
+                                  1735 column key=- class=ls-block-content-indent 68,238 964x0
+                                1736 column key=- class=ls-block swipe-item 68,240 964x28
+                                  1737 row key=- class=block-main-container 68,242 964x24
+                                    1738 row key=- class=block-control-wrap height=24 68,242 38x24
+                                      1739 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,244 22x22
+                                        1740 box key=- class=control-hide opacity=0 70,246 13x18
+                                          1741 box key=- class=rotating-arrow not-collapsed 70,246 13x13
+                                            1742 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,246 13x13
+                                      1743 row key=- class=bullet-link-wrap margin-left=0 90,246 16x16
+                                        1744 box key=- class=bullet-container cursor height=16 width=16 90,246 16x16
+                                          1745 box key=- class=bullet height=6 width=6 opacity=1 95,251 6x6
+                                    1746 column key=- class=- grow=1 110,242 922x24
+                                      1747 column key=- class=- 110,242 922x24
+                                        1748 row key=- class=- 110,242 922x24
+                                          1749 column key=- class=- grow=1 110,242 922x24
+                                            1750 box key=- class=block-content-or-editor-wrap grow=1 110,242 922x24
+                                              1751 box key=- class=block-content-or-editor-inner grow=1 110,242 922x24
+                                                1752 row key=- class=block-row grow=1 110,242 922x24
+                                                  1753 box key=- class=- 3,48 0x0
+                                                  1754 row key=- class=block-content-wrapper grow=1 110,242 918x24
+                                                    1755 box key=- class=block-content grow=1 110,242 918x24
+                                                      1756 row key=- class=- 110,242 918x24
+                                                        1757 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,242 918x24
+                                                          1758 row key=- class=- 110,242 333x24
+                                                            1759 text key=- class=block-title-wrap text="Scroll row 28: repeatable long-page content" 110,242 333x24
+                                                    1760 row key=- class=- 1028,242 0x24
+                                                  1761 row key=- class=ls-block-right 1032,254 0x0
+                                                    1762 box key=- class=- 3,48 0x0
+                                                    1763 box key=- class=- 3,48 0x0
+                                            1764 box key=- class=- 3,48 0x0
+                                      1765 box key=- class=- 3,48 0x0
+                                  1766 column key=- class=ls-block-content-indent 68,266 964x0
+                                1767 column key=- class=ls-block swipe-item 68,268 964x28
+                                  1768 row key=- class=block-main-container 68,270 964x24
+                                    1769 row key=- class=block-control-wrap height=24 68,270 38x24
+                                      1770 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,272 22x22
+                                        1771 box key=- class=control-hide opacity=0 70,274 13x18
+                                          1772 box key=- class=rotating-arrow not-collapsed 70,274 13x13
+                                            1773 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,274 13x13
+                                      1774 row key=- class=bullet-link-wrap margin-left=0 90,274 16x16
+                                        1775 box key=- class=bullet-container cursor height=16 width=16 90,274 16x16
+                                          1776 box key=- class=bullet height=6 width=6 opacity=1 95,279 6x6
+                                    1777 column key=- class=- grow=1 110,270 922x24
+                                      1778 column key=- class=- 110,270 922x24
+                                        1779 row key=- class=- 110,270 922x24
+                                          1780 column key=- class=- grow=1 110,270 922x24
+                                            1781 box key=- class=block-content-or-editor-wrap grow=1 110,270 922x24
+                                              1782 box key=- class=block-content-or-editor-inner grow=1 110,270 922x24
+                                                1783 row key=- class=block-row grow=1 110,270 922x24
+                                                  1784 box key=- class=- 3,48 0x0
+                                                  1785 row key=- class=block-content-wrapper grow=1 110,270 918x24
+                                                    1786 box key=- class=block-content grow=1 110,270 918x24
+                                                      1787 row key=- class=- 110,270 918x24
+                                                        1788 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,270 918x24
+                                                          1789 row key=- class=- 110,270 333x24
+                                                            1790 text key=- class=block-title-wrap text="Scroll row 29: repeatable long-page content" 110,270 333x24
+                                                    1791 row key=- class=- 1028,270 0x24
+                                                  1792 row key=- class=ls-block-right 1032,282 0x0
+                                                    1793 box key=- class=- 3,48 0x0
+                                                    1794 box key=- class=- 3,48 0x0
+                                            1795 box key=- class=- 3,48 0x0
+                                      1796 box key=- class=- 3,48 0x0
+                                  1797 column key=- class=ls-block-content-indent 68,294 964x0
+                                1798 column key=- class=ls-block swipe-item 68,296 964x28
+                                  1799 row key=- class=block-main-container 68,298 964x24
+                                    1800 row key=- class=block-control-wrap height=24 68,298 38x24
+                                      1801 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,300 22x22
+                                        1802 box key=- class=control-hide opacity=0 70,302 13x18
+                                          1803 box key=- class=rotating-arrow not-collapsed 70,302 13x13
+                                            1804 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,302 13x13
+                                      1805 row key=- class=bullet-link-wrap margin-left=0 90,302 16x16
+                                        1806 box key=- class=bullet-container cursor height=16 width=16 90,302 16x16
+                                          1807 box key=- class=bullet height=6 width=6 opacity=1 95,307 6x6
+                                    1808 column key=- class=- grow=1 110,298 922x24
+                                      1809 column key=- class=- 110,298 922x24
+                                        1810 row key=- class=- 110,298 922x24
+                                          1811 column key=- class=- grow=1 110,298 922x24
+                                            1812 box key=- class=block-content-or-editor-wrap grow=1 110,298 922x24
+                                              1813 box key=- class=block-content-or-editor-inner grow=1 110,298 922x24
+                                                1814 row key=- class=block-row grow=1 110,298 922x24
+                                                  1815 box key=- class=- 3,48 0x0
+                                                  1816 row key=- class=block-content-wrapper grow=1 110,298 918x24
+                                                    1817 box key=- class=block-content grow=1 110,298 918x24
+                                                      1818 row key=- class=- 110,298 918x24
+                                                        1819 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,298 918x24
+                                                          1820 row key=- class=- 110,298 333x24
+                                                            1821 text key=- class=block-title-wrap text="Scroll row 30: repeatable long-page content" 110,298 333x24
+                                                    1822 row key=- class=- 1028,298 0x24
+                                                  1823 row key=- class=ls-block-right 1032,310 0x0
+                                                    1824 box key=- class=- 3,48 0x0
+                                                    1825 box key=- class=- 3,48 0x0
+                                            1826 box key=- class=- 3,48 0x0
+                                      1827 box key=- class=- 3,48 0x0
+                                  1828 column key=- class=ls-block-content-indent 68,322 964x0
+                                1829 column key=- class=ls-block swipe-item 68,324 964x28
+                                  1830 row key=- class=block-main-container 68,326 964x24
+                                    1831 row key=- class=block-control-wrap height=24 68,326 38x24
+                                      1832 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,328 22x22
+                                        1833 box key=- class=control-hide opacity=0 70,330 13x18
+                                          1834 box key=- class=rotating-arrow not-collapsed 70,330 13x13
+                                            1835 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,330 13x13
+                                      1836 row key=- class=bullet-link-wrap margin-left=0 90,330 16x16
+                                        1837 box key=- class=bullet-container cursor height=16 width=16 90,330 16x16
+                                          1838 box key=- class=bullet height=6 width=6 opacity=1 95,335 6x6
+                                    1839 column key=- class=- grow=1 110,326 922x24
+                                      1840 column key=- class=- 110,326 922x24
+                                        1841 row key=- class=- 110,326 922x24
+                                          1842 column key=- class=- grow=1 110,326 922x24
+                                            1843 box key=- class=block-content-or-editor-wrap grow=1 110,326 922x24
+                                              1844 box key=- class=block-content-or-editor-inner grow=1 110,326 922x24
+                                                1845 row key=- class=block-row grow=1 110,326 922x24
+                                                  1846 box key=- class=- 3,48 0x0
+                                                  1847 row key=- class=block-content-wrapper grow=1 110,326 918x24
+                                                    1848 box key=- class=block-content grow=1 110,326 918x24
+                                                      1849 row key=- class=- 110,326 918x24
+                                                        1850 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,326 918x24
+                                                          1851 row key=- class=- 110,326 330x24
+                                                            1852 text key=- class=block-title-wrap text="Scroll row 31: repeatable long-page content" 110,326 330x24
+                                                    1853 row key=- class=- 1028,326 0x24
+                                                  1854 row key=- class=ls-block-right 1032,338 0x0
+                                                    1855 box key=- class=- 3,48 0x0
+                                                    1856 box key=- class=- 3,48 0x0
+                                            1857 box key=- class=- 3,48 0x0
+                                      1858 box key=- class=- 3,48 0x0
+                                  1859 column key=- class=ls-block-content-indent 68,350 964x0
+                                1860 column key=- class=ls-block swipe-item 68,352 964x28
+                                  1861 row key=- class=block-main-container 68,354 964x24
+                                    1862 row key=- class=block-control-wrap height=24 68,354 38x24
+                                      1863 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,356 22x22
+                                        1864 box key=- class=control-hide opacity=0 70,358 13x18
+                                          1865 box key=- class=rotating-arrow not-collapsed 70,358 13x13
+                                            1866 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,358 13x13
+                                      1867 row key=- class=bullet-link-wrap margin-left=0 90,358 16x16
+                                        1868 box key=- class=bullet-container cursor height=16 width=16 90,358 16x16
+                                          1869 box key=- class=bullet height=6 width=6 opacity=1 95,363 6x6
+                                    1870 column key=- class=- grow=1 110,354 922x24
+                                      1871 column key=- class=- 110,354 922x24
+                                        1872 row key=- class=- 110,354 922x24
+                                          1873 column key=- class=- grow=1 110,354 922x24
+                                            1874 box key=- class=block-content-or-editor-wrap grow=1 110,354 922x24
+                                              1875 box key=- class=block-content-or-editor-inner grow=1 110,354 922x24
+                                                1876 row key=- class=block-row grow=1 110,354 922x24
+                                                  1877 box key=- class=- 3,48 0x0
+                                                  1878 row key=- class=block-content-wrapper grow=1 110,354 918x24
+                                                    1879 box key=- class=block-content grow=1 110,354 918x24
+                                                      1880 row key=- class=- 110,354 918x24
+                                                        1881 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,354 918x24
+                                                          1882 row key=- class=- 110,354 333x24
+                                                            1883 text key=- class=block-title-wrap text="Scroll row 32: repeatable long-page content" 110,354 333x24
+                                                    1884 row key=- class=- 1028,354 0x24
+                                                  1885 row key=- class=ls-block-right 1032,366 0x0
+                                                    1886 box key=- class=- 3,48 0x0
+                                                    1887 box key=- class=- 3,48 0x0
+                                            1888 box key=- class=- 3,48 0x0
+                                      1889 box key=- class=- 3,48 0x0
+                                  1890 column key=- class=ls-block-content-indent 68,378 964x0
+                                1891 column key=- class=ls-block swipe-item 68,380 964x28
+                                  1892 row key=- class=block-main-container 68,382 964x24
+                                    1893 row key=- class=block-control-wrap height=24 68,382 38x24
+                                      1894 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,384 22x22
+                                        1895 box key=- class=control-hide opacity=0 70,386 13x18
+                                          1896 box key=- class=rotating-arrow not-collapsed 70,386 13x13
+                                            1897 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,386 13x13
+                                      1898 row key=- class=bullet-link-wrap margin-left=0 90,386 16x16
+                                        1899 box key=- class=bullet-container cursor height=16 width=16 90,386 16x16
+                                          1900 box key=- class=bullet height=6 width=6 opacity=1 95,391 6x6
+                                    1901 column key=- class=- grow=1 110,382 922x24
+                                      1902 column key=- class=- 110,382 922x24
+                                        1903 row key=- class=- 110,382 922x24
+                                          1904 column key=- class=- grow=1 110,382 922x24
+                                            1905 box key=- class=block-content-or-editor-wrap grow=1 110,382 922x24
+                                              1906 box key=- class=block-content-or-editor-inner grow=1 110,382 922x24
+                                                1907 row key=- class=block-row grow=1 110,382 922x24
+                                                  1908 box key=- class=- 3,48 0x0
+                                                  1909 row key=- class=block-content-wrapper grow=1 110,382 918x24
+                                                    1910 box key=- class=block-content grow=1 110,382 918x24
+                                                      1911 row key=- class=- 110,382 918x24
+                                                        1912 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,382 918x24
+                                                          1913 row key=- class=- 110,382 333x24
+                                                            1914 text key=- class=block-title-wrap text="Scroll row 33: repeatable long-page content" 110,382 333x24
+                                                    1915 row key=- class=- 1028,382 0x24
+                                                  1916 row key=- class=ls-block-right 1032,394 0x0
+                                                    1917 box key=- class=- 3,48 0x0
+                                                    1918 box key=- class=- 3,48 0x0
+                                            1919 box key=- class=- 3,48 0x0
+                                      1920 box key=- class=- 3,48 0x0
+                                  1921 column key=- class=ls-block-content-indent 68,406 964x0
+                                1922 column key=- class=ls-block swipe-item 68,408 964x28
+                                  1923 row key=- class=block-main-container 68,410 964x24
+                                    1924 row key=- class=block-control-wrap height=24 68,410 38x24
+                                      1925 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,412 22x22
+                                        1926 box key=- class=control-hide opacity=0 70,414 13x18
+                                          1927 box key=- class=rotating-arrow not-collapsed 70,414 13x13
+                                            1928 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,414 13x13
+                                      1929 row key=- class=bullet-link-wrap margin-left=0 90,414 16x16
+                                        1930 box key=- class=bullet-container cursor height=16 width=16 90,414 16x16
+                                          1931 box key=- class=bullet height=6 width=6 opacity=1 95,419 6x6
+                                    1932 column key=- class=- grow=1 110,410 922x24
+                                      1933 column key=- class=- 110,410 922x24
+                                        1934 row key=- class=- 110,410 922x24
+                                          1935 column key=- class=- grow=1 110,410 922x24
+                                            1936 box key=- class=block-content-or-editor-wrap grow=1 110,410 922x24
+                                              1937 box key=- class=block-content-or-editor-inner grow=1 110,410 922x24
+                                                1938 row key=- class=block-row grow=1 110,410 922x24
+                                                  1939 box key=- class=- 3,48 0x0
+                                                  1940 row key=- class=block-content-wrapper grow=1 110,410 918x24
+                                                    1941 box key=- class=block-content grow=1 110,410 918x24
+                                                      1942 row key=- class=- 110,410 918x24
+                                                        1943 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,410 918x24
+                                                          1944 row key=- class=- 110,410 334x24
+                                                            1945 text key=- class=block-title-wrap text="Scroll row 34: repeatable long-page content" 110,410 334x24
+                                                    1946 row key=- class=- 1028,410 0x24
+                                                  1947 row key=- class=ls-block-right 1032,422 0x0
+                                                    1948 box key=- class=- 3,48 0x0
+                                                    1949 box key=- class=- 3,48 0x0
+                                            1950 box key=- class=- 3,48 0x0
+                                      1951 box key=- class=- 3,48 0x0
+                                  1952 column key=- class=ls-block-content-indent 68,434 964x0
+                                1953 column key=- class=ls-block swipe-item 68,436 964x28
+                                  1954 row key=- class=block-main-container 68,438 964x24
+                                    1955 row key=- class=block-control-wrap height=24 68,438 38x24
+                                      1956 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,440 22x22
+                                        1957 box key=- class=control-hide opacity=0 70,442 13x18
+                                          1958 box key=- class=rotating-arrow not-collapsed 70,442 13x13
+                                            1959 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,442 13x13
+                                      1960 row key=- class=bullet-link-wrap margin-left=0 90,442 16x16
+                                        1961 box key=- class=bullet-container cursor height=16 width=16 90,442 16x16
+                                          1962 box key=- class=bullet height=6 width=6 opacity=1 95,447 6x6
+                                    1963 column key=- class=- grow=1 110,438 922x24
+                                      1964 column key=- class=- 110,438 922x24
+                                        1965 row key=- class=- 110,438 922x24
+                                          1966 column key=- class=- grow=1 110,438 922x24
+                                            1967 box key=- class=block-content-or-editor-wrap grow=1 110,438 922x24
+                                              1968 box key=- class=block-content-or-editor-inner grow=1 110,438 922x24
+                                                1969 row key=- class=block-row grow=1 110,438 922x24
+                                                  1970 box key=- class=- 3,48 0x0
+                                                  1971 row key=- class=block-content-wrapper grow=1 110,438 918x24
+                                                    1972 box key=- class=block-content grow=1 110,438 918x24
+                                                      1973 row key=- class=- 110,438 918x24
+                                                        1974 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,438 918x24
+                                                          1975 row key=- class=- 110,438 333x24
+                                                            1976 text key=- class=block-title-wrap text="Scroll row 35: repeatable long-page content" 110,438 333x24
+                                                    1977 row key=- class=- 1028,438 0x24
+                                                  1978 row key=- class=ls-block-right 1032,450 0x0
+                                                    1979 box key=- class=- 3,48 0x0
+                                                    1980 box key=- class=- 3,48 0x0
+                                            1981 box key=- class=- 3,48 0x0
+                                      1982 box key=- class=- 3,48 0x0
+                                  1983 column key=- class=ls-block-content-indent 68,462 964x0
+                                1984 column key=- class=ls-block swipe-item 68,464 964x28
+                                  1985 row key=- class=block-main-container 68,466 964x24
+                                    1986 row key=- class=block-control-wrap height=24 68,466 38x24
+                                      1987 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,468 22x22
+                                        1988 box key=- class=control-hide opacity=0 70,470 13x18
+                                          1989 box key=- class=rotating-arrow not-collapsed 70,470 13x13
+                                            1990 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,470 13x13
+                                      1991 row key=- class=bullet-link-wrap margin-left=0 90,470 16x16
+                                        1992 box key=- class=bullet-container cursor height=16 width=16 90,470 16x16
+                                          1993 box key=- class=bullet height=6 width=6 opacity=1 95,475 6x6
+                                    1994 column key=- class=- grow=1 110,466 922x24
+                                      1995 column key=- class=- 110,466 922x24
+                                        1996 row key=- class=- 110,466 922x24
+                                          1997 column key=- class=- grow=1 110,466 922x24
+                                            1998 box key=- class=block-content-or-editor-wrap grow=1 110,466 922x24
+                                              1999 box key=- class=block-content-or-editor-inner grow=1 110,466 922x24
+                                                2000 row key=- class=block-row grow=1 110,466 922x24
+                                                  2001 box key=- class=- 3,48 0x0
+                                                  2002 row key=- class=block-content-wrapper grow=1 110,466 918x24
+                                                    2003 box key=- class=block-content grow=1 110,466 918x24
+                                                      2004 row key=- class=- 110,466 918x24
+                                                        2005 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,466 918x24
+                                                          2006 row key=- class=- 110,466 333x24
+                                                            2007 text key=- class=block-title-wrap text="Scroll row 36: repeatable long-page content" 110,466 333x24
+                                                    2008 row key=- class=- 1028,466 0x24
+                                                  2009 row key=- class=ls-block-right 1032,478 0x0
+                                                    2010 box key=- class=- 3,48 0x0
+                                                    2011 box key=- class=- 3,48 0x0
+                                            2012 box key=- class=- 3,48 0x0
+                                      2013 box key=- class=- 3,48 0x0
+                                  2014 column key=- class=ls-block-content-indent 68,490 964x0
+                                2015 column key=- class=ls-block swipe-item 68,492 964x28
+                                  2016 row key=- class=block-main-container 68,494 964x24
+                                    2017 row key=- class=block-control-wrap height=24 68,494 38x24
+                                      2018 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,496 22x22
+                                        2019 box key=- class=control-hide opacity=0 70,498 13x18
+                                          2020 box key=- class=rotating-arrow not-collapsed 70,498 13x13
+                                            2021 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,498 13x13
+                                      2022 row key=- class=bullet-link-wrap margin-left=0 90,498 16x16
+                                        2023 box key=- class=bullet-container cursor height=16 width=16 90,498 16x16
+                                          2024 box key=- class=bullet height=6 width=6 opacity=1 95,503 6x6
+                                    2025 column key=- class=- grow=1 110,494 922x24
+                                      2026 column key=- class=- 110,494 922x24
+                                        2027 row key=- class=- 110,494 922x24
+                                          2028 column key=- class=- grow=1 110,494 922x24
+                                            2029 box key=- class=block-content-or-editor-wrap grow=1 110,494 922x24
+                                              2030 box key=- class=block-content-or-editor-inner grow=1 110,494 922x24
+                                                2031 row key=- class=block-row grow=1 110,494 922x24
+                                                  2032 box key=- class=- 3,48 0x0
+                                                  2033 row key=- class=block-content-wrapper grow=1 110,494 918x24
+                                                    2034 box key=- class=block-content grow=1 110,494 918x24
+                                                      2035 row key=- class=- 110,494 918x24
+                                                        2036 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,494 918x24
+                                                          2037 row key=- class=- 110,494 332x24
+                                                            2038 text key=- class=block-title-wrap text="Scroll row 37: repeatable long-page content" 110,494 332x24
+                                                    2039 row key=- class=- 1028,494 0x24
+                                                  2040 row key=- class=ls-block-right 1032,506 0x0
+                                                    2041 box key=- class=- 3,48 0x0
+                                                    2042 box key=- class=- 3,48 0x0
+                                            2043 box key=- class=- 3,48 0x0
+                                      2044 box key=- class=- 3,48 0x0
+                                  2045 column key=- class=ls-block-content-indent 68,518 964x0
+                                2046 column key=- class=ls-block swipe-item 68,520 964x28
+                                  2047 row key=- class=block-main-container 68,522 964x24
+                                    2048 row key=- class=block-control-wrap height=24 68,522 38x24
+                                      2049 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,524 22x22
+                                        2050 box key=- class=control-hide opacity=0 70,526 13x18
+                                          2051 box key=- class=rotating-arrow not-collapsed 70,526 13x13
+                                            2052 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,526 13x13
+                                      2053 row key=- class=bullet-link-wrap margin-left=0 90,526 16x16
+                                        2054 box key=- class=bullet-container cursor height=16 width=16 90,526 16x16
+                                          2055 box key=- class=bullet height=6 width=6 opacity=1 95,531 6x6
+                                    2056 column key=- class=- grow=1 110,522 922x24
+                                      2057 column key=- class=- 110,522 922x24
+                                        2058 row key=- class=- 110,522 922x24
+                                          2059 column key=- class=- grow=1 110,522 922x24
+                                            2060 box key=- class=block-content-or-editor-wrap grow=1 110,522 922x24
+                                              2061 box key=- class=block-content-or-editor-inner grow=1 110,522 922x24
+                                                2062 row key=- class=block-row grow=1 110,522 922x24
+                                                  2063 box key=- class=- 3,48 0x0
+                                                  2064 row key=- class=block-content-wrapper grow=1 110,522 918x24
+                                                    2065 box key=- class=block-content grow=1 110,522 918x24
+                                                      2066 row key=- class=- 110,522 918x24
+                                                        2067 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,522 918x24
+                                                          2068 row key=- class=- 110,522 333x24
+                                                            2069 text key=- class=block-title-wrap text="Scroll row 38: repeatable long-page content" 110,522 333x24
+                                                    2070 row key=- class=- 1028,522 0x24
+                                                  2071 row key=- class=ls-block-right 1032,534 0x0
+                                                    2072 box key=- class=- 3,48 0x0
+                                                    2073 box key=- class=- 3,48 0x0
+                                            2074 box key=- class=- 3,48 0x0
+                                      2075 box key=- class=- 3,48 0x0
+                                  2076 column key=- class=ls-block-content-indent 68,546 964x0
+                                2077 column key=- class=ls-block swipe-item 68,548 964x28
+                                  2078 row key=- class=block-main-container 68,550 964x24
+                                    2079 row key=- class=block-control-wrap height=24 68,550 38x24
+                                      2080 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,552 22x22
+                                        2081 box key=- class=control-hide opacity=0 70,554 13x18
+                                          2082 box key=- class=rotating-arrow not-collapsed 70,554 13x13
+                                            2083 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,554 13x13
+                                      2084 row key=- class=bullet-link-wrap margin-left=0 90,554 16x16
+                                        2085 box key=- class=bullet-container cursor height=16 width=16 90,554 16x16
+                                          2086 box key=- class=bullet height=6 width=6 opacity=1 95,559 6x6
+                                    2087 column key=- class=- grow=1 110,550 922x24
+                                      2088 column key=- class=- 110,550 922x24
+                                        2089 row key=- class=- 110,550 922x24
+                                          2090 column key=- class=- grow=1 110,550 922x24
+                                            2091 box key=- class=block-content-or-editor-wrap grow=1 110,550 922x24
+                                              2092 box key=- class=block-content-or-editor-inner grow=1 110,550 922x24
+                                                2093 row key=- class=block-row grow=1 110,550 922x24
+                                                  2094 box key=- class=- 3,48 0x0
+                                                  2095 row key=- class=block-content-wrapper grow=1 110,550 918x24
+                                                    2096 box key=- class=block-content grow=1 110,550 918x24
+                                                      2097 row key=- class=- 110,550 918x24
+                                                        2098 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,550 918x24
+                                                          2099 row key=- class=- 110,550 333x24
+                                                            2100 text key=- class=block-title-wrap text="Scroll row 39: repeatable long-page content" 110,550 333x24
+                                                    2101 row key=- class=- 1028,550 0x24
+                                                  2102 row key=- class=ls-block-right 1032,562 0x0
+                                                    2103 box key=- class=- 3,48 0x0
+                                                    2104 box key=- class=- 3,48 0x0
+                                            2105 box key=- class=- 3,48 0x0
+                                      2106 box key=- class=- 3,48 0x0
+                                  2107 column key=- class=ls-block-content-indent 68,574 964x0
+                                2108 column key=- class=ls-block swipe-item 68,576 964x28
+                                  2109 row key=- class=block-main-container 68,578 964x24
+                                    2110 row key=- class=block-control-wrap height=24 68,578 38x24
+                                      2111 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,580 22x22
+                                        2112 box key=- class=control-hide opacity=0 70,582 13x18
+                                          2113 box key=- class=rotating-arrow not-collapsed 70,582 13x13
+                                            2114 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,582 13x13
+                                      2115 row key=- class=bullet-link-wrap margin-left=0 90,582 16x16
+                                        2116 box key=- class=bullet-container cursor height=16 width=16 90,582 16x16
+                                          2117 box key=- class=bullet height=6 width=6 opacity=1 95,587 6x6
+                                    2118 column key=- class=- grow=1 110,578 922x24
+                                      2119 column key=- class=- 110,578 922x24
+                                        2120 row key=- class=- 110,578 922x24
+                                          2121 column key=- class=- grow=1 110,578 922x24
+                                            2122 box key=- class=block-content-or-editor-wrap grow=1 110,578 922x24
+                                              2123 box key=- class=block-content-or-editor-inner grow=1 110,578 922x24
+                                                2124 row key=- class=block-row grow=1 110,578 922x24
+                                                  2125 box key=- class=- 3,48 0x0
+                                                  2126 row key=- class=block-content-wrapper grow=1 110,578 918x24
+                                                    2127 box key=- class=block-content grow=1 110,578 918x24
+                                                      2128 row key=- class=- 110,578 918x24
+                                                        2129 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,578 918x24
+                                                          2130 row key=- class=- 110,578 334x24
+                                                            2131 text key=- class=block-title-wrap text="Scroll row 40: repeatable long-page content" 110,578 334x24
+                                                    2132 row key=- class=- 1028,578 0x24
+                                                  2133 row key=- class=ls-block-right 1032,590 0x0
+                                                    2134 box key=- class=- 3,48 0x0
+                                                    2135 box key=- class=- 3,48 0x0
+                                            2136 box key=- class=- 3,48 0x0
+                                      2137 box key=- class=- 3,48 0x0
+                                  2138 column key=- class=ls-block-content-indent 68,602 964x0
+                                2139 column key=- class=ls-block swipe-item 68,604 964x28
+                                  2140 row key=- class=block-main-container 68,606 964x24
+                                    2141 row key=- class=block-control-wrap height=24 68,606 38x24
+                                      2142 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,608 22x22
+                                        2143 box key=- class=control-hide opacity=0 70,610 13x18
+                                          2144 box key=- class=rotating-arrow not-collapsed 70,610 13x13
+                                            2145 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,610 13x13
+                                      2146 row key=- class=bullet-link-wrap margin-left=0 90,610 16x16
+                                        2147 box key=- class=bullet-container cursor height=16 width=16 90,610 16x16
+                                          2148 box key=- class=bullet height=6 width=6 opacity=1 95,615 6x6
+                                    2149 column key=- class=- grow=1 110,606 922x24
+                                      2150 column key=- class=- 110,606 922x24
+                                        2151 row key=- class=- 110,606 922x24
+                                          2152 column key=- class=- grow=1 110,606 922x24
+                                            2153 box key=- class=block-content-or-editor-wrap grow=1 110,606 922x24
+                                              2154 box key=- class=block-content-or-editor-inner grow=1 110,606 922x24
+                                                2155 row key=- class=block-row grow=1 110,606 922x24
+                                                  2156 box key=- class=- 3,48 0x0
+                                                  2157 row key=- class=block-content-wrapper grow=1 110,606 918x24
+                                                    2158 box key=- class=block-content grow=1 110,606 918x24
+                                                      2159 row key=- class=- 110,606 918x24
+                                                        2160 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,606 918x24
+                                                          2161 row key=- class=- 110,606 330x24
+                                                            2162 text key=- class=block-title-wrap text="Scroll row 41: repeatable long-page content" 110,606 330x24
+                                                    2163 row key=- class=- 1028,606 0x24
+                                                  2164 row key=- class=ls-block-right 1032,618 0x0
+                                                    2165 box key=- class=- 3,48 0x0
+                                                    2166 box key=- class=- 3,48 0x0
+                                            2167 box key=- class=- 3,48 0x0
+                                      2168 box key=- class=- 3,48 0x0
+                                  2169 column key=- class=ls-block-content-indent 68,630 964x0
+                                2170 column key=- class=ls-block swipe-item 68,632 964x28
+                                  2171 row key=- class=block-main-container 68,634 964x24
+                                    2172 row key=- class=block-control-wrap height=24 68,634 38x24
+                                      2173 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,636 22x22
+                                        2174 box key=- class=control-hide opacity=0 70,638 13x18
+                                          2175 box key=- class=rotating-arrow not-collapsed 70,638 13x13
+                                            2176 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,638 13x13
+                                      2177 row key=- class=bullet-link-wrap margin-left=0 90,638 16x16
+                                        2178 box key=- class=bullet-container cursor height=16 width=16 90,638 16x16
+                                          2179 box key=- class=bullet height=6 width=6 opacity=1 95,643 6x6
+                                    2180 column key=- class=- grow=1 110,634 922x24
+                                      2181 column key=- class=- 110,634 922x24
+                                        2182 row key=- class=- 110,634 922x24
+                                          2183 column key=- class=- grow=1 110,634 922x24
+                                            2184 box key=- class=block-content-or-editor-wrap grow=1 110,634 922x24
+                                              2185 box key=- class=block-content-or-editor-inner grow=1 110,634 922x24
+                                                2186 row key=- class=block-row grow=1 110,634 922x24
+                                                  2187 box key=- class=- 3,48 0x0
+                                                  2188 row key=- class=block-content-wrapper grow=1 110,634 918x24
+                                                    2189 box key=- class=block-content grow=1 110,634 918x24
+                                                      2190 row key=- class=- 110,634 918x24
+                                                        2191 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,634 918x24
+                                                          2192 row key=- class=- 110,634 334x24
+                                                            2193 text key=- class=block-title-wrap text="Scroll row 42: repeatable long-page content" 110,634 334x24
+                                                    2194 row key=- class=- 1028,634 0x24
+                                                  2195 row key=- class=ls-block-right 1032,646 0x0
+                                                    2196 box key=- class=- 3,48 0x0
+                                                    2197 box key=- class=- 3,48 0x0
+                                            2198 box key=- class=- 3,48 0x0
+                                      2199 box key=- class=- 3,48 0x0
+                                  2200 column key=- class=ls-block-content-indent 68,658 964x0
+                                2201 column key=- class=ls-block swipe-item 68,660 964x28
+                                  2202 row key=- class=block-main-container 68,662 964x24
+                                    2203 row key=- class=block-control-wrap height=24 68,662 38x24
+                                      2204 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,664 22x22
+                                        2205 box key=- class=control-hide opacity=0 70,666 13x18
+                                          2206 box key=- class=rotating-arrow not-collapsed 70,666 13x13
+                                            2207 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,666 13x13
+                                      2208 row key=- class=bullet-link-wrap margin-left=0 90,666 16x16
+                                        2209 box key=- class=bullet-container cursor height=16 width=16 90,666 16x16
+                                          2210 box key=- class=bullet height=6 width=6 opacity=1 95,671 6x6
+                                    2211 column key=- class=- grow=1 110,662 922x24
+                                      2212 column key=- class=- 110,662 922x24
+                                        2213 row key=- class=- 110,662 922x24
+                                          2214 column key=- class=- grow=1 110,662 922x24
+                                            2215 box key=- class=block-content-or-editor-wrap grow=1 110,662 922x24
+                                              2216 box key=- class=block-content-or-editor-inner grow=1 110,662 922x24
+                                                2217 row key=- class=block-row grow=1 110,662 922x24
+                                                  2218 box key=- class=- 3,48 0x0
+                                                  2219 row key=- class=block-content-wrapper grow=1 110,662 918x24
+                                                    2220 box key=- class=block-content grow=1 110,662 918x24
+                                                      2221 row key=- class=- 110,662 918x24
+                                                        2222 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,662 918x24
+                                                          2223 row key=- class=- 110,662 334x24
+                                                            2224 text key=- class=block-title-wrap text="Scroll row 43: repeatable long-page content" 110,662 334x24
+                                                    2225 row key=- class=- 1028,662 0x24
+                                                  2226 row key=- class=ls-block-right 1032,674 0x0
+                                                    2227 box key=- class=- 3,48 0x0
+                                                    2228 box key=- class=- 3,48 0x0
+                                            2229 box key=- class=- 3,48 0x0
+                                      2230 box key=- class=- 3,48 0x0
+                                  2231 column key=- class=ls-block-content-indent 68,686 964x0
+                                2232 column key=- class=ls-block swipe-item 68,688 964x28
+                                  2233 row key=- class=block-main-container 68,690 964x24
+                                    2234 row key=- class=block-control-wrap height=24 68,690 38x24
+                                      2235 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,692 22x22
+                                        2236 box key=- class=control-hide opacity=0 70,694 13x18
+                                          2237 box key=- class=rotating-arrow not-collapsed 70,694 13x13
+                                            2238 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,694 13x13
+                                      2239 row key=- class=bullet-link-wrap margin-left=0 90,694 16x16
+                                        2240 box key=- class=bullet-container cursor height=16 width=16 90,694 16x16
+                                          2241 box key=- class=bullet height=6 width=6 opacity=1 95,699 6x6
+                                    2242 column key=- class=- grow=1 110,690 922x24
+                                      2243 column key=- class=- 110,690 922x24
+                                        2244 row key=- class=- 110,690 922x24
+                                          2245 column key=- class=- grow=1 110,690 922x24
+                                            2246 box key=- class=block-content-or-editor-wrap grow=1 110,690 922x24
+                                              2247 box key=- class=block-content-or-editor-inner grow=1 110,690 922x24
+                                                2248 row key=- class=block-row grow=1 110,690 922x24
+                                                  2249 box key=- class=- 3,48 0x0
+                                                  2250 row key=- class=block-content-wrapper grow=1 110,690 918x24
+                                                    2251 box key=- class=block-content grow=1 110,690 918x24
+                                                      2252 row key=- class=- 110,690 918x24
+                                                        2253 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,690 918x24
+                                                          2254 row key=- class=- 110,690 334x24
+                                                            2255 text key=- class=block-title-wrap text="Scroll row 44: repeatable long-page content" 110,690 334x24
+                                                    2256 row key=- class=- 1028,690 0x24
+                                                  2257 row key=- class=ls-block-right 1032,702 0x0
+                                                    2258 box key=- class=- 3,48 0x0
+                                                    2259 box key=- class=- 3,48 0x0
+                                            2260 box key=- class=- 3,48 0x0
+                                      2261 box key=- class=- 3,48 0x0
+                                  2262 column key=- class=ls-block-content-indent 68,714 964x0
+                                2263 column key=- class=ls-block swipe-item 68,716 964x28
+                                  2264 row key=- class=block-main-container 68,718 964x24
+                                    2265 row key=- class=block-control-wrap height=24 68,718 38x24
+                                      2266 link key=- class=block-control font-size="0.875rem" opacity=0.4 68,720 22x22
+                                        2267 box key=- class=control-hide opacity=0 70,722 13x18
+                                          2268 box key=- class=rotating-arrow not-collapsed 70,722 13x13
+                                            2269 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 70,722 13x13
+                                      2270 row key=- class=bullet-link-wrap margin-left=0 90,722 16x16
+                                        2271 box key=- class=bullet-container cursor height=16 width=16 90,722 16x16
+                                          2272 box key=- class=bullet height=6 width=6 opacity=1 95,727 6x6
+                                    2273 column key=- class=- grow=1 110,718 922x24
+                                      2274 column key=- class=- 110,718 922x24
+                                        2275 row key=- class=- 110,718 922x24
+                                          2276 column key=- class=- grow=1 110,718 922x24
+                                            2277 box key=- class=block-content-or-editor-wrap grow=1 110,718 922x24
+                                              2278 box key=- class=block-content-or-editor-inner grow=1 110,718 922x24
+                                                2279 row key=- class=block-row grow=1 110,718 922x24
+                                                  2280 box key=- class=- 3,48 0x0
+                                                  2281 row key=- class=block-content-wrapper grow=1 110,718 918x24
+                                                    2282 box key=- class=block-content grow=1 110,718 918x24
+                                                      2283 row key=- class=- 110,718 918x24
+                                                        2284 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 110,718 918x24
+                                                          2285 row key=- class=- 110,718 333x24
+                                                            2286 text key=- class=block-title-wrap text="Scroll row 45: repeatable long-page content" 110,718 333x24
+                                                    2287 row key=- class=- 1028,718 0x24
+                                                  2288 row key=- class=ls-block-right 1032,730 0x0
+                                                    2289 box key=- class=- 3,48 0x0
+                                                    2290 box key=- class=- 3,48 0x0
+                                            2291 box key=- class=- 3,48 0x0
+                                      2292 box key=- class=- 3,48 0x0
+                                  2293 column key=- class=ls-block-content-indent 68,742 964x0
+                            1383 column key=- class=ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0  opacity=0 68,744 964x28
+                              1384 row key=- class=- 68,744 964x28
+                                1385 row key=- class=bab-inner grow=1 height=28 margin-left=22 90,744 942x28
+                                  1386 box key=- class=bullet-container height=16 width=16 90,750 16x16
+                                    1387 box key=- class=bullet height=6 width=6 opacity=1 95,755 6x6
+                      1388 column key=- class=- margin-left=4 92,836 940x32
+                        1389 box key=- class=- 92,836 940x0
+                          1390 box key=- class=- 3,48 0x0
+                        1391 box key=- class=- 92,868 940x0
+                          1392 box key=- class=- 3,48 0x0
+                      1393 box key=- class=- 3,48 0x0
+      105 box key=- class=cp__right-sidebar closed 1103,0 177x900
+        106 row key=- class=- grow=1 1103,0 177x900
+    107 box key=- class= 1280,0 0x900
+      108 spacer key=- class=- 1280,0 0x900
+  109 popover key=- class=cp__overlays 0,0 1280x900
+    110 box key=- class=- grow=1 0,0 1280x900
+      111 box key=- class=- 0,0 1280x0
+      112 box key=- class=- 0,0 0x0
+      113 box key=- class=- 0,0 0x0
+      114 box key=- class=- 0,0 0x0
+      115 box key=- class=- 0,0 0x0
+      116 column key=- class=cp__overlay-layer cp__dialog-shell 0,0 1280x0
+        117 column key=- class=- 0,0 1280x0
+        118 column key=- class=- 0,0 1280x0
+      119 spacer key=- class=- 0,0 1280x450
+      120 spacer key=- class=- 0,450 1280x450
+  121 overlay key=- class=- 1260,880 20x20
+    122 box key=- class=cp__sidebar-help-btn 1260,880 20x20
+      123 box key=- class=inner 1260,880 20x20
+        124 icon key=- class=ui__icon ls-icon-help-small height=20 width=20 name="app:help-small" ires=ok:app:help-small 1260,880 20x20
+  125 spacer key=- class=- 0,0 1280x900
+  126 spacer key=- class=- 0,0 1280x900
+scene[0] 0,0 1100x900
+scene[1] 14,14 20x20
+scene[2] 46,14 20x20
+scene[8] 3,48 1097x852
+scene[9] 3,48 1097x852
+scene[10] 68,44 964x28
+scene[11] 95,55 6x6
+scene[12] 110,46 918x24
+scene[14] 68,72 964x28
+scene[15] 95,83 6x6
+scene[16] 110,74 918x24
+scene[18] 68,100 964x28
+scene[19] 95,111 6x6
+scene[20] 110,102 918x24
+scene[22] 68,128 964x28
+scene[23] 95,139 6x6
+scene[24] 110,130 918x24
+scene[26] 68,156 964x28
+scene[27] 95,167 6x6
+scene[28] 110,158 918x24
+scene[30] 68,184 964x28
+scene[31] 95,195 6x6
+scene[32] 110,186 918x24
+scene[34] 68,212 964x28
+scene[35] 95,223 6x6
+scene[36] 110,214 918x24
+scene[38] 68,240 964x28
+scene[39] 95,251 6x6
+scene[40] 110,242 918x24
+scene[42] 68,268 964x28
+scene[43] 95,279 6x6
+scene[44] 110,270 918x24
+scene[46] 68,296 964x28
+scene[47] 95,307 6x6
+scene[48] 110,298 918x24
+scene[50] 68,324 964x28
+scene[51] 95,335 6x6
+scene[52] 110,326 918x24
+scene[54] 68,352 964x28
+scene[55] 95,363 6x6
+scene[56] 110,354 918x24
+scene[58] 68,380 964x28
+scene[59] 95,391 6x6
+scene[60] 110,382 918x24
+scene[62] 68,408 964x28
+scene[63] 95,419 6x6
+scene[64] 110,410 918x24
+scene[66] 68,436 964x28
+scene[67] 95,447 6x6
+scene[68] 110,438 918x24
+scene[70] 68,464 964x28
+scene[71] 95,475 6x6
+scene[72] 110,466 918x24
+scene[74] 68,492 964x28
+scene[75] 95,503 6x6
+scene[76] 110,494 918x24
+scene[78] 68,520 964x28
+scene[79] 95,531 6x6
+scene[80] 110,522 918x24
+scene[82] 68,548 964x28
+scene[83] 95,559 6x6
+scene[84] 110,550 918x24
+scene[86] 68,576 964x28
+scene[87] 95,587 6x6
+scene[88] 110,578 918x24
+scene[90] 68,604 964x28
+scene[91] 95,615 6x6
+scene[92] 110,606 918x24
+scene[94] 68,632 964x28
+scene[95] 95,643 6x6
+scene[96] 110,634 918x24
+scene[98] 68,660 964x28
+scene[99] 95,671 6x6
+scene[100] 110,662 918x24
+scene[102] 68,688 964x28
+scene[103] 95,699 6x6
+scene[104] 110,690 918x24
+scene[106] 68,716 964x28
+scene[107] 95,727 6x6
+scene[108] 110,718 918x24
+scene[120] 0,4 1280x900
+scene[121] 0,2 1280x900
+scene[122] 0,0 1280x900
