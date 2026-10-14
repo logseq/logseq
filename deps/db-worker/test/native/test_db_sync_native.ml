@@ -9997,6 +9997,66 @@ let test_rebase_keeps_pending_when_rebased_empty () =
           check "pending kept"
             (List.length (Sync_apply.pending_txs test_repo ()) = 1)))
 
+(* Encrypted journal replacements must preserve confirmed state and pending edits. *)
+let test_encrypted_journal_text_replacement ~attr ~same_text ~add_first () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, child1, child2, _child3 = setup_parent_child () in
+      mark_graph_remote conn;
+      let key = Wire.Binary (String.make 32 'k') in
+      let target = if attr = "block/name" then
+          Option.get (Ldb.ref_ent child1 "block/page") else child1 in
+      let old_title = Option.get (Ldb.string_value target attr) in
+      let title = if same_text then old_title else "remote replacement" in
+      let subject = block_uuid_lookup (entity_block_uuid target) in
+      let encrypt value =
+        Wire.String (await_task (Sync_crypt.encrypt_text_value_impl key value))
+      in
+      let assertion = db_add subject attr (encrypt title) in
+      let retraction = db_retract subject attr (encrypt old_title) in
+      check "ciphertexts differ"
+        (List.nth (Wire.as_seq assertion) 3 <> List.nth (Wire.as_seq retraction) 3);
+      let items =
+        if add_first then [ assertion; retraction ] else [ retraction; assertion ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          raw_transact_string display
+            [ db_add (block_uuid_lookup (entity_block_uuid child2))
+                "block/title" (Wire.String "pending local edit") ];
+          let pending = Sync_apply.pending_txs test_repo () in
+          Sync_deps.graph_e2ee := Some (fun _ -> true);
+          Sync_deps.ensure_graph_aes_key := Some (fun _ -> Db_worker_effect.pure key);
+          Sync_deps.decrypt_tx_data := Some (fun raw_key items ->
+              Db_worker_effect.map Wire.as_seq
+                (Sync_crypt.decrypt_tx_data (Wire.Binary raw_key) (Wire.Array items)));
+          let client = mk_client () in
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+            (msg_json [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+                      ; "txs", Wire.Array
+                          [ wire_map [ "t", Wire.Int 1
+                                     ; "tx-id", Wire.Uuid (fresh_uuid ())
+                                     ; "tx", Wire.String (Transit_codec.to_string (Wire.Array items)) ] ] ]));
+          check "encrypted journal advances cursor"
+            (Sync_client_op.get_local_tx test_repo = Some 1);
+          let displayed = Option.get (ent_by_block_uuid (Datascript.db display)
+              (ent_block_uuid target)) in
+          let confirmed = Option.get (Sync_state.server_conn test_repo) in
+          let server_child = Option.get (ent_by_block_uuid (Datascript.db confirmed)
+              (ent_block_uuid target)) in
+          check "display title survives decryption"
+            (Ldb.string_value displayed attr = Some title);
+          check "confirmed title survives decryption"
+            (Ldb.string_value server_child attr = Some title);
+          check "pending intent remains queued"
+            (List.map (fun (row : Sync_client_op.local_tx_entry) -> row.tx_id)
+               (Sync_apply.pending_txs test_repo ())
+             = List.map (fun (row : Sync_client_op.local_tx_entry) -> row.tx_id) pending);
+          let pending_child = Option.get (ent_by_block_uuid (Datascript.db display)
+              (ent_block_uuid child2)) in
+          check "pending edit remains displayed"
+            (Ldb.string_value pending_child "block/title" = Some "pending local edit")))
+
 (* cljs apply-remote-tx-collapsed-encrypted-title-update-test *)
 let test_apply_remote_tx_collapsed_encrypted_title () =
   preserve_state (fun () ->
@@ -10005,22 +10065,12 @@ let test_apply_remote_tx_collapsed_encrypted_title () =
       let child_uuid = ent_block_uuid child1 in
       let title = Option.get (Ldb.value child1 "block/title") in
       with_datascript_conns conn (Some ops) (fun () ->
-          (* journal truth: a collapsed add+retract pair that leaves a
-             required attr empty cannot journal — the apply fails fast
-             instead of being silently repaired *)
-          (match
-             (try
-                await_unit
-                  (Sync_replay.apply_remote_tx test_repo (mk_client ())
-                     [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
-                         "block/title" (Ds_wire.transit_of_value title)
-                     ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
-                         "block/title" (Ds_wire.transit_of_value title) ]);
-                false
-              with _ -> true)
-           with
-           | true -> ()
-           | false -> Alcotest.fail "apply-remote-tx did not raise");
+          await_unit
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
+               [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                   "block/title" (Ds_wire.transit_of_value title)
+               ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
+                   "block/title" (Ds_wire.transit_of_value title) ]);
           let child' =
             Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
           in
@@ -15740,7 +15790,15 @@ let () =
         ; Alcotest.test_case "failed-pull-preserves-unconfirmed-intent" `Quick
             test_failed_pull_does_not_confirm_journal_echo ] )
     ; ( "journal-truth-regressions"
-      , [ Alcotest.test_case "partial-reject-pulls-accepted-prefix" `Quick
+      , [ Alcotest.test_case "encrypted-identical-text-add-first" `Quick
+            (test_encrypted_journal_text_replacement ~attr:"block/title" ~same_text:true ~add_first:true)
+        ; Alcotest.test_case "encrypted-identical-text-retract-first" `Quick
+            (test_encrypted_journal_text_replacement ~attr:"block/title" ~same_text:true ~add_first:false)
+        ; Alcotest.test_case "encrypted-changed-text-add-first" `Quick
+            (test_encrypted_journal_text_replacement ~attr:"block/title" ~same_text:false ~add_first:true)
+        ; Alcotest.test_case "encrypted-identical-name-add-first" `Quick
+            (test_encrypted_journal_text_replacement ~attr:"block/name" ~same_text:true ~add_first:true)
+        ; Alcotest.test_case "partial-reject-pulls-accepted-prefix" `Quick
             test_partial_reject_pulls_accepted_prefix
         ; Alcotest.test_case "uuid-text-title-uploads" `Quick test_uuid_text_title_uploads
         ; Alcotest.test_case "upload-rebase-after-one-window" `Quick

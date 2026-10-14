@@ -1247,7 +1247,17 @@ let transact_remote_txs
            ingest would have dropped the item or its target journaled
            earlier — so strict transact resolution surfaces a broken
            prefix instead of silently patching it *)
-        let tx_data = List.map (resolve_temp_id db) raw_tx_data in
+        (* Match master's post-decryption collision handling: different
+           ciphertext facts can become the same plaintext fact. Keep its
+           assertion even if the journal lists the retract after the add.
+           This normalization does not depend on the client's db state. *)
+        let tx_data =
+          raw_tx_data
+          |> List.map (resolve_temp_id db)
+          |> List.map Ds_wire.value_of_transit
+          |> Db_sync_tx_sanitize.drop_conflicted_encrypted_retracts
+          |> List.map Ds_wire.transit_of_value
+        in
         (if tx_data = [] && raw_tx_data <> [] then
            Worker_log.warn "sync/remote-tx-emptied"
              [ "outliner-op", remote_op
