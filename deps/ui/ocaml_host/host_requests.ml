@@ -527,22 +527,18 @@ let queue_input_focus bid focused =
     (bid, focused)
     :: List.filter (fun (b, _) -> b <> bid) !pending_focus
 
-(* while an ed-sink exists it holds focus — the browser keeps the
-   editing input focused for the whole editing session, covering a
-   remount that dropped the focused node AND the mount paths that
-   never emit set-input-focus (pointer-driven mounts). Only moves
-   focus when nothing else owns it — a focused popup/menu/other input
-   is left alone. Runs both after applied batches and after the frame
-   loop's store_changed (dead-focus cleanup clears Ui.focused there,
-   when no batch is pending to trigger this again). *)
-let focus_candidates = Host_interaction.editor_cache ()
-
+(* Restore the editor the app already focused, after a remount dropped
+   the sink node (Ui.focused goes to 0 or dead, with no new
+   set-input-focus). Do not scan the tree for the first block-id: that
+   steals focus onto a non-editable block, arms SDL text input, and the
+   next poll_event blocks inside XFilterEvent for an ibus/XIM timeout.
+   A focused popup, menu, or other input is left alone. *)
 let ensure_ed_focus_ (e : env) =
-  if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
-    match Host_interaction.editor_candidate focus_candidates e.store with
-    | Some bid -> ignore (try_set_input_focus e bid true)
-    | None -> ()
-
+  match !editor_focus_bid with
+  | None -> ()
+  | Some bid ->
+    if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
+      ignore (try_set_input_focus e bid true)
 (* Draw the model caret using the same current glyph geometry used by
    caret-rect replies. The input sink itself has no visible bounds. *)
 let editor_caret_ops ~color =

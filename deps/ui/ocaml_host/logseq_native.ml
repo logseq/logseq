@@ -1078,7 +1078,16 @@ let () =
         Native_embed.platform_event ("lazy-mount\n" ^ body))
       (Host_interaction.lazy_mount_groups store (List.rev !entering))
   in
-  (* SDL_SetTextInputRect works in window (logical) pixels. *)
+  (* SDL text input feeds XIM. Leaving it armed on a non-editable
+     node makes SDL_PollEvent run XFilterEvent, which blocks the main
+     thread for an ibus timeout (~20s) on the following keyup. Arm it
+     only while a text-entry node owns focus. *)
+  let text_entry kind =
+    match kind with
+    | "input" | "search-field" | "text-field" | "secure-field"
+    | "textarea" | "extension:logseq-editor" -> true
+    | _ -> false
+  in
   let set_ime_rect (r : Lui_scene.rect) =
     let s = !scale_cell in
     Sdl.set_text_input_rect
@@ -1109,8 +1118,10 @@ let () =
   in
   let text_input = Native_window.text_input () in
   let focused_text_input id =
-    Native_window.request_text_input text_input (id <> 0);
-    if id <> 0 then set_ime_rect (Rects.get rects id)
+    let on = id <> 0 && Lui_store.mem store id
+             && text_entry (Lui_store.kind store id) in
+    Native_window.request_text_input text_input on;
+    if on then set_ime_rect (Rects.get rects id)
   in
   let quit = ref false in
   let rec apply_action = function
@@ -1752,6 +1763,34 @@ let () =
     | _ -> ()
   in
   Callback.register "ocaml_host_menu_command" menu_command;
+  (* PageUp/PageDown with focus off a list used to no-op (control_key
+     ignores them; list_key only pages a pointer-armed list scope) and,
+     with text input armed, the keyup blocked in XIM. When nothing
+     else scrolled, page the main column. Multiline editors keep the
+     key. The id is cached; a remount misses and we scan once. *)
+  let main_scroller = ref 0 in
+  let main_scroller_id () =
+    let id = !main_scroller in
+    if
+      id <> 0 && Lui_store.mem store id
+      && Lui_store.string_prop store id "accessibility-identifier"
+         = Some "main-content-container"
+    then id
+    else
+      match
+        List.find_opt
+          (fun nid ->
+            Lui_store.string_prop store nid "accessibility-identifier"
+            = Some "main-content-container")
+          (Lui_store.preorder store)
+      with
+      | Some nid ->
+        main_scroller := nid;
+        nid
+      | None ->
+        main_scroller := 0;
+        0
+  in
   let e = Sdl.Event.create () in
   let drain_events () =
     let n = ref 0 in
@@ -1797,7 +1836,37 @@ let () =
              (handle_input (Input.Resize (w, h)))
          | Some (Input.Resize _) -> ()
          | Some input ->
+           let page_dir =
+             match input with
+             | Input.Key_down (k, mods, _)
+               when not
+                      (mods.Input.ctrl || mods.Input.shift
+                       || mods.Input.alt || mods.Input.meta) ->
+               if k = Input.Page_down then 1.
+               else if k = Input.Page_up then -1.
+               else 0.
+             | _ -> 0.
+           in
+           let epoch0 = Ui.scroll_epoch ui in
            apply_actions (handle_input input);
+           if page_dir <> 0. && Ui.scroll_epoch ui = epoch0 then begin
+             let fid = Ui.focused ui in
+             let editor_owns =
+               fid <> 0
+               &&
+               match Lui_store.kind store fid with
+               | "textarea" | "extension:logseq-editor" -> true
+               | _ -> false
+             in
+             if not editor_owns then
+               let sc = main_scroller_id () in
+               if sc <> 0 then begin
+                 let h = (Rects.get rects sc).Lui_scene.h in
+                 if h > 1. then
+                   apply_actions
+                     (Ui.scroll_by ui store sc (page_dir *. 0.9 *. h))
+               end
+           end;
            (match input with
             | Input.Text_input s ->
               Host_metrics.note_text metrics s;
@@ -1894,6 +1963,10 @@ let () =
     | Some _ -> true
   in
   let raises_left = ref 3 in
+  (* (focused id, caret, shadow, rect x/y/w) of the last caret push.
+     Unchanged frames skip Input.Caret so a focused field does not
+     dirty the painter every tick. *)
+  let caret_key = ref (-1, -1, "", 0., 0., 0.) in
   (* [last_busy] gates the idle sleep: any activity below refreshes
      it, so the 1ms fast poll persists through bursts (boot, typing)
      and the blocking wait only kicks in after sustained quiet. *)
@@ -2119,9 +2192,22 @@ let () =
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
     Host_requests.ensure_ed_focus ();
-    if Ui.focused ui <> 0 then
-      apply_actions
-        (handle_input (Input.Caret (caret_rect ())));
+    (* Caret geometry is text-entry only, and only when the anchor
+       moved. A non-editable focus must not run this every frame. *)
+    let fid = Ui.focused ui in
+    if fid = 0 || not (text_entry (Lui_store.kind store fid)) then
+      caret_key := (-1, -1, "", 0., 0., 0.)
+    else begin
+      let c = Ui.caret ui in
+      let sh = Ui.shadow ui in
+      let r = Rects.get rects fid in
+      let key = (fid, c, sh, r.Lui_scene.x, r.Lui_scene.y, r.Lui_scene.w) in
+      if key <> !caret_key then begin
+        caret_key := key;
+        apply_actions
+          (handle_input (Input.Caret (caret_rect ())))
+      end
+    end;
     if !Theme_vars.generation <> !theme_gen_seen then begin
       theme_gen_seen := !Theme_vars.generation;
       Lui_host.invalidate_paint host;
