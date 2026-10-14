@@ -88,3 +88,7 @@ Actual master Electron now runs independently with private HOME/XDG/graph state 
 ### Clipboard URL checkpoint
 
 Desktop Copy page URL is implemented and actual native/system clipboard values checked against actual master Electron and source tests. Native URI component encoding is corrected. **2094 UI checks, 0 failures**; native-host/contracts/host and focused creation E2E pass. Direct fixture-import graph identity preservation and opening copied links remain unverified.
+
+### Page typography checkpoint
+
+Page/journal display and editor leaves now inherit reference body16/24 and title36/54 metrics through typed properties. Production native text-engine assertions, actual window captures and existing-block saved-content evidence: [validation](evidence/page-typography/validation.md). Spacing, indentation, overflow and advanced editing remain unverified/different.

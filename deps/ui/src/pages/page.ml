@@ -1049,6 +1049,13 @@ let page_wrap_cls (m : Model.t) (page : Model.page) : string =
   ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
      else "")
 
+(* Page typography is inherited by display and editor leaves. Titles
+   override only the size, retaining the reference's 1.5 line-height ratio. *)
+let page_typography element =
+  Ui_components.with_props
+    [ Ui_components.Prop.font_size "var(--ls-page-text-size, 16px)"
+    ; Ui_components.Prop.line_height "1.5" ] element
+
 (* journal item backed by the journals signal — the outer keyed
    collection keeps the item mounted across publishes, a title reactive
    repaints title/icon/tag edits, the block list is the same keyed
@@ -1119,7 +1126,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 var(--lx-gray-04, var(--ls-border-color))" )
          ]
     [ (* data-page-tags is the page-wrap plugin contract *)
-      box ~key:("jiw-" ^ key)
+      page_typography (box ~key:("jiw-" ^ key)
         ~style_class:(page_wrap_cls (Signal.get ms) p0)
         ~padding_horizontal:8
         ~data_attrs:(page_wrap_attrs p0)
@@ -1188,7 +1195,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                       ]))
                 ps
             ]
-        ]
+        ])
     ])
     ctx parent
 
@@ -1598,7 +1605,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
      static ~style_class); the dynamic data-page-tags wrap attrs ride
      ~data_attrs_signal *)
   (Ui_parts.class_signal ms page_cls
-     (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
+     (page_typography (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
         ~padding_horizontal:8
         [ column ~key:"page-inner" ~gap:32
             ~style_class:"page-inner"
@@ -1609,7 +1616,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
             ]
         ; reactive ~equal:refs_eq refs_wrap ms
         ; Selection_bar.view ()
-        ]))
+        ])))
     ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted

@@ -15,7 +15,9 @@ let () =
   in
   let initial = Model.initial in
   let registry = Lui_extension.registry () in
-  Logseq_el.register registry;
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   let view _context model _send = Chrome.shell model in
   let app = Lui_app.create_with_extensions backend registry initial (fun _model model -> model) view in
   ignore (Lui_app.start app);
@@ -55,6 +57,39 @@ let () =
             (menu.y = 40. && menu.w = 256.))
         [ 1280.; 1100. ])
     [ false; true ];
+  let previous_worker = !Runtime.worker in
+  let dead, _, _ = Js.Promise.pending () in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun _ _ -> Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  let block = Decode.block_of_wire (Wire.Map
+      [ Wire.Keyword "block/uuid", Wire.Uuid "22222222-2222-4222-8222-222222222222"
+      ; Wire.Keyword "block/title", Wire.String "Body typography fixture" ]) in
+  let page = Option.get (Decode.page_of_summary (Wire.Map
+      [ Wire.Keyword "page-title", Wire.String "Typography fixture"
+      ; Wire.Keyword "page-uuid", Wire.Uuid "33333333-3333-4333-8333-333333333333" ])) in
+  let page = { page with page_blocks = [ block ] } in
+  let model = { Model.initial with phase = Model.Ready; route = Model.Page "fixture"; route_page = Some page } in
+  ignore (Lui_app.send app model);
+  ignore (Lui_app.flush app);
+  let theme = Ui_theme.snapshot Ui_theme.Light in
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      [ "mode", `String "light"
+      ; "vars", `Assoc (List.map (fun (key, value) -> key, `String value) theme.vars) ]));
+  let by_text text = List.find (fun id -> Lui_store.string_prop store id "text" = Some text)
+      (Lui_store.preorder store) in
+  let body = by_text "Body typography fixture"
+  and title = by_text "Typography fixture" in
+  let body_font = Text_engine.font_of store body
+  and title_font = Text_engine.font_of store title in
+  check "native page body text inherits the reference sixteen-pixel size"
+    (Host_platform.Text.size body_font = 16.);
+  check "native body text inherits the reference twenty-four-pixel line height"
+    (Text_engine.line_height store body body_font = Some 24.);
+  check "native page titles retain their separate font size and inherited line-height ratio"
+    (Host_platform.Text.size title_font = 36.
+     && Text_engine.line_height store title title_font = Some 54.);
+  Runtime.worker := previous_worker;
   ignore (Lui_app.dispose app);
   let page = Option.get (Decode.page_of_summary (Wire.Map
       [ Wire.Keyword "page-title", Wire.String "Clipboard fixture"
@@ -86,4 +121,5 @@ let () =
   Runtime.read_model := previous_model;
   Runtime.current_graph_uuid := previous_graph_id;
   ignore (Lui_app.dispose copy_app);
+
   print_endline "native header layout: OK"
