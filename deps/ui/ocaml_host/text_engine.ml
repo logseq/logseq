@@ -312,7 +312,8 @@ let text_layout t id (r : Lui_scene.rect) s =
   (* Flowing text wraps at its padded width so a long line never spills
      into the node's inset; labeled controls keep a single line. *)
   let wrap_w =
-    match Lui_store.kind store id with
+    if r.w <= 0. || Lui_store.string_prop store id "white-space" = Some "nowrap" then 0.
+    else match Lui_store.kind store id with
     | "text" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
     | "popover" | "alert" ->
       (* LUI's pixel-snapping contract edge-rounds every exported rect,
@@ -339,7 +340,14 @@ let text_ops t id r fg s =
   let tp = Lui_paint.text_placement_of store id in
   let layout, x0, y0 = text_layout t id r s in
   let w' = Float.max 0. (r.w -. (2. *. tp.tp_pad_x *. scale)) in
-  let lines = Array.map (fun (l : Lui_text.line_layout) -> l.ll_line) layout.lay_lines in
+  let lines =
+    if Lui_store.string_prop store id "text-overflow" = Some "ellipsis"
+       && layout.lay_width *. scale > w' then
+      match Lui_text.truncate ~width:(w' /. scale) layout.lay_base s with
+      | Some line -> [|line|]
+      | None -> [||]
+    else Array.map (fun (l : Lui_text.line_layout) -> l.ll_line) layout.lay_lines
+  in
   let gstart = List.length scene.glyphs in
   let line_y = ref 0. in
   Array.iter
@@ -411,7 +419,8 @@ let measure_text ?(width = 0.) t id s =
   else
     let scale = t.scale () in
     let width =
-      if Float.is_finite width && width > 0. then width /. scale else 0.
+      if Lui_store.string_prop (t.store ()) id "white-space" = Some "nowrap" then 0.
+      else if Float.is_finite width && width > 0. then width /. scale else 0.
     in
     let w, h = Lui_text.Cache.measure t.layouts ~width (font_of (t.store ()) id) s in
     (w *. scale, h *. scale)

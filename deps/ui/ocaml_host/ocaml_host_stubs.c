@@ -15,6 +15,103 @@
 #include <caml/mlvalues.h>
 
 #include <stdlib.h>
+#include <SDL.h>
+#include <SDL_syswm.h>
+
+CAMLprim value logseq_native_performance_time(value unit_v) {
+  CAMLparam1(unit_v);
+  CAMLreturn(caml_copy_double((double)SDL_GetPerformanceCounter() /
+                             (double)SDL_GetPerformanceFrequency()));
+}
+
+typedef struct {
+  double *regions;
+  size_t count;
+  Uint32 window_id;
+  SDL_threadID thread;
+  int watching;
+  int repainting;
+} LogseqWindowState;
+
+static const char *logseq_window_key = "logseq-native-window";
+
+static LogseqWindowState *logseq_window_state(SDL_Window *window) {
+  LogseqWindowState *state = SDL_GetWindowData(window, logseq_window_key);
+  if (!state) {
+    state = calloc(1, sizeof(*state));
+    if (!state) caml_raise_out_of_memory();
+    state->window_id = SDL_GetWindowID(window);
+    state->thread = SDL_ThreadID();
+    SDL_SetWindowData(window, logseq_window_key, state);
+  }
+  return state;
+}
+
+static SDL_HitTestResult logseq_hit_test(SDL_Window *window,
+                                       const SDL_Point *point, void *userdata) {
+  (void)window;
+  const LogseqWindowState *state = userdata;
+
+  for (size_t i = 0; i < state->count; i += 5) {
+    const double *r = state->regions + i;
+    if (point->x >= r[1] && point->y >= r[2] &&
+        point->x < r[1] + r[3] && point->y < r[2] + r[4])
+      return r[0] == 1.0 ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+  }
+  return SDL_HITTEST_NORMAL;
+}
+
+CAMLprim value logseq_native_drag_regions(value id, value regions) {
+  CAMLparam2(id, regions);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id));
+  if (!window) caml_invalid_argument("Native drag regions require a live window");
+  size_t count = Wosize_val(regions) / Double_wosize;
+  if (count % 5) caml_invalid_argument("Invalid native drag rectangles");
+  LogseqWindowState *state = logseq_window_state(window);
+  double *copy = count ? malloc(count * sizeof(double)) : NULL;
+  if (count && !copy) caml_raise_out_of_memory();
+  for (size_t i = 0; i < count; i++) copy[i] = Double_field(regions, i);
+  free(state->regions);
+  state->regions = copy;
+  state->count = count;
+  if (SDL_SetWindowHitTest(window, count ? logseq_hit_test : NULL,
+                          count ? state : NULL) < 0)
+    caml_failwith(SDL_GetError());
+  if (!count && !state->watching) {
+    SDL_SetWindowData(window, logseq_window_key, NULL);
+    free(state);
+  }
+  CAMLreturn(Val_unit);
+}
+
+static int logseq_expose_watch(void *userdata, SDL_Event *event) {
+  LogseqWindowState *state = userdata;
+  if (SDL_ThreadID() == state->thread && !state->repainting &&
+      event->type == SDL_WINDOWEVENT && event->window.windowID == state->window_id &&
+      event->window.event == SDL_WINDOWEVENT_EXPOSED) {
+    const value *callback = caml_named_value("logseq_native_expose");
+    state->repainting = 1;
+    value result = caml_callback_exn(*callback, Val_unit);
+    state->repainting = 0;
+    if (Is_exception_result(result)) caml_fatal_error("Native resize repaint failed");
+  }
+  return 0;
+}
+
+CAMLprim value logseq_native_watch_expose(value id, value enabled) {
+  CAMLparam2(id, enabled);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id));
+  if (!window) caml_invalid_argument("Native expose watch requires a live window");
+  LogseqWindowState *state = logseq_window_state(window);
+  if (Bool_val(enabled) && !state->watching) {
+    state->watching = 1;
+    SDL_AddEventWatch(logseq_expose_watch, state);
+  } else if (!Bool_val(enabled) && state->watching) {
+    SDL_DelEventWatch(logseq_expose_watch, state);
+    state->watching = 0;
+  }
+  CAMLreturn(Val_unit);
+}
 
 /* OCaml-internal: native_embed.ml's `external wakeup` lands here. The
    host loop polls Bridge.pending_wakeup once per frame; a flag is all
@@ -367,17 +464,54 @@ CAMLprim void logseq_native_titlebar_blend(void) {
     unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(
         w, sel_registerName("styleMask"));
     if (!(mask & 1L /* NSWindowStyleMaskTitled */)) continue;
+    id content = ((id (*)(id, SEL))objc_msgSend)(w, sel_registerName("contentView"));
+    id responder = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("nextResponder"));
     ((void (*)(id, SEL, unsigned long))objc_msgSend)(
         w, sel_registerName("setStyleMask:"),
         mask | (1L << 15) /* NSWindowStyleMaskFullSizeContentView */);
+    /* AppKit rewrites the responder chain when the style mask changes.
+       Preserve SDL's listener so mouse presses continue reaching SDL. */
+    ((void (*)(id, SEL, id))objc_msgSend)(content, sel_registerName("setNextResponder:"), responder);
     ((void (*)(id, SEL, int))objc_msgSend)(
         w, sel_registerName("setTitlebarAppearsTransparent:"), 1);
     ((void (*)(id, SEL, long))objc_msgSend)(
         w, sel_registerName("setTitleVisibility:"),
         1L /* NSWindowTitleHidden */);
     ((void (*)(id, SEL, int))objc_msgSend)(
-        w, sel_registerName("setMovableByWindowBackground:"), 1);
+        w, sel_registerName("setMovableByWindowBackground:"), 0);
   }
+}
+
+CAMLprim value logseq_native_input_chain(value id_v) {
+  SDL_SysWMinfo info;
+  SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info))
+    caml_failwith(SDL_GetError());
+  id window = (id)info.info.cocoa.window;
+  id listener = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("delegate"));
+  id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
+  id next = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("nextResponder"));
+  id window_next = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("nextResponder"));
+  return Val_bool(next == listener && window_next == listener);
+}
+CAMLprim value logseq_native_sidebar_hit(value id_v) {
+  SDL_SysWMinfo info; SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
+  id window = (id)info.info.cocoa.window;
+  id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
+  id frame = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("superview"));
+  id children = ((id (*)(id, SEL))objc_msgSend)(frame, sel_registerName("subviews"));
+  unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(children, sel_registerName("count"));
+  for (unsigned long index = 0; index < count; index++) {
+    id view = ((id (*)(id, SEL, unsigned long))objc_msgSend)(children, sel_registerName("objectAtIndex:"), index);
+    if (((int (*)(id, SEL, Class))objc_msgSend)(view, sel_registerName("isKindOfClass:"), objc_getClass("NSVisualEffectView"))) {
+      typedef struct { double x,y; } Point;
+      Point point = {20.,20.};
+      id hit = ((id (*)(id, SEL, Point))objc_msgSend)(view, sel_registerName("hitTest:"), point);
+      return Val_bool(hit != nil);
+    }
+  }
+  caml_failwith("Sidebar material is missing");
 }
 /* Register every font file in a directory with CoreText so Lui_text's
    named-family lookup (CTFontDescriptorCreateMatchingFontDescriptor)
@@ -488,6 +622,22 @@ CAMLprim value logseq_native_sidebar_theme(value vdark) {
   CAMLreturn(Val_unit);
 }
 
+typedef struct { double x,y; } LogseqPoint;
+static id logseq_material_hit_test(id view, SEL selector, LogseqPoint point) {
+  (void)view; (void)selector; (void)point;
+  return nil;
+}
+
+static Class logseq_material_class(void) {
+  Class cls = objc_getClass("LogseqSidebarMaterial");
+  if (!cls) {
+    cls = objc_allocateClassPair(objc_getClass("NSVisualEffectView"), "LogseqSidebarMaterial", 0);
+    class_addMethod(cls, sel_registerName("hitTest:"), (IMP)logseq_material_hit_test, "@@:{CGPoint=dd}");
+    objc_registerClassPair(cls);
+  }
+  return cls;
+}
+
 /* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
    material composited BEHIND the SDL content view. SDL assumes the
    content view IS its metal view (a subview inside it would draw above
@@ -541,7 +691,7 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
         cv, sel_registerName("superview"));
     if (frame == nil) continue;
     if (effect == nil) {
-      Class effcls = objc_getClass("NSVisualEffectView");
+      Class effcls = logseq_material_class();
       if (effcls == Nil) break;
       ls_nsrect r = {x, y, w, h};
       effect = ((id (*)(id, SEL, ls_nsrect))objc_msgSend)(
@@ -1885,6 +2035,16 @@ CAMLprim value logseq_native_menu_popup(value spec_v) {
 }
 
 #elif defined(__linux__)
+
+CAMLprim value logseq_native_sidebar_hit(value id_v) {
+  (void)id_v;
+  caml_failwith("logseq_native: AppKit material inspection requires macOS");
+}
+
+CAMLprim value logseq_native_input_chain(value id_v) {
+  (void)id_v;
+  caml_failwith("logseq_native: AppKit responder inspection requires macOS");
+}
 
 #include <fontconfig/fontconfig.h>
 

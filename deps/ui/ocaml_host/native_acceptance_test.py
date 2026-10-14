@@ -1,8 +1,37 @@
 import unittest
-from native_acceptance import collect, validate, validate_functionality
+from native_acceptance import collect, validate, validate_functionality, validate_idle
 
 
 class NativeAcceptanceTest(unittest.TestCase):
+    def test_idle_rejects_rendering_and_gc_churn(self):
+        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
+                {"time_s": 10, "gpu_submitted": 1210, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100100000, "host_allocated_bytes": 100100000, "minor_collections": 52}}]
+        errors = validate_idle(rows)
+        self.assertTrue(any("allocation" in error for error in errors))
+        self.assertTrue(any("minor GC" in error for error in errors))
+        self.assertTrue(any("render" in error for error in errors))
+        rows[-1].update(gpu_submitted=20, gc={"allocated_bytes": 1100000, "host_allocated_bytes": 1100000,
+                                            "minor_collections": 3})
+        self.assertEqual([], validate_idle(rows))
+        rows[-1]["layout_count"] = 6
+        self.assertTrue(any("layout" in error for error in validate_idle(rows)))
+
+    def test_idle_rejects_uncollected_host_allocation(self):
+        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
+                {"time_s": 10, "gpu_submitted": 20, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 10100000, "minor_collections": 2}}]
+        self.assertTrue(any("host allocation" in error for error in validate_idle(rows)))
+
+    def test_idle_rejects_user_input(self):
+        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 1,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
+                {"time_s": 10, "gpu_submitted": 20, "layout_count": 5, "event_count": 2,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}}]
+        self.assertTrue(any("event" in error for error in validate_idle(rows)))
+
     def typing_evidence(self):
         return {"expected_text": "abcdefghijklmnopqrst" * 10,
                 "actual_text": "abcdefghijklmnopqrst" * 10,

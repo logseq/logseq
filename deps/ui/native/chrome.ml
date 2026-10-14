@@ -630,17 +630,14 @@ let shell (ms : Model.t Signal.signal) : t =
   install_menu_dismiss ();
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      (* h-full: the root view stretches children horizontally but sizes
-         them to content vertically — without a definite height the
-         whole chrome chain shrink-wraps and the docked sidebar renders
-         as a floating content-sized panel *)
-      "theme-container-inner ls-hl-colored h-full"
+      "theme-container-inner ls-hl-colored"
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
      )
     (* stack: the app row fills the frame as the in-flow first child;
        overlays/help/not-found become shared-cell overlays (native:
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
+    (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ (* horizontal shell: the docked splits own both side docks'
          tracks — the left split's second pane is the detail column
@@ -662,4 +659,4 @@ let shell (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ])
+    ]))

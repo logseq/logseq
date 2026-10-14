@@ -412,7 +412,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
                    [ Ui_components.Prop.margin_left 4
                    ; Ui_components.Prop.margin_right 8 ]
                    (icon_ icon_name)
-               ; text ~grow:1. ~value:title [] ]
+               ; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
               @ tail @ [ more ]))) ]
 
 let nav_route ~sched ~class_ ~active ~title ~icon_name ?shortcut hash =

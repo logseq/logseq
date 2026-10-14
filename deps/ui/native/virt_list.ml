@@ -31,6 +31,29 @@ let lazy_spine ctx =
   | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost -> true
   | _ -> false
 
+let lazy_row ?node_key ?(style_class="") ~key ~estimate_size near ns child : t =
+ fun ctx parent ->
+  let extent = Signal.state ctx.Lui_ui.ui_scheduler (estimate_size 0) in
+  (* The native viewport widget owns this binding through Logseq_el.
+     A measured floating-point extent preserves scrolling coordinates
+     when its content leaves the window. *)
+  let height = Signal.map2 (fun mounted height ->
+    Lui_protocol.StringValue (if mounted then "auto" else string_of_float height))
+    ns (Signal.value extent) in
+  (Logseq_el.el ?key:node_key ~style_class ~attrs:["data-lazy-mount",key]
+    ~ext_prop_signals:["height",height] ~events:"lazy-mount lazy-unmount"
+    ~on_dom_event:(fun name payload ->
+      if name="lazy-mount" then Signal.set near true
+      else if name="lazy-unmount" then begin
+        let fields = Option.get (Js.Json.decodeObject (Js.Json.parseExn (Option.get payload))) in
+        let height = Option.get (Option.bind (Js.Dict.get fields "height") Js.Json.decodeNumber) in
+        if not (Float.is_finite height) || height < 0. then
+          invalid_arg "Invalid lazy row measured height";
+        Signal.set extent height;
+        Signal.set near false
+      end)
+    [if_ ~test:ns child]) ctx parent
+
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
@@ -130,22 +153,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       else
         let near = near_of k in
         let ns = (Signal.value (near)) in
-        (* TODO(component): the lazy-mount dom-event is the Swift spine
-           contract — the attr could ride ~data_attrs but no component
-           kind carries a custom event channel *)
-        Logseq_el.el 
-          ~attrs_signal_v:
-            (Logseq_el.attrs_signal ns (fun n ->
-               ("data-lazy-mount", k)
-               :: (if n then []
-                   else
-                     [ ( "style"
-                       , Printf.sprintf "min-height:%.0fpx"
-                           (estimate_size 0) )
-                     ])))
-          ~events:"lazy-mount"
-          ~on_dom_event:(fun _name _payload -> Signal.set near true)
-          [ Lui_elements.if_ ~test:ns (render it) ]
+        lazy_row ~key:k ~estimate_size near ns (render it)
     in
     (* TODO(component): data-virt-count could ride ~data_attrs but the
        virt-end dom-event driving pagination has no component
@@ -208,21 +216,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     else
       let near = near_of k in
       let ns = (Signal.value (near)) in
-      (* TODO(component): same lazy-mount dom-event Swift spine contract as
-         [list] — stays a logseq-div *)
-      Logseq_el.el 
-        ~attrs_signal_v:
-          (Logseq_el.attrs_signal ns (fun n ->
-             ("data-lazy-mount", k)
-             :: (if n then []
-                 else
-                   [ ( "style"
-                     , Printf.sprintf "min-height:%.0fpx" (estimate_size 0)
-                     )
-                   ])))
-        ~events:"lazy-mount"
-        ~on_dom_event:(fun _name _payload -> Signal.set near true)
-        [ Lui_elements.if_ ~test:ns (mount item_sig) ]
+      lazy_row ~key:k ~estimate_size near ns (mount item_sig)
   in
   (* TODO(component): same data-virt-count + virt-end dom-event Swift spine
      contract as [list] — stays a logseq-div *)

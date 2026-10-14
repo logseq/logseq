@@ -241,7 +241,12 @@ let invalidate_stale_snapshots (rt : Lui_runtime.application) =
   if epoch <> !snapshot_epoch_ref then begin
     snapshot_epoch_ref := epoch;
     Hashtbl.reset shallow_cache;
-    Hashtbl.reset subtree_cache
+    Hashtbl.reset subtree_cache;
+    let alive id = Hashtbl.mem rt.Lui_runtime.mounted_nodes id in
+    Hashtbl.filter_map_inplace (fun id value -> if alive id then Some value else None)
+      attrs_parse_cache;
+    Dom_ext.prune_nodes alive;
+    Ui_dom_native.prune_tokens ()
   end
 
 let shallow_of (rt : Lui_runtime.application) node : Js.Json.t =
@@ -320,6 +325,7 @@ let decode_extension_values payload =
   | _ -> Lui_protocol.String_map.empty
 
 let take_patches_dbg where =
+  Option.iter (fun app -> invalidate_stale_snapshots (Lui_app.runtime app)) !current_app;
   let out = take_patches () in
   (match Sys.getenv_opt "LOGSEQ_PERF" with
    | Some _ ->
@@ -659,6 +665,22 @@ let platform_event payload =
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 
+let keyboard_event node payload values =
+  with_entry_lock (fun () ->
+    (* Document and conduit dispatch form one input transaction. Async
+       completions must not remount the target between those phases. *)
+    Platform.emit_event "keydown" (Js.Json.parseExn payload);
+    Option.iter (fun app ->
+      (match Lui_runtime.extension_identifier (Lui_app.runtime app) node with
+       | Some "logseq-editor" ->
+         ignore (Lui_app.dispatch_event app
+           (Lui_protocol.ExtensionEvent (node,"logseq-editor","key",
+             decode_extension_values values)))
+       | Some _ -> invalid_arg "Keyboard target is not an editor conduit"
+       | None -> ());
+      ignore (Lui_app.flush app)) !current_app;
+    take_patches_dbg "keyboard")
+
 let dispose () : string =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
@@ -667,6 +689,7 @@ let dispose () : string =
     (match !current_app with
      | Some app ->
          ignore (Lui_app.dispose app);
+         invalidate_stale_snapshots (Lui_app.runtime app);
          current_app := None
      | None -> ());
     take_patches ())

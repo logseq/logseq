@@ -10,13 +10,6 @@ module D = Logseq_el
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
 let force uuid = Hashtbl.replace forced uuid ()
 
-(* Per-uuid latches for `lazy_rows`, shared across invocations: the
-   container's dom-event handler is registered once on first emit and
-   keeps its original closure even when later republishes reuse the
-   node, so a table recreated per call would leave the handler mutating
-   latches the live rows no longer subscribe to. *)
-let near_states : (string, bool Signal.state) Hashtbl.t = Hashtbl.create 16
-
 (* TODO(component): the lazy-mount dom-event is a host-side contract
    (onAppear triggers the mount); the attr half could ride ~data_attrs
    but no component kind carries a custom event channel, so the
@@ -28,18 +21,8 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
     Signal.state ctx.Lui_ui.ui_scheduler (Hashtbl.mem forced uuid)
   in
   let near_sig = (Signal.value (near)) in
-  (Logseq_el.el ~key ~style_class:"block-children"
-     ~attrs_signal_v:
-       (Logseq_el.attrs_signal near_sig (fun n ->
-          (if n then []
-           else
-             [ ("style", Printf.sprintf "min-height:%.0fpx" min_height) ])
-          @ [ ("data-lazy-mount", uuid) ]))
-     ~events:"lazy-mount"
-     ~on_dom_event:(fun name _payload ->
-       if name = "lazy-mount" then Signal.set near true)
-     [ Lui_elements.if_ ~test:near_sig (render ()) ])
-    ctx parent
+  (Virt_list.lazy_row ~node_key:key ~style_class:"block-children" ~key:uuid
+    ~estimate_size:(fun _ -> min_height) near near_sig (render ())) ctx parent
 
 (* Parse the uuids array out of a batched lazy-mount payload. *)
 let uuids_of_payload payload =
@@ -74,6 +57,10 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
     (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in
+    (* Latches belong to this mounted list. A global table would keep
+       every disposed list's signals and scheduler reachable. *)
+    let near_states : (string,bool Signal.state) Hashtbl.t = Hashtbl.create 16 in
+    Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> Hashtbl.clear near_states);
     let near_of uuid =
       match Hashtbl.find_opt near_states uuid with
       | Some s -> s
@@ -94,23 +81,7 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
              let uuid = key b in
              let near = near_of uuid in
              let near_sig = (Signal.value (near)) in
-             Logseq_el.el 
-               ~attrs_signal_v:
-                 (Logseq_el.attrs_signal near_sig (fun n ->
-                    ("data-lazy-mount", uuid)
-                    :: (if n then []
-                        else
-                          [ ( "style"
-                            , Printf.sprintf "min-height:%.0fpx"
-                                (estimate_height b) )
-                          ])))
-               ~events:"lazy-mount"
-               (* hosts that can't batch (drive harness, per-node
-                  dispatch) emit lazy-mount straight at the row — the
-                  row lifts its own latch; a batched parent payload
-                  reaches the same latch through the container above *)
-               ~on_dom_event:(fun name _payload ->
-                 if name = "lazy-mount" then Signal.set near true)
-               [ Lui_elements.if_ ~test:near_sig (mount bs) ]) ])
+             Virt_list.lazy_row ~key:uuid ~estimate_size:(fun _ -> estimate_height b)
+               near near_sig (mount bs)) ])
       ctx parent
   end

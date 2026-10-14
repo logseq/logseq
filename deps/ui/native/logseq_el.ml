@@ -468,7 +468,9 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   if text <> "" then
     Lui_ui.extension_property context node "text" (StringValue text);
   Option.iter
-    (fun handler -> Platform.register_dom_handler node ~events handler)
+    (fun handler ->
+      Platform.register_dom_handler node ~events handler;
+      Signal.on_dispose context.Lui_ui.ui_scope (fun () -> Platform.unregister_dom_handlers node))
     on_dom_event;
   Lui_ui.on_event context node dispatch_raw;
   (match parent with

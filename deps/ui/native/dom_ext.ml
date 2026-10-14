@@ -450,6 +450,11 @@ let doc_query_selector_all (sel : string) : element list =
 let live_fields : (string, string * int * int) Hashtbl.t =
   Hashtbl.create 16
 
+let reference_owners : (string, int) Hashtbl.t = Hashtbl.create 16
+
+let note_reference_owner el key =
+  Option.iter (fun id -> Hashtbl.replace reference_owners key id) (node_id_of el)
+
 let dom_id_of (el : element) : string option =
   match str_prop "id" el with
   | Some id when id <> "" -> Some id
@@ -479,6 +484,7 @@ let value (el : element) : string =
 let set_value (el : element) (v : string) : unit =
   (match dom_id_of el with
    | Some id -> (
+       note_reference_owner el id;
        match Hashtbl.find_opt live_fields id with
        | Some (_, s, e) -> Hashtbl.replace live_fields id (v, s, e)
        | None -> Hashtbl.replace live_fields id (v, 0, 0))
@@ -488,6 +494,7 @@ let set_value (el : element) (v : string) : unit =
 let set_selection_range (el : element) (s : int) (e : int) : unit =
   (match dom_id_of el with
    | Some id -> (
+       note_reference_owner el id;
        match Hashtbl.find_opt live_fields id with
        | Some (v, _, _) -> Hashtbl.replace live_fields id (v, s, e)
        | None -> Hashtbl.replace live_fields id ("", s, e))
@@ -531,6 +538,8 @@ let note_node_rect (j : Js.Json.t) : unit =
   | Js.Json.JObject _ as ref_ -> (
       match ref_key_of ref_ with
       | Some k -> (
+          Option.iter (fun id -> Hashtbl.replace reference_owners k id)
+            (Option.map int_of_float (num_prop "nodeId" j));
           match prop "rect" j with
           | Js.Json.JObject _ as r -> Hashtbl.replace ref_rect_store k r
           | _ -> Hashtbl.remove ref_rect_store k)
@@ -583,6 +592,19 @@ let rect_pending (el : element) : bool =
    reply with a "node-natural-size" event; callers read the pushed
    value on their next attempt. *)
 let natural_store : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 8
+
+let prune_nodes alive =
+  let keep id value = if alive id then Some value else None in
+  Hashtbl.filter_map_inplace keep overlays;
+  Hashtbl.filter_map_inplace keep rect_store;
+  Hashtbl.filter_map_inplace keep natural_store;
+  Hashtbl.filter_map_inplace (fun key id ->
+    if alive id then Some id
+    else begin
+      Hashtbl.remove live_fields key;
+      Hashtbl.remove ref_rect_store key;
+      None
+    end) reference_owners
 
 let note_node_natural_size (j : Js.Json.t) : unit =
   match Option.map int_of_float (num_prop "nodeId" j) with
@@ -761,7 +783,7 @@ let el_set_checked (el : element) (v : bool) : unit =
 let el_contains (a : element) (b : element) : bool =
   let ka = el_key a in
   ka <> ""
-  && List.exists (fun anc -> el_key anc = ka) (ancestors_of b)
+  && (ka = el_key b || List.exists (fun anc -> el_key anc = ka) (ancestors_of b))
 
 let el_id (el : element) : string =
   Option.value (dom_id_of el) ~default:""

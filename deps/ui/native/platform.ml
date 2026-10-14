@@ -194,7 +194,7 @@ let emit_event name payload =
            match Js.Json.decodeNumber v with
            | None -> ()
            | Some n ->
-               let payload_str = Js.Json.stringify payload in
+               let payload_str = lazy (Js.Json.stringify payload) in
                let rec bubble id depth =
                  if depth < 64 && not !propagation_stopped then begin
                    (match Hashtbl.find_opt dom_handlers id with
@@ -205,7 +205,7 @@ let emit_event name payload =
                               (not !propagation_stopped)
                               && event_listed dh.dh_events name
                             then
-                              try dh.dh_fn name (Some payload_str)
+                              try dh.dh_fn name (Some (Lazy.force payload_str))
                               with e ->
                                 Printf.eprintf
                                   "[emit_event] handler threw id=%d ev=%s: %s\n%!"

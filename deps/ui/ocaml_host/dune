@@ -22,7 +22,7 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in linux) flags=$(pkg-config --cflags fontconfig) || exit; printf '(%s)' \"$flags\";; *) printf '()';; esac"))))
+    "flags=$(pkg-config --cflags sdl2) || exit; case '%{system}' in linux) flags=\"$flags $(pkg-config --cflags fontconfig)\" || exit;; esac; printf '(%s)' \"$flags\""))))
 
 (rule
  (target host_link_flags.sexp)
@@ -370,7 +370,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_embed native_lifecycle_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
+ (modules (:standard \ logseq_native native_window native_window_test native_embed native_lifecycle_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
@@ -453,8 +453,8 @@
 (library
  (name logseq_native_entry)
  (wrapped false)
- (modules native_embed bridge)
- (libraries logseq_ui_ocamlhost)
+ (modules native_embed bridge native_window)
+ (libraries logseq_ui_ocamlhost logseq_native_interaction tsdl)
  (foreign_stubs
   (language c)
   (names ocaml_host_stubs)
@@ -464,6 +464,12 @@
  (name native_lifecycle_test)
  (modules native_lifecycle_test)
  (libraries logseq_native_entry)
+ (link_flags (:standard (:include host_link_flags.sexp))))
+
+(test
+ (name native_window_test)
+ (modules native_window_test)
+ (libraries logseq_native_entry logseq_ocaml_host_platform)
  (link_flags (:standard (:include host_link_flags.sexp))))
 
 (library

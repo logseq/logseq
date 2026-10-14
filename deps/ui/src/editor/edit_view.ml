@@ -702,15 +702,18 @@ let view ~model ~frame ~block_id ~on_input ~cls : t =
     own context
       (Signal.map
          (fun m ->
-           match m.Edit_model.units with
-           | U16 ->
-               let lines =
-                 match cache.lc_model with
-                 | Some previous when previous.source == m.source -> previous.lines
-                 | _ -> web_flow_ranges m
-               in
-               lines_step cache { m with lines }
-           | Bytes -> lines_step cache m)
+           (* Visual ranges belong to cursor navigation. Rendering them
+              as explicit rows makes a transient narrow measurement
+              persist forever, even after the editor grows again. *)
+           let lines =
+             match cache.lc_model with
+             | Some previous when previous.source == m.Edit_model.source -> previous.lines
+             | _ ->
+               match m.units with
+               | U16 -> web_flow_ranges m
+               | Bytes -> Edit_model.lines_of_source m.source
+           in
+           lines_step cache { m with lines })
          model)
   in
   let lines_s = own context (Signal.cutoff ( == ) mapped) in

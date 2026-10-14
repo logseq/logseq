@@ -78,6 +78,18 @@ let viewport_attributes () =
   check "Lazy mount marker was missed"
     (Host_interaction.has_attribute {|{"data-lazy-mount":"true"}|} "data-lazy-mount")
 
+let attribute_scan_allocation () =
+  let payload = String.make 1000 'x' ^ "data-window-titlebar" in
+  let before = (Gc.quick_stat ()).Gc.minor_words in
+  for _ = 1 to 100 do
+    check "Header marker at the end was missed"
+      (Host_interaction.has_attribute payload "data-window-titlebar");
+    check "Missing header marker matched"
+      (not (Host_interaction.has_attribute payload "missing-marker"))
+  done;
+  check "Attribute scans allocate a substring per character"
+    ((Gc.quick_stat ()).Gc.minor_words -. before < 10000.)
+
 let geometry_refresh () =
   let store = Lui_store.create () in
   for id = 1 to 100 do
@@ -114,6 +126,96 @@ let unconstrained_measure () =
     (Hashtbl.find_opt memo (Host_interaction.measure_width nan) = Some (10., 20.));
   check "A positive wrapping width was discarded" (Host_interaction.measure_width 50. = 50.)
 
+let scroll_end () =
+  let viewport = Lui_scene.rect 40. 100. 200. 300. in
+  let x,y = Host_interaction.scroll_extent viewport ~right:340. ~bottom:900. in
+  check "Bottom padding and leading space were omitted from scroll range"
+    (x = 100. && y = 500.);
+  let x,y = Host_interaction.scroll_extent viewport ~right:140. ~bottom:200. in
+  check "Short content acquired a negative scroll range" (x = 0. && y = 0.)
+
+let viewport_candidate_allocation () =
+  let store = Lui_store.create () in
+  for id = 1 to 6000 do Lui_store.apply_op store (CreateNode (id, Column)) done;
+  Lui_store.apply_op store (SetExtensionProp (10, "attrs", StringValue "data-lazy-mount"));
+  Lui_store.apply_op store (SetExtensionProp (20, "attrs", StringValue "data-virt-count"));
+  let cache = Host_interaction.viewport_cache () in
+  check "Viewport candidates must include lazy mounts and pagination markers"
+    (Host_interaction.viewport_candidates cache store = [10;20]);
+  let before = Gc.allocated_bytes () in
+  for _ = 1 to 100 do ignore (Host_interaction.viewport_candidates cache store) done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 100. in
+  check (Printf.sprintf "Scroll viewport checks allocate %.0f bytes/frame" allocated)
+    (allocated < 8192.);
+  Lui_store.apply_op store (SetExtensionProp (30, "attrs", StringValue "data-lazy-mount"));
+  Lui_store.apply_op store (RemoveExtensionProp (10, "attrs"));
+  Lui_store.apply_op store (DropNode 20);
+  check "Viewport markers must follow attributes and removed nodes"
+    (Host_interaction.viewport_candidates cache store = [30]);
+  let other = Lui_store.create () in
+  Lui_store.apply_op other (CreateNode (40, Column));
+  Lui_store.apply_op other (SetExtensionProp (40, "attrs", StringValue "data-lazy-mount"));
+  check "Viewport candidate cache must not retain a previous graph's nodes"
+    (Host_interaction.viewport_candidates cache other = [40])
+
+let pointer_hit_allocations () =
+  let store = Lui_store.create () in
+  Lui_store.apply_op store (CreateNode (1, Column));
+  let rects = Lui_window.Rects.create () in
+  Hashtbl.add rects 1 (Lui_scene.rect 0. 0. 100. 40000.);
+  for id = 2 to 2001 do
+    Lui_store.apply_op store (CreateNode (id, Button));
+    Lui_store.apply_op store (InsertChild (1, id, id - 2));
+    Lui_store.apply_op store (SetProp (id, PointerEnabled, BoolValue true));
+    Hashtbl.add rects id (Lui_scene.rect 0. (float (id - 2) *. 20.) 100. 20.)
+  done;
+  let cache = Host_interaction.hit_cache () in
+  let ui = Lui_window.Ui.create () in
+  let raw_motion () =
+    ignore (Lui_window.Ui.handle ui store rects (Lui_window.Input.Move (10., 10.)));
+    ignore (Lui_window.hit_path store rects ~x:10. ~y:10.)
+  in
+  raw_motion ();
+  let raw_before = Gc.allocated_bytes () in
+  for _ = 1 to 10 do raw_motion () done;
+  Printf.printf "unindexed pointer motion allocated %.0f bytes/event\n%!"
+    ((Gc.allocated_bytes () -. raw_before) /. 10.);
+  let motion () =
+    let spatial = Host_interaction.hit_index cache ~store ~rects ~epoch:0 in
+    ignore (Lui_window.Ui.handle ~spatial ui store rects (Lui_window.Input.Move (10., 10.)));
+    check "Indexed DOM hit differs from visible button"
+      (Lui_window.hit_path ~spatial store rects ~x:10. ~y:10. = [2;1])
+  in
+  motion ();
+  let before = Gc.allocated_bytes () in
+  for _ = 1 to 100 do motion () done;
+  let bytes = (Gc.allocated_bytes () -. before) /. 100. in
+  Printf.printf "pointer motion allocated %.0f bytes/event\n%!" bytes;
+  check "Pointer hit testing exceeds 16 KiB per event" (bytes < 16384.)
+
+let pointer_hit_invalidation () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Button);
+    SetProp (1, PointerEnabled, BoolValue true)]};
+  let rects = Lui_window.Rects.create () in
+  Hashtbl.add rects 1 (Lui_scene.rect 0. 0. 20. 20.);
+  let cache = Host_interaction.hit_cache () in
+  let hit epoch = Lui_window.hit_path
+    ~spatial:(Host_interaction.hit_index cache ~store ~rects ~epoch)
+    store rects ~x:10. ~y:10. in
+  check "Initial hit missing" (hit 0 = [1]);
+  Hashtbl.replace rects 1 (Lui_scene.rect 50. 50. 20. 20.);
+  check "Moved geometry reused a stale index" (hit 1 = []);
+  Hashtbl.replace rects 1 (Lui_scene.rect 0. 0. 20. 20.);
+  Lui_store.apply_op store (SetProp (1, Visible, BoolValue false));
+  check "Store visibility reused a stale index" (hit 2 = []);
+  let replacement = Lui_store.create () in
+  Lui_store.apply_batch replacement {generation=1;ops=[CreateNode (1, Button);
+    SetProp (1, PointerEnabled, BoolValue true)]};
+  let spatial = Host_interaction.hit_index cache ~store:replacement ~rects ~epoch:2 in
+  check "A replacement store reused a foreign index"
+    (Lui_window.hit_path ~spatial replacement rects ~x:10. ~y:10. = [1])
+
 let () =
   let failures = ref [] in
   List.iter (fun (name, test) ->
@@ -122,6 +224,153 @@ let () =
       Printf.eprintf "%s: FAIL: %s\n%!" name message)
     [ "pointer layout", pointer_layout; "idle focus", idle_editor_scan;
       "editor caret", visible_caret;
-      "interaction paint", interaction_repaints; "viewport markers", viewport_attributes; "hit geometry", geometry_refresh; "overlay text", overlay_glyphs;
-      "unconstrained measure", unconstrained_measure ];
+      "interaction paint", interaction_repaints; "viewport markers", viewport_attributes;
+      "attribute allocation", attribute_scan_allocation;
+      "hit geometry", geometry_refresh; "overlay text", overlay_glyphs;
+      "unconstrained measure", unconstrained_measure; "scroll end", scroll_end ];
+  List.iter (fun test ->
+    try test () with Failure message -> failures := message :: !failures;
+      Printf.eprintf "pointer hit: FAIL: %s\n%!" message)
+    [pointer_hit_allocations; pointer_hit_invalidation];
   if !failures <> [] then exit 1
+
+let () = viewport_candidate_allocation (); print_endline "viewport allocation: OK"
+
+let () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column); CreateNode (2, Column);
+    SetExtensionProp (1,"attrs",StringValue "data-lazy-mount");
+    SetExtensionProp (2,"attrs",StringValue "data-virt-count") ]};
+  let cache = Host_interaction.viewport_cache () in
+  let lazy_fired = Hashtbl.create 2 and virt_end_fired = Hashtbl.create 2 in
+  let emitted = ref [] and bottom = ref 300. in
+  let check_events expected =
+    emitted := [];
+    Host_interaction.viewport_events cache ~store ~height:600.
+      ~rect_of:(fun id -> if id=1 then Lui_scene.rect 0. 2000. 100. 100.
+        else Lui_scene.rect 0. 0. 100. !bottom)
+      ~lazy_fired ~virt_end_fired ~emit:(fun name id -> emitted := (name,id)::!emitted);
+    check "Pagination must fire independently from lazy-mount markers"
+      (List.rev !emitted = expected) in
+  check_events ["virt-end",2];
+  check_events [];
+  bottom := 800.; check_events ["virt-end",2];
+  bottom := 2000.; check_events [];
+  Hashtbl.replace lazy_fired 1 ();
+  Lui_store.apply_op store (DropNode 2);
+  Lui_store.apply_op store (RemoveExtensionProp (1,"attrs"));
+  check_events [];
+  check "Removed viewport markers must not retain per-node state"
+    (Hashtbl.length lazy_fired=0 && Hashtbl.length virt_end_fired=0);
+  print_endline "viewport pagination: OK"
+
+let () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column);
+    SetExtensionProp (1,"attrs",StringValue "data-lazy-mount") ]};
+  let cache = Host_interaction.viewport_cache () in
+  let lazy_fired = Hashtbl.create 1 and virt_end_fired = Hashtbl.create 1 in
+  let y = ref 100. and emitted = ref [] in
+  let step expected =
+    emitted := [];
+    Host_interaction.viewport_events cache ~store ~height:600.
+      ~rect_of:(fun _ -> Lui_scene.rect 0. !y 100. 40.)
+      ~lazy_fired ~virt_end_fired ~emit:(fun name id -> emitted := (name,id)::!emitted);
+    check "Lazy viewport window must enter, leave, and reenter without duplicate events"
+      (List.rev !emitted = expected) in
+  step ["lazy-mount",1]; step [];
+  y := 2000.; step ["lazy-unmount",1]; step [];
+  y := 100.; step ["lazy-mount",1];
+  print_endline "bounded lazy viewport: OK"
+
+let () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column);
+    SetExtensionProp (1,"attrs",StringValue "data-lazy-mount") ]};
+  let cache = Host_interaction.viewport_cache () in
+  let lazy_fired = Hashtbl.create 1 and virt_end_fired = Hashtbl.create 1 in
+  Hashtbl.add lazy_fired 1 ();
+  let emitted = ref [] in
+  Host_interaction.viewport_events ~pinned:(fun id -> id=1) cache ~store ~height:600.
+    ~rect_of:(fun _ -> Lui_scene.rect 0. 2000. 100. 40.)
+    ~lazy_fired ~virt_end_fired ~emit:(fun name id -> emitted := (name,id)::!emitted);
+  check "Focused editor ancestors must stay mounted outside the viewport"
+    (!emitted=[] && Hashtbl.mem lazy_fired 1)
+
+let () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column); CreateNode (2, Column);
+    CreateNode (3, Column); CreateNode (4, Column); CreateNode (5, Column);
+    SetExtensionProp (1,"events",StringValue "lazy-mount click");
+    SetExtensionProp (2,"attrs",StringValue "data-lazy-mount");
+    SetExtensionProp (3,"attrs",StringValue "data-lazy-mount");
+    SetExtensionProp (4,"events",StringValue "click");
+    SetExtensionProp (5,"attrs",StringValue "data-lazy-mount");
+    InsertChild (1,2,0); InsertChild (1,3,1); InsertChild (2,4,0); InsertChild (4,5,0) ]};
+  check "Nested child gates must not be batched into an unrelated row container"
+    (Host_interaction.lazy_mount_groups store [2;5;3] = [1,[2;3];5,[5]]);
+  check "No viewport work must produce no batches" (Host_interaction.lazy_mount_groups store []=[])
+
+let () =
+  let state = Host_interaction.presentation () and ready = ref true in
+  let presented = ref [] in
+  let submit (scene : Lui_scene.t) = presented := scene.ops :: !presented in
+  let renderer = {Lui_host.name="controlled-presentation";
+    render=(fun scene -> ignore (Host_interaction.present state ~ready:!ready ~submit scene); Bytes.empty)} in
+  let hooks = {Lui_paint.default_hooks with color_of=Lui_window.Theme.color_of;
+    layout=(fun _ -> Lui_paint.placement_of_rect (Lui_scene.rect 0. 0. 100. 40.))} in
+  let host = Lui_host.create ~hooks ~renderer ~width:200 ~height:100 ~scale:1. () in
+  ignore (Lui_host.apply_batch host {generation=1;ops=[CreateNode (1,Box);
+    SetProp (1,BackgroundValue,StringValue "#ff0000")]});
+  ignore (Lui_host.repaint host);
+  ready := false;
+  ignore (Lui_host.apply_batch host {generation=2;ops=[SetProp (1,BackgroundValue,StringValue "#0000ff")]});
+  ignore (Lui_host.repaint host);
+  check "A busy renderer must not count a skipped scene as presented" (List.length !presented=1);
+  check "A dirty scene skipped by the GPU must retry on the next loop without new input"
+    (Host_interaction.presentation_due state ~now:0.016 ~last:0.008);
+  ignore (Lui_host.apply_batch host {generation=3;ops=[SetProp (1,BackgroundValue,StringValue "#00ff00")]});
+  ignore (Lui_host.repaint host);
+  ready := true;
+  ignore (renderer.render (Lui_host.scene host));
+  check "The retry must present the latest coalesced scene"
+    (List.length !presented=2 && List.hd !presented=(Lui_host.scene host).Lui_scene.ops);
+  check "The submitted scene must contain the final visual update"
+    (List.exists (function Lui_scene.Fill fill -> fill.fcolor=Lui_scene.color 0 255 0 255 | _ -> false)
+      (List.hd !presented));
+  check "A successful retry must stop immediate resubmission"
+    (not (Host_interaction.presentation_due state ~now:0.025 ~last:0.024));
+  check "Idle heartbeat must remain available"
+    (Host_interaction.presentation_due state ~now:1.025 ~last:0.024);
+  print_endline "native pending presentation: OK"
+
+let () =
+  let cache = Host_interaction.overlay_cache () in
+  let scene = Lui_scene.create
+    ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:32 ~h:32)
+    ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:32 ~h:32) in
+  let glyph = {Lui_scene.gx=1.;gy=2.;gw=3.;gh=4.;gu=0;gv=0;guw=3;gvh=4;
+    gcolor=Lui_scene.color 0 0 0 255;gwide=0;gcolored=false;gsubpixel=false;gthin=false} in
+  let draws = ref 0 in
+  let draw () =
+    incr draws;
+    let base = List.length scene.glyphs in
+    scene.glyphs <- {glyph with gx=99.} :: scene.glyphs;
+    [Lui_scene.Glyphs {gstart=base;gend=base+1;gpaint=Lui_scene.Solid;
+      gcolor=glyph.gcolor;gcolor2=glyph.gcolor;ggradient=(0.,0.,0.,0.);gwide2=0;gopacity=1.}] in
+  let frame key body =
+    scene.glyphs <- body;
+    let ops = Host_interaction.overlay_cached cache ~key scene draw in
+    check "Cached overlay must preserve the body's glyphs"
+      (List.length scene.glyphs=List.length body+1 && (List.hd scene.glyphs).gx=99.);
+    ops in
+  let first = frame 1 [glyph] in
+  for _=1 to 100 do
+    check "Cached overlay changed glyph indices" (frame 1 [{glyph with gx=5.}]=first)
+  done;
+  check "Pointer repaint must not reshape unchanged metrics on every frame" (!draws=1);
+  ignore (frame 2 [glyph]);
+  check "A new metrics sample must refresh the overlay" (!draws=2);
+  ignore (frame 2 [glyph;glyph]);
+  check "Changed body glyph count must refresh absolute overlay indices" (!draws=3);
+  print_endline "native metrics overlay reuse: OK"

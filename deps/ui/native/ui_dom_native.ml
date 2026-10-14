@@ -24,21 +24,32 @@ let jstr name j =
   | Some v -> Js.Json.decodeString v
   | None -> None
 
-(* element-handle table backing [token]: bounded ring, values are
-   valid while the token hasn't wrapped *)
-let token_ring_size = 1024
-let token_ring : Js.Json.t array =
-  Array.make token_ring_size Js.Json.JNull
+(* Element handles own their snapshots. The registry uses weak keys so
+   temporary pointer-event handles neither expire while held nor retain
+   snapshots after the last consumer releases the handle. *)
+module Element_handles = Ephemeron.K1.Make (struct
+  type t = Ui_services.el
+  let equal a b = a == b
+  let hash element = Hashtbl.hash element.Ui_services.token
+end)
+
+let tokens : Js.Json.t Element_handles.t = Element_handles.create 1024
 let token_next = ref 0
 
-let token_register (e : Js.Json.t) : int =
-  let i = !token_next land (token_ring_size - 1) in
-  token_ring.(i) <- e;
+let prune_tokens () = Element_handles.clean tokens
+
+let next_token () =
+  let token = !token_next in
   incr token_next;
-  i
+  if token land 511 = 0 then prune_tokens ();
+  token
+
+let token_register owner payload = Element_handles.add tokens owner payload
 
 let token_el (el : Ui_services.el) : Js.Json.t =
-  token_ring.(el.Ui_services.token land (token_ring_size - 1))
+  match Element_handles.find_opt tokens el with
+  | Some element -> element
+  | None -> invalid_arg "Element handle has no owned snapshot"
 
 (* portable Json.t -> host Js.Json.t *)
 let rec js_json_of : Json.t -> Js.Json.t = function
@@ -91,7 +102,7 @@ let file_of_json (f : Js.Json.t) : Ui_services.file =
 let clipboard_data e = jfield "clipboardData" e
 
 let rec el_of (e : Js.Json.t) : Ui_services.el =
-  { Ui_services.token = token_register e
+  let result = { Ui_services.token = next_token ()
   ; closest = (fun sel -> Option.map el_of (Dom_ext.closest e sel))
   ; attr = (fun name -> Dom_ext.get_attribute e name)
   ; rect =
@@ -144,7 +155,9 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
       (fun _ -> "")
       (* no stylesheets on this host — the capability gap the contract
          documents *)
-  }
+  } in
+  token_register result e;
+  result
 
 let ev_of (e : Js.Json.t) : Ui_services.ev =
   let files =

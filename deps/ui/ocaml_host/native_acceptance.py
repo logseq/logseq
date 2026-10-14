@@ -11,6 +11,35 @@ def percentile(values, fraction):
     return ordered[min(len(ordered) - 1, int(len(ordered) * fraction))]
 
 
+def validate_idle(rows):
+    first, last = rows[0], rows[-1]
+    duration = last["time_s"] - first["time_s"]
+    if duration < 10:
+        return ["Idle recording requires at least 10 seconds"]
+    allocated = last["gc"]["allocated_bytes"] - first["gc"]["allocated_bytes"]
+    host_allocated = last["gc"]["host_allocated_bytes"] - first["gc"]["host_allocated_bytes"]
+    minor = last["gc"]["minor_collections"] - first["gc"]["minor_collections"]
+    renders = last["gpu_submitted"] - first["gpu_submitted"]
+    layouts = last["layout_count"] - first["layout_count"]
+    events = last["event_count"] - first["event_count"]
+    if min(allocated, host_allocated, minor, renders, layouts, events) < 0:
+        raise ValueError("Idle metrics counters moved backwards")
+    errors = []
+    if allocated / duration > 256 * 1024:
+        errors.append(f"Idle allocation {allocated / duration:.0f} bytes/s exceeds 256 KiB/s")
+    if host_allocated / duration > 256 * 1024:
+        errors.append(f"Idle host allocation {host_allocated / duration:.0f} bytes/s exceeds 256 KiB/s")
+    if minor / duration > 0.1:
+        errors.append(f"Idle minor GC {minor / duration:.2f}/s exceeds 0.1/s")
+    if renders / duration > 1.1:
+        errors.append(f"Idle rendering {renders / duration:.2f}/s exceeds metrics refresh cadence")
+    if layouts:
+        errors.append(f"Idle layout ran {layouts} times")
+    if events:
+        errors.append(f"Idle recording contains {events} user events")
+    return errors
+
+
 def validate(samples, *, scenario, refresh_hz, duration_s):
     if refresh_hz <= 0 or scenario not in ("buttons", "scroll", "typing", "enter", "reflow"):
         raise ValueError("Invalid native acceptance scenario or refresh rate")
@@ -128,7 +157,7 @@ def validate_functionality(evidence, *, scenario):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recording", type=Path)
-    parser.add_argument("--scenario", required=True, choices=("buttons", "scroll", "typing", "enter", "reflow"))
+    parser.add_argument("--scenario", required=True, choices=("buttons", "scroll", "typing", "enter", "reflow", "idle"))
     parser.add_argument("--refresh-hz", required=True, type=float)
     parser.add_argument("--warmup-s", type=float, default=5)
     parser.add_argument("--end-s", type=float)
@@ -136,6 +165,13 @@ def main():
                         help="Observed UI results and persisted data for this scenario")
     args = parser.parse_args()
     rows = [json.loads(line) for line in args.recording.read_text().splitlines() if line]
+    if args.scenario == "idle":
+        started = rows[0]["time_s"]
+        rows = [row for row in rows if row["time_s"] - started >= args.warmup_s
+                and (args.end_s is None or row["time_s"] - started <= args.end_s)]
+        errors = validate_idle(rows)
+        print(json.dumps({"scenario": "idle", "pass": not errors, "errors": errors}, indent=2))
+        return 1 if errors else 0
     samples, duration = collect(rows, warmup_s=args.warmup_s, end_s=args.end_s)
     errors = validate(samples, scenario=args.scenario, refresh_hz=args.refresh_hz, duration_s=duration)
     evidence = json.loads(args.evidence.read_text()) if args.evidence else None
