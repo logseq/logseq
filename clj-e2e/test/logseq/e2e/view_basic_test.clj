@@ -200,6 +200,53 @@
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "New table object")))
 
+(defn- clear-view-filters!
+  []
+  (util/double-esc)
+  (when (w/visible? ".filters-row")
+    (w/click ".filters-row button:has(.ls-icon-x)"))
+  (assert/assert-is-hidden ".filters-row"))
+
+(deftest table-view-deadline-filter-operator-toggle-test
+  (let [container-page (page/get-page-name)
+        now (System/currentTimeMillis)
+        day (* 24 60 60 1000)]
+    (doseq [[title deadline]
+            [["Deadline filter past" (- now (* 3 day))]
+             ["Deadline filter future" (+ now (* 3 day))]]]
+      (ls-api-call! :editor.insertBlock
+                    container-page
+                    (str title " #Task")
+                    {:properties {"logseq.property/status" "Todo"
+                                  "logseq.property/deadline" deadline}}))
+    (page/goto-page "Task")
+    (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
+    (try
+      (w/click (view-action-button "filter"))
+      (w/click (loc/filter ".cp__select-results a" :has-text "Deadline"))
+      (w/click (util/get-by-text "1 day ago" true))
+      (assert/assert-is-visible ".filters-row")
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "1 day ago"))
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "after"))
+      (util/double-esc)
+      (w/click (loc/filter ".filters-row button" :has-text "after"))
+      (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "before"))
+      (w/click (util/get-by-text "before" true))
+      (assert/assert-is-visible ".filters-row")
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "before"))
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "1 day ago"))
+      (assert/assert-have-count (loc/filter :has-text "Error caught by UI") 0)
+      (assert/assert-have-count (loc/filter :has-text "Something went wrong") 0)
+      (w/click (loc/filter ".filters-row button" :has-text "before"))
+      (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "after"))
+      (w/click (util/get-by-text "after" true))
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "after"))
+      (assert/assert-is-visible (loc/filter ".filters-row" :has-text "1 day ago"))
+      (assert/assert-have-count (loc/filter :has-text "Error caught by UI") 0)
+      (assert/assert-have-count (loc/filter :has-text "Something went wrong") 0)
+      (finally
+        (clear-view-filters!)))))
+
 (deftest table-view-column-visibility-action-test
   (seed-table-view! "table-column-actions")
   (open-view-more-actions!)
