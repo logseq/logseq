@@ -1498,6 +1498,55 @@ let test_cmdk_view () =
   check "upsert create last when filtered"
     ((List.nth v3.groups 1).gid = Cmdk_state.G_create)
 
+let test_cmdk_creation_ownership () =
+  Stub_dom.install ();
+  let body : Js.Json.t = [%mel.raw "document.body"] in
+  let modal = Stub_dom.make_element "div" in
+  Stub_dom.append_child body modal;
+  let element = Ui_dom_web.el_of modal in
+  let retain value = element.set_attr "class" (if value then "cp__cmdk__modal" else "") in
+  let scenario change =
+    retain true;
+    let repo = ref (Some "creation-graph") and page = ref (Some "created-page") in
+    let pending = Queue.create () in
+    let appended = ref 0 and errors = ref 0 in
+    let services =
+      { (Cmdk_host.services ()) with
+        repo = (fun () -> !repo); route_page_uuid = (fun () -> !page)
+      ; set_timeout = (fun callback _ -> Queue.add callback pending)
+      ; append_block = (fun () -> incr appended)
+      ; console_error = (fun _ _ -> incr errors) }
+    in
+    let st = Cmdk_state.make ~register:false (Signal.scheduler ()) services in
+    Cmdk_state.append_created_page_when_closed st ~repo:"creation-graph" ~uuid:"created-page";
+    let tick () = (Queue.take pending) () in
+    tick ();
+    eqi "creation waits for the retained modal" 0 !appended;
+    change st repo page;
+    let polls = ref 0 in
+    while not (Queue.is_empty pending) && !polls < 100 do incr polls; tick () done;
+    (!appended, !errors)
+  in
+  let released, errors = scenario (fun _ _ _ -> retain false) in
+  eqi "modal release inserts exactly once" 1 released;
+  eqi "modal release does not log errors" 0 errors;
+  let reopened, errors = scenario (fun st _ _ ->
+      Cmdk_state.set_in st (fun view -> { view with open_ = true })) in
+  eqi "reopening cancels initial insertion" 0 reopened;
+  eqi "reopening does not report timeout" 0 errors;
+  let exhausted, errors = scenario (fun _ _ _ -> ()) in
+  eqi "retained-modal timeout never inserts" 0 exhausted;
+  eqi "retained-modal timeout logs once" 1 errors;
+  let moved, errors = scenario (fun _ _ page ->
+      page := Some "different-page"; retain false) in
+  eqi "page navigation cancels initial insertion" 0 moved;
+  eqi "page navigation does not report timeout" 0 errors;
+  let switched, errors = scenario (fun _ repo _ ->
+      repo := Some "different-graph"; retain false) in
+  eqi "graph switching cancels initial insertion" 0 switched;
+  eqi "graph switching does not report timeout" 0 errors;
+  retain false
+
 let test_cmdk_groups () =
   let gids v q rows total =
     List.map
@@ -4388,6 +4437,7 @@ let () =
   test_cmdk_rows ();
   test_cmdk_view ();
   test_cmdk_groups ();
+  test_cmdk_creation_ownership ();
   test_model_indent ();
   test_model_outdent ();
   test_editor_wire_runs ();

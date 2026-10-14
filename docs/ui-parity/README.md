@@ -76,3 +76,7 @@
 ## Evidence and validation ledger
 
 No entire feature area has been declared fully verified yet. The default native control palette has focused scene tests and actual light/dark/restart evidence. The earlier backdrop-alpha claim was corrected after independent review: [functional alpha repair and actual captures](evidence/modal-alpha/validation.md). Both actual apps now execute. Bootstrap repair: initialize the newly required `Lui_paint.hooks.hidden` field; `Lui_host.set_hidden` supplies the real visibility predicate. Native build and platform/service tests pass; UI suite: **2066 checks, 0 failures**. Evidence and reproduction: sibling `evidence/bootstrap-validation.md`, `master/01-home-light.png`, `native/01-home-light-before.png`. Bootstrap logs distinguish setup failures from product differences. Before/after screenshots and reproduction steps will be linked per completed area, alongside focused tests, actual native verification, and normal pushed commits.
+
+### Creation ownership follow-up
+
+The search creation wait now cancels on graph/page navigation as well as palette reopening. Deterministic production-function lifecycle tests and actual native saved-content/navigation evidence: [validation](evidence/creation-ownership/validation.md). UI suite: **2087 checks, 0 failures**; focused creation E2E passes. This is not a full search-area parity claim.
