@@ -195,9 +195,10 @@ let rec color_of (s : string) : Lui_scene.color option =
                         then String.sub name 2 (String.length name - 2)
                         else name
                       in
-                      match color_of ("var(--" ^ tok ^ ")") with
-                      | Some _ as c -> c
-                      | None -> (
+                      let resolved =
+                        match color_of ("var(--" ^ tok ^ ")") with
+                        | Some _ as c -> c
+                        | None -> (
                           let tok =
                             (* --x-foreground slots alias onto the plain
                                foreground rather than per-surface text
@@ -208,16 +209,16 @@ let rec color_of (s : string) : Lui_scene.color option =
                             then "foreground"
                             else tok
                           in
-                          match Lui_theme.color_of !mode tok with
-                          | Some c ->
-                            Some
-                              (match alpha with
-                               | None -> c
-                               | Some a ->
-                                 { c with Lui_scene.a =
-                                     int_of_float
-                                       (Float.round
-                                          (a *. float c.Lui_scene.a)) })
-                          | None -> None))))))
+                          Lui_theme.color_of !mode tok)
+                      in
+                      Option.map
+                        (fun c ->
+                          match alpha with
+                          | None -> c
+                          | Some a ->
+                              { c with Lui_scene.a =
+                                  int_of_float
+                                    (Float.round (a *. float c.Lui_scene.a)) })
+                        resolved)))))
 
 let count_of_mode m = Hashtbl.length (vars_of_mode m)

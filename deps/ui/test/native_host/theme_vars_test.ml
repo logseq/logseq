@@ -52,9 +52,20 @@ let unchecked_switch () =
 
 let dialog_backdrop () =
   let fills = paint Lui_protocol.Dialog [] in
-  let expected = resolve "hsl(var(--background) / 0.9)" in
+  let background = resolve "var(--background)" in
+  let expected =
+    { background with a = int_of_float (Float.round (0.9 *. float background.a)) }
+  in
   check "dialog backdrop uses the reference background at ninety percent opacity"
     (List.exists (fun fill -> fill.fcolor = expected && fill.frect.w = 100.) fills)
+
+let functional_alpha () =
+  let primary = resolve "var(--primary)" in
+  let translucent = resolve "hsl(var(--primary) / 0.5)" in
+  check "functional variable colors retain their RGB channels"
+    (translucent.r = primary.r && translucent.g = primary.g && translucent.b = primary.b);
+  check "functional variable colors multiply the resolved alpha"
+    (translucent.a = int_of_float (Float.round (0.5 *. float primary.a)))
 
 let () =
   List.iter
@@ -62,6 +73,7 @@ let () =
       snapshot mode;
       checked_switch ();
       unchecked_switch ();
+      functional_alpha ();
       dialog_backdrop ())
     [ Ui_theme.Light; Ui_theme.Dark ];
   snapshot Ui_theme.Light;
