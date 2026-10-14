@@ -190,3 +190,15 @@ writes, menu coherence and both restart states are verified against actual
 master desktop behavior in `docs/ui-parity/evidence/publication/validation.md`.
 Cloud publication, graph access and other menu/property workflows remain
 separate inventory items, not implicitly validated by this local flag.
+
+### Native measured caret checkpoint
+
+The SDL hidden input extension does not paint a rich-text caret. Enable the
+existing measured overlay, preserve web color overrides and fall back to the
+native app foreground. Normalize device/logical coordinates at the native host
+measurement boundary, including reciprocal pointer hits and editor height.
+Production host tests fail first on missing geometry, missing paint and scale2
+unit mixing, then pass; actual SDL captures show the caret and Escape removal.
+Paired typing undo/redo and split undo preserve the insertion offset. Evidence
+and exact remaining editor limitations are recorded in
+`docs/ui-parity/evidence/editor-native/validation.md`; this is partial parity.

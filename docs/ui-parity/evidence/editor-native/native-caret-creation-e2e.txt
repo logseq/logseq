@@ -1,0 +1,15 @@
+[fixture-dbg] begin 1792020701.7s
+[fixture-dbg] open_app 1792020703.8s
+[fixture-dbg] developer_mode 1792020703.8s
+[fixture-dbg] refresh_test_env 1792020703.8s
+[fixture-dbg] close-begin 1792020706.0s
+✔ cmdk-create-page-keeps-spaced-label-and-editor-focus (4460.722529ms)
+[fixture-dbg] close-done 1792020706.1s
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5300.584997

@@ -571,7 +571,9 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
             (* the native scene graph paints registered image ids, not
                url-fetched bitmaps *)
             (fun () -> false)
-        ; paints_caret = (fun () -> true)
+        (* The native input sink is invisible. Its measured rich-text
+           caret belongs to Edit_view, not the host's standard inputs. *)
+        ; paints_caret = (fun () -> false)
         ; menu_popup = native_menu_popup
         }
     ; dom

@@ -59,6 +59,33 @@
 (rule
  (copy ../../ocaml_host/host_scroll.ml host_scroll.ml))
 
+(rule
+ (copy ../../ocaml_host/host_requests.ml host_requests.ml))
+
+(rule
+ (copy ../../ocaml_host/bridge.ml bridge.ml))
+
+(rule
+ (copy ../../ocaml_host/patch_decode.ml patch_decode.ml))
+
+(rule
+ (copy ../../ocaml_host/host_icons.ml host_icons.ml))
+
+(rule
+ (copy ../../ocaml_host/ocaml_host_stubs.c editor_host_stubs.c))
+
+(test
+ (name editor_geometry_test)
+ (modules editor_geometry_test host_requests native_embed bridge patch_decode host_icons)
+ (libraries logseq_ui_ocamlhost native_host_test_support lui.layout lui.store lui.svg)
+ (foreign_stubs
+  (language c)
+  (names editor_host_stubs)
+  (flags (:standard (:include ../../ocaml_host/host_c_flags.sexp))))
+ (link_flags (:standard (:include ../../ocaml_host/host_link_flags.sexp)))
+ (preprocess (pps lui.ppx))
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
 (test
  (name host_scroll_test)
  (modules host_scroll_test)

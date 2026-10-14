@@ -1,0 +1,22 @@
+{
+  "reference_commit": "7dfa9b45aee9d6a9387ddb3375018356f1e7c6a8",
+  "native_before_commit": "8e3470da4ebc72df1574339a34068ba6d1e6c16d",
+  "viewport": {
+    "width": 1280,
+    "height": 900,
+    "scale": 1,
+    "theme": "light"
+  },
+  "actual_native_pid": 370924,
+  "actual_reference_pid": 223889,
+  "artifacts": {
+    "deps/ui/_build/default/ocaml_host/logseq_native.exe": {
+      "sha256": "9c0b3f549541fc84adc7b2a381a2305678f40fb8be574795289b27d5104afc32",
+      "mtime_utc": "2026-10-14T23:29:56Z"
+    },
+    "static/js/main.js": {
+      "sha256": "30ddea36b6bc3e65220f9c77b93b879031c22803c7d22e336c7e9fe102f3c518",
+      "mtime_utc": "2026-10-14T23:30:33Z"
+    }
+  }
+}

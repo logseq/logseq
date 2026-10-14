@@ -356,3 +356,57 @@ let () =
           (Lui_store.preorder store)));
       ignore (Lui_app.dispose menu_app)) [ { page with page_uuid = None }; block_page ];
   print_endline "native header layout: OK"
+
+let () =
+  let store = Lui_store.create () in
+  let backend =
+    { Lui_protocol.backend_profile =
+        Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost
+    ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let frame = { Edit_input.empty_frame with
+      caret = Some { Edit_input.x = 34; y = 0; w = 2; h = 24 } } in
+  let app = Lui_app.create backend frame (fun _ next -> next)
+      (fun _context state _send -> Edit_view.overlay state) in
+  ignore (Lui_app.start app);
+  ignore (Lui_app.flush app);
+  let caret = List.find_opt (fun id ->
+      Lui_store.string_prop store id "style-class" = Some "ed-caret")
+      (Lui_store.preorder store) in
+  check "native rich-text editing retains a visible measured caret"
+    (Option.is_some caret);
+  let layout = Lui_layout.create () in
+  Lui_layout.sync ~width:300. ~height:24. layout store;
+  let caret_rect = Option.get (Lui_layout.rect layout (Option.get caret)) in
+  check "native caret follows the measured glyph edge and line height"
+    (caret_rect.x = 34. && caret_rect.y = 0.
+     && caret_rect.w = 2. && caret_rect.h = 24.);
+  let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64) in
+  let hooks = { Lui_paint.default_hooks with
+      layout = Lui_layout.layout_hook layout; color_of = Theme_vars.color_of } in
+  List.iter (fun mode ->
+      let theme = Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+          [ "mode", `String (if mode = Ui_theme.Light then "light" else "dark")
+          ; "vars", `Assoc (List.map (fun (key, value) -> key, `String value) theme.vars) ]));
+      Lui_paint.paint hooks store scene ~width:300 ~height:24 ~scale:1.
+        ~clear:(Lui_scene.color 0 0 0 0);
+      let foreground = Option.get (Theme_vars.color_of "foreground") in
+      check "native caret paints the app foreground in both themes"
+        (List.exists (function
+           | Lui_scene.Fill fill -> fill.frect = caret_rect
+               && fill.fcolor = foreground && fill.fcolor.a > 0
+           | _ -> false) scene.ops)) [ Ui_theme.Dark; Ui_theme.Light ];
+  Lui_layout.sync ~scale:2. ~width:600. ~height:48. layout store;
+  let scaled_rect = Option.get (Lui_layout.rect layout (Option.get caret)) in
+  check "logical caret measurements scale exactly once with native layout"
+    (scaled_rect.x = 68. && scaled_rect.y = 0.
+     && scaled_rect.w = 4. && scaled_rect.h = 48.);
+  ignore (Lui_app.send app Edit_input.empty_frame);
+  ignore (Lui_app.flush app);
+  check "native caret disappears when its measurement frame is cleared"
+    (not (List.exists (fun id ->
+        Lui_store.string_prop store id "style-class" = Some "ed-caret")
+      (Lui_store.preorder store)));
+  ignore (Lui_app.dispose app)

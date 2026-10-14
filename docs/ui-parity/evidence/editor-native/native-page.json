@@ -1,0 +1,4 @@
+{
+  "ok": true,
+  "resultTransit": "[\"^ \",\"~:db/id\",271,\"~:block/created-at\",1792020093983,\"~:block/name\",\"interaction parity\",\"~:block/refs\",[\"~#set\",[4,23]],\"~:block/tags\",[\"^4\",[4]],\"~:block/title\",\"Interaction parity\",\"~:block/tx-id\",536870985,\"~:block/updated-at\",1792020099406,\"~:block/uuid\",\"~u3bf6c035-480b-8362-1b0d-37ca54fb21b1\"]"
+}

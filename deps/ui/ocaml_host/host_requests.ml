@@ -185,7 +185,10 @@ let caret_rect e ctx off =
   end
 
 let offset_at e ctx x y =
-  let wx, wy = ctx.ox +. float x, ctx.oy +. float y in
+  (* Pointer offsets arrive in logical pixels, like element bounds.
+     The text layouts and run rectangles below use device pixels. *)
+  let scale = e.scale () in
+  let wx, wy = ctx.ox +. float x *. scale, ctx.oy +. float y *. scale in
   let n = Array.length ctx.nodes in
   if n = 0 || Array.length ctx.runs = 0 then 0
   else begin
@@ -746,7 +749,8 @@ let dom_op (e : env) (op : string) (body : string) =
        twin of getClientRects over DOM text nodes. The sink node
        (ed-sink-<block-id>) carries the "runs" prop listing each run's
        model-unit span in document order; it zips against the .ed-r
-       elements under the sink's parent. All rects are device px;
+       elements under the sink's parent. Engine rectangles are device
+       pixels; replies use logical pixels like the app's element bounds.
        x/y/h are relative to the block-editor element, ox/oy is its
        window-space origin. A miss replies with the contract's
        no-data values so the app's measure loop keeps cycling. *)
@@ -761,12 +765,15 @@ let dom_op (e : env) (op : string) (body : string) =
            (match jint_opt "offset" parsed with
             | Some off ->
               let x, y, h = caret_rect e ctx off in
+              let scale = e.scale () in
               reply "caret-rect"
                 (`Assoc
                    [ ("block-id", `String bid)
                    ; ("offset", `Int off)
-                   ; ("x", `Float x); ("y", `Float y); ("h", `Float h)
-                   ; ("ox", `Float ctx.ox); ("oy", `Float ctx.oy) ])
+                   ; ("x", `Float (x /. scale)); ("y", `Float (y /. scale))
+                   ; ("h", `Float (h /. scale))
+                   ; ("ox", `Float (ctx.ox /. scale))
+                   ; ("oy", `Float (ctx.oy /. scale)) ])
             | None -> ())
          | "offset-at" ->
            (match (jint_opt "x" parsed, jint_opt "y" parsed) with
@@ -788,7 +795,7 @@ let dom_op (e : env) (op : string) (body : string) =
            reply "scroll-height"
              (`Assoc
                 [ ("block-id", `String bid)
-                ; ("height", `Float (scroll_height e ctx)) ])
+                ; ("height", `Float (scroll_height e ctx /. e.scale ())) ])
          | _ -> ())))
   | "set-input-focus" ->
     (* the conduit contract is a handshake: after the host moves its

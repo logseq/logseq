@@ -589,7 +589,7 @@ let caret_view (frame : frame Signal.signal) : t =
   let bar =
     (Ui_components.with_props
        [ ( Ui_components.Prop.background
-             "var(--ls-caret-color, var(--ls-primary-text-color))" )
+             "var(--ls-caret-color, var(--ls-primary-text-color, var(--foreground)))" )
        ; Ui_components.Prop.position `relative
        ; Ui_components.Prop.z_index 2 ]
        (row ~style_class:"ed-caret" ~width:2 []))
@@ -607,9 +607,8 @@ let overlay (frame : frame Signal.signal) : t =
          (fun f -> List.mapi (fun i r -> (i, r)) f.Edit_input.selection)
          frame)
   in
-  (* The native host paints the caret from the current glyph layout
-     alongside the input sink. Other hosts use the measured overlay
-     rectangle. *)
+  (* Hosts that paint their own rich-text caret suppress this overlay.
+     Otherwise use the rectangle measured from the rendered text runs. *)
   let caret =
     if Ui_services.env_paints_caret () then []
     else
