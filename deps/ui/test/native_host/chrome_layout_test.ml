@@ -33,5 +33,24 @@ let () =
       check "native header reserves traffic-light space only on macOS"
         (menu.x = 8. +. reserved && menu.y = 8.))
     [ false; true ];
+  List.iter (fun right_sidebar_open ->
+      ignore (Lui_app.send app
+        { initial with right_sidebar_open
+        ; page_menu = Some (1232., 48., 48., true, None) });
+      ignore (Lui_app.flush app);
+      List.iter (fun width ->
+          Lui_layout.sync ~width ~height:900. layout store;
+          let head = Option.get (Lui_layout.rect layout (by_id "head")) in
+          let menu_id = List.find (fun id ->
+              match Lui_store.string_prop store id "style-class" with
+              | Some classes -> List.mem "ls-dots-menu" (String.split_on_char ' ' classes)
+              | None -> false) (Lui_store.preorder store) in
+          let menu = Option.get (Lui_layout.rect layout menu_id) in
+          check "the menu follows its header controls rather than the window edge"
+            (Float.abs (menu.x +. menu.w -. (head.x +. head.w -. 5.)) < 0.5);
+          check "the toolbar menu sits directly below the reference trigger"
+            (menu.y = 40. && menu.w = 256.))
+        [ 1280.; 1100. ])
+    [ false; true ];
   ignore (Lui_app.dispose app);
   print_endline "native header layout: OK"

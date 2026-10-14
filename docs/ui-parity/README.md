@@ -8,7 +8,7 @@
 - Linux native host: OCaml/LUI SDL executable, not the browser UI. LUI source revision: `7ae8b157281fc4837fc7e6f1507d722c1f13404c`.
 - Comparison target: 1280 x 900 content viewport, scale 1, English, light and dark themes, identical disposable content. Native header at the top is accepted; its content and behavior are not exempt.
 - Workspace evidence: `/home/user/logseq-ui-parity/evidence/`. Runtime logs: sibling `logs/`. Disposable data: sibling `data/`; never use an existing user graph.
-- User scope update: Graph View and its graph-visualization-specific interactions are explicitly excluded from implementation and validation. Graph management, graph switching and persistence remain in scope.
+- User scope update: Graph View, sidebar Page graph visualization, and their graph-specific interactions are explicitly excluded from implementation and validation. Graph management, graph switching and persistence remain in scope.
 - Hard stop: 2026-10-16T16:22:21.466320Z. The existing enabled deadline timer remains unchanged.
 
 ## Status convention
@@ -22,8 +22,8 @@
 | ID | Reference surface / interaction | Authoritative master source | Native implementation candidate | Status | Difference / fix / validation / evidence |
 | --- | --- | --- | --- | --- | --- |
 | H01 | Header: sidebar/search/home/right-sidebar, graph-dependent visibility | components/header.cljs | native/chrome.ml | Partial | Graph-search loading/closure visibility fixed and regression-tested. Header leading controls now stay fixed across left-dock states, and Linux no longer reserves macOS traffic-light space. [Header evidence](evidence/header/validation.md). Other controls/states remain. [Evidence](evidence/search/validation.md) |
-| H02 | Desktop back/forward, route history, block breadcrumb | components/header.cljs | native/chrome.ml; routing/router.ml | Partial | Desktop navigation source inventoried; native Back experiment revealed blank retained Home scene until resize. Dependency cache investigation and desktop reference execution remain. [Evidence](evidence/header/validation.md) |
-| H03 | Header: page/application menu, shortcut hints, tooltips | components/header.cljs; page_menu.cljs | native/page_menu.ml; popups/tooltip.ml | Inventory | Pending paired execution |
+| H02 | Desktop back/forward, route history, block breadcrumb | components/header.cljs | native/chrome.ml; routing/router.ml | Partial | Desktop navigation source inventoried; native Back experiment revealed blank retained Home scene until resize. Actual desktop reference now executes. Home blanking is conclusively traced to [dependency cache purging](evidence/retained-cache/investigation.md); additional-repository push authorization is pending. [Evidence](evidence/header/validation.md) |
+| H03 | Header: page/application menu, shortcut hints, tooltips | components/header.cljs; page_menu.cljs | native/page_menu.ml; popups/tooltip.ml | Partial | Toolbar menu now uses retained trigger-group anchoring and follows right-dock/resize states. Actual desktop reference adds Copy page URL/public-private actions missing natively; keyboard/hints remain. [Evidence](evidence/menu-anchor/validation.md) |
 | H04 | Sync, collaborators, upload/download/index progress, updates, server and plugin indicators | components/header.cljs; rtc/; server.cljs | native/chrome.ml; graphs/rtc_flows.ml | Inventory | Test local states first; remote fixtures must not use real graphs |
 | L01 | Graph picker: switching, recent graph order, menus and creation entry | components/repo.cljs; left_sidebar.cljs | sidebar/left_sidebar_view.ml; graphs/ | Inventory | Pending paired execution |
 | L02 | Journals, Pages, Tasks, Assets, flashcards; navigation customization | components/left_sidebar.cljs | sidebar/left_sidebar_view.ml | Inventory | Pending paired execution |
@@ -80,3 +80,7 @@ No entire feature area has been declared fully verified yet. The default native 
 ### Creation ownership follow-up
 
 The search creation wait now cancels on graph/page navigation as well as palette reopening. Deterministic production-function lifecycle tests and actual native saved-content/navigation evidence: [validation](evidence/creation-ownership/validation.md). UI suite: **2087 checks, 0 failures**; focused creation E2E passes. This is not a full search-area parity claim.
+
+### Desktop reference bootstrap
+
+Actual master Electron now runs independently with private HOME/XDG/graph state and the same fixture imported through its CLJS worker (3085 transactions). CLI/worker assets staged with repository scripts. Runtime flags resolving the earlier service crash are recorded in the dedicated workspace session manifest. Native caption controls and conditional desktop-only menu actions are now inventoried rather than assumed absent.

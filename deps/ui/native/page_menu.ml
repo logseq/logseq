@@ -151,7 +151,7 @@ let global_items () =
 
 let inner_width () : float = Host.inner_width ()
 
-let view (x, _atop, y, with_app_items) (p : Model.page option) =
+let view ?(toolbar_anchor = false) (x, _atop, y, with_app_items) (p : Model.page option) =
   (* toolbar dots menu is w-64 (cljs header.cljs); the page
      right-click keeps the 280px context-menu look *)
   let w = if with_app_items then 256 else 280 in
@@ -168,7 +168,12 @@ let view (x, _atop, y, with_app_items) (p : Model.page option) =
   (* the retained popover kind owns point placement + dismiss on
      native; the div[role=menu] shell inside keeps the e2e markup *)
   Lui_elements.popover ~transition:Ui_components.popover_transition
-    ~key:"page-menu" ~at:(at_x, y) ~role:`menu ~min_width:w ~max_width:w
+    ~key:"page-menu"
+    ?at:(if toolbar_anchor then None else Some (at_x, y))
+    ?anchor:(if toolbar_anchor then Some `below else None)
+    ?anchor_alignment:(if toolbar_anchor then Some `end_ else None)
+    ?anchor_offset:(if toolbar_anchor then Some 0. else None)
+    ~role:`menu ~min_width:w ~max_width:w
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
        else "ui__dropdown-menu-content ls-context-menu-content")
@@ -269,8 +274,15 @@ let resolve_menu_page (m : Model.t) uuid =
         m.journals
 
 (* stop overlay clicks from leaking to the dialog handler *)
+let toolbar_view (m : Model.t) =
+  match m.page_menu with
+  | Some (ax, atop, abot, true, uuid) ->
+      view ~toolbar_anchor:true (ax, atop, abot, true) (resolve_menu_page m uuid)
+  | _ -> Lui_elements.spacer ~key:"toolbar-menu-empty" []
+
 let dialog_view (m : Model.t) =
   match m.page_menu with
+  | Some (_, _, _, true, _) -> Lui_elements.spacer ~key:"page-menu-anchored" []
   | Some (ax, atop, abot, with_app, uuid) ->
       view (ax, atop, abot, with_app) (resolve_menu_page m uuid)
   | None -> (

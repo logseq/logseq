@@ -60,11 +60,8 @@ let search_btn ?(key = "search-btn") () =
   icon_btn ~key ~acc:"search-button" ~icon_name:"search"
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
-(* cljs anchors the dropdown to the trigger's right edge — the fixed
-   trailing position: menu right edge just left of the last button,
-   just under the header. The resolved anchor is recorded in
-   Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
-   to the same trigger. *)
+(* The toolbar menu uses its retained control group as the layout anchor.
+   Keep the appearance popup's legacy point channel at the trigger baseline. *)
 let dots_btn =
   icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
@@ -76,10 +73,10 @@ let dots_btn =
         Runtime.send (Action.Page_menu_set None);
         Runtime.flush ())
       else (
-          let x = Host.inner_width () -. 48. in
-          Dom_ext.toolbar_dots_pos := Some (x, 48.);
+          let x = Host.inner_width () -. 5. in
+          Dom_ext.toolbar_dots_pos := Some (x, 40.);
           Runtime.send
-            (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
+            (Action.Page_menu_set (Some (x, 40., 40., true, None)))))
 
 let home_btn ms =
   button ~key:"home-btn" ~label:(I18n.t "nav/home")
@@ -169,8 +166,13 @@ let topbar (ms : Model.t Signal.signal) : t list =
              ; if_ ~test:(reactive (fun (m : Model.t) -> m.repo <> None) ms)
                  (search_btn ()) ]
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
-          ~padding_horizontal:6 ~style_class:"cp__header-r"
-          [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
+          ~padding_horizontal:5 ~style_class:"cp__header-r"
+          [ rtc_item ms; home_item ms
+          ; row ~key:"toolbar-menu-anchor" ~cross:`center
+              [ dots_btn; right_toggle_btn ms
+              ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+                    a.page_menu = b.page_menu && a.data_gen = b.data_gen)
+                  Page_menu.toolbar_view ms ] ] ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
