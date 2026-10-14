@@ -45,7 +45,7 @@ let toast_item (t : Model.toast) : t =
                 (fun () -> Toast.dismiss t.toast_id)
                 duration))
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
-       ~style_class:kind
+       ~style_class:("ui__toast " ^ kind)
        [ overlay ~key:"ti-content"
            [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
                ~padding_vertical:8 ~cross:`start

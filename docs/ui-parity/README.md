@@ -21,7 +21,7 @@
 
 | ID | Reference surface / interaction | Authoritative master source | Native implementation candidate | Status | Difference / fix / validation / evidence |
 | --- | --- | --- | --- | --- | --- |
-| H01 | Header: sidebar/search/home/right-sidebar, graph-dependent visibility | components/header.cljs | native/chrome.ml | Inventory | Pending paired execution |
+| H01 | Header: sidebar/search/home/right-sidebar, graph-dependent visibility | components/header.cljs | native/chrome.ml | Partial | Graph-search loading/closure visibility fixed and regression-tested. Header positioning/alignment and other conditional controls remain. [Evidence](evidence/search/validation.md) |
 | H02 | Desktop back/forward, route history, block breadcrumb | components/header.cljs | native/chrome.ml; routing/router.ml | Inventory | Pending desktop reference execution |
 | H03 | Header: page/application menu, shortcut hints, tooltips | components/header.cljs; page_menu.cljs | native/page_menu.ml; popups/tooltip.ml | Inventory | Pending paired execution |
 | H04 | Sync, collaborators, upload/download/index progress, updates, server and plugin indicators | components/header.cljs; rtc/; server.cljs | native/chrome.ml; graphs/rtc_flows.ml | Inventory | Test local states first; remote fixtures must not use real graphs |
@@ -37,7 +37,7 @@
 | P04 | Delete, favorite, convert tag/page, copy URL, publish/public and export menus | components/page_menu.cljs | native/page_menu.ml; pages/page_ops.ml | Inventory | Pending paired execution |
 | P05 | All Pages: tables, filtering, sorting, tabs, selection, navigation | components/all_pages.cljs; views.cljs | views/ | Inventory | Pending paired execution |
 | G01 | Global Graph: modes, settings, node/edge display, navigation, pan/zoom, time travel | components/graph.cljs; extensions/graph.cljs | Not required | Excluded by user | Explicit user scope update on 2026-10-14: do not implement or validate graph visualization or graph-specific interactions |
-| S01 | Search: open/close, query restore, Escape semantics, focus, results, scrolling | components/cmdk/ | shared/cmdk_view.ml; native/cmdk_host.ml | Inventory | Pending paired execution |
+| S01 | Search: open/close, query restore, Escape semantics, focus, results, scrolling | components/cmdk/ | shared/cmdk_view.ml; native/cmdk_host.ml | Partial | Literal-space encoding and new-page editor focus fixed. Native typing/save/database evidence and repeated focused E2E pass; remaining query/Escape/results/scroll paths are not fully verified. [Evidence](evidence/search/validation.md) |
 | S02 | Search filters, commands, new page, journal/date navigation, sidebar-open | components/cmdk/; commands.cljs | cmdk/; shared/cmdk_view.ml | Inventory | Pending paired execution |
 | S03 | Search in page / find; theme search | components/find_in_page.cljs; cmdk/ | cmdk/; settings/ | Inventory | Pending paired execution |
 | E01 | Click-to-edit, caret placement, title editing, empty block/add button | components/editor.cljs; block.cljs | editor/; blocks/add_button.ml; native/logseq_editor.ml | Inventory | Pending paired execution |
@@ -58,10 +58,11 @@
 | Q01 | Query builder, view management, table/grid/list controls and action submenus | components/query/; views.cljs | blocks/query_builder.ml; views/ | Inventory | Pending paired execution |
 | M01 | Menus/popovers: anchors, second press, outside/Escape, disabled items, keyboard focus | components/; deps/shui/ | core/overlay.ml; shared/ui_components.ml | Inventory | Verify each owning surface, not just primitives |
 | M02 | Dialog stacking, alerts, prompts, confirmation, password and focus restore | deps/shui/; components/ | dialogs/; graphs/rtc_error.ml | Inventory | Pending paired execution |
-| M03 | Toasts: identity, duration, persistent errors, close/pause/swipe/stack | handler/notification.cljs; deps/shui/ | toasts/ | Inventory | Pending paired execution |
+| M03 | Toasts: identity, duration, persistent errors, close/pause/swipe/stack | handler/notification.cljs; deps/shui/ | toasts/ | Partial | Master notification selector restored; production-view and graph-validation fixture checks pass. Native layout, position and lifecycle parity remain. [Evidence](evidence/search/validation.md) |
 | T01 | Settings General: language, theme, accents, font, wide/bracket modes | components/settings.cljs | settings/; ocaml_host/theme_vars.ml | Partial | Native control palette now resolves app snapshot roles; actual dark/light switch and restart persistence verified. Layout, icons, checkbox/font controls and custom accents remain. [Evidence](evidence/theme/validation.md) |
 | T02 | Settings Editor: date format, outdent, references, home, tooltip options | components/settings.cljs | settings/settings_page.ml | Partial | Paired execution confirms primary/input track colors and theme backdrop fixed. Label wrapping/alignment and switch-thumb geometry differ. [Evidence](evidence/theme/validation.md) |
 | T03 | Settings Features/Advanced: flashcards, plugins, server, sync URLs, privacy/developer | components/settings.cljs | settings/ | Inventory | Pending paired execution |
+| T05 | Authenticated settings: collaboration, access tokens and encryption | components/settings.cljs | No complete corresponding native settings panel inventoried | Inventory | Conditional source surfaces discovered; use isolated local account fixtures, not a production graph/account |
 | T04 | Keymap: filters, search by keys, custom binding, disable/reset, actual dispatch | components/shortcut.cljs; modules/shortcut/ | settings/keymap_data.ml; settings_page.ml; native/ | Inventory | Base keymap uses static macOS data; custom/reset paths require investigation |
 | D01 | Graph creation, import formats, export page/graph/ontology and publishing | components/repo.cljs; imports.cljs; export.cljs | graphs/; export/ | Inventory | Use disposable fixtures only |
 | D02 | Graph switching/deletion/recycle, retention and persistence across restart | components/repo.cljs; recycle.cljs | graphs/; native/daemon_client.ml | Inventory | Pending paired execution |

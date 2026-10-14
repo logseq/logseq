@@ -685,7 +685,9 @@ let header (ms : Model.t Signal.signal) =
         ~data_attrs:[ ("style", "padding-left:8px;height:100%") ]
         [ row ~key:"head-l-btns" ~cross:`center
             ~style_class:"head-l-btns"
-            [ left_menu_button (); search_button () ] ]
+            [ left_menu_button ()
+            ; if_ ~test:(reactive (fun (m : Model.t) -> m.repo <> None) ms)
+                (search_button ()) ] ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
         ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]

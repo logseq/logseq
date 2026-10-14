@@ -123,3 +123,25 @@ let () =
     let* (in_view : bool) = kbd_highlight_in_viewport env in
     Fest.equal in_view true Fest.expect;
     Fixtures.validate_graph env)
+
+let () =
+  Fest.Promise.test "cmdk-create-page-keeps-spaced-label-and-editor-focus" (fun () ->
+    let* env = env in
+    let title = "Parity spaced page " ^ Js.String.make (Js.Date.now ()) in
+    let* () = Ls_page.new_page env title in
+    let* actual = Ls_page.get_page_name env in
+    Fest.equal actual title Fest.expect;
+    let rec wait_focus attempts =
+      let* focused = Pw.eval_js env
+        "document.activeElement === document.querySelector('.editor-wrapper textarea')" in
+      if focused || attempts = 0 then Js.Promise.resolve focused
+      else
+        let* () = Util.wait_timeout env 100. in
+        wait_focus (attempts - 1)
+    in
+    let* focused = wait_focus 50 in
+    Fest.equal focused true Fest.expect;
+    let* () = Pw.fill env Util.editor_q "Saved after creating a spaced page" in
+    let* () = Keyboard.esc env in
+    let* () = Pw.wait_for env ".block-content:has-text('Saved after creating a spaced page')" in
+    Fixtures.validate_graph env)

@@ -1057,7 +1057,22 @@ let create_page st title =
          first keystrokes were lost. Defer one tick so it reads the
          loaded page. *)
       st.svs.Svs.on_page_loaded uuid (fun () ->
-          st.svs.Svs.set_timeout (fun () -> st.svs.Svs.append_block ()) 0);
+          let rec append_when_closed attempts =
+            if (get st).open_ then ()
+            else
+              match Ui_services.dom_query ".cp__cmdk__modal" with
+              | None -> st.svs.Svs.append_block ()
+              | Some _ when attempts > 0 ->
+                  st.svs.Svs.set_timeout
+                    (fun () -> append_when_closed (attempts - 1)) 16
+              | Some _ ->
+                  st.svs.Svs.console_error "cmdk create-page modal did not close"
+                    (Failure "The search modal retained focus ownership")
+          in
+          (* The dialog retains its exiting surface and restores focus
+             when that surface is removed. Starting the editor earlier
+             lets the return-focus action steal its initial caret. *)
+          st.svs.Svs.set_timeout (fun () -> append_when_closed 60) 0);
       goto_page st repo uuid)
 
 (* cljs cmdk "#tag" create: <create-class! without redirect, then the

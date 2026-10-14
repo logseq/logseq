@@ -170,7 +170,9 @@ let topbar (ms : Model.t Signal.signal) : t list =
           (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
           (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
              ~style_class:"cp__header-l"
-             [ left_menu_btn (); search_btn () ])
+             [ left_menu_btn ()
+             ; if_ ~test:(reactive (fun (m : Model.t) -> m.repo <> None) ms)
+                 (search_btn ()) ])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]

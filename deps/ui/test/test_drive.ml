@@ -212,7 +212,7 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
 
 let test_shell () =
   has "prop:accessibility-identifier=\"head\"";
-  has "prop:accessibility-identifier=\"search-button\"";
+  absent "prop:accessibility-identifier=\"search-button\"";
   has "prop:accessibility-identifier=\"left-menu\"";
   has "prop:accessibility-identifier=\"left-sidebar\"";
   has "prop:accessibility-identifier=\"right-sidebar\"";

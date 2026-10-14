@@ -280,12 +280,13 @@ let hl_segments ~query ~text : (bool * string) list =
 let display_spaces s =
   if not (String.contains s ' ') then s
   else
+    let space = gph "\u{00A0}" in
     let b = Buffer.create (String.length s + 8) in
     String.iter
       (fun c ->
         (* U+00A0 nbsp as UTF-8 — a bare \xA0 byte is invalid UTF-8 and
            renders as U+FFFD on the native host *)
-        if c = ' ' then Buffer.add_string b "\u{00A0}"
+        if c = ' ' then Buffer.add_string b space
         else Buffer.add_char b c)
       s;
     Buffer.contents b

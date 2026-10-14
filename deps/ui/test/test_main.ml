@@ -12,6 +12,14 @@ let () =
 
 let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files
 
+let () =
+  eqs "cmdk display spaces preserve worker text without mojibake"
+    (Ui_services.literal_text "café 😀")
+    (Cmdk_view.display_spaces (Ui_services.literal_text "café 😀"));
+  eqs "cmdk display spaces leave unspaced worker text unchanged"
+    (Ui_services.literal_text "café😀")
+    (Cmdk_view.display_spaces (Ui_services.literal_text "café😀"))
+
 (* document listeners attach through the services dom channel, so they
    can only go up after Platform_web.install *)
 let () = Editor_keys.install_once ()

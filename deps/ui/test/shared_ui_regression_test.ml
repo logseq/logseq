@@ -32,6 +32,20 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let header = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:Update.update ~view:(fun _ctx ms _send -> Chrome.header ms) () in
+  let search_buttons () = List.filter (fun n ->
+      M.string_prop n "accessibility-identifier" = Some "search-button")
+      (nodes header) in
+  check "the header does not offer graph search before a graph is ready"
+    (search_buttons () = []);
+  ignore (Lui_app.send header.S.app (Action.Boot_graph_ready "logseq_db_parity"));
+  S.flush header;
+  eqi "graph readiness enables one header search control" 1 (List.length (search_buttons ()));
+  ignore (Lui_app.send header.S.app Action.Graph_closed);
+  S.flush header;
+  check "closing the graph removes its search control" (search_buttons () = []);
+  ignore (Lui_app.dispose header.S.app);
   let chosen = ref None in
   let picker = mount (fun _ ->
       Icon_picker.picker_view ~del:true ~emoji_only:false
@@ -137,6 +151,8 @@ let run_views ~registry ~profile ~finish =
   push "success" "First";
   let first = List.find (fun n -> n.M.kind = "toast") (nodes notifications) in
   check "notifications use the platform toast lifecycle" (first.M.kind = "toast");
+  check "notifications expose the master notification selector"
+    (class_has first "ui__toast");
   push "error" "Persistent";
   check "adding a notification preserves previous toast identity"
     (List.exists (fun n -> n.M.id = first.M.id) (nodes notifications));
