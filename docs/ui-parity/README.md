@@ -21,8 +21,8 @@
 
 | ID | Reference surface / interaction | Authoritative master source | Native implementation candidate | Status | Difference / fix / validation / evidence |
 | --- | --- | --- | --- | --- | --- |
-| H01 | Header: sidebar/search/home/right-sidebar, graph-dependent visibility | components/header.cljs | native/chrome.ml | Partial | Graph-search loading/closure visibility fixed and regression-tested. Header positioning/alignment and other conditional controls remain. [Evidence](evidence/search/validation.md) |
-| H02 | Desktop back/forward, route history, block breadcrumb | components/header.cljs | native/chrome.ml; routing/router.ml | Inventory | Pending desktop reference execution |
+| H01 | Header: sidebar/search/home/right-sidebar, graph-dependent visibility | components/header.cljs | native/chrome.ml | Partial | Graph-search loading/closure visibility fixed and regression-tested. Header leading controls now stay fixed across left-dock states, and Linux no longer reserves macOS traffic-light space. [Header evidence](evidence/header/validation.md). Other controls/states remain. [Evidence](evidence/search/validation.md) |
+| H02 | Desktop back/forward, route history, block breadcrumb | components/header.cljs | native/chrome.ml; routing/router.ml | Partial | Desktop navigation source inventoried; native Back experiment revealed blank retained Home scene until resize. Dependency cache investigation and desktop reference execution remain. [Evidence](evidence/header/validation.md) |
 | H03 | Header: page/application menu, shortcut hints, tooltips | components/header.cljs; page_menu.cljs | native/page_menu.ml; popups/tooltip.ml | Inventory | Pending paired execution |
 | H04 | Sync, collaborators, upload/download/index progress, updates, server and plugin indicators | components/header.cljs; rtc/; server.cljs | native/chrome.ml; graphs/rtc_flows.ml | Inventory | Test local states first; remote fixtures must not use real graphs |
 | L01 | Graph picker: switching, recent graph order, menus and creation entry | components/repo.cljs; left_sidebar.cljs | sidebar/left_sidebar_view.ml; graphs/ | Inventory | Pending paired execution |

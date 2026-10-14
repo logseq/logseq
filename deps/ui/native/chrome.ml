@@ -160,19 +160,14 @@ let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ Ui_parts.int_prop_signal Lui_protocol.MarginLeft ms
-          (* NavigationSplitView detail toolbar: the row lives inside
-             the split's second pane, so while the sidebar is open its
-             leading buttons already start at the sidebar's right edge.
-             When the dock collapses the pane spans the window and the
-             buttons must clear the traffic-light controls (~76px) —
-             the host blends the title bar via fullSizeContentView. *)
-          (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
-          (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
+      [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
+             (* Only the blended macOS titlebar has overlaid traffic lights.
+                The header spans the main area independently of the left dock. *)
+             ~margin_left:(if Platform.is_mac () then 70 else 0)
              ~style_class:"cp__header-l"
              [ left_menu_btn ()
              ; if_ ~test:(reactive (fun (m : Model.t) -> m.repo <> None) ms)
-                 (search_btn ()) ])
+                 (search_btn ()) ]
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
@@ -262,9 +257,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
     (fun (m : Model.t) ->
       "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
-    (Ui_components.with_props
-       [ Ui_components.Prop.height_viewport 1. ]
-       (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+    (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
           ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
              [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
@@ -274,14 +267,9 @@ let left_sidebar (ms : Model.t Signal.signal) =
                        surface tone. *)
                     ~background:"muted"
                     ~style_class:"left-sidebar-inner as-container"
-               [ (* NavigationSplitView sidebar semantics: the column
-                    spans the full window height, so its top strip sits
-                    in the title-bar zone where the host overlays the
-                    traffic-light controls. It stays empty drag space
-                    (the window is movable-by-background); the toggle
-                    and search buttons live in the titlebar
-                    (.cp__header > .l). *)
-                 box ~key:"ls-top" ~height:52
+               [ (* The global header owns the titlebar controls. Retain
+                    the reference's four-pixel sidebar inset below it. *)
+                 box ~key:"ls-top" ~height:4
                    ~style_class:"left-sidebar-top"
                    ~data_attrs:[ ("data-window-titlebar", "true") ] []
                ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
@@ -296,7 +284,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
                ]
            )
            ]
-       ]))
+       ])
 
 (* docked splits — the native renderer draws Split natively and fires
    ValueChanged on drag; the persisted fraction drives ProgressValue
@@ -304,7 +292,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
    (the native kit has no split animation today). *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1. ~gap:3
+  split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
@@ -317,7 +305,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1. ~gap:3
+  split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
@@ -408,9 +396,8 @@ let main_scroll (ms : Model.t Signal.signal) : t =
         ]
         ])
 
-(* NavigationSplitView detail column — the left dock split's second
-   pane: titlebar row over the page scroll, sized by the persisted
-   sidebar fraction. *)
+(* The left dock split's detail pane contains page content. The header
+   is a sibling above the split, so opening the dock cannot move controls. *)
 let detail_column (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
@@ -422,7 +409,6 @@ let detail_column (ms : Model.t Signal.signal) : t =
        ([ (* invisible logseq-dom carrier: hosts forward
              document events through this extension node *)
           Logseq_el.carrier ]
-        @ topbar ms
         @ [ hidden_chrome ms; main_scroll ms ]))
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
@@ -644,13 +630,12 @@ let shell (ms : Model.t Signal.signal) : t =
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    [ (* horizontal shell: the docked splits own both side docks'
-         tracks — the left split's second pane is the detail column
-         (titlebar + page scroll), so the sidebar column spans the
-         full window height like NavigationSplitView *)
+    [ (* The header spans the main area above the left dock split. The
+         right dock remains full-height, matching the reference shell. *)
       row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ right_split ms st
-            (left_split ms st (detail_column ms))
+            (column ~key:"main-area" ~grow:1. ~min_height:0
+               (topbar ms @ [ left_split ms st (detail_column ms) ]))
             (right_sidebar ms)
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
