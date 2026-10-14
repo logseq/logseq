@@ -1,0 +1,7 @@
+(rule
+ (copy ../../ocaml_host/theme_vars.ml theme_vars.ml))
+
+(test
+ (name theme_vars_test)
+ (modules theme_vars theme_vars_test)
+ (libraries logseq_ui_shared lui.paint lui.store lui.scene lui.window lui.theme yojson))

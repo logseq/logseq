@@ -13,7 +13,7 @@
 
 ## Status convention
 
-`Inventory` means identified in current master source/tests, not verified parity. `Explored` requires live reference reproduction. `Different` requires paired execution evidence. `Fixed` requires tests and actual native reproduction; `Verified` additionally requires paired matching behavior, persistence where applicable, and appearance evidence. `Blocked` names an exact external/platform prerequisite; it does not mean omitted.
+`Inventory` means identified in current master source/tests, not verified parity. `Explored` requires live reference reproduction. `Different` requires paired execution evidence. `Fixed` requires tests and actual native reproduction; `Verified` additionally requires paired matching behavior, persistence where applicable, and appearance evidence. `Partial` records validated fixes while known differences remain. `Blocked` names an exact external/platform prerequisite; it does not mean omitted.
 
 `source-inventory.json` lists 251 current master E2E cases with scenario descriptions and candidate native test files. Candidate paths and historical reports do not count as native execution. This matrix expands as live exploration discovers additional surfaces.
 
@@ -59,8 +59,8 @@
 | M01 | Menus/popovers: anchors, second press, outside/Escape, disabled items, keyboard focus | components/; deps/shui/ | core/overlay.ml; shared/ui_components.ml | Inventory | Verify each owning surface, not just primitives |
 | M02 | Dialog stacking, alerts, prompts, confirmation, password and focus restore | deps/shui/; components/ | dialogs/; graphs/rtc_error.ml | Inventory | Pending paired execution |
 | M03 | Toasts: identity, duration, persistent errors, close/pause/swipe/stack | handler/notification.cljs; deps/shui/ | toasts/ | Inventory | Pending paired execution |
-| T01 | Settings General: language, theme, accents, font, wide/bracket modes | components/settings.cljs | settings/ | Inventory | Persistence and native font rendering need execution |
-| T02 | Settings Editor: date format, outdent, references, home, tooltip options | components/settings.cljs | settings/settings_page.ml | Inventory | Pending paired execution |
+| T01 | Settings General: language, theme, accents, font, wide/bracket modes | components/settings.cljs | settings/; ocaml_host/theme_vars.ml | Partial | Native control palette now resolves app snapshot roles; actual dark/light switch and restart persistence verified. Layout, icons, checkbox/font controls and custom accents remain. [Evidence](evidence/theme/validation.md) |
+| T02 | Settings Editor: date format, outdent, references, home, tooltip options | components/settings.cljs | settings/settings_page.ml | Partial | Paired execution confirms primary/input track colors and theme backdrop fixed. Label wrapping/alignment and switch-thumb geometry differ. [Evidence](evidence/theme/validation.md) |
 | T03 | Settings Features/Advanced: flashcards, plugins, server, sync URLs, privacy/developer | components/settings.cljs | settings/ | Inventory | Pending paired execution |
 | T04 | Keymap: filters, search by keys, custom binding, disable/reset, actual dispatch | components/shortcut.cljs; modules/shortcut/ | settings/keymap_data.ml; settings_page.ml; native/ | Inventory | Base keymap uses static macOS data; custom/reset paths require investigation |
 | D01 | Graph creation, import formats, export page/graph/ontology and publishing | components/repo.cljs; imports.cljs; export.cljs | graphs/; export/ | Inventory | Use disposable fixtures only |
@@ -74,4 +74,4 @@
 
 ## Evidence and validation ledger
 
-No feature area has been declared fully verified yet. Both actual apps now execute. Bootstrap repair: initialize the newly required `Lui_paint.hooks.hidden` field; `Lui_host.set_hidden` supplies the real visibility predicate. Native build and platform/service tests pass; UI suite: **2066 checks, 0 failures**. Evidence and reproduction: sibling `evidence/bootstrap-validation.md`, `master/01-home-light.png`, `native/01-home-light-before.png`. Bootstrap logs distinguish setup failures from product differences. Before/after screenshots and reproduction steps will be linked per completed area, alongside focused tests, actual native verification, and normal pushed commits.
+No entire feature area has been declared fully verified yet. The default native control palette and modal backdrop sub-area has focused scene tests and actual light/dark/restart evidence. Both actual apps now execute. Bootstrap repair: initialize the newly required `Lui_paint.hooks.hidden` field; `Lui_host.set_hidden` supplies the real visibility predicate. Native build and platform/service tests pass; UI suite: **2066 checks, 0 failures**. Evidence and reproduction: sibling `evidence/bootstrap-validation.md`, `master/01-home-light.png`, `native/01-home-light-before.png`. Bootstrap logs distinguish setup failures from product differences. Before/after screenshots and reproduction steps will be linked per completed area, alongside focused tests, actual native verification, and normal pushed commits.

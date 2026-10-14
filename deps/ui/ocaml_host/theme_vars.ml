@@ -128,7 +128,44 @@ let fn_var_ref (s : string) : (string * float option) option =
     | _ -> None)
   | _ -> None
 
+(* The self-drawn controls request semantic names rather than CSS
+   declarations. Resolve those names through the same app snapshot as
+   explicit view colors, so native control chrome does not use LUI's
+   independent blue/zinc palette. *)
+let app_color_tokens =
+  [ "background", "var(--background)"
+  ; "foreground", "var(--foreground)"
+  ; "text", "var(--lx-gray-12)"
+  ; "text-muted", "var(--muted-foreground)"
+  ; "muted-foreground", "var(--muted-foreground)"
+  ; "muted", "var(--lx-gray-02)"
+  ; "surface", "var(--lx-gray-03)"
+  ; "surface-hover", "var(--lx-gray-04)"
+  ; "surface-pressed", "var(--lx-gray-05)"
+  ; "popover", "var(--popover)"
+  ; "card", "var(--card)"
+  ; "border", "var(--border)"
+  ; "input", "var(--input)"
+  ; "control-border", "var(--input)"
+  ; "switch-track", "var(--input)"
+  ; "accent", "var(--primary)"
+  ; "accent-hover", "var(--primary)"
+  ; "accent-pressed", "var(--primary)"
+  ; "accent-text", "var(--primary-foreground)"
+  ; "primary", "var(--primary)"
+  ; "primary-foreground", "var(--primary-foreground)"
+  ; "secondary", "var(--secondary)"
+  ; "danger", "var(--destructive)"
+  ; "destructive", "var(--destructive)"
+  ; "focus", "var(--ring)"
+  ; "ring", "var(--ring)"
+  ; "inverse", "var(--lx-gray-12)"
+  ; "inverse-foreground", "var(--lx-gray-01)"
+  ; "scrim", "hsl(var(--background) / 0.9)"
+  ]
+
 let rec color_of (s : string) : Lui_scene.color option =
+  let s = Option.value (List.assoc_opt s app_color_tokens) ~default:s in
   let v =
     match var_ref s with
     | Some _ -> resolve_value s 0
