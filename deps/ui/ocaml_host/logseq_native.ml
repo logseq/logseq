@@ -1124,7 +1124,7 @@ let () =
   in
   let jstr s = "\"" ^ json_escape s ^ "\"" in
   let jbool b = if b then "true" else "false" in
-  let emit_dom name node fields =
+  let dom_payload node fields =
     let fields =
       if node > 0 then ("nodeId", string_of_int node) :: fields
       else fields
@@ -1135,6 +1135,10 @@ let () =
           (List.map (fun (k, v) -> jstr k ^ ":" ^ v) fields)
       ^ "}"
     in
+    body
+  in
+  let emit_dom name node fields =
+    let body = dom_payload node fields in
     dbg "dom %s node=%d %s" name node body;
     Native_embed.platform_event (name ^ "\n" ^ body)
   in
@@ -1446,7 +1450,7 @@ let () =
         | None -> None)
     | _ -> None
   in
-  let on_dom_key ~down ~scancode ~keymod ~repeat =
+  let on_dom_key ~native_default ~down ~scancode ~keymod ~repeat =
     let mods = mods_of_keymod keymod in
     let target =
       let menu = Ui.open_menu ui in
@@ -1489,7 +1493,19 @@ let () =
     in
     if dupe then ()
     else begin
-      emit_dom (if down then "keydown" else "keyup") target fields;
+      let prevented =
+        match native_default with
+        | Some default ->
+            Host_events.dispatch_key ~default
+              ~document:(fun () ->
+                let patches, prevented = Native_embed.document_event "keydown"
+                    (Js.Json.parseExn (dom_payload target fields)) in
+                apply_patch_json patches;
+                prevented)
+        | None ->
+            emit_dom (if down then "keydown" else "keyup") target fields;
+            false
+      in
       (* browsers dispatch copy/cut/paste as their own dom events on
          mod+c/x/v — the document clipboard listeners (on_copy/on_cut/
          on_paste) hang off those, not the keydown; a paste event
@@ -1516,7 +1532,7 @@ let () =
          conduit "key" event alongside the document dispatch — give the
          focused logseq-editor sink the same feed; typed text arrives
          separately as Text_input -> "insert" *)
-      if down && target <> 0
+      if down && not prevented && target <> 0
          && Lui_store.kind store target = "extension:logseq-editor"
       then begin
         dbg "editor key %s" (dom_key scancode);
@@ -1541,7 +1557,7 @@ let () =
       end
     end
   in
-  let emit_dom_event e =
+  let emit_dom_event ?native_default e =
     match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
     | `Mouse_button_down ->
       on_dom_button_down
@@ -1566,12 +1582,12 @@ let () =
         ~ry:(Sdl.Event.get e Sdl.Event.mouse_motion_yrel)
         ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
     | `Key_down ->
-      on_dom_key ~down:true
+      on_dom_key ~native_default ~down:true
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
         ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0)
     | `Key_up ->
-      on_dom_key ~down:false
+      on_dom_key ~native_default:None ~down:false
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
         ~repeat:false
@@ -1656,7 +1672,12 @@ let () =
              Lui_host.invalidate_paint host;
              host_req_repaint := true
          | _ -> ());
+        let escape_dispatched = ref false in
         (match input_of_event e with
+         | Some (Input.Key_down (Input.Escape, _, _) as input) ->
+           escape_dispatched := true;
+           emit_dom_event e ~native_default:(fun () ->
+             apply_actions (Ui.handle ui store rects input))
          | Some (Input.Resize (w, h)) ->
            win_w := w;
            win_h := h;
@@ -1678,7 +1699,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        emit_dom_event e
+        if not !escape_dispatched then emit_dom_event e
       end
       else go := false
     done;

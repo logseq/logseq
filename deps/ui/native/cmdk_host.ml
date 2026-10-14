@@ -59,8 +59,12 @@ let with_sidebar f =
   | Some sst -> f sst
   | None -> ()
 
-let services : unit -> Svs.t =
- fun () ->
+let services ?input_container () : Svs.t =
+  let input_selector =
+    (match input_container with
+     | Some identifier -> "#" ^ identifier
+     | None -> ".cp__cmdk__modal") ^ " .cp__cmdk-search-input"
+  in
   { Svs.publishing = Platform.publishing
   ; is_mac = Platform.is_mac
   ; dev_build = (fun () -> Platform.dev_build)
@@ -113,18 +117,18 @@ let services : unit -> Svs.t =
   ; scroll_to_top = Router.scroll_to_top
   ; set_input_value =
       (fun v ->
-        match Ui_services.dom_query ".cp__cmdk-search-input" with
+        match Ui_services.dom_query input_selector with
         | Some el -> el.Ui_services.set_value v
         | None -> ())
   ; focus_search_input =
       (fun () ->
-        match Ui_services.dom_query ".cp__cmdk-search-input" with
+        match Ui_services.dom_query input_selector with
         | Some el -> el.Ui_services.focus ()
         | None -> ())
   ; focus_input_init =
       (fun q ->
         let rec go tries =
-          match Ui_services.dom_query ".cp__cmdk-search-input" with
+          match Ui_services.dom_query input_selector with
           | Some el ->
               el.Ui_services.focus ();
               if q <> "" then (

@@ -21,4 +21,4 @@ Reference: master 7dfa9b45a. Native base: 7b0d18735000f2b7ae6342c410df476088baa5
 
 ## Remaining differences
 
-Header alignment, palette result/filter details, existing-page query restoration, Escape ordering and other search actions still require coverage. Notification placement, pause/swipe/timer semantics and layout remain unverified. The saved-page screenshots intentionally expose remaining shell and text appearance differences; this checkpoint does not establish full search, editor, notification or visual parity.
+Header alignment has a later checkpoint. Escape ordering, filter query preservation and owning-input focus have a later [validated repair](../search-escape/validation.md). Palette result/filter details, complete query restoration and other search actions still require coverage. Notification placement, pause/swipe/timer semantics and layout remain unverified. The saved-page screenshots intentionally expose remaining shell and text appearance differences; this checkpoint does not establish full search, editor, notification or visual parity.

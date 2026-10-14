@@ -504,7 +504,10 @@ let item_body st idx (it : Sidebar_state.item) =
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
-            [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
+            [ Cmdk_view.sidebar
+                ~services:(Cmdk_host.services
+                  ~input_container:("sidebar-panel-content-" ^ n) ())
+                ~query:it.title ]
         ]
   | "help" ->
       (* cljs :help items mount onboarding/help directly in

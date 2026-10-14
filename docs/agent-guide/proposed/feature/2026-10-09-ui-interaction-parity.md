@@ -156,3 +156,14 @@ The current continuation uses independent clones at master `7dfa9b45a` and nativ
 The coverage matrix and source-derived 251-case inventory are in `docs/ui-parity/`. Validated checkpoints cover native paint initialization, app palette lookup, graph-search loading visibility, literal-space decoding, create-page focus ownership, notification hooks, typed settings layout, visible checkbox geometry, typography-variable lookup, label wrapping and line-height. Actual native SDL execution and paired evidence accompany those partial checkpoints. The UI recording suite currently passes 2072 checks; focused creation/focus/persistence/validation E2E passes repeatedly. These results do not establish full settings, editor, search or native parity.
 
 Remaining native renderer opacity, expose/restore repaint, nested scrolling, richer rendering, menus, keymap and other inventoried interactions remain open. macOS-specific UI is not verified by Linux. The matrix is authoritative for progress and residual differences.
+
+### Search Escape and owning-input checkpoint
+
+The SDL Escape default must run after synchronous document capture and skip
+native dismissal when prevented. Scoped dispatch state and an Escape-only host
+boundary establish this without changing other keyboard ordering or LUI.
+Filter selection/clearing preserves master's query semantics and keyboard focus.
+Search host services now scope value/focus/initial-focus operations to the modal
+or existing pinned-sidebar panel identifier. Actual native coexistence and
+editor-save regressions, paired master screenshots and test-first evidence are
+recorded in `docs/ui-parity/evidence/search-escape/validation.md`.

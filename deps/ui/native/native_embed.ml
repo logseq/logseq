@@ -609,6 +609,16 @@ let pump () : string =
       perf_mark "pump.total" t0;
       out)
 
+(* SDL Escape needs document capture and its patches before host defaults. *)
+let document_event name payload =
+  with_entry_lock (fun () ->
+      Host.drain ();
+      let prevented = Platform.emit_event_with_default name payload in
+      (match !current_app with
+       | Some app -> ignore (Lui_app.flush app)
+       | None -> ());
+      (take_patches_dbg "document-event", prevented))
+
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,
      dom-op results, menu commands). Payload is "name\njson". *)

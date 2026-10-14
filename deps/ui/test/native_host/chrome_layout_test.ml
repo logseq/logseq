@@ -4,9 +4,65 @@ let () =
   Platform.install_ui_services ~assert_owner:(fun () -> ())
     ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let seen_prevented = ref false in
+  Ui_services.dom_on_document_event ~capture:true "parity-prevention"
+    (fun ev -> ev.prevent_default ());
+  Ui_services.dom_on_document_event "parity-prevention"
+    (fun ev -> seen_prevented := ev.default_prevented);
+  Platform.emit_event "parity-prevention" (Js.Json.JObject []);
+  check "native capture prevention reaches later document listeners" !seen_prevented;
+  check "native dispatch reports consumed defaults to its host"
+    (Platform.emit_event_with_default "parity-prevention" (Js.Json.JObject []));
+  check "default prevention does not leak into the next event"
+    (not (Platform.emit_event_with_default "parity-unhandled" (Js.Json.JObject [])));
+  Ui_services.dom_on_document_event ~capture:true "parity-nested"
+    (fun ev ->
+      ev.prevent_default ();
+      check "nested dispatch starts with an independent default state"
+        (not (Platform.emit_event_with_default "parity-unhandled" (Js.Json.JObject []))));
+  check "nested dispatch preserves its parent's default prevention"
+    (Platform.emit_event_with_default "parity-nested" (Js.Json.JObject []));
+  Platform.add_event_listener ~capture:true "parity-direct-prevention" Dom_ext.prevent_default;
+  check "native snapshot event handlers share default prevention"
+    (Platform.emit_event_with_default "parity-direct-prevention" (Js.Json.JObject []));
+  Ui_services.dom_on_document_event ~capture:true "parity-stop"
+    (fun ev -> ev.stop_propagation ());
+  check "propagation stopping alone does not prevent a host default"
+    (not (Platform.emit_event_with_default "parity-stop" (Js.Json.JObject [])));
+
   check "native URI components follow encodeURIComponent rather than query syntax"
     (Ui_services.uri_encode_component "a/b?c=d&e+f,g!~*'()" =
        "a%2Fb%3Fc%3Dd%26e%2Bf%2Cg!~*'()");
+  let input_snapshot id ancestor = Js.Json.JObject
+      [ "node-id", Js.Json.JNumber (float_of_int id)
+      ; "tag", Js.Json.JString "input"
+      ; "class", Js.Json.JString "cp__cmdk-search-input"
+      ; "ancestors", Js.Json.JArray [| ancestor |] ] in
+  let sidebar_owner = Js.Json.JObject [ "id", Js.Json.JString "sidebar-panel-content-0" ]
+  and modal_owner = Js.Json.JObject [ "class", Js.Json.JString "cp__cmdk__modal" ] in
+  let previous_elements = !Dom_ext.doc_elements_provider
+  and previous_host_op = !Host.host_op in
+  Dom_ext.doc_elements_provider := (fun () ->
+      [ input_snapshot 9001 sidebar_owner; input_snapshot 9002 modal_owner ]);
+  let target = ref None in
+  Host.set_host_op (fun operation payload ->
+      if operation = "dom-op" then
+        let index = String.index payload '\n' in
+        let json = Js.Json.parseExn (String.sub payload (index + 1)
+            (String.length payload - index - 1)) in
+        target := Js.Json.decodeNumber (Dom_ext.prop "node-id" (Dom_ext.prop "ref" json)));
+  let services = Cmdk_host.services () in
+  services.focus_search_input ();
+  check "modal focus does not select an earlier pinned-sidebar input" (!target = Some 9002.);
+  services.set_input_value "query";
+  check "modal value changes do not write into an earlier sidebar input" (!target = Some 9002.);
+  let sidebar_services = Cmdk_host.services ~input_container:"sidebar-panel-content-0" () in
+  sidebar_services.focus_search_input ();
+  check "sidebar focus stays with its owning search panel" (!target = Some 9001.);
+  sidebar_services.set_input_value "sidebar query";
+  check "sidebar input changes do not overwrite the open modal" (!target = Some 9001.);
+  Dom_ext.doc_elements_provider := previous_elements;
+  Host.set_host_op previous_host_op;
   let store = Lui_store.create () in
   let backend =
     { Lui_protocol.backend_profile =

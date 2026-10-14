@@ -926,8 +926,9 @@ let close st =
   set_in st (fun v -> { v with open_ = false; persist = true })
 
 let clear_filter st =
-  set_in st (fun v -> { v with filter = None });
-  refresh st
+  set_in st (fun v -> { v with filter = None; mouse = false });
+  refresh st;
+  st.svs.Svs.focus_search_input ()
 
 (* sidebar cmdk block: independent state seeded with the query —
    a fresh make() never runs :default in cljs either, but here the
@@ -1316,10 +1317,16 @@ let rec run_item st it =
              | None -> Ui_task.resolve ()))
          repo
    | Set_filter gid ->
+       let input =
+         match String.rindex_opt v.input '/' with
+         | Some index -> String.sub v.input 0 index
+         | None -> v.input
+       in
        set_in st (fun v ->
-           { v with filter = Some gid; input = "" });
-       st.svs.Svs.set_input_value "";
-       refresh st
+           { v with filter = Some gid; input; mouse = false });
+       st.svs.Svs.set_input_value input;
+       refresh st;
+       st.svs.Svs.focus_search_input ()
    | Run cid -> run_with_lifecycle st repo cid
    | Open_file _ ->
        (* cljs file rows open the file editor — no such route here;

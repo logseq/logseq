@@ -1523,6 +1523,78 @@ let test_copy_urls () =
     (url ~repo:(Ui_services.literal_text "logseq_db_café space&+") "page-id" =
        Some "logseq://graph/caf%C3%A9%20space&+?block-id=page-id")
 
+let test_cmdk_input_ownership () =
+  Stub_dom.install ();
+  let body : Js.Json.t = [%mel.raw "document.body"] in
+  let sidebar = Stub_dom.make_element "div"
+  and modal = Stub_dom.make_element "div"
+  and sidebar_input = Stub_dom.make_element "input"
+  and modal_input = Stub_dom.make_element "input" in
+  (Ui_dom_web.el_of sidebar).set_attr "id" "sidebar-panel-content-0";
+  (Ui_dom_web.el_of modal).set_attr "class" "cp__cmdk__modal";
+  List.iter (fun input -> (Ui_dom_web.el_of input).set_attr "class" "cp__cmdk-search-input")
+    [ sidebar_input; modal_input ];
+  Stub_dom.append_child body sidebar;
+  Stub_dom.append_child sidebar sidebar_input;
+  Stub_dom.append_child body modal;
+  Stub_dom.append_child modal modal_input;
+  let services = Cmdk_host.services () in
+  services.focus_search_input ();
+  let active : Js.Json.t = [%mel.raw "document.activeElement"] in
+  check "modal services focus their own input rather than an earlier sidebar" (active == modal_input);
+  services.set_input_value "modal query";
+  eqs "modal services write only their own input" "modal query" ((Ui_dom_web.el_of modal_input).value ());
+  let sidebar_services = Cmdk_host.services ~input_container:"sidebar-panel-content-0" () in
+  sidebar_services.focus_search_input ();
+  let active : Js.Json.t = [%mel.raw "document.activeElement"] in
+  check "sidebar services focus their own panel's input" (active == sidebar_input);
+  sidebar_services.set_input_value "sidebar query";
+  eqs "sidebar services write their own panel's input" "sidebar query" ((Ui_dom_web.el_of sidebar_input).value ());
+  eqs "sidebar services preserve the open modal's input" "modal query" ((Ui_dom_web.el_of modal_input).value ())
+
+let test_cmdk_escape_and_filter_focus () =
+  let focused = ref 0 and input = ref "" in
+  let services = { (Cmdk_host.services ()) with
+    repo = (fun () -> None)
+  ; focus_search_input = (fun () -> incr focused)
+  ; set_input_value = (fun value -> input := value) } in
+  let st = Cmdk_state.make ~register:false (Signal.scheduler ()) services in
+  Cmdk_state.set_in st (fun view -> { view with open_ = true; input = "query" });
+  let escape = { Cmdk_services.key = "Escape"; meta = false; ctrl = false
+               ; shift = false; alt = false } in
+  let answer = Cmdk_view.handle_keydown st escape in
+  check "query Escape consumes the key without closing the palette"
+    (answer.prevent && answer.stop && (Cmdk_state.get st).open_);
+  eqs "query Escape clears both model and input" "" (Cmdk_state.get st).input;
+  eqs "query Escape writes the empty input" "" !input;
+  let answer = Cmdk_view.handle_keydown st escape in
+  check "empty Escape consumes the key and closes the palette"
+    (answer.prevent && answer.stop && not (Cmdk_state.get st).open_);
+  Cmdk_state.set_in st (fun view -> { view with open_ = true; filter = Some G_nodes; mouse = true });
+  ignore (Cmdk_view.handle_keydown st escape);
+  check "filter Escape clears the filter without closing the palette"
+    ((Cmdk_state.get st).open_ && (Cmdk_state.get st).filter = None
+      && not (Cmdk_state.get st).mouse);
+  eqi "filter Escape restores search input focus" 1 !focused;
+  let item : Cmdk_state.item =
+    { ikey = "filter-fixture"; idx = 0; gid = G_filters; ititle = "Nodes"
+    ; info = None; header = None; iicon = ""; isc = ""; ibadge = No_badge
+    ; act = Set_filter G_nodes; ihl = false; imouse = false; iq = "" } in
+  Cmdk_state.set_in st (fun view -> { view with input = "Focus"; mouse = true });
+  Cmdk_state.run_item st item;
+  check "selecting a filter keeps the palette open and preserves its query"
+    ((Cmdk_state.get st).open_ && (Cmdk_state.get st).filter = Some G_nodes
+      && (Cmdk_state.get st).input = "Focus" && not (Cmdk_state.get st).mouse);
+  eqs "filter selection preserves the visible query" "Focus" !input;
+  eqi "selecting a filter returns focus from its row to the input" 2 !focused;
+  List.iter (fun (query, expected) ->
+      Cmdk_state.set_in st (fun view -> { view with input = query });
+      Cmdk_state.run_item st item;
+      eqs "filter selection removes only the final slash-filter suffix" expected
+        (Cmdk_state.get st).input;
+      eqs "filter suffix removal synchronizes the visible input" expected !input)
+    [ "/nodes", ""; "Projects/Alpha/nodes", "Projects/Alpha"; "Focus /nodes", "Focus " ]
+
 let test_cmdk_creation_ownership () =
   Stub_dom.install ();
   let body : Js.Json.t = [%mel.raw "document.body"] in
@@ -4462,6 +4534,8 @@ let () =
   test_cmdk_rows ();
   test_cmdk_view ();
   test_cmdk_groups ();
+  test_cmdk_input_ownership ();
+  test_cmdk_escape_and_filter_focus ();
   test_cmdk_creation_ownership ();
   test_copy_urls ();
   test_model_indent ();

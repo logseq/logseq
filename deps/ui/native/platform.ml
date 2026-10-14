@@ -111,6 +111,14 @@ let unregister_dom_handlers id = Hashtbl.remove dom_handlers id
 let propagation_stopped = ref false
 let request_stop () = propagation_stopped := true
 
+(* Default prevention belongs to one dispatch, including nested events. *)
+let dispatch_default : bool ref option ref = ref None
+let default_prevented () =
+  match !dispatch_default with Some prevented -> !prevented | None -> false
+let request_prevent_default () =
+  match !dispatch_default with Some prevented -> prevented := true | None -> ()
+
+
 let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
 
 (* runtime-node-id -> element snapshot for the event's "target" prop,
@@ -145,7 +153,7 @@ let native_block_controls () = true
 let css_transform_icons () = false
 
 (* host -> OCaml event entry; called by the bridge. *)
-let emit_event name payload =
+let dispatch_event name payload =
   let now = date_now_ms () in
   if name = "click" && now -. !last_click_ms < 60. then
     ()
@@ -232,6 +240,24 @@ let emit_event name payload =
      document listener provides *)
   if name = "ls:navigate" then notify_navigate ()
   end
+
+let emit_event_with_default name payload =
+  let previous_default = !dispatch_default
+  and previous_stop = !propagation_stopped in
+  let prevented = ref (match payload with
+      | Js.Json.JObject fields ->
+          (match List.assoc_opt "defaultPrevented" fields with
+           | Some value -> Js.Json.decodeBoolean value = Some true
+           | None -> false)
+      | _ -> false) in
+  dispatch_default := Some prevented;
+  Fun.protect
+    ~finally:(fun () ->
+      dispatch_default := previous_default;
+      propagation_stopped := previous_stop)
+    (fun () -> dispatch_event name payload; !prevented)
+
+let emit_event name payload = ignore (emit_event_with_default name payload)
 
 (* ---------- clipboard ---------- *)
 

@@ -1,0 +1,484 @@
+{
+  "url": "http://localhost:3001/?rtc-test=true#/page/6acfc1f4-0749-46e7-8cbc-34a7c767c462?graph-id=00000000-2953-4fdb-a9f4-1dc82cc9768c",
+  "viewport": {
+    "width": 1280,
+    "height": 900,
+    "dpr": 1
+  },
+  "text": "Skip to main content\nDemo\nNavigations\nJournals\nFlashcards\nPages\nGraph view\nFavorites\nRecent\nNative focus verified\nNative parity smoke\nParity Home\nAdd icon\nSet property\nNative focus verified\nFocus ownership persisted\nNodes\n2\nNative focus verified\nCurrent Page\nFocus ownership persisted\nNative focus verifiedCurrent Page\nCreate page \u2014 Create page called 'Focus'\nRecently updated\n1\nNative focus verified\nFilters\n6\nShow more\nCtrl\n\u2193\nSearch only current page \u2014 Add filter to search\nSearch only nodes \u2014 Add filter to search\nSearch only codes \u2014 Add filter to search\nSearch only commands \u2014 Add filter to search\nSearch only files \u2014 Add filter to search\nTip:\nPress\n/\nto filter search results\nOpen\n\u23ce\nOpen in sidebar\n\u21e7\n\u23ce\nCopy ref\nCtrl\nC",
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "skip-to-main",
+      "className": "",
+      "text": "Skip to main content",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 550.5,
+        "y": -100,
+        "w": 179,
+        "h": 40
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "left-menu",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden cp__header-left-menu",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 8,
+        "y": 8,
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "search-button",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 40,
+        "y": 8,
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "base-ui-_r_8t_",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 1178,
+        "y": 8,
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "base-ui-_r_ks_",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden toolbar-dots-btn",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 1210,
+        "y": 8,
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "base-ui-_r_91_",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden toggle-right-sidebar",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 1242,
+        "y": 8,
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " item flex items-center gap-1 select-none",
+      "text": "Demo",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 52,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " wrap-th",
+      "text": "Navigations",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -226,
+        "y": 96,
+        "w": 72,
+        "h": 15.984375
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-0.5 as-edit",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -43,
+        "y": 95,
+        "w": 28,
+        "h": 14
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " item group flex items-center text-sm rounded-md font-medium",
+      "text": "Journals",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 124,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " item group flex items-center text-sm rounded-md font-medium",
+      "text": "Flashcards",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 158,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " item group flex items-center text-sm rounded-md font-medium",
+      "text": "Pages",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 192,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " item group flex items-center text-sm rounded-md font-medium",
+      "text": "Graph view",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 226,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " wrap-th",
+      "text": "Favorites",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -226,
+        "y": 274,
+        "w": 57,
+        "h": 15.984375
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " wrap-th",
+      "text": "Recent",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -226,
+        "y": 310,
+        "w": 42,
+        "h": 15.984375
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " link-item group",
+      "text": "Native focus verified",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 334,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " link-item group",
+      "text": "Native parity smoke",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 366,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " link-item group",
+      "text": "Parity Home",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": -234,
+        "y": 398,
+        "w": 221,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "control-6acfc1f4-0749-46e7-8cbc-34a7c767c462",
+      "className": " block-control",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": 146,
+        "y": 96.328125,
+        "w": 22,
+        "h": 22
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost rounded px-2 py-0 h-6 text-xs text-muted-foreground",
+      "text": "Add icon",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 178,
+        "y": 60,
+        "w": 69,
+        "h": 24
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost rounded px-2 py-0 h-6 text-xs text-muted-foreground",
+      "text": "Set property",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 255,
+        "y": 60,
+        "w": 94,
+        "h": 24
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "control-6acfc1f5-aba9-4b1f-b684-7f4eb3fc9192",
+      "className": " block-control",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": 156,
+        "y": 189.5,
+        "w": 22,
+        "h": 22
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "base-ui-_r_ku_",
+      "className": " bullet-link-wrap",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": 178,
+        "y": 192,
+        "w": 16,
+        "h": 16
+      }
+    },
+    {
+      "tag": "INPUT",
+      "role": null,
+      "id": "",
+      "className": "text-xl bg-transparent !border-none w-full !outline-none !shadow-none px-3 py-3 focus:!border-none focus:!outline-none focus:!shadow-none focus-visible:!outline-none focus-visible:!shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cp__cmdk-search-input",
+      "text": "",
+      "title": "",
+      "aria": null,
+      "placeholder": "What are you looking for?",
+      "value": "Focus",
+      "disabled": false,
+      "checked": false,
+      "rect": {
+        "x": 193,
+        "y": 109,
+        "w": 894,
+        "h": 52
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "id": "",
+      "className": " text-link select-node opacity-50 hover:opacity-90",
+      "text": "Show more\nCtrl\n\u2193",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "rect": {
+        "x": 972.5,
+        "y": 388,
+        "w": 103.5,
+        "h": 16
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost h-7 rounded px-3 py-1 hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80",
+      "text": "Open\n\u23ce",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 663,
+        "y": 756,
+        "w": 86,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost h-7 rounded px-3 py-1 hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80",
+      "text": "Open in sidebar\n\u21e7\n\u23ce",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 757,
+        "y": 756,
+        "w": 181,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "id": "",
+      "className": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost h-7 rounded px-3 py-1 hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80",
+      "text": "Copy ref\nCtrl\nC",
+      "title": "",
+      "aria": null,
+      "placeholder": null,
+      "value": "",
+      "disabled": false,
+      "rect": {
+        "x": 946,
+        "y": 756,
+        "w": 136,
+        "h": 28
+      }
+    }
+  ]
+}
