@@ -71,7 +71,7 @@
 | X01 | Plugins dashboard/settings/marketplace, UI hooks and commands | components/plugins*.cljs | native/plugins_view.ml; plugin_host.ml | Inventory | Exact native host capability restrictions must be recorded |
 | X02 | Login/logout, local sync test server, RTC/e2ee/error/retry/collaboration | components/user/; rtc/; e2ee.cljs | graphs/rtc_*; dialogs/login_view.ml | Inventory | Do not use production account or existing graph for destructive tests |
 | X03 | Bug report/help/library/onboarding, desktop menus and window controls | routes.cljs; components/ | native/menu_bar.ml; dialogs/; sidebar/ | Inventory | macOS AppKit and window-material verification unavailable on Linux |
-| U01 | Loading/empty/error/disabled states; long content, clipping/scrolling, scaling | Current source/tests across all surfaces | All corresponding surfaces | Inventory | Cross-cutting criterion, checked per row |
+| U01 | Loading/empty/error/disabled states; long content, clipping/scrolling, scaling | Current source/tests across all surfaces | All corresponding surfaces | Partial | Graph-search loading state and Linux native uncover repaint repaired. Uncover capture exactly matches baseline; other cross-cutting states remain per-area work. [Evidence](evidence/window-damage/validation.md) |
 
 ## Evidence and validation ledger
 

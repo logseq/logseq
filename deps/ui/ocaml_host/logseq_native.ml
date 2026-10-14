@@ -1639,6 +1639,7 @@ let () =
     | _ -> ()
   in
   Callback.register "ocaml_host_menu_command" menu_command;
+  let host_req_repaint = ref false in
   let e = Sdl.Event.create () in
   let drain_events () =
     let n = ref 0 in
@@ -1647,6 +1648,14 @@ let () =
       if Sdl.poll_event (Some e) then begin
         incr n;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
+        (match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
+         | `Window_event
+           when Host_events.requires_repaint
+                  (Sdl.Event.window_event_enum
+                     (Sdl.Event.get e Sdl.Event.window_event_id)) ->
+             Lui_host.invalidate_paint host;
+             host_req_repaint := true
+         | _ -> ());
         (match input_of_event e with
          | Some (Input.Resize (w, h)) ->
            win_w := w;
@@ -1693,7 +1702,6 @@ let () =
   Ui.set_content_rect ui engine_rect;
   let a11y = Lui_a11y.of_store store in
   (* Host_requests env: the dom-op/platform-request sink. *)
-  let host_req_repaint = ref false in
   let theme_gen_seen = ref !Theme_vars.generation in
   Host_requests.install
     { Host_requests.store;

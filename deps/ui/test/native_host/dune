@@ -28,3 +28,12 @@
  (modules settings_layout_test)
  (libraries native_host_test_support logseq_ui_shared lui.layout lui.store lui.scene lui logseq_ocaml_host_platform)
  (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(rule
+ (copy ../../ocaml_host/host_events.ml host_events.ml))
+
+(test
+ (name host_events_test)
+ (modules host_events host_events_test)
+ (libraries tsdl)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
