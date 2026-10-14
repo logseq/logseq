@@ -1638,9 +1638,11 @@ let () =
   Callback.register "ocaml_host_menu_command" menu_command;
   let e = Sdl.Event.create () in
   let drain_events () =
+    let n = ref 0 in
     let go = ref true in
     while !go do
       if Sdl.poll_event (Some e) then begin
+        incr n;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         (match input_of_event e with
          | Some (Input.Resize (w, h)) ->
@@ -1667,7 +1669,8 @@ let () =
         emit_dom_event e
       end
       else go := false
-    done
+    done;
+    !n
   in
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name "Logseq";
@@ -1779,6 +1782,10 @@ let () =
     end
   in
   Daemon_client.boot_mark "loop";
+  (* [last_busy] gates the idle sleep: any activity below refreshes
+     it, so the 1ms fast poll persists through bursts (boot, typing)
+     and the blocking wait only kicks in after sustained quiet. *)
+  let last_rev = ref 0 and last_busy = ref (perf_s ()) in
   while not !quit do
     let t0 = perf_s () in
     Lui_shell.pump ();
@@ -1795,7 +1802,7 @@ let () =
       native_activate ();
       Daemon_client.boot_mark "raise end"
     end;
-    drain_events ();
+    if drain_events () > 0 then last_busy := t0;
     if !frame < 3 then Daemon_client.boot_mark "events drained";
     (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
        (id kind key class rect, indented) to the debug log. *)
@@ -1866,6 +1873,7 @@ let () =
        serializes a full paint into the pump path. *)
     let rec pump_all n =
       if n > 0 && Atomic.exchange Bridge.pending_wakeup false then begin
+        last_busy := t0;
         let r = Native_embed.pump () in
         if !debug then warn "pump -> %d bytes" (String.length r);
         apply_patch_json r;
@@ -1876,7 +1884,13 @@ let () =
     if !frame < 3 then Daemon_client.boot_mark "pumps drained";
     (* platform_request envelopes the app emitted are serviced here. *)
     Host_requests.drain ();
-    apply_actions (Ui.store_changed ui store);
+    let rev_now = Lui_store.revision store in
+    if rev_now <> !last_rev then begin
+      last_rev := rev_now; last_busy := t0
+    end;
+    let sync_acts = Ui.store_changed ui store in
+    if sync_acts <> [] then last_busy := t0;
+    apply_actions sync_acts;
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
     Host_requests.ensure_ed_focus ();
@@ -1907,6 +1921,7 @@ let () =
       Daemon_client.boot_mark "a11y sync";
       if !gl_live_cell then Sdl.gl_swap_window !win;
       Ui.frame_done ui;
+      last_busy := t0;
       incr frame
     end;
     (let iter_ms = (perf_s () -. t0) *. 1000. in
@@ -1934,9 +1949,16 @@ let () =
         Sdl.delay (Int32.of_int (int_of_float remaining))
     end
     else if not dirty then
-      (* 1ms during boot: wakeup-driven pumps otherwise wait a 4ms
-         sleep per hop across the serialized invoke chain. *)
-      Sdl.delay (if !frame < 60 then 1l else 4l)
+      (* Busy (recent event/wakeup/paint): 1ms — wakeup-driven pump
+         chains otherwise pay a sleep per hop across the serialized
+         invoke chain. Quiet for >2s: block in SDL_WaitEventTimeout —
+         input wakes immediately while the pump/sync poll cadence
+         drops from ~500Hz to ~60Hz. NULL event: the waking event
+         stays queued for drain_events. The old [!frame < 60] gate
+         never escaped because [frame] counts repaints, which stop
+         entirely once idle. *)
+      if perf_s () -. !last_busy < 2. then Sdl.delay 1l
+      else ignore (Sdl.wait_event_timeout None 16)
   done;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with
