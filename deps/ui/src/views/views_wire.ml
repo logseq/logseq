@@ -188,12 +188,12 @@ let group_value_uuid (v : W.t) : string option =
   | _ -> None
 
 (* How many linked/unlinked reference rows to materialize at once.
-   The worker rejects initial-row-count on those features, so the
-   window is applied to the already-decoded result: the header keeps
-   the full count, and only this many row entities are fetched and
-   mounted. Zero means "first batch not in hand yet" — render no rows
+   Linked references send this as initial-row-count so the worker
+   returns a prefix plus the index total. Unlinked stays client-side:
+   the worker has no row-limit fast path for that scan. Zero
+   fetch_limit means the first batch has not landed — render no rows
    rather than a Loading placeholder. *)
-let ref_window = 48
+let ref_window = 16
 
 let row_count = function
   | VFlat { rows; count; _ } -> max count (List.length rows)

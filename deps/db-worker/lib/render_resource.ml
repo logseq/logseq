@@ -2049,7 +2049,8 @@ let require_view_context (context : Wire.t) : (Wire.t * Wire.t) list =
                   | Some (Wire.Keyword f) -> f
                   | _ -> ""
                 in
-                List.mem ft [ "all-pages"; "class-objects" ] && n > 0 && n <= 1000
+                List.mem ft [ "all-pages"; "class-objects"; "linked-references" ]
+                && n > 0 && n <= 1000
             | None -> true
             | _ -> false)
         && (match List.assoc_opt (Wire.keyword "row-offset") kvs with

@@ -355,18 +355,36 @@ let name_uuid_state context name =
       | Some u ->
           if !sync then Signal.set st u else Runtime.signal_set st u
       | None ->
-          (let* w =
-            Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-              (Wire.String "[:block/uuid]")
-              (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
-          in
-          (match Wire.map_get_uuid w "block/uuid" with
-           | Some u ->
-               Hashtbl.replace cache.c_name_uuid key u;
-               Runtime.signal_set st u
-           | None -> ());
-          Js.Promise.resolve ())
-          |> ignore);
+          (* The route page is already in hand. [[Hub]] on a Hub
+             backlink must not each pay a thread-api/pull before the
+             first row layout. *)
+          let seeded = ref false in
+          (match (Runtime.model ()).Model.route_page with
+           | Some p
+             when String.lowercase_ascii p.Model.page_title = key -> (
+               match p.Model.page_uuid with
+               | Some u ->
+                   seeded := true;
+                   Hashtbl.replace cache.c_name_uuid key u;
+                   Hashtbl.replace cache.c_uuid_meta u
+                     (p.Model.page_title, true, false);
+                   if !sync then Signal.set st u else Runtime.signal_set st u
+               | None -> ())
+           | _ -> ());
+          if not !seeded then
+            ignore
+              ((let* w =
+                  Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+                    (Wire.String "[:block/uuid]")
+                    (Wire.Array
+                       [ Wire.Keyword "block/name"; Wire.String key ])
+                in
+                (match Wire.map_get_uuid w "block/uuid" with
+                 | Some u ->
+                     Hashtbl.replace cache.c_name_uuid key u;
+                     Runtime.signal_set st u
+                 | None -> ());
+                Js.Promise.resolve ())));
   sync := false;
   st
 

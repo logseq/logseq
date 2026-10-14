@@ -2771,7 +2771,8 @@ let select_keys_wire db (e : entity) : Wire.t =
 
 (* view/linked-references-page-list-view-data *)
 let linked_references_page_list_view_data db (view : entity option)
-    (entities_result : linked_reference_result) (entities : entity list) : Wire.t =
+    ?count (entities_result : linked_reference_result) (entities : entity list)
+    : Wire.t =
   let gs_ident =
     match
       Option.bind view (fun v -> Ldb.ref_ent v "logseq.property.view/sort-groups-by-property")
@@ -2809,9 +2810,11 @@ let linked_references_page_list_view_data db (view : entity option)
               ; nested_block_groups_wire blocks ])
          sorted_page_groups)
   in
+  let n =
+    match count with Some c -> c | None -> List.length entities
+  in
   let pairs =
-    [ (Wire.Keyword "count", Wire.Int (List.length entities))
-    ; (Wire.Keyword "data", data) ]
+    [ (Wire.Keyword "count", Wire.Int n); (Wire.Keyword "data", data) ]
   in
   let pairs =
     match entities_result.ref_pages_count with
@@ -2881,6 +2884,56 @@ let get_query_properties db (query : Wire.t option) (entities : entity list) :
            keys
        in
        Some (Wire.Array (List.map (fun a -> Wire.Keyword a) keys)))
+
+(* First [limit] visible linked-reference blocks, plus a raw avet count
+   of every block/refs datom (aliases included). The hidden/page/tags
+   check is one eavt slice per candidate and stops once the window is
+   full; the tail is only counted. Filters, search, and a missing
+   row-limit stay on get_linked_references so they keep global order. *)
+let linked_refs_window db (id : entity_id) ~limit : entity list * int =
+  let entity = Ldb.ent_of_id db id in
+  let ids = dedupe_ids (id :: get_block_alias db id) in
+  let class_ids =
+    match entity with
+    | Some e when Ldb.is_class e ->
+        id :: Db_class.get_structured_children db id
+    | _ -> []
+  in
+  let hidden_eid = hidden_eid_pred db in
+  let passes rid =
+    let tags = ref [] and page = ref None in
+    datoms db Eavt ~e:rid ()
+    |> Seq.iter (fun (d : datom) ->
+           if d.a = "block/tags" then
+             match entid d.v with
+             | Some t -> tags := t :: !tags
+             | None -> ()
+           else if d.a = "block/page" && !page = None then page := entid d.v);
+    not
+      ((class_ids <> [] && List.exists (fun t -> List.mem t class_ids) !tags)
+       || hidden_eid (Some rid)
+       || hidden_eid !page)
+  in
+  let total = ref 0 in
+  let taken = ref [] in
+  let ntake = ref 0 in
+  let seen = Hashtbl.create (max 16 (limit * 2)) in
+  List.iter
+    (fun pid ->
+      Seq.iter
+        (fun (d : datom) ->
+          incr total;
+          if !ntake < limit && not (Hashtbl.mem seen d.e) then
+            if passes d.e then begin
+              Hashtbl.add seen d.e ();
+              taken := d.e :: !taken;
+              incr ntake
+            end
+            else Hashtbl.add seen d.e ())
+        (datoms db Avet ~a:"block/refs" ~v:(Ref pid) ()))
+    ids;
+  let ents = List.filter_map (Ldb.ent_of_id db) (List.rev !taken) in
+  (ents, !total)
 
 (* view/get-view-data *)
 let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
@@ -3024,6 +3077,36 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
       | Some (Wire.Bool b) -> b
       | _ -> true
     in
+    (* No filters and an explicit row-limit: do not materialize every
+       referring entity. Index order, then the page-list grouper sorts
+       just this window. *)
+    let linked_window =
+      match feat_type, class_id, row_limit with
+      | Some "linked-references", Some id, Some n
+        when n > 0 && (not filters.vf_present) && Unicode.trim input = "" ->
+          let ents, total = linked_refs_window db id ~limit:n in
+          let result =
+            { ref_blocks = ents
+            ; ref_matched_children_ids = None
+            ; ref_pages_count = None }
+          in
+          let group_by_page = group_by_ident = Some "block/page" in
+          Some
+            (if list_view && group_by_page then
+               linked_references_page_list_view_data db view_opt ~count:total
+                 result ents
+             else
+               Wire.Map
+                 [ (Wire.Keyword "count", Wire.Int total)
+                 ; ( Wire.Keyword "data"
+                   , Wire.Array
+                       (List.map (fun (e : entity) -> Wire.Int e.id) ents) )
+                 ])
+      | _ -> None
+    in
+    match linked_window with
+    | Some w -> w
+    | None ->
     let fast_row_data =
       match feat_type with
       | Some ("all-pages" | "class-objects") as ft

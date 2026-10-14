@@ -1510,35 +1510,42 @@ let ref_flags (p : Model.page option) =
         , p.page_uuid )
   | None -> None
 
-let refs_eq (a : Model.t) (b : Model.t) =
-  a.page_ref_count = b.page_ref_count
-  && a.unlinked_exists = b.unlinked_exists
-  && a.unlinked_open = b.unlinked_open
-  && a.route = b.route
-  && ref_flags a.route_page = ref_flags b.route_page
+(* Linked refs mount as soon as the page uuid exists. page_ref_count
+   is a full index walk and must not gate the section or remount it
+   when the count arrives. Unlinked stays on its own equality so that
+   flag does not tear the linked rows down. *)
+let linked_refs_eq (a : Model.t) (b : Model.t) =
+  a.route = b.route && ref_flags a.route_page = ref_flags b.route_page
 
-let refs_wrap (m : Model.t) : t =
+let unlinked_refs_eq (a : Model.t) (b : Model.t) =
+  a.unlinked_exists = b.unlinked_exists
+  && a.unlinked_open = b.unlinked_open
+  && linked_refs_eq a b
+
+let linked_refs_el (m : Model.t) : t =
+  match m.route_page with
+  | None -> Logseq_el.nothing
+  | Some page -> (
+      match page.Model.page_uuid with
+      | None -> Logseq_el.nothing
+      | Some uuid ->
+          column ~key:"refs-wrap" ~gap:32 ~margin_left:4
+            (* cljs page-inner: #today-queries div first on today's journal,
+               then the linked refs section *)
+            ((if is_today_page m page then
+                [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
+              else [])
+            @ [ box ~key:"lrefs"
+                  [ references_view ~page_uuid:uuid ~has_refs:true () ] ]))
+
+let unlinked_refs_el (m : Model.t) : t =
   match m.route_page with
   | None -> Logseq_el.nothing
   | Some page ->
-      column ~key:"refs-wrap" ~gap:32 ~margin_left:4
-        (* cljs page-inner: #today-queries div first on today's journal,
-           then linked and unlinked refs .fade-in.delay sections *)
-        ((if is_today_page m page then
-            [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
-          else [])
-        @ [ (match page.Model.page_uuid with
-             | Some uuid ->
-                 box ~key:"lrefs"
-                   [ references_view ~page_uuid:uuid
-                       ~has_refs:(m.page_ref_count > 0) () ]
-             | None -> Logseq_el.nothing)
-          ; (* cljs when-not class-page?/property-page? — the unlinked
-               section is omitted entirely on node pages *)
-            (if page.page_is_tag || page.page_is_property
-             then Logseq_el.nothing
-             else box ~key:"urefs" [ unlinked_references_view m ])
-          ])
+      (* cljs when-not class-page?/property-page? — the unlinked
+         section is omitted entirely on node pages *)
+      if page.page_is_tag || page.page_is_property then Logseq_el.nothing
+      else box ~key:"urefs" ~margin_left:4 [ unlinked_references_view m ]
 
 (* cljs page-inner (show-tabs?): class/property pages render
    .page-tabs > .w-full > .ui__tabs-content > .ml-1 hosting the objects
@@ -1593,7 +1600,8 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
             ; page_tabs_el m0
             ; blocks_area ~scope ~library ?puuid ms
             ]
-        ; reactive ~equal:refs_eq refs_wrap ms
+        ; reactive ~equal:linked_refs_eq linked_refs_el ms
+        ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms
         ; Selection_bar.view ()
         ]))
     ctx parent

@@ -171,6 +171,7 @@ let view_el inst : t =
         && V.Sset.equal a.V.collapsed_groups b.V.collapsed_groups
     | _ -> true
   in
+  let inner =
   box ~grow:1.
     [ column ~gap:8 ~grow:1.
         [ column ~gap:8 ~grow:1.
@@ -185,6 +186,28 @@ let view_el inst : t =
             ]
         ]
     ]
+  in
+  (* An empty linked-refs result (page with no mentions) unmounts the
+     section once the snapshot has settled. While it is loading, or
+     the wire count is still unknown (VEmpty), the head stays so the
+     first rows are not gated on block-ref-count. *)
+  fun ctx parent ->
+    if inst.V.kind <> V.KLinkedRefs then inner ctx parent
+    else
+      let show =
+        D.own ctx
+          (Signal.map
+             (fun (s : V.vstate) ->
+               let settled_empty =
+                 (not s.V.loading)
+                 && s.V.data <> Wr.VEmpty
+                 && s.V.items_count = 0
+                 && Wr.row_count s.V.data = 0
+               in
+               not settled_empty)
+             (Signal.value inst.V.st))
+      in
+      if_ ~test:show inner ctx parent
 
 (* cljs custom-query: .views-query-inner holds [builder?; results] —
    the :view hiccup / scalar list / query-result table / loading /
@@ -282,6 +305,24 @@ let ref_end inst t =
   match Hashtbl.find_opt ref_inflight inst.V.id with
   | Some t' when t' = t -> Hashtbl.remove ref_inflight inst.V.id
   | _ -> ()
+
+(* block-ref-count walks every referring entity. Queue it only after
+   this view's get-blocks has already been invoked, and only for the
+   route page, so it cannot sit ahead of the first reference rows.
+   A remount is a new inst id and kicks again. *)
+let extras_once : (int, unit) Hashtbl.t = Hashtbl.create 4
+
+let kick_page_extras inst =
+  if inst.V.kind = V.KLinkedRefs && not (Hashtbl.mem extras_once inst.V.id)
+  then
+    match (Runtime.model ()).M.route_page with
+    | Some p -> (
+        match p.M.page_uuid, inst.V.owner with
+        | Some u, W.Uuid u' when u = u' ->
+            Hashtbl.add extras_once inst.V.id ();
+            !Runtime.refresh_page_side p
+        | _ -> ())
+    | None -> ()
 
 let dedupe_uuids xs =
   let seen = Hashtbl.create (max 1 (List.length xs)) in
@@ -417,17 +458,27 @@ let load_view_data ?(fetch_limit = 0) inst =
             load_props inst (fun () -> build_columns inst)
           in
           if ref_kind inst then begin
-            (* Keep every decoded uuid so the header count stays exact,
-               but get-blocks only the first window. initial-row-count
-               is rejected by the worker for reference features, and
-               pulling every inline ref of thousands of rows is what
-               stalls the first paint. fetch_limit stays 0 until those
-               entities land, so the body mounts no rows and no Loading
-               text. A refetch that already holds the prefix paints it
-               immediately. *)
-            let total = Wr.row_count d in
-            let n = min Wr.ref_window total in
+            (* The worker may return a prefix (linked refs send
+               initial-row-count) or the full uuid list. [items_count]
+               is the wire total so the header stays exact while
+               get-blocks only the staged window. fetch_limit stays 0
+               until the first entities land, so the body mounts no
+               rows and no Loading text. A growth keeps the prefix
+               already on screen. *)
+            let decoded = Wr.row_count d in
+            let wire_count =
+              Option.value (W.map_get_int v "count") ~default:0
+            in
+            let items_count =
+              if wire_count > 0 then wire_count else decoded
+            in
+            let staged =
+              if fetch_limit > 0 then fetch_limit else Wr.ref_window
+            in
+            let n = min staged decoded in
             let first = Wr.row_window d ~start:0 ~stop:n in
+            let prev_limit = (V.get inst).V.fetch_limit in
+            let growing = fetch_limit > prev_limit && prev_limit > 0 in
             let have =
               n > 0
               && List.for_all
@@ -438,21 +489,28 @@ let load_view_data ?(fetch_limit = 0) inst =
                 { s with
                   V.data = d
                 ; loading = false
-                ; fetch_limit = (if have then n else 0)
+                ; items_count
+                ; fetch_limit =
+                    (if have then n else if growing then s.V.fetch_limit else 0)
                 ; ref_pages_count = Wr.decode_ref_counts v
                 ; query_idents =
                     (match d with
                      | Wr.VFlat { qprops; _ } -> qprops
                      | _ -> s.V.query_idents)
                 });
-            if n = 0 || have then continue ()
+            if n = 0 || have then begin
+              kick_page_extras inst;
+              continue ()
+            end
             else
               let ticket = ref_begin inst in
               let uuids = dedupe_uuids (first.Wr.rows @ first.Wr.headers) in
-              load_blocks ~set_limit:n
+              load_blocks ~merge:growing ~set_limit:n
                 ~fresh:(fun () -> V.fetch_fresh inst gen)
                 ~finally:(fun () -> ref_end inst ticket)
-                inst uuids (fun () -> continue ())
+                inst uuids (fun () -> continue ());
+              (* get-blocks is already on the worker queue. *)
+              kick_page_extras inst
           end
           else begin
             V.update inst (fun s ->
@@ -675,17 +733,20 @@ let export_edn inst =
           ; toast_kind = "success" });
      Ui_task.resolve ()))
 
-(* Next reference window. Does not refetch the snapshot: the decoded
-   uuid list is already complete. Skips while a batch is in flight, or
-   while the current prefix is not fully in [blocks], so virt-end
-   (which refires whenever a short list's tail sits inside the
-   viewport band) cannot stack get-blocks calls. *)
+(* Next reference window. A worker that ignored row-limit left every
+   uuid in [data]; slice that locally. A windowed worker returned only
+   the prefix, so ask for a larger initial-row-count. Skips while a
+   batch is in flight or the current prefix is not in [blocks], so
+   virt-end cannot stack fetches. *)
 let load_more_refs inst =
   let s = V.get inst in
-  let total = Wr.row_count s.V.data in
+  let decoded = Wr.row_count s.V.data in
+  let total =
+    if s.V.items_count > decoded then s.V.items_count else decoded
+  in
   if s.V.fetch_limit <= 0 || s.V.fetch_limit >= total || ref_busy inst then
     ()
-  else
+  else if decoded > s.V.fetch_limit then
     let have = Wr.row_window s.V.data ~start:0 ~stop:s.V.fetch_limit in
     if not (List.for_all (fun u -> Hashtbl.mem s.V.blocks u) have.Wr.rows)
     then ()
@@ -699,6 +760,9 @@ let load_more_refs inst =
         ~fresh:(fun () -> V.fetch_fresh inst gen)
         ~finally:(fun () -> ref_end inst ticket)
         inst uuids (fun () -> ())
+  else
+    let stop = min total (s.V.fetch_limit + Wr.ref_window) in
+    load_view_data ~fetch_limit:stop inst
 
 (* windowed view-data growth — the row stream's virt-end dom-event fires
    when its last child nears the viewport; each bump doubles the fetched

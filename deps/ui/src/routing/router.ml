@@ -445,7 +445,9 @@ let rec load_page_ref for_route ref_v =
         (Ui_services.dom_body ()).Ui_services.set_attr "data-page"
           p''.Model.page_title;
         (Ui_services.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
-        fetch_page_extras ~stale:is_stale p'';
+        (* block-ref-count scans every referring entity. The linked-refs
+           view kicks it after its own get-blocks is queued, so the
+           count cannot run ahead of the first rows. *)
         (* zoom-out to a page parent keeps the zoomed
            block in edit mode (cljs pending-edit) *)
         (match Editor_actions.consume_pending_zoom ()

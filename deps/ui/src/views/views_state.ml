@@ -80,7 +80,11 @@ type vstate =
            linked/unlinked refs: how many decoded row uuids have block
            entities yet. 0 means the first batch has not landed, so the
            body mounts nothing while the header still shows the full
-           count. Those features must not send initial-row-count. *)
+           count. Linked references also send this (or ref_window) as
+           initial-row-count. Unlinked must not. *)
+  ; items_count : int
+        (* Wire "count" when the payload is a window, not the whole
+           result. 0 means [data] already holds every row. *)
   ; ref_pages_count : (string * int) list
         (* view-data :ref-pages-count — [[title count]...] for the
            linked-refs filter dialog *)
@@ -140,6 +144,7 @@ let empty_vstate () : vstate =
   ; ref_titles = Hashtbl.create 8
   ; asset_class = false
   ; fetch_limit = 0
+  ; items_count = 0
   ; ref_pages_count = []
   ; ref_includes = []
   ; ref_excludes = []
@@ -267,7 +272,10 @@ let ctx_of inst : W.t =
   in
   let base =
     (* cljs loaded-view-resource-plan: un-grouped all-pages/class-objects
-       are windowed — initial-row-count = min 1000 (ceil viewport/33) *)
+       are windowed — initial-row-count = min 1000 (ceil viewport/33).
+       Linked references send a small prefix so the worker does not
+       scan every referring block before the first rows paint.
+       Unlinked has no server window. *)
     match inst.feature, s.group_by with
     | ("all-pages" | "class-objects"), None ->
         let n =
@@ -275,6 +283,12 @@ let ctx_of inst : W.t =
           |> max 0. |> ceil |> int_of_float |> max 1 |> min 1000
         in
         base @ [ (W.kw "initial-row-count", W.Int (max n s.fetch_limit)) ]
+    | "linked-references", _ ->
+        let staged =
+          if s.fetch_limit > 0 then s.fetch_limit else Views_wire.ref_window
+        in
+        base
+        @ [ (W.kw "initial-row-count", W.Int (min 1000 (max 1 staged))) ]
     | _ -> base
   in
   let base =

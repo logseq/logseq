@@ -2468,6 +2468,13 @@ let test_views_state () =
      = Some (Wire.Array [ Wire.Uuid "r1" ]));
   check "ctx no initial-row-count for query-result"
     (Wire.get ctx "initial-row-count" = None);
+  let linst = mk_view_inst "linked-references" in
+  check "ctx linked-references windows the first page"
+    (Wire.get (Views_state.ctx_of linst) "initial-row-count"
+     = Some (Wire.Int Views_wire.ref_window));
+  let uinst = mk_view_inst "unlinked-references" in
+  check "ctx unlinked does not send initial-row-count"
+    (Wire.get (Views_state.ctx_of uinst) "initial-row-count" = None);
   check "ctx group-by"
     (let inst2 = mk_view_inst "x" in
      Views_state.update inst2 (fun s ->

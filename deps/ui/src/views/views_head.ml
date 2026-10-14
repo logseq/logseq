@@ -38,6 +38,8 @@ let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
   mk (if title_ = "" then None else Some title_)
 
 let count_of (s : V.vstate) =
+  if s.V.items_count > 0 then s.V.items_count
+  else
   match s.V.data with
   | Wr.VFlat { rows; _ } -> List.length rows
   | Wr.VGrouped gs ->

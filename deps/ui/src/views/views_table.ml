@@ -1496,10 +1496,14 @@ let windowed inst (s : V.vstate) =
     { s with V.data = Wr.slice_view_data s.V.data s.V.fetch_limit }
   else s
 
+(* Decoded rows are a prefix when the worker windowed the query.
+   [items_count] is the index total in that case. *)
+let ref_total (s : V.vstate) =
+  let decoded = Wr.row_count s.V.data in
+  if s.V.items_count > decoded then s.V.items_count else decoded
+
 let more_ref_rows inst (s : V.vstate) =
-  ref_view inst
-  && s.V.fetch_limit > 0
-  && s.V.fetch_limit < Wr.row_count s.V.data
+  ref_view inst && s.V.fetch_limit > 0 && s.V.fetch_limit < ref_total s
 
 (* rows for the list display: same (uuid, blk) stream, ls-block markup.
    [~paginate] is set only on the tail list of a reference window so

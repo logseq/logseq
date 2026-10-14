@@ -1956,6 +1956,37 @@ let test_groups_page_level_linked_references () =
         | _ -> check "one partition" false))
   | _ -> check "single group" false
 
+let test_linked_references_row_limit_keeps_total () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "Target" }; blocks = [] }
+        ; { page = { default_page with pg_title = Some "Ref A" }; blocks = [] }
+        ; { page = { default_page with pg_title = Some "Ref B" }; blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  let target_id = eid_of_title db "Target" in
+  let a = eid_of_title db "Ref A" in
+  let b = eid_of_title db "Ref B" in
+  let view_id = create_view_id conn ~view_for_id:target_id "linked-references" in
+  transact_maps conn
+    [ op_db_add (Int64 a) "block/refs" (Int64 target_id)
+    ; op_db_add (Int64 b) "block/refs" (Int64 target_id)
+    ; op_db_add (Int64 view_id) "logseq.property.view/type"
+        (Kw "logseq.property.view/type.list")
+    ; op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
+        (Kw "block/page") ];
+  let result =
+    Db_view.get_view_data (db_of conn) (Some view_id)
+      (opts
+         [ "view-feature-type", kw "linked-references"
+         ; "view-for-id", Wire.Int target_id
+         ; "row-limit", Wire.Int 1 ])
+  in
+  check "row-limit keeps the index total" (view_count result = 2);
+  check "row-limit returns one group" (List.length (data_wire result) = 1)
+
 let test_class_objects_ref_filter_fast_path () =
   let conn =
     create_conn_with_blocks
@@ -2191,6 +2222,9 @@ let () =
         ; Alcotest.test_case
             "get-view-data-groups-page-level-linked-references-under-the-referring-page-test"
             `Quick test_groups_page_level_linked_references
+        ; Alcotest.test_case
+            "get-view-data-linked-references-row-limit-keeps-total-test"
+            `Quick test_linked_references_row_limit_keeps_total
         ; Alcotest.test_case
             "get-view-data-class-objects-ref-filter-fast-path-test" `Quick
             test_class_objects_ref_filter_fast_path
