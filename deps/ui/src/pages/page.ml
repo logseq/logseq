@@ -1350,22 +1350,32 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
              last_uuid := u;
              emitted := mount_chunk
            end;
-           take (min !emitted (List.length bs)) bs)
+           (* A long page must not pass through the keyed prefix at
+              all, including the flush that crosses the threshold. *)
+           if Virt_list.enabled ~virtualize:true (List.length bs) then []
+           else take (min !emitted (List.length bs)) bs)
          spine_sig (Signal.value tick))
   in
+  (* The threshold is live. Sampling it once at mount left a page that
+     loaded empty (or under 64 blocks) on the keyed path, which then
+     chunk-mounted all 1500 rows and painted for minutes. *)
+  let virt_on =
+    Logseq_el.own ctx
+      (Signal.map
+         (fun bs -> Virt_list.enabled ~virtualize:true (List.length bs))
+         blocks_sig)
+  in
+  let virt_now () = Signal.get virt_on in
   (* growth driver: deferred tasks bump the window until the whole
      spine is emitted; a spine republish (splice or route change)
-     re-arms the loop via the spine_sig subscriber. Only armed when the
-     keyed list is the one mounted — virtualized pages window rows
-     themselves. *)
-  let use_virt =
-    Virt_list.enabled ~virtualize:true (List.length (Signal.get blocks_sig))
-  in
-  if not use_virt then begin
+     re-arms the loop via the spine_sig subscriber. Stops once the
+     virtual list takes over — otherwise 1500/16 timeouts still run. *)
+  if not (virt_now ()) then begin
     let grow_pending = ref false and alive = ref true in
     let rec grow () =
       grow_pending := false;
-      if !alive then begin
+      if (not !alive) || virt_now () then emitted := max_int
+      else begin
         let total = List.length (snd (Signal.get spine_sig)) in
         if !emitted < total then begin
           (* Once loaded, edits must not truncate the mounted spine. *)
@@ -1384,7 +1394,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     in
     ignore
       (Signal.subscribe ~emit_initial:false spine_sig (fun _ ->
-           schedule_grow ()));
+           if not (virt_now ()) then schedule_grow ()));
     Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
     schedule_grow ()
   end;
@@ -1409,10 +1419,15 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
              254px ≈ 16 rows at the 32px estimate *)
           ~overscan:16 blocks_sig ]
   in
-  (* if_/reactive branches must mount a node — the keyed/virt choice can't be
-     a dynamic child, so pick once per region mount; either renderer is
-     correct at any size, the threshold is only an optimization *)
-  let list_el = if use_virt then virt_list else keyed_list in
+  (* if_ mounts only the live branch. Crossing 64 blocks after the
+     region is already up (LongScroll's tree arrives after the shell)
+     swaps the keyed prefix for the virtual list. *)
+  let keyed_on = Logseq_el.own ctx (Signal.map not virt_on) in
+  let list_el =
+    box ~key:"bl-switch" ~display:`contents
+      [ Lui_elements.if_ ~test:virt_on virt_list
+      ; Lui_elements.if_ ~test:keyed_on keyed_list ]
+  in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
   (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     ~min_height:60 ~margin_top:16 ~margin_left:(-20)
