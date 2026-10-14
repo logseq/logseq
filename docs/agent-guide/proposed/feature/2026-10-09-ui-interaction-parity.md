@@ -167,3 +167,15 @@ Search host services now scope value/focus/initial-focus operations to the modal
 or existing pinned-sidebar panel identifier. Actual native coexistence and
 editor-save regressions, paired master screenshots and test-first evidence are
 recorded in `docs/ui-parity/evidence/search-escape/validation.md`.
+
+### Page and scroll geometry checkpoint
+
+Typed page/block/control metrics match actual reference rects. Native root
+viewport bounds keep long content in the scrolling pane; host scroll bounds
+exclude empty/unlaid and clipped descendant content while retaining direct
+padding in device pixels. Post-paint offset clamps schedule their repaint.
+Shared page spacing has one typed owner after removing obsolete CSS padding.
+Fresh Vite/CSS browser regressions, native Pango tests and actual SDL evidence
+are recorded in `docs/ui-parity/evidence/page-spacing/validation.md`.
+Percentage flex-basis cache invalidation is a separate confirmed LUI dependency
+blocker; no whole-layout workaround or extra-repository edit is introduced.

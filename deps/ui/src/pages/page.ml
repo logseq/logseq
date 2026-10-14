@@ -560,7 +560,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             (fun selected ->
               if S.String_set.mem uuid selected then "selected ls-block"
               else "ls-block")
-            (column ~key:"pt-block"
+            (column ~key:"pt-block" ~padding_vertical:2
                ~transition:Ui_components.block_transition
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
@@ -1130,9 +1130,9 @@ let journal_item_sig (ms : Model.t Signal.signal)
         ~style_class:(page_wrap_cls (Signal.get ms) p0)
         ~padding_horizontal:8
         ~data_attrs:(page_wrap_attrs p0)
-        [ column ~key:("jip-" ^ key) ~gap:32
+        [ column ~key:("jip-" ^ key) ~gap:32 ~margin_bottom:64
             ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
+            ~data_attrs:[ ("style", "position:relative") ]
             [ title_ctx_row ~key:("jit-" ^ key) p0
                 [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
@@ -1607,9 +1607,9 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
   (Ui_parts.class_signal ms page_cls
      (page_typography (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
         ~padding_horizontal:8
-        [ column ~key:"page-inner" ~gap:32
+        [ column ~key:"page-inner" ~gap:32 ~margin_bottom:64
             ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
+            ~data_attrs:[ ("style", "position:relative") ]
             [ reactive ~equal:top_eq top_view ms
             ; page_tabs_el m0
             ; blocks_area ~scope ~library ?puuid ms

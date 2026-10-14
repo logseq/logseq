@@ -416,20 +416,20 @@ let () =
       Lui_scene.y = r.Lui_scene.y -. sy }
   in
   let content_box id =
-    List.fold_left
-      (fun (l, t, rgt, b) d ->
-         if d = id then (l, t, rgt, b)
-         else
-           let r = engine_rect d in
-           ( Float.min l r.Lui_scene.x
-           , Float.min t r.Lui_scene.y
-           , Float.max rgt (r.Lui_scene.x +. r.Lui_scene.w)
-           , Float.max b (r.Lui_scene.y +. r.Lui_scene.h) ))
-      ( Float.max_float
-      , Float.max_float
-      , Float.min_float
-      , Float.min_float )
-      (Lui_store.preorder ~root:id (store_of ()))
+    let store = store_of () in
+    let padding = Option.value (Lui_store.int_prop store id "padding") ~default:0 in
+    let padding_x = float (Option.value (Lui_store.int_prop store id "padding-horizontal") ~default:padding)
+    and padding_y = float (Option.value (Lui_store.int_prop store id "padding-vertical") ~default:padding) in
+    let scale = !scale_cell in
+    Host_scroll.content_bounds ~viewport:(engine_rect id)
+      ~padding_x:(padding_x *. scale) ~padding_y:(padding_y *. scale)
+      ~rect_of:engine_rect
+      ~children:(fun node ->
+        if Ui.hidden ui store node
+           || (not (Lui_paint.unboxed store node)
+               && Lui_paint.clips (Lui_store.kind store node) store node)
+        then [] else Lui_store.child_ids store node)
+      (Lui_store.child_ids store id)
   in
   let rect_intersect a b =
     let x = Float.max a.Lui_scene.x b.Lui_scene.x
@@ -1840,6 +1840,14 @@ let () =
        (id kind key class rect, indented) to the debug log. *)
     if Atomic.exchange dump_tree_flag false then begin
       dbg "icons=%d" (Host_icons.count ());
+      List.iter (fun id ->
+          if Ui.scrollable store id then begin
+            let rect = engine_rect id in
+            let left, top, right, bottom = content_box id in
+            dbg "scroll-range id=%d viewport=%.1f,%.1f %.1fx%.1f bounds=%.1f,%.1f %.1f,%.1f cap=%.1f offset=%.1f"
+              id rect.x rect.y rect.w rect.h left top right bottom (Ui.scroll_cap ui id)
+              (Ui.scroll_offset ui id)
+          end) (Lui_store.preorder store);
       let rec out depth id =
         let r = Rects.get rects id in
         let fprop name =
@@ -1952,7 +1960,8 @@ let () =
       ignore (Lui_a11y.sync a11y);
       Daemon_client.boot_mark "a11y sync";
       if !gl_live_cell then Sdl.gl_swap_window !win;
-      Ui.frame_done ui;
+      if Host_scroll.finish_frame ui ~painted_scroll_epoch:!scroll_epoch_seen then
+        host_req_repaint := true;
       last_busy := t0;
       incr frame
     end;

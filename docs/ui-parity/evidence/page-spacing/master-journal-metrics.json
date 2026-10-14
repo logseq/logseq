@@ -1,0 +1,85 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "class": " scrollbar-spacing w-full flex justify-center flex-row outline-none relative",
+      "id": "main-content-container",
+      "rect": {
+        "x": 0,
+        "y": 48,
+        "width": 1280,
+        "height": 852,
+        "top": 48,
+        "right": 1280,
+        "bottom": 900,
+        "left": 0
+      },
+      "padding": "32px 16px 32px 32px",
+      "margin": "0px"
+    },
+    {
+      "class": " cp__sidebar-main-content",
+      "id": "",
+      "rect": {
+        "x": 168,
+        "y": 80,
+        "width": 960,
+        "height": 788,
+        "top": 80,
+        "right": 1128,
+        "bottom": 868,
+        "left": 168
+      },
+      "padding": "0px",
+      "margin": "0px"
+    },
+    {
+      "class": "journal-last-item journal-item content relative",
+      "id": "",
+      "rect": {
+        "x": 168,
+        "y": 80,
+        "width": 960,
+        "height": 500,
+        "top": 80,
+        "right": 1128,
+        "bottom": 580,
+        "left": 168
+      },
+      "padding": "0px 0px 102px",
+      "margin": "0px"
+    },
+    {
+      "class": "title ls-page-title flex flex-1 w-full content items-start title",
+      "id": "",
+      "rect": {
+        "x": 176,
+        "y": 80,
+        "width": 944,
+        "height": 58,
+        "top": 80,
+        "right": 1120,
+        "bottom": 138,
+        "left": 176
+      },
+      "padding": "0px",
+      "margin": "0px"
+    },
+    {
+      "class": "mt-4 ls-page-blocks",
+      "id": "",
+      "rect": {
+        "x": 156,
+        "y": 186,
+        "width": 964,
+        "height": 60,
+        "top": 186,
+        "right": 1120,
+        "bottom": 246,
+        "left": 156
+      },
+      "padding": "0px",
+      "margin": "16px 0px 0px -20px"
+    }
+  ]
+}

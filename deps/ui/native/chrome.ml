@@ -327,15 +327,15 @@ let main_scroll (ms : Model.t Signal.signal) : t =
             vertical scroller (.scrollbar-spacing = overflow-y:auto) —
             emit the real scroll kind so pages taller than the window
             actually scroll. *)
-  Ui_parts.int_prop_signal Lui_protocol.PaddingVertical ms
-    (fun (m : Model.t) ->
-      (* cljs container.cljs: margin-less routes (journals/home/
-         all-pages) strip the container's py-8; named pages keep
-         the 32px top pad under the title *)
-      match m.route with
-      | Model.Journals | Model.Home | Model.All_pages -> 0
-      | _ -> 32)
-        (scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
+  let viewport = Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w in
+  (* Master container.css uses py-2 below640px, otherwise py-8/pl-8/pr-4.
+     Horizontal padding16 plus the row's left margin16 supplies the
+     asymmetric gutter without an untyped inline-layout declaration. *)
+  Ui_parts.int_prop_signal Lui_protocol.PaddingVertical viewport
+    (fun width -> if width < 640. then 8 else 32)
+    (Ui_parts.int_prop_signal Lui_protocol.PaddingHorizontal viewport
+      (fun width -> if width < 640. then 0 else 16)
+        (scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
         ~accessibility_identifier:"main-content-container"
         ~style_class:"scrollbar-spacing"
         ~data_attrs_signal:
@@ -344,7 +344,9 @@ let main_scroll (ms : Model.t Signal.signal) : t =
         [ (* the row keeps the pre-scroll layout: flex-row +
              justify-center centered .cp__sidebar-main-content
              horizontally (scroll children stretch to viewport width) *)
-          row ~key:"main-content-row" ~main:`center ~grow:1.
+          Ui_parts.int_prop_signal Lui_protocol.MarginLeft viewport
+            (fun width -> if width < 640. then 0 else 16)
+            (row ~key:"main-content-row" ~main:`center ~grow:1.
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
               (* cljs: .cp__sidebar-main-content centers a max-width
@@ -395,8 +397,8 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                         ms)
                    [ Page.region ms ]) ]
             ))
-        ]
         ])
+        ]))
 
 (* The left dock split's detail pane contains page content. The header
    is a sibling above the split, so opening the dock cannot move controls. *)
@@ -631,10 +633,13 @@ let shell (ms : Model.t Signal.signal) : t =
        overlays/help/not-found become shared-cell overlays (native:
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
+    (Ui_components.with_props
+       [ Ui_components.Prop.height_viewport 1.
+       ; Ui_components.Prop.max_height_viewport 1. ]
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ (* The header spans the main area above the left dock split. The
          right dock remains full-height, matching the reference shell. *)
-      row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
+      row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
         [ right_split ms st
             (column ~key:"main-area" ~grow:1. ~min_height:0
                (topbar ms @ [ left_split ms st (detail_column ms) ]))
@@ -651,4 +656,4 @@ let shell (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ])
+    ]))

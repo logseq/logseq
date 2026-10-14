@@ -1,0 +1,32 @@
+{
+  "reference_commit": "7dfa9b45aee9d6a9387ddb3375018356f1e7c6a8",
+  "native_base_commit": "7b0d18735000f2b7ae6342c410df476088baa543",
+  "implementation_parent": "076dad1e91a61d8819d425bd3985c09edf7502dc",
+  "lui_commit": "7ae8b157281fc4837fc7e6f1507d722c1f13404c",
+  "artifacts": {
+    "native_executable": {
+      "sha256": "9038aa72a38e499457f7a3fe1ce4d3987dce8244b85941210ab644684d60f9bf",
+      "bytes": 33136008
+    },
+    "web_bundle": {
+      "sha256": "87b553f58b72ebc6ed3b59d44688da5ec50ef4c98c9eef5b2f2dd666ffe808e6",
+      "bytes": 6067222
+    },
+    "web_css": {
+      "sha256": "524e04c8a04a3a9f7b42a336bfbcbb257197f82f958ec7d644cc3f90568ce7f2",
+      "bytes": 523583
+    }
+  },
+  "results": {
+    "shared_ui_checks": 2114,
+    "shared_ui_failures": 0,
+    "native_platform_contract_host_tests": "pass",
+    "current_bundle_creation_e2e": "pass",
+    "fresh_browser_journal_and_page_spacing": "pass"
+  },
+  "remaining": {
+    "long_page_native_cap": 702,
+    "long_page_reference_cap": 766,
+    "split_percentage_basis_resize_cache": "confirmed dependency blocker"
+  }
+}

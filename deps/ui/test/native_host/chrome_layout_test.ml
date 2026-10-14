@@ -145,6 +145,92 @@ let () =
   check "native page titles retain their separate font size and inherited line-height ratio"
     (Host_platform.Text.size title_font = 36.
      && Text_engine.line_height store title title_font = Some 54.);
+  let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:256 ~h:256)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:256 ~h:256) in
+  let engine = Text_engine.create ~scene:(fun () -> scene)
+      ~scale:(fun () -> 1.) ~store:(fun () -> store) in
+  let ui = Lui_window.Ui.create () in
+  Lui_layout.sync ~width:1280. ~height:900.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let title_rect = Option.get (Lui_layout.rect layout title)
+  and body_rect = Option.get (Lui_layout.rect layout body) in
+  Printf.printf "native page geometry: title %.0f,%.0f body %.0f,%.0f\n%!"
+    title_rect.x title_rect.y body_rect.x body_rect.y;
+  check "page centering includes the reference asymmetric scrollbar gutter"
+    (title_rect.x = 178.);
+  check "page title has the reference two-pixel block inset" (title_rect.y = 82.);
+  check "ordinary block controls reserve the reference indentation width"
+    (body_rect.x = 198.);
+  check "body rows follow the reference title and block padding" (body_rect.y = 188.);
+  let scroll = by_id "main-content-container" in
+  let viewport = Option.get (Lui_layout.rect layout scroll) in
+  let left, top, right, bottom = Host_scroll.content_bounds ~viewport
+      ~padding_x:16. ~padding_y:32.
+      ~rect_of:(fun node -> Option.value (Lui_layout.rect layout node) ~default:(Lui_scene.rect 0. 0. 0. 0.))
+      ~children:(fun node ->
+        if Lui_window.Ui.hidden ui store node
+           || (not (Lui_paint.unboxed store node)
+               && Lui_paint.clips (Lui_store.kind store node) store node)
+        then [] else Lui_store.child_ids store node)
+      (Lui_store.child_ids store scroll) in
+  check "short native pages do not create vertical or horizontal scrollbar range"
+    (bottom -. top = viewport.h && right -. left = viewport.w);
+  let long_blocks = List.init 45 (fun index -> Decode.block_of_wire (Wire.Map
+      [ Wire.Keyword "block/uuid", Wire.Uuid (Printf.sprintf "22222222-2222-4222-8222-%012d" index)
+      ; Wire.Keyword "block/title", Wire.String (Printf.sprintf "Scroll row %02d: repeatable long-page content" (index + 1)) ])) in
+  let long_page = { page with page_blocks = long_blocks } in
+  ignore (Lui_app.send app { model with route_page = Some long_page });
+  ignore (Lui_app.flush app);
+  let complete () = List.exists (fun node -> Lui_store.string_prop store node "text" =
+      Some "Scroll row 45: repeatable long-page content") (Lui_store.preorder store) in
+  let remaining = ref 1000 in
+  while not (complete ()) && !remaining > 0 do
+    decr remaining;
+    Unix.sleepf 0.001;
+    Host.drain ();
+    ignore (Lui_app.flush app)
+  done;
+  check "the long-page regression waits for the complete deferred block spine" (complete ());
+  Lui_layout.sync ~width:1280. ~height:900.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let scroll_rect = Option.get (Lui_layout.rect layout (by_id "main-content-container")) in
+  let _, height = Lui_layout.content_extent layout in
+  check "long pages keep the native scroll viewport inside the offered window"
+    (scroll_rect.h = 852. && height = 900.);
+  let scroll = by_id "main-content-container" in
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport:scroll_rect
+      ~padding_x:16. ~padding_y:32.
+      ~rect_of:(fun node -> Option.value (Lui_layout.rect layout node) ~default:(Lui_scene.rect 0. 0. 0. 0.))
+      ~children:(fun node ->
+        if Lui_window.Ui.hidden ui store node
+           || (not (Lui_paint.unboxed store node)
+               && Lui_paint.clips (Lui_store.kind store node) store node)
+        then [] else Lui_store.child_ids store node)
+      (Lui_store.child_ids store scroll) in
+  Printf.printf "long native page range %.0f\n%!" (bottom -. top -. scroll_rect.h);
+  check "long pages retain a real scroll range after the viewport is bounded"
+    (bottom -. top -. scroll_rect.h > 600.);
+  let sidebar_state = Option.get !Sidebar_state.st_ref in
+  Signal.set sidebar_state.viewport_w 600.;
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~width:600. ~height:700.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let scroll = by_id "main-content-container" in
+  let scroll_rect = Option.get (Lui_layout.rect layout scroll) in
+  check "narrow native viewports use the reference eight-pixel vertical gutter"
+    (Lui_store.int_prop store scroll "padding-vertical" = Some 8
+     && Lui_store.int_prop store scroll "padding-horizontal" = Some 0);
+  check "narrow long pages keep a bounded scroll viewport"
+    (scroll_rect.h = 652. && snd (Lui_layout.content_extent layout) = 700.);
+  Signal.set sidebar_state.viewport_w 1280.;
+  ignore (Lui_app.flush app);
   Runtime.worker := previous_worker;
   ignore (Lui_app.dispose app);
   let page = Option.get (Decode.page_of_summary (Wire.Map

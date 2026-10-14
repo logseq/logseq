@@ -1,0 +1,203 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "class": " is-with-icon bullet-hidden block-control-wrap flex flex-row items-center h-6",
+      "tag": "DIV",
+      "rect": {
+        "x": 146,
+        "y": 94.828125,
+        "width": 24,
+        "height": 24,
+        "top": 94.828125,
+        "right": 170,
+        "bottom": 118.828125,
+        "left": 146
+      },
+      "style": {
+        "padding": "0px 2px 0px 0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "24px",
+        "minWidth": "auto",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " block-control",
+      "tag": "A",
+      "rect": {
+        "x": 146,
+        "y": 96.328125,
+        "width": 22,
+        "height": 22,
+        "top": 96.328125,
+        "right": 168,
+        "bottom": 118.328125,
+        "left": 146
+      },
+      "style": {
+        "padding": "2px",
+        "margin": "1px 0px 0px",
+        "gap": "normal",
+        "width": "22px",
+        "minWidth": "22px",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " flex flex-col w-full",
+      "tag": "DIV",
+      "rect": {
+        "x": 178,
+        "y": 82,
+        "width": 942,
+        "height": 54,
+        "top": 82,
+        "right": 1120,
+        "bottom": 136,
+        "left": 178
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "942px",
+        "minWidth": "auto",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " block-control-wrap flex flex-row items-center h-6",
+      "tag": "DIV",
+      "rect": {
+        "x": 156,
+        "y": 188,
+        "width": 38,
+        "height": 24,
+        "top": 188,
+        "right": 194,
+        "bottom": 212,
+        "left": 156
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "38px",
+        "minWidth": "auto",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " block-control",
+      "tag": "A",
+      "rect": {
+        "x": 156,
+        "y": 189.5,
+        "width": 22,
+        "height": 22,
+        "top": 189.5,
+        "right": 178,
+        "bottom": 211.5,
+        "left": 156
+      },
+      "style": {
+        "padding": "2px",
+        "margin": "1px 0px 0px",
+        "gap": "normal",
+        "width": "22px",
+        "minWidth": "22px",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " bullet-link-wrap",
+      "tag": "A",
+      "rect": {
+        "x": 178,
+        "y": 192,
+        "width": 16,
+        "height": 16,
+        "top": 192,
+        "right": 194,
+        "bottom": 208,
+        "left": 178
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "16px",
+        "minWidth": "auto",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " bullet-container cursor",
+      "tag": "SPAN",
+      "rect": {
+        "x": 178,
+        "y": 192,
+        "width": 16,
+        "height": 16,
+        "top": 192,
+        "right": 194,
+        "bottom": 208,
+        "left": 178
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "16px",
+        "minWidth": "16px",
+        "flex": "0 0 auto"
+      }
+    },
+    {
+      "class": " flex flex-col w-full",
+      "tag": "DIV",
+      "rect": {
+        "x": 198,
+        "y": 188,
+        "width": 922,
+        "height": 24,
+        "top": 188,
+        "right": 1120,
+        "bottom": 212,
+        "left": 198
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "922px",
+        "minWidth": "auto",
+        "flex": "0 1 auto"
+      }
+    },
+    {
+      "class": " bullet-container",
+      "tag": "SPAN",
+      "rect": {
+        "x": 178,
+        "y": 220,
+        "width": 16,
+        "height": 16,
+        "top": 220,
+        "right": 194,
+        "bottom": 236,
+        "left": 178
+      },
+      "style": {
+        "padding": "0px",
+        "margin": "0px",
+        "gap": "normal",
+        "width": "16px",
+        "minWidth": "16px",
+        "flex": "0 0 auto"
+      }
+    }
+  ]
+}

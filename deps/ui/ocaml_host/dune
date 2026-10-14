@@ -370,7 +370,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine host_platform host_platform_test host_events))
+ (modules (:standard \ logseq_native native_embed bridge patch_decode host_requests theme_vars host_icons text_engine host_platform host_platform_test host_events host_scroll))
  (modes native)
  (libraries
    lui
@@ -408,7 +408,7 @@
 (executable
  (name logseq_native)
  (modules logseq_native native_embed bridge patch_decode host_requests
-   theme_vars host_icons text_engine host_events)
+   theme_vars host_icons text_engine host_events host_scroll)
  (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform
    lui
    lui.store

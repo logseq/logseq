@@ -1273,13 +1273,6 @@ html[data-theme='dark'] {
   display: none;
 }
 
-/* cljs page.cljs: .page-inner carries mb-16 — the gap between the block
-   list and the add-block row at page bottom (padding: a margin would
-   collapse through the lui-box block-format ancestors into scroll size) */
-.cp__page-inner-wrap > .page-inner {
-  padding-bottom: 4rem;
-}
-
 /* cljs url property values render a plain inline <a.external-link>
    (line-box height ~21px); the lui link kind is display:flex which
    grows the value cell to 25px */

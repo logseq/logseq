@@ -1,0 +1,72 @@
+open Lui_scene
+
+let check name condition = if not condition then failwith name
+
+let () =
+  let viewport = rect 3. 48. 1274. 852. in
+  let bounds rects = Host_scroll.content_bounds ~viewport ~padding_x:16. ~padding_y:32. ~rect_of:Fun.id ~children:(fun _ -> []) rects in
+  let left, top, right, bottom = bounds [ rect 35. 80. 1226. 788.; rect 0. 0. 0. 0. ] in
+  check "unlaid nodes at the origin do not create a short-page scroll range"
+    (left = viewport.x && top = viewport.y
+     && right = viewport.x +. viewport.w && bottom = viewport.y +. viewport.h);
+  let left, top, right, bottom = bounds [] in
+  check "empty content keeps finite viewport bounds"
+    (left = 3. && top = 48. && right = 1277. && bottom = 900.);
+  let _, top, _, bottom = bounds [ rect 35. 80. 1226. 2000. ] in
+  check "long content retains both leading and trailing container padding"
+    (top = 48. && bottom = 2112. && bottom -. top -. viewport.h = 1212.);
+  let _, top, _, bottom = bounds [ rect 0. (-500.) 0. 2000. ] in
+  check "zero-width placeholders do not affect the scroll extent"
+    (top = 48. && bottom = 900.);
+  let _, top, _, bottom = bounds [ rect 30. (-500.) 40. 200. ] in
+  check "overflow before the scroll origin does not add positive scroll range"
+    (top = 48. && bottom = 900.);
+  let scaled_viewport = rect 6. 96. 2548. 1704. in
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport:scaled_viewport
+      ~padding_x:32. ~padding_y:64. ~rect_of:Fun.id ~children:(fun _ -> [])
+      [ rect 70. 160. 2452. 2000. ] in
+  check "device-pixel scroll bounds retain scaled padding"
+    (bottom -. top -. scaled_viewport.h = 424.);
+  let child_viewport = rect 35. 100. 800. 200.
+  and child_content = rect 35. 100. 800. 2000. in
+  let rect_of = function 1 -> child_viewport | _ -> child_content in
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport ~padding_x:16.
+      ~padding_y:32. ~rect_of ~children:(fun _ -> []) [ 1 ] in
+  check "a fixed-height nested scroller contributes only its own viewport"
+    (bottom -. top -. viewport.h = 0.);
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport:child_viewport
+      ~padding_x:0. ~padding_y:0. ~rect_of ~children:(fun _ -> []) [ 2 ] in
+  check "nested content still scrolls inside its own owner"
+    (bottom -. top -. child_viewport.h = 1800.);
+  let rect_of = function 1 -> rect 35. 80. 1226. 788. | _ -> rect 168. 80. 960. 1586. in
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport ~padding_x:16.
+      ~padding_y:32. ~rect_of ~children:(function 1 -> [ 2 ] | _ -> []) [ 1 ] in
+  check "visible descendant overflow does not double-add container padding"
+    (bottom -. top = 1618.);
+  let nested_store = Lui_store.create () and nested_ui = Lui_window.Ui.create () in
+  Lui_store.apply_batch nested_store { Lui_protocol.generation = 1;
+    ops = [ CreateNode (1, Scroll); CreateNode (2, Scroll); CreateNode (3, Column);
+            InsertChild (1, 2, 0); InsertChild (2, 3, 0) ] };
+  let children node =
+    if Lui_window.Ui.hidden nested_ui nested_store node
+       || (not (Lui_paint.unboxed nested_store node)
+           && Lui_paint.clips (Lui_store.kind nested_store node) nested_store node)
+    then [] else Lui_store.child_ids nested_store node in
+  let rect_of = function 2 -> child_viewport | _ -> child_content in
+  let _, top, _, bottom = Host_scroll.content_bounds ~viewport ~padding_x:16.
+      ~padding_y:32. ~rect_of ~children (Lui_store.child_ids nested_store 1) in
+  check "production clipping policy excludes a nested scroller's descendants"
+    (bottom -. top -. viewport.h = 0.);
+  let store = Lui_store.create () and ui = Lui_window.Ui.create () in
+  Lui_store.apply_batch store { Lui_protocol.generation = 1;
+    ops = [ CreateNode (1, Scroll) ] };
+  Lui_window.Ui.set_scroll_cap ui 1 902.;
+  ignore (Lui_window.Ui.scroll_to ui store 1 902.);
+  let painted_scroll_epoch = Lui_window.Ui.scroll_epoch ui in
+  Lui_window.Ui.set_scroll_cap ui 1 702.;
+  check "a shrinking layout cap clamps the offset" (Lui_window.Ui.scroll_offset ui 1 = 702.);
+  check "a post-paint clamp requests the next frame rather than losing its dirty state"
+    (Host_scroll.finish_frame ui ~painted_scroll_epoch);
+  check "an unchanged scroll epoch does not keep the host repainting"
+    (not (Host_scroll.finish_frame ui ~painted_scroll_epoch:(Lui_window.Ui.scroll_epoch ui)));
+  print_endline "native scroll geometry: OK"

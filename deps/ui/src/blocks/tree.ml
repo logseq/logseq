@@ -288,6 +288,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ; Ui_components.Prop.line_height "1.42857"
         ; Ui_components.Prop.cursor `default
         ; Ui_components.Prop.user_select `none
+        ; Ui_components.Prop.min_width 22
+        ; Ui_components.Prop.min_height 22
+        ; Ui_components.Prop.padding 2
+        ; Ui_components.Prop.margin_top 1
         ; Ui_components.Prop.opacity 0.4
         ; Ui_components.Prop.pressed_opacity 0.3 ]
         (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
@@ -295,8 +299,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
            ~accessibility_identifier:("control-" ^ uuid)
            ~data_attrs:
              [ ( "style"
-               , "margin-top:1px;min-width:22px;min-height:22px;\
-                  padding:0.125rem;text-decoration:none" )
+               , "text-decoration:none" )
              ]
         [ Ui_parts.class_signal cs
             (fun c ->
@@ -813,7 +816,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
      main list, sidebars, previews and embeds simultaneously, and a bare
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
-    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+    (column ~key:("ls-" ^ scope ^ "-" ^ key) ~padding_vertical:2
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        (* .ls-block.selected paints --ls-block-highlight-color on web
@@ -877,7 +880,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
       ib
   in
   (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
-    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+    (column ~key:("ls-" ^ scope ^ "-" ^ key) ~padding_vertical:2
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~corner_radius:4
@@ -1093,7 +1096,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
   Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
-    (column ~key:("rfs-" ^ key)
+    (column ~key:("rfs-" ^ key) ~padding_vertical:2
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)

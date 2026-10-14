@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "result": {
+    "title": "Add icon\nSet property\nLong Page",
+    "scroll": [
+      {
+        "class": " scrollbar-spacing w-full flex justify-center flex-row outline-none relative",
+        "rect": {
+          "x": 0,
+          "y": 48,
+          "width": 1280,
+          "height": 852,
+          "top": 48,
+          "right": 1280,
+          "bottom": 900,
+          "left": 0
+        },
+        "scrollHeight": 1618,
+        "padding": "32px 16px 32px 32px",
+        "margin": "0px"
+      },
+      {
+        "class": " cp__sidebar-main-content",
+        "rect": {
+          "x": 168,
+          "y": 80,
+          "width": 960,
+          "height": 788,
+          "top": 80,
+          "right": 1128,
+          "bottom": 868,
+          "left": 168
+        },
+        "scrollHeight": 1586,
+        "padding": "0px",
+        "margin": "0px"
+      },
+      {
+        "class": " flex-1 page relative cp__page-inner-wrap",
+        "rect": {
+          "x": 168,
+          "y": 80,
+          "width": 960,
+          "height": 1490,
+          "top": 80,
+          "right": 1128,
+          "bottom": 1570,
+          "left": 168
+        },
+        "scrollHeight": 1490,
+        "padding": "0px 8px",
+        "margin": "0px"
+      },
+      {
+        "class": " relative grid gap-4 sm:gap-8 page-inner mb-16",
+        "rect": {
+          "x": 176,
+          "y": 80,
+          "width": 944,
+          "height": 1394,
+          "top": 80,
+          "right": 1120,
+          "bottom": 1474,
+          "left": 176
+        },
+        "scrollHeight": 1394,
+        "padding": "0px",
+        "margin": "0px 0px 64px"
+      }
+    ]
+  }
+}
