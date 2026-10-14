@@ -147,7 +147,7 @@ let editor_font_row () =
     [ row ~key:"font-btns" ~style_class:"ls-row-gap"
         [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
     ; box ~key:"font-g" ~style_class:"ls-font-global"
-        [ row ~key:"font-gl" ~cross:`center ~min_height:28
+        [ row ~key:"font-gl" ~cross:`center ~min_height:28 ~gap:4
             ~style_class:"ls-check-row"
             [ C.checkbox_el ~key:"font-gc" ~on:font.S.fglobal
                 ~on_checked:(fun b -> S.set_editor_font_global b)
@@ -244,7 +244,7 @@ let accent_row ~modal =
 
 let general_pane ~modal ctx =
   column ~key:"pane-general" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+    ~gap:16 ~padding:4 ~max_width:600 ~container_relative_frame:`horizontal
     [ version_row ()
     ; language_row ctx
     ; theme_row ctx
@@ -333,7 +333,7 @@ let date_format_row ctx =
 
 let editor_pane ctx =
   column ~key:"pane-editor" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+    ~gap:16 ~padding:4 ~max_width:600 ~container_relative_frame:`horizontal
     [ date_format_row ctx
     ; brackets_row ~key:"brackets"
     ; wide_mode_row ~key:"wide"
@@ -580,7 +580,7 @@ let storage_url key default =
 
 let advanced_pane () =
   column ~key:"pane-advanced" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+    ~gap:16 ~padding:4 ~max_width:600 ~container_relative_frame:`horizontal
     [ C.toggle_row ~key:"usage"
         ~label:T.usage_diagnostics
         ~detail:
@@ -660,7 +660,8 @@ let switch_action_row ~key ~label ~on ~on_checked () =
 
 let features_pane ctx =
   column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
-    ~gap:16 ~padding:4 ~margin_bottom:32 ~min_width:560
+    ~gap:16 ~padding:4 ~margin_bottom:32 ~min_width:0
+    ~max_width:600 ~container_relative_frame:`horizontal
     [ home_page_row ctx
     ; C.action_row ~key:"plugs"
         ~label:T.plugins_label
@@ -712,17 +713,17 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  (* overflow-y stays on the data_attrs style channel — axis-specific
-     overflow has no typed-prop form *)
-  column ~key:"settings-article" ~style_class:"settings-article"
-    ~padding:16 ~grow:1. ~min_height:192
-    ~data_attrs:[ "style", "overflow-y: auto" ]
+  (* The category and its controls share the article's scrolling surface. *)
+  scroll ~key:"settings-article" ~style_class:"settings-article"
+    ~orientation:`vertical ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
+    [ column ~key:"settings-article-content" ~min_width:0 ~cross:`stretch
        [ row ~key:"art-h" ~style_class:"cp__settings-header"
            ~cross:`center ~main:`start ~gap:8 ~height:40
            ~padding_vertical:8
            [ heading ~key:"art-ht" ~level:1
                ~style_class:"cp__settings-category-title"
                ~font_size:"1.25rem"
+               ~font_weight:400
                ~value:
                  (reactive (fun (s : S.t) -> tab_title s.tab)
                     (S.signal ()))
@@ -730,7 +731,7 @@ let article ~modal ctx =
            ]
        ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
            (S.signal ())
-       ]
+       ] ]
 
 let inner ~modal : t =
  fun ctx parent ->
@@ -752,7 +753,8 @@ let inner ~modal : t =
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
-          [ ( Ui_components.Prop.min_height_viewport 0.55 )
+          [ ( Ui_components.Prop.height_viewport 0.7 )
+          ; ( Ui_components.Prop.min_height_viewport 0.55 )
           ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
           (inner_box
              [ column ~key:"settings-aside"

@@ -50,6 +50,7 @@ let create ~scene ~scale ~store =
 (* ---- font + text prop plumbing ---- *)
 
 let rec parse_len s =
+  let s = Option.value (Theme_vars.resolve_value s 0) ~default:s in
   let n = String.length s in
   let stop =
     let rec find i =
@@ -137,6 +138,7 @@ let inherited_int store id name =
    default is the real family, so the fallback after the last comma is
    the value (same convention as parse_len). *)
 let var_fallback s =
+  let s = Option.value (Theme_vars.resolve_value s 0) ~default:s in
   let n = String.length s in
   if n > 4 && String.sub s 0 4 = "var(" then
     match String.rindex_opt s ',' with
@@ -208,6 +210,28 @@ let font_of store id =
        (Lui_text.family f) size weight
    | _ -> ());
   f
+
+let line_height store id font =
+  match inherited_str store id "line-height" with
+  | None -> None
+  | Some raw ->
+      let value = Option.value (Theme_vars.resolve_value raw 0) ~default:raw in
+      let value = String.trim value in
+      let height =
+        match float_of_string_opt value with
+        | Some multiplier -> Some (multiplier *. Lui_text.size font)
+        | None when String.ends_with ~suffix:"em" value
+                    && not (String.ends_with ~suffix:"rem" value) ->
+            Option.map (fun multiplier -> multiplier *. Lui_text.size font)
+              (float_of_string_opt (String.sub value 0 (String.length value - 2)))
+        | None -> parse_len value
+      in
+      match height with
+      | Some height when height > 0. -> Some height
+      | Some _ | None -> None
+
+let line_step declared (line : Lui_text.line) =
+  Option.value declared ~default:(line.ascent +. line.descent +. line.leading)
 
 (* ---- atlas upload ---- *)
 
@@ -313,7 +337,7 @@ let text_ops t id r fg s =
      into the node's inset; labeled controls keep a single line. *)
   let wrap_w =
     match Lui_store.kind store id with
-    | "text" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
+    | "text" | "label" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
     | "popover" | "alert" ->
       (* LUI's pixel-snapping contract edge-rounds every exported rect,
          which can trim up to 1 device px off a box layout sized to its
@@ -324,11 +348,12 @@ let text_ops t id r fg s =
     | _ -> 0.
   in
   let lines = Lui_text.shape font s ~width:wrap_w in
+  let declared_line_height = line_height store id font in
   (* Vertical centering inside the node's rect, device pixels. *)
   let text_h =
     Array.fold_left
       (fun acc (l : Lui_text.line) ->
-         acc +. l.ascent +. l.descent +. l.leading)
+         acc +. line_step declared_line_height l)
       0. lines
     *. scale
   in
@@ -340,7 +365,10 @@ let text_ops t id r fg s =
   let line_y = ref 0. in
   Array.iter
     (fun (l : Lui_text.line) ->
-       let baseline = Lui_text.baseline (y0 +. !line_y +. l.ascent *. scale) in
+       let step = line_step declared_line_height l in
+       let inset = (step -. l.ascent -. l.descent -. l.leading) /. 2. in
+       let baseline = Lui_text.baseline
+           (y0 +. !line_y +. (inset +. l.ascent) *. scale) in
        let lx =
          match tp.tp_align with
          | Lui_paint.Ta_start -> x0
@@ -358,7 +386,7 @@ let text_ops t id r fg s =
               run.glyphs)
          l.runs;
        line_y :=
-         !line_y +. (l.ascent +. l.descent +. l.leading) *. scale)
+         !line_y +. step *. scale)
     lines;
   let gend = List.length scene.glyphs in
   if gend = gstart then []
@@ -409,5 +437,12 @@ let measure_text ?(width = 0.) t id s =
     let width =
       if Float.is_finite width && width > 0. then width /. scale else 0.
     in
-    let w, h = Lui_text.measure ~width (font_of (t.store ()) id) s in
+    let store = t.store () in
+    let font = font_of store id in
+    let w, natural_height = Lui_text.measure ~width font s in
+    let h =
+      match line_height store id font with
+      | None -> natural_height
+      | Some height -> float (Array.length (Lui_text.shape ~width font s)) *. height
+    in
     (w *. scale, h *. scale)

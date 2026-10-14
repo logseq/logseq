@@ -103,6 +103,7 @@ let switch_controls ~key ~on ~on_checked ?(extra = []) () =
    check svg child is dropped *)
 let checkbox_el ~key ~on ~on_checked =
   checkbox ~key ~style_class:"ui__checkbox" ~checked:on
+    ~width:16 ~height:16 ~min_width:16 ~min_height:16
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
@@ -132,8 +133,10 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
         ]
     | None -> []
   in
-  Ui_components.form_row ~key
-    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+  Ui_components.form_row ~key ~min_height:28
+    ~label:(Ui_components.form_label ~key:(key ^ "-l")
+              ~line_height:"1.75rem"
+              ~text:label ())
     ~label_extra ~control ~side ()
 
 (* cljs row-with-button-action *)

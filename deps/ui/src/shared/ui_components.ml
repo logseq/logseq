@@ -598,38 +598,27 @@ let ls_tooltip_keys ~key children : t =
    stacked variant is a documented leftover (no breakpoint channel). *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     ?(col_gap = 24) ?(min_height = 36) ~control () : t =
-  (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
-     columns — flex-grow with auto bases drifts with content width, so
-     the cells carry explicit zero-basis flex ratios. .its nested inside
-     another wrapper keep sm:gap-4 (16px) — e.g. the accent row *)
-  let third =
-    Printf.sprintf "calc((100%% - %dpx) / 3)" (2 * col_gap)
-  in
+  (* Zero-width bases keep the reference's one-third label column
+     independent of text length on both renderers. A CSS flex declaration
+     in data_attrs only reaches the web renderer. *)
   row ~key ~style_class:"it" ~gap:col_gap ~min_width:0 ~cross:`start
     ~min_height
-    ([ column ~key:(key ^ "-lc") ~min_width:180 ~cross:`stretch
+    ([ column ~key:(key ^ "-lc") ~width:0 ~min_width:0 ~grow:1. ~cross:`stretch
          ~gap:0
-         ~data_attrs:
-           [ "style"
-           , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
-         ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
+         ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0
+              ~min_height:(min 28 min_height) ~min_width:0
               (label :: label_extra) ]
           @ match desc with Some d -> [ d ] | None -> [])
-     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16 ~grow:1.
-         ~data_attrs:
-           [ "style"
-           , Printf.sprintf "flex: %s; min-width: 0"
-               (if side = [] then "1 1 0"
-                else "0 0 " ^ third) ]
+     ; row ~key:(key ^ "-rc") ~width:0 ~min_width:0 ~cross:`center ~gap:16
+         ~grow:(if side = [] then 2. else 1.)
          [ control ] ]
     @ List.mapi
         (fun i s ->
-          box ~key:(key ^ "-s" ^ string_of_int i) ~min_width:0
-            ~data_attrs:
-              [ "style"
-              , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
+          box ~key:(key ^ "-s" ^ string_of_int i) ~width:0 ~min_width:0 ~grow:1.
             [ s ])
-        side)
+        side
+    @ if side = [] then [ spacer ~key:(key ^ "-grid-gap") ~width:0 ~height:0 ~grow:0. [] ]
+      else [])
 
 (* `.ls-label`/`.it-label` — 14px medium, 28px line, 70% opacity.
    Inside a flex-col label cell cljs uses leading-5 (20px). *)
@@ -641,8 +630,8 @@ let form_label ~key ?(line_height = "1.75rem") ?text_signal ~text () : t =
     ; Prop.opacity 0.7
     ]
     (match text_signal with
-     | Some s -> label ~key ~value_signal:s []
-     | None -> label ~key ~value:text [])
+     | Some s -> label ~key ~min_width:0 ~grow:1. ~value_signal:s []
+     | None -> label ~key ~min_width:0 ~grow:1. ~value:text [])
 
 (* `.it-desc`/`.ls-it-desc` — 12px muted line under a label or next to a
    control. *)
@@ -819,7 +808,8 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
     ~selected_signal:selected
     ~on_press () : t =
   with_props
-    [ Prop.hover_opacity 1.; Prop.cursor `pointer; Prop.opacity 0.9 ]
+    [ Prop.hover_opacity 1.; Prop.cursor `pointer; Prop.opacity 0.9
+    ; Prop.selected_background "transparent" ]
     (list_item ~key ~on_press ~selected_signal:selected
        ~min_height:0 ~width:100 ~padding_vertical:0 ~padding_horizontal:0
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
@@ -833,7 +823,18 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
                      ~border_width:1
                      ~border_color:"var(--lx-gray-06, hsl(var(--border)))"
                      ~background:"var(--lx-gray-04, hsl(var(--muted)))"
-                     [ thumbnail ]))
+                     [ stack ~key:"thumbnail" ~width:92 ~height:63
+                         [ thumbnail
+                         ; Ui_parts.hit_transparent
+                             (box ~key:"selected-outline" ~width:92 ~height:63
+                                ~corner_radius:4 ~border_width:2
+                                ~border_color:
+                                  "var(--ls-link-text-color, var(--primary))"
+                                ~background:"transparent"
+                                ~opacity:(reactive
+                                   (fun selected -> if selected then 1. else 0.)
+                                   selected)
+                                []) ] ]))
            ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
                ~line_height:"1rem" ~value:label ~text_alignment:`center
                ~data_attrs:

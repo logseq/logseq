@@ -1,7 +1,30 @@
 (rule
  (copy ../../ocaml_host/theme_vars.ml theme_vars.ml))
 
+(rule
+ (copy ../../ocaml_host/text_engine.ml text_engine.ml))
+
+(library
+ (name native_host_test_support)
+ (wrapped false)
+ (modules theme_vars text_engine)
+ (libraries lui.paint lui.store lui.scene lui.window lui.theme yojson logseq_ocaml_host_platform)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
 (test
  (name theme_vars_test)
- (modules theme_vars theme_vars_test)
- (libraries logseq_ui_shared lui.paint lui.store lui.scene lui.window lui.theme yojson))
+ (modules theme_vars_test)
+ (libraries native_host_test_support logseq_ui_shared)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(test
+ (name text_engine_test)
+ (modules text_engine_test)
+ (libraries native_host_test_support logseq_ui_shared)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(test
+ (name settings_layout_test)
+ (modules settings_layout_test)
+ (libraries native_host_test_support logseq_ui_shared lui.layout lui.store lui.scene lui logseq_ocaml_host_platform)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
