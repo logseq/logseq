@@ -306,10 +306,10 @@ let ref_end inst t =
   | Some t' when t' = t -> Hashtbl.remove ref_inflight inst.V.id
   | _ -> ()
 
-(* block-ref-count walks every referring entity. Queue it only after
-   this view's get-blocks has already been invoked, and only for the
-   route page, so it cannot sit ahead of the first reference rows.
-   A remount is a new inst id and kicks again. *)
+(* block-ref-count walks every referring entity. Run it only after
+   this view's get-blocks has returned, and only for the route page,
+   so it cannot sit ahead of the first reference rows. A remount is
+   a new inst id and kicks again. *)
 let extras_once : (int, unit) Hashtbl.t = Hashtbl.create 4
 
 let kick_page_extras inst =
@@ -499,18 +499,21 @@ let load_view_data ?(fetch_limit = 0) inst =
                      | _ -> s.V.query_idents)
                 });
             if n = 0 || have then begin
-              kick_page_extras inst;
-              continue ()
+              continue ();
+              kick_page_extras inst
             end
             else
               let ticket = ref_begin inst in
               let uuids = dedupe_uuids (first.Wr.rows @ first.Wr.headers) in
+              (* Kick only from the callback. Invoking the count at
+                 the same time as get-blocks races two HTTP threads,
+                 and the count was winning and delaying the rows. *)
               load_blocks ~merge:growing ~set_limit:n
                 ~fresh:(fun () -> V.fetch_fresh inst gen)
                 ~finally:(fun () -> ref_end inst ticket)
-                inst uuids (fun () -> continue ());
-              (* get-blocks is already on the worker queue. *)
-              kick_page_extras inst
+                inst uuids (fun () ->
+                  continue ();
+                  kick_page_extras inst)
           end
           else begin
             V.update inst (fun s ->

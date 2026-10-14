@@ -877,20 +877,27 @@ let filters_row inst : t =
 (* refetches the owner page's includes/excludes + the unfiltered
    [:block-ref-count] total — the filter-cog icon state and the
    items-count/total suffix in the tab both read these *)
-let load_ref_filters ?(on_done = fun () -> ()) inst =
+(* [~count] refetches [:block-ref-count]. That walk visits every
+   referring datom (~1s on a hub page), so the first view load must
+   not request it: it used to sit ahead of view-data on the
+   single-threaded worker and the reference rows waited on it.
+   Filter edits opt in. The page-side extras kick requests the count
+   after the first get-blocks has returned. *)
+let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
   match V.owner_uuid inst with
   | Some uuid ->
       Views_db.pull_ref_filters uuid (fun (inc, exc) ->
           V.update inst (fun s ->
               { s with V.ref_includes = inc; ref_excludes = exc });
           on_done ());
-      Views_db.snapshots
-        ~f:(fun snap ->
-          match Wr.snapshot_slot_value snap (Views_db.key_ref_count uuid) with
-          | Some (W.Int n) ->
-              V.update inst (fun s -> { s with V.refs_total = n })
-          | _ -> ())
-        [ Views_db.resource_ref_count uuid ]
+      if count then
+        Views_db.snapshots
+          ~f:(fun snap ->
+            match Wr.snapshot_slot_value snap (Views_db.key_ref_count uuid) with
+            | Some (W.Int n) ->
+                V.update inst (fun s -> { s with V.refs_total = n })
+            | _ -> ())
+          [ Views_db.resource_ref_count uuid ]
   | None -> ()
 
 (* page-handler/db-based-save-filter! — click toggles include,
@@ -908,7 +915,7 @@ let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
                   (if incl then Views_db.includes_prop
                    else Views_db.excludes_prop)
                 ~ref_eid:eid ~add (fun () ->
-                  load_ref_filters ~on_done inst;
+                  load_ref_filters ~count:true ~on_done inst;
                   refresh inst)
           | None -> ())
 
