@@ -1,0 +1,3930 @@
+{
+  "reference_commit": "7dfa9b45a",
+  "native_base_commit": "7b0d18735000f2b7ae6342c410df476088baa543",
+  "generated_at": "2026-10-14T16:30:02.248016+00:00",
+  "note": "Source-derived inventory only. A corresponding test path does not establish native parity. Live exploration expands this inventory.",
+  "reference_e2e_cases": [
+    {
+      "area": "assets_basic_test",
+      "test": "image-upload-lightbox-and-resize-test",
+      "reference": "clj-e2e/test/logseq/e2e/assets_basic_test.clj",
+      "reference_line": 24,
+      "scenarios": [
+        "uploaded images create stable asset blocks and retain resized metadata"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_assets_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "assets_basic_test",
+      "test": "image-action-menu-delete-test",
+      "reference": "clj-e2e/test/logseq/e2e/assets_basic_test.clj",
+      "reference_line": 81,
+      "scenarios": [
+        "the image action menu opens on a mouse click and deletes the image"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_assets_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "bidirectional_properties_test",
+      "test": "bidirectional-properties-test",
+      "reference": "clj-e2e/test/logseq/e2e/bidirectional_properties_test.clj",
+      "reference_line": 15,
+      "scenarios": [
+        "shows reverse property references when a class enables bidirectional properties"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_bidirectional_properties.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "references-embeds-and-mounted-instance-refresh-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 58,
+      "scenarios": [
+        "page refs, embeds, linked refs and mounted copies share canonical updates"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "unlinked-reference-filter-and-breadcrumb-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 94,
+      "scenarios": [
+        "unlinked-reference search updates results and breadcrumbs track renames"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "flashcard-rating-advances-once-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 130,
+      "scenarios": [
+        "answer reveal and one rating advance to the next card and update due count"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "multi-target-comment-draft-edit-delete-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 145,
+      "scenarios": [
+        "multi-target comments preserve drafts and support edit/delete lifecycle"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "block-and-comment-reaction-toggle-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 176,
+      "scenarios": [
+        "block and comment reactions use their own targets and toggle without duplicates"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "icon-and-structural-tag-visibility-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 205,
+      "scenarios": [
+        "icons update mounted references and internal tags stay hidden from user tags"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "property-create-and-name-validation-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 230,
+      "scenarios": [
+        "property creation is unique and invalid names cannot create ghost nodes"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "scalar-property-value-validation-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 260,
+      "scenarios": [
+        "number/date reject incompatible text and URL values preserve valid edits"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "property-type-cardinality-and-checkbox-choice-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 300,
+      "scenarios": [
+        "schema controls expose cardinality and allow unused properties to change type"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "property-default-description-position-and-hidden-state-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 338,
+      "scenarios": [
+        "property presentation/default settings apply to new objects and hidden values"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "property-delete-and-bidirectional-refresh-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 378,
+      "scenarios": [
+        "bidirectional values refresh both sides and deleting the definition removes usages"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "tag-inheritance-schema-and-object-view-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 413,
+      "scenarios": [
+        "class inheritance and schema mutations update object views without losing values"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "tag-template-dynamic-values-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 447,
+      "scenarios": [
+        "a tag template is applied once and resolves dynamic date references"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "block_property_basic_test",
+      "test": "checkbox-property-toggle-persists-test",
+      "reference": "clj-e2e/test/logseq/e2e/block_property_basic_test.clj",
+      "reference_line": 489,
+      "scenarios": [
+        "checkbox property toggles immediately and survives refresh"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_block_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "cmdk_scroll_basic_test",
+      "test": "cmdk-keeps-results-visible-while-searching",
+      "reference": "clj-e2e/test/logseq/e2e/cmdk_scroll_basic_test.clj",
+      "reference_line": 63,
+      "scenarios": [
+        "typing and deleting do not clear the visible results before the debounced search finishes"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_cmdk_scroll_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "cmdk_scroll_basic_test",
+      "test": "cmdk-highlight-mode-switching",
+      "reference": "clj-e2e/test/logseq/e2e/cmdk_scroll_basic_test.clj",
+      "reference_line": 93,
+      "scenarios": [
+        "keyboard & mouse highlight mode toggles correctly"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_cmdk_scroll_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "cmdk_scroll_basic_test",
+      "test": "cmdk-lazy-visible-keyboard-scroll",
+      "reference": "clj-e2e/test/logseq/e2e/cmdk_scroll_basic_test.clj",
+      "reference_line": 144,
+      "scenarios": [
+        "keyboard navigation scrolls through lazy-visible :nodes items"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_cmdk_scroll_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "command-trigger-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 87,
+      "scenarios": [
+        "/command trigger popup"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "slash-command-group-headings-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 95,
+      "scenarios": [
+        "unfiltered slash popup shows section headings",
+        "typed slash filter hides section headings"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "slash-command-arrow-scroll-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 129,
+      "scenarios": [
+        "arrow down/up keeps the chosen slash command in view"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "page-reference-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 154,
+      "scenarios": [
+        "Page reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "block-reference-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 164,
+      "scenarios": [
+        "Block reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "link-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 175,
+      "scenarios": [
+        "/link"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "link-image-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 194,
+      "scenarios": [
+        "/image link"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "underline-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 205,
+      "scenarios": [
+        "/underline"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "code-block-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 214,
+      "scenarios": [
+        "/code block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "math-block-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 224,
+      "scenarios": [
+        "/math block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "quote-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 233,
+      "scenarios": [
+        "/quote"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "quote-heading-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 240,
+      "scenarios": [
+        "quote headings render consistently"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "headings-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 263,
+      "scenarios": [
+        "/heading"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "clear-heading-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 274,
+      "scenarios": [
+        "/clear heading"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "status-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 292,
+      "scenarios": [
+        "task status commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "priority-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 306,
+      "scenarios": [
+        "task priority commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "scheduled-deadline-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 318,
+      "scenarios": [
+        "task scheduled and deadline commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "date-command-keyboard-navigation-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 332,
+      "scenarios": [
+        "date commands focus the calendar and support keyboard navigation"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "date-picker-month-select-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 338,
+      "scenarios": [
+        "date picker month dropdown changes the visible month and closes"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "date-time-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 356,
+      "scenarios": [
+        "date time commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "number-list-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 384,
+      "scenarios": [
+        "number list commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "number-children-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 398,
+      "scenarios": [
+        "number children commands"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "query-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 410,
+      "scenarios": [
+        "query"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "query-view-membership-updates-live",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 421,
+      "scenarios": [
+        "a mounted query view inserts and removes matching rows"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "advanced-query-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 454,
+      "scenarios": [
+        "query"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "calculator-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 466,
+      "scenarios": [
+        "calculator"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "template-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 475,
+      "scenarios": [
+        "template"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "embed-html-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 495,
+      "scenarios": [
+        "embed html"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "embed-video-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 503,
+      "scenarios": [
+        "embed video"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "embed-tweet-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 511,
+      "scenarios": [
+        "embed tweet"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "commands_basic_test",
+      "test": "cloze-test",
+      "reference": "clj-e2e/test/logseq/e2e/commands_basic_test.clj",
+      "reference_line": 519,
+      "scenarios": [
+        "cloze"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_commands_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "recycle-restore-removes-row-immediately-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 44,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "recycle-delete-removes-row-and-recent-entry-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 56,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-context-menu-tab-closes-without-stack-overflow-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 160,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-context-menu-shift-tab-closes-without-stack-overflow-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 171,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "block-context-menu-tab-does-not-overflow-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 181,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "block-context-menu-clickable-controls-use-pointer-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 191,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "block-context-menu-color-hover-shows-ring-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 206,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "notification-appears-at-top-right-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 215,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "favorites-and-recents-load-after-refresh-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 239,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "favorite-menu-and-sidebar-follow-page-updates-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 255,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-alias-can-be-added-and-removed-from-the-property-picker-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 280,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "theme-preview-images-load-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 309,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "language-select-shows-dropdown-indicator-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 336,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "main-scrollbar-track-uses-main-background-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 344,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "click-rendered-block-focuses-editor",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 440,
+      "scenarios": [
+        "clicking a rendered block leaves the editor textarea focused"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "multiline-heading-keeps-bullet-on-first-line",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 754,
+      "scenarios": [
+        "heading block bullet aligns with the first line when the heading wraps"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "copy-blocks-selected-after-fast-scroll-virtualized-list",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 766,
+      "scenarios": [
+        "copy includes virtualized blocks selected after fast scrolling a long page"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-list-uses-measured-spacing-without-item-margins",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 778,
+      "scenarios": [
+        "journals list spacing does not use item margins that destabilize Virtuoso measurement"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-list-does-not-nest-virtualized-scrollers-in-long-journal",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 790,
+      "scenarios": [
+        "long journals keep a single virtualized measurement owner"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-list-rows-hold-no-pin-once-content-is-in",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 839,
+      "scenarios": [
+        "after a scroll, a journal row that holds content carries no inline min-height"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-list-remounts-complete-long-journal-with-one-scroller",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 863,
+      "scenarios": [
+        "an outer journal remount restores all content without a nested virtualizer"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-linked-refs-remain-visible",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 902,
+      "scenarios": [
+        "journals linked refs stay visible while journals layout owns the outer measurement"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "consecutive-enter-keeps-text-and-cursor-on-the-new-block",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 945,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "enter-delete-keeps-text-and-cursor-on-the-previous-block",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 962,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "parent-and-child-rapid-edits-keep-the-latest-child-title",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 977,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-level-node-reference-renders-linked-references",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 996,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "consecutive-enter-and-delete-ops-complete-without-worker-errors",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1024,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "backspace-at-start-removes-pending-block-dom-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1047,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "today-queries-render-without-resource-errors",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1057,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "drag-and-drop-asset-does-not-create-blank-asset",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1065,
+      "scenarios": [
+        "dragging and dropping a file should keep non-empty asset title"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "toggle-between-page-and-block",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1078,
+      "scenarios": [
+        "Convert block to page and back"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "toggle-between-page-and-block-for-selected-blocks",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1086,
+      "scenarios": [
+        "Convert selected blocks to pages and back"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "disallow-adding-page-tag-to-normal-pages",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1097,
+      "scenarios": [
+        "Disallow adding #Page to normal pages"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "move-blocks-mod+shift+m",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1110,
+      "scenarios": [
+        "move blocks using `mod+shift+m`"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "move-blocks-cmdk",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1120,
+      "scenarios": [
+        "move blocks using cmdk"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "move-editing-block-cmdk",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1132,
+      "scenarios": [
+        "move the current editing block using cmdk"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "shift-open-page-in-sidebar",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1146,
+      "scenarios": [
+        "Shift+Enter opens an ordinary page search result in the sidebar"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "shift-click-page-title-opens-in-sidebar",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1160,
+      "scenarios": [
+        "Shift+click opens an ordinary page title in the sidebar"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "cmdk-block-results-render-breadcrumbs-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1170,
+      "scenarios": [
+        "CmdK block results include their ready breadcrumb"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "comments-update-and-title-edit",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1180,
+      "scenarios": [
+        "a submitted comment renders immediately and its thread title is editable"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "first-comment-actions-stay-inside-scroll-container",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1194,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "move-pages-to-library",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1211,
+      "scenarios": [
+        "move pages using `mod+shift+m`"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "create-nested-pages-in-library",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1232,
+      "scenarios": [
+        "create nested pages in Library"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-icon-in-library",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1240,
+      "scenarios": [
+        "Library page entries show an icon only for the page's own or a tag icon"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "editor-exit-and-unicode-persistence-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1281,
+      "scenarios": [
+        "Esc, outside click and navigation save Unicode once and clear transient editor state"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "empty-enter-and-soft-line-break-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1301,
+      "scenarios": [
+        "empty Enter obeys tree rules while Shift+Enter stays inside one block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "cursor-boundaries-word-motion-and-kill-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1326,
+      "scenarios": [
+        "cursor motion follows boundaries and range deletion is one undoable edit"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "text-format-shortcuts-and-source-roundtrip-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1360,
+      "scenarios": [
+        "format shortcuts wrap only the selection and rendered text round-trips"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "escape-save-never-paints-stale-block-content-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1381,
+      "scenarios": [
+        "the first rendered frame after Escape contains the saved text"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "new-page-reference-renders-on-the-first-frame-after-save-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1394,
+      "scenarios": [
+        "a newly created page reference is never blank after Escape"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "saved-page-reference-reopens-with-page-title-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1407,
+      "scenarios": [
+        "keyboard editing uses the page title instead of its UUID"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-and-tag-autocomplete-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1421,
+      "scenarios": [
+        "page and tag autocomplete update, insert and open existing/new targets"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "slash-menu-filter-scroll-and-cleanup-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1446,
+      "scenarios": [
+        "slash search keeps one highlighted result and Esc clears its state"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "task-date-and-priority-slash-lifecycle-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1465,
+      "scenarios": [
+        "task commands add, update and clear visible properties immediately"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "virtualized-late-editor-and-code-editor-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1506,
+      "scenarios": [
+        "late-mounted rows and CodeMirror keep separate targets and persisted content"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "multi-selection-indent-roundtrip-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1534,
+      "scenarios": [
+        "multi-indent preserves order/subtrees and is one undo step"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "collapse-single-multiple-and-sidebar-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1554,
+      "scenarios": [
+        "single and selected collapse states update mounted containers predictably"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "collapsed-subtree-stays-collapsed-after-bullet-zoom-back-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1580,
+      "scenarios": [
+        "bullet zoom-in then back keeps the parent subtree collapsed"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "selection-direction-and-hierarchical-select-all-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1602,
+      "scenarios": [
+        "range and select-all remain inside the current visible container"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "structured-and-plain-text-copy-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1615,
+      "scenarios": [
+        "structured copy preserves trees while plain copy exposes readable indentation"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "plain-multiline-and-html-paste-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1639,
+      "scenarios": [
+        "paste mode preserves cursor text, multiline structure and safe rich content"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "mixed-height-virtual-page-keeps-blocks-separated-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1671,
+      "scenarios": [
+        "mixed text, code and headings do not overlap after fast scrolling"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "journals-consecutive-input-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1718,
+      "scenarios": [
+        "consecutive journal input creates one stable editor and distinct blocks"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "worker-missing-read-is-recoverable-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1732,
+      "scenarios": [
+        "a missing worker entity returns nil without poisoning a later read"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "enter-splits-block-at-cursor-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1744,
+      "scenarios": [
+        "Enter in the middle preserves both halves and moves focus to the second"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "node-reference-autocomplete-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1757,
+      "scenarios": [
+        "node reference search inserts a reference and rerenders target updates"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "quick-add-moves-all-blocks-to-today-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1788,
+      "scenarios": [
+        "Quick add moves every temporary block to today's journal exactly once"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "external-property-update-preserves-edit-buffer-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1805,
+      "scenarios": [
+        "an external property/child delta does not replace unrelated active text"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "operation-completion-restores-mounted-focus-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1819,
+      "scenarios": [
+        "completed insert/update/delete operations expose their DOM result immediately"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "arrow-up-down-move-the-caret-inside-a-block-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1852,
+      "scenarios": [
+        "up and down move the caret one row inside the block, not to another block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "shift-arrow-up-selects-inside-a-block-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1866,
+      "scenarios": [
+        "shift with up selects up to the previous row of the same block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "heading-editor-shows-every-row-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1886,
+      "scenarios": [
+        "the editor of a heading block is sized for the heading font when it opens"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-ref-navigate-persists-unsaved-edit-buffer-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1900,
+      "scenarios": [
+        "clicking a page-ref while editing flushes the editor so typed text is not lost (db-test#1250)"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "shift-click-select-persists-unsaved-edit-buffer-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1925,
+      "scenarios": [
+        "shift+click block selection flushes the editor buffer (db-test#1250)"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "editor_basic_test",
+      "test": "page-ref-navigate-persists-edit-buffer-with-open-popup-test",
+      "reference": "clj-e2e/test/logseq/e2e/editor_basic_test.clj",
+      "reference_line": 1948,
+      "scenarios": [
+        "clicking a page-ref while the page-search popup is open still flushes the editor"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_editor_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "export_basic_test",
+      "test": "graph-export-downloads-browser-artifacts-test",
+      "reference": "clj-e2e/test/logseq/e2e/export_basic_test.clj",
+      "reference_line": 47,
+      "scenarios": [
+        "browser graph export produces nonempty DB, zip, EDN, Markdown and transit files"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_export_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "flashcards_basic_test",
+      "test": "flashcards-plus-and-switching-test",
+      "reference": "clj-e2e/test/logseq/e2e/flashcards_basic_test.clj",
+      "reference_line": 49,
+      "scenarios": [
+        "create #Cards blocks from flashcards dialog and switch card sets",
+        "an untitled #Cards block is listed by its query with page names, not uuids"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_flashcards_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "graph-empty-state-and-name-validation-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 19,
+      "scenarios": [
+        "graph creation exposes an actionable empty state and rejects invalid/duplicate names"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "graph-refresh-and-browser-history-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 48,
+      "scenarios": [
+        "refresh and back/forward restore current graph/page without duplicate history"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "direct-page-and-block-route-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 69,
+      "scenarios": [
+        "direct page/block URLs load exact worker entities and missing routes recover"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "local-graph-delete-and-list-metadata-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 120,
+      "scenarios": [
+        "graph list metadata is current and local deletion cannot leak its route/data"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "default-home-route-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 144,
+      "scenarios": [
+        "configured default home opens on startup and invalid home falls back explicitly"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "graph-view-mode-settings-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 194,
+      "scenarios": [
+        "Graph view modes and settings rebuild the canvas"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "graph-time-travel-playback-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 220,
+      "scenarios": [
+        "time travel limits nodes and returning to Now restores the complete graph"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_navigation_basic_test",
+      "test": "restoring-graph-gates-and-recovers-interaction-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_navigation_basic_test.clj",
+      "reference_line": 240,
+      "scenarios": [
+        "reload/restoring never accepts half-mounted edits and restores all controls"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_graph_navigation_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_test",
+      "test": "maybe-input-e2ee-password-skips-when-cloud-ready-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_test.clj",
+      "reference_line": 7,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_graph.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_test",
+      "test": "maybe-input-e2ee-password-inputs-when-modal-appears-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_test.clj",
+      "reference_line": 18,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_graph.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "graph_test",
+      "test": "maybe-input-e2ee-password-does-not-exit-on-stale-cloud-ready-test",
+      "reference": "clj-e2e/test/logseq/e2e/graph_test.clj",
+      "reference_line": 33,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_graph.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "import_basic_test",
+      "test": "import-options-and-invalid-edn-preserve-current-graph-test",
+      "reference": "clj-e2e/test/logseq/e2e/import_basic_test.clj",
+      "reference_line": 24,
+      "scenarios": [
+        "browser import exposes supported sources and rejects invalid EDN atomically"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_import_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "left_sidebar_basic_test",
+      "test": "selected-class-navigations-survive-graph-lifecycle-test",
+      "reference": "clj-e2e/test/logseq/e2e/left_sidebar_basic_test.clj",
+      "reference_line": 38,
+      "scenarios": [
+        "selected Tasks and Assets appear after toggling, reload, and graph changes"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_left_sidebar_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "library_basic_test",
+      "test": "library-hides-normal-blocks-and-collapses-child-pages",
+      "reference": "clj-e2e/test/logseq/e2e/library_basic_test.clj",
+      "reference_line": 24,
+      "scenarios": [
+        "Library shows nested pages without their blocks, and parent pages collapse child pages"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_library_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "library_basic_test",
+      "test": "library-enter-on-page-creates-sibling",
+      "reference": "clj-e2e/test/logseq/e2e/library_basic_test.clj",
+      "reference_line": 55,
+      "scenarios": [
+        "Enter on a Library page block creates a sibling instead of a nested child"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_library_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "multi_tabs_basic_test",
+      "test": "multi-tabs-test",
+      "reference": "clj-e2e/test/logseq/e2e/multi_tabs_basic_test.clj",
+      "reference_line": 23,
+      "scenarios": [
+        "edit on one tab, check all tab's blocks are same",
+        "add new graphs and switch graphs + edit + check on tabs"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "focused-root-block-cannot-indent-or-move-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 110,
+      "scenarios": [
+        "Focused root block ignores indent/outdent/move-up/move-down commands",
+        "Delete blocks case 1",
+        "Delete at end",
+        "Delete block with its children"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "create-test-page-and-insert-blocks-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 170,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "indent-and-outdent-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 173,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "indent-outdent-embed-page-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 176,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "indent-into-collapsed-block-expands-it-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 214,
+      "scenarios": [
+        "Tab under a collapsed sibling expands it and keeps editing the indented block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "indent-into-collapsed-block-on-journals-expands-it-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 218,
+      "scenarios": [
+        "Same as above, on the journals view"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "indent-selected-block-into-collapsed-block-expands-it-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 225,
+      "scenarios": [
+        "Tab on a selected block under a collapsed sibling expands it and keeps the selection visible"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "enter-then-tab-on-collapsed-block-expands-it-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 235,
+      "scenarios": [
+        "Enter at the end of a collapsed block then Tab nests the new block under it, expanded"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "move-up-down-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 250,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "move-across-parents-keeps-selection-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 253,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 272,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-end-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 275,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-test-with-children-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 278,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-concat-test-2-blocks",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 281,
+      "scenarios": [
+        "Delete concat with empty block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-concat-test-3-blocks",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 291,
+      "scenarios": [
+        "Delete concat with empty block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-concat-test-with-children",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 302,
+      "scenarios": [
+        "Delete concat with children blocks"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "delete-concat-test-with-tag",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 313,
+      "scenarios": [
+        "Delete concat with tag"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "backspace-empty-first-child-keeps-empty-parent-subtree-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 326,
+      "scenarios": [
+        "Backspace in the first empty child of an empty parent deletes only the child"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "backspace-at-parent-start-keeps-children-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 348,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "consecutive-backspace-does-not-restore-deleted-blocks-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 378,
+      "scenarios": [
+        "Deleting b and then a never renders stale block content"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "held-backspace-does-not-duplicate-merged-content-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 413,
+      "scenarios": [
+        "Repeated Backspace cannot merge the same block twice"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "rapid-retype-before-enter-keeps-the-edit-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 424,
+      "scenarios": [
+        "Backspace, retype, and Enter keep the retyped content"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "boundary-delete-and-backspace-merge-contract-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 593,
+      "scenarios": [
+        "boundary edits preserve structure through per-step and full-history undo/redo"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "drag-reorders-once-and-is-undoable-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 697,
+      "scenarios": [
+        "same-level drag changes order once and undo restores the original order"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "drag-indents-and-outdents-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 713,
+      "scenarios": [
+        "dragging into and out of a parent updates both sides of the tree"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "drag-rejects-parent-into-descendant-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 732,
+      "scenarios": [
+        "dragging a parent into its descendant leaves the tree unchanged"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "outliner_basic_test",
+      "test": "undo-history-is-scoped-to-current-graph-test",
+      "reference": "clj-e2e/test/logseq/e2e/outliner_basic_test.clj",
+      "reference_line": 742,
+      "scenarios": [
+        "Undo in a newly switched graph cannot consume the previous graph history"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_outliner_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "editor-apis-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 34,
+      "scenarios": [
+        "editor related apis"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "append-block-in-page-stays-at-page-root-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 50,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "block-properties-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 61,
+      "scenarios": [
+        "block properties related apis"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "property-upsert-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 95,
+      "scenarios": [
+        "property with default settings",
+        "property with specified cardinality && type",
+        ":checkbox property doesn't allow :many cardinality"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "property-related-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 124,
+      "scenarios": [
+        "properties management related apis"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "insert-block-with-properties",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 135,
+      "scenarios": [
+        "insert block with properties"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "update-block-with-properties",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 166,
+      "scenarios": [
+        "update block with properties"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "insert-batch-blocks-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 201,
+      "scenarios": [
+        "insert batch blocks",
+        "insert batch blocks with properties"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "create-page-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 239,
+      "scenarios": [
+        "create page",
+        "create page with properties",
+        "create tag page"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "get-all-tags-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 285,
+      "scenarios": [
+        "get_all_tags"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "get-all-properties-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 298,
+      "scenarios": [
+        "get_all_properties"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "get-tag-objects-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 303,
+      "scenarios": [
+        "get_tag_objects"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "create-and-get-tag-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 313,
+      "scenarios": [
+        "create and get tag with title or ident",
+        "create tag with tagProperties",
+        "add and remove tag extends"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "get-tags-by-name-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 348,
+      "scenarios": [
+        "get tags by exact name",
+        "get tags by name is case-insensitive",
+        "get tags by name returns empty array for non-existent tag",
+        "get tags by name filters out non-tag pages",
+        "get tags by name with multiple tags having similar names"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_basic_test",
+      "test": "set-property-node-tags",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_basic_test.clj",
+      "reference_line": 389,
+      "scenarios": [
+        "set property node tags"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_marketplace_test",
+      "test": "marketplace-tabs-search-and-state-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_marketplace_test.clj",
+      "reference_line": 82,
+      "scenarios": [
+        "installed and marketplace tabs keep their own filters and visible results"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_marketplace.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_marketplace_test",
+      "test": "install-plugin-from-marketplace",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_marketplace_test.clj",
+      "reference_line": 108,
+      "scenarios": [
+        "Install a plugin from the marketplace"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_marketplace.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_marketplace_test",
+      "test": "plugin-command-registration-follows-lifecycle-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_marketplace_test.clj",
+      "reference_line": 145,
+      "scenarios": [
+        "a plugin command is registered once, removed on disable, and restored on enable"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_marketplace.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "plugins_marketplace_test",
+      "test": "plugin-disable-enable-and-reload-test",
+      "reference": "clj-e2e/test/logseq/e2e/plugins_marketplace_test.clj",
+      "reference_line": 177,
+      "scenarios": [
+        "plugin UI contributions are completely removed and restored without duplicates"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_plugins_marketplace.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_basic_test",
+      "test": "new-property-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_basic_test.clj",
+      "reference_line": 52,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_basic_test",
+      "test": "property-value-lifecycle-and-object-view-persistence-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_basic_test.clj",
+      "reference_line": 56,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_basic_test",
+      "test": "keyboard-highlight-selects-property-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_basic_test.clj",
+      "reference_line": 104,
+      "scenarios": [
+        "Enter applies the highlighted property, not the first visible item"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_property_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "property-choices-configuration-and-mod-p-stay-reactive-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 42,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "mod-p-creates-and-sets-text-property-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 86,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "property-table-hides-internal-id-column-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 102,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "property-choice-more-settings-menu-anchors-on-first-open-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 133,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "available-choices-list-is-scrollable-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 147,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_config_basic_test",
+      "test": "text-property-default-value-can-be-set-from-config-menu-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_config_basic_test.clj",
+      "reference_line": 161,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_config_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_scoped_choices_test",
+      "test": "tag-scoped-property-choices-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_scoped_choices_test.clj",
+      "reference_line": 70,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_scoped_choices.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "property_scoped_choices_test",
+      "test": "tag-scoped-property-choices-isolated-test",
+      "reference": "clj-e2e/test/logseq/e2e/property_scoped_choices_test.clj",
+      "reference_line": 100,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_property_scoped_choices.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_builder_basic_test",
+      "test": "query-builder-task-filter-shows-all-status-choices-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_builder_basic_test.clj",
+      "reference_line": 54,
+      "scenarios": [
+        "task filter lists every built-in status"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_builder_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_builder_basic_test",
+      "test": "query-builder-priority-filter-shows-all-priority-choices-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_builder_basic_test.clj",
+      "reference_line": 60,
+      "scenarios": [
+        "priority filter lists every built-in priority"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_builder_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_builder_basic_test",
+      "test": "query-builder-property-filter-shows-all-status-choices-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_builder_basic_test.clj",
+      "reference_line": 66,
+      "scenarios": [
+        "property filter lists every Status closed value, not only used ones"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_builder_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_builder_basic_test",
+      "test": "query-builder-task-tag-shows-title-not-uuid-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_builder_basic_test.clj",
+      "reference_line": 76,
+      "scenarios": [
+        "a tags filter for Task shows #Task instead of the class uuid"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_builder_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "partial-journal-query-table-list-and-reload-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 54,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "partial-query-edit-empty-and-live-update-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 78,
+      "scenarios": [
+        "editing the query updates its result set",
+        "empty results recover when matching data is added"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "scalar-and-multiple-column-query-results-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 96,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "partial-query-result-transform-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 107,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "query-set-literals-do-not-create-tags-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 115,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "partial-query-uses-requested-columns-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 134,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "simple-query-builder-views-and-live-results-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 151,
+      "scenarios": [
+        "editing a simple query can produce an empty result and recover live"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "query_results_basic_test",
+      "test": "advanced-query-relative-journal-inputs-test",
+      "reference": "clj-e2e/test/logseq/e2e/query_results_basic_test.clj",
+      "reference_line": 206,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_query_results_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "self-reference",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 22,
+      "scenarios": [
+        "self reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "self-tag-block-reference",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 30,
+      "scenarios": [
+        "self reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "mutual-reference",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 39,
+      "scenarios": [
+        "mutual reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "parent-reference",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 54,
+      "scenarios": [
+        "parent reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "cycle-reference",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 70,
+      "scenarios": [
+        "cycle reference"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "search-displays-referenced-block-title",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 102,
+      "scenarios": [
+        "cmdk and [[ autocomplete resolve [[uuid]] to the referenced title"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "reference_basic_test",
+      "test": "page-self-mentions-are-excluded-from-references",
+      "reference": "clj-e2e/test/logseq/e2e/reference_basic_test.clj",
+      "reference_line": 133,
+      "scenarios": [
+        "blocks on a page do not appear in that page's linked or unlinked references"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_reference_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "right_sidebar_basic_test",
+      "test": "right-sidebar-topbar-uses-dark-neutral-background",
+      "reference": "clj-e2e/test/logseq/e2e/right_sidebar_basic_test.clj",
+      "reference_line": 39,
+      "scenarios": [
+        "right sidebar header stays dark with neutral accent color"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "right_sidebar_basic_test",
+      "test": "right-sidebar-uses-only-content-scrollbar",
+      "reference": "clj-e2e/test/logseq/e2e/right_sidebar_basic_test.clj",
+      "reference_line": 50,
+      "scenarios": [
+        "the outer sidebar does not reserve a second scrollbar"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "right_sidebar_basic_test",
+      "test": "same-block-updates-in-main-and-right-sidebar",
+      "reference": "clj-e2e/test/logseq/e2e/right_sidebar_basic_test.clj",
+      "reference_line": 63,
+      "scenarios": [
+        "one mounted UUID rerenders content and properties in both containers"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "right_sidebar_basic_test",
+      "test": "contents-open-as-page-navigates-to-contents",
+      "reference": "clj-e2e/test/logseq/e2e/right_sidebar_basic_test.clj",
+      "reference_line": 101,
+      "scenarios": [
+        "Contents sidebar more menu opens the Contents page"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_basic_test",
+      "test": "rtc-basic-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_basic_test.clj",
+      "reference_line": 21,
+      "scenarios": [
+        "open 2 app instances, add a rtc graph, check this graph available on other instance",
+        "remote graph refresh waits until the button is enabled",
+        "logseq pages add/delete",
+        "Page reference created",
+        "cleanup"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_part2_test",
+      "test": "online-two-clients-undo-redo-stress-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_part2_test.clj",
+      "reference_line": 285,
+      "scenarios": [
+        "two online RTC clients survive random edits + undo/redo loops on a long nested page"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra_part2.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_part2_test",
+      "test": "issue-651-block-title-double-transit-encoded-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_part2_test.clj",
+      "reference_line": 330,
+      "scenarios": [
+        "\n1. create pages named \\\"bbb\\\", \\\"aaa\\\", and turn these pages into tag\n2. set \\\"bbb\\\" parent to \\\"aaa\\\"\n3. create a new page \\\"ccc\\\", and create a simple query with filter tags = aaa/bbb\nwait for 5-10 seconds, will found that \\\"aaa/bbb\\\" became \\\"aaa/<encrypted-string>\\\"\n"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra_part2.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_part2_test",
+      "test": "paste-multiple-blocks-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_part2_test.clj",
+      "reference_line": 366,
+      "scenarios": [
+        "\n1. create 3 blocks\n  - block1\n  - block2\n  - block3\n2. copy these 3 blocks\n3. when cursor at block3, press <enter> to create a new block\n4. paste them at current position 5 times\n5. validate blocks are same on both clients"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra_part2.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_part2_test",
+      "test": "asset-blocks-validate-after-init-downloaded-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_part2_test.clj",
+      "reference_line": 414,
+      "scenarios": [
+        "\n- add some assets in client1\n- remove local graph in client2\n- re-download the remote graph in client2\n- compare asset-blocks data in both clients"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra_part2.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_part2_test",
+      "test": "issue-683-paste-large-block-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_part2_test.clj",
+      "reference_line": 448,
+      "scenarios": [
+        "Copying and pasting a large block of text into sync-ed graph causes sync to fail"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra_part2.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-task-blocks-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 76,
+      "scenarios": [
+        "add some task blocks while rtc disconnected on page1",
+        "update task blocks while rtc disconnected on page1",
+        "perform same operations on page2 while keeping rtc connected on page1",
+        "update task blocks while rtc connected on page1"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-property-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 128,
+      "scenarios": [
+        "add different types user properties on page2 while keeping rtc connected on page1",
+        "perform same operations on page2 while keeping rtc connected on page1"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-property-update-rerenders-mounted-block",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 153,
+      "scenarios": [
+        "a remote property transaction rerenders the mounted block"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-outliner-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 185,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-outliner-conflict-update-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 205,
+      "scenarios": [
+        "add some blocks, ensure them synced",
+        "page1: indent block1 as child of block0, page2: delete block0",
+        "\norigin:\n- block2\n- block3\n- block4\npage1:\n- block2\n  - block3\n    - block4\npage2:\n;; block2 deleted\n- block4\n  - block3"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "rtc-page-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 268,
+      "scenarios": [
+        "create same name page in different clients.\n- client1: offline, create page1\n- client2: offline, create page1\n- restart rtc",
+        "\n- client1: offline, add blocks on page-2\n- client2: offline, delete page-2",
+        "page rename"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "rtc_extra_test",
+      "test": "long-block-title-test",
+      "reference": "clj-e2e/test/logseq/e2e/rtc_extra_test.clj",
+      "reference_line": 321,
+      "scenarios": [
+        "insert >4KB block/title"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_rtc_extra.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "settings_basic_test",
+      "test": "preferred-date-format-survives-reload-test",
+      "reference": "clj-e2e/test/logseq/e2e/settings_basic_test.clj",
+      "reference_line": 32,
+      "scenarios": [
+        "Settings > Editor preferred date format is restored on startup"
+      ],
+      "native_test_candidate": null,
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "tag_basic_test",
+      "test": "new-tag-test",
+      "reference": "clj-e2e/test/logseq/e2e/tag_basic_test.clj",
+      "reference_line": 25,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_tag_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "tag_basic_test",
+      "test": "page-title-tag-autocomplete-test",
+      "reference": "clj-e2e/test/logseq/e2e/tag_basic_test.clj",
+      "reference_line": 34,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_tag_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "tag_basic_test",
+      "test": "page-tag-conversion-persists-and-removes-tag-from-objects-test",
+      "reference": "clj-e2e/test/logseq/e2e/tag_basic_test.clj",
+      "reference_line": 53,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_tag_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "undo_redo_test",
+      "test": "undo-redo-paste",
+      "reference": "clj-e2e/test/logseq/e2e/undo_redo_test.clj",
+      "reference_line": 22,
+      "scenarios": [
+        "Undo redo paste blocks"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_undo_redo.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "undo_redo_test",
+      "test": "undo-latest-saved-block-content-once",
+      "reference": "clj-e2e/test/logseq/e2e/undo_redo_test.clj",
+      "reference_line": 38,
+      "scenarios": [
+        "Undo reverts the latest saved block content on the first attempt"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_undo_redo.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "undo_redo_test",
+      "test": "cut-and-paste-preserves-multiple-block-trees",
+      "reference": "clj-e2e/test/logseq/e2e/undo_redo_test.clj",
+      "reference_line": 49,
+      "scenarios": [
+        "Cut waits for structured clipboard data before deleting nested blocks"
+      ],
+      "native_test_candidate": "ocaml-e2e/test/test_undo_redo.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "table-row-selection-shows-action-bar-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 90,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "all-pages-delete-confirm-stays-open-on-pointer-release-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 99,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "view-lifecycle-and-display-type-persistence-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 116,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "table-view-search-filter-and-new-record-actions-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 166,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "table-view-column-visibility-action-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 203,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "table-view-group-and-export-actions-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 224,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    },
+    {
+      "area": "view_basic_test",
+      "test": "table-view-column-sort-does-not-crash-test",
+      "reference": "clj-e2e/test/logseq/e2e/view_basic_test.clj",
+      "reference_line": 268,
+      "scenarios": [],
+      "native_test_candidate": "ocaml-e2e/test/test_view_basic.ml",
+      "status": "source-inventoried",
+      "evidence": [],
+      "differences": [],
+      "fixes": [],
+      "validation": [],
+      "blocker": null
+    }
+  ]
+}

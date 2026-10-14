@@ -448,6 +448,9 @@ let () =
   let hooks =
     Lui_paint.
       { color_of = Theme_vars.color_of;
+        (* Lui_host replaces this with the visibility predicate installed
+           by set_hidden before painting the app. *)
+        hidden = (fun _ -> false);
         (* Virtual lists publish the mounted window. Every other kind
            returns None and the walk stays the full child list. *)
         mounted_children =
