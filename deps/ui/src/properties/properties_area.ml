@@ -730,14 +730,17 @@ let page_area (p : Model.page) : t =
       (not (Editor_state.is_expanded uuid))
       && (Editor_state.is_collapsed uuid || p.Model.page_is_tag)
     in
+    let display_state = Logseq_el.own context
+        (Signal.map2 (fun data show_hidden -> data, show_hidden)
+           (Signal.value st) (S.show_hidden_signal context)) in
     let node =
       (reactive
-         (fun (d : S.area_data) ->
+         (fun ((d : S.area_data), show_hidden) ->
             if title_collapsed then column ~gap:0 []
             else if
               (not p.Model.page_is_tag)
               && d.rows = []
-              && d.hidden = []
+              && (d.hidden = [] || not show_hidden)
             then column ~gap:0 []
             else
               let ctx = page_ctx p key uuid in
@@ -756,7 +759,7 @@ let page_area (p : Model.page) : t =
                      new_property_btn ctx ~for_class:false
                        ~owner_title:p.Model.page_title)
                 ])
-         (Signal.value st))
+         display_state)
         context parent
     in
     S.note_area_node ~key node;

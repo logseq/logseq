@@ -51,3 +51,9 @@ let convert_tag_to_page db_id =
       (Wire.String (repo ())) (Wire.Int db_id)
   in
   Js.Promise.resolve (reload ())
+
+(* This local export flag is independent of cloud publication and graph access. *)
+let set_publishing_public uuid value =
+  let* _ = Sdk_util.apply_op "set-block-property"
+      [ Wire.Uuid uuid; Wire.Keyword "logseq.property/publishing-public?"; Wire.Bool value ] in
+  Js.Promise.resolve (reload ())

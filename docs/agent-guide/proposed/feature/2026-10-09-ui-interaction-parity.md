@@ -179,3 +179,14 @@ Fresh Vite/CSS browser regressions, native Pango tests and actual SDL evidence
 are recorded in `docs/ui-parity/evidence/page-spacing/validation.md`.
 Percentage flex-basis cache invalidation is a separate confirmed LUI dependency
 blocker; no whole-layout workaround or extra-repository edit is introduced.
+
+### Local publication flag checkpoint
+
+The desktop menu now toggles the existing local publishing/export checkbox;
+full-entity hydration preserves its current value without changing worker
+contracts. Ordinary-page hidden-only property areas remain absent by default,
+while explicit visibility reveals a real16px checkbox. Actual native pointer
+writes, menu coherence and both restart states are verified against actual
+master desktop behavior in `docs/ui-parity/evidence/publication/validation.md`.
+Cloud publication, graph access and other menu/property workflows remain
+separate inventory items, not implicitly validated by this local flag.

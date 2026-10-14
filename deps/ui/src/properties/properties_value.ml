@@ -521,7 +521,7 @@ let scalar_edit_cell ctx row : t =
 let checkbox_view ctx row : t =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
-  checkbox ~checked
+  checkbox ~checked ~width:16 ~height:16 ~min_width:16
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, b) ->

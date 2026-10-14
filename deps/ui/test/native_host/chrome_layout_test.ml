@@ -178,6 +178,45 @@ let () =
       (Lui_store.child_ids store scroll) in
   check "short native pages do not create vertical or horizontal scrollbar range"
     (bottom -. top = viewport.h && right -. left = viewport.w);
+  let property_area = Hashtbl.find Properties_state.areas
+      "page:33333333-3333-4333-8333-333333333333" in
+  let hidden_row = Wire.Map
+      [ Wire.Keyword "property-ident", Wire.Keyword "logseq.property/publishing-public?"
+      ; Wire.Keyword "property", Wire.Map
+          [ Wire.Keyword "db/ident", Wire.Keyword "logseq.property/publishing-public?"
+          ; Wire.Keyword "block/title", Wire.String "Publishing Public?"
+          ; Wire.Keyword "logseq.property/type", Wire.Keyword "checkbox"
+          ; Wire.Keyword "logseq.property/hide?", Wire.Bool true ]
+      ; Wire.Keyword "value", Wire.Bool false ] in
+  Signal.set property_area.a_state
+    { Properties_state.empty_area_data with hidden = [ hidden_row ] };
+  ignore (Lui_app.flush app);
+  check "hidden-only page metadata does not create an empty properties panel"
+    (not (List.exists (fun node ->
+       match Lui_store.string_prop store node "style-class" with
+       | Some classes -> List.mem "ls-properties-area" (String.split_on_char ' ' classes)
+       | None -> false) (Lui_store.preorder store)));
+  Properties_state.toggle_hidden ();
+  ignore (Lui_app.flush app);
+  check "explicit hidden-property visibility reveals the page panel"
+    (List.exists (fun node ->
+       match Lui_store.string_prop store node "style-class" with
+       | Some classes -> List.mem "ls-properties-area" (String.split_on_char ' ' classes)
+       | None -> false) (Lui_store.preorder store));
+  Lui_layout.sync ~width:1280. ~height:900.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let checkbox = List.find (fun node -> Lui_store.kind store node = "checkbox") (Lui_store.preorder store) in
+  let checkbox_rect = Option.get (Lui_layout.rect layout checkbox) in
+  check "native property checkbox values have a visible sixteen-pixel hit target"
+    (checkbox_rect.w = 16. && checkbox_rect.h = 16.);
+  check "native property checkboxes preserve an explicit false value"
+    (not (Lui_store.bool_prop store checkbox "checked"));
+  Properties_state.toggle_hidden ();
+  ignore (Lui_app.flush app);
+  Signal.set property_area.a_state Properties_state.empty_area_data;
+  ignore (Lui_app.flush app);
   let long_blocks = List.init 45 (fun index -> Decode.block_of_wire (Wire.Map
       [ Wire.Keyword "block/uuid", Wire.Uuid (Printf.sprintf "22222222-2222-4222-8222-%012d" index)
       ; Wire.Keyword "block/title", Wire.String (Printf.sprintf "Scroll row %02d: repeatable long-page content" (index + 1)) ])) in
@@ -264,4 +303,56 @@ let () =
   Runtime.current_graph_uuid := previous_graph_id;
   ignore (Lui_app.dispose copy_app);
 
+  List.iter (fun (public, label) ->
+      let page = Option.get (Decode.page_of_summary (Wire.Map
+          [ Wire.Keyword "page-title", Wire.String "Publishing fixture"
+          ; Wire.Keyword "page-uuid", Wire.Uuid "44444444-4444-4444-8444-444444444444"
+          ; Wire.Keyword "logseq.property/publishing-public?", Wire.Bool public ])) in
+      let menu_app = Lui_app.create backend () (fun model () -> model)
+          (fun _context _model _send -> Lui_elements.column (Page_menu.page_items page)) in
+      ignore (Lui_app.start menu_app);
+      ignore (Lui_app.flush menu_app);
+      let action = List.find_opt (fun node ->
+          Lui_store.string_prop store node "text" = Some (I18n.t label)) (Lui_store.preorder store) in
+      check "native page menus expose the publication flag's current action" (action <> None);
+      let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+      let mutation = ref None in
+      let dead, _, _ = Js.Promise.pending () in
+      Runtime.worker := Some
+        { Worker_client.invoke_fn = (fun method_name arguments ->
+            if method_name = "thread-api/apply-outliner-ops" then mutation := Some arguments;
+            Js.Promise.resolve Wire.Nil)
+        ; on_message = (fun _ _ -> ()); dead };
+      Runtime.read_model := (fun () -> { Model.initial with repo = Some "publication-fixture" });
+      ignore (Lui_app.dispatch_event menu_app (Lui_protocol.Press (Option.get action)));
+      ignore (Lui_app.flush menu_app);
+      Host.drain ();
+      check "the native action toggles only the existing local publishing property"
+        (!mutation = Some
+          [ Wire.String "publication-fixture"
+          ; Wire.Array [ Wire.Array [ Wire.Keyword "set-block-property"
+              ; Wire.Array [ Wire.Uuid "44444444-4444-4444-8444-444444444444"
+                  ; Wire.Keyword "logseq.property/publishing-public?"; Wire.Bool (not public) ] ] ]
+          ; Wire.Map [] ]);
+      Runtime.worker := previous_worker;
+      Runtime.read_model := previous_model;
+      ignore (Lui_app.dispose menu_app))
+    [ false, "page/make-public"; true, "page/make-private" ];
+  let identity = "55555555-5555-4555-8555-555555555555" in
+  let page = Option.get (Decode.page_of_summary (Wire.Map
+      [ Wire.Keyword "page-title", Wire.String "Eligibility fixture"
+      ; Wire.Keyword "page-uuid", Wire.Uuid identity ])) in
+  let block_page = { page with page_blocks =
+      [ Model.empty_block ~uuid:identity ~title:"Contained block" ~is_page:false ] } in
+  List.iter (fun page ->
+      let menu_app = Lui_app.create backend () (fun model () -> model)
+          (fun _context _model _send -> Lui_elements.column (Page_menu.page_items page)) in
+      ignore (Lui_app.start menu_app);
+      ignore (Lui_app.flush menu_app);
+      check "publication flag actions require an actual page identity"
+        (not (List.exists (fun node ->
+          let label = Lui_store.string_prop store node "text" in
+          label = Some (I18n.t "page/make-public") || label = Some (I18n.t "page/make-private"))
+          (Lui_store.preorder store)));
+      ignore (Lui_app.dispose menu_app)) [ { page with page_uuid = None }; block_page ];
   print_endline "native header layout: OK"

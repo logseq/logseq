@@ -584,6 +584,9 @@ let icon_of_wire (w : Wire.t) : (string * string) option =
 
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
+let publishing_public_of_wire w =
+  Wire.get w "logseq.property/publishing-public?" = Some (Wire.Bool true)
+
 let page_of_summary (w : Wire.t) : Model.page option =
   let str ks =
     List.fold_left
@@ -653,6 +656,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
              with
              | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) -> true
              | _ -> false)
+        ; page_publishing_public = publishing_public_of_wire w
         ; page_add_object =
             (match Wire.get w "add-object?" with
              | Some (Wire.Bool b) -> b

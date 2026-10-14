@@ -611,6 +611,7 @@ let load_block_zoom uuid =
                        ; page_is_library = false
                        ; page_internal = false
                        ; page_built_in = false
+                       ; page_publishing_public = false
                        ; page_add_object = false
                        ; page_tags = b.Model.block_tags
                        ; page_tag_idents =

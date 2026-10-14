@@ -133,6 +133,7 @@ type page =
        built-in? = :logseq.property/built-in? *)
     page_internal : bool
   ; page_built_in : bool
+  ; page_publishing_public : bool (* explicit publishing export flag, not graph access *)
   ; (* objects.cljs: class-objects "new object" unless the class ident is
        private (worker-computed "add-object?") *)
     page_add_object : bool

@@ -529,6 +529,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
     Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
       (Wire.String page.Model.page_title)
   in
+  let page = { page with Model.page_publishing_public = Decode.publishing_public_of_wire w } in
   (* get-case-page encodes multi-ref values as a plain set of
             entity ids (unlike the {:db/id} stubs in entity maps) *)
   let ids =

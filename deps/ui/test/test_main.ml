@@ -298,6 +298,17 @@ let test_wire () =
 
 (* ---- Decode page/summary/toast ---- *)
 
+let test_page_publication_flag () =
+  List.iter (fun (value, expected) ->
+      let fields = [ "page-title", Wire.String "Publishing fixture" ] in
+      let fields = match value with None -> fields | Some value ->
+        ("logseq.property/publishing-public?", value) :: fields in
+      let page = Option.get (Decode.page_of_summary (Wire.Map (List.map (fun (key, value) -> Wire.kw key, value) fields))) in
+      check "publication flags follow the reference explicit-true semantics"
+        (page.Model.page_publishing_public = expected))
+    [ None, false; Some (Wire.Bool false), false; Some (Wire.Bool true), true
+    ; Some Wire.Nil, false; Some (Wire.String "true"), false ]
+
 let test_decode2 () =
   let p =
     Wire.Map
@@ -4503,6 +4514,7 @@ let () =
   test_move ();
   test_update ();
   test_decode ();
+  test_page_publication_flag ();
   test_decode2 ();
   test_wire ();
   test_router ();

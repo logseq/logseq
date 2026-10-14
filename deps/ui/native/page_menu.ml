@@ -79,6 +79,16 @@ let page_items (p : Model.page) =
          | None -> ());
         Sidebar_state.open_dialog "publish-page")
   in
+  let publication_flag =
+    match p.page_uuid with
+    | Some uuid when not (Page.is_block_route p) ->
+        let label = I18n.t (if p.page_publishing_public
+            then "page/make-private" else "page/make-public") in
+        [ item "publishing-public" label (fun () ->
+              Runtime.send (Action.Page_menu_set None);
+              ignore (Page_ops.set_publishing_public uuid (not p.page_publishing_public))) ]
+    | _ -> []
+  in
   (* cljs page_menu.cljs: convert-to-tag only for internal pages that are
      not built-in; convert-tag-to-page for non-built-in classes *)
   let convert =
@@ -115,7 +125,7 @@ let page_items (p : Model.page) =
   let copy_url = item "copy-url" (I18n.t "page/copy-url") (fun () ->
       Runtime.send (Action.Page_menu_set None);
       Page_ops.copy_url p) in
-  fav @ [ copy_url ] @ del @ [ export_page; publish_page ] @ convert @ dev
+  fav @ [ copy_url ] @ del @ [ export_page; publish_page ] @ publication_flag @ convert @ dev
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
