@@ -33,6 +33,12 @@ val capitalize : string -> string
    BMP code points count 1, astral 2 (surrogate pair). *)
 val js_length : string -> int
 
+(* Convert text to JavaScript UTF-16 code units, including surrogate pairs. *)
+val utf16_units : string -> int array
+
+(* Convert UTF-16 code units to text. Replace unpaired surrogates with U+FFFD. *)
+val of_utf16_units : int array -> string
+
 (* JS (subs s start end) — slices on UTF-16 code units. Native cannot
    encode a lone surrogate, so a boundary falling inside an astral
    character keeps/drops the whole character. *)

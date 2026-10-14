@@ -23,5 +23,23 @@ let capitalize s =
 (* JS String.length — UTF-16 code units natively. *)
 let js_length s = Js.String.length s
 
+let utf16_units s =
+  Array.init (Js.String.length s) (fun index ->
+      int_of_float (Js.String.charCodeAt ~index s))
+
+let of_utf16_units units =
+  let n = Array.length units in
+  let high u = u >= 0xD800 && u <= 0xDBFF in
+  let low u = u >= 0xDC00 && u <= 0xDFFF in
+  units
+  |> Array.mapi (fun i u ->
+         let paired =
+           (high u && i + 1 < n && low units.(i + 1))
+           || (low u && i > 0 && high units.(i - 1)) in
+         Js.String.fromCharCode
+           (if (high u || low u) && not paired then 0xFFFD else u))
+  |> Array.to_list
+  |> String.concat ""
+
 (* JS subs on UTF-16 units. *)
 let js_sub s start end_ = Js.String.substring ~start ~end_ s

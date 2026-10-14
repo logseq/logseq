@@ -506,44 +506,8 @@ let remove_accents (s : string) : string =
 
 let max_string_length = 1000.0
 
-let utf8_decode (s : string) : int list =
-  let len = String.length s in
-  let byte i = Char.code s.[i] in
-  let rec loop i acc =
-    if i >= len then List.rev acc
-    else
-      let b0 = byte i in
-      if b0 < 0x80 then loop (i + 1) (b0 :: acc)
-      else if b0 < 0xC0 then loop (i + 1) (0xFFFD :: acc)
-      else if b0 < 0xE0 && i + 1 < len then
-        loop (i + 2) (((b0 land 0x1F) lsl 6 lor (byte (i + 1) land 0x3F)) :: acc)
-      else if b0 < 0xF0 && i + 2 < len then
-        loop (i + 3)
-          (((b0 land 0x0F) lsl 12 lor ((byte (i + 1) land 0x3F) lsl 6)
-            lor (byte (i + 2) land 0x3F))
-          :: acc)
-      else if i + 3 < len then
-        loop (i + 4)
-          (((b0 land 0x07) lsl 18 lor ((byte (i + 1) land 0x3F) lsl 12)
-            lor ((byte (i + 2) land 0x3F) lsl 6)
-            lor (byte (i + 3) land 0x3F))
-          :: acc)
-      else List.rev acc
-  in
-  loop 0 []
-
-let utf16_units (s : string) : int array =
-  s |> utf8_decode
-  |> List.concat_map (fun cp ->
-         if cp <= 0xFFFF then [ cp ]
-         else
-           let cp' = cp - 0x10000 in
-           [ 0xD800 lor (cp' lsr 10); 0xDC00 lor (cp' land 0x3FF) ])
-  |> Array.of_list
-
-let utf16_length (s : string) : int =
-  utf8_decode s
-  |> List.fold_left (fun n cp -> if cp <= 0xFFFF then n + 1 else n + 2) 0
+let utf16_units = Unicode.utf16_units
+let utf16_length = Unicode.js_length
 
 (* cljs search-fuzzy/clean-str: lower-case, strip [ \ / _ ] ( ) chars,
    lower-case again. *)
