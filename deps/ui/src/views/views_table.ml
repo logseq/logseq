@@ -1379,24 +1379,6 @@ let row_title s u =
       | None -> "")
   | None -> ""
 
-let gallery_card_el ~title : t =
-  box ~style_class:"ls-card-item" [ text ~value:title [] ]
-
-(* keyed-row variant: an in-place block edit republishes the item
-   signal under the same key, so the title rides a reactive prop off it
-   instead of freezing the mount-time snapshot *)
-let gallery_card_el_sig inst (item_sig : row_item Signal.signal) : t =
-  box ~style_class:"ls-card-item"
-    [ text
-        ~value:
-          (reactive
-             (fun ((u, blk) : row_item) ->
-               match W.get blk "block/title" with
-               | Some t_ -> Wr.prop_text t_
-               | None -> row_title (V.get inst) u)
-             item_sig)
-        [] ]
-
 (* the keyed mount decodes the item snapshot — content edits
    republish under a new keyed_row_key and remount the row *)
 let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
@@ -1729,22 +1711,50 @@ let render_list inst s : t =
         (List.map (block_line s) (all_row_uuids s))
   | _ -> list_stream ~paginate:more inst (all_row_uuids s)
 
-let render_gallery inst _s : t =
+(* Four cards per virtual row. The body remounts when the window or
+   the block table changes, so the cards are the mount-time snapshot.
+   virt-end grows the reference prefix; data-virt-count is omitted
+   once the index total is on screen, or every short row would cascade. *)
+let render_gallery inst (s : V.vstate) : t =
  fun ctx parent ->
-  (* columns is a Grid-only property — on a row node GridColumns is
-     rejected and the whole mount batch dies. Cards follow the same
-     materialized prefix as the list, so a reference gallery does not
-     mount every row. *)
-  grid ~gap:8 ~padding:8 ~columns:4
-    [ keyed
-        ~source:
-          (Logseq_el.own ctx
-             (Signal.map
-                (fun (s' : V.vstate) -> flat_items (windowed inst s'))
-                (Signal.value (inst.V.st))))
-        ~key:keyed_row_key ~cmp:String.compare
-        ~mount:(fun item_sig -> gallery_card_el_sig inst item_sig) ]
-    ctx parent
+  let card ((u, blk) : row_item) =
+    box ~key:u ~style_class:"ls-card-item"
+      [ text
+          ~value:
+            (match W.get blk "block/title" with
+             | Some t_ -> Wr.prop_text t_
+             | None -> row_title s u)
+          [] ]
+  in
+  let rec rows acc cur k = function
+    | [] ->
+        let acc = if cur = [] then acc else List.rev cur :: acc in
+        List.rev acc
+    | x :: xs when k = 4 -> rows (List.rev cur :: acc) [ x ] 1 xs
+    | x :: xs -> rows acc (x :: cur) (k + 1) xs
+  in
+  let shown = flat_items (windowed inst s) in
+  let row_els =
+    List.mapi
+      (fun i row ->
+        grid ~key:("gr" ^ string_of_int i) ~gap:8 ~columns:4
+          (List.map card row))
+      (rows [] [] 0 shown)
+  in
+  let paginate = more_ref_rows inst s in
+  let node =
+    virtual_list ~key:"gal-window" ~grow:1. ~gap:8 ~item_extent:148.
+      ~overscan:1
+      ~data_attrs:
+        (if paginate then
+           [ ("data-virt-count", string_of_int (List.length row_els)) ]
+         else [])
+      row_els ctx parent
+  in
+  if paginate then
+    Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
+        (V.ops ()).V.o_load_more inst);
+  node
 
 let render_table inst s : t =
   let more = more_ref_rows inst s in
