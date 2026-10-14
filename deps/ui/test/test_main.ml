@@ -1498,6 +1498,31 @@ let test_cmdk_view () =
   check "upsert create last when filtered"
     ((List.nth v3.groups 1).gid = Cmdk_state.G_create)
 
+let test_copy_urls () =
+  let url ?graph_id ?repo ?(kind = `Page) entity_id =
+    Ui_url.entity_url_for_copy ~app_base_url:"https://logseq.com///"
+      ~graph_id ~repo ~entity_id ~kind
+  in
+  check "page URLs prefer the canonical graph-qualified web route"
+    (url ~graph_id:"graph-id" ~repo:"logseq_db_work" "page-id" =
+       Some "https://logseq.com/page/page-id?graph-id=graph-id");
+  check "block URLs use the corresponding graph-qualified web route"
+    (url ~graph_id:"graph-id" ~kind:`Block "block-id" =
+       Some "https://logseq.com/block/block-id?graph-id=graph-id");
+  check "local-only page URLs fall back to the desktop graph protocol"
+    (url ~repo:"logseq_db_work" "page-id" = Some "logseq://graph/work?block-id=page-id");
+  check "local-only block URLs share the reference desktop entity target"
+    (url ~repo:"logseq_db_work" ~kind:`Block "block-id" =
+       Some "logseq://graph/work?block-id=block-id");
+  check "missing graph identities do not produce an ambiguous copied URL"
+    (url "page-id" = None && url ~graph_id:" " ~repo:" " "page-id" = None);
+  check "web URL parts use component encoding"
+    (url ~graph_id:"graph/id?" (Ui_services.literal_text "café 😀") =
+       Some "https://logseq.com/page/caf%C3%A9%20%F0%9F%98%80?graph-id=graph%2Fid%3F");
+  check "desktop graph names use encodeURI rather than component encoding"
+    (url ~repo:(Ui_services.literal_text "logseq_db_café space&+") "page-id" =
+       Some "logseq://graph/caf%C3%A9%20space&+?block-id=page-id")
+
 let test_cmdk_creation_ownership () =
   Stub_dom.install ();
   let body : Js.Json.t = [%mel.raw "document.body"] in
@@ -4438,6 +4463,7 @@ let () =
   test_cmdk_view ();
   test_cmdk_groups ();
   test_cmdk_creation_ownership ();
+  test_copy_urls ();
   test_model_indent ();
   test_model_outdent ();
   test_editor_wire_runs ();

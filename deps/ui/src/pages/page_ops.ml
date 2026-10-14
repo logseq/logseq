@@ -6,6 +6,19 @@ let repo = Runtime.repo
 
 let reload () = Router.resolve ()
 
+let copy_url (page : Model.page) =
+  match page.page_uuid with
+  | None -> Toast.warning (I18n.t "page/no-page-found-to-copy")
+  | Some entity_id ->
+      let app_base_url =
+        if Ui_services.env_dev_build () then "http://localhost:3001" else "https://logseq.com"
+      in
+      match Ui_url.entity_url_for_copy ~app_base_url
+          ~graph_id:(!Runtime.current_graph_uuid)
+          ~repo:(Runtime.model ()).repo ~entity_id ~kind:`Page with
+      | Some url -> Ui_services.clipboard_copy url
+      | None -> Toast.warning (I18n.t "page/copy-url-unavailable-warning")
+
 let rename uuid new_title =
   if String.trim new_title = "" then Js.Promise.resolve ()
   else

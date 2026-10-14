@@ -539,7 +539,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
     ; perf = { mark = perf_mark }
     ; uri =
         { encode_component =
-            (fun s -> Uri.pct_encode ~component:`Query_value s)
+            (fun s -> Uri.pct_encode ~component:(`Custom (`Generic, "!'()*", "")) s)
         }
     ; clipboard =
         { copy = Host.clipboard_write

@@ -112,7 +112,10 @@ let page_items (p : Model.page) =
               Runtime.send (Action.Page_menu_set None)) ]
     | _ -> []
   in
-  fav @ del @ [ export_page; publish_page ] @ convert @ dev
+  let copy_url = item "copy-url" (I18n.t "page/copy-url") (fun () ->
+      Runtime.send (Action.Page_menu_set None);
+      Page_ops.copy_url p) in
+  fav @ [ copy_url ] @ del @ [ export_page; publish_page ] @ convert @ dev
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
