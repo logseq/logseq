@@ -410,3 +410,77 @@ let () =
         Lui_store.string_prop store id "style-class" = Some "ed-caret")
       (Lui_store.preorder store)));
   ignore (Lui_app.dispose app)
+
+let () =
+  let store = Lui_store.create () in
+  let backend =
+    { Lui_protocol.backend_profile =
+        Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost
+    ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let registry = Lui_extension.registry () in
+  Logseq_editor.register registry;
+  let page = Option.get (Decode.page_of_summary (Wire.Map
+      [ Wire.Keyword "page-title", Wire.String "Title input ownership"
+      ; Wire.Keyword "page-uuid", Wire.Uuid "66666666-6666-4666-8666-666666666666" ])) in
+  let listeners_before = List.length !Editor_sink.measurement_listeners in
+  let app = Lui_app.create_with_extensions backend registry () (fun () () -> ())
+      (fun context _model _send ->
+         Editor_state.ensure context;
+         Page.title_editor page) in
+  ignore (Lui_app.start app);
+  ignore (Lui_app.flush app);
+  let runtime = Lui_app.runtime app in
+  let sink = List.find (fun node ->
+      Lui_store.string_prop store node "block-id" = page.page_uuid)
+      (Lui_store.preorder store) in
+  let snapshot = Native_embed_snapshot.ext_snapshot runtime sink in
+  let input = Ui_dom_native.el_of snapshot in
+  check "native title editor snapshots expose editable input semantics"
+    (input.Ui_services.editable ());
+  let previous_model = !Runtime.read_model in
+  Runtime.read_model := (fun () ->
+      { Model.initial with phase = Model.Ready; route = Model.Page "title"
+      ; route_page = Some { page with page_blocks =
+          [ Model.empty_block ~uuid:"body" ~title:"Body" ~is_page:false ] }
+      ; editing_title = true });
+  let ev = Ui_dom_native.ev_of (Js.Json.JObject
+      [ "target", snapshot; "key", Js.Json.JString "a"
+      ; "ctrlKey", Js.Json.JBoolean true ]) in
+  Editor_keys.on_keydown ev;
+  check "title select-all does not select the page's outline blocks"
+    (not (Editor_state.selection_active ()));
+  let hidden_before = !Properties_state.show_hidden in
+  Editor_keys.chord_seq := [];
+  List.iter (fun key ->
+      Editor_keys.on_global_key (Ui_dom_native.ev_of (Js.Json.JObject
+        [ "target", snapshot; "key", Js.Json.JString key ]))) [ "p"; "a" ];
+  check "typing a non-editing shortcut inside the title does not toggle properties"
+    (!Properties_state.show_hidden = hidden_before);
+  Editor_keys.chord_seq := [];
+  ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+      (sink, Logseq_editor.identifier, "focus", Lui_protocol.String_map.empty)));
+  ignore (Lui_app.flush app);
+  Logseq_editor.note_measurement "caret-rect" (Js.Json.JObject
+      [ "block-id", Js.Json.JString (Option.get page.page_uuid)
+      ; "offset", Js.Json.JNumber (float_of_int (String.length page.page_title))
+      ; "x", Js.Json.JNumber 180.; "y", Js.Json.JNumber 0.
+      ; "h", Js.Json.JNumber 54. ]);
+  Host.drain ();
+  ignore (Lui_app.flush app);
+  check "a cold native title paints its caret when the first measurement reply arrives"
+    (List.exists (fun node ->
+        Lui_store.string_prop store node "style-class" = Some "ed-caret")
+      (Lui_store.preorder store));
+  let caret = List.find (fun node ->
+      Lui_store.string_prop store node "style-class" = Some "ed-caret")
+      (Lui_store.preorder store) in
+  let layout = Lui_layout.create () in
+  Lui_layout.sync ~width:180. ~height:54. layout store;
+  let rect = Option.get (Lui_layout.rect layout caret) in
+  check "a caret at the title's right edge cannot flex-shrink to zero width"
+    (rect.x = 180. && rect.w = 2. && rect.h = 54.);
+  Runtime.read_model := previous_model;
+  ignore (Lui_app.dispose app);
+  check "disposing a title editor releases its geometry reply owner"
+    (List.length !Editor_sink.measurement_listeners = listeners_before);
+  Editor_sink.measurement_changed (Option.get page.page_uuid)

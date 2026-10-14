@@ -1,0 +1,4 @@
+{
+  "ok": true,
+  "resultTransit": "[\"^ \",\"~:db/id\",199,\"~:block/created-at\",1791996216280,\"~:block/name\",\"long page\",\"~:block/refs\",[\"~#set\",[4,23,109]],\"~:block/tags\",[\"^4\",[4]],\"~:block/title\",\"Long Page\",\"~:block/tx-id\",536871036,\"~:block/updated-at\",1792022101236,\"~:block/uuid\",\"~u6acfb138-272f-49e4-b333-5de24a86813f\",\"~:logseq.property/publishing-public?\",false]"
+}

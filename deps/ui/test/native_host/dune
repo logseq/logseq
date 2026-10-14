@@ -41,9 +41,12 @@
 (rule
  (copy ../../ocaml_host/ocaml_host_stubs.c chrome_host_stubs.c))
 
+(rule
+ (copy ../../native/native_embed.ml native_embed_snapshot.ml))
+
 (test
  (name chrome_layout_test)
- (modules chrome_layout_test)
+ (modules chrome_layout_test native_embed_snapshot)
  (libraries logseq_ui_ocamlhost native_host_test_support lui.layout lui.store)
  (foreign_stubs
   (language c)

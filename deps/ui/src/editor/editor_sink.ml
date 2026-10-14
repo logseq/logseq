@@ -73,3 +73,26 @@ let invalidate block_id = (!current).invalidate block_id
    selection so the OS context menu offers real text items (web DOM
    selection; native hosts keep their own surface selection) *)
 let select_range block_id lo hi = (!current).select_range block_id lo hi
+
+(* Non-block editors own their model/frame locally. Async geometry replies
+   must refresh those mounted owners too, without retaining disposed views. *)
+type measurement_listener =
+  { block_id : string
+  ; refresh : unit -> unit
+  ; mutable active : bool
+  }
+
+let measurement_listeners : measurement_listener list ref = ref []
+
+let on_measurement ~scope block_id refresh =
+  let listener = { block_id; refresh; active = true } in
+  measurement_listeners := listener :: !measurement_listeners;
+  Signal.on_dispose scope (fun () ->
+      listener.active <- false;
+      measurement_listeners :=
+        List.filter (fun current -> current != listener) !measurement_listeners)
+
+let measurement_changed block_id =
+  List.iter (fun listener ->
+      if listener.active && listener.block_id = block_id then listener.refresh ())
+    !measurement_listeners

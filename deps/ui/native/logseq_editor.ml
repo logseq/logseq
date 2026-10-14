@@ -232,10 +232,11 @@ let store_measurement block_id tbl key value =
   if Hashtbl.find_opt tbl key <> Some value then begin
     Hashtbl.replace tbl key value;
     Host.enqueue (fun () ->
-        match Editor_state.editing () with
+        (match Editor_state.editing () with
         | Some e when e.Editor_state.uuid = block_id ->
             ignore (Editor_actions.refresh_overlay block_id)
-        | _ -> ())
+        | _ -> ());
+        Editor_sink.measurement_changed block_id)
   end
 
 let note_measurement name (j : Js.Json.t) : unit =

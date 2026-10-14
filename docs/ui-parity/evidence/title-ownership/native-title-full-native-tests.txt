@@ -1,0 +1,6 @@
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK

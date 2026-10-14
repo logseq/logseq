@@ -592,7 +592,7 @@ let caret_view (frame : frame Signal.signal) : t =
              "var(--ls-caret-color, var(--ls-primary-text-color, var(--foreground)))" )
        ; Ui_components.Prop.position `relative
        ; Ui_components.Prop.z_index 2 ]
-       (row ~style_class:"ed-caret" ~width:2 []))
+       (row ~style_class:"ed-caret" ~width:2 ~min_width:2 []))
       context (Some wrap)
   in
   bind_int context bar HeightValue

@@ -230,6 +230,18 @@ let title_editor (page : Model.page) : t =
   let frame =
     Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame
   in
+  Editor_sink.invalidate uuid;
+  let refresh_frame () =
+    match Editor_sink.conduit uuid with
+    | None -> ()
+    | Some conduit ->
+        let measured = Edit_input.measure conduit (Runtime.signal_get model_st) in
+        if measured <> Runtime.signal_get frame then begin
+          Signal.set frame measured;
+          Runtime.flush ()
+        end
+  in
+  Editor_sink.on_measurement ~scope:ctx.Lui_ui.ui_scope uuid refresh_frame;
   let commit ?(select = false) () =
     let value =
       String.trim
@@ -275,6 +287,8 @@ let title_editor (page : Model.page) : t =
         in
         let m' = Edit_input.handle ~route ~conduit m ev in
         if m' != m then begin
+          if m'.Edit_model.source <> m.Edit_model.source then
+            Editor_sink.invalidate uuid;
           Signal.update model_st (fun _ -> m');
           (* flush now so the conduit measures the freshly painted
              runs — a stale read would re-emit the old line ranges and
@@ -294,7 +308,7 @@ let title_editor (page : Model.page) : t =
           Signal.update model_st (fun _ -> m2);
           Runtime.flush ()
         end;
-        Signal.update frame (fun _ -> Edit_input.measure conduit m2)
+        refresh_frame ()
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
      [ Edit_view.view

@@ -98,6 +98,11 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   let kind = Hashtbl.find_opt rt.Lui_runtime.mounted_nodes node in
   let tag =
     match Hashtbl.find_opt rt.Lui_runtime.runtime_extension_nodes node with
+    | Some ident when ident = Logseq_editor.identifier ->
+        (* The browser twin's rich-text input sink is a textarea.
+           Preserve its editable semantics for delegated key/clipboard
+           guards, including title editors outside Editor_state.editing. *)
+        "textarea"
     | Some ident ->
         if String.starts_with ~prefix:"logseq-" ident
         then

@@ -202,3 +202,13 @@ unit mixing, then pass; actual SDL captures show the caret and Escape removal.
 Paired typing undo/redo and split undo preserve the insertion offset. Evidence
 and exact remaining editor limitations are recorded in
 `docs/ui-parity/evidence/editor-native/validation.md`; this is partial parity.
+
+### Title input ownership checkpoint
+
+Native rich-text snapshots expose textarea semantics so title editing does not
+also trigger outline/global commands. Scoped geometry owners refresh the
+current locally owned title frame on native replies and release on disposal.
+An end-edge caret keeps its typed minimum width. Actual paired Ctrl+A/rename,
+worker persistence and unchanged 45-block trees are recorded in
+`docs/ui-parity/evidence/title-ownership/validation.md`. Native title clipboard
+is a separately reproduced remaining gap; no full title/editor parity claim.
