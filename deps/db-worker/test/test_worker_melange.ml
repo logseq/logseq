@@ -494,3 +494,56 @@ let () =
     [ "db-tx", (fun conn f -> ignore (Db_tx.batch_transact_with_temp_conn conn f))
     ; "db-transact", (fun conn f -> ignore (Db_transact.batch_transact_with_temp_conn conn [] f))
     ; "sync-apply", (fun conn f -> ignore (Sync_replay.batch_transact_with_temp_conn_impl conn [] f ())) ]
+
+let () =
+  let marked s = Search_index.snippet_highlight_start ^ s ^ Search_index.snippet_highlight_end in
+  List.iter
+    (fun (name, title, query, expected) ->
+       Fest.test ("search snippet preserves Unicode: " ^ name) (fun () ->
+           Fest.expect |> Fest.equal
+             (Search_index.ensure_highlighted_snippet None (Some title) query)
+             (Some expected)))
+    [ "mixed Chinese and English",
+      {js|Repro · 列边界拖拽热区过窄，难以命中，光标反馈弱|js}, "repro",
+      marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js}
+    ; "Chinese query", {js|今天学习中文|js}, {js|中文|js}, {js|今天学习|js} ^ marked {js|中文|js}
+    ; "accented text and emoji", {js|Repro · café 😀 中文|js}, "repro",
+      marked "Repro" ^ {js| · café 😀 中文|js}
+    ; "astral query", {js|中文 😀 search|js}, {js|😀|js}, {js|中文 |js} ^ marked {js|😀|js} ^ " search" ];
+  Fest.test "search snippets preserve Chinese in a distant match window" (fun () ->
+      let title = String.concat "" (List.init 300 (fun _ -> {js|中|js})) ^ {js| target 中文内容|js} in
+      let actual = Option.get (Search_index.ensure_highlighted_snippet None (Some title) "target") in
+      Fest.expect |> Fest.equal (contains actual (marked "target" ^ {js| 中文内容|js})) true;
+      Fest.expect |> Fest.equal (contains actual {js|中|js}) true;
+      Fest.expect |> Fest.equal (contains actual {js|ï|js}) false);
+  Fest.test "fuzzy search distinguishes Chinese text and counts astral characters" (fun () ->
+      Fest.expect |> Fest.equal (Search_fuzzy.utf16_length {js|中文😀|js}) 4;
+      Fest.expect |> Fest.equal
+        (Search_fuzzy.score {js|中文|js} {js|中文|js} > Search_fuzzy.score {js|中文|js} {js|另一段文字|js}) true);
+  Fest.test "indexed search returns the original Chinese block text" (fun () ->
+      let open Datascript in
+      let page_uuid = "00000000-0000-4000-8000-000000000101" in
+      let block_uuid = "00000000-0000-4000-8000-000000000102" in
+      let title = {js|Repro · 列边界拖拽热区过窄，难以命中，光标反馈弱|js} in
+      let conn = Datascript.conn_from_db (Datascript.empty_db ~schema:(Db_schema.schema ()) ()) in
+      let scalar a v = a, One_value v in
+      ignore (Datascript.transact_conn conn
+        [ Entity { db_id = Some (Entity_id 1); attrs =
+            [ scalar "block/uuid" (Uuid page_uuid); scalar "block/name" (String "search")
+            ; scalar "block/title" (String "Search") ] }
+        ; Entity { db_id = Some (Entity_id 2); attrs =
+            [ scalar "block/uuid" (Uuid block_uuid); scalar "block/title" (String title)
+            ; scalar "block/page" (Ref 1); scalar "block/parent" (Ref 1)
+            ; scalar "block/order" (String "a0") ] } ]);
+      let db = Sqlite.open_db ~path:":memory:" in
+      Common_util.protect ~finally:(fun () -> Sqlite.close db) (fun () ->
+          Search_index.create_tables_and_triggers db;
+          Search_index.upsert_blocks db
+            [ Search_index.mk_index_item ~id:block_uuid ~page:page_uuid ~title () ];
+          let result = Search_index.search_blocks ~conn ~search_db:(Some db)
+              ~vector_index:None ~q0:"repro" ~opts:Search_index.default_opts in
+          let rows = match result with
+            | Search_index.Rows rows | Search_index.Rows_with_count (rows, _) -> rows in
+          Fest.expect |> Fest.equal
+            (List.map (fun row -> List.assoc_opt "block/title" row) rows
+             = [ Some (String (marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js})) ]) true))

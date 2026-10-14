@@ -711,6 +711,25 @@ let graph_with_blocks titles =
   let _items = index_conn_blocks conn sdb in
   (conn, sdb)
 
+let test_search_blocks_preserves_mixed_chinese_preview () =
+  let title = "Repro · 列边界拖拽热区过窄，难以命中，光标反馈弱" in
+  let conn, sdb = graph_with_blocks [ "Unicode search fixture" ] in
+  let block = Option.get (T.find_block_by_content (Datascript.db conn) "Unicode search fixture") in
+  ignore (Datascript.transact_conn conn [ Add (Entity_id block.id, "block/title", String title) ]);
+  ignore (index_conn_blocks conn sdb);
+  Fun.protect ~finally:(fun () -> Sqlite.close sdb) (fun () ->
+      let rows = outcome_rows (run_search conn sdb "repro" ()) in
+      check_list "indexed Chinese preview stays readable"
+        [ mk_open ^ "Repro" ^ mk_close ^ " · 列边界拖拽热区过窄，难以命中，光标反馈弱" ]
+        (result_titles rows) Fun.id);
+  List.iter
+    (fun text ->
+       check_eq "search Unicode round trip" text
+         (Search_index.U16.to_string (Search_index.U16.of_string text)))
+    [ ""; "中文"; "café"; "😀中文𠮷" ];
+  check "fuzzy UTF-16 length includes surrogate pairs"
+    (Search_fuzzy.utf16_length "中文😀" = 4)
+
 let test_search_blocks_fuzzy_matches_from_search_db () =
   let conn, sdb = graph_with_blocks [ "New Project" ] in
   let res =
@@ -2238,6 +2257,7 @@ let test_fuzzy_search_multi () =
   check_list "nil fields skipped" [ ("Delete Page", None) ] res (fun (a, _) -> a)
 
 let () =
+  test_search_blocks_preserves_mixed_chinese_preview ();
   test_ensure_highlighted_snippet_adds_marker ();
   test_ensure_highlighted_snippet_keeps_existing ();
   test_ensure_highlighted_snippet_preserves_original_title_case ();
