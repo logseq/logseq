@@ -4,6 +4,15 @@ let () =
   Platform.install_ui_services ~assert_owner:(fun () -> ())
     ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let parent = Js.Json.JObject [ "node-id", Js.Json.JNumber 970. ] in
+  let child = Js.Json.JObject
+      [ "node-id", Js.Json.JNumber 971.; "ancestors", Js.Json.JArray [| parent |] ] in
+  check "native element containment includes the element itself"
+    (Dom_ext.el_contains parent parent);
+  check "native element containment includes descendants"
+    (Dom_ext.el_contains parent child);
+  check "native element containment excludes unrelated nodes"
+    (not (Dom_ext.el_contains child parent));
   let seen_prevented = ref false in
   Ui_services.dom_on_document_event ~capture:true "parity-prevention"
     (fun ev -> ev.prevent_default ());
@@ -83,6 +92,44 @@ let () =
         Lui_store.string_prop store id "accessibility-identifier" = Some identifier)
       (Lui_store.preorder store)
   in
+  ignore (Lui_app.flush app);
+  List.iter (fun identifier ->
+      check ("native desktop header exposes " ^ identifier)
+        (List.exists (fun node ->
+            Lui_store.string_prop store node "accessibility-identifier" = Some identifier)
+          (Lui_store.preorder store))) [ "history-back"; "history-forward" ];
+  let back_id = by_id "history-back" and forward_id = by_id "history-forward" in
+  let keys id =
+    Lui_protocol.data_attrs_decode (Option.get (Lui_store.string_prop store id "data-attrs"))
+    |> List.assoc "data-tooltip-keys" in
+  let modifier = if Platform.is_mac () then "⌘" else "ctrl" in
+  check "history tooltips use the current platform binding display"
+    (keys back_id = modifier ^ " [" && keys forward_id = modifier ^ " ]");
+  let previous_back = !Platform.back_stack and previous_forward = !Platform.fwd_stack in
+  let previous_hash = Ui_services.nav_hash () in
+  Ui_services.nav_set_hash "#/page/previous";
+  Ui_services.nav_set_hash "#/page/current";
+  ignore (Lui_app.dispatch_event app (Lui_protocol.Press (by_id "history-back")));
+  ignore (Lui_app.flush app);
+  check "the native header back control uses route history"
+    (Ui_services.nav_hash () = "#/page/previous");
+  ignore (Lui_app.dispatch_event app (Lui_protocol.Press (by_id "history-forward")));
+  ignore (Lui_app.flush app);
+  check "the native header forward control uses route history"
+    (Ui_services.nav_hash () = "#/page/current");
+  ignore (Lui_app.dispatch_event app (Lui_protocol.Press forward_id));
+  ignore (Lui_app.flush app);
+  check "forward at the history boundary is a no-op"
+    (Ui_services.nav_hash () = "#/page/current");
+  Ui_services.nav_back ();
+  Ui_services.nav_set_hash "#/page/another";
+  ignore (Lui_app.dispatch_event app (Lui_protocol.Press forward_id));
+  ignore (Lui_app.flush app);
+  check "new navigation retires forward history"
+    (Ui_services.nav_hash () = "#/page/another");
+  Platform.replace_url_fragment previous_hash;
+  Platform.back_stack := previous_back;
+  Platform.fwd_stack := previous_forward;
   List.iter (fun left_sidebar_open ->
       ignore (Lui_app.send app { initial with left_sidebar_open });
       ignore (Lui_app.flush app);
@@ -562,3 +609,61 @@ let () =
   Editor_state.clipboard := previous_trees;
   Editor_state.clipboard_text := previous_text;
   ignore (Lui_app.dispose app)
+
+let () =
+  let previous_state = !Tooltip.state in
+  let state = Signal.state (Signal.scheduler ()) None in
+  Tooltip.state := Some state;
+  let pending = ref true in
+  let trigger =
+    { (Ui_dom_native.el_of (Js.Json.JObject [])) with
+      Ui_services.attr = (function "aria-label" -> Some "History" | _ -> None)
+    ; rect_pending = (fun () -> !pending)
+    ; rect = (fun () -> if !pending then (0., 0., 0., 0.) else (1144., 8., 32., 32.)) } in
+  let owner = ref None in
+  let trigger =
+    { trigger with Ui_services.closest = (fun _ -> !owner)
+    ; contains = (fun other -> other.Ui_services.token = trigger.Ui_services.token) } in
+  owner := Some trigger;
+  let event =
+    { (Ui_dom_native.ev_of (Js.Json.JObject [])) with Ui_services.target = Some trigger } in
+  Tooltip.show_for trigger;
+  check "a tooltip waits for its native trigger geometry"
+    (Runtime.signal_get state = None);
+  pending := false;
+  Unix.sleepf 0.03;
+  Host.drain ();
+  check "a cold tooltip starts below its measured trigger"
+    (match Runtime.signal_get state with
+     | Some tip -> tip.Tooltip.tip_x = 1160. && tip.tip_y = 40.
+     | None -> false);
+  Tooltip.on_mousemove event;
+  check "pointer movement within the visible tooltip trigger keeps it open"
+    (Runtime.signal_get state <> None);
+  Tooltip.hide ();
+  pending := true;
+  Tooltip.show_for trigger;
+  Tooltip.hide ();
+  pending := false;
+  Unix.sleepf 0.03;
+  Host.drain ();
+  check "dismissal cancels a queued trigger measurement"
+    (Runtime.signal_get state = None);
+  Tooltip.hide ();
+  Unix.sleepf 0.03;
+  Host.drain ();
+  Tooltip.on_mousemove event;
+  (* A native timeout already in the UI mailbox survives clear_timeout. *)
+  let rec wait_queued attempts =
+    Mutex.lock Host.lock;
+    let queued = not (Queue.is_empty Host.queue) in
+    Mutex.unlock Host.lock;
+    if queued || attempts = 0 then queued
+    else (Unix.sleepf 0.01; wait_queued (attempts - 1)) in
+  check "the hover timeout reached the native UI mailbox before dismissal" (wait_queued 200);
+  Tooltip.hide ();
+  Host.drain ();
+  check "dismissal cancels an expired hover callback already queued in the native mailbox"
+    (Runtime.signal_get state = None);
+  Tooltip.hide ();
+  Tooltip.state := previous_state

@@ -29,6 +29,7 @@ let armed_on : Ui_services.el option ref = ref None
 let timer = ref (-1)
 let delay_ms = 500
 let installed = ref false
+let placement_generation = ref 0
 
 let set_tip v =
   match !state with
@@ -38,6 +39,7 @@ let set_tip v =
   | None -> ()
 
 let hide () =
+  incr placement_generation;
   armed_on := None;
   if !timer <> -1 then begin
     Ui_services.timers_clear_timeout !timer;
@@ -64,53 +66,68 @@ let show_for (trig : Ui_services.el) =
   | None | Some "" -> ()
   | Some label ->
       hide ();
+      armed_on := Some trig;
       let keys =
         Option.value (trig.Ui_services.attr "data-tooltip-keys")
           ~default:""
       in
-      let tx, ty, tw, th = trig.Ui_services.rect () in
-      let trig_cx = tx +. (tw /. 2.) in
-      let trig_bottom = ty +. th in
-      (* provisional mount; arrow starts centred until measured *)
-      set_tip
-        (Some
-           { tip_label = label
-           ; tip_keys = keys
-           ; tip_x = trig_cx
-           ; tip_y = trig_bottom
-           ; tip_arrow_x = 0.
-           ; tip_above = false });
-      let rec place tries =
-        match Ui_services.dom_query "#lui-tooltip" with
-        | None -> ()
-        | Some bubble ->
-            if bubble.Ui_services.rect_pending () && tries > 0 then
-              ignore
-                (Ui_services.timers_timeout (fun () -> place (tries - 1)) 16)
-            else
-              let _, _, w, h = bubble.Ui_services.rect () in
-              let x =
-                Float.max 5.
-                  (Float.min (trig_cx -. (w /. 2.))
-                     (Ui_services.dom_viewport_width () -. w -. 5.))
-              in
-              (* base-ui side=bottom, sideOffset 0 — the arrow visually
-                 bridges the gap to the trigger; flip above when there's
-                 no room *)
-              let above =
-                Ui_services.dom_viewport_height () -. trig_bottom -. h
-                < 8.
-              in
-              set_tip
-                (Some
-                   { tip_label = label
-                   ; tip_keys = keys
-                   ; tip_x = x
-                   ; tip_y = (if above then ty -. h else trig_bottom)
-                   ; tip_arrow_x = trig_cx -. x -. 4.
-                   ; tip_above = above })
+      (* Native trigger rects arrive asynchronously. A dismissed or replaced
+         tooltip must not be resurrected by a late placement reply. *)
+      let generation = !placement_generation in
+      let current () = generation = !placement_generation in
+      let rec show tries =
+        if not (current ()) then ()
+        else if trig.Ui_services.rect_pending () then (
+          if tries > 0 then
+            ignore (Ui_services.timers_timeout (fun () -> show (tries - 1)) 16))
+        else begin
+          let tx, ty, tw, th = trig.Ui_services.rect () in
+          let trig_cx = tx +. (tw /. 2.) in
+          let trig_bottom = ty +. th in
+          (* provisional mount; arrow starts centred until measured *)
+          set_tip
+            (Some
+               { tip_label = label
+               ; tip_keys = keys
+               ; tip_x = trig_cx
+               ; tip_y = trig_bottom
+               ; tip_arrow_x = 0.
+               ; tip_above = false });
+          let rec place tries =
+            match (if current () then Ui_services.dom_query "#lui-tooltip" else None) with
+            | None -> ()
+            | Some bubble ->
+                if bubble.Ui_services.rect_pending () then (
+                  if tries > 0 then
+                    ignore
+                      (Ui_services.timers_timeout (fun () -> place (tries - 1)) 16))
+                else
+                  let _, _, w, h = bubble.Ui_services.rect () in
+                  let x =
+                    Float.max 5.
+                      (Float.min (trig_cx -. (w /. 2.))
+                         (Ui_services.dom_viewport_width () -. w -. 5.))
+                  in
+                  (* base-ui side=bottom, sideOffset 0 — the arrow visually
+                     bridges the gap to the trigger; flip above when there's
+                     no room *)
+                  let above =
+                    Ui_services.dom_viewport_height () -. trig_bottom -. h
+                    < 8.
+                  in
+                  set_tip
+                    (Some
+                       { tip_label = label
+                       ; tip_keys = keys
+                       ; tip_x = x
+                       ; tip_y = (if above then ty -. h else trig_bottom)
+                       ; tip_arrow_x = trig_cx -. x -. 4.
+                       ; tip_above = above })
+          in
+          ignore (Ui_services.timers_timeout (fun () -> place 8) 16)
+        end
       in
-      ignore (Ui_services.timers_timeout (fun () -> place 8) 16)
+      show 8
 
 (* content: label span + kbd cells mirroring cmdk's shui-shortcut-key.
    cljs with-shortcut stacks the title above the keycap row in a
@@ -166,12 +183,15 @@ let on_mousemove (ev : Ui_services.ev) =
           | _ ->
               hide ();
               armed_on := Some trig;
+              let generation = !placement_generation in
               timer :=
                 Ui_services.timers_timeout
                   (fun () ->
-                    timer := -1;
-                    armed_on := None;
-                    show_for trig)
+                    if generation = !placement_generation then begin
+                      timer := -1;
+                      armed_on := None;
+                      show_for trig
+                    end)
                   delay_ms)
       | None -> hide ())
 

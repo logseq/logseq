@@ -1,0 +1,5 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+[properties] render-data batch failed
+Fatal error: exception Failure("pointer movement within the visible tooltip trigger keeps it open")

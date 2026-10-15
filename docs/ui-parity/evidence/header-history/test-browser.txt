@@ -1,0 +1,10 @@
+✔ page spacing has one typed margin owner, without legacy web padding (1474.877904ms)
+✔ hidden-only page properties stay collapsed until explicitly shown (1620.651499ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3461.206005

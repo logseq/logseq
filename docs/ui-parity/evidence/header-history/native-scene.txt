@@ -1,0 +1,900 @@
+  125 spacer key=- class=- 0,0 1280x900
+  126 spacer key=- class=- 0,0 1280x900
+scene[0] 0,0 1277x900
+scene[1] 14,14 20x20
+scene[2] 46,14 20x20
+scene[8] 3,48 1274x852
+scene[9] 3,48 1274x852
+scene[10] 146,83 13x13
+scene[12] 156,186 964x28
+scene[13] 183,197 6x6
+scene[14] 198,188 918x24
+scene[16] 156,214 964x28
+scene[17] 183,225 6x6
+scene[18] 198,216 2x24
+scene[20] 156,242 964x28
+scene[21] 183,253 6x6
+scene[22] 198,244 918x24
+scene[30] 0,4 1280x900
+scene[31] 0,2 1280x900
+scene[32] 0,0 1280x900
+sdl event type=512
+sdl event type=768
+dom keydown node=5921 {"nodeId":5921,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key Control
+sdl event type=768
+dom keydown node=5921 {"nodeId":5921,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key a
+sdl event type=769
+dom keyup node=5921 {"nodeId":5921,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=5921 {"nodeId":5921,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 51 ops=33
+frame 52 ops=34
+sdl event type=512
+sdl event type=768
+dom keydown node=5921 {"nodeId":5921,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key Control
+sdl event type=768
+dom keydown node=5921 {"nodeId":5921,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key c
+sdl event type=769
+dom keyup node=5921 {"nodeId":5921,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=5921 {"nodeId":5921,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+sdl event type=2304
+sdl event type=2304
+sdl event type=512
+sdl event type=1024
+dispatch PointerEnter node=5657 class=block-content-wrapper
+  dispatch -> 0 bytes
+dom mousemove node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":97,"movementY":-90}
+dom pointermove node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":97,"movementY":-90}
+sdl event type=512
+sdl event type=1025
+dispatch PointerDown node=5657 class=block-content-wrapper
+  dispatch -> 0 bytes
+dom mousedown node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerdown node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+sdl event type=1026
+dispatch PointerUp node=5657 class=block-content-wrapper
+  dispatch -> 0 bytes
+dispatch PressDetail node=5657 class=block-content-wrapper
+  dispatch -> 0 bytes
+dispatch PressDetail node=5645 class=block-main-container is-page-title-row ls-pt-no-icon
+  dispatch -> 0 bytes
+dispatch Press node=5666 class=block-title-wrap
+  dispatch -> 0 bytes
+dom mouseup node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerup node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+dom click node=5666 {"nodeId":5666,"clientX":320,"clientY":110,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+sdl event type=512
+frame 53 ops=34
+frame 54 ops=33
+frame 55 ops=34
+sdl event type=512
+sdl event type=768
+dom keydown node=6057 {"nodeId":6057,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key Control
+sdl event type=768
+dom keydown node=6057 {"nodeId":6057,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key a
+sdl event type=769
+dom keyup node=6057 {"nodeId":6057,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=6057 {"nodeId":6057,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 56 ops=35
+sdl event type=512
+sdl event type=768
+dom keydown node=6057 {"nodeId":6057,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key Control
+sdl event type=768
+dom keydown node=6057 {"nodeId":6057,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+editor key c
+sdl event type=769
+dom keyup node=6057 {"nodeId":6057,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=6057 {"nodeId":6057,"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+sdl event type=2304
+sdl event type=2304
+sdl event type=512
+sdl event type=768
+editor key Escape
+sdl event type=769
+dom keyup node=6057 {"nodeId":6057,"key":"Escape","code":"Escape","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 57 ops=33
+sdl event type=512
+sdl event type=768
+dom keydown node=0 {"key":"Alt","code":"AltLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":true}
+sdl event type=769
+dom keyup node=0 {"key":"Alt","code":"AltLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+sdl event type=256
+sdl event type=512
+theme-snapshot installed: light=500 dark=0
+sdl event type=512
+sdl event type=512
+sdl event type=512
+sdl event type=1024
+dom mousemove node=1 {"nodeId":1,"clientX":399,"clientY":26,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":0,"movementY":0}
+dom pointermove node=1 {"nodeId":1,"clientX":399,"clientY":26,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":0,"movementY":0}
+sdl event type=512
+sdl event type=512
+sdl event type=512
+sdl event type=512
+frame 0 ops=20
+frame 1 ops=20
+frame 2 ops=20
+sdl event type=512
+sdl event type=512
+sdl event type=512
+frame 3 ops=32
+sdl event type=512
+frame 4 ops=32
+sdl event type=512
+sdl event type=512
+sdl event type=768
+dom keydown node=0 {"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=768
+dom keydown node=0 {"key":"k","code":"KeyK","repeat":false,"keyChar":"k","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=0 {"key":"k","code":"KeyK","repeat":false,"keyChar":"k","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=0 {"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 5 ops=122
+frame 6 ops=122
+frame 7 ops=133
+frame 8 ops=155
+sdl event type=512
+sdl event type=512
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"l","code":"KeyL","repeat":false,"keyChar":"L","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 22924 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"l","code":"KeyL","repeat":false,"keyChar":"L","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 9 ops=163
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"o","code":"KeyO","repeat":false,"keyChar":"o","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 8578 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"o","code":"KeyO","repeat":false,"keyChar":"o","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"n","code":"KeyN","repeat":false,"keyChar":"n","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6210 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"n","code":"KeyN","repeat":false,"keyChar":"n","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6215 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 10 ops=143
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":" ","code":"Space","repeat":false,"keyChar":" ","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6221 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":" ","code":"Space","repeat":false,"keyChar":" ","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"p","code":"KeyP","repeat":false,"keyChar":"P","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 7057 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"p","code":"KeyP","repeat":false,"keyChar":"P","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6349 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 11 ops=145
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6471 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=358 {"nodeId":358,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=358 class=cp__cmdk-search-input
+  dispatch -> 6241 bytes
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 12 ops=143
+sdl event type=512
+frame 13 ops=240
+sdl event type=512
+sdl event type=768
+dispatch Submit node=358 class=cp__cmdk-search-input
+  dispatch -> 0 bytes
+dom keydown node=358 {"nodeId":358,"key":"Enter","code":"Enter","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=358 {"nodeId":358,"key":"Enter","code":"Enter","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 14 ops=22
+frame 15 ops=127
+frame 16 ops=127
+sdl event type=512
+sdl event type=768
+dom keydown node=0 {"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=768
+dom keydown node=0 {"key":"k","code":"KeyK","repeat":false,"keyChar":"k","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=0 {"key":"k","code":"KeyK","repeat":false,"keyChar":"k","shiftKey":false,"metaKey":false,"ctrlKey":true,"altKey":false}
+sdl event type=769
+dom keyup node=0 {"key":"Control","code":"ControlLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 17 ops=229
+frame 18 ops=229
+frame 19 ops=345
+sdl event type=512
+sdl event type=512
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"R","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 30383 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"R","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 20 ops=321
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 8715 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"f","code":"KeyF","repeat":false,"keyChar":"f","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6571 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"f","code":"KeyF","repeat":false,"keyChar":"f","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6326 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"r","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6331 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"r","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 21 ops=321
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6336 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"n","code":"KeyN","repeat":false,"keyChar":"n","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6341 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"n","code":"KeyN","repeat":false,"keyChar":"n","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6346 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"c","code":"KeyC","repeat":false,"keyChar":"c","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 22 ops=272
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6475 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":" ","code":"Space","repeat":false,"keyChar":" ","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6357 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":" ","code":"Space","repeat":false,"keyChar":" ","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"t","code":"KeyT","repeat":false,"keyChar":"T","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 14195 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"t","code":"KeyT","repeat":false,"keyChar":"T","shiftKey":true,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"Shift","code":"ShiftLeft","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 8728 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"a","code":"KeyA","repeat":false,"keyChar":"a","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"r","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6372 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"r","code":"KeyR","repeat":false,"keyChar":"r","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+frame 23 ops=253
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6377 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"g","code":"KeyG","repeat":false,"keyChar":"g","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6382 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"e","code":"KeyE","repeat":false,"keyChar":"e","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=768
+dom keydown node=2790 {"nodeId":2790,"key":"t","code":"KeyT","repeat":false,"keyChar":"t","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=771
+dispatch TextChanged node=2790 class=cp__cmdk-search-input
+  dispatch -> 6387 bytes
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"t","code":"KeyT","repeat":false,"keyChar":"t","shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 24 ops=253
+frame 25 ops=263
+sdl event type=512
+sdl event type=768
+dispatch Submit node=2790 class=cp__cmdk-search-input
+  dispatch -> 0 bytes
+dom keydown node=2790 {"nodeId":2790,"key":"Enter","code":"Enter","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=769
+dom keyup node=2790 {"nodeId":2790,"key":"Enter","code":"Enter","repeat":false,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false}
+sdl event type=512
+frame 26 ops=22
+frame 27 ops=30
+frame 28 ops=33
+frame 29 ops=34
+frame 30 ops=35
+frame 31 ops=48
+frame 32 ops=54
+frame 33 ops=54
+frame 34 ops=54
+sdl event type=512
+sdl event type=1024
+dispatch PointerEnter node=12
+  dispatch -> 0 bytes
+dom mousemove node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":761,"movementY":-2}
+dom pointermove node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":761,"movementY":-2}
+sdl event type=512
+sdl event type=1025
+dispatch PointerDown node=12
+  dispatch -> 0 bytes
+dom mousedown node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerdown node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+sdl event type=1026
+dispatch PointerUp node=12
+  dispatch -> 0 bytes
+dispatch PressDetail node=12
+  dispatch -> 0 bytes
+dispatch Press node=12
+  dispatch -> 623 bytes
+dom mouseup node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerup node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+dom click node=13 {"nodeId":13,"clientX":1160,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+sdl event type=512
+frame 35 ops=22
+frame 36 ops=87
+frame 37 ops=127
+frame 38 ops=127
+sdl event type=512
+sdl event type=1024
+dispatch PointerLeave node=12
+  dispatch -> 0 bytes
+dispatch PointerEnter node=14
+  dispatch -> 0 bytes
+dom mousemove node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":32,"movementY":0}
+dom pointermove node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"movementX":32,"movementY":0}
+sdl event type=512
+sdl event type=1025
+dispatch PointerDown node=14
+  dispatch -> 0 bytes
+dom mousedown node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerdown node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+sdl event type=1026
+dispatch PointerUp node=14
+  dispatch -> 0 bytes
+dispatch PressDetail node=14
+  dispatch -> 0 bytes
+dispatch Press node=14
+  dispatch -> 623 bytes
+dom mouseup node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerup node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+dom click node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+sdl event type=512
+frame 39 ops=22
+frame 40 ops=30
+frame 41 ops=33
+frame 42 ops=34
+frame 43 ops=35
+frame 44 ops=54
+frame 45 ops=54
+sdl event type=512
+sdl event type=512
+sdl event type=1025
+dispatch PointerDown node=14
+  dispatch -> 0 bytes
+dom mousedown node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerdown node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":1,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+sdl event type=1026
+dispatch PointerUp node=14
+  dispatch -> 0 bytes
+dispatch PressDetail node=14
+  dispatch -> 0 bytes
+dispatch Press node=14
+  dispatch -> 0 bytes
+dom mouseup node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+dom pointerup node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":0}
+dom click node=15 {"nodeId":15,"clientX":1192,"clientY":24,"button":0,"buttons":0,"shiftKey":false,"metaKey":false,"ctrlKey":false,"altKey":false,"detail":1}
+sdl event type=512
+frame 46 ops=54
+icons=6192
+scroll-range id=96 viewport=12.0,300.0 0.0x224.0 bounds=12.0,300.0 28.0,524.0 cap=0.0 offset=0.0
+scroll-range id=102 viewport=3.0,48.0 1274.0x852.0 bounds=3.0,48.0 1277.0,900.0 cap=0.0 offset=0.0
+scroll-range id=6254 viewport=180.0,342.0 940.0x116.0 bounds=180.0,342.0 1120.0,458.0 cap=0.0 offset=0.0
+1 stack key=- class=theme-container-inner ls-hl-colored h-full 0,0 1280x900
+  2 row key=- class=- grow=1 0,0 1280x900
+    3 split key=- class=- value=1 grow=1 0,0 1280x900
+      4 column key=- class=- grow=1 0,0 1277x900
+        5 row key=- class=cp__header height=48 0,0 1277x48
+          6 row key=- class=cp__header-l margin-left=0 0,8 80x32
+            7 button key=- class=- height=32 width=32 8,8 32x32
+              8 icon key=- class=ui__icon ls-icon-menu-2 height=20 width=20 name="app:menu-2" ires=ok:app:menu-2 14,14 20x20
+            138 button key=- class=- height=32 width=32 40,8 32x32
+              139 icon key=- class=ui__icon ls-icon-search height=20 width=20 name="search" ires=ok:search 46,14 20x20
+          9 row key=- class=cp__header-r grow=1 80,8 1197x32
+            10 box key=- class=- 1112,24 0x0
+            1254 button key=- class=- height=32 width=32 1112,8 32x32
+              1255 icon key=- class=ui__icon ls-icon-home height=20 width=20 name="app:home" ires=ok:app:home 1118,14 20x20
+            12 button key=- class=- height=32 width=32 1144,8 32x32
+              13 icon key=- class=ui__icon ls-icon-arrow-left height=20 width=20 name="app:arrow-left" ires=ok:app:arrow-left 1150,14 20x20
+            14 button key=- class=- height=32 width=32 1176,8 32x32
+              15 icon key=- class=ui__icon ls-icon-arrow-right height=20 width=20 name="arrow-right" ires=ok:arrow-right 1182,14 20x20
+            16 row key=- class=- 1208,8 64x32
+              17 button key=- class=toolbar-dots-btn height=32 width=32 1208,8 32x32
+                18 icon key=- class=ui__icon ls-icon-dots height=20 width=20 name="app:dots" ires=ok:app:dots 1214,14 20x20
+              19 button key=- class=- height=32 width=32 1240,8 32x32
+                20 icon key=- class=ui__icon ls-icon-layout-sidebar-right height=20 width=20 name="app:layout-sidebar-right" ires=ok:app:layout-sidebar-right 1246,14 20x20
+              21 spacer key=- class=- 1272,24 0x0
+        22 split key=- class=- value=0.0001 grow=1 0,48 1277x852
+          23 box key=- class=cp__sidebar-left-layout 0,48 0x852
+            24 row key=- class=- grow=1 0,48 0x852
+              25 column key=- class=left-sidebar-inner as-container grow=1 0,48 0x852
+                26 box key=- class=left-sidebar-top height=4 0,48 0x4
+                27 column key=- class=- grow=1 0,52 0x848
+                  28 column key=- class=sidebar-header-container 0,52 0x172
+                    29 box key=- class=- 0,52 24x32
+                      30 row key=- class=cp__graphs-selector 12,52 0x32
+                        31 button key=- class=item grow=1 opacity=0.9 12,52 8x32
+                          32 row key=- class=- grow=1 16,56 0x24
+                            33 row key=- class=thumb height=24 width=24 opacity=0.8 margin-left=-2 14,56 0x24
+                              34 icon key=- class=ui__icon height=16 width=16 name="app:topology-star" ires=ok:app:topology-star 14,60 0x16
+                            35 text key=- class=- grow=1 text="Demo" font-size="var(--text-sm)" font-weight=500 margin-left=4 22,68 0x0
+                            36 icon key=- class=ui__icon height=18 width=18 name="app:selector" ires=ok:app:selector 26,59 0x18
+                    37 box key=- class=sidebar-content-group is-expand 0,88 24x136
+                      38 column key=- class=sidebar-content-group-inner 12,88 0x136
+                        39 row key=- class=hd non-collapsable enter-show-more height=32 12,88 8x32
+                          40 box key=- class=a margin-left=4 20,88 0x32
+                            41 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,88 0x32
+                              42 text key=- class=- text="Navigations" font-size="0.75rem" 20,104 0x0
+                          43 box key=- class=b height=32 width=28 opacity=0 20,88 0x32
+                            44 row key=- class=as-edit opacity=0.8 20,97 0x14
+                              45 icon key=- class=ui__icon height=14 width=14 name="app:filter-edit" margin-left=7 ires=ok:app:filter-edit 27,97 0x14
+                        46 box key=- class=bd 12,120 0x104
+                          47 column key=- class=sidebar-navigations 12,124 0x100
+                            48 box key=- class=journals-nav 12,124 0x32
+                              49 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,124 4x32
+                                50 icon key=- class=ui__icon height=16 width=16 name="app:calendar" margin-left=4 ires=ok:app:calendar 18,132 0x16
+                                51 text key=- class=- grow=1 text="Journals" 26,140 0x0
+                                52 row key=- class=- 26,130 0x20
+                                  53 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,130 0x20
+                                    54 row key=- class=shui-shortcut-separate 30,130 0x20
+                                      55 row key=- class=- height=20 30,130 20x20
+                                        56 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,132 8x16
+                                      57 row key=- class=- height=20 54,130 20x20
+                                        58 kbd key=- class= text="J" font-size="var(--lx-text-header)" font-weight=400 61,132 6x16
+                                59 box key=- class=- 0,0 0x0
+                            60 box key=- class=flashcards-nav 12,158 0x32
+                              61 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,158 4x32
+                                62 icon key=- class=ui__icon height=16 width=16 name="app:cards" margin-left=4 ires=ok:app:cards 18,166 0x16
+                                63 text key=- class=- grow=1 text="Flashcards" 26,174 0x0
+                                64 row key=- class=- 26,164 0x20
+                                  65 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,164 0x20
+                                    66 row key=- class=shui-shortcut-separate 30,164 0x20
+                                      67 row key=- class=- height=20 30,164 20x20
+                                        68 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,166 8x16
+                                      69 row key=- class=- height=20 54,164 20x20
+                                        70 kbd key=- class= text="F" font-size="var(--lx-text-header)" font-weight=400 60,166 8x16
+                                71 box key=- class=- 0,0 0x0
+                            72 box key=- class=all-pages-nav 12,192 0x32
+                              73 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,192 4x32
+                                74 icon key=- class=ui__icon height=16 width=16 name="app:files" margin-left=4 ires=ok:app:files 18,200 0x16
+                                75 text key=- class=- grow=1 text="Pages" 26,208 0x0
+                                76 box key=- class=- 0,0 0x0
+                  77 column key=- class=sidebar-contents-container 0,228 24x300
+                    78 box key=- class=sidebar-content-group favorites is-expand 12,232 0x32
+                      79 column key=- class=sidebar-content-group-inner 12,232 0x32
+                        80 row key=- class=hd height=32 12,232 8x32
+                          81 box key=- class=a margin-left=4 20,232 0x32
+                            82 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,232 0x32
+                              83 text key=- class=- text="Favorites" font-size="0.75rem" 20,248 0x0
+                          84 box key=- class=b height=32 width=28 opacity=0.4 20,232 0x32
+                            85 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,241 15x15
+                        86 box key=- class=- 0,0 0x0
+                    87 box key=- class=sidebar-content-group recent has-children is-expand 12,268 0x256
+                      88 column key=- class=sidebar-content-group-inner 12,268 0x256
+                        89 row key=- class=hd height=32 12,268 8x32
+                          90 box key=- class=a margin-left=4 20,268 0x32
+                            91 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,268 0x32
+                              92 text key=- class=- text="Recent" font-size="0.75rem" 20,284 0x0
+                          93 box key=- class=b height=32 width=28 opacity=0.4 20,268 0x32
+                            94 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,277 15x15
+                        95 box key=- class=bd 12,300 0x224
+                          96 list key=- class= 12,300 0x224
+                            4151 column key=- class=recent-item font-weight=500 12,300 0x32
+                              4152 row key=- class=link-item group height=32 opacity=0.8 12,300 16x32
+                                4153 row key=- class=page-icon 20,308 0x16
+                                  4154 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,308 0x16
+                                4155 text key=- class=page-title grow=1 text="Reference Target" 24,316 0x0
+                              4156 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,300 28x28
+                                4157 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,305 16x18
+                            149 column key=- class=recent-item font-weight=500 12,332 0x32
+                              150 row key=- class=link-item group height=32 opacity=0.8 12,332 16x32
+                                151 row key=- class=page-icon 20,340 0x16
+                                  152 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,340 0x16
+                                153 text key=- class=page-title grow=1 text="Long Page" 24,348 0x0
+                              154 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,332 28x28
+                                155 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,337 16x18
+                            142 column key=- class=recent-item font-weight=500 12,364 0x32
+                              143 row key=- class=link-item group height=32 opacity=0.8 12,364 16x32
+                                144 row key=- class=page-icon 20,372 0x16
+                                  145 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,372 0x16
+                                146 text key=- class=page-title grow=1 text="Interaction parity" 24,380 0x0
+                              147 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,364 28x28
+                                148 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,369 16x18
+                            156 column key=- class=recent-item font-weight=500 12,396 0x32
+                              157 row key=- class=link-item group height=32 opacity=0.8 12,396 16x32
+                                158 row key=- class=page-icon 20,404 0x16
+                                  159 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,404 0x16
+                                160 text key=- class=page-title grow=1 text="Native focus verified" 24,412 0x0
+                              161 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,396 28x28
+                                162 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,401 16x18
+                            163 column key=- class=recent-item font-weight=500 12,428 0x32
+                              164 row key=- class=link-item group height=32 opacity=0.8 12,428 16x32
+                                165 row key=- class=page-icon 20,436 0x16
+                                  166 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,436 0x16
+                                167 text key=- class=page-title grow=1 text="Native creation context" 24,444 0x0
+                              168 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,428 28x28
+                                169 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,433 16x18
+                            170 column key=- class=recent-item font-weight=500 12,460 0x32
+                              171 row key=- class=link-item group height=32 opacity=0.8 12,460 16x32
+                                172 row key=- class=page-icon 20,468 0x16
+                                  173 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,468 0x16
+                                174 text key=- class=page-title grow=1 text="Native parity smoke" 24,476 0x0
+                              175 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,460 28x28
+                                176 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,465 16x18
+                            177 column key=- class=recent-item font-weight=500 12,492 0x32
+                              178 row key=- class=link-item group height=32 opacity=0.8 12,492 16x32
+                                179 row key=- class=page-icon 20,500 0x16
+                                  180 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,500 0x16
+                                181 text key=- class=page-title grow=1 text="Parity Home" 24,508 0x0
+                              182 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,492 28x28
+                                183 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,497 16x18
+          97 column key=- class=flex-1 flex grow=1 3,48 1274x852
+            98 extension:logseq-dom key=- class=- 3,48 1274x0
+            99 box key=- class=- 0,0 0x0
+              100 box key=- class=- 0,0 0x0
+              101 spacer key=- class=- 0,0 0x0
+            102 scroll key=- class=scrollbar-spacing grow=1 orientation="vertical" 3,48 1274x852
+              103 row key=- class=- grow=1 margin-left=16 35,80 1226x788
+                104 box key=- class=cp__sidebar-main-content grow=1 168,80 960x788
+                  105 column key=- class=mx-auto pb-24 168,80 960x410
+                    6122 box key=- class=page cp__page-inner-wrap font-size="var(--ls-page-text-size, 16px)" 168,80 960x410
+                      6123 column key=- class=page-inner 176,80 944x166
+                        6124 box key=- class=- 3,48 0x0
+                          6125 row key=- class=- 176,80 944x58
+                            6126 extension:logseq-div key=- class=ls-page-title content title 176,80 302x58
+                              6127 box key=- class=- grow=1 176,80 302x58
+                                6128 column key=- class=ls-block 176,80 302x58
+                                  6129 row key=- class=block-main-container is-page-title-row ls-pt-no-icon grow=1 margin-left=-30 146,82 332x54
+                                    6130 row key=- class=is-with-icon bullet-hidden block-control-wrap height=24 width=24 146,82 24x24
+                                      6131 box key=- class=block-control opacity=0.4 146,83 22x22
+                                        6132 box key=- class=control-hide rotating-arrow not-collapsed 146,83 22x13
+                                          6133 icon key=- class=- height=13 width=13 name="app:rotating-arrow" ires=ok:app:rotating-arrow 146,83 13x13
+                                    6134 column key=- class=- grow=1 178,82 300x54
+                                      6135 column key=- class=- 178,82 300x54
+                                        6136 row key=- class=- 178,82 300x54
+                                          6137 column key=- class=- grow=1 178,82 300x54
+                                            6138 box key=- class=ls-page-title-container block-content-or-editor-wrap grow=1 font-size="var(--ls-page-title-size, 32px)" font-weight=500 178,82 300x54
+                                              6139 box key=- class=block-content-or-editor-inner grow=1 178,82 300x54
+                                                6140 row key=- class=block-row grow=1 178,82 300x54
+                                                  6141 column key=- class=block-content-wrapper grow=1 178,82 296x54
+                                                    6142 row key=- class=ls-page-title-actions opacity=0 178,62 203x24
+                                                      6143 button key=- class=as-ghost height=24 text="Add icon" font-size="12px" 178,62 83x24
+                                                      6144 button key=- class=as-ghost height=24 text="Set property" font-size="12px" 269,62 104x24
+                                                      6145 box key=- class=- 381,74 0x0
+                                                    6146 extension:logseq-div key=- class=block-content 178,82 296x54
+                                                      6147 row key=- class=- 178,82 296x54
+                                                        6148 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 178,82 296x54
+                                                          6149 box key=- class=- 178,82 296x54
+                                                            6150 text key=- class=block-title-wrap text="Reference Target" 178,82 296x54
+                                                  6151 row key=- class=ls-block-right 478,109 0x0
+                                                    6152 box key=- class=- 478,109 0x0
+                                  6153 column key=- class=- 176,136 302x0
+                              6154 row key=- class=- 176,138 302x0
+                                6155 box key=- class=- 176,138 0x0
+                            6156 row key=- class=- 1120,80 0x58
+                              6157 box key=- class=- 1120,80 0x58
+                          6158 box key=- class=- 3,48 0x0
+                        6159 box key=- class=- 3,48 0x0
+                        6160 column key=- class=ls-page-blocks margin-left=-20 156,186 964x60
+                          6161 box key=- class=page-blocks-inner 156,186 964x56
+                            6162 box key=- class=- grow=1 156,186 964x28
+                              6163 box key=- class=blocks-list-wrap 156,186 964x28
+                                6164 column key=- class=ls-block swipe-item 156,186 964x28
+                                  6165 row key=- class=block-main-container 156,188 964x24
+                                    6166 row key=- class=block-control-wrap height=24 156,188 38x24
+                                      6167 link key=- class=block-control font-size="0.875rem" opacity=0.4 156,190 22x22
+                                        6168 box key=- class=control-hide opacity=0 158,192 13x18
+                                          6169 box key=- class=rotating-arrow not-collapsed 158,192 13x13
+                                            6170 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 158,192 13x13
+                                      6171 row key=- class=bullet-link-wrap margin-left=0 178,192 16x16
+                                        6172 box key=- class=bullet-container cursor height=16 width=16 178,192 16x16
+                                          6173 box key=- class=bullet height=6 width=6 opacity=1 183,197 6x6
+                                    6174 column key=- class=- grow=1 198,188 922x24
+                                      6175 column key=- class=- 198,188 922x24
+                                        6176 row key=- class=- 198,188 922x24
+                                          6177 column key=- class=- grow=1 198,188 922x24
+                                            6178 box key=- class=block-content-or-editor-wrap grow=1 198,188 922x24
+                                              6179 box key=- class=block-content-or-editor-inner grow=1 198,188 922x24
+                                                6180 row key=- class=block-row grow=1 198,188 922x24
+                                                  6181 box key=- class=- 3,48 0x0
+                                                  6182 row key=- class=block-content-wrapper grow=1 198,188 918x24
+                                                    6183 box key=- class=block-content grow=1 198,188 918x24
+                                                      6184 row key=- class=- 198,188 918x24
+                                                        6185 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 198,188 918x24
+                                                          6186 row key=- class=- 198,188 204x24
+                                                            6187 extension:logseq-span key=- class=block-title-wrap orientation="horizontal" flex-wrap="wrap" 198,188 204x24
+                                                              6188 text key=- class=- text="Backlink to " 198,188 87x24
+                                                              6189 extension:logseq-span key=- class=page-reference orientation="horizontal" flex-wrap="wrap" 285,188 117x24
+                                                                6190 text key=- class=bracket text="[[" 285,188 12x24
+                                                                6191 extension:logseq-span key=- class=- orientation="horizontal" flex-wrap="wrap" 297,188 93x24
+                                                                  6192 extension:logseq-span key=- class=preview-ref-link orientation="horizontal" flex-wrap="wrap" 297,188 93x24
+                                                                    6193 link key=- class=page-ref text="Parity Home" 297,188 93x24
+                                                                6194 text key=- class=bracket text="]]" 390,188 12x24
+                                                    6195 row key=- class=- 1116,188 0x24
+                                                  6196 row key=- class=ls-block-right 1120,200 0x0
+                                                    6197 box key=- class=- 3,48 0x0
+                                                    6198 box key=- class=- 3,48 0x0
+                                            6199 box key=- class=- 3,48 0x0
+                                      6200 box key=- class=- 3,48 0x0
+                                  6201 column key=- class=ls-block-content-indent 156,212 964x0
+                            6202 column key=- class=ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0  opacity=0 156,214 964x28
+                              6203 row key=- class=- 156,214 964x28
+                                6204 row key=- class=bab-inner grow=1 height=28 margin-left=22 178,214 942x28
+                                  6205 box key=- class=bullet-container height=16 width=16 178,220 16x16
+                                    6206 box key=- class=bullet height=6 width=6 opacity=1 183,225 6x6
+                      6207 column key=- class=- margin-left=4 180,310 940x180
+                        6208 box key=- class=- 180,310 940x148
+                          6218 column key=- class=references 180,310 940x148
+                            6219 box key=- class=- grow=1 180,310 940x148
+                              6220 box key=- class=- grow=1 180,310 940x148
+                                6221 column key=- class=- grow=1 180,310 940x148
+                                  6222 column key=- class=- grow=1 180,310 940x148
+                                    6223 column key=- class=- grow=1 180,310 940x148
+                                      6224 row key=- class=ls-foldable-title content 180,310 940x28
+                                        6225 row key=- class=foldable-title grow=1 180,310 940x28
+                                          6226 row key=- class=ls-foldable-header grow=1 180,310 940x28
+                                            6227 box key=- class=ls-foldable-title-control block-control height=16 width=14 opacity=0.5 margin-left=-27 153,316 14x16
+                                              6228 box key=- class=control-hide 153,316 14x16
+                                                6229 box key=- class=rotating-arrow not-collapsed 153,316 14x16
+                                                  6230 icon key=- class=- height=16 width=16 name="app:caret-right" ires=ok:app:caret-right 153,316 16x16
+                                            6231 row key=- class=ls-view-head grow=1 height=28 171,310 949x28
+                                              6232 row key=- class=ls-view-head-left 171,310 170x28
+                                                6233 row key=- class=views 171,310 170x28
+                                                  6251 button key=- class=ls-view-tab height=24 font-size="0.875rem" opacity=1 171,312 138x24
+                                                    6252 text key=- class=- text="Linked references" 175,314 119x21
+                                                    6255 text key=- class=- text="2" font-size="0.75rem" margin-left=4 298,315 7x18
+                                                  6234 button key=- class=ls-add-view height=28 icon="plus" opacity=0 ires=ok:plus 313,310 28x28
+                                              6235 box key=- class=view-actions opacity=0 932,310 188x28
+                                                6236 toolbar key=- class=- orientation="horizontal" 932,310 188x28
+                                                  6237 button key=- class= height=28 icon="app:filter-cog" ires=ok:app:filter-cog 932,310 28x28
+                                                  6250 button key=- class=- height=28 icon="app:arrows-up-down" ires=ok:app:arrows-up-down 964,310 28x28
+                                                  6238 button key=- class=- height=28 icon="app:filter" ires=ok:app:filter 996,310 28x28
+                                                  6239 button key=- class= height=28 icon="search" ires=ok:search 1028,310 28x28
+                                                  6240 button key=- class=- height=28 icon="app:list" ires=ok:app:list 1060,310 28x28
+                                                  6241 button key=- class=- height=28 icon="ellipsis" ires=ok:ellipsis 1092,310 28x28
+                                      6242 box key=- class=ls-foldable-content grow=1 180,338 940x120
+                                        6243 box key=- class=ls-foldable-content-inner grow=1 180,338 940x120
+                                          6244 column key=- class=ls-view-body grow=1 180,342 940x116
+                                            6254 virtual-list key=- class=- grow=1 180,342 940x116
+                                              6258 row key=- class=ls-foldable-header 180,342 940x24
+                                                6259 box key=- class=- height=16 width=14 180,346 14x16
+                                                  6260 icon key=- class=rotating-arrow not-collapsed height=16 width=16 name="app:caret-right" ires=ok:app:caret-right 180,346 16x16
+                                                6261 link key=- class=page-ref text="Parity Home" 198,342 93x24
+                                              6262 column key=- class=ls-block swipe-item 180,370 940x28
+                                                6263 row key=- class=block-main-container 180,372 940x24
+                                                  6264 row key=- class=block-control-wrap height=24 180,372 38x24
+                                                    6265 link key=- class=block-control font-size="0.875rem" opacity=0.4 180,374 22x22
+                                                      6266 box key=- class=control-hide opacity=0 182,376 13x18
+                                                        6267 box key=- class=rotating-arrow not-collapsed 182,376 13x13
+                                                          6268 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 182,376 13x13
+                                                    6269 row key=- class=bullet-link-wrap margin-left=0 202,376 16x16
+                                                      6270 box key=- class=bullet-container cursor height=16 width=16 202,376 16x16
+                                                        6271 box key=- class=bullet height=6 width=6 opacity=1 207,381 6x6
+                                                  6272 column key=- class=- grow=1 222,372 898x24
+                                                    6273 column key=- class=- 222,372 898x24
+                                                      6274 row key=- class=- 222,372 898x24
+                                                        6275 column key=- class=- grow=1 222,372 898x24
+                                                          6276 box key=- class=block-content-or-editor-wrap 222,372 898x24
+                                                            6277 box key=- class=block-content-or-editor-inner 222,372 898x24
+                                                              6278 row key=- class=block-row grow=1 222,372 898x24
+                                                                6279 box key=- class=- 180,342 0x0
+                                                                6280 row key=- class=block-content-wrapper grow=1 222,372 894x24
+                                                                  6281 box key=- class=block-content grow=1 222,372 894x24
+                                                                    6282 row key=- class=- 222,372 894x24
+                                                                      6283 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 222,372 894x24
+                                                                        6284 row key=- class=- 222,372 272x24
+                                                                          6285 extension:logseq-span key=- class=block-title-wrap orientation="horizontal" flex-wrap="wrap" 222,372 272x24
+                                                                            6436 extension:logseq-span key=- class=page-reference orientation="horizontal" flex-wrap="wrap" 222,372 153x24
+                                                                              6437 row key=- class=- 222,372 153x24
+                                                                                6438 text key=- class=bracket text="[[" 222,372 12x24
+                                                                                6439 extension:logseq-span key=- class=- orientation="horizontal" flex-wrap="wrap" 234,372 130x24
+                                                                                  6440 extension:logseq-span key=- class=preview-ref-link orientation="horizontal" flex-wrap="wrap" 234,372 130x24
+                                                                                    6441 link key=- class=page-ref 234,372 130x24
+                                                                                      6442 text key=- class=- text="Reference Target" 234,372 130x24
+                                                                                6443 text key=- class=bracket text="]]" 364,372 11x24
+                                                                            6287 text key=- class=- text=" and " 375,372 38x24
+                                                                            6288 extension:logseq-span key=- class=- orientation="horizontal" flex-wrap="wrap" 413,372 81x24
+                                                                              6289 extension:logseq-span key=- class=preview-ref-link orientation="horizontal" flex-wrap="wrap" 413,372 81x24
+                                                                                6290 link key=- class=tag 413,372 81x24
+                                                                                  6291 text key=- class=- text="#ParityTag" 413,372 81x24
+                                                                  6292 row key=- class=- 1116,372 0x24
+                                                                6293 row key=- class=ls-block-right 1120,384 0x0
+                                                                  6294 box key=- class=- 180,342 0x0
+                                                                  6295 box key=- class=- 180,342 0x0
+                                                          6296 box key=- class=- 180,342 0x0
+                                                    6297 box key=- class=- 180,342 0x0
+                                                6298 column key=- class=ls-block-content-indent 180,396 940x0
+                                                6299 box key=- class=- 180,342 0x0
+                                              6300 row key=- class=ls-foldable-header 180,402 940x24
+                                                6301 box key=- class=- height=16 width=14 180,406 14x16
+                                                  6302 icon key=- class=rotating-arrow not-collapsed height=16 width=16 name="app:caret-right" ires=ok:app:caret-right 180,406 16x16
+                                                6303 link key=- class=page-ref text="Alpha" 198,402 43x24
+                                              6304 column key=- class=ls-block swipe-item 180,430 940x28
+                                                6305 row key=- class=block-main-container 180,432 940x24
+                                                  6306 row key=- class=block-control-wrap height=24 180,432 38x24
+                                                    6307 link key=- class=block-control font-size="0.875rem" opacity=0.4 180,434 22x22
+                                                      6308 box key=- class=control-hide opacity=0 182,436 13x18
+                                                        6309 box key=- class=rotating-arrow not-collapsed 182,436 13x13
+                                                          6310 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 182,436 13x13
+                                                    6311 row key=- class=bullet-link-wrap margin-left=0 202,436 16x16
+                                                      6312 box key=- class=bullet-container cursor height=16 width=16 202,436 16x16
+                                                        6313 box key=- class=bullet height=6 width=6 opacity=1 207,441 6x6
+                                                  6314 column key=- class=- grow=1 222,432 898x24
+                                                    6315 column key=- class=- 222,432 898x24
+                                                      6316 row key=- class=- 222,432 898x24
+                                                        6317 column key=- class=- grow=1 222,432 898x24
+                                                          6318 box key=- class=block-content-or-editor-wrap 222,432 898x24
+                                                            6319 box key=- class=block-content-or-editor-inner 222,432 898x24
+                                                              6320 row key=- class=block-row grow=1 222,432 898x24
+                                                                6321 box key=- class=- 180,342 0x0
+                                                                6322 row key=- class=block-content-wrapper grow=1 222,432 894x24
+                                                                  6323 box key=- class=block-content grow=1 222,432 894x24
+                                                                    6324 row key=- class=- 222,432 894x24
+                                                                      6325 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 222,432 894x24
+                                                                        6326 row key=- class=- 222,432 330x24
+                                                                          6327 extension:logseq-span key=- class=block-title-wrap orientation="horizontal" flex-wrap="wrap" 222,432 330x24
+                                                                            6328 text key=- class=- text="Project notes linking to " 222,432 177x24
+                                                                            6444 extension:logseq-span key=- class=page-reference orientation="horizontal" flex-wrap="wrap" 399,432 153x24
+                                                                              6445 row key=- class=- 399,432 153x24
+                                                                                6446 text key=- class=bracket text="[[" 399,432 12x24
+                                                                                6447 extension:logseq-span key=- class=- orientation="horizontal" flex-wrap="wrap" 411,432 130x24
+                                                                                  6448 extension:logseq-span key=- class=preview-ref-link orientation="horizontal" flex-wrap="wrap" 411,432 130x24
+                                                                                    6449 link key=- class=page-ref 411,432 130x24
+                                                                                      6450 text key=- class=- text="Reference Target" 411,432 130x24
+                                                                                6451 text key=- class=bracket text="]]" 541,432 11x24
+                                                                  6330 row key=- class=- 1116,432 0x24
+                                                                6331 row key=- class=ls-block-right 1120,444 0x0
+                                                                  6332 box key=- class=- 180,342 0x0
+                                                                  6333 box key=- class=- 180,342 0x0
+                                                          6334 box key=- class=- 180,342 0x0
+                                                    6335 box key=- class=- 180,342 0x0
+                                                6336 column key=- class=ls-block-content-indent 180,456 940x0
+                                                6337 box key=- class=- 180,342 0x0
+                        6210 box key=- class=- 180,490 940x0
+                          6211 box key=- class=- 3,48 0x0
+                      6212 box key=- class=- 3,48 0x0
+      109 box key=- class=cp__right-sidebar closed 1280,0 0x900
+        110 row key=- class=- grow=1 1280,0 0x900
+    111 box key=- class= 1280,0 0x900
+      112 spacer key=- class=- 1280,0 0x900
+  113 popover key=- class=cp__overlays 0,0 1280x900
+    114 box key=- class=- grow=1 0,0 1280x900
+      115 box key=- class=- 0,0 1280x0
+      116 box key=- class=- 0,0 0x0
+      117 box key=- class=- 0,0 0x0
+      118 box key=- class=- 0,0 0x0
+      119 box key=- class=- 0,0 0x0
+      120 column key=- class=cp__overlay-layer cp__dialog-shell 0,0 1280x0
+        121 column key=- class=- 0,0 1280x0
+        122 column key=- class=- 0,0 1280x0
+      123 spacer key=- class=- 0,0 1280x450
+      124 spacer key=- class=- 0,450 1280x450
+  125 overlay key=- class=- 1260,880 20x20
+    126 box key=- class=cp__sidebar-help-btn 1260,880 20x20
+      127 box key=- class=inner 1260,880 20x20
+        128 icon key=- class=ui__icon ls-icon-help-small height=20 width=20 name="app:help-small" ires=ok:app:help-small 1260,880 20x20
+  129 spacer key=- class=- 0,0 1280x900
+  130 spacer key=- class=- 0,0 1280x900
+scene[0] 0,0 1277x900
+scene[1] 14,14 20x20
+scene[2] 46,14 20x20
+scene[10] 3,48 1274x852
+scene[11] 3,48 1274x852
+scene[12] 146,83 13x13
+scene[14] 156,186 964x28
+scene[15] 183,197 6x6
+scene[16] 198,188 918x24
+scene[21] 153,316 16x16
+scene[22] 171,310 949x28
+scene[26] 180,342 940x116
+scene[27] 180,346 16x16
+scene[29] 207,381 6x6
+scene[30] 222,372 894x24
+scene[36] 180,406 16x16
+scene[38] 207,441 6x6
+scene[39] 222,432 894x24
+scene[51] 0,4 1280x900
+scene[52] 0,2 1280x900
+scene[53] 0,0 1280x900

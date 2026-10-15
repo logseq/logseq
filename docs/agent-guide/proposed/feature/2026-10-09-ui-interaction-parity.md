@@ -227,3 +227,19 @@ exactly-once structured worker writes are recorded in
 `docs/ui-parity/evidence/title-clipboard/validation.md`. An active native body
 editor can remain visually empty after structured replacement until Escape;
 this remains a separate unresolved editor issue, not a full clipboard claim.
+
+### Desktop route history and tooltip checkpoint
+
+Master desktop always exposes enabled back/forward controls between Home and
+the page menu, even at a history boundary. Native already owns hash stacks and
+keyboard command dispatch but lacks the header controls. Reuse that navigation
+service, existing header translations and command-binding display for the
+tooltip, without adding another history store or inventing disabled states.
+Production dispatch/boundary tests and paired desktop pointer navigation pass.
+Cold native tooltip trigger geometry is awaited before mounting; generation
+ownership prevents dismissed queued hover/placement callbacks from resurfacing.
+Reflexive native element containment restores same-trigger identity. Actual
+cold anchoring is repaired, but pointer movement can still erase tooltip pixels
+without removing its retained scene; a resize repaints it. This rendering issue
+and the recorded retained Home dependency issue remain unresolved. Evidence and
+remaining limits live in `docs/ui-parity/evidence/header-history/validation.md`.

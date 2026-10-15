@@ -761,7 +761,8 @@ let el_set_checked (el : element) (v : bool) : unit =
 let el_contains (a : element) (b : element) : bool =
   let ka = el_key a in
   ka <> ""
-  && List.exists (fun anc -> el_key anc = ka) (ancestors_of b)
+  && (el_key b = ka
+      || List.exists (fun anc -> el_key anc = ka) (ancestors_of b))
 
 let el_id (el : element) : string =
   Option.value (dom_id_of el) ~default:""

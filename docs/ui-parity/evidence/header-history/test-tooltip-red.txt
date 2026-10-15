@@ -1,0 +1,4 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+Fatal error: exception Failure("a tooltip waits for its native trigger geometry")

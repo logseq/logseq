@@ -33,10 +33,13 @@ open Lui_elements
 let menu_dismiss_installed = ref false
 
 let icon_btn ~key ?(acc = "") ~icon_name ~label ?disabled_signal
-    ?foreground_signal ?style_class on_press =
+    ?foreground_signal ?style_class ?keys on_press =
   button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
+    ~data_attrs:(match keys with
+      | Some keys -> [ "data-tooltip-keys", keys ]
+      | None -> [])
     ?disabled_signal ?foreground_signal ?style_class
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ]
@@ -111,6 +114,18 @@ let right_toggle_btn ms =
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
+(* Desktop master keeps both history controls enabled at stack boundaries. *)
+let history_buttons () =
+  let history_button key command icon label action =
+    let binding = (Option.get (Commands_data.command_by_id command)).Commands_data.sc in
+    let keys = String.concat " " (String.split_on_char '+' (Commands_data.display binding)) in
+    icon_btn ~key ~icon_name:icon ~label ~keys action
+  in
+  [ history_button "history-back" "go/backward" "arrow-left" (I18n.t "header/go-back")
+      Ui_services.nav_back
+  ; history_button "history-forward" "go/forward" "arrow-right" (I18n.t "header/go-forward")
+      Ui_services.nav_forward ]
+
 (* rtc status as a toolbar item: a ghost cloud button — native toolbars
    carry status items as their own spaced items, not fused capsules.
    Dimmed while sync is off, accent while queueing (the .cp__rtc-sync
@@ -167,12 +182,12 @@ let topbar (ms : Model.t Signal.signal) : t list =
                  (search_btn ()) ]
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:5 ~style_class:"cp__header-r"
-          [ rtc_item ms; home_item ms
-          ; row ~key:"toolbar-menu-anchor" ~cross:`center
+          ([ rtc_item ms; home_item ms ] @ history_buttons () @
+          [ row ~key:"toolbar-menu-anchor" ~cross:`center
               [ dots_btn; right_toggle_btn ms
               ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
                     a.page_menu = b.page_menu && a.data_gen = b.data_gen)
-                  Page_menu.toolbar_view ms ] ] ]
+                  Page_menu.toolbar_view ms ] ]) ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
