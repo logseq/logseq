@@ -1,0 +1,4 @@
+File "test/native_host/host_scroll_test.ml", line 91, characters 10-35:
+91 |   ignore (Host_scroll.prepare_frame ui host);
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound value Host_scroll.prepare_frame

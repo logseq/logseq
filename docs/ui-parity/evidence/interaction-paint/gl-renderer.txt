@@ -1,0 +1,2 @@
+renderer: Lui_gl
+logseq_native: 1280x900 drawable (scale 1.00), renderer=lui_gl, icons=6192

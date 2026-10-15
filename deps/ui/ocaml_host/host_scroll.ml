@@ -16,6 +16,14 @@ let content_bounds ~viewport ~padding_x ~padding_y ~rect_of ~children nodes =
     (viewport.Lui_scene.x +. viewport.w, viewport.y +. viewport.h) nodes in
   (viewport.x, viewport.y, right, bottom)
 
+(* Interaction state is outside the store journal. Forward the same hints
+   as the standard window assembly before planning retained fragments. *)
+let prepare_frame ui host =
+  let hard, soft = Lui_window.Ui.paint_hints ui (Lui_host.store host) in
+  Hashtbl.iter (fun id () -> Lui_host.note_paint host id) hard;
+  Hashtbl.iter (fun id () -> Lui_host.note_moved host id) soft;
+  Lui_window.Ui.scroll_epoch ui
+
 (* Layout metrics are published after painting. A shrinking range can
    clamp the offset then; keep that change alive for the following frame. *)
 let finish_frame ui ~painted_scroll_epoch =

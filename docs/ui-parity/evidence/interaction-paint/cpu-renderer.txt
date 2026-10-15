@@ -1,0 +1,1 @@
+logseq_native: 1280x900 drawable (scale 1.00), renderer=lui_raster+blit, icons=6192

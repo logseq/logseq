@@ -243,3 +243,18 @@ cold anchoring is repaired, but pointer movement can still erase tooltip pixels
 without removing its retained scene; a resize repaints it. This rendering issue
 and the recorded retained Home dependency issue remain unresolved. Evidence and
 remaining limits live in `docs/ui-parity/evidence/header-history/validation.md`.
+
+### Native interaction paint integration checkpoint
+
+The custom SDL frame loop synchronizes scroll translations but does not forward
+Ui.paint_hints, unlike the standard LUI Assembly.repaint boundary. Retained paint
+hooks read hover/focus/selection state outside the store journal, so these changes
+must be offered to the existing host hint API. Replace the scroll-only duplicate
+with the standard interaction preparation and retain the post-layout scroll-epoch
+clamp check. Production retained-button tests verify missing-hint negative control and
+hover/focus/press replanning; actual GL long-page scrolling down/up passes.
+The original tooltip pixel gap remains on GL, but actual CPU raster preserves
+it through the same pointer move. This narrows the rendering investigation;
+it does not establish a dependency root cause or claim the gap is fixed.
+Evidence lives in `docs/ui-parity/evidence/interaction-paint/validation.md`.
+Do not use a blanket cache/layout invalidation or edit the dependency repository.

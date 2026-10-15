@@ -70,3 +70,52 @@ let () =
   check "an unchanged scroll epoch does not keep the host repainting"
     (not (Host_scroll.finish_frame ui ~painted_scroll_epoch:(Lui_window.Ui.scroll_epoch ui)));
   print_endline "native scroll geometry: OK"
+
+let () =
+  let ui = Lui_window.Ui.create () in
+  let store_ref = ref None in
+  let plans = ref 0 in
+  let hooks =
+    { Lui_paint.default_hooks with
+      layout = (fun _ -> Lui_paint.placement_of_rect (rect 0. 0. 100. 40.))
+    ; state_of = (fun id ->
+        if id = 2 then incr plans;
+        Lui_window.Ui.state_of ui (Option.get !store_ref) id) } in
+  let host = Lui_host.create ~hooks ~width:100 ~height:40 ~scale:1.
+      ~renderer:{ Lui_host.name = "recording"; render = (fun _ -> Bytes.empty) } () in
+  let store = Lui_host.store host in
+  store_ref := Some store;
+  ignore (Lui_host.apply_batch host
+      { Lui_protocol.generation = 1
+      ; ops = [ CreateNode (1, Root); CreateNode (2, Button); InsertChild (1, 2, 0) ] });
+  ignore (Host_scroll.prepare_frame ui host);
+  ignore (Lui_host.repaint host);
+  let before = !plans in
+  check "the production host painted the initial button" (before > 0);
+  let rects = Lui_window.Rects.create () in
+  Hashtbl.replace rects 1 (rect 0. 0. 100. 40.);
+  Hashtbl.replace rects 2 (rect 0. 0. 100. 40.);
+  ignore (Lui_window.Ui.handle ui store rects (Lui_window.Input.Move (10., 10.)));
+  check "pointer movement changes the production interaction state"
+    (Lui_window.Ui.hovered ui = 2);
+  ignore (Lui_host.repaint host);
+  check "without interaction hints the retained button keeps its old paint plan"
+    (!plans = before);
+  ignore (Host_scroll.prepare_frame ui host);
+  ignore (Lui_host.repaint host);
+  check "native interaction hints replan a hovered retained button without store changes"
+    (!plans > before);
+  let before_focus = !plans in
+  Lui_window.Ui.set_focused ui store 2;
+  ignore (Host_scroll.prepare_frame ui host);
+  ignore (Lui_host.repaint host);
+  check "native focus changes replan the retained control"
+    (!plans > before_focus);
+  let before_press = !plans in
+  ignore (Lui_window.Ui.handle ui store rects
+      (Lui_window.Input.Button_down (10., 10., Lui_window.Input.Left, 1,
+         Lui_window.Input.mods_none)));
+  ignore (Host_scroll.prepare_frame ui host);
+  ignore (Lui_host.repaint host);
+  check "native pressed changes replan the retained control"
+    (!plans > before_press)
