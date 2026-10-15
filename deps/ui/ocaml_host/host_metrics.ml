@@ -13,6 +13,7 @@ type summary = { count : int; p50 : float; p95 : float; maximum : float; mean : 
 type phase_samples = { values : float array; formatted : string option array;
   indices : int array; scratch : int array;
   mutable used : int; mutable next : int; mutable total : int; mutable sum : float;
+  mutable total_ms : float;
   mutable summary : summary option; mutable serialized_header : string option }
 
 type process_memory = { footprint_bytes : int; peak_footprint_bytes : int;
@@ -64,7 +65,7 @@ let idle_timeout ~dirty ~now ~last_busy =
 let sample_history () =
   {values=Array.make 240 0.; formatted=Array.make 240 None;
    indices=Array.make 240 0; scratch=Array.make 240 0;
-   used=0; next=0; total=0; sum=0.; summary=None; serialized_header=None}
+   used=0; next=0; total=0; sum=0.; total_ms=0.; summary=None; serialized_header=None}
 let create ~now =
   let work_samples = sample_history () in
   {process_memory=None; raster_background_domains=0; export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
@@ -89,6 +90,7 @@ let record_phase t phase ms =
   history.next <- (history.next + 1) mod Array.length history.values;
   history.used <- min (history.used + 1) (Array.length history.values);
   history.total <- history.total + 1;
+  history.total_ms <- history.total_ms +. ms;
   history.summary <- None;
   history.serialized_header <- None
 
@@ -179,8 +181,10 @@ let snapshot t ~now =
       | None ->
         let summary = phase_summary t phase in
         let prefix = Buffer.create 256 in
-        Printf.bprintf prefix "\"%s\":{\"count\":%d,\"total\":%d,\"p50_ms\":"
+        Printf.bprintf prefix "\"%s\":{\"count\":%d,\"total\":%d,\"total_ms\":"
           name summary.count history.total;
+        Buffer.add_string prefix (json_float history.total_ms);
+        Buffer.add_string prefix ",\"p50_ms\":";
         Buffer.add_string prefix (json_float summary.p50);
         Buffer.add_string prefix ",\"p95_ms\":";
         Buffer.add_string prefix (json_float summary.p95);

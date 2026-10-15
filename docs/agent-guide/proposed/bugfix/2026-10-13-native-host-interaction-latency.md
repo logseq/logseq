@@ -1167,6 +1167,170 @@ nine more than the pristine 790-block graph. Both isolated processes are killed
 at the unchanged protection limit. The 50-Enter, default-renderer memory, and
 visible presentation requirements remain unmet.
 
+## Controlled measurement protocol
+
+Further optimization must follow a measured application bottleneck. A lower
+allocation count in a helper is insufficient when the same end-to-end workload
+still fails. The previous 650 ms captures have different completed-action
+counts; their raw estimates cannot rank application improvements. The store
+reader regressions establish the local allocation reduction independently.
+
+Use fresh SQLite backups of the same inactive demo graph for every repetition.
+Record executable, worker, input script, input library, and graph SHA-256 hashes;
+source revisions and local diff hash; compiler/build profile; renderer; replay
+policy; logical/device viewport; requested and actual raster domain counts;
+window visibility; and profiler mode. Keep the full 1440x900 logical / 2880x1800
+device viewport and four requested raster workers. Do not compile, lint, or run
+tests during measurements. The independent 50 ms memory monitor terminates both
+isolated processes when combined RSS or physical footprint exceeds 200000000
+bytes, including while a graph query is in progress.
+
+Separate three kinds of recording:
+
+1. Unprofiled baseline: measure GUI and worker RSS/physical memory, cumulative
+   phase work, active-frame and presentation timings, and completed actions.
+   Repeat each scenario at least three times; report the median and full range,
+   including failed runs. Three repetitions are preliminary evidence, not a
+   precise confidence interval.
+2. Allocation/CPU diagnosis: replay the same input boundaries with sampling
+   enabled. Attribute sampled bytes to the first allocation site, preserving
+   complete stacks for ownership. Do not add inclusive caller and callee costs.
+   Sampling timings do not qualify as baseline or acceptance measurements.
+3. Retention/native-resource diagnosis: inspect surviving sampled allocations
+   only with live tracking enabled and explicitly record the diagnostic major
+   collections. Capture native memory categories and graphics resource sizes
+   separately. Last-GC live bytes, heap capacity, cumulative allocation, RSS,
+   and physical footprint answer different questions and must stay separate.
+   Atlas bytes and native resource accounting can overlap process accounting;
+   do not add them to the process footprint or label its remainder as a leak.
+
+The workload matrix remains idle (at least 600 seconds), pointer-only movement,
+bidirectional scrolling, navigation/buttons, 200-character typing, 50 Enter
+actions at 10/s, and resize. Preserve rich text and all existing functional and
+presentation acceptance requirements. Diagnostic software-renderer controls
+cannot certify the default Metal backend. Locked-window replay cannot certify
+visible presentation, physical pointer delivery, focus, or IME behavior.
+
+Count injected input, host-handled input, persisted operations, and settled UI
+results separately. Normalize bytes/work by completed actions only when all
+four agree. A guard exit, lost timing samples, missing persistence evidence, or
+unknown UI settlement remains an incomplete workload. Idle controls must retain
+the same editing/focus state as the action recording. Use recorded native-clock
+timestamps as phase boundaries; external memory samples retain their own clock.
+
+The native phase exporter now retains cumulative `total_ms` independently of
+the 240-sample history. Its regression first fails when the ring loses the first
+25 ms sample, then passes with 625 ms of cumulative work and an unchanged 2 ms
+rolling mean. `scripts/native_profile_report.py` uses differences between exact
+recorded boundaries, rejects counter resets/missing provenance, includes GUI
+and worker memory at the same sampling instant, and marks missing quantiles.
+Parent/nested phase totals are reported independently, never summed as CPU time.
+
+`scripts/native_profile_run.py` records isolated demo idle/Enter cohorts and
+preserves raw samples, input logs, checksums, block counts, and termination
+outcomes. It deliberately leaves UI settlement unverified; its report is a
+diagnostic, not an acceptance result. The macOS input library source is
+`scripts/native_input_events.c`; compile it against SDL2 and load it only into
+the isolated GUI using the runner's `--input-library` argument. Input script
+lines have the shape `8000 key 13 0` and `8010 release 13 0`; elapsed times are
+milliseconds from replay startup. Each emitted event logs the native performance
+clock used by the phase exporter.
+
+```sh
+python3 scripts/native_profile_run.py --help
+python3 scripts/native_profile_report.py tmp/native-app/science-enter-1/recording.json
+python3 -m unittest discover -s scripts -p 'test_native_profile_*.py'
+```
+
+Prioritize measured excess over the budget and repeated cost in the workload.
+For each change, record the suspected owner, evidence, maximum plausible saving,
+and a falsifiable prediction. Re-run the identical workload after one change;
+keep it only when the intended bottleneck improves without functional or timing
+regressions. Add a regression at the confirmed boundary, while retaining the
+application acceptance thresholds.
+
+## First controlled release cohorts
+
+These cohorts use the classic 5.5.1 switch, an explicit Dune release build,
+LUI `49c5d766`, Logseq `0e4bfa4ce9` plus the pending geometry and phase-export
+changes, and the same binary/graph/input hashes. No allocation profiler runs.
+The geometry change reduces the 1000-node regression from 390360 to 86360
+allocated bytes; nested clipping/scrolling tests pass. Its preceding fast-Enter
+application run still exits at 200163328 RSS bytes / 105973176 physical bytes
+after 8.28 seconds. This is a local allocation repair, not an application pass.
+
+The new isolated default-Metal startup recordings fail before any scripted
+input, while the store still contains 127 nodes and the managed heap is about
+5 MiB. All three activate the unchanged combined-memory guard:
+
+| Repetition | Combined physical bytes at guard | GUI physical bytes | Worker physical bytes |
+| --- | --- | --- | --- |
+| 1 | 208881128 | 188695536 | 20185592 |
+| 2 | 202753464 | 182453208 | 20300256 |
+| 3 | 209061400 | 188662816 | 20398584 |
+
+This localizes the memory priority to renderer initialization/initial submission
+before the full graph is mounted. It does not yet identify an individual Metal
+allocation. Further store/row micro-optimizations cannot explain this startup
+failure. Native resource attribution must precede the next memory optimization.
+
+The same executable on the Cocoa diagnostic backend completes one Enter in each
+of three fresh 790-block graphs, with all three worker queries returning 791
+blocks. Combined physical peaks are 96388512, 96241128, and 96667112 bytes; RSS
+peaks are 191447040, 191250432, and 191676416 bytes. The recorded post-setup
+windows allocate 31788192, 31780336, and 31789056 host-domain bytes, including
+roughly 36 seconds of background work. A matched idle control is required before
+attributing all of those bytes to Enter. Input-to-host-frame observations are
+44.50, 43.06, and 27.24 ms; they are three individual observations, not a p95
+acceptance distribution. Final UI settlement and visible FPS remain unverified.
+
+The first idle control completes 625 seconds without a protection exit. A
+613.164-second post-setup interval has zero input events and zero layouts,
+167530.71 host-domain allocated bytes/s, 0.07828 minor collections/s, and two
+major collections. The existing idle-allocation validator reports no errors.
+Heap capacity grows from 32016344 to 37291136 bytes; this is not equivalent to
+live process growth. Over external seconds 30-615, combined physical memory
+ranges from 85476792 to 93160888 bytes, median 88606136. The first/last five-second
+medians are 91489720 and 90195384 bytes. Corresponding RSS medians are 186630144
+and 170442752 bytes, with a complete-recording RSS peak of 191791104 bytes.
+This is one hidden Cocoa control, not default-renderer, visible-memory, or FPS
+acceptance, and it does not prove indefinite retention bounds.
+
+Separate startup diagnostics pause the GUI before the protection threshold,
+while the independent memory monitor remains active, then collect `vmmap`
+and kill both isolated processes. These snapshots cannot measure latency.
+The 126.9 MiB GUI snapshot includes 65.4 MiB resident
+`owned unmapped (graphics)` and a 19.8 MiB IOSurface region. A later 168.3 MiB
+snapshot has approximately 65.4 MiB in the former category and 59.3 MiB resident
+IOSurface memory across four regions. The categories are observations from
+different startup phases, not a summed ownership proof. They confirm the next
+memory investigation must attribute native graphics resource creation and
+lifetime; the exact allocation owner and whether any resource is redundant
+remain unresolved. The same binary, graph, worker, and viewport are preserved.
+
+After the collector settles, a further three Enter cohorts use an identical
+runner hash (`cb6d76d6`), binary/worker/graph/input hashes, and a 20-second input
+script. Each injects and handles one Enter and persists exactly one additional
+block. Their measured native windows last 12.082-12.111 seconds and allocate
+27695888, 27696272, and 27697000 host-domain bytes. These include background
+allocation and are not completed-UI costs. Individual input-to-host-frame
+observations are 47.25, 41.98, and 38.00 ms, all above the 32 ms target; maximum
+active-frame work is 46.45, 42.19, and 38.06 ms. These results reproduce an input
+pipeline failure without selecting a helper from a sampled stack prematurely.
+Native geometry totals are 8.97-10.20 ms and scene-build totals 11.18-19.37 ms
+per recording, alongside 27.83-37.21 ms of mailbox work. Phase nesting prevents
+adding these totals into an exclusive CPU breakdown. The next interaction
+profile must attribute allocation and CPU within this reproducible operation.
+
+The memory monitor requests a 50 ms wait between observations. The 625-second
+cohort's actual sampling gaps have median 58.62 ms, p95 60.39 ms, and maximum
+74.38 ms, including system-call and scheduling time. Report measured peaks as
+sampled peaks; do not imply the monitor can prevent every instantaneous
+overshoot. All isolated processes from the protection and snapshot cohorts are
+terminated. The reporter regressions cover aggregation, incomplete workloads,
+counter resets, missing roles/provenance, reduced viewports, invalid visibility,
+insufficient quantile samples, and ring loss; all 13 tests pass.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

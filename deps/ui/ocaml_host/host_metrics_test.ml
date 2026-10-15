@@ -59,6 +59,12 @@ let () =
   let layout = Host_metrics.phase_summary active Layout in
   check "Phase history is unbounded or retains old outliers"
     (layout.count = 240 && layout.maximum = 2. && layout.mean = 2.);
+  check "Phase export must retain lifetime work after the timing ring wraps"
+    (contains (Host_metrics.snapshot active ~now:2.)
+      "\"layout\":{\"count\":240,\"total\":301,\"total_ms\":625.0,");
+  check "An unmeasured phase must export zero lifetime work"
+    (contains (Host_metrics.snapshot active ~now:2.)
+      "\"gpu_execute\":{\"count\":0,\"total\":0,\"total_ms\":0.0,");
   check "Unsampled phase reports fictitious work"
     ((Host_metrics.phase_summary active Gpu_execute).count = 0);
   Host_metrics.record_presentation_samples active ~total:3 [|10.; 20.; 30.|];
