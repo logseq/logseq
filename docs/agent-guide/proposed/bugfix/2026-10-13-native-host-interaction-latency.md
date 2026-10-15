@@ -1186,6 +1186,118 @@ colored and translucent data still require their full representation. No image
 format or default backend change is included in the timer/export fix. The
 source and raw results are in science-gray-surface-control.
 
+## Actual scroll memory cohort
+
+The final-image census rejects grayscale storage as a material application
+optimization: only 25 of 57 cropped images qualify, most already occupy a
+single allocation page. Their predicted aligned saving is 114688 bytes from
+3735552 image bytes. The complete presenter owns 4210688 bytes including
+backgrounds. No format or segmentation change is adopted. Evidence is in
+science-surface-census-panel-r1/surfaces/gray-analysis.json.
+
+The first scroll script ended its pointer sweep at x999, outside the main
+scroller's logical right edge near x997. Wheel events alone were insufficient
+functional evidence; science-stream-scroll-panel-long-r1 is explicitly excluded
+and stopped before its planned long idle. A separate native offset diagnostic
+at [600,450] observes 0 to 6776 device pixels and back to zero, with scroll epoch
+155 and a final 4516-pixel range. The corrected unprofiled script resets to that
+position before scrolling. Its graph, worker, full viewport, software backend,
+and single raster worker remain unchanged.
+
+science-stream-scroll-panel-long-r2 exits normally after 670.81 seconds,
+replaying all 602 pointer moves and 2400 wheel events across four alternating
+sweeps. Combined sampled physical peak is 135267792 bytes, comprising 108463064
+GUI and 26804728 worker bytes at that instant. Final physical footprints are
+107381744 and 26673656 bytes; GUI lifetime peak is 108872664 bytes. Combined RSS
+peaks at 230703104 bytes under the authorized temporary physical-only guard.
+The sampled window remains occluded, so this is not screen/FPS acceptance.
+
+Over the final 603.49 seconds, no layout runs; one SDL event is observed.
+Host allocation averages 1015393 bytes/s and minor collections 0.466/s, failing
+the existing 256 KiB/s and 0.1/s budgets. Last-completed-GC live bytes change
+from 39044552 to 39441760 and heap capacity from 53329896 to 55108112 bytes.
+These values do not establish an unbounded leak, but the retained post-scroll
+footprint exceeds the target. The same graph requires retained-allocation
+attribution before choosing another optimization.
+
+The recorded scroll interval has active-frame p95 31.73 ms, input-latency p95
+33.15 ms, layout p95 9.27 ms, scene-build p95 9.95 ms, and overlay p95 9.92 ms.
+Timing histories lose no samples. The default Metal working set remains a
+separate failure; neither the software cohort nor timer/export regressions
+close the complete memory or performance objective.
+
+## Retained paint fragment lifetime
+
+A live-allocation diagnostic replays the corrected scroll workload using the
+same release executable, sampling allocations from seconds 16 through 59.
+Diagnostic full major collections run when sampling stops; these measurements
+are not normal application memory acceptance. The run exits normally at 85.92
+seconds. It estimates 23760000 newly allocated bytes still live, of which
+21680000 have retained-paint allocation stacks. Fresh fragment records account
+for 10560000 bytes, their rectangles for several more MB, and parent-map entries
+for approximately 3200000 bytes. The live native store has only 436 nodes, with
+436 shallow snapshots, zero subtree snapshots/handles, and 111 text layouts.
+Evidence is in science-stream-scroll-live-profile-r1.
+
+The paint cache uses the last painted child lists to purge deleted subtrees.
+Those lists omit previously virtualized children and can change during nested
+scope disposal. Parent links also survive deletion, and old geometry/interaction
+hints recreate fragments for IDs absent from the final store. A repeated native
+teardown regression initially leaves 113 fragments and 301 parent links for
+one live store node; a second regression recreates resources from deleted-node
+hints. Both fail before the fix.
+
+LUI commit 4b8cc1d8 on feat/ml-backend prunes retired fragment, parent, pending
+work, and virtual-window records at structural journal boundaries against the
+final store. Hints name only live nodes, complete invalidation clears every
+associated index, and dropping the last root still clears the presented scene.
+The teardown regression now retains one fragment and one parent link. All 21
+retained-paint tests pass, including full-paint scene equivalence, remounting,
+virtual-window movement, random updates, root removal, and journal resync.
+Complete LUI release build/test/install aliases and native application release
+build/test aliases pass. Formatting checks pass with the installed formatter
+from the 5.5.0 switch. No Dune files or warning policies change in LUI.
+
+The rebuilt production candidate, science-retained-scroll-panel-long-r1,
+uses executable SHA-256
+106d83b7958d65b819349ab6a2adc9b84bebb506776e07220646b608a4ac03d3.
+Graph, worker, input script/library, viewport, renderer, raster worker count,
+and allocator environment match the unprofiled pre-fix cohort. It exits
+normally after 671.54 seconds with all 602 pointer moves and 2400 wheel events.
+Combined physical peak falls from 135267792 to 105088488 bytes; the peak occurs
+at 24.14 seconds, with 79037424 GUI and 26051064 worker bytes. Final footprints
+are 68207600 GUI plus 22643192 worker bytes, totaling 90850792 bytes, versus
+134055400 bytes before. Combined RSS peak is 197197824 bytes. GUI lifetime peak
+is 79152112 bytes. Worker footprint varies independently and is reported rather
+than credited to the GUI fix.
+
+The final 602.98 seconds contain zero events and zero layouts. Sampled live
+bytes change from 11711656 to 12238792 and heap capacity from 25040456 to
+25843584 bytes, substantially below the earlier retained 39 MB. Host allocation
+still averages 1009419 bytes/s and minor GC 0.481/s with the metrics panel open;
+those idle budgets fail. Scroll active-frame p95 is 30.29 ms, input latency
+30.91 ms, layout 9.73 ms, scene build 10.10 ms, and overlay 9.87 ms, with complete
+histories. The peak still exceeds 100 MB, actual screen presentation remains
+unverified, and the default Metal working set is unchanged. This is a measured
+retention fix, not completion of either memory or frame-rate acceptance.
+
+A rebuilt native offset diagnostic independently verifies post-fix scrolling:
+0 to 7333 device pixels and back to zero, scroll epoch 167, with five journals
+and a final 4516-pixel range. It exits normally after 31.75 seconds. This is
+functional offset evidence, not a replacement for screen-visible acceptance.
+Evidence is in science-scroll-offset-after-r1/semantic-results.json.
+
+An independent allocation-volume capture starts at second 65, after the same
+scroll workload, and runs for 20 seconds without forced collections. It
+estimates 19440000 allocated bytes. The largest stack groups include raster
+operation bounds and damage comparison, overlay prefix/reuse lists, and
+reversing the composed glyph list. Individual leading bounds stacks estimate
+1920000, 1520000, and 1200000 bytes. These identify the next allocation owners;
+no new cache or storage policy is selected from allocation volume alone. The
+producer's alive column is inapplicable when live tracking is disabled and is
+explicitly excluded from the parsed report. The diagnostic exits normally at
+100 seconds. Evidence is in science-retained-scroll-idle-profile-r1.
+
 ## Optimistic Enter order during asynchronous delta publication
 
 The native application reproduces new empty rows above their original block
