@@ -50,6 +50,7 @@ type t = {
   mutable input_latency_ms : float;
   mutable missed : int;
   mutable panel_open : bool;
+  mutable panel_sample : (int * float * string list) option;
   mutable input_at : float option;
   mutable layout_count : int;
   mutable patch_ops : int;
@@ -73,7 +74,7 @@ let create ~now =
   sample_history ()) phases; samples=work_samples.values; work_samples; work_sorted=false; count=0; cursor=0;
   presented=0; started=now; fps=0.; frame_ms=0.; paint_ms=0.; layout_ms=0.;
   render_ms=0.; gpu_submit_ms=0.; populate_ms=0.; event_ms=0.; input_latency_ms=0.; missed=0;
-  panel_open=false; input_at=None; layout_count=0; patch_ops=0; event_count=0; pump_ms=0.}
+  panel_open=false; panel_sample=None; input_at=None; layout_count=0; patch_ops=0; event_count=0; pump_ms=0.}
 let note_key t key =
   t.key_downs <- t.key_downs + 1;
   if key = "Enter" then t.enter_downs <- t.enter_downs + 1
@@ -245,7 +246,18 @@ let percentile t fraction =
     t.samples.(t.work_samples.indices.(min (t.count - 1)
       (int_of_float (fraction *. float t.count))))
   end
-let toggle_panel t = t.panel_open <- not t.panel_open
+let sample_panel t ~generation build =
+  if not t.panel_open then invalid_arg "Cannot sample a closed metrics panel";
+  match t.panel_sample with
+  | Some (previous,fps,values) when previous=generation && fps=t.fps -> values
+  | _ ->
+      let values = build () in
+      t.panel_sample <- Some (generation,t.fps,values);
+      values
+
+let toggle_panel t =
+  t.panel_sample <- None;
+  t.panel_open <- not t.panel_open
 
 let panel_width t width = if t.panel_open then min 440. (width *. 0.35) else 0.
 let content_width t width = width -. panel_width t width

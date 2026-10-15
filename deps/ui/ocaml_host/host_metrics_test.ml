@@ -250,3 +250,45 @@ let () =
     (active.key_downs = 2 && active.enter_downs = 1
      && active.text_commits = 1 && active.text_bytes = 6);
   print_endline "native metrics: OK"
+
+
+let () =
+  let metrics = Host_metrics.create ~now:0. in
+  Host_metrics.toggle_panel metrics;
+  let samples = ref 0 in
+  let build () = incr samples; [Printf.sprintf "Sample %d" !samples; String.make 512 'x'] in
+  let first = Host_metrics.sample_panel metrics ~generation:10 build in
+  let before = Gc.allocated_bytes () in
+  for _=1 to 1000 do ignore (Host_metrics.sample_panel metrics ~generation:10 build) done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 1000. in
+  Printf.printf "native metrics sampled values allocated %.0f bytes/read\n%!" allocated;
+  check "Painting an unchanged metrics sample rebuilt formatted values" (!samples=1);
+  check "An unchanged panel sample lost its identity"
+    (Host_metrics.sample_panel metrics ~generation:10 build == first);
+  check "Reading sampled metrics allocates new formatted strings" (allocated <= 128.);
+  ignore (Host_metrics.sample_panel metrics ~generation:11 build);
+  check "A new sampling interval retained stale values" (!samples=2);
+  metrics.fps <- 120.;
+  ignore (Host_metrics.sample_panel metrics ~generation:11 build);
+  check "A new FPS reading retained stale panel values" (!samples=3);
+  Host_metrics.toggle_panel metrics;
+  let rejected = try ignore (Host_metrics.sample_panel metrics ~generation:11 build); false
+    with Invalid_argument _ -> true in
+  check "Sampling a closed panel did not reject its caller" rejected;
+  Host_metrics.toggle_panel metrics;
+  ignore (Host_metrics.sample_panel metrics ~generation:11 build);
+  check "Reopening a panel in the same interval reused a closed sample" (!samples=4);
+  let failed = try ignore (Host_metrics.sample_panel metrics ~generation:12 (fun () ->
+    failwith "sample failure")); false with Failure _ -> true in
+  check "A sample-builder exception was hidden" failed;
+  ignore (Host_metrics.sample_panel metrics ~generation:12 build);
+  check "A failed sample was cached instead of retried" (!samples=5);
+  let previous = Weak.create 1 in
+  let remember () =
+    let value = Host_metrics.sample_panel metrics ~generation:13 build in
+    Weak.set previous 0 (Some value) in
+  remember ();
+  ignore (Host_metrics.sample_panel metrics ~generation:14 build);
+  Gc.full_major ();
+  check "Panel sampling retained a superseded value list" (Weak.get previous 0=None);
+  print_endline "native metrics sampling lifetime: OK"

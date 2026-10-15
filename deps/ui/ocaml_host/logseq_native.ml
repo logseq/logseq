@@ -920,8 +920,8 @@ let () =
     else
       let x = content_width () in
       let width = float !win_w -. x in
-      let gc = Gc.quick_stat () in
-      let lines =
+      let lines = Host_metrics.sample_panel metrics ~generation:(overlay_generation ()) (fun () ->
+        let gc = Gc.quick_stat () in
         [ "Native performance (Dev)"
         ; Printf.sprintf "FPS: %.1f / %.0f" metrics.fps Host_metrics.target_fps
         ; Printf.sprintf "Frame budget: %.2f ms" Host_metrics.frame_budget_ms
@@ -950,18 +950,15 @@ let () =
         ; Printf.sprintf "Heap: %.1f MB" (float gc.Gc.heap_words *. 8. /. 1048576.)
         ; Printf.sprintf "GC minor / major: %d / %d" gc.minor_collections gc.major_collections
         ; "Click dialog again to close this buffer."
-        ]
+        ])
       in
       ops @ (box x 48. width (float !win_h -. 48.) bg
         :: box x 48. 1. (float !win_h -. 48.) accent
         :: List.concat (List.mapi (fun i line ->
              label (i+2) (x +. 18.) (64. +. float i *. 31.) (width -. 36.) line) lines)) in
-  let metrics_overlay = Host_interaction.overlay_cache () in
-  paint_metrics := (fun scene ->
-    scene.Lui_scene.width <- int_of_float (float !win_w *. !scale_cell);
-    let key = scene.width,scene.height,!scale_cell,!Theme_vars.generation,
-      metrics.panel_open,overlay_generation (),Printf.sprintf "%.0f FPS" metrics.fps in
-    Host_interaction.overlay_cached metrics_overlay ~key scene (fun () -> draw_metrics scene));
+  (* Values are sampled at the panel cadence; label fragments and the complete
+     renderer overlay already have their own caches. *)
+  paint_metrics := draw_metrics;
   (* macOS sidebar vibrancy: the left sidebar column is the node
      classed cp__sidebar-left-layout; populate_rects records its id so
      the render hook below can keep an NSVisualEffectView under the
