@@ -1,0 +1,6 @@
+Entering directory '/home/user/logseq-ui-parity/native/deps/ui'
+File "test/native_host/sidebar_sizing_test.ml", line 12, characters 12-41:
+12 |     (close (Sidebar_state.load_left_width 1280.) 246.);
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound value Sidebar_state.load_left_width
+Leaving directory '/home/user/logseq-ui-parity/native/deps/ui'

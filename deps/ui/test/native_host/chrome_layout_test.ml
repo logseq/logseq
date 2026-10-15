@@ -109,6 +109,7 @@ let () =
   check "sidebar input changes do not overwrite the open modal" (!target = Some 9001.);
   Dom_ext.doc_elements_provider := previous_elements;
   Host.set_host_op previous_host_op;
+  Host.set_window_size 1280. 900.;
   let store = Lui_store.create () in
   let backend =
     { Lui_protocol.backend_profile =
@@ -242,6 +243,11 @@ let () =
       ignore (Lui_app.send app { initial with left_sidebar_open });
       ignore (Lui_app.flush app);
       Lui_layout.sync ~width:1280. ~height:900. layout store;
+      if left_sidebar_open then begin
+        let background = Option.get (Lui_layout.rect layout (by_id "left-sidebar-header-background")) in
+        check "the open left dock's header background follows its pixel width"
+          (background.x = 0. && background.y = 0. && background.w = 246. && background.h = 48.)
+      end;
       let _, height = Lui_layout.content_extent layout in
       check "the native shell stays inside its offered viewport" (height <= 900.);
       let menu = Option.get (Lui_layout.rect layout (by_id "left-menu")) in
@@ -281,6 +287,21 @@ let () =
             (menu.y = 40. && menu.w = 256.))
         [ 1280.; 1100. ])
     [ false; true ];
+  let sizing = Option.get !Sidebar_state.st_ref in
+  Signal.set sizing.viewport_w 1280.;
+  let previous_fraction = Runtime.signal_get sizing.right_fraction in
+  Signal.set sizing.right_fraction 0.65;
+  ignore (Lui_app.send app { initial with right_sidebar_open = true });
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~width:1280. ~height:900. layout store;
+  let inner = by_id "right-sidebar-container" in
+  check "a preferred 65 percent right dock keeps its inner minimum within the visible 60vw pane"
+    (Lui_store.int_prop store inner "min-width" = Some 756);
+  let inner_rect = Option.get (Lui_layout.rect layout inner) in
+  check "the capped right dock's full inner layout does not extend past the window"
+    (inner_rect.w <= 768. && inner_rect.x +. inner_rect.w <= 1280.);
+  Signal.set sizing.right_fraction previous_fraction;
+  ignore (Lui_app.flush app);
   let previous_worker = !Runtime.worker in
   let dead, _, _ = Js.Promise.pending () in
   Runtime.worker := Some

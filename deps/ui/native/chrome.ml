@@ -232,7 +232,15 @@ let rtc_item (ms : Model.t Signal.signal) : t =
 (* cljs container.cljs: single .cp__header row — .l [sidebar-toggle,
    search], .r [rtc, home, dots, right-toggle]. *)
 let topbar (ms : Model.t Signal.signal) : t list =
-  [ row ~key:"head" ~accessibility_identifier:"head"
+  let sidebar = Sidebar_state.ensure ms in
+  [ stack ~height:48
+      [ overlay ~alignment:`top_leading
+          [ if_ ~test:(reactive (fun (model : Model.t) -> model.left_sidebar_open) ms)
+              (Ui_parts.int_prop_signal Lui_protocol.WidthValue
+                 (Signal.value sidebar.Sidebar_state.left_width) int_of_float
+                 (box ~height:48 ~background:"muted"
+                    ~accessibility_identifier:"left-sidebar-header-background" [])) ]
+      ; row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
@@ -257,6 +265,7 @@ let topbar (ms : Model.t Signal.signal) : t list =
                    ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
                          a.page_menu = b.page_menu && a.data_gen = b.data_gen)
                        Page_menu.toolbar_view ms ] ]))) context parent) ]
+      ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
@@ -381,32 +390,34 @@ let left_sidebar (ms : Model.t Signal.signal) =
    (the native kit has no split animation today). *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  Ui_parts.int_prop_signal Lui_protocol.Gap ms
-    (fun (m : Model.t) -> if m.left_sidebar_open then 3 else 0)
-    (split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:3
+  split ~key:"left-split" ~accessibility_identifier:"left-sidebar-split"
+       ~grow:1. ~min_height:0 ~gap:0
     ~value:
       (reactive
-         (fun (m : Model.t) f ->
-           if m.Model.left_sidebar_open then f
+         (fun (m : Model.t) width right viewport ->
+           let available = viewport *. (if m.right_sidebar_open
+               then 1. -. Sidebar_state.visible_right_fraction right else 1.) in
+           if m.left_sidebar_open then width /. available
            else Sidebar_state.closed_fraction)
-         ms (Signal.value st.Sidebar_state.left_fraction))
+         ms (Signal.value st.Sidebar_state.left_width)
+         (Signal.value st.Sidebar_state.right_fraction)
+         (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content)
+    (left_sidebar ms) content
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  Ui_parts.int_prop_signal Lui_protocol.Gap ms
-    (fun (m : Model.t) -> if m.right_sidebar_open then 3 else 0)
-    (split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:3
+  split ~key:"right-split" ~accessibility_identifier:"right-sidebar-split"
+       ~grow:1. ~min_height:0 ~gap:0
     ~value:
       (reactive
          (fun (m : Model.t) f ->
-           if m.Model.right_sidebar_open then 1. -. f else 1.)
+           if m.Model.right_sidebar_open then 1. -. Sidebar_state.visible_right_fraction f else 1.)
          ms (Signal.value st.Sidebar_state.right_fraction))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
-    first second)
+    first second
 
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)

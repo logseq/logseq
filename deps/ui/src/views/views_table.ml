@@ -254,7 +254,7 @@ let main_track_avail () : int Signal.signal option =
               (Signal.map2
                  (fun (m : Model.t) lf -> (m, lf))
                  ms
-                 (Signal.value st.Sidebar_state.left_fraction))
+                 (Signal.value st.Sidebar_state.left_width))
               (Signal.map2
                  (fun rf vw -> (rf, vw))
                  (Signal.value st.Sidebar_state.right_fraction)
@@ -267,11 +267,11 @@ let main_track_avail () : int Signal.signal option =
                   if vw <= 1. then Ui_services.dom_viewport_width () else vw
                 in
                 let content =
-                  if m.Model.right_sidebar_open then vw *. (1. -. rf) else vw
+                  if m.Model.right_sidebar_open then vw *. (1. -. Sidebar_state.visible_right_fraction rf) else vw
                 in
                 let left =
                   if Sidebar_state.left_docked m.Model.left_sidebar_open vw
-                  then lf *. content
+                  then lf
                   else 0.
                 in
                 (* 24px: split gap + the page wrap's horizontal pad *)

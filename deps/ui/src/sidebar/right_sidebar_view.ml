@@ -605,7 +605,7 @@ let inner ?header_end_inset st =
     (Signal.map2 (fun a b -> (a, b))
        (Signal.value st.Sidebar_state.right_fraction)
        (Signal.value st.Sidebar_state.viewport_w))
-    (fun (rf, vw) -> int_of_float (rf *. vw) - 12)
+    (fun (rf, vw) -> int_of_float (Sidebar_state.visible_right_fraction rf *. vw) - 12)
     (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
        ~grow:1.
        ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"

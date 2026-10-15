@@ -1,0 +1,6 @@
+Entering directory '/home/user/logseq-ui-parity/native/deps/ui'
+File "test/native_host/host_split_test.ml", line 26, characters 18-35:
+26 |       let state = Host_split.create () in
+                       ^^^^^^^^^^^^^^^^^
+Error: Unbound value Host_split.create
+Leaving directory '/home/user/logseq-ui-parity/native/deps/ui'

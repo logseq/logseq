@@ -1,0 +1,84 @@
+{
+  "viewport": [
+    1280,
+    900
+  ],
+  "storage": {
+    "ls-left-sidebar-width": "\"246.00px\"",
+    "ls-left-sidebar-open?": "true"
+  },
+  "nodes": [
+    {
+      "id": "left-sidebar",
+      "cls": "is-open cp__sidebar-left-layout",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 246,
+        "height": 900,
+        "top": 0,
+        "right": 246,
+        "bottom": 900,
+        "left": 0
+      },
+      "width": "246px",
+      "maxWidth": "none",
+      "role": null,
+      "tabIndex": -1
+    },
+    {
+      "id": "",
+      "cls": " left-sidebar-resizer",
+      "rect": {
+        "x": 245,
+        "y": 0,
+        "width": 3,
+        "height": 900,
+        "top": 0,
+        "right": 248,
+        "bottom": 900,
+        "left": 245
+      },
+      "width": "3px",
+      "maxWidth": "none",
+      "role": null,
+      "tabIndex": -1
+    },
+    {
+      "id": "right-sidebar",
+      "cls": "open cp__right-sidebar h-screen",
+      "rect": {
+        "x": 768,
+        "y": 0,
+        "width": 512,
+        "height": 900,
+        "top": 0,
+        "right": 1280,
+        "bottom": 900,
+        "left": 768
+      },
+      "width": "512px",
+      "maxWidth": "768px",
+      "role": null,
+      "tabIndex": -1
+    },
+    {
+      "id": "",
+      "cls": " resizer",
+      "rect": {
+        "x": 769,
+        "y": 0,
+        "width": 3,
+        "height": 900,
+        "top": 0,
+        "right": 772,
+        "bottom": 900,
+        "left": 769
+      },
+      "width": "3px",
+      "maxWidth": "none",
+      "role": "separator",
+      "tabIndex": 0
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+native scroll geometry: OK
+native split gestures: OK
+native window damage: OK
+native app theme rendering: OK
+native text rendering: OK
+native settings layout: OK
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+File "test/native_host/dune", line 111, characters 7-26:
+111 |  (name sidebar_sizing_test)
+             ^^^^^^^^^^^^^^^^^^^
+Fatal error: exception Failure("continued dragging beyond the left limit does not rewrite unchanged preferences")
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+window close cancelled: Failure("expected latest title save rejection")
+window close cancelled: Failure("expected title save rejection")
+window close cancelled: Failure("expected body save rejection")

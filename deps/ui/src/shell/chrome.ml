@@ -789,22 +789,9 @@ let right_sidebar (ms : Model.t Signal.signal) =
    its expanded layout and is clipped by the pane's overflow:hidden
    (slide-out) instead of reflowing/shrinking its text. The left
    split's own width is the right split's first track. *)
-let left_inner_min_width (st : Sidebar_state.t)
-    (ms : Model.t Signal.signal) =
-  Ui_parts.int_prop_signal Lui_protocol.MinWidth
-    (Signal.map2 (fun a b -> (a, b))
-       (Signal.map2 (fun m lf -> (m, lf)) ms
-          (Signal.value st.Sidebar_state.left_fraction))
-       (Signal.map2 (fun rf vw -> (rf, vw))
-          (Signal.value st.Sidebar_state.right_fraction)
-          (Signal.value st.Sidebar_state.viewport_w)))
-    (fun ((m, lf), (rf, vw)) ->
-      (* -12 slack: the gaps/dividers keep the exact track fraction a
-         few px under lf*vw; a min-width 1px too wide would clip the
-         pane's border while open *)
-      int_of_float
-        (lf *. vw *. if m.Model.right_sidebar_open then 1. -. rf else 1.)
-      - 12)
+let left_inner_min_width (st : Sidebar_state.t) =
+  Ui_parts.int_prop_signal Lui_protocol.MinWidth (Signal.value st.Sidebar_state.left_width)
+    (fun width -> int_of_float width - 12)
 
 let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
@@ -813,7 +800,7 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~style_class:"cp__sidebar-left-layout"
-       [ left_inner_min_width st ms
+       [ left_inner_min_width st
            (column ~key:"ls-inner" ~grow:1. ~min_height:0
               ~background:
                 "var(--left-sidebar-bg-color)"
@@ -869,12 +856,14 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (split ~key:"left-split" ~grow:1. ~gap:3
        ~value:
          (reactive
-            (fun (m : Model.t) f vw ->
-              if Sidebar_state.left_docked m.Model.left_sidebar_open vw
-              then f
+            (fun (m : Model.t) width right viewport ->
+              let available = viewport *. (if m.right_sidebar_open
+                  then 1. -. Sidebar_state.visible_right_fraction right else 1.) in
+              if Sidebar_state.left_docked m.left_sidebar_open viewport
+              then width /. available
               else Sidebar_state.closed_fraction)
-            ms
-            (Signal.value st.Sidebar_state.left_fraction)
+            ms (Signal.value st.Sidebar_state.left_width)
+            (Signal.value st.Sidebar_state.right_fraction)
             (Signal.value st.Sidebar_state.viewport_w))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_left_split_resize st)
@@ -895,7 +884,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
        ~value:
          (reactive
             (fun (m : Model.t) f ->
-              if m.Model.right_sidebar_open then 1. -. f else 1.)
+              if m.Model.right_sidebar_open then 1. -. Sidebar_state.visible_right_fraction f else 1.)
             ms (Signal.value st.Sidebar_state.right_fraction))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_right_split_resize st)

@@ -211,14 +211,6 @@ let () =
   let prefer_metal =
     Host_platform.is_macos && not use_cpu && env <> "gl" && env <> "opengl"
   in
-  (* The embedded app's bootstrap (~70ms) is pure OCaml work — it
-     touches no SDL/Metal state. Run it on a spare domain while this
-     thread does window + renderer setup; joined below right before
-     the init patches are applied. *)
-  let init_d =
-    Domain.spawn
-      (fun () -> Native_embed.initialize Host_platform.platform_code 0 "")
-  in
   sdl_ok (Sdl.init Sdl.Init.(video + events));
   Daemon_client.boot_mark "sdl init";
   sdl_ok (Sdl.gl_set_attribute Sdl.Gl.context_major_version 3);
@@ -250,6 +242,12 @@ let () =
     else None
   in
   Daemon_client.boot_mark "window+gpu ctx";
+  let logical_width, logical_height = Sdl.get_window_size !win in
+  Host.set_window_size (float logical_width) (float logical_height);
+  (* Bootstrap can overlap renderer setup once services know the actual
+     logical viewport, including window-manager size constraints. *)
+  let init_d = Domain.spawn
+      (fun () -> Native_embed.initialize Host_platform.platform_code 0 "") in
   let gctx =
     if Option.is_some metal || software_window then None
     else match Sdl.gl_create_context !win with
@@ -294,7 +292,7 @@ let () =
     else Sdl.gl_get_drawable_size !win
   in
   let dw, dh = drawable () in
-  let scale = Float.max 0.01 (float dw /. float width) in
+  let scale = Float.max 0.01 (float dw /. float logical_width) in
   let noop_renderer =
     { Lui_host.name = "noop";
       Lui_host.render =
@@ -704,7 +702,7 @@ let () =
   Lui_host.set_hidden host (Some (fun id -> Ui.hidden ui store id));
   Lui_host.set_ctx_anchor host
     (Some (fun () -> Some (Ui.pointer ui)));
-  let win_w = ref width and win_h = ref height in
+  let win_w = ref logical_width and win_h = ref logical_height in
   (* Content-space visible range for virtual-list nodes. Rects are
      published after this callback on the sync that creates the list,
      so a missing rect means "first screen", not "lay out every row". *)
@@ -1177,6 +1175,7 @@ let () =
     | id :: _ -> id
     | [] -> dom_root ()
   in
+  let split_drag = Host_split.create () in
   if not Host_platform.is_macos then
     native_window_hit_test (Sdl.unsafe_ptr_of_window !win)
       (Some (fun x y ->
@@ -1189,7 +1188,9 @@ let () =
          Host_events.window_hit_test ~width ~height ~x ~y
            ~maximized:(Sdl.Window.test flags Sdl.Window.maximized)
            ~fullscreen:(Sdl.Window.test flags Sdl.Window.fullscreen)
-           ~draggable:(draggable (dom_hit ~x:(float x) ~y:(float y)))));
+           ~draggable:(let hit = dom_hit ~x:(float x) ~y:(float y) in
+               Host_split.pick store rects ~scale:!scale_cell ~hit
+                 ~x:(float x) ~y:(float y) = None && draggable hit)));
   (* DOM `buttons` bitmask: 1 primary, 2 secondary, 4 auxiliary. SDL
      button numbers are 1 left, 2 middle, 3 right while DOM is 0 left,
      1 middle, 2 right — map through Input.mouse_button. *)
@@ -1317,8 +1318,11 @@ let () =
     in
     up node 0
   in
-  let update_cursor node =
-    let name = cursor_for node in
+  let update_cursor ~x ~y node =
+    let resizing = Host_split.active split_drag
+      || (!dom_buttons = 0 && Host_split.pick store rects ~scale:!scale_cell
+            ~hit:node ~x ~y <> None) in
+    let name = if resizing then "col-resize" else cursor_for node in
     if name <> !current_cursor then begin
       current_cursor := name;
       match sys_cursor name with
@@ -1333,13 +1337,14 @@ let () =
   let last_ptr : (int * int) option ref = ref None in
   let refresh_cursor () =
     match !last_ptr with
-    | Some (x, y) -> update_cursor (dom_hit ~x:(float x) ~y:(float y))
+    | Some (x, y) -> update_cursor ~x:(float x) ~y:(float y)
+        (dom_hit ~x:(float x) ~y:(float y))
     | None -> ()
   in
   let on_dom_motion ~x ~y ~rx ~ry ~mods =
     last_ptr := Some (x, y);
     let node = dom_hit ~x:(float x) ~y:(float y) in
-    update_cursor node;
+    update_cursor ~x:(float x) ~y:(float y) node;
     let now = Unix.gettimeofday () in
     let last_node, last_t = !last_move_emit in
     let skip =
@@ -1712,6 +1717,19 @@ let () =
   Callback.register "ocaml_host_menu_command" menu_command;
   let host_req_repaint = ref false in
   let e = Sdl.Event.create () in
+  let split_input = function
+    | Input.Button_down (x, y, Input.Left, _, _) ->
+      Host_split.start split_drag store rects ~scale:!scale_cell
+        ~hit:(dom_hit ~x ~y) ~x ~y
+    | Input.Move (x, _) as input when Host_split.active split_drag ->
+      (* Keep ordinary hover state while the split owns drag activation. *)
+      apply_actions (Ui.handle ui store rects input);
+      Option.iter (fun event -> apply_actions [ Dispatch event ])
+        (Host_split.move split_drag store rects ~scale:!scale_cell ~x);
+      true
+    | Input.Button_up (_, _, Input.Left, _) -> Host_split.release split_drag
+    | _ -> false
+  in
   let drain_events () =
     let n = ref 0 in
     let go = ref true in
@@ -1720,7 +1738,11 @@ let () =
         incr n;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         (match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
-         | `Window_event -> push_window_state ()
+         | `Window_event ->
+           push_window_state ();
+           (match Sdl.Event.window_event_enum (Sdl.Event.get e Sdl.Event.window_event_id) with
+            | `Focus_lost | `Hidden | `Minimized -> ignore (Host_split.release split_drag)
+            | _ -> ())
          | _ -> ());
         (match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
          | `Window_event
@@ -1732,6 +1754,7 @@ let () =
          | _ -> ());
         let native_key_dispatched = ref false in
         (match input_of_event e with
+         | Some input when split_input input -> ()
          | Some (Input.Key_down (_, _, repeat))
            when Host_events.fullscreen_shortcut ~is_macos:Host_platform.is_macos ~repeat
                   ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)

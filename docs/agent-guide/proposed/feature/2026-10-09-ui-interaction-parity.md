@@ -319,3 +319,25 @@ publish only when entering a page, using the existing current-page lifecycle
 rather than adding a title cache. Tests cover metadata refresh, static-route
 publication and returning to the renamed page. Actual Unicode rename,
 navigation and full native worker restart evidence is recorded separately.
+
+### Sidebar sizing and native resize gestures
+
+Actual master starts with a 246px left sidebar and 40% right sidebar. Left drag
+clamps to 240–460px and stores a CSS pixel string; right drag stores percentages,
+uses a 320px drag minimum, can close below half that minimum, and renders no wider
+than 60vw. Graph-view rows are excluded and are not recreated as placeholders.
+
+Actual SDL drag currently emits no Split ValueChanged event, so resizing does
+nothing. Add the missing host-side sidebar-split gesture translation, using
+actual retained geometry and typed resize events. Keep business constraints in
+Sidebar_state rather than the SDL driver. The three-pixel resizer is an overlay
+hit region, not a layout-consuming gap. Preserve popup/gesture ownership and
+logical/device coordinate boundaries; verify both real pointer paths.
+
+Represent left preferred width in pixels and right preferred width as a ratio.
+Write the reference CSS-unit preference values. Convert previously written
+native fractional preferences once before canonical reading, rather than
+continuing a second write format. Seed actual viewport dimensions before app
+initialization. Test clamping, open/close, viewport changes, persisted restore
+and pointer capture; keep keyboard/accessibility, hover transitions and narrow
+layout cases explicitly incomplete until their actual paths are verified.

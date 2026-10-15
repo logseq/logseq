@@ -1,0 +1,28 @@
+{
+  "viewport": [
+    1280,
+    900
+  ],
+  "left": {
+    "x": 0,
+    "y": 0,
+    "width": 309,
+    "height": 900,
+    "top": 0,
+    "right": 309,
+    "bottom": 900,
+    "left": 0
+  },
+  "right": {
+    "x": 720,
+    "y": 0,
+    "width": 560,
+    "height": 900,
+    "top": 0,
+    "right": 1280,
+    "bottom": 900,
+    "left": 720
+  },
+  "leftPref": "\"309.00px\"",
+  "rightPref": "\"43.75%\""
+}
