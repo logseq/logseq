@@ -10,6 +10,24 @@ from native_profile_run import clone_graph, over_limit, sample_processes
 
 
 class NativeProfileRunTest(unittest.TestCase):
+    def test_missing_usage_can_precede_confirmed_process_exit(self):
+        command = [sys.executable, "-u", "-c",
+                   "import sys,time; print('ready'); sys.stdin.readline(); time.sleep(.001)"]
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as process:
+            self.assertEqual("ready\n", process.stdout.readline())
+
+            def read_during_exit(_pid):
+                process.stdin.write("exit\n")
+                process.stdin.flush()
+                raise ProcessLookupError(3, "Usage disappeared before exit became waitable")
+
+            try:
+                result = sample_processes({"gui": process}, read_during_exit)
+            except ProcessLookupError:
+                result = "exit status had not become observable yet"
+            self.assertEqual({}, result)
+            self.assertEqual(0, process.wait(timeout=5))
+
     def test_process_exit_during_memory_read_is_not_a_recording_failure(self):
         with subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"]) as process:
             def read_after_exit(pid):
@@ -53,6 +71,16 @@ class NativeProfileRunTest(unittest.TestCase):
             self.assertTrue(over_limit(row))
             row["processes"]["worker"][field] -= 1
             self.assertFalse(over_limit(row))
+
+    def test_diagnostic_rss_override_keeps_the_combined_physical_limit(self):
+        row = {"processes": {"gui": {"rss_bytes": 240_000_000, "footprint_bytes": 90_000_000},
+                              "worker": {"rss_bytes": 40_000_000, "footprint_bytes": 20_000_000}}}
+        self.assertTrue(over_limit(row))
+        self.assertFalse(over_limit(row, rss_guard=False))
+        row["processes"]["gui"]["footprint_bytes"] = 180_000_001
+        self.assertTrue(over_limit(row, rss_guard=False))
+        row["processes"]["gui"]["footprint_bytes"] -= 1
+        self.assertFalse(over_limit(row, rss_guard=False))
 
     def test_clone_copies_committed_graph_and_omits_runtime_ownership(self):
         with tempfile.TemporaryDirectory() as directory:

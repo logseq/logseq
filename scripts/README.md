@@ -11,6 +11,13 @@ GUI/worker memory, and kills both above a combined 200 MB RSS or physical
 footprint. Build the application before recording and keep builds/tests out of
 the measurement interval. Output directories must not already exist.
 
+For an explicitly authorized diagnostic, `--ignore-rss-limit` records RSS without
+enforcing its threshold. The combined 200 MB physical-footprint guard remains
+active. This flag marks the run as diagnostic even without an attached profiler;
+it cannot produce an eligible timing baseline. Use `--external-profiler` to name
+an attached allocation profiler. The built-in `LOGSEQ_NATIVE_ALLOC_*` settings
+require `--external-profiler ocaml-memprof`.
+
 Compile `native_input_events.c` as a macOS dynamic library against SDL2, for
 example with the bundled application library and locally installed headers:
 

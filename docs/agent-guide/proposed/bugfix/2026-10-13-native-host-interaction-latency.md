@@ -318,6 +318,122 @@ worker count, graph workload, or acceptance limit changed in these experiments.
 Default-renderer memory, all 50 Enter actions, and visible 120/60 FPS acceptance
 remain incomplete.
 
+## Memtrace allocation and lifetime attribution
+
+An authorized diagnostic override now separates the RSS threshold from the
+combined GUI/worker physical-footprint guard. `--ignore-rss-limit` keeps the
+200,000,000-byte physical limit, samples both counters every 50 ms, and marks
+the result as ineligible for an unprofiled timing baseline. Ordinary runs
+retain both guards. A sampler regression also covers the interval in which
+macOS has stopped exposing process usage but the child exit is not yet waitable;
+the sampler waits up to 50 ms to confirm termination and still rejects failed reads
+for a live process.
+
+Memtrace 0.2.3 was installed in the existing OCaml 5.5.1 profiling switch.
+The standard trace writer/reader records sampled allocations, promotions,
+collections, and complete backtraces. A temporary adapter retains and discards
+the OCaml 5 profiling handle and serializes writer access across domains.
+A roundtrip with three worker domains decoded 722 allocation and 700 collection
+events.
+The first application trace reproduced the released encoder's location-field
+overflow; the profiling dependency received the upstream
+[location encoding fix](https://github.com/janestreet/memtrace/pull/23) before
+recapture. The malformed trace is excluded from allocation conclusions.
+No profiling dependency or temporary producer hook is added to the application.
+
+The valid full-size Cocoa trace used 0.0001 samples per word, up to 128 stack
+frames, the unchanged graph and worker, four requested raster workers, and
+50 Enter events at 10 Hz. Its injected, handled, and persisted counts all equal
+50. The native viewport remained 1440x900 points and 2880x1800 pixels. SDL event
+replay establishes the controlled native path; OS input and UI settlement are
+not established by those counters alone.
+
+| Diagnostic measurement | Result |
+| --- | ---: |
+| Estimated Enter-phase allocation | 949,440,000 bytes |
+| Host metric allocation over the recorded input window | 944,821,568 bytes |
+| Allocation with `paint_frame` in its stack | 578,000,000 bytes |
+| Allocation with layout synchronization in its stack | 108,800,000 bytes |
+| Allocation with accessibility synchronization in its stack | 88,240,000 bytes |
+| Combined GUI/worker peak physical footprint | 124,765,624 bytes |
+
+These stack totals are nested and must not be added together. Sampling estimates
+are distinct from exact runtime counters and retained memory. The trace showed
+large allocation churn without a corresponding increase in sampled survivors.
+The next application decision must distinguish live payload, GC capacity and
+metadata, native allocations, and renderer resources.
+
+A follow-up retained the full viewport for the complete 90-second replay,
+including approximately 79 idle seconds after the final Enter. All 50 blocks
+were handled and persisted, and the fixed app exited normally. Before disposing
+any application state, two diagnostic major collections left 22,169,976 live
+managed bytes in 41,620,192 bytes of heap capacity. Memtrace estimated 22.72 MB
+of survivors from 234 sampled objects. Estimated retained allocation owners
+include flex/layout at 5.84 MB, raster buffers at 3.12 MB, scene data at 2.56 MB,
+signals at 2.40 MB, native snapshots at 1.60 MB, and store nodes at 1.20 MB.
+These sampled sites describe where surviving objects were allocated, not all
+owners keeping them reachable. The recording peaked at 95,405,064 physical GUI
+bytes and 28,606,968 worker bytes. Earlier long captures with window size changes
+remain excluded from the fixed-viewport comparison. Neither 90 seconds nor
+forced collection replaces the required 600-second uninstrumented idle test.
+
+A separate matched diagnostic then compacted the still-mounted application.
+GUI physical memory fell from 94,979,080 to 73,073,672 bytes, while heap capacity
+fell from 41,457,376 to 24,319,712 bytes and live payload stayed at 22,169,864
+bytes. Compaction took 21.274 ms. This isolates retained heap capacity as a
+material part of the software control footprint; it does not justify adding
+a pause exceeding the editing-frame budget to the interaction path.
+
+A separate system allocation capture resolves several costs hidden from a
+managed allocation trace: about 5.13 MB in OCaml reference/custom/ephemeron
+tables, 2.11 MB in frame descriptors, and 1.51 MB in major-GC mark stacks.
+About 8.03 MB of malloc allocations in that capture are managed large objects;
+they already belong to GC accounting and must not be counted a second time.
+Virtual mappings and pthread stack reservations are likewise not resident
+malloc payload. The stack logger has its own overhead and its 143 MB combined
+physical peak is not an uninstrumented application result.
+
+A control changed only the GUI startup minor heap from 262,144 to 65,536 words.
+Both variants handled and persisted all 50 blocks with the same full viewport,
+graph, worker, and input script. Combined physical peaks were 122,914,256 and
+118,359,504 bytes, while windowed minor collections increased from 458 to 1,729.
+This single pair does not establish a latency-neutral production improvement,
+and the smaller heap is not adopted. The original runtime configuration remains
+the baseline; these software controls do not certify the default-renderer target.
+
+The actual Enter stack sample also justified removing capturing closures from
+attribute substring checks. A failing allocation regression fell from 20,896
+to 96 bytes for 200 scans; a 6,000-node discovery test fell from 2,016,312 to
+192,256 bytes beyond a matched traversal control. Boundary semantics and all
+6,000 nodes are preserved. The two complete one-Enter pairs measured about
+24.0 MB before and 22.8 MB after. A later unmatched original run and interrupted
+candidate are excluded from paired comparisons.
+These software measurements do not establish the default-renderer memory goal.
+
+Long sampling exposed an independent native crash. The crash report shows
+`SDL_WaitEventTimeout` invoking `logseq_expose_watch` after its Ctypes binding
+released the runtime, followed by `caml_callback_exn` aborting with
+`no domain lock held`. The event watcher now acquires the runtime only when it
+was released and restores that state after repainting. The regression first
+reproduced the same abort and then passed with the fix, including a callback
+that allocates and pushes a nested expose event, a foreign-thread event, and
+events after disposal. The full native host tests and release build pass.
+
+Raw traces, decoded events, source patches, and run provenance remain ignored
+under `tmp/native-app/science-enter-50-memtrace*`,
+`science-enter-50-native-malloc*`, and `science-memtrace-producer.patch`.
+The default Metal repetition was terminated at 178,930,672 physical GUI bytes
+plus 22,462,968 worker bytes, after only 127 nodes and before any Enter input.
+The latest managed live/heap observation was approximately 5/6 MiB. This is a
+failed startup capture, not a completed action workload. A separate 1 ms native
+allocation diagnostic paused the GUI at about 115 MB before the safety limit,
+then recorded system maps and malloc stacks and intentionally terminated it.
+Its later map showed a lower current footprint than the earlier peak, so a
+paused snapshot alone cannot explain transient graphics charges. Its explicit
+profiler and termination markers exclude it from normal runtime acceptance.
+The complete default-Metal memory budget and visible presentation acceptance
+remain open.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content

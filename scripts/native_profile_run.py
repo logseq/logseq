@@ -32,9 +32,10 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def over_limit(row):
+def over_limit(row, *, rss_guard=True):
+    counters = ("rss_bytes", "footprint_bytes") if rss_guard else ("footprint_bytes",)
     return any(sum(item[name] for item in row["processes"].values()) > 200_000_000
-               for name in ("rss_bytes", "footprint_bytes"))
+               for name in counters)
 
 
 def sample_processes(processes, read_usage):
@@ -46,9 +47,11 @@ def sample_processes(processes, read_usage):
             measured = read_usage(process.pid)
             if process.poll() is None:
                 usage[role] = measured
-        except ProcessLookupError:
-            if process.poll() is None:
-                raise
+        except ProcessLookupError as error:
+            try:
+                process.wait(timeout=.05)
+            except subprocess.TimeoutExpired:
+                raise error from None
     return usage
 
 
@@ -91,13 +94,15 @@ def main():
     parser.add_argument("--duration-s", type=float, required=True)
     parser.add_argument("--expected-actions", type=int, required=True)
     parser.add_argument("--external-profiler", help="Name an attached profiler so this run cannot qualify as an unprofiled baseline")
+    parser.add_argument("--ignore-rss-limit", action="store_true",
+                        help="Diagnostic only: keep the physical limit while recording RSS without a threshold")
     args = parser.parse_args()
     for name in ("baseline", "output", "executable", "worker", "input_script", "input_library"):
         setattr(args, name, getattr(args, name).resolve())
     if not math.isfinite(args.duration_s) or args.duration_s <= 0 or args.expected_actions < 0:
         parser.error("Duration must be positive and expected actions nonnegative")
     forbidden = [name for name in os.environ if name.startswith("LOGSEQ_NATIVE_ALLOC_")]
-    if forbidden or "DYLD_INSERT_LIBRARIES" in os.environ:
+    if (forbidden and args.external_profiler != "ocaml-memprof") or "DYLD_INSERT_LIBRARIES" in os.environ:
         parser.error("Run unprofiled recordings without allocation or injected-library environment overrides")
     args.output.mkdir()
     root = args.output / "root"
@@ -107,7 +112,8 @@ def main():
                   "input_sha256": digest(args.input_script), "input_library_sha256": digest(args.input_library),
                   "build_profile": args.build_profile, "lui_revision": args.lui_revision,
                   "backend": args.backend, "viewport": [1440, 900, 2880, 1800],
-                  "raster_workers": 4, "profiler": args.external_profiler is not None,
+                  "raster_workers": 4, "profiler": args.external_profiler is not None or args.ignore_rss_limit,
+                  "rss_guard_enabled": not args.ignore_rss_limit,
                   "external_profiler": args.external_profiler,
                   "logseq_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                   "source_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"])).hexdigest(),
@@ -130,6 +136,7 @@ def main():
                        LOGSEQ_WIDTH="1440", LOGSEQ_HEIGHT="900")
     processes, memory, runtime = {}, [], None
     outcome = {"provenance": provenance, "exit_code": None, "protection_limit_bytes": 200_000_000,
+               "guarded_counters": ["footprint_bytes"] if args.ignore_rss_limit else ["rss_bytes", "footprint_bytes"],
                "sampling_interval_s": .05, "error": None}
     started = time.monotonic()
 
@@ -138,7 +145,7 @@ def main():
                "processes": sample_processes(processes, memory_usage)}
         memory.append(row)
         channel.write(json.dumps(row) + "\n")
-        if over_limit(row):
+        if over_limit(row, rss_guard=not args.ignore_rss_limit):
             outcome["error"] = "protection_limit"
             outcome["trigger_sample"] = row
             for process in processes.values():
