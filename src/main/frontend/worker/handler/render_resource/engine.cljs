@@ -22,6 +22,17 @@
                               {:provider :sync-state
                                :resource-key resource-key})))}))
 
+(defn- render-known-resource
+  [db resource-key runtime]
+  (let [resource-kind (first resource-key)]
+    (if-let [{:keys [shape render]} (get resource-renderers resource-kind)]
+      (do
+        (when shape
+          (common/require-shape! resource-key resource-kind shape))
+        (render db resource-key runtime))
+      (common/fail! "Unknown renderer resource key"
+                    {:resource-key resource-key}))))
+
 (defn- resource-value
   [db resource-key runtime]
   (when-not (and (vector? resource-key) (seq resource-key))
@@ -36,14 +47,15 @@
     (common/fail! "Renderer resource keys cannot contain graph entities"
                   {:resource-key resource-key})
 
-    (let [resource-kind (first resource-key)]
-      (if-let [{:keys [shape render]} (get resource-renderers resource-kind)]
-        (do
-          (when shape
-            (common/require-shape! resource-key resource-kind shape))
-          (render db resource-key runtime))
-        (common/fail! "Unknown renderer resource key"
-                      {:resource-key resource-key})))))
+    ;; Query resources isolate every remaining failure so one bad query
+    ;; cannot reject the get-render-snapshots batch. Functions and
+    ;; entities in the key stay fail-fast: those keys are not transit-safe.
+    (if (= :query (first resource-key))
+      (try
+        (render-known-resource db resource-key runtime)
+        (catch :default error
+          (query/isolated-query-failure error)))
+      (render-known-resource db resource-key runtime))))
 
 (defn- resource-entry
   [db resource-key runtime]

@@ -74,17 +74,9 @@
   (and (integer? value)
        (<= 10000101 value 99991231)))
 
-(defn- valid-datalog-query-content?
-  "User-authored :query in an advanced query. A list such as
-  (task WAIT WAITING) is invalid datalog, not a malformed resource spec."
-  [query]
-  (and (vector? query)
-       (= :find (first query))))
-
 (defn- require-query-spec!
-  "Fail-fast for resource-spec contracts from code. Query *content* shape
-  (whether a datalog :query is a [:find ...] vector) is validated later so
-  a bad user query becomes a per-resource error instead of crashing the page."
+  "Throw on an unusable query spec. Callers must catch: a bad query must
+  never fail the get-render-snapshots batch."
   [query-spec]
   (let [kind (:kind query-spec)
         allowed-keys (case kind
@@ -116,20 +108,15 @@
                               (boolean? (:cards? query-spec))))
 
                      :datalog
-                     (and (or (not (contains? query-spec :inputs))
+                     (and (vector? (:query query-spec))
+                          (= :find (first (:query query-spec)))
+                          (or (not (contains? query-spec :inputs))
                               (vector? (:inputs query-spec)))
                           (or (not (contains? query-spec :rules))
                               (vector? (:rules query-spec))))
 
                      false))
       (common/fail! "Invalid renderer query resource" {:query-spec query-spec})))
-  query-spec)
-
-(defn- require-datalog-query-content!
-  [query-spec]
-  (when (and (= :datalog (:kind query-spec))
-             (not (valid-datalog-query-content? (:query query-spec))))
-    (common/fail! "Invalid renderer query resource" {:query-spec query-spec}))
   query-spec)
 
 (defn- quoted-query-text
@@ -303,25 +290,27 @@
            :error {:message (or (ex-message error) (str error))}}
     (ex-data error) (assoc-in [:error :data] (transit-safe-value (ex-data error)))))
 
+(defn isolated-query-failure
+  "Per-resource query error. Watch-all re-evaluates once the query is fixed."
+  [error]
+  (log/error :renderer-query-failed {:error error})
+  [common/watch-all (query-error-value error)])
+
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))]
-    (when (and (= :dsl (:kind query-spec))
-               (quoted-query-text (:query query-spec))
-               (not (:repo runtime)))
-      (common/fail! "Full-text query resource requires repository" {}))
-    (try
-      (require-datalog-query-content! query-spec)
+  (try
+    (let [query-spec (require-query-spec! (second resource-key))]
+      (when (and (= :dsl (:kind query-spec))
+                 (quoted-query-text (:query query-spec))
+                 (not (:repo runtime)))
+        (common/fail! "Full-text query resource requires repository" {}))
       [(query-watch-keys db query-spec)
        {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
-                                 query-spec)}]
-      ;; A user-supplied query can fail in many ways: cljs.reader errors on
-      ;; incomplete syntax while editing, invalid regex, malformed datalog,
-      ;; a bad result-transform. Isolating the failure keeps sibling snapshot
-      ;; resources alive; watch-all re-evaluates once the query is fixed.
-      (catch :default error
-        (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
-        [common/watch-all (query-error-value error)]))))
+                                 query-spec)}])
+    ;; Spec contracts, user query content, DSL parse, evaluation, and
+    ;; result-transform failures all stay on this resource.
+    (catch :default error
+      (isolated-query-failure error))))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})
