@@ -15,6 +15,7 @@
 #include <caml/mlvalues.h>
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <SDL.h>
 #include <SDL_syswm.h>
 
@@ -205,6 +206,35 @@ CAMLprim value loadIconNames(value arg) {
 #include <objc/objc.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
+#include <CoreGraphics/CoreGraphics.h>
+#include <IOSurface/IOSurface.h>
+#include <libproc.h>
+#include <sys/resource.h>
+#include <unistd.h>
+
+CAMLprim value logseq_native_memory_usage(value unit_v) {
+  CAMLparam1(unit_v);
+  CAMLlocal1(out);
+  struct rusage_info_v4 usage = {0};
+  if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&usage) != 0)
+    caml_failwith("Cannot read native process memory usage");
+  out = caml_alloc_tuple(3);
+  Store_field(out, 0, Val_long(usage.ri_phys_footprint));
+  Store_field(out, 1, Val_long(usage.ri_resident_size));
+  Store_field(out, 2, Val_long(usage.ri_lifetime_max_phys_footprint));
+  CAMLreturn(out);
+}
+
+CAMLprim value logseq_native_window_presentable(value id_v) {
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  if (!window) caml_invalid_argument("Presentation requires a live window");
+  SDL_SysWMinfo info; SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
+  id native_window = (id)info.info.cocoa.window;
+  unsigned long state = ((unsigned long (*)(id, SEL))objc_msgSend)(native_window,
+                                                   sel_registerName("occlusionState"));
+  return Val_bool((state & (1UL << 1)) != 0);
+}
 
 /* A bare binary never goes through LaunchServices so the NSApp can end
    up registered-but-inactive: raise_window reorders the window yet the
@@ -513,6 +543,30 @@ CAMLprim value logseq_native_sidebar_hit(value id_v) {
   }
   caml_failwith("Sidebar material is missing");
 }
+
+CAMLprim value logseq_native_window_opaque(value id_v) {
+  SDL_SysWMinfo info; SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
+  id window = (id)info.info.cocoa.window;
+  return Val_bool(((int (*)(id, SEL))objc_msgSend)(window, sel_registerName("isOpaque")));
+}
+
+CAMLprim value logseq_native_has_sidebar_material(value id_v) {
+  SDL_SysWMinfo info; SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
+  Class material = objc_getClass("LogseqSidebarMaterial");
+  if (material == Nil) return Val_false;
+  id window = (id)info.info.cocoa.window;
+  id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
+  id frame = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("superview"));
+  id children = ((id (*)(id, SEL))objc_msgSend)(frame, sel_registerName("subviews"));
+  unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(children, sel_registerName("count"));
+  for (unsigned long index = 0; index < count; index++) {
+    id view = ((id (*)(id, SEL, unsigned long))objc_msgSend)(children, sel_registerName("objectAtIndex:"), index);
+    if (((int (*)(id, SEL, Class))objc_msgSend)(view, sel_registerName("isKindOfClass:"), material)) return Val_true;
+  }
+  return Val_false;
+}
 /* Register every font file in a directory with CoreText so Lui_text's
    named-family lookup (CTFontDescriptorCreateMatchingFontDescriptor)
    resolves them. The app ships Inter as TTFs; without registration the
@@ -579,19 +633,18 @@ typedef struct {
   double x, y, w, h;
 } ls_nsrect;
 
-/* Clear opaqueness on a CALayer and any CAMetalLayer sublayers: the
-   sidebar hole needs the drawable's alpha channel to reach the window
-   server. SDL hosts the CAMetalLayer as the content view's own layer;
-   walk one level of sublayers too in case a driver nests it. */
-static void make_layers_transparent(id layer) {
+/* Only the visible sidebar needs transparent composition. Restore
+   opaque layers when it closes so the complete window does not keep
+   paying for alpha composition and material backing surfaces. */
+static void set_layers_transparency(id layer, int transparent) {
   if (layer == nil) return;
   const char *name = object_getClassName(layer);
   if (name != NULL) {
     ((void (*)(id, SEL, int))objc_msgSend)(
-        layer, sel_registerName("setOpaque:"), 0);
+        layer, sel_registerName("setOpaque:"), !transparent);
     /* setOpaque:NO still leaves an opaque backgroundColor fill that
        shows through the hole — NULL it too. */
-    ((void (*)(id, SEL, void *))objc_msgSend)(
+    if (transparent) ((void (*)(id, SEL, void *))objc_msgSend)(
         layer, sel_registerName("setBackgroundColor:"), NULL);
   }
   id sub = ((id (*)(id, SEL))objc_msgSend)(
@@ -606,8 +659,8 @@ static void make_layers_transparent(id layer) {
     const char *ln = object_getClassName(l);
     if (ln != NULL && strstr(ln, "CAMetalLayer") != NULL) {
       ((void (*)(id, SEL, int))objc_msgSend)(
-          l, sel_registerName("setOpaque:"), 0);
-      ((void (*)(id, SEL, void *))objc_msgSend)(
+          l, sel_registerName("setOpaque:"), !transparent);
+      if (transparent) ((void (*)(id, SEL, void *))objc_msgSend)(
           l, sel_registerName("setBackgroundColor:"), NULL);
     }
   }
@@ -638,6 +691,246 @@ static Class logseq_material_class(void) {
   return cls;
 }
 
+
+/* Immutable IOSurface bands go directly to the window compositor. The
+   renderer can reuse its staging pixels as soon as the copy completes. */
+typedef struct {
+  id view;
+  IOSurfaceRef *tiles;
+  id *layers;
+  bool *changed;
+  int w, h, rows, count;
+  size_t owned_bytes;
+} LogseqSoftwareSurface;
+
+static const char *logseq_software_key = "logseq-native-software-surface";
+
+static SDL_Window *logseq_software_window(value id_v) {
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  if (!window) caml_invalid_argument("Software presentation requires a live window");
+  return window;
+}
+
+static int logseq_software_flipped(id view, SEL selector) {
+  (void)view; (void)selector;
+  return 1;
+}
+
+static int logseq_software_opaque(id view, SEL selector) {
+  (void)selector;
+  id window = ((id (*)(id, SEL))objc_msgSend)(view, sel_registerName("window"));
+  return ((int (*)(id, SEL))objc_msgSend)(window, sel_registerName("isOpaque"));
+}
+
+static void logseq_software_update(id view, SEL selector) {
+  (void)view; (void)selector;
+}
+
+static Class logseq_software_class(void) {
+  Class cls = objc_getClass("LogseqSoftwareView");
+  if (!cls) {
+    cls = objc_allocateClassPair(objc_getClass("NSView"), "LogseqSoftwareView", 0);
+    class_addMethod(cls, sel_registerName("isFlipped"), (IMP)logseq_software_flipped, "B@:");
+    class_addMethod(cls, sel_registerName("wantsUpdateLayer"), (IMP)logseq_software_flipped, "B@:");
+    class_addMethod(cls, sel_registerName("updateLayer"), (IMP)logseq_software_update, "v@:");
+    class_addMethod(cls, sel_registerName("isOpaque"), (IMP)logseq_software_opaque, "B@:");
+    class_addMethod(cls, sel_registerName("hitTest:"), (IMP)logseq_material_hit_test,
+                    "@@:{CGPoint=dd}");
+    objc_registerClassPair(cls);
+  }
+  return cls;
+}
+
+static void logseq_software_clear(LogseqSoftwareSurface *surface) {
+  for (int i=0; i<surface->count; i++) {
+    ((void (*)(id, SEL))objc_msgSend)(surface->layers[i], sel_registerName("removeFromSuperlayer"));
+    if (surface->tiles[i]) CFRelease(surface->tiles[i]);
+  }
+  free(surface->tiles); free(surface->layers); free(surface->changed);
+  surface->tiles = NULL; surface->layers = NULL; surface->changed = NULL;
+  surface->count = 0; surface->owned_bytes = 0;
+}
+
+static IOSurfaceRef logseq_software_band(int w, int h) {
+  CFMutableDictionaryRef properties = CFDictionaryCreateMutable(NULL, 0,
+      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFStringRef keys[] = {kIOSurfaceWidth, kIOSurfaceHeight, kIOSurfaceBytesPerElement,
+                       kIOSurfaceBytesPerRow, kIOSurfacePixelFormat};
+  int64_t values[] = {w, h, 4, IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, (size_t)w*4),
+                     0x42475241};
+  for (int i=0; i<5; i++) {
+    CFNumberRef number = CFNumberCreate(NULL, kCFNumberSInt64Type, &values[i]);
+    CFDictionarySetValue(properties, keys[i], number);
+    CFRelease(number);
+  }
+  IOSurfaceRef image = IOSurfaceCreate(properties);
+  CFRelease(properties);
+  if (!image) caml_failwith("Cannot create software IOSurface band");
+  return image;
+}
+
+CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
+  CAMLparam2(id_v, dimensions);
+  SDL_Window *window = logseq_software_window(id_v);
+  int w = Int_val(Field(dimensions,0)), h = Int_val(Field(dimensions,1));
+  int rows = Int_val(Field(dimensions,2));
+  if (w <= 0 || h <= 0 || rows <= 0) caml_invalid_argument("Invalid software surface size");
+  extern void *objc_autoreleasePoolPush(void);
+  extern void objc_autoreleasePoolPop(void *);
+  void *pool = objc_autoreleasePoolPush();
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  if (!surface) {
+    SDL_SysWMinfo info; SDL_VERSION(&info.version);
+    if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
+    surface = calloc(1, sizeof(*surface));
+    if (!surface) caml_raise_out_of_memory();
+    id native_window = (id)info.info.cocoa.window;
+    id content = ((id (*)(id, SEL))objc_msgSend)(native_window, sel_registerName("contentView"));
+    ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(content, sel_registerName("bounds"));
+    id view = ((id (*)(Class, SEL))objc_msgSend)(logseq_software_class(), sel_registerName("alloc"));
+    view = ((id (*)(id, SEL, ls_nsrect))objc_msgSend)(view, sel_registerName("initWithFrame:"), bounds);
+    ((void (*)(id, SEL, unsigned long))objc_msgSend)(view, sel_registerName("setAutoresizingMask:"), 2 | 16);
+    id layer = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("CALayer"), sel_registerName("layer"));
+    ((void (*)(id, SEL, id))objc_msgSend)(view, sel_registerName("setLayer:"), layer);
+    ((void (*)(id, SEL, int))objc_msgSend)(view, sel_registerName("setWantsLayer:"), 1);
+    ((void (*)(id, SEL, id))objc_msgSend)(content, sel_registerName("addSubview:"), view);
+    surface->view = view;
+    SDL_SetWindowData(window, logseq_software_key, surface);
+  }
+  if (surface->w != w || surface->h != h || surface->rows != rows) {
+    logseq_software_clear(surface);
+    surface->w = w; surface->h = h; surface->rows = rows;
+    surface->count = (h + rows - 1) / rows;
+    surface->tiles = calloc(surface->count, sizeof(IOSurfaceRef));
+    surface->layers = calloc(surface->count, sizeof(id));
+    surface->changed = calloc(surface->count, sizeof(bool));
+    if (!surface->tiles || !surface->layers || !surface->changed) caml_raise_out_of_memory();
+    id root = ((id (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("layer"));
+    for (int i=0; i<surface->count; i++) {
+      id layer = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("CALayer"), sel_registerName("layer"));
+      ((void (*)(id, SEL, id))objc_msgSend)(root, sel_registerName("addSublayer:"), layer);
+      surface->layers[i] = layer;
+    }
+  }
+  objc_autoreleasePoolPop(pool);
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_software_tile(value id_v, value band) {
+  CAMLparam2(id_v, band);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  int y0 = Int_val(Field(band,0)), h = Int_val(Field(band,1));
+  int stride = Int_val(Field(band,2));
+  value pixels = Field(band,3);
+  if (y0 < 0 || y0 >= surface->h || y0 % surface->rows || h <= 0 ||
+      h != (surface->h - y0 < surface->rows ? surface->h - y0 : surface->rows) ||
+      stride != surface->w * 4 || caml_string_length(pixels) < (size_t)stride * h)
+    caml_invalid_argument("Invalid software image band");
+  IOSurfaceRef image = logseq_software_band(surface->w, h);
+  if (IOSurfaceLock(image, 0, NULL)) {
+    CFRelease(image);
+    caml_failwith("Cannot lock software IOSurface band");
+  }
+  size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+  UInt8 *destination = IOSurfaceGetBaseAddress(image);
+  for (int y=0; y<h; y++)
+    memcpy(destination + row_bytes*y, Bytes_val(pixels) + (size_t)stride*y, stride);
+  if (IOSurfaceUnlock(image, 0, NULL)) {
+    CFRelease(image);
+    caml_failwith("Cannot unlock software IOSurface band");
+  }
+  int index = y0 / surface->rows;
+  if (surface->tiles[index]) {
+    surface->owned_bytes -= IOSurfaceGetAllocSize(surface->tiles[index]);
+    CFRelease(surface->tiles[index]);
+  }
+  surface->owned_bytes += IOSurfaceGetAllocSize(image);
+  surface->tiles[index] = image;
+  surface->changed[index] = true;
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_software_present(value id_v) {
+  CAMLparam1(id_v);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  for (int i=0; i<surface->count; i++)
+    if (!surface->tiles[i]) caml_invalid_argument("Software frame is incomplete");
+  extern void *objc_autoreleasePoolPush(void);
+  extern void objc_autoreleasePoolPop(void *);
+  void *pool = objc_autoreleasePoolPush();
+  Class transaction = objc_getClass("CATransaction");
+  ((void (*)(Class, SEL))objc_msgSend)(transaction, sel_registerName("begin"));
+  ((void (*)(Class, SEL, int))objc_msgSend)(transaction, sel_registerName("setDisableActions:"), 1);
+  ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("bounds"));
+  double scale_y = bounds.h / surface->h;
+  for (int i=0; i<surface->count; i++) {
+    ls_nsrect rect = {0, i*surface->rows*scale_y, bounds.w,
+                     IOSurfaceGetHeight(surface->tiles[i])*scale_y};
+    ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(surface->layers[i], sel_registerName("setFrame:"), rect);
+    ((void (*)(id, SEL, double))objc_msgSend)(surface->layers[i], sel_registerName("setContentsScale:"),
+                                           surface->w / bounds.w);
+    if (surface->changed[i]) {
+      ((void (*)(id, SEL, id))objc_msgSend)(surface->layers[i], sel_registerName("setContents:"),
+                                         (id)surface->tiles[i]);
+      surface->changed[i] = false;
+    }
+  }
+  ((void (*)(Class, SEL))objc_msgSend)(transaction, sel_registerName("commit"));
+  ((void (*)(Class, SEL))objc_msgSend)(transaction, sel_registerName("flush"));
+  objc_autoreleasePoolPop(pool);
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_software_owned_bytes(value id_v) {
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  return Val_long(surface ? surface->owned_bytes : 0);
+}
+
+CAMLprim value logseq_native_software_read(value id_v) {
+  CAMLparam1(id_v); CAMLlocal1(out);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  for (int i=0; i<surface->count; i++)
+    if (!surface->tiles[i]) caml_invalid_argument("Software frame is incomplete");
+  out = caml_alloc_string((size_t)surface->w * surface->h * 4);
+  for (int index=0; index<surface->count; index++) {
+    IOSurfaceRef image = surface->tiles[index];
+    if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
+      caml_failwith("Cannot read software IOSurface band");
+    const UInt8 *source = IOSurfaceGetBaseAddress(image);
+    size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+    for (size_t y=0; y<IOSurfaceGetHeight(image); y++)
+      memcpy(Bytes_val(out) + ((size_t)index*surface->rows+y)*surface->w*4,
+             source + row_bytes*y, (size_t)surface->w*4);
+    if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
+      caml_failwith("Cannot finish reading software IOSurface band");
+  }
+  CAMLreturn(out);
+}
+
+CAMLprim value logseq_native_software_hit(value id_v) {
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  LogseqPoint point = {2.,2.};
+  id hit = ((id (*)(id, SEL, LogseqPoint))objc_msgSend)(surface->view, sel_registerName("hitTest:"), point);
+  return Val_bool(hit != nil);
+}
+
+CAMLprim value logseq_native_software_dispose(value id_v) {
+  SDL_Window *window = logseq_software_window(id_v);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  if (surface) {
+    logseq_software_clear(surface);
+    ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("removeFromSuperview"));
+    ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("release"));
+    SDL_SetWindowData(window, logseq_software_key, NULL);
+    free(surface);
+  }
+  return Val_unit;
+}
+
 /* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
    material composited BEHIND the SDL content view. SDL assumes the
    content view IS its metal view (a subview inside it would draw above
@@ -649,7 +942,8 @@ static Class logseq_material_class(void) {
    The host calls this once per layout while the metal renderer is
    active. x/y/w/h are window points in the frame view's coordinate
    space (origin bottom-left; the caller already flipped y).
-   visible=false hides the effect while the sidebar is collapsed. */
+   Collapsing the sidebar releases its material and restores opaque
+   window composition. */
 CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
                                               value vw, value vh,
                                               value vvisible) {
@@ -690,6 +984,35 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
     id frame = ((id (*)(id, SEL))objc_msgSend)(
         cv, sel_registerName("superview"));
     if (frame == nil) continue;
+    ((void (*)(id, SEL, int))objc_msgSend)(
+        win, sel_registerName("setOpaque:"), !visible);
+    Class nscolor = objc_getClass("NSColor");
+    if (nscolor != Nil) {
+      id background = ((id (*)(Class, SEL))objc_msgSend)(
+          nscolor, sel_registerName(visible ? "clearColor" : "windowBackgroundColor"));
+      ((void (*)(id, SEL, id))objc_msgSend)(
+          win, sel_registerName("setBackgroundColor:"), background);
+    }
+    id layer = ((id (*)(id, SEL))objc_msgSend)(cv, sel_registerName("layer"));
+    set_layers_transparency(layer, visible);
+    id appearance = nil;
+    Class appcls = objc_getClass("NSAppearance");
+    if (appcls != Nil) {
+      appearance = ((id (*)(Class, SEL, id))objc_msgSend)(
+          appcls, sel_registerName("appearanceNamed:"),
+          menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua"));
+      if (appearance != nil) ((void (*)(id, SEL, id))objc_msgSend)(
+          win, sel_registerName("setAppearance:"), appearance);
+    }
+    if (!visible) {
+      if (effect != nil) {
+        ((void (*)(id, SEL))objc_msgSend)(effect, sel_registerName("removeFromSuperview"));
+        ((void (*)(id, SEL))objc_msgSend)(effect, sel_registerName("release"));
+        effect = nil;
+        frame_init = 0;
+      }
+      break;
+    }
     if (effect == nil) {
       Class effcls = logseq_material_class();
       if (effcls == Nil) break;
@@ -713,44 +1036,9 @@ CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
       ((void (*)(id, SEL, id, long, id))objc_msgSend)(
           frame, sel_registerName("addSubview:positioned:relativeTo:"),
           effect, -1L /* NSWindowBelow */, cv);
-      ((void (*)(id, SEL, int))objc_msgSend)(
-          win, sel_registerName("setOpaque:"), 0);
-      /* A non-opaque window still fills behind the effect with its
-         backgroundColor; clear it or the material samples an opaque
-         dark base instead of the desktop. */
-      Class nscolor = objc_getClass("NSColor");
-      if (nscolor != Nil) {
-        id clear = ((id (*)(Class, SEL))objc_msgSend)(
-            nscolor, sel_registerName("clearColor"));
-        if (clear != nil)
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              win, sel_registerName("setBackgroundColor:"), clear);
-      }
     }
-      /* The material follows the app theme, not the window's
-         effective appearance (an SDL window doesn't track the app's
-         own light/dark switch). BehindWindow materials resolve
-         their tint from the view's effective appearance, so pin
-         the appearance on the effect AND its window — the window
-         default is Aqua and can override the view pin. */
-      Class appcls = objc_getClass("NSAppearance");
-      if (appcls != Nil) {
-        id ap = ((id (*)(Class, SEL, id))objc_msgSend)(
-            appcls, sel_registerName("appearanceNamed:"),
-            menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua"
-                                : "NSAppearanceNameAqua"));
-        if (ap != nil) {
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              effect, sel_registerName("setAppearance:"), ap);
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              win, sel_registerName("setAppearance:"), ap);
-        }
-      }
-    /* SDL or a driver update may re-opaque the metal layer; keep it
-       transparent while the effect lives. */
-    id layer =
-        ((id (*)(id, SEL))objc_msgSend)(cv, sel_registerName("layer"));
-    make_layers_transparent(layer);
+    if (appearance != nil) ((void (*)(id, SEL, id))objc_msgSend)(
+        effect, sel_registerName("setAppearance:"), appearance);
     if (visible && (!frame_init || x != lx || y != ly || w != lw ||
                     h != lh)) {
       ls_nsrect r = {x, y, w, h};
@@ -2036,6 +2324,18 @@ CAMLprim value logseq_native_menu_popup(value spec_v) {
 
 #elif defined(__linux__)
 
+CAMLprim value logseq_native_memory_usage(value unit_v) {
+  (void)unit_v;
+  caml_failwith("Physical footprint inspection requires macOS");
+}
+
+CAMLprim value logseq_native_window_presentable(value id_v) {
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  if (!window) caml_invalid_argument("Presentation requires a live window");
+  Uint32 flags = SDL_GetWindowFlags(window);
+  return Val_bool(!(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)));
+}
+
 CAMLprim value logseq_native_sidebar_hit(value id_v) {
   (void)id_v;
   caml_failwith("logseq_native: AppKit material inspection requires macOS");
@@ -2044,6 +2344,29 @@ CAMLprim value logseq_native_sidebar_hit(value id_v) {
 CAMLprim value logseq_native_input_chain(value id_v) {
   (void)id_v;
   caml_failwith("logseq_native: AppKit responder inspection requires macOS");
+}
+
+
+CAMLprim value logseq_native_software_begin(value id, value dimensions) {
+  (void)id; (void)dimensions; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_tile(value id, value tile) {
+  (void)id; (void)tile; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_present(value id) {
+  (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_owned_bytes(value id) {
+  (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_read(value id) {
+  (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_hit(value id) {
+  (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_dispose(value id) {
+  (void)id; return Val_unit;
 }
 
 #include <fontconfig/fontconfig.h>
@@ -2083,6 +2406,16 @@ CAMLprim value logseq_native_sidebar_vibrancy(value x, value y, value w,
   (void)h;
   (void)visible;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_window_opaque(value window) {
+  (void)window;
+  caml_failwith("logseq_native: AppKit window inspection requires macOS");
+}
+
+CAMLprim value logseq_native_has_sidebar_material(value window) {
+  (void)window;
+  caml_failwith("logseq_native: AppKit material inspection requires macOS");
 }
 
 /* Linux renders menus through LUI. These entry points must never be

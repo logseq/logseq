@@ -216,14 +216,14 @@ let run () =
     { get =
         (fun name ->
           if name = "good" then
-            Some
+            Some (Icon_tabler_data.decode_children
               (Json.Array
                  [| Json.Array
                       [| Json.String "path"
                        ; Json.Object [ "d", Json.String "M0 0" ]
                       |]
-                 |])
-          else Some (Json.Array [| Json.Null |]))
+                 |]))
+          else Some (Icon_tabler_data.decode_children (Json.Array [| Json.Null |])))
     ; keys = (fun () -> [| "good" |])
     };
   check "tabler decode"

@@ -160,17 +160,14 @@ let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ Ui_parts.int_prop_signal Lui_protocol.MarginLeft ms
-          (* NavigationSplitView detail toolbar: the row lives inside
-             the split's second pane, so while the sidebar is open its
-             leading buttons already start at the sidebar's right edge.
-             When the dock collapses the pane spans the window and the
-             buttons must clear the traffic-light controls (~76px) —
-             the host blends the title bar via fullSizeContentView. *)
-          (fun (m : Model.t) -> if m.Model.left_sidebar_open then 0 else 70)
-          (row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
-             ~style_class:"cp__header-l"
-             [ left_menu_btn (); search_btn () ])
+      [ reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+            a.left_sidebar_open = b.left_sidebar_open)
+          (fun (m : Model.t) ->
+            if m.left_sidebar_open then spacer ~key:"head-leading-space" []
+            else
+              row ~key:"head-inner" ~cross:`center ~margin_left:80
+                ~padding_horizontal:8 ~style_class:"cp__header-l"
+                [ left_menu_btn (); search_btn () ]) ms
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
@@ -272,16 +269,21 @@ let left_sidebar (ms : Model.t Signal.signal) =
                        surface tone. *)
                     ~background:"muted"
                     ~style_class:"left-sidebar-inner as-container"
-               [ (* NavigationSplitView sidebar semantics: the column
-                    spans the full window height, so its top strip sits
-                    in the title-bar zone where the host overlays the
-                    traffic-light controls. It stays empty drag space
-                    (the window is movable-by-background); the toggle
-                    and search buttons live in the titlebar
-                    (.cp__header > .l). *)
-                 box ~key:"ls-top" ~height:52
+               [ (* The sidebar's titlebar strip shares the system traffic
+                    lights. Closing the dock moves these controls into the
+                    detail header, with the same leading safe area. *)
+                 row ~key:"ls-top" ~height:48 ~cross:`center
                    ~style_class:"left-sidebar-top"
-                   ~data_attrs:[ ("data-window-titlebar", "true") ] []
+                   ~data_attrs:[ ("data-window-titlebar", "true") ]
+                   [ reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+                         a.left_sidebar_open = b.left_sidebar_open)
+                       (fun (m : Model.t) ->
+                         if m.left_sidebar_open then
+                           row ~key:"sidebar-titlebar-controls" ~margin_left:80
+                             ~padding_horizontal:8 ~cross:`center
+                             [ left_menu_btn ~key:"left-menu-sidebar" ();
+                               search_btn ~key:"search-sidebar" () ]
+                         else spacer ~key:"sidebar-titlebar-empty" []) ms ]
                ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
                    [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
                        ~style_class:"sidebar-header-container"
@@ -328,83 +330,33 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)
 let main_scroll (ms : Model.t Signal.signal) : t =
-  (* #main-content-container is queried by graphs/recycle.ml —
-            the id rides ~accessibility_identifier; the data-is-* attrs
-            are imperative contracts (graphs_view, container.cljs hooks)
-            carried by data_attrs_signal. On web this element is the page's
-            vertical scroller (.scrollbar-spacing = overflow-y:auto) —
-            emit the real scroll kind so pages taller than the window
-            actually scroll. *)
-  Ui_parts.int_prop_signal Lui_protocol.PaddingVertical ms
-    (fun (m : Model.t) ->
-      (* cljs container.cljs: margin-less routes (journals/home/
-         all-pages) strip the container's py-8; named pages keep
-         the 32px top pad under the title *)
-      match m.route with
-      | Model.Journals | Model.Home | Model.All_pages -> 0
-      | _ -> 32)
-        (scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
-        ~accessibility_identifier:"main-content-container"
-        ~style_class:"scrollbar-spacing"
-        ~data_attrs_signal:
-          (Signal.map (fun (_ : Model.t) ->
-               [ ("data-is-margin-less-pages", "false") ]) ms)
-        [ (* the row keeps the pre-scroll layout: flex-row +
-             justify-center centered .cp__sidebar-main-content
-             horizontally (scroll children stretch to viewport width) *)
-          row ~key:"main-content-row" ~main:`center ~grow:1.
-        [ Ui_parts.class_signal ms
-            (fun (m : Model.t) ->
-              (* cljs: .cp__sidebar-main-content centers a max-width
-                 column via margin auto; is-full-width (margin-less
-                 routes) stretches it — no stylesheet natively, so the
-                 full-width variant maps to w-full *)
-              "cp__sidebar-main-content"
-              ^ (match m.route with
-                 | Model.All_pages -> " w-full"
-                 | _ -> ""))
-            (Ui_parts.int_prop_signal Lui_protocol.MaxWidth ms
-               (fun (m : Model.t) ->
-                 (* cljs: .cp__sidebar-main-content = flex:1 +
-                    max-width var(--ls-main-content-max-width)=960px +
-                    margin-inline auto (the row centers it);
-                    is-full-width routes cap at 100vw *)
-                 match m.route with
-                 | Model.All_pages -> 100000
-                 | _ -> 960)
-            (box ~key:"main-inner" ~grow:1.
-            ~data_attrs_signal:
-              (Signal.map (fun (m : Model.t) ->
-                   (* cljs container.cljs: data-is-full-width on margin-less +
-                      all-pages/all-files/my-publishing routes *)
-                   let marginless =
-                     [ ("data-is-margin-less-pages", "false") ]
-                   in
-                   match m.route with
-                   | Model.All_pages ->
-                       ("data-is-full-width", "true") :: marginless
-                   | _ -> marginless) ms)
-            [ Ui_parts.class_signal ms
-                (fun (m : Model.t) ->
-                  (* cljs container.cljs: div.mx-auto.pb-24 around
-                     main-content; home/margin-less routes keep an
-                     empty class + 0 margin *)
-                  match m.route with
-                  | Model.Journals | Model.Home -> ""
-                  | _ -> "mx-auto pb-24")
-                (column ~key:"content-wrap"
-                   ~data_attrs_signal:
-                     (Signal.map
-                        (fun (m : Model.t) ->
-                          match m.route with
-                          | Model.Journals | Model.Home ->
-                              [ ("style", "margin-bottom: 0") ]
-                          | _ -> [ ("style", "margin-bottom: 120px") ])
-                        ms)
-                   [ Page.region ms ]) ]
-            ))
-        ]
-        ])
+  let st = Sidebar_state.ensure ms in
+  scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
+    ~padding_horizontal:16 ~padding_vertical:32
+    ~accessibility_identifier:"main-content-container"
+    ~style_class:"scrollbar-spacing"
+    ~data_attrs:[ ("data-is-margin-less-pages", "false") ]
+    [ (* Production uses 32-point leading and 16-point trailing
+         padding. Center the reading column within that content area. *)
+      row ~key:"main-content-row" ~main:`center ~min_width:0 ~margin_left:16
+        [ column ~key:"main-inner" ~grow:1. ~min_width:0
+            ~style_class:"cp__sidebar-main-content"
+            ~max_width:(reactive
+              (fun (m : Model.t) viewport_width ->
+                match m.route with
+                | Model.All_pages -> int_of_float viewport_width
+                | _ -> 960) ms (Signal.value st.Sidebar_state.viewport_w))
+            ~data_attrs:(reactive (fun (m : Model.t) ->
+              [ ("data-is-margin-less-pages", "false");
+                ("data-is-full-width", string_of_bool (m.route = Model.All_pages)) ]) ms)
+            [ column ~key:"content-wrap" ~min_width:0
+                [ Page.region ms;
+                  reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+                      a.route = b.route)
+                    (fun (m : Model.t) ->
+                      match m.route with
+                      | Model.Journals | Model.Home -> spacer ~key:"content-end" []
+                      | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
 
 (* NavigationSplitView detail column — the left dock split's second
    pane: titlebar row over the page scroll, sized by the persisted
@@ -637,7 +589,11 @@ let shell (ms : Model.t Signal.signal) : t =
        overlays/help/not-found become shared-cell overlays (native:
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
-    (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
+    (Ui_components.with_props
+      [ Ui_components.Prop.height_viewport 1.
+      ; Ui_components.Prop.font_size "1rem"
+      ; Ui_components.Prop.font_family "var(--ls-font-family, Inter)"
+      ; Ui_components.Prop.line_height "1.5" ]
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ (* horizontal shell: the docked splits own both side docks'
          tracks — the left split's second pane is the detail column

@@ -29,7 +29,7 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in macosx) printf '(-cclib -lobjc)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
+    "case '%{system}' in macosx) printf '(-cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
 
 (rule
  (copy ../native/asset_dom.ml asset_dom.ml))
@@ -433,7 +433,6 @@
    ocaml-signal
    unix
    threads.posix)
- (link_flags (:standard (:include host_link_flags.sexp)))
  (modes native)
  (enabled_if (or (= %{system} macosx) (= %{system} linux))))
 
@@ -448,12 +447,17 @@
 (test
  (name host_requests_test)
  (modules host_requests_test)
+ (deps ../assets/tabler-children.json)
+ (action
+  (setenv LOGSEQ_ICON_DATA %{dep:../assets/tabler-children.json}
+   (run %{test})))
  (libraries logseq_native_host_services))
 
 (library
  (name logseq_native_entry)
  (wrapped false)
  (modules native_embed bridge native_window)
+ (library_flags (:include host_link_flags.sexp))
  (libraries logseq_ui_ocamlhost logseq_native_interaction tsdl)
  (foreign_stubs
   (language c)
@@ -463,14 +467,12 @@
 (test
  (name native_lifecycle_test)
  (modules native_lifecycle_test)
- (libraries logseq_native_entry)
- (link_flags (:standard (:include host_link_flags.sexp))))
+ (libraries logseq_native_entry))
 
 (test
  (name native_window_test)
  (modules native_window_test)
- (libraries logseq_native_entry logseq_ocaml_host_platform)
- (link_flags (:standard (:include host_link_flags.sexp))))
+ (libraries logseq_native_entry logseq_ocaml_host_platform lui.metal lui.scene lui.raster))
 
 (library
  (name logseq_native_interaction)

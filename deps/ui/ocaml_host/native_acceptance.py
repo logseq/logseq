@@ -11,11 +11,57 @@ def percentile(values, fraction):
     return ordered[min(len(ordered) - 1, int(len(ordered) * fraction))]
 
 
+def validate_memory(rows, *, warmup_s, end_s):
+    if not rows:
+        return ["Process memory evidence is missing"]
+    started = rows[0]["time_s"]
+    measured, visible = [], []
+    previous_time, previous_peak = None, 0
+    for row in rows:
+        now = row["time_s"]
+        if not math.isfinite(now) or (previous_time is not None and now < previous_time):
+            raise ValueError("Invalid process memory recording time")
+        elapsed = now - started
+        if end_s is not None and elapsed > end_s:
+            break
+        memory = row.get("process_memory")
+        if memory is None:
+            return ["Process memory evidence is missing"]
+        fields = ("footprint_bytes", "peak_footprint_bytes", "rss_bytes", "width", "height",
+                  "pixel_width", "pixel_height")
+        if (any(type(memory[key]) is not int or memory[key] <= 0 for key in fields)
+                or type(memory["window_visible"]) is not bool
+                or memory["peak_footprint_bytes"] < memory["footprint_bytes"]
+                or memory["peak_footprint_bytes"] < previous_peak):
+            raise ValueError("Invalid process memory measurements")
+        measured.append(memory)
+        if elapsed >= warmup_s:
+            visible.append((now, memory))
+        previous_time, previous_peak = now, memory["peak_footprint_bytes"]
+    errors = []
+    if not measured or not visible:
+        return ["Visible process memory evidence is missing"]
+    first = measured[0]
+    if (first["width"] < 1440 or first["height"] < 900
+            or first["pixel_width"] < 2880 or first["pixel_height"] < 1800):
+        errors.append("Memory recording starts with a reduced viewport")
+    peak = max(memory["peak_footprint_bytes"] for memory in measured)
+    if peak > 100_000_000:
+        errors.append(f"Physical footprint peak {peak} bytes exceeds 100 MB, including startup")
+    if any(memory["rss_bytes"] > 200_000_000 for memory in measured):
+        errors.append("RSS exceeds the 200 MB protection limit")
+    if any(not memory["window_visible"] for _, memory in visible):
+        errors.append("Memory recording includes an invisible window after warmup")
+    if any(after[0] - before[0] > 2 for before, after in zip(visible, visible[1:])):
+        errors.append("Memory recording has a visibility sampling gap above two seconds")
+    return errors
+
+
 def validate_idle(rows):
     first, last = rows[0], rows[-1]
     duration = last["time_s"] - first["time_s"]
-    if duration < 10:
-        return ["Idle recording requires at least 10 seconds"]
+    if duration < 600:
+        return ["Idle recording requires at least 600 seconds"]
     allocated = last["gc"]["allocated_bytes"] - first["gc"]["allocated_bytes"]
     host_allocated = last["gc"]["host_allocated_bytes"] - first["gc"]["host_allocated_bytes"]
     minor = last["gc"]["minor_collections"] - first["gc"]["minor_collections"]
@@ -165,25 +211,29 @@ def main():
                         help="Observed UI results and persisted data for this scenario")
     args = parser.parse_args()
     rows = [json.loads(line) for line in args.recording.read_text().splitlines() if line]
+    memory_errors = validate_memory(rows, warmup_s=args.warmup_s, end_s=args.end_s)
     if args.scenario == "idle":
         started = rows[0]["time_s"]
         rows = [row for row in rows if row["time_s"] - started >= args.warmup_s
                 and (args.end_s is None or row["time_s"] - started <= args.end_s)]
         errors = validate_idle(rows)
-        print(json.dumps({"scenario": "idle", "pass": not errors, "errors": errors}, indent=2))
-        return 1 if errors else 0
+        print(json.dumps({"scenario": "idle", "pass": not errors and not memory_errors,
+                          "memory_pass": not memory_errors, "memory_errors": memory_errors,
+                          "errors": errors}, indent=2))
+        return 1 if errors or memory_errors else 0
     samples, duration = collect(rows, warmup_s=args.warmup_s, end_s=args.end_s)
     errors = validate(samples, scenario=args.scenario, refresh_hz=args.refresh_hz, duration_s=duration)
     evidence = json.loads(args.evidence.read_text()) if args.evidence else None
     functional_errors = validate_functionality(evidence, scenario=args.scenario)
     print(json.dumps({"scenario": args.scenario, "duration_s": duration, "timing_pass": not errors,
                       "functional_pass": not functional_errors,
-                      "pass": not errors and not functional_errors,
+                      "memory_pass": not memory_errors, "memory_errors": memory_errors,
+                      "pass": not errors and not functional_errors and not memory_errors,
                       "functional_errors": functional_errors,
                       "errors": errors, "phases": {name: {"count": len(values),
                           "p95_ms": percentile(values, 0.95), "max_ms": max(values)}
                           for name, values in samples.items() if values}}, indent=2))
-    return 1 if errors or functional_errors else 0
+    return 1 if errors or functional_errors or memory_errors else 0
 
 
 if __name__ == "__main__":

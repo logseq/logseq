@@ -1,13 +1,117 @@
 import unittest
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 from native_acceptance import collect, validate, validate_functionality, validate_idle
 
 
 class NativeAcceptanceTest(unittest.TestCase):
+    def memory_rows(self):
+        memory = {"footprint_bytes": 40_000_000, "peak_footprint_bytes": 50_000_000,
+                  "rss_bytes": 120_000_000, "window_visible": True,
+                  "width": 1440, "height": 900, "pixel_width": 2880, "pixel_height": 1800}
+        return [{"time_s": time, "process_memory": dict(memory), "gpu_submitted": 1,
+                 "layout_count": 1, "event_count": 0,
+                 "gc": {"allocated_bytes": 1000, "host_allocated_bytes": 1000,
+                        "minor_collections": 1}}
+                for time in range(606)]
+
+    def run_memory_recording(self, rows, warmup=0):
+        with tempfile.TemporaryDirectory() as directory:
+            recording = Path(directory) / "recording.jsonl"
+            recording.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            return subprocess.run([sys.executable, str(Path(__file__).with_name("native_acceptance.py")),
+                                   str(recording), "--scenario", "idle", "--refresh-hz", "100",
+                                   "--warmup-s", str(warmup)], capture_output=True, text=True)
+
+    def test_memory_cli_accepts_physical_budget_with_separate_rss(self):
+        result = self.run_memory_recording(self.memory_rows())
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_memory_cli_rejects_transient_startup_peak(self):
+        rows = self.memory_rows()
+        rows[0]["process_memory"].update(footprint_bytes=110_000_000)
+        for row in rows:
+            row["process_memory"]["peak_footprint_bytes"] = 110_000_000
+        result = self.run_memory_recording(rows, warmup=5)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("100 MB", result.stdout)
+
+    def test_memory_cli_rejects_lifetime_peak_between_samples(self):
+        rows = self.memory_rows()
+        rows[-1]["process_memory"]["peak_footprint_bytes"] = 100_000_001
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("100 MB", result.stdout)
+
+    def test_memory_cli_rejects_rss_above_protection_limit(self):
+        rows = self.memory_rows()
+        rows[-1]["process_memory"]["rss_bytes"] = 200_000_001
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("200 MB", result.stdout)
+
+    def test_memory_cli_rejects_invisible_window(self):
+        rows = self.memory_rows()
+        rows[-1]["process_memory"]["window_visible"] = False
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("invisible", result.stdout)
+
+    def test_memory_cli_allows_invisible_startup_before_warmup(self):
+        rows = self.memory_rows()
+        rows[0]["process_memory"]["window_visible"] = False
+        result = self.run_memory_recording(rows, warmup=5)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_memory_cli_rejects_reduced_startup_viewport(self):
+        rows = self.memory_rows()
+        rows[0]["process_memory"].update(width=640, height=480,
+                                         pixel_width=1280, pixel_height=960)
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("viewport", result.stdout)
+
+    def test_memory_cli_rejects_reduced_pixel_resolution(self):
+        rows = self.memory_rows()
+        rows[0]["process_memory"].update(pixel_width=1440, pixel_height=900)
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("viewport", result.stdout)
+
+    def test_memory_cli_rejects_visibility_sampling_gaps(self):
+        rows = self.memory_rows()
+        result = self.run_memory_recording([rows[0], rows[-1]])
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("gap", result.stdout)
+
+    def test_memory_cli_rejects_missing_process_evidence(self):
+        rows = self.memory_rows()
+        del rows[1]["process_memory"]
+        result = self.run_memory_recording(rows)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("memory evidence", result.stdout)
+
+    def test_memory_cli_rejects_invalid_measurements(self):
+        rows = self.memory_rows()
+        rows[1]["process_memory"]["footprint_bytes"] = -1
+        result = self.run_memory_recording(rows)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("Invalid process memory", result.stderr)
+
+    def test_idle_requires_ten_minutes(self):
+        first = {"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}}
+        last = {**first, "time_s": 24}
+        self.assertTrue(any("600 seconds" in error for error in validate_idle([first, last])))
+
     def test_idle_rejects_rendering_and_gc_churn(self):
         rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 10, "gpu_submitted": 1210, "layout_count": 5, "event_count": 0,
-                 "gc": {"allocated_bytes": 100100000, "host_allocated_bytes": 100100000, "minor_collections": 52}}]
+                {"time_s": 600, "gpu_submitted": 1210, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 600100000, "host_allocated_bytes": 600100000, "minor_collections": 1002}}]
         errors = validate_idle(rows)
         self.assertTrue(any("allocation" in error for error in errors))
         self.assertTrue(any("minor GC" in error for error in errors))
@@ -21,14 +125,14 @@ class NativeAcceptanceTest(unittest.TestCase):
     def test_idle_rejects_uncollected_host_allocation(self):
         rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 10, "gpu_submitted": 20, "layout_count": 5, "event_count": 0,
-                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 10100000, "minor_collections": 2}}]
+                {"time_s": 600, "gpu_submitted": 20, "layout_count": 5, "event_count": 0,
+                 "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 600100000, "minor_collections": 2}}]
         self.assertTrue(any("host allocation" in error for error in validate_idle(rows)))
 
     def test_idle_rejects_user_input(self):
         rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 1,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 10, "gpu_submitted": 20, "layout_count": 5, "event_count": 2,
+                {"time_s": 600, "gpu_submitted": 20, "layout_count": 5, "event_count": 2,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}}]
         self.assertTrue(any("event" in error for error in validate_idle(rows)))
 

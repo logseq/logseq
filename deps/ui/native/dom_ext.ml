@@ -83,8 +83,7 @@ let el_attr (el : element) (name : string) : string option =
 (* the snapshot "class" prop mirrors style-class; elements that declare
    their class inside attrs keep it there instead — DOM semantics treat
    both as the same class list; dom-op mutations live in the overlay *)
-let class_list (el : element) : string list =
-  let words =
+let class_string (el : element) =
     match !overlay_class_fn el with
     | Some c -> c
     | None -> (
@@ -94,8 +93,31 @@ let class_list (el : element) : string list =
             match el_attr el "class" with
             | Some s -> s
             | None -> ""))
-  in
-  List.filter (fun c -> c <> "") (String.split_on_char ' ' words)
+
+let class_list el =
+  List.filter (fun c -> c <> "") (String.split_on_char ' ' (class_string el))
+
+let has_class el cls =
+  let words = class_string el in
+  let length = String.length words and target = String.length cls in
+  let index = ref 0 and matched = ref false in
+  while !index < length && not !matched do
+    if words.[!index]=' ' then incr index
+    else begin
+      let start = !index in
+      while !index < length && words.[!index]<>' ' do incr index done;
+      if !index-start=target then begin
+        let offset = ref 0 in
+        while !offset < target && words.[start + !offset]=cls.[!offset] do incr offset done;
+        matched := !offset=target
+      end
+    end
+  done;
+  !matched
+
+let rec has_classes el = function
+  | [] -> true
+  | cls::rest -> has_class el cls && has_classes el rest
 
 let has_attr (el : element) (name : string) : bool =
   el_attr el name <> None || (name = "class" && class_list el <> [])
@@ -202,7 +224,7 @@ let rec match_compound (el : element) (c : compound) : bool =
   (match c.c_tag with
    | Some t -> String.equal t (String.lowercase_ascii (tag_name el))
    | None -> true)
-  && List.for_all (fun cls -> List.mem cls (class_list el)) c.c_classes
+  && has_classes el c.c_classes
   && (match c.c_id with
       | Some i -> String.equal i (el_id_attr el)
       | None -> true)
@@ -227,7 +249,7 @@ let rec match_compound (el : element) (c : compound) : bool =
    must each match some ancestor, scanning outward in order *)
 let match_chain (comps : compound list) (el : element)
     (ancestors : element list) : bool =
-  match List.rev comps with
+  match comps with
   | [] -> false
   | last :: rest -> (
       if not (match_compound el last) then false
@@ -244,28 +266,26 @@ let match_chain (comps : compound list) (el : element)
         in
         seek rest ancestors)
 
-let selector_matches (sel : string) (el : element)
-    (ancestors : element list) : bool =
+let parse_selector (sel : string) =
   sel
   |> String.split_on_char ','
-  |> List.exists (fun alt ->
-         let comps =
-           alt
-           |> String.split_on_char ' '
-           |> List.filter (fun c -> c <> "")
-           |> List.map parse_compound
-         in
-         match_chain comps el ancestors)
+  |> List.map (fun alt ->
+       alt |> String.split_on_char ' ' |> List.filter (fun c -> c <> "")
+       |> List.rev_map parse_compound)
+
+let compiled_matches selectors el ancestors =
+  List.exists (fun comps -> match_chain comps el ancestors) selectors
 
 let closest (el : element) (sel : string) : element option =
-  let rec walk candidates ancestors =
+  let selectors = parse_selector sel in
+  let rec walk candidates =
     match candidates with
     | [] -> None
     | c :: rest ->
-        if selector_matches sel c (rest @ ancestors) then Some c
-        else walk rest (ancestors @ [ c ])
+        if compiled_matches selectors c rest then Some c
+        else walk rest
   in
-  walk (el :: ancestors_of el) []
+  walk (el :: ancestors_of el)
 
 (* ---------- scoped / child-combinator selectors ----------
 
@@ -323,11 +343,13 @@ let overlay_attr_node (node : int) (name : string)
   | None -> None
 
 let overlay_attr (el : element) (name : string) : string option option =
+  if Hashtbl.length overlays=0 then None else
   match node_id_of el with
   | Some n -> overlay_attr_node n name
   | None -> None
 
 let overlay_class_of (el : element) : string option =
+  if Hashtbl.length overlays=0 then None else
   match node_id_of el with
   | Some n -> (
       match overlay_find n with Some o -> o.o_class | None -> None)
@@ -359,7 +381,6 @@ let parse_steps (alt : string) : sstep list =
            , `Desc))
        ([], `Desc)
   |> fst
-  |> List.rev
 
 let step_matches ~scope (el : element) (step : sstep) : bool =
   match step.s_comp with
@@ -369,41 +390,44 @@ let step_matches ~scope (el : element) (step : sstep) : bool =
 (* match a step chain against (el, ancestors); ancestors nearest-first *)
 let rec match_steps ~scope (steps : sstep list) (el : element)
     (ancestors : element list) : bool =
-  match List.rev steps with
+  match steps with
   | [] -> false
+  | [step] -> step_matches ~scope el step
   | last :: rest -> (
       if not (step_matches ~scope el last) then false
       else
-        let rec seek steps ancestors =
+        let rec seek combinator steps ancestors =
           match steps with
           | [] -> true
           | st :: ss -> (
               match ancestors with
               | [] -> false
               | a :: tail -> (
-                  match st.s_comb with
+                  match combinator with
                   | `Child ->
-                      if step_matches ~scope a st then seek ss tail
+                      if step_matches ~scope a st then seek st.s_comb ss tail
                       else false
                   | `Desc ->
-                      if step_matches ~scope a st then seek ss tail
-                      else seek (st :: ss) tail))
+                      if step_matches ~scope a st then seek st.s_comb ss tail
+                      else seek combinator (st :: ss) tail))
         in
-        seek rest ancestors)
+        seek last.s_comb rest ancestors)
 
-let scoped_matches ~scope (sel : string) (el : element)
-    (ancestors : element list) : bool =
+let parse_scoped_selector (sel : string) =
   sel
   |> String.split_on_char ','
-  |> List.exists (fun alt ->
-         match parse_steps alt with
-         | [] -> false
-         | steps -> match_steps ~scope steps el ancestors)
+  |> List.map parse_steps
+
+let scoped_matches ~scope selectors el ancestors =
+  match selectors with
+  | [steps] -> match_steps ~scope steps el ancestors
+  | selectors -> List.exists (fun steps -> match_steps ~scope steps el ancestors) selectors
 
 let query_selector_all_scoped ~(scope : element) ~(els : element list)
     (sel : string) : element list =
+  let selectors = parse_scoped_selector sel in
   List.filter
-    (fun el -> scoped_matches ~scope sel el (ancestors_of el))
+    (fun el -> scoped_matches ~scope selectors el (ancestors_of el))
     els
 
 (* The native "DOM" is the LUI extension tree — native_embed installs
@@ -419,8 +443,9 @@ let query_selector (el : element) (sel : string) : element option =
   match num_prop "node-id" el with
   | Some id ->
       let els = !subtree_elements_provider (int_of_float id) in
+      let selectors = parse_scoped_selector sel in
       List.find_opt
-        (fun e -> scoped_matches ~scope:el sel e (ancestors_of e))
+        (fun e -> scoped_matches ~scope:el selectors e (ancestors_of e))
         els
   | None -> None
 
@@ -432,8 +457,9 @@ let query_selector_all (el : element) (sel : string) : element list =
   | None -> []
 
 let doc_query_selector (sel : string) : element option =
+  let selectors = parse_scoped_selector sel in
   List.find_opt
-    (fun el -> scoped_matches ~scope:document_el sel el (ancestors_of el))
+    (fun el -> scoped_matches ~scope:document_el selectors el (ancestors_of el))
     (!doc_elements_provider ())
 
 let doc_query_selector_all (sel : string) : element list =

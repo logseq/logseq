@@ -199,10 +199,25 @@ let () =
     try int_of_string (Sys.getenv "LOGSEQ_HEIGHT") with _ -> 900
   in
   let env = try Sys.getenv "LUI_GPU" with Not_found -> "" in
+  let use_cocoa = env = "cocoa" in
+  if use_cocoa && not Host_platform.is_macos then
+    failwith "The CoreGraphics renderer requires macOS";
+  let memory_replay_duration = Option.map float_of_string
+    (Sys.getenv_opt "LOGSEQ_NATIVE_MEMORY_REPLAY") in
+  (match memory_replay_duration with
+   | Some duration when not use_cocoa || not (Float.is_finite duration) || duration <= 0. ->
+     invalid_arg "Memory replay requires LUI_GPU=cocoa and a positive finite duration"
+   | _ -> ());
+  let memory_replay = Option.is_some memory_replay_duration in
+  let raster_workers = match Sys.getenv_opt "LOGSEQ_NATIVE_RASTER_WORKERS" with
+    | None -> 4
+    | Some value -> int_of_string value in
+  if raster_workers < 1 || raster_workers > 8 then
+    invalid_arg "Native raster rendering requires between one and eight workers";
   let use_cpu = env = "0" || env = "cpu" in
   let software_window = use_cpu && not Host_platform.is_macos in
   let prefer_metal =
-    Host_platform.is_macos && not use_cpu && env <> "gl" && env <> "opengl"
+    Host_platform.is_macos && not use_cpu && not use_cocoa && env <> "gl" && env <> "opengl"
   in
   (* The embedded app's bootstrap (~70ms) is pure OCaml work — it
      touches no SDL/Metal state. Run it on a spare domain while this
@@ -228,7 +243,7 @@ let () =
     ref
       (sdl_ok
          (Sdl.create_window "logseq" ~w:width ~h:height
-            (flags (not prefer_metal && not software_window))))
+            (flags (not prefer_metal && not software_window && not use_cocoa))))
   in
   Daemon_client.boot_mark "window created";
   let metal =
@@ -247,7 +262,7 @@ let () =
   in
   Daemon_client.boot_mark "window+gpu ctx";
   let gctx =
-    if Option.is_some metal || software_window then None
+    if Option.is_some metal || software_window || use_cocoa then None
     else match Sdl.gl_create_context !win with
     | Ok c ->
       sdl_ok (Sdl.gl_make_current !win c);
@@ -318,7 +333,20 @@ let () =
            Lui_blit.present b;
            img.Lui_raster.Image.pix) }
   in
+  let cocoa_tiles = if use_cocoa then Some (Lui_raster.Tile_renderer.create ()) else None in
+  let cocoa_renderer tiles =
+    let id = Sdl.get_window_id !win in
+    { Lui_host.name = "lui_raster+iosurface";
+      Lui_host.render = (fun scene ->
+        Native_window.software_begin id (scene.Lui_scene.width,scene.height,
+          Lui_raster.Tile_renderer.band_height);
+        Lui_raster.Tile_renderer.render ~workers:raster_workers tiles scene ~emit:(fun area image ->
+          Native_window.software_tile id (area.Lui_scene.y0,area.y1-area.y0,
+            image.Lui_raster.Image.stride,image.pix));
+        Native_window.software_present id;
+        Bytes.empty) } in
   let metrics = Host_metrics.create ~now:(perf_s ()) in
+  metrics.panel_open <- Sys.getenv_opt "LOGSEQ_NATIVE_METRICS_PANEL" = Some "1";
   let presentation = Host_interaction.presentation () in
   let renderer, gl_live, blit =
     match metal with
@@ -342,7 +370,9 @@ let () =
                Bytes.empty) }
       , false, None )
     | None -> (
-        if use_cpu then
+        if use_cocoa then
+          (cocoa_renderer (Option.get cocoa_tiles),false,None)
+        else if use_cpu then
           match Lui_blit.create !win ~w:dw ~h:dh with
           | Error m ->
             unavailable_renderer ("lui_blit.create failed: " ^ m)
@@ -373,6 +403,8 @@ let () =
      installed further down is its only user. *)
   let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let cached_overlay = ref None in
+  let painted_fps = ref (-1) in
+  let overlay_fps () = int_of_float (Float.round metrics.fps) in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
     if metrics.panel_open then int_of_float (floor (perf_s () *. 4.)) else 0 in
@@ -402,6 +434,7 @@ let () =
                    Printf.sprintf "%.0f FPS" metrics.fps, metrics.panel_open, overlay_generation (),
                    !Theme_vars.generation, caret)
                 in
+                painted_fps := overlay_fps ();
                 (match !cached_overlay with
                  | Some (body_ops, body_glyphs, previous, ops, glyphs, width)
                    when body_ops == retained_ops && body_glyphs == retained_glyphs
@@ -836,6 +869,12 @@ let () =
       (Printf.sprintf "window-size\n{\"width\":%d,\"height\":%d}"
          (int_of_float (content_width ())) !win_h)
   in
+  if metrics.panel_open then resize_metrics_split ();
+  (* Diagnostic samples have a separate bounded layout cache. Each
+     label retains only its latest fragment, including stable glyphs
+     when another label changes length or the scene body changes. *)
+  let metrics_text_engine = {text_engine with Text_engine.layouts=Host_platform.Text.Cache.create 32} in
+  let metrics_labels = Hashtbl.create 24 in
   let draw_metrics (scene : Lui_scene.t) =
     let sc = !scale_cell in
     scene.width <- int_of_float (float !win_w *. sc);
@@ -850,16 +889,22 @@ let () =
           fborder=(0.,0.,0.,0.); fborder_color=Lui_scene.color 0 0 0 0;
           fdashed=false; fwide=0; fopacity=1. }
     in
-    let label x y w value =
-      Text_engine.text_ops text_engine 0
-        (Lui_scene.rect (x *. sc) (y *. sc) (w *. sc) (28. *. sc)) fg value
+    let label slot x y w value =
+      let cache = match Hashtbl.find_opt metrics_labels slot with
+        | Some cache -> cache
+        | None -> let cache = Host_interaction.overlay_cache () in
+          Hashtbl.add metrics_labels slot cache; cache in
+      let rect = Lui_scene.rect (x *. sc) (y *. sc) (w *. sc) (28. *. sc) in
+      let key = rect,fg,value,sc,!Theme_vars.generation in
+      Host_interaction.overlay_cached cache ~key scene (fun () ->
+        Text_engine.text_ops metrics_text_engine 0 rect fg value)
     in
     let button = Host_metrics.dialog_rect metrics (float !win_w) in
     let ops =
       box (button.x -. 115.) 7. 108. 32. bg
       :: box button.x button.y button.w button.h accent
-      :: label (button.x -. 108.) 9. 100. (Printf.sprintf "%.0f FPS" metrics.fps)
-      @ label (button.x +. 12.) 9. 70. "dialog"
+      :: label 0 (button.x -. 108.) 9. 100. (Printf.sprintf "%.0f FPS" metrics.fps)
+      @ label 1 (button.x +. 12.) 9. 70. "dialog"
     in
     if not metrics.panel_open then ops
     else
@@ -900,7 +945,7 @@ let () =
       ops @ (box x 48. width (float !win_h -. 48.) bg
         :: box x 48. 1. (float !win_h -. 48.) accent
         :: List.concat (List.mapi (fun i line ->
-             label (x +. 18.) (64. +. float i *. 31.) (width -. 36.) line) lines)) in
+             label (i+2) (x +. 18.) (64. +. float i *. 31.) (width -. 36.) line) lines)) in
   let metrics_overlay = Host_interaction.overlay_cache () in
   paint_metrics := (fun scene ->
     scene.Lui_scene.width <- int_of_float (float !win_w *. !scale_cell);
@@ -1976,6 +2021,7 @@ let () =
   let previous_loop = ref None in
   let frame_deadline = ref (perf_s ()) in
   let last_render = ref (perf_s ()) in
+  let memory_replay_started = perf_s () in
   let allocation_profile = ref None in
   let allocation_done = ref false in
   let allocation_samples = Hashtbl.create 32 in
@@ -2050,7 +2096,8 @@ let () =
       win_w := w; win_h := h;
       apply_actions (handle_input (Input.Resize (w,h)))
     end;
-    paint_frame ();
+    if memory_replay || Native_window.presentable (Sdl.get_window_id !win) then paint_frame ()
+    else host_req_repaint := true;
     Host_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.));
   Daemon_client.boot_mark "loop";
   Fun.protect ~finally:finish_allocation (fun () ->
@@ -2215,7 +2262,13 @@ let () =
       host_req_repaint := true
     end;
     Ui.tick_scrollbars ui ~now_ms:(perf_s () *. 1000.);
-    let dirty = Ui.want_frame ui host || !host_req_repaint in
+    let can_present = Native_window.presentable (Sdl.get_window_id !win) in
+    (* Exercise the real embedded app, its layout, and every viewport pixel
+       while occluded. Visibility exports remain truthful; this diagnostic
+       does not establish visible presentation FPS or input acceptance. *)
+    if memory_replay then Option.iter Lui_raster.Tile_renderer.invalidate cocoa_tiles;
+    let dirty = (can_present || memory_replay) &&
+      (memory_replay || Ui.want_frame ui host || !host_req_repaint) in
     let retry = presentation.Host_interaction.pending in
     if dirty then begin
       paint_frame ();
@@ -2225,7 +2278,9 @@ let () =
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
     end
-    else if Host_interaction.presentation_due presentation ~now:(perf_s ()) ~last:!last_render
+    else if can_present && (Host_interaction.presentation_due presentation
+             || overlay_fps () <> !painted_fps
+             || (metrics.panel_open && perf_s () -. !last_render >= 0.25))
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
       last_render := perf_s ();
       ignore (renderer_live.Lui_host.render (Lui_host.scene host));
@@ -2240,8 +2295,18 @@ let () =
     then Host_metrics.record_phase metrics Active_frame work_ms;
     Host_metrics.record_present metrics ~now:(perf_s ()) ~work_ms;
     let now = perf_s () in
+    (match memory_replay_duration with
+     | Some duration when now -. memory_replay_started >= duration -> quit := true
+     | _ -> ());
     if now -. !last_metrics_export >= 1. then begin
       last_metrics_export := now;
+      if Host_platform.is_macos && Option.is_some metrics_log then begin
+        let footprint_bytes,rss_bytes,peak_footprint_bytes = Native_window.memory_usage () in
+        let pixel_width,pixel_height = drawable () in
+        metrics.process_memory <- Some {footprint_bytes; rss_bytes; peak_footprint_bytes;
+          window_visible=Native_window.presentable (Sdl.get_window_id !win);
+          width= !win_w; height= !win_h; pixel_width; pixel_height}
+      end;
       (match metal with
        | Some m ->
            let total, values = Lui_metal.presentation_samples m in
@@ -2259,35 +2324,40 @@ let () =
        mem_mark := now;
        let st = Gc.quick_stat () in
        Printf.eprintf
-         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d]\n%!"
+         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d]\n%!"
          !frame
          (st.Gc.live_words * 8 / 1048576)
          (st.Gc.heap_words * 8 / 1048576)
          (st.Gc.free_words * 8 / 1048576)
          (st.Gc.top_heap_words * 8 / 1048576)
          (Lui_store.node_count store)
+         (Hashtbl.length text_engine.Text_engine.slots)
+         (Host_platform.Text.Cache.length text_engine.layouts)
+         (Host_platform.Text.Cache.length metrics_text_engine.layouts)
+         (Hashtbl.length metrics_labels)
+         (Hashtbl.length Native_embed.shallow_cache)
+         (Hashtbl.length Native_embed.subtree_cache)
+         (Ui_dom_native.Element_handles.length Ui_dom_native.tokens)
      end);
-    if not vsync then begin
-      let now = perf_s () in
-      frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;
-      let remaining = !frame_deadline -. now in
-      if remaining > 0. then Thread.delay remaining
-    end
-    else if not dirty then
-      (* Busy (recent event/wakeup/paint): 1ms — wakeup-driven pump
-         chains otherwise pay a sleep per hop across the serialized
-         invoke chain. Quiet for >2s: block in SDL_WaitEventTimeout —
-         input wakes immediately while the pump/sync poll cadence
-         drops from ~500Hz to ~60Hz. NULL event: the waking event
-         stays queued for drain_events. The old [!frame < 60] gate
-         never escaped because [frame] counts repaints, which stop
-         entirely once idle. *)
-      if perf_s () -. !last_busy < 2. then Sdl.delay 1l
-      else ignore (Sdl.wait_event_timeout None 16)
+    let now = perf_s () in
+    match Host_metrics.idle_timeout ~dirty ~now ~last_busy:!last_busy with
+    | Some timeout ->
+        if not can_present || not presentation.pending then Option.iter Lui_metal.trim metal;
+        (* The event remains queued for drain_events. Apply this to Metal
+           too: it has no GL vsync and would otherwise keep polling at
+           the active-frame cadence even when nothing needs repainting. *)
+        ignore (Sdl.wait_event_timeout None timeout)
+    | None when not vsync ->
+        frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;
+        let remaining = !frame_deadline -. now in
+        if remaining > 0. then Thread.delay remaining
+    | None when not dirty -> Sdl.delay 1l
+    | None -> ()
 
   done);
   Option.iter close_out metrics_log;
   Native_window.dispose !win;
+  Option.iter Lui_raster.Tile_renderer.release cocoa_tiles;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with
    | Some c -> Sdl.gl_delete_context c

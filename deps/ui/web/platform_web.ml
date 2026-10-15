@@ -239,7 +239,9 @@ let install ~request_flush ~dom ~timers ~files =
     { get =
         (fun name ->
           match Js.Undefined.toOption children_table_u with
-          | Some dict -> Option.map Sdk_json.of_js (Js.Dict.get dict name)
+          | Some dict -> Option.map
+              (fun value -> Icon_tabler_data.decode_children (Sdk_json.of_js value))
+              (Js.Dict.get dict name)
           | None -> None)
     ; keys =
         (fun () ->

@@ -47,6 +47,426 @@ At least 95% of actual display intervals must fit the scenario's limit. The 120 
 
 None. The user authorized fixing all-operation native latency; the remaining questions are technical investigation tasks.
 
+## Native memory budget
+
+The current target is 30–100 MB for the native GUI process, measured using
+macOS `ri_phys_footprint`, with RSS reported separately. Verify the release
+application on the existing graph at its normal 1440×900 logical window size,
+including startup, at least 600 seconds of idle time, navigation, scrolling,
+editing, and resize. Preserve rich text editing and the interaction acceptance
+criteria above. A smaller diagnostic viewport or a managed-heap reading alone
+cannot establish acceptance. The external protection terminates the app when
+either RSS or physical footprint exceeds 200,000,000 bytes.
+
+Confirmed findings on October 15:
+
+- Uninstrumented release startup still exceeded 200 MB. The protection
+  terminated it; long-running full-application acceptance remains incomplete.
+- The native icon bootstrap expanded the complete 6,192-icon registry despite
+  the host already supporting lazy bundled-icon lookup. Its regression test
+  measured 124,676,320 allocated bytes and a 3,354,990-byte envelope before the
+  fix, versus 273,648 allocated bytes and a 41,674-byte envelope afterward.
+- Resolved native SVGs now retain their identity on warm lookup. The regression
+  records 48 allocated bytes per lookup and covers registry replacement,
+  override removal, application icons, and lazy toolbar-icon resolution.
+- Independent replay of the retained 2880×1800 page scene consumed about
+  116 MB when submitted once per second, falling to about 41 MB after four
+  seconds without submission. Device-owned Metal resources measured about
+  25 MB in both states. This distinguishes driver working memory from retained
+  application textures; it does not prove that the application meets budget.
+- Idle scenes no longer resubmit periodically. Pending GPU updates still
+  retry the latest scene, FPS changes refresh the HUD, and the open metrics
+  panel continues refreshing. Native regression tests fail before these
+  changes and pass afterward.
+
+The memory objective remains unverified. Retained frame targets, drawable
+pool size, driver working memory, and application startup retention require
+further runtime measurement and optimization.
+
+Further validation on October 15:
+
+- Window drawables are limited to two. Idle trimming releases spare drawable
+  capacity without modifying the rendered frame; tests cover original-size
+  rendering, resize, and offscreen pixel preservation.
+- Window frames now draw directly into an acquired drawable. An immutable
+  native frame owns copied instance data and GPU references while background
+  acquisition and encoding run; neither operation waits on the input thread.
+  Private frame-target allocation is zero before rendering, after rendering,
+  and after resize in the real SDL/Metal window regression. Offscreen targets
+  remain owned and retain their pixel-parity behavior.
+- Collapsed sidebars no longer create an unused material or keep the window
+  transparent. Closing removes and releases the material; reopening restores
+  transparent composition. The actual AppKit window regression fails before
+  the lifecycle fix and passes afterward.
+- All native host regressions and the full LUI regression suite passed,
+  including 13 Metal pixel and GPU-budget cases.
+- The normal release application's measured startup peak still reached
+  221,299,720 bytes and was terminated by the 200 MB protection. These changes
+  therefore do not establish the 30–100 MB application budget.
+- A 0.5-second startup survivor sample estimates 15.76 MB allocated and
+  5.84 MB retained by the bundled icon table's full parse and portable JSON
+  conversion. This remains eager even though individual SVGs are now lazy.
+  Its two diagnostic major collections are not part of normal operation.
+
+The native icon provider now indexes array offsets in the original bundled
+JSON and decodes only requested icons. Index construction allocated 633,600
+bytes versus 18,913,744 bytes for eager portable-JSON conversion. Regression
+coverage compares every bundled icon against the original parser, verifies
+all names, memoized identity, missing entries, escaped keys, duplicate-key
+precedence, and malformed table rejection. Native host regressions pass.
+The normal 1440×900 release still crossed the protection threshold at
+215,516,144 bytes during startup, so the application memory target remains
+unmet.
+
+A diagnostic CPU replay of the retained 2880×1800 modal scene with moving glyphs
+used 33.21 MB, but recorded p50 34.48 ms and p95 58.12 ms. This excludes
+window presentation and fails the editing frame budget, so it is not an
+acceptable replacement renderer without substantial further optimization.
+
+The native icon provider now converts the complete bundled resource during
+the build. The generated table contains immutable renderer children, rather
+than runtime JSON arrays. A regression compiling all 6,146 bundled icons
+measured 1,410,016 bytes of eager module initialization with JSON constants;
+immutable children reduce that measurement to 53,248 bytes. First native
+lookup allocates 112 bytes instead of the indexed provider's 2,413,024-byte
+initial load. Production no longer reads the JSON file, scans offsets, or
+converts portable JSON into renderer children. Binary search returns the
+same immutable value on warm lookup. Tests compare every bundled entry and
+cover escaped names and values, duplicate precedence, empty tables, missing
+names, malformed resources, and the startup allocation budget. Web adapters
+decode at their boundary and preserve their existing rendering behavior.
+
+The newly packaged uninstrumented 1440×900 release reached 210,011,120 bytes
+of physical footprint and was terminated by the unchanged protection. The
+600-second idle run therefore did not complete. This is still a failing
+application memory result. Paused-process memory maps were collected only
+for diagnosis and do not replace normal application acceptance.
+
+Further inspection distinguishes the captured modal from ordinary page
+captures: the modal includes a full-window alpha-128 fill. CPU sampling
+identified polymorphic minimum comparisons in its translucent pixel loop.
+Integer-specific saturation and byte writes preserve the existing pixels.
+All 14 raster golden, damage, and semantic cases pass. An optional native
+capture replay now checks moving-glyph pixels against a full redraw and
+enforces a 16.67 ms p95 draw budget. The modal replay initially failed at
+70.27 ms and still fails after optimization; it cannot justify selecting
+the CPU renderer for the application. An ordinary page replay passes at
+p50 2.93 ms and p95 4.07 ms. These measurements exclude presentation.
+
+A separate 1440×900 AppKit/CoreGraphics window displaying the captured page
+at its original 2880×1800 resolution peaks at 58.00 MB physical footprint
+while scheduling repeated redraws. It is a presentation experiment, not
+the complete application. The view retains one image provider across draw
+calls, so borrowing a movable OCaml byte buffer without an ownership and
+synchronization design would be unsafe. Actual application startup, long
+idle, editing, modal performance, and resize still require validation.
+
+Window raster staging now uses a reusable 64-row band. Its retained-pixel
+regression fails with the whole-image renderer at 20,737,680 bytes and passes
+with 737,792 bytes. The window presenter owns copied, immutable CoreGraphics
+band images; source mutation and collection cannot invalidate them. Native
+window tests cover retained pixels, resize, disposal, and unchanged SDL input
+ownership. Raster coverage compares banded pixels with the existing golden
+fixtures and whole redraws, checks resize and translucent rounded geometry,
+and rejects redundant uploads for unchanged scenes. The ordinary captured
+page's tiled redraw and pixel-copy replay records p50 12.45 ms and p95
+12.63 ms; presentation is excluded, and the 8.33 ms target remains unmet.
+
+Initial full-application CoreGraphics recordings still exceeded 200 MB.
+Diagnostic inspection found both SDL and child views without layer backing;
+changing that setting is therefore not justified by the evidence. Explicit
+context flushing did not reduce the observed startup footprint and was
+removed. A console-session inspection then confirmed that the Mac was
+locked. The application had continued drawing while its window was not
+presentable. The host now uses the public window-occlusion state to defer
+layout/paint and presentation until the window is visible, retaining pending
+model updates. Linux uses SDL hidden/minimized state. The hidden-window
+regression and all native host tests pass. The current protected release
+recording is approximately 38 MB while locked; this is an occluded-window
+diagnostic and cannot establish the normal visible-window memory target,
+actual FPS, interaction behavior, or the required visible idle duration.
+
+The occluded release completed its 600-second external observation without
+crossing the protection threshold: physical footprint peaked at 38.274 MB
+and finished at 34.047 MB; RSS peaked at 114.459 MB and finished at 86.262 MB.
+No forced collection or process suspension was used in this observation.
+The Mac remained locked, so this still does not satisfy visible-window
+acceptance.
+
+Further modal replay sampling identifies opaque and translucent span writes
+as the main raster work. Packed two-pixel stores and independent 16-bit
+compositing lanes preserve the scalar rounding and saturation rules. New
+byte-level regressions cover alpha endpoints, odd widths, offset starts,
+destination transparency, and untouched edges; a preallocated 512×128
+translucent fill stays below the unchanged 131072-byte allocation limit.
+All 20 raster correctness and retention tests pass. The modal tiled replay
+improves from p50 68.82 ms / p95 136.42 ms to p50 34.78 ms / p95 35.72 ms,
+but still fails its 16.67 ms budget. The whole-image replay also still fails
+the p95 budget. These CPU timings exclude window presentation, and this
+optimization is included in the rebuilt release.
+
+Default Metal startup also prefetched window-sized drawables before any
+application frame. The window layer now starts at 1×1 without acquisition;
+the submitted scene establishes the actual drawable size on the existing
+background render queue. The cold-window regression failed before this
+change and passes together with first-frame readback, idle restoration,
+and resize coverage. The first full release recording after this change
+still peaked at 111.379 MB physical footprint, exceeding 100 MB. It was
+stopped after 202 seconds for further diagnosis and is not an idle
+acceptance recording.
+
+A native hidden-window memory regression then identified GPU pipeline
+prewarming as a separate allocation. SDK physical-footprint measurements
+over the initialization boundary reported 74,973,184 added bytes and
+failed a 20,000,000-byte limit. Prewarming now checks the public window
+occlusion state and skips invisible windows; offscreen renderers retain
+their existing behavior. The same regression adds 1,998,872 bytes after
+the fix. Subsequent full-size rendering, readback, idle restoration, and
+resize still pass, as do the full LUI and native host suites. The release
+has been repackaged with this change and restarted on the default Metal
+path for external observation. This does not establish visible-window
+startup or interaction memory.
+
+The earlier isolated CoreGraphics result is not consistently reproducible.
+Current whole-image and 64-row image experiments peak around 193–196 MB,
+including after terminating the native GUI. Device RGB versus sRGB does
+not explain the difference. These experiments remain diagnostic; they do
+not justify changing the application's color space or selecting an
+experimental renderer.
+
+The uninstrumented default Metal release completed a 600.131-second
+occluded-window observation with 1,179 external samples. Physical footprint
+peaked at 39.601 MB and finished at 35.947 MB; RSS peaked at 117.785 MB and
+finished at 117.703 MB. No forced collection or process suspension was used.
+The required visible-window and interaction observations remain missing.
+
+Memory acceptance is now enforced by the existing scenario CLI alongside
+timing and functional acceptance. It requires physical footprint, RSS,
+the SDK lifetime physical-footprint peak, window visibility, and logical
+and pixel viewport dimensions. Startup peaks remain included after timing
+warmup, physical peaks above 100 MB fail, and RSS above the 200 MB protection
+limit fails. A reduced startup viewport, invisible post-warmup samples,
+missing evidence, and visibility-sampling gaps above two seconds fail.
+Invalid or decreasing measurements fail fast. The existing 600-second
+idle-duration requirement remains unchanged. Thirty validator regressions
+pass after reproducing nine incorrect CLI success results before the fix.
+
+The native macOS exporter reads SDK `RUSAGE_INFO_V4` once per second when
+metrics recording is enabled. Its lifetime peak captures increases between
+individual samples. Window visibility uses the same public occlusion check
+as presentation eligibility. Unobserved process metrics remain explicitly
+unavailable. Native SDK, exporter, and allocation-budget tests pass; the
+full-history allocation regression also includes process-memory fields.
+A rebuilt live release emits the normal 1440×900 / 2880×1800 dimensions,
+physical/resident/peak bytes, and `window_visible=false`. The validator
+correctly rejects that recording as invisible. This is producer/validator
+integration verification, not visible-window memory acceptance.
+
+## Active renderer memory isolation
+
+A content-free 2880×1800 render target reproduces substantial graphics
+allocation: a legacy Metal clear peaks at approximately 88.3 MB physical
+footprint, compared with 62.1 MB for a 1×1 clear. Metal 4 command allocators
+produce approximately the same 88.5 MB peak, so no Metal 4 port is applied.
+These are isolated driver diagnostics, not application acceptance.
+
+The opt-in software presenter previously copied immutable CGImage bands
+into an AppKit drawing context. A cold full-size SDL regression exceeds
+its 200 MB protection limit before completing 120 updates. Immutable
+IOSurface bands now go directly to Core Animation layers without that
+client drawing context. The same regression peaks at approximately
+82.4 MB and passes its 100 MB isolation budget. This test does not reserve
+memory for application state or replace the whole-process 100 MB acceptance
+limit. An attempted 70 MB renderer sub-budget fails at 81.9 MB. A safe
+two-surface reuse probe submits only 20 updates in 10 seconds while occluded;
+a three-surface probe submits all 1200 scheduled updates and peaks at 78.3 MB.
+The 70 MB sub-budget is therefore withdrawn rather than treating unsafe
+reuse as a fix. Neither prototype establishes visible presentation FPS,
+and neither is included in production code. Resize, source
+buffer reuse after collection, unchanged frames, partial updates, pixel
+readback, disposal, and SDL mouse-event ownership remain covered.
+IOSurface accounting includes the actual allocation size and row alignment.
+The default application renderer remains Metal.
+
+The first ordinary native-scene replay has total draw/present p95 5.22 ms
+and physical peak 91.9 MB. The modal replay has p95 15.87 ms and peak
+92.9 MB, so its frame latency is still inadequate. Longer pre-optimization
+replays fail: the compatibility-library run reaches 200.3 MB RSS after
+347.9 seconds, and a run linked to the exact bundled SDL2 library reaches
+202.5 MB RSS after 377.0 seconds. Both are killed by the unchanged memory
+cap. The latter rules out attributing the growth solely to SDL compatibility.
+These replays force window updates while the window is occluded and do
+not establish visible-window FPS or idle acceptance. The initial replay
+also retained timing samples in lists; the harness now preallocates arrays
+bounded by duration and its paced 120 Hz rate to reduce measurement overhead.
+
+Allocation sampling of the actual captured CPU scenes finds approximately
+31.6 MB/frame for the ordinary page and 140 MB/frame for the modal. The
+largest sites are per-pixel bilinear sampling closures/color tuples and
+inset shadows with an empty hole. Image sampling now uses per-renderer
+channel scratch and direct integer clamp indices; empty inset holes use
+the existing clipped fill/span path. New regressions fail at 8,575,946
+bytes/frame for an image and 25,167,498 bytes/frame for an empty inset,
+then pass at 23,498 and 31,442 bytes/frame. Their 1,000,000 and 262,144
+byte limits are unchanged. A per-renderer clip-row cache also reduces a
+320-glyph regression from 1,917,578 to 287,594 bytes/frame under its unchanged
+512 KB limit. Clip stack changes, damage, resize, and multicore output are
+checked for identical pixels. All 26 raster tests pass, including fractional
+image coverage, grayscale, clipped continuous/circular shadow corners,
+alpha/opacity endpoints, golden pixels, damage, and multicore equality.
+Captured-scene four-worker CPU-only p95 is 1.47 ms for the ordinary page
+and 7.07 ms for the modal, excluding presentation and frontend work.
+A persistent-worker prototype increased memory without improving
+latency and is not included in production code.
+
+Malloc stack logging of the local 5.5.0 replay identifies live 48-byte
+allocations from `caml_alloc_stack_cache`, through `domain_create`. The
+installed compiler is OCaml 5.5.0; its domain termination does not free
+this cache. The upstream fix is included in OCaml 5.5.1
+([runtime fix](https://github.com/ocaml/ocaml/pull/14940)). CI already
+selects 5.5.1, but the earlier local native builds used the 5.5.0 switch.
+A complete 5.5.1 rebuild is required: relinking old package objects with
+the new standard library fails its implementation checksum checks and is
+not used. Native replay output now includes the compiler version so
+recordings cannot silently obscure this distinction. This explains one
+source of growth, not the entire active-process footprint.
+
+The complete 5.5.1 LUI build/test suite passes after building its local
+`@install` artifacts before the scaffold integration test. Native host
+tests also pass, and the release GUI has been rebuilt with 5.5.1. A second
+allocation snapshot records one live stack-cache allocation (48 bytes),
+compared with 1453 allocations (69,744 bytes) in the 5.5.0 snapshot.
+Sampling changes timing and these snapshots cover different intervals;
+they establish cache release, not a direct byte-for-byte whole-process
+comparison. The post-raster-optimization 5.5.0 replay completes 600 seconds
+without hitting the protection limit: SDK lifetime physical peak is
+126,911,472 bytes, sampled RSS peak is 167,886,848 bytes. It still exceeds
+the 100 MB physical target. Its timing includes concurrent builds and
+allocation diagnostics and does not establish a frame-latency improvement.
+The 5.5.1 replay also completes 600 seconds. Its SDK lifetime physical peak
+is 138,560,472 bytes; external sampling sees a lower 118,883,312-byte peak
+and 160,563,200-byte RSS peak. Sampling alone would miss the transient
+physical peak, so the 100 MB physical target still fails. Builds and
+allocation diagnostics overlap portions of this recording too; its
+18.147 ms draw/present p95 is not an uncontended latency comparison or
+visible-window FPS acceptance. Locked-window GUI plus shared worker
+footprint is approximately 88 MB; this is not active-window acceptance.
+
+The software tile presenter can render bands on up to eight workers while
+the caller alone uploads them. Each worker owns one staging band and waits
+for its upload before reusing it; exceptions join all workers and invalidate
+damage before retry. Parallel pixel, resize, upload failure, worker failure,
+and bounded staging tests pass. Four workers improve the captured modal's
+work budget, but do not resolve whole-application memory. This path remains
+opt-in, and no persistent worker pool is added.
+
+Scalar shadow integration previously allocated 3,003,226 bytes per redraw
+in the 128×96 regression. Inlining its scalar helpers preserves the formulas
+and reduces it to 252,650 bytes under the unchanged 262,144-byte limit.
+The captured modal's four-worker tile replay then has 8.090 ms draw/present
+p95 and SDK lifetime physical peak 101,893,104 bytes. It still exceeds the
+100 MB limit and remains an occluded renderer fixture, not app acceptance.
+
+An opt-in full-app repaint diagnostic now exercises the real frontend tree,
+assets, host phases, and bundled SDL2 while the screen is locked. It records
+the actual window visibility and does not claim physical presentation FPS.
+With the metrics panel closed and one raster worker, node and snapshot counts
+remain at 2517 while reported heap capacity grows from approximately 31 MB
+to 40 MB. Draw work p95 is approximately 5.25 ms, but sampled RSS reaches
+204,242,944 bytes after 10.68 seconds and the protection monitor terminates
+the process. Four workers also exceed the cap. Worker concurrency is therefore
+not sufficient to explain or solve the full-app memory issue.
+
+An early full-app vmmap reports 125.3 MiB physical footprint, with 30.4 MiB
+IOSurface dirty memory, 28.8 MiB VM_ALLOCATE dirty memory, 28.7 MiB malloc
+dirty memory, and 19.8 MiB owned-unmapped accounting. Malloc reports 16.2 MiB
+allocated and 12.4 MiB fragmentation. These categories do not separately
+identify the OCaml heap, and shared library residency is not summed into
+private process footprint.
+
+A short serial full-app Memprof cohort estimates 63,120,000 allocated bytes
+and zero surviving sampled bytes after two diagnostic major collections.
+The largest sampled sites include rounded scanline bounds and shadow
+integration. This does not establish an OCaml leak; the reported live-word
+growth can include garbage awaiting major collection. Forced collection is
+used only to classify ownership, not to meet memory acceptance.
+
+Inlining scanline scalar helpers and folding clip intersections without
+mutable accumulator references reduces an integral-edge 1024×768 clipped
+fill regression from 290,418 to 112,706 allocated bytes/frame, below its
+unchanged 131,072-byte limit. Rounded and fractional pixels remain covered
+by the existing golden and differential tests; this allocation limit applies
+to the integral-edge scanline fixture. All 33 raster tests and the full LUI
+build/test suite pass. Full-app post-change memory validation remains pending.
+
+The full-app repaint diagnostic after the scanline change still fails memory
+acceptance. The SDK records a 139,117,576-byte physical peak; the external
+guard terminates it at 201,670,656 RSS bytes after approximately 8.63 seconds.
+Its active-frame p95 is 5.30 ms. The recording includes vmmap inspection,
+so it is not a controlled before/after latency comparison.
+
+## Controlled frontend memory comparison
+
+An initial launch of the installed Electron 2.0.2 package uses a JavaScript
+daemon and is excluded from comparison with the current native-worker branch.
+The current Electron main process and UI are rebuilt from this worktree, with
+the renderer's production flag enabled. An outdated installed local
+`@logseq/graph-lifecycle` copy ignores the native binary argument; linking the
+current local package restores the native daemon launch. This is dependency
+setup, not a production source change.
+
+The controlled comparison uses a consistent SQLite backup of the demo graph,
+including its client-operations and search databases, under an isolated root.
+Both frontends load that graph and use a 1440×900-point window at 2× scale.
+The native frontend's boot log explicitly reuses the Electron-launched OCaml
+daemon at port 63811, and its health response reports PID 95064. The shared
+worker binary is built with OCaml 5.5.1. No forced GC is used for memory sampling.
+
+At the end of a 30-sample recording, physical footprint is:
+
+| Component | Native frontend | Electron frontend |
+| --- | ---: | ---: |
+| Frontend processes | 40.3 MB | 412.4 MB |
+| Same OCaml worker | 33.6 MB | 33.6 MB |
+| Application total | 73.9 MB | 446.0 MB |
+
+Electron's frontend consists of 78.6 MB main, 289.4 MB renderer, 37.1 MB GPU,
+and 7.3 MB utility processes. RSS totals are approximately 159.7 MB for native
+including the shared worker and 738.4 MB for Electron. RSS sums include shared
+framework pages and are not substituted for physical footprint.
+
+The screen remains locked. The native host records `window_visible=false`
+and zero layout runs, while the Electron renderer has constructed its DOM.
+This measures each runtime's behavior in the locked state, not equivalent
+visible rendering work, long-duration idle acceptance, or active memory/FPS.
+The native 100 MB active-memory goal remains incomplete.
+
+The worker storage adapter also retains committed payloads in an unbounded
+strong read-through cache. A regression writing 256 historical 64 KiB leaf
+values retains all 256 after diagnostic GC, then also retains all restored
+payloads. Removing that cache releases them, but the requested implementation
+must preserve a weak cache and benchmark behavior. The strong-cache baseline
+is restored for that comparison. Warm-cache, mutable-address replacement,
+payload lifetime, and unused-address lifetime probes remain local experiments.
+The user has deferred weak-cache implementation; those unfinished tests are
+excluded from this change. A separate 4k-movies
+baseline startup exceeds the unchanged 200 MB protection limit and is killed;
+it provides no passing benchmark evidence.
+
+## Validation after the October 15 branch update
+
+The branch is fast-forwarded to `27019f4dff` before restoring the local native
+changes. The combined native executable and Melange UI compile with OCaml
+5.5.1 in the release profile. Native host, icon generator, contract, and shared
+boundary test aliases pass. The corresponding renderer's release `@all` and
+`@runtest` pass, including all 33 raster tests.
+
+The Web recording-host suite reports 2070 checks and 18 Journals failures.
+A separate build of the unmodified `27019f4dff` UI produces exactly the same
+18 failures. This establishes no additional failures in that suite for the
+local changes; it does not establish a passing Web suite. The screen remains
+locked, so active native UI, memory, and presentation acceptance remain open.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
@@ -237,3 +657,30 @@ A regression changes one hover fill while retaining 1000 glyph records and recom
 Native `contains` omitted the target element itself, so two handles of the same trigger never compared as the same element. Tooltip hover therefore repeatedly cancelled and re-armed the same trigger. The original element-token ring also overwrote a held handle after 1024 lookups. The identity regression first failed before any intervening lookup, then failed after 2001 lookups once reflexive containment was corrected.
 
 Containment now includes the same element and preserves parent/child direction. Handles use monotonically assigned tokens and an ephemeron registry weakly keyed by the handle itself; a held handle retains its snapshot and temporary event handles become collectible. The old bounded-ring expiration rule is removed. Tests pass for repeated lookups, separate snapshots of one node, held handles across GC, directional containment, and disposed snapshot collection. The GPU glyph reuse full suites also pass, including Metal pixel coverage and native input tests. Rebuilt native application validation remains outstanding for the combined change.
+
+## Idle allocation with unchanged patches
+
+An extended native recording has zero events and zero layout runs over 30.103 seconds but allocates 561242440 host-domain bytes. Heap capacity reaches 601559600 bytes. The metrics panel is open; its updates use the renderer overlay rather than application patches, so an unchanged patch counter does not establish that rendering is idle. The renderer restores the retained operations and glyph list after overlay submission; the evidence does not support repeated overlay-list accumulation.
+
+The GPU glyph cache previously weakly retained compiled instances as long as historical glyph keys remained alive elsewhere. It also accumulated weak-table bookkeeping between major collections. A regression retaining historical text snapshots across 100 replacements fails with 24947088 additional bytes of compiled renderer data. The cache now owns only glyphs used by its current compiled frame and drops superseded entries at replacement, independently of GC timing. The same regression retains 247168 bytes and verifies identical uncached rendering. The stable 1000-glyph hover regression remains below its unchanged 131072-byte/frame budget at 91429 bytes/frame; the full LUI suite passes.
+
+Panel labels now retain their individual fragments and relocate glyph indices when preceding text changes length. Unchanged glyph geometry preserves physical identity across sample changes, allowing GPU instance reuse. Diagnostic layouts use a separate 32-entry cache instead of adding continuously changing numerical strings to the application text cache. A real CoreText label regression fails when changing a number reshapes unrelated labels, then passes at 52112 bytes/update. Cached indices are also checked against changed and empty scene bodies.
+
+Allocation sampling identifies work-percentile sorting as another idle hotspot. Copying and sorting the 240-element float array for p50 and p95 allocates 217757 bytes/update. Reusable integer index buffers and one sort per history update reduce the same regression to 65 bytes/update without changing the rolling percentile semantics.
+
+The rebuilt panel recording contains a 24.117-second interval with zero events and zero layouts. It allocates 17242608 host-domain bytes, while heap capacity decreases by 2165440 bytes and sampled live memory decreases by 1551448 bytes. This interval does not reproduce monotonic heap growth, but approximately 0.715 MB/s allocation still exceeds the 256 KiB/s idle target. Active editing, scrolling, pointer allocation, and presentation acceptance remain incomplete.
+
+The user requires terminating the application above 200 MB of actual process memory. Test launches now have an external RSS monitor with a 200000000-byte threshold and a 0.5-second polling interval. It terminated the rebuilt application at 200491008 RSS bytes. This cap limits test resource consumption; it is not a memory optimization or a passing acceptance result. Samples after input resumes must not be reported as pure idle. `LOGSEQ_NATIVE_METRICS_PANEL=1` opens the split at startup for reproducible idle recordings when UI automation cannot click the window.
+
+
+## Quiet-loop integration and extended memory validation
+
+The extended recording after the warmup spans 775.598 seconds. It allocates 718608 host-domain bytes/s and runs 0.330 minor collections/s; heap capacity grows from 40586832 to 59237392 bytes. It contains 79 events, so it is not a pure-idle acceptance recording. Both allocation and GC exceed their existing limits. Idle acceptance now requires at least 600 seconds, and its regression rejects the previously reported 24-second interval.
+
+A 30-second live-allocation cohort estimates 17840000 allocated bytes and 160000 surviving bytes after two diagnostic major collections. The surviving samples are shaped layouts. Snapshot, handle, glyph-slot, and layout-cache counts remain bounded in that recording. This narrows the investigation to allocation churn but does not establish that every native resource is released. Forced collections remain diagnostic only.
+
+The remote quiet-loop fix replaces an idle gate based on repaint count with elapsed time since activity. Repaints stop during idle, so a repaint-count boot gate may never expire. The local Metal path has no GL vsync and instead used the active 120 Hz deadline, bypassing the remote blocking-wait branch. Quiet-loop selection now precedes both renderer pacing paths: after two seconds without activity and with no dirty frame, SDL waits up to 16 ms for an event. Input wakes the wait, and the waking event remains queued for normal handling. Scheduler regressions cover quiet, recent-activity, and dirty-frame cases.
+
+The rebuilt application reduces quiet polling from approximately 120 to 60 iterations/s, but still allocates approximately 0.65–0.75 MB/s in the short panel recording. Its actual RSS reaches 200114176 bytes and the external memory guard kills it. Subsequent launch diagnostics also hit the unchanged 200000000-byte cap. These recordings cannot certify sustained idle behavior, interaction responsiveness, or the FPS requirements. A native memory-map capture reports substantial graphics memory beyond the OCaml heap; ownership and in-flight GPU resources still require investigation.
+
+Merge validation builds the native executable and web bundle and passes the UI test aliases after generating their complete JavaScript test dependencies. Restored allocation fixes pass the native host tests, all 19 acceptance-validator tests, and the LUI test suite. The nearest-ancestor regression measures 12073 bytes/query for 64 ancestors, and the 1000-row scoped query regression measures 216525 bytes/query. These are isolated regression measurements, not application FPS acceptance.

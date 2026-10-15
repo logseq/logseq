@@ -5,6 +5,80 @@ open Lui_protocol
 let check message condition = if not condition then failwith message
 
 let () =
+  let before = Gc.allocated_bytes () in
+  ignore (Option.get (Icon_data.get "menu-2"));
+  let allocated = Gc.allocated_bytes () -. before in
+  Printf.printf "native icon startup allocated %.0f bytes\n%!" allocated;
+  check "Native icons still parse or retain the source JSON at startup"
+    (allocated < 100_000.)
+
+let rec json_of_yojson = function
+  | `Null -> Json.Null
+  | `Bool b -> Json.Bool b
+  | `Int n -> Json.Number (float_of_int n)
+  | `Intlit s -> Json.Number (float_of_string s)
+  | `Float f -> Json.Number f
+  | `String s -> Json.String s
+  | `List xs -> Json.Array (Array.of_list (List.map json_of_yojson xs))
+  | `Assoc kvs -> Json.Object (List.map (fun (k,v) -> k,json_of_yojson v) kvs)
+
+let () =
+  let source = In_channel.with_open_bin (Sys.getenv "LOGSEQ_ICON_DATA") In_channel.input_all in
+  let expected = match Yojson.Safe.from_string source with
+    | `Assoc entries -> entries | _ -> failwith "Invalid bundled icon fixture" in
+  check "Compiled native icons lost bundled names"
+    (List.sort String.compare (Array.to_list (Icon_data.keys ()))
+     = List.sort String.compare (List.map fst expected));
+  List.iter (fun (name,value) ->
+    check ("Compiled icon differs from bundled data: " ^ name)
+      (Icon_data.get name = Some (Icon_tabler_data.decode_children (json_of_yojson value)))) expected;
+  let first = Option.get (Icon_data.get "menu-2") in
+  let before = Gc.allocated_bytes () in
+  for _ = 1 to 1000 do
+    check "Repeated icon lookup does not reuse compiled data"
+      (Option.get (Icon_data.get "menu-2") == first)
+  done;
+  check "Warm icon lookup still decodes data"
+    (Gc.allocated_bytes () -. before < 32_000.);
+  check "Missing icon unexpectedly resolves" (Icon_data.get "absent-native-icon" = None);
+  check "Before-first icon name unexpectedly resolves" (Icon_data.get "" = None);
+  check "After-last icon name unexpectedly resolves" (Icon_data.get "zzzzzzzz" = None);
+  print_endline "native compiled icon data: OK"
+
+let () =
+  let snapshot = Ui_theme.snapshot Ui_theme.Light in
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode",`String "light";
+     "vars",`Assoc (List.map (fun (key,value) -> key,`String value) snapshot.Ui_theme.vars)]));
+  let store = Lui_store.create () in
+  List.iter (Lui_store.apply_op store)
+    [CreateNode (1, Text);
+     SetProp (1, FontSize, StringValue "var(--ls-page-title-size, 32px)")];
+  check "Native titles ignore the production theme's 36-point size"
+    (Host_platform.Text.size (Text_engine.font_of store 1) = 36.);
+  Lui_store.apply_op store (SetProp (1, FontSize, StringValue "var(--missing-font-size, 18px)"));
+  check "An absent font token must use its declared CSS fallback"
+    (Host_platform.Text.size (Text_engine.font_of store 1) = 18.);
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode",`String "light";
+     "vars",`Assoc ["--font-alias",`String "var(--font-target)";
+                    "--font-target",`String "22px";
+                    "--font-code",`String "monospace"]]));
+  Lui_store.apply_op store (SetProp (1, FontSize, StringValue "var(--font-alias, 14px)"));
+  check "Native text ignores nested theme font aliases"
+    (Host_platform.Text.size (Text_engine.font_of store 1) = 22.);
+  Lui_store.apply_op store (SetProp (1, FontFamily, StringValue "var(--font-code, sans-serif)"));
+  let mono = Text_engine.font_of store 1 in
+  let narrow,_ = Host_platform.Text.measure mono "iiii" in
+  let wide,_ = Host_platform.Text.measure mono "WWWW" in
+  check "Code font tokens fall back to proportional text"
+    (abs_float (narrow -. wide) < 0.1);
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode",`String "light";
+     "vars",`Assoc (List.map (fun (key,value) -> key,`String value) snapshot.Ui_theme.vars)]));
+  print_endline "native theme typography: OK"
+
+let () =
   let store = Lui_store.create () in
   Lui_store.apply_op store (CreateNode (1, Text));
   let text = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" in
@@ -78,6 +152,38 @@ let () = Native_embed.with_entry_lock (fun () ->
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let before = Gc.allocated_bytes () in
+  let icons = Icons.app_icon_svgs () in
+  let payload = Yojson.Safe.to_string (`Assoc
+    (List.map (fun (name,svg) -> name,`String svg) icons)) in
+  Host_icons.install payload;
+  let allocated = Gc.allocated_bytes () -. before in
+  Printf.printf "native icon bootstrap allocated %.0f bytes, payload %d bytes\n%!"
+    allocated (String.length payload);
+  check "Native startup eagerly duplicates the complete bundled icon table"
+    (allocated < 1_000_000. && String.length payload < 65536);
+  List.iter (fun name ->
+    check ("Lazy native icon lookup lost " ^ name) (Host_icons.svg_of name <> None))
+    ["app:menu-2"; "app:search"; "app:dots"; "app:layout-sidebar-right"];
+  List.iter (fun (name,svg) ->
+    check ("Custom native icon changed " ^ name) (Host_icons.svg_of ("app:" ^ name) = Some svg))
+    (Icons.custom_icons @ Icons.extension_icons @ Icons.status_icons @ Icons.priority_icons);
+  let original = Option.get (Host_icons.svg_of "app:menu-2") in
+  let before = Gc.allocated_bytes () in
+  for _=1 to 1000 do
+    check "A cached icon was converted again"
+      (Option.get (Host_icons.svg_of "app:menu-2") == original)
+  done;
+  let lookup_bytes = (Gc.allocated_bytes () -. before) /. 1000. in
+  Printf.printf "native cached SVG allocated %.0f bytes/lookup\n%!" lookup_bytes;
+  check "Warm native icon lookup must not rebuild SVG data" (lookup_bytes < 128.);
+  let replacement = "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0h4\"/></svg>" in
+  Host_icons.install (Yojson.Safe.to_string (`Assoc ["menu-2",`String replacement]));
+  check "An icon registry update retained a stale SVG"
+    (Host_icons.svg_of "app:menu-2" = Some replacement);
+  Host_icons.install payload;
+  check "Replacing the icon registry retained a removed override"
+    (Host_icons.svg_of "app:menu-2" = Some original);
   let store = Lui_store.create () in
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
@@ -85,8 +191,9 @@ let () = Native_embed.with_entry_lock (fun () ->
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;
   Logseq_editor.register registry;
-  let app = Lui_app.create_with_extensions backend registry Model.initial
-      (fun model _ -> model) (fun _ model _ -> Chrome.shell model) in
+  let initial = {Model.initial with left_sidebar_open=true; right_sidebar_open=false} in
+  let app = Lui_app.create_with_extensions backend registry initial
+      (fun _ next -> next) (fun _ model _ -> Chrome.shell model) in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   let layout = Lui_layout.create () in
@@ -95,9 +202,65 @@ let () = Native_embed.with_entry_lock (fun () ->
       = Some "app-container-wrapper") (Lui_store.preorder store) in
   let scroll = List.find (fun id -> Lui_store.kind store id = "scroll")
       (Lui_store.preorder store) in
+  let find_class cls = List.find (fun id ->
+    match Lui_store.string_prop store id "style-class" with
+    | Some value -> List.mem cls (String.split_on_char ' ' value)
+    | None -> false) (Lui_store.preorder store) in
+  let main = find_class "cp__sidebar-main-content" in
+  let sidebar = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "left-sidebar")
+    (Lui_store.preorder store) in
+  let left_menu = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "left-menu")
+    (Lui_store.preorder store) in
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let menu_rect = Option.get (Lui_layout.rect layout left_menu) in
+  let sidebar_rect = Option.get (Lui_layout.rect layout sidebar) in
+  check (Printf.sprintf "Native titlebar toggle x=%.0f w=%.0f exceeds sidebar x=%.0f w=%.0f" menu_rect.x menu_rect.w sidebar_rect.x sidebar_rect.w)
+    (menu_rect.x >= 160. && menu_rect.x +. menu_rect.w <= sidebar_rect.x +. sidebar_rect.w);
+  List.iter (fun (width,height) ->
+    Lui_layout.sync ~scale:2. ~width ~height layout store;
+    let viewport = Option.get (Lui_layout.rect layout scroll) in
+    let content = Option.get (Lui_layout.rect layout main) in
+    let expected_width = min 1920. (viewport.w -. 96.) in
+    let expected_x = viewport.x +. 64. +. (viewport.w -. 96. -. expected_width) /. 2. in
+    check (Printf.sprintf "Main content width %.0f does not match %.0f at %.0f" content.w expected_width width)
+      (abs_float (content.w -. expected_width) <= 2.);
+    check "Main content is not centered within the padded viewport"
+      (abs_float (content.x -. expected_x) <= 2.);
+    check "Journals must retain the production 32-point top spacing"
+      (content.y >= viewport.y +. 64.)) [2880.,1800.; 2000.,1200.; 1280.,900.];
+  let icons = List.filter (fun id -> Lui_store.kind store id = "icon")
+    (Lui_store.preorder store) in
+  check "The shell must contain visible toolbar and navigation icons" (icons <> []);
+  List.iter (fun id ->
+    match Lui_layout.rect layout id with
+    | Some rect when rect.w > 0. && rect.h > 0. ->
+        (match Host_icons.image_of store 1. id rect with
+         | Some image ->
+             let opaque = ref false in
+             for i = 3 to Bytes.length image.Lui_scene.ipix - 1 do
+               if i mod 4 = 3 && Bytes.get image.ipix i <> '\000' then opaque := true
+             done;
+             check "A visible native icon rasterized to transparent pixels" !opaque
+         | None -> failwith ("A visible native icon did not resolve: " ^
+             Option.value ~default:"unknown" (Host_icons.icon_name store id)))
+    | _ -> ()) icons;
+  ignore (Lui_app.send app {initial with left_sidebar_open=false});
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let menu_ids = List.filter (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "left-menu")
+    (Lui_store.preorder store) in
+  check "Collapsing the sidebar duplicated or removed the titlebar toggle" (List.length menu_ids = 1);
+  let closed_menu_rect = Option.get (Lui_layout.rect layout (List.hd menu_ids)) in
+  check "The collapsed titlebar toggle overlaps the system traffic lights"
+    (closed_menu_rect.x >= 160. && closed_menu_rect.x < 200.);
+  ignore (Lui_app.send app initial);
+  ignore (Lui_app.flush app);
   List.iter (Lui_store.apply_op store)
     [CreateNode (100000, Box); SetProp (100000, HeightValue, IntValue 4000);
-     InsertChild (scroll, 100000, 0)];
+     InsertChild (main, 100000, 0)];
   List.iter (fun (width,height) ->
     Lui_layout.sync ~scale:2. ~width ~height layout store;
     let root_rect = Option.get (Lui_layout.rect layout root) in
@@ -499,6 +662,100 @@ let () =
       ignore (key next);
       check "A document-owned key was also delivered to a disposed editor" (!received=3));
   print_endline "native atomic editor key delivery: OK"
+
+let () =
+  let store = Lui_store.create () in
+  let scene = Lui_scene.create
+    ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
+    ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512) in
+  let engine = Text_engine.create ~scene:(fun () -> scene)
+    ~scale:(fun () -> 2.) ~store:(fun () -> store) in
+  let caches = Array.init 21 (fun _ -> Host_interaction.overlay_cache ()) in
+  let foreground = Lui_scene.color 0 0 0 255 in
+  let frame sample =
+    scene.glyphs <- [];
+    Array.iteri (fun index cache ->
+      let value = if index=0 then Printf.sprintf "Heap: %d MB" sample
+        else "Unchanged performance measurement" in
+      let rect = Lui_scene.rect 2000. (float index *. 32.) 800. 32. in
+      ignore (Host_interaction.overlay_cached cache ~key:value scene (fun () ->
+        Text_engine.text_ops engine 0 rect foreground value))) caches;
+    Host_interaction.seal_overlay scene in
+  frame 99;
+  let original = List.nth scene.glyphs 20 in
+  frame 100;
+  let current = List.find_opt (fun glyph -> glyph.Lui_scene.gx=original.gx
+    && glyph.gy=original.gy && glyph.gu=original.gu && glyph.gv=original.gv) scene.glyphs in
+  check "Changing the number of metrics digits reshaped unrelated labels"
+    (match current with Some glyph -> glyph == original | None -> false);
+  let before = Gc.allocated_bytes () in
+  for sample=101 to 120 do frame sample done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 20. in
+  Printf.printf "native metrics label refresh allocated %.0f bytes/frame\n%!" allocated;
+  check "A metrics update regenerated every unchanged text label" (allocated <= 131072.);
+  print_endline "native metrics label retention: OK"
+
+let () =
+  let ancestors = Array.init 64 (fun id -> Js.Json.JObject
+    ["node-id",Js.Json.JNumber (float id); "class",Js.Json.JString "container wrapper"] ) in
+  let snapshot = Js.Json.JObject ["node-id",Js.Json.JNumber 100.;
+    "class",Js.Json.JString "text"; "ancestors",Js.Json.JArray ancestors] in
+  let before = Gc.allocated_bytes () in
+  for _=1 to 100 do
+    check "Missing hover selector unexpectedly matched"
+      (Dom_ext.closest snapshot ".missing, [data-tooltip]" = None)
+  done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 100. in
+  Printf.printf "native closest on 64 ancestors allocated %.0f bytes/query\n%!" allocated;
+  check "Hover closest reparses selectors and copies ancestor paths per candidate"
+    (allocated <= 16384.);
+  print_endline "native closest allocation: OK"
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store = Lui_store.create () in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let app = Lui_app.create backend Model.initial (fun model _ -> model)
+    (fun _ _ _ -> Lui_elements.column ~style_class:"outer block"
+      [Lui_elements.column ~style_class:"inner block"
+        [Lui_elements.text ~value:"selector target" []]]) in
+  ignore (Lui_app.start app); ignore (Lui_app.flush app);
+  let target = List.find (fun id -> Lui_store.string_prop store id "text" = Some "selector target")
+    (Lui_store.preorder store) in
+  let snapshot = Native_embed.ext_snapshot (Lui_app.runtime app) target in
+  let nearest = Option.get (Dom_ext.closest snapshot ".block") in
+  check "Native closest selects an outer block instead of the nearest block"
+    (Dom_ext.str_prop "class" nearest = Some "inner block");
+  check "A descendant was incorrectly used as the ancestor of an outer candidate"
+    (Dom_ext.closest snapshot ".inner .outer" = None);
+  check "Closest lost a valid ancestor selector"
+    (Dom_ext.closest snapshot ".outer .inner" <> None);
+  ignore (Lui_app.dispose app);
+  print_endline "native nearest ancestor selectors: OK")
+
+let () =
+  let element id class_ ancestors = Js.Json.JObject
+    ["node-id",Js.Json.JNumber (float id); "class",Js.Json.JString class_;
+     "ancestors",Js.Json.JArray (Array.of_list ancestors)] in
+  let scope = element 200000 "scope" [] in
+  let direct = element 200001 "item" [scope] in
+  let wrapper = element 200002 "wrapper" [scope] in
+  let nested = element 200003 "item" [wrapper;scope] in
+  let rows = List.init 1000 (fun id -> element (id+300000) "row item" [scope]) in
+  let before = Gc.allocated_bytes () in
+  for _=1 to 20 do
+    check "Compiled native selector changed query results"
+      (List.length (Dom_ext.query_selector_all_scoped ~scope ~els:rows ".item")=1000)
+  done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 20. in
+  Printf.printf "native 1000-row query allocated %.0f bytes/query\n%!" allocated;
+  check "Native queries recompile the same selector for each candidate" (allocated <= 262144.);
+  let results = Dom_ext.query_selector_all_scoped ~scope ~els:[direct;wrapper;nested] ":scope > .item" in
+  check "A direct-child selector also matched nested descendants" (results=[direct]);
+  check "A descendant selector lost nested matches"
+    (Dom_ext.query_selector_all_scoped ~scope ~els:[direct;wrapper;nested] ":scope .item"
+      = [direct;nested]);
+  print_endline "native scoped selector compilation: OK"
 
 let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_REPLAY" with
   | None -> ()

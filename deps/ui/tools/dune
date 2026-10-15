@@ -16,3 +16,17 @@
  (name version_gen)
  (modes native)
  (libraries yojson))
+
+(executable
+ (name icon_gen)
+ (modes native)
+ (libraries yojson))
+
+(rule
+ (alias runtest)
+ (deps icon_gen_test.py ../src/contracts/json.ml ../src/shared/icon_tabler_data.ml
+  ../assets/tabler-children.json)
+ (action
+  (run python3 %{dep:icon_gen_test.py} %{exe:icon_gen.exe}
+   %{ocamlc} %{dep:../src/contracts/json.ml} %{ocamlopt}
+   %{dep:../src/shared/icon_tabler_data.ml} %{dep:../assets/tabler-children.json})))

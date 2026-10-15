@@ -328,7 +328,7 @@ let () =
   ignore (Lui_host.repaint host);
   check "A busy renderer must not count a skipped scene as presented" (List.length !presented=1);
   check "A dirty scene skipped by the GPU must retry on the next loop without new input"
-    (Host_interaction.presentation_due state ~now:0.016 ~last:0.008);
+    (Host_interaction.presentation_due state);
   ignore (Lui_host.apply_batch host {generation=3;ops=[SetProp (1,BackgroundValue,StringValue "#00ff00")]});
   ignore (Lui_host.repaint host);
   ready := true;
@@ -339,9 +339,11 @@ let () =
     (List.exists (function Lui_scene.Fill fill -> fill.fcolor=Lui_scene.color 0 255 0 255 | _ -> false)
       (List.hd !presented));
   check "A successful retry must stop immediate resubmission"
-    (not (Host_interaction.presentation_due state ~now:0.025 ~last:0.024));
-  check "Idle heartbeat must remain available"
-    (Host_interaction.presentation_due state ~now:1.025 ~last:0.024);
+    (not (Host_interaction.presentation_due state));
+  check "An unchanged idle scene must not keep GPU working resources alive"
+    (not (Host_interaction.presentation_due state));
+  check "A long idle interval must not resubmit an unchanged scene"
+    (not (Host_interaction.presentation_due state));
   print_endline "native pending presentation: OK"
 
 let () =
@@ -372,5 +374,18 @@ let () =
   ignore (frame 2 [glyph]);
   check "A new metrics sample must refresh the overlay" (!draws=2);
   ignore (frame 2 [glyph;glyph]);
-  check "Changed body glyph count must refresh absolute overlay indices" (!draws=3);
+  check "Changed body glyph count must relocate cached glyph indices without reshaping" (!draws=2);
+  (match frame 2 [glyph;glyph] with
+   | [Lui_scene.Glyphs range] -> check "Relocated overlay points at the wrong glyphs"
+       (range.gstart=2 && range.gend=3)
+   | _ -> failwith "Overlay lost its text operation");
+  let prior = List.hd scene.glyphs in
+  ignore (frame 3 [glyph;glyph]);
+  check "Unchanged glyph geometry lost its identity after an updated sample"
+    (List.hd scene.glyphs == prior);
+  ignore (frame 3 []);
+  (match frame 3 [] with
+   | [Lui_scene.Glyphs range] -> check "Overlay cannot relocate to an empty body"
+       (range.gstart=0 && range.gend=1)
+   | _ -> failwith "Empty body lost overlay text");
   print_endline "native metrics overlay reuse: OK"

@@ -260,15 +260,15 @@ let shallow_of (rt : Lui_runtime.application) node : Js.Json.t =
 let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   invalidate_stale_snapshots rt;
   let ancestors =
-    let rec walk n acc depth =
-      if depth >= 64 then acc
+    let rec walk n depth =
+      if depth >= 64 then []
       else
         match Hashtbl.find_opt rt.Lui_runtime.runtime_parents n with
         | Some parent ->
-            walk parent (shallow_of rt parent :: acc) (depth + 1)
-        | None -> acc
+            shallow_of rt parent :: walk parent (depth + 1)
+        | None -> []
     in
-    walk node [] 0
+    walk node 0
   in
   match shallow_of rt node with
   | Js.Json.JObject kvs ->

@@ -179,7 +179,7 @@ let presentation () = {pending=false}
 let present state ~ready ~submit scene =
   if ready then begin submit scene; state.pending <- false; true end
   else begin state.pending <- true; false end
-let presentation_due state ~now ~last = state.pending || now -. last >= 1.
+let presentation_due state = state.pending
 
 type 'key overlay_cache = {
   mutable overlay : ('key * int * Lui_scene.op list * Lui_scene.glyph list) option;
@@ -189,9 +189,14 @@ let overlay_cached cache ~key (scene : Lui_scene.t) draw =
   let body = scene.glyphs in
   let base = List.length body in
   match cache.overlay with
-  | Some (previous,previous_base,ops,glyphs) when previous=key && previous_base=base ->
+  | Some (previous,previous_base,ops,glyphs) when previous=key ->
     scene.glyphs <- glyphs @ body;
-    ops
+    if previous_base=base then ops
+    else List.map (function
+      | Lui_scene.Glyphs range -> Lui_scene.Glyphs
+          {range with gstart=range.gstart + base - previous_base;
+                      gend=range.gend + base - previous_base}
+      | op -> op) ops
   | _ ->
     let ops = draw () in
     let rec prefix glyphs =
@@ -199,5 +204,14 @@ let overlay_cached cache ~key (scene : Lui_scene.t) draw =
       else match glyphs with
         | glyph::rest -> glyph :: prefix rest
         | [] -> invalid_arg "Overlay draw must prepend glyphs to the current scene" in
-    cache.overlay <- Some (key,base,ops,prefix scene.glyphs);
+    let rec reuse fresh old = match fresh,old with
+      | glyph::rest,previous::remaining ->
+        (if glyph=previous then previous else glyph) :: reuse rest remaining
+      | fresh,_ -> fresh in
+    let glyphs = prefix scene.glyphs in
+    let glyphs = match cache.overlay with
+      | Some (_,_,_,old) -> reuse glyphs old
+      | None -> glyphs in
+    scene.glyphs <- glyphs @ body;
+    cache.overlay <- Some (key,base,ops,glyphs);
     ops

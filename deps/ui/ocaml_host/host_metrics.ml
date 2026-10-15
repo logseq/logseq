@@ -15,7 +15,12 @@ type phase_samples = { values : float array; formatted : string option array;
   mutable used : int; mutable next : int; mutable total : int; mutable sum : float;
   mutable summary : summary option; mutable serialized_header : string option }
 
+type process_memory = { footprint_bytes : int; peak_footprint_bytes : int;
+  rss_bytes : int; window_visible : bool; width : int; height : int;
+  pixel_width : int; pixel_height : int }
+
 type t = {
+  mutable process_memory : process_memory option;
   mutable key_downs : int;
   mutable enter_downs : int;
   mutable text_commits : int;
@@ -26,6 +31,8 @@ type t = {
   phases : (phase * phase_samples) list;
   export_buffer : Buffer.t;
   samples : float array;
+  work_samples : phase_samples;
+  mutable work_sorted : bool;
   mutable count : int;
   mutable cursor : int;
   mutable presented : int;
@@ -51,11 +58,17 @@ type t = {
 let target_fps = 120.
 let frame_budget_ms = 1000. /. target_fps
 let next_deadline ~previous ~now = max now (previous +. 1. /. target_fps)
-let create ~now = {export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
-  presentation_seen=0; gpu_submitted=0; gpu_busy_skips=0; phases=List.map (fun (phase, _) -> phase,
+let idle_timeout ~dirty ~now ~last_busy =
+  if not dirty && now -. last_busy >= 2. then Some 16 else None
+let sample_history () =
   {values=Array.make 240 0.; formatted=Array.make 240 None;
    indices=Array.make 240 0; scratch=Array.make 240 0;
-   used=0; next=0; total=0; sum=0.; summary=None; serialized_header=None}) phases; samples=Array.make 240 0.; count=0; cursor=0;
+   used=0; next=0; total=0; sum=0.; summary=None; serialized_header=None}
+let create ~now =
+  let work_samples = sample_history () in
+  {process_memory=None; export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
+  presentation_seen=0; gpu_submitted=0; gpu_busy_skips=0; phases=List.map (fun (phase, _) -> phase,
+  sample_history ()) phases; samples=work_samples.values; work_samples; work_sorted=false; count=0; cursor=0;
   presented=0; started=now; fps=0.; frame_ms=0.; paint_ms=0.; layout_ms=0.;
   render_ms=0.; gpu_submit_ms=0.; populate_ms=0.; event_ms=0.; input_latency_ms=0.; missed=0;
   panel_open=false; input_at=None; layout_count=0; patch_ops=0; event_count=0; pump_ms=0.}
@@ -143,12 +156,19 @@ let snapshot t ~now =
   let gc = Gc.quick_stat () in
   let buffer = t.export_buffer in
   Buffer.clear buffer;
-  Printf.bprintf buffer "{\"time_s\":%.3f,\"fps\":%.2f,\"target_fps\":%.0f,\"layout_count\":%d,\"event_count\":%d,\"gpu_submitted\":%d,\"gpu_busy_skips\":%d,\"key_downs\":%d,\"enter_downs\":%d,\"text_commits\":%d,\"text_bytes\":%d,\"gc\":{\"allocated_bytes\":%.0f,\"host_allocated_bytes\":%.0f,\"minor_collections\":%d,\"major_collections\":%d,\"heap_bytes\":%d,\"live_bytes\":%d,\"top_heap_bytes\":%d},\"phases\":{"
+  Printf.bprintf buffer "{\"time_s\":%.3f,\"fps\":%.2f,\"target_fps\":%.0f,\"layout_count\":%d,\"event_count\":%d,\"gpu_submitted\":%d,\"gpu_busy_skips\":%d,\"key_downs\":%d,\"enter_downs\":%d,\"text_commits\":%d,\"text_bytes\":%d,\"gc\":{\"allocated_bytes\":%.0f,\"host_allocated_bytes\":%.0f,\"minor_collections\":%d,\"major_collections\":%d,\"heap_bytes\":%d,\"live_bytes\":%d,\"top_heap_bytes\":%d}"
     now t.fps target_fps t.layout_count t.event_count t.gpu_submitted t.gpu_busy_skips t.key_downs t.enter_downs t.text_commits t.text_bytes
     ((gc.minor_words +. gc.major_words -. gc.promoted_words) *. float (Sys.word_size / 8))
     (Gc.allocated_bytes ())
     gc.minor_collections gc.major_collections
     (gc.heap_words * (Sys.word_size / 8)) (gc.live_words * (Sys.word_size / 8)) (gc.top_heap_words * (Sys.word_size / 8));
+  (match t.process_memory with
+   | None -> Buffer.add_string buffer ",\"process_memory\":null"
+   | Some memory ->
+       Printf.bprintf buffer ",\"process_memory\":{\"footprint_bytes\":%d,\"peak_footprint_bytes\":%d,\"rss_bytes\":%d,\"window_visible\":%b,\"width\":%d,\"height\":%d,\"pixel_width\":%d,\"pixel_height\":%d}"
+         memory.footprint_bytes memory.peak_footprint_bytes memory.rss_bytes
+         memory.window_visible memory.width memory.height memory.pixel_width memory.pixel_height);
+  Buffer.add_string buffer ",\"phases\":{";
   List.iteri (fun phase_index (phase, name) ->
     if phase_index > 0 then Buffer.add_char buffer ',';
     let history = List.assoc phase t.phases in
@@ -198,14 +218,20 @@ let record_present t ~now ~work_ms =
   t.samples.(t.cursor) <- work_ms;
   t.cursor <- (t.cursor + 1) mod Array.length t.samples;
   t.count <- min (t.count + 1) (Array.length t.samples);
+  t.work_sorted <- false;
   t.frame_ms <- work_ms;
   if work_ms > frame_budget_ms then t.missed <- t.missed + 1
 let percentile t fraction =
   if t.count = 0 then 0.
-  else
-    let samples = Array.sub t.samples 0 t.count in
-    Array.sort Float.compare samples;
-    samples.(min (t.count - 1) (int_of_float (fraction *. float t.count)))
+  else begin
+    if not t.work_sorted then begin
+      t.work_samples.used <- t.count;
+      sort_indices t.work_samples;
+      t.work_sorted <- true
+    end;
+    t.samples.(t.work_samples.indices.(min (t.count - 1)
+      (int_of_float (fraction *. float t.count))))
+  end
 let toggle_panel t = t.panel_open <- not t.panel_open
 
 let panel_width t width = if t.panel_open then min 440. (width *. 0.35) else 0.

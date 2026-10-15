@@ -2,14 +2,15 @@
 
    The table itself is platform-provided: the web reads the
    window.__tablerChildren global (kept out of main.js by
-   resources/js/icon-data.js), native loads the bundled
-   tabler-children.json, and tests install a fixed table. Each adapter
-   hands the shared decoders portable Json.t values. *)
+   resources/js/icon-data.js), native compiles the bundled
+   tabler-children.json into constants during the build, and tests install a
+   fixed table. Each adapter hands the shared renderer decoded, immutable
+   children. *)
 
 type children = (string * (string * string) list) list
 
 type source = {
-  get : string -> Json.t option;
+  get : string -> children option;
   keys : unit -> string array;
 }
 
@@ -38,16 +39,14 @@ let decode_children (v : Json.t) : children =
                  | _ -> None)
              | _ -> None)
 
-(* absent icon data is a real state (the table stays outside the binary
-   on both targets), so a missing source decodes to empty like the
-   pre-shared window/table-absent paths did *)
+(* A missing source or icon has no children. *)
 let tabler_children name : children =
   match !installed with
   | None -> []
   | Some s -> (
       match s.get name with
       | None -> []
-      | Some v -> decode_children v)
+      | Some children -> children)
 
 let tabler_names () : string list =
   match !installed with

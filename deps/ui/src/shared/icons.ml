@@ -378,26 +378,15 @@ let priority_icons =
   ]
 ;;
 
-(* `app:` icon registry — name -> raw svg markup, ordered like the web
-   lookup: tabler-children table first, `~ext` (the web's
-   window.tablerIcons walked by js_app/icons_ext.ml) over it, custom
-   app icons last. Later entries win on a clash. Native hosts consume
-   this directly; web/svg-uri consumers go through [app_icons]. *)
+(* Native hosts resolve bundled Tabler icons on demand. Only custom
+   overrides cross the app-icons channel, preserving their precedence
+   without expanding and duplicating the complete bundled table. *)
 let app_icon_svgs ?(ext = []) () : (string * string) list =
-  let base =
-    Icon_tabler_data.tabler_names ()
-    |> List.filter_map (fun name ->
-           match Icon_tabler_data.tabler_children name with
-           | [] -> None
-           | kids ->
-               Some (name, svg_of_children ~size:24. name kids))
-  in
-  base @ ext @ (custom_icons @ extension_icons @ status_icons @ priority_icons)
+  ext @ (custom_icons @ extension_icons @ status_icons @ priority_icons)
 ;;
 
-(* `app:` icon registry — name -> data URI of the svg markup. Same
-   source table and precedence as [app_icon_svgs]; here `~ext` entries
-   arrive already data-URI encoded (icons_ext.ml encodes them). *)
+(* Web icon registry. Its entries carry data URIs; extension entries
+   arrive encoded by icons_ext.ml. Application overrides come last. *)
 let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
   let enc = List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) in
   let base =

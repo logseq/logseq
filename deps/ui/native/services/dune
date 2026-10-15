@@ -3,3 +3,9 @@
  (wrapped false)
  (modes byte native)
  (libraries logseq_ui_contracts logseq_ui_shared threads.posix unix yojson uri ptime))
+
+(rule
+ (target icon_data_gen.ml)
+ (deps ../../assets/tabler-children.json)
+ (action
+  (run %{exe:../../tools/icon_gen.exe} %{dep:../../assets/tabler-children.json} %{target})))

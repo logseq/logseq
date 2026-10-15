@@ -43,6 +43,7 @@ let svg_payload (s : string) =
 let install (payload : string) =
   match J.from_string payload with
   | `Assoc kvs ->
+    Hashtbl.reset svgs;
     List.iter
       (fun (name, v) ->
          match v with
@@ -72,13 +73,15 @@ let svg_of name =
   in
   match Hashtbl.find_opt svgs name with
   | Some _ as s -> s
-  | None -> (
-      match List.assoc_opt name Host_builtin_icons.all with
-      | Some _ as s -> s
-      | None -> (
-          match Icon_tabler_data.tabler_children name with
-          | [] -> None
-          | kids -> Some (Icons.svg_of_children ~size:24. name kids)))
+  | None ->
+      let resolved = match List.assoc_opt name Host_builtin_icons.all with
+        | Some _ as s -> s
+        | None -> (
+            match Icon_tabler_data.tabler_children name with
+            | [] -> None
+            | kids -> Some (Icons.svg_of_children ~size:24. name kids)) in
+      Option.iter (fun svg -> Hashtbl.add svgs name svg) resolved;
+      resolved
 
 (* Effective icon color — web SVGs paint currentColor from the
    inherited CSS color property; here the node (or its nearest

@@ -11,6 +11,12 @@ let () =
     (abs_float (deadline -. (1. +. 1. /. 120.)) < 0.000001);
   check "Scheduler queues obsolete frames after a long reflow"
     (Host_metrics.next_deadline ~previous:1. ~now:1.1 >= 1.1);
+  check "Quiet native loops must wait for an event independent of repaint count"
+    (Host_metrics.idle_timeout ~dirty:false ~now:10. ~last_busy:0. = Some 16);
+  check "Recent activity must keep mailbox chains responsive"
+    (Host_metrics.idle_timeout ~dirty:false ~now:1. ~last_busy:0. = None);
+  check "A dirty frame must not wait for an event"
+    (Host_metrics.idle_timeout ~dirty:true ~now:10. ~last_busy:0. = None);
   let metrics = Host_metrics.create ~now:0. in
   for frame = 1 to 120 do
     Host_metrics.record_present metrics ~now:(float frame /. 120.) ~work_ms:2.;
@@ -25,6 +31,16 @@ let () =
   done;
   check "Sample history grows without bound" (metrics.count = 240);
   check "Old outliers never leave the live window" (Host_metrics.percentile metrics 0.95 = 3.);
+  let before = Gc.allocated_bytes () in
+  for sample=1 to 100 do
+    Host_metrics.record_present metrics ~now:(float sample) ~work_ms:(float (sample mod 7));
+    ignore (Host_metrics.percentile metrics 0.5);
+    ignore (Host_metrics.percentile metrics 0.95)
+  done;
+  let percentile_bytes = (Gc.allocated_bytes () -. before) /. 100. in
+  Printf.printf "native work percentiles allocated %.0f bytes/update\n%!" percentile_bytes;
+  check "Metrics work percentiles allocate boxed float sorting intermediates"
+    (percentile_bytes <= 8192.);
   Host_metrics.toggle_panel metrics;
   check "Metrics split buffer did not open" metrics.panel_open;
   Host_metrics.toggle_panel metrics;
@@ -136,10 +152,22 @@ let () =
   check "Live allocation counters must include allocations made since the last GC"
     (after -. before >= 48000.);
   let memory_snapshot = Host_metrics.snapshot sampled ~now:2. in
+  check "Unavailable process memory is not marked in the recording"
+    (contains memory_snapshot "\"process_memory\":null");
   check "Memory metrics must distinguish heap capacity from cumulative allocation"
     (contains memory_snapshot "\"heap_bytes\":" && contains memory_snapshot "\"live_bytes\":"
      && contains memory_snapshot "\"top_heap_bytes\":");
   let full = Host_metrics.create ~now:0. in
+  full.process_memory <- Some {footprint_bytes=40_000_000; peak_footprint_bytes=50_000_000;
+    rss_bytes=120_000_000; window_visible=false; width=1440; height=900;
+    pixel_width=2880; pixel_height=1800};
+  let process_snapshot = Host_metrics.snapshot full ~now:0. in
+  check "Process memory recording drops physical memory or window visibility"
+    (contains process_snapshot "\"footprint_bytes\":40000000"
+     && contains process_snapshot "\"peak_footprint_bytes\":50000000"
+     && contains process_snapshot "\"rss_bytes\":120000000"
+     && contains process_snapshot "\"window_visible\":false"
+     && contains process_snapshot "\"pixel_width\":2880");
   for sample = 1 to 240 do
     List.iter (fun (phase, _) -> Host_metrics.record_phase full phase (float sample /. 1234567.))
       Host_metrics.phases
