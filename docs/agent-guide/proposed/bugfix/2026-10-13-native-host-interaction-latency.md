@@ -1080,6 +1080,48 @@ remain failures. Both cohorts use the changes-only software replay with four
 requested workers, without debug output or allocation profiling. The default
 Metal renderer is unchanged and visible interaction remains unverified.
 
+## Captured scrolling assertion repair
+
+The existing captured-scene suite reproduces a serial tiled redraw failure:
+p95 is 19.20 ms against the unchanged 16.67 ms limit, with exact output pixels.
+Sampling the same serial rendering path identifies `blend_span` as the largest
+CPU hotspot (1504 top-of-stack samples). An allocation probe also identifies
+repeated full clip-coverage evaluation in sharp inset shadows. This is the CPU
+raster runtime used by the software presenter, not an Electron measurement.
+
+LUI commit `96f1ec03` reduces the work in these paths. Opaque spans expand one
+initialized pixel with bulk copies, and fully covered row interiors can copy
+from a previous interior containing the same span. Edges and borders retain
+their original coverage calculation. Packed translucent blending no longer
+saturates each channel: a premultiplied source channel is at most its alpha,
+and the destination contribution is at most the complementary alpha, so the
+sum cannot exceed 255. Sharp inset shadows reuse the existing solid clip-row
+bounds, and hot integer bounds use specialized comparisons.
+
+Regression cases cover empty through 2880-pixel spans, offsets 0/1/3, heights
+1/3/65, odd tails, adjacent untouched pixels, and every translucent alpha from
+1 through 254 over every destination byte value. The captured-scene tests keep
+their original 16.67 ms serial and 8.33 ms parallel limits and exact pixel
+checks. An intermediate span-only optimization still has one failed repeat
+at 24.49 ms; it is not treated as stable acceptance. After the complete change,
+three consecutive captured-scene runs pass all three replay tests:
+
+| Run | Whole-image p95 | Serial tiled p95 | Four-worker tiled p95 |
+| --- | --- | --- | --- |
+| 1 | 4.78 ms | 14.13 ms | 6.16 ms |
+| 2 | 3.73 ms | 13.83 ms | 4.77 ms |
+| 3 | 4.01 ms | 13.72 ms | 5.20 ms |
+
+All 42 raster cases pass with the captured fixture enabled, and the full LUI
+build/test aliases pass. The installed classic-switch package source matches
+the committed implementation; native host regressions and executable/archive
+builds pass against it. The profile application bundle is rebuilt and its code
+signature verifies. A separate unprofiled 60-frame serial probe reports
+p95 14.67 ms and median allocation 1,748,432 bytes/frame, down from approximately
+2,005,000 bytes/frame before the clip change. It still causes 121 minor and one
+major collection. Allocation remains substantial; this repair does not certify
+the application memory target, sustained input, or visible presentation FPS.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
