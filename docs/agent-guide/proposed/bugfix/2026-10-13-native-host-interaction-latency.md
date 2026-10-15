@@ -516,6 +516,92 @@ presentation FPS. A subsequent full-app software repaint diagnostic reaches
 1.132 seconds. The guard terminates it. Quiet-loop allocation is improved,
 but the full memory goal remains unmet. No weak-cache changes are included.
 
+## Default renderer resource accounting
+
+The replay diagnostic now accepts every existing renderer. It continues to
+reject nonpositive and nonfinite durations, and exports the real occlusion
+state. Forcing repaint while occluded does not certify visible presentation
+FPS, scroll behavior, or whole-graph acceptance. The default stays Metal;
+no driver interposition or alternative-backend experiment is shipped.
+
+At 2880×1800, an uninstrumented default-Metal app replay reaches
+185,959,432 frontend physical bytes plus 20,054,520 worker bytes, triggering
+the unchanged 200,000,000-byte combined guard after 1.608 seconds. RSS at
+that sample is 164,134,912 combined bytes. The trace still has only about
+5 MiB of live OCaml data and 127 store nodes. This is already a startup
+failure; it does not reach a fully populated demo-page steady state.
+
+A separate, briefly paused resource snapshot finishes before the protection
+threshold and reports 128.3 MiB frontend physical footprint. Its disjoint
+vmmap categories include 19.8 MiB of mapped IOSurface data and 65.4 MiB of
+owned unmapped graphics memory. The device's allocation counter overlaps
+these resource categories and must not be added to them. Direct drawable
+tracing records 20,742,144 bytes per 2880×1800 texture. Although the configured
+maximum drawable count is two, the device allocation counter reaches
+65,241,088 bytes after three distinct full-size textures have appeared. This
+observation alone does not prove a leaked application reference.
+
+A minimal 1×1 clear reconfirms the earlier driver isolation: physical
+footprint rises from roughly 6.2 MB before submission to 62.3 MB during
+repeated GPU work, then falls to about 8.3 MB after two idle seconds. No
+application store, text renderer, or graph is involved. The earlier Metal 4
+result already reproduced this cost, so a backend port is not justified by
+that hypothesis.
+
+Process-local diagnostic interposition tests retain the same viewport and
+embedded app while varying one graphics hypothesis. None brings startup
+within the requested range:
+
+| Diagnostic control | Observed combined physical bytes before termination |
+| --- | ---: |
+| One command buffer permitted per queue | 204,670,464 |
+| Opaque layer/window and hidden material view | 212,960,768 |
+| Release the previous target before drawable acquisition | 203,785,704 |
+| Present on the drawing command buffer | 203,818,496 |
+| Framebuffer-only drawable textures | 207,078,888 |
+
+These cold, instrumented runs are sufficient to reject each control as a
+complete memory fix, not to rank small differences between them. The controls
+can alter rendering or readback semantics and are not production changes.
+No surface precision, viewport size, graph data, or rich-text functionality
+is reduced in the production implementation.
+
+The existing OpenGL path also fails: the global guard observes 242,238,472
+frontend physical bytes and kills it. The local 50 ms sampler's last
+pre-termination combined sample is only 189,531,528 bytes, illustrating why
+its sampled peak cannot override the independent guard's larger observation.
+Changing the default to OpenGL is therefore rejected.
+
+The renderer's fixed working cost and full-size surfaces remain the active
+bottleneck. The 30–100 MB target, including application state and worker
+accounting, remains unverified and contradicted by active startup samples.
+The next renderer change must be evaluated in the complete app; passing an
+isolated renderer budget is insufficient. Preserve the existing Metal default
+until an alternative passes memory, pixel, readback, resize, and latency
+acceptance together. Weak storage caches remain out of scope.
+
+## Compiler and allocation regression checks
+
+A separately rebuilt OCaml 5.5.1 Flambda O3 candidate does not solve active
+application memory. With the same ordinary compiler worker and cloned demo
+graph, guarded software replays terminate at 220,512,256 combined RSS bytes
+for the ordinary compiler and 215,810,048 for Flambda. These short cold runs
+do not establish a steady-state improvement or authorize changing the
+application compiler.
+
+Two Flambda regressions are resolved in LUI commits `74592afe` and
+`56828517`. Float min/max bodies stay inline rather than boxing intermediate
+shadow geometry; inset shadows reuse each row's fully covered span. The
+original outer-shadow fixture falls from 424,114 to 131,170 bytes/frame under
+its unchanged 262,144-byte limit. Outer/inset cases at heights 96 and 160 all
+pass, as do golden pixels and GPU parity. The glyph lifetime fixture now uses
+runtime geometry so constant lifting cannot make its weak-reference check
+fail spuriously. It verifies both current ownership and release after scene
+replacement. Temporarily removing cache pruning makes the corrected test
+fail. Full ordinary-compiler and Flambda builds/test aliases pass. These are
+renderer/test improvements, not evidence that the default Metal app meets
+the memory target.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

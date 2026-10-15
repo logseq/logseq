@@ -205,8 +205,8 @@ let () =
   let memory_replay_duration = Option.map float_of_string
     (Sys.getenv_opt "LOGSEQ_NATIVE_MEMORY_REPLAY") in
   (match memory_replay_duration with
-   | Some duration when not use_cocoa || not (Float.is_finite duration) || duration <= 0. ->
-     invalid_arg "Memory replay requires LUI_GPU=cocoa and a positive finite duration"
+   | Some duration when not (Float.is_finite duration) || duration <= 0. ->
+     invalid_arg "Memory replay requires a positive finite duration"
    | _ -> ());
   let memory_replay = Option.is_some memory_replay_duration in
   let raster_workers = match Sys.getenv_opt "LOGSEQ_NATIVE_RASTER_WORKERS" with
