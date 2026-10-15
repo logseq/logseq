@@ -695,9 +695,9 @@ static Class logseq_material_class(void) {
 /* Immutable IOSurface bands go directly to the window compositor. The
    renderer can reuse its staging pixels as soon as the copy completes. */
 typedef struct {
-  IOSurfaceRef image, background;
-  id layers[3];
-  int left, right;
+  IOSurfaceRef images[2], background;
+  id layers[5];
+  int edges[6];
   uint32_t pixel;
   bool ready, changed;
 } LogseqSoftwareBand;
@@ -748,9 +748,9 @@ static Class logseq_software_class(void) {
 }
 
 static void logseq_software_drop_images(LogseqSoftwareSurface *surface, LogseqSoftwareBand *band) {
-  if (band->image) {
-    surface->owned_bytes -= IOSurfaceGetAllocSize(band->image);
-    CFRelease(band->image);
+  for (int i=0; i<2; i++) if (band->images[i]) {
+    surface->owned_bytes -= IOSurfaceGetAllocSize(band->images[i]);
+    CFRelease(band->images[i]);
   }
   if (band->background) {
     surface->owned_bytes -= IOSurfaceGetAllocSize(band->background);
@@ -761,7 +761,7 @@ static void logseq_software_drop_images(LogseqSoftwareSurface *surface, LogseqSo
 static void logseq_software_clear(LogseqSoftwareSurface *surface) {
   for (int i=0; i<surface->count; i++) {
     LogseqSoftwareBand *band = &surface->bands[i];
-    for (int part=0; part<3; part++)
+    for (int part=0; part<5; part++)
       ((void (*)(id, SEL))objc_msgSend)(band->layers[part], sel_registerName("removeFromSuperlayer"));
     logseq_software_drop_images(surface, band);
   }
@@ -803,6 +803,14 @@ static IOSurfaceRef logseq_software_image(int w, int h, const unsigned char *sou
     caml_failwith("Cannot unlock software IOSurface band");
   }
   return image;
+}
+
+static size_t logseq_software_image_size(int w, int h) {
+  if (!w) return 0;
+  size_t row_bytes = IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, (size_t)w*4);
+  size_t bytes = IOSurfaceAlignProperty(kIOSurfaceAllocSize, row_bytes*h);
+  size_t page = (size_t)getpagesize();
+  return (bytes+page-1)/page*page;
 }
 
 static uint32_t logseq_software_pixel(const unsigned char *source) {
@@ -847,7 +855,7 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
     if (!surface->bands) caml_raise_out_of_memory();
     id root = ((id (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("layer"));
     for (int i=0; i<surface->count; i++) {
-      for (int part=0; part<3; part++) {
+      for (int part=0; part<5; part++) {
         id layer = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("CALayer"), sel_registerName("layer"));
         ((void (*)(id, SEL, id))objc_msgSend)(root, sel_registerName("addSublayer:"), layer);
         surface->bands[i].layers[part] = layer;
@@ -890,21 +898,45 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
     right = x;
   }
   if (left == surface->w) right = left;
+  /* Split at the largest fully uniform internal gap only when the
+     extra image and background actually save aligned surface storage. */
+  int gap_left = right, gap_right = right, start = left;
+  for (int x=left; x<right; x++) {
+    int y = 0;
+    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)x*4) == pixel) y++;
+    if (y<h) {
+      if (x-start > gap_right-gap_left) { gap_left = start; gap_right = x; }
+      start = x+1;
+    }
+  }
+  size_t split_size = logseq_software_image_size(gap_left-left, h)
+    + logseq_software_image_size(right-gap_right, h);
+  if (!left && right == surface->w) split_size += logseq_software_image_size(1, 1);
+  if (gap_left == gap_right || split_size >= logseq_software_image_size(right-left, h))
+    gap_left = gap_right = right;
   LogseqSoftwareBand *band = &surface->bands[y0 / surface->rows];
-  IOSurfaceRef image = right > left
-    ? logseq_software_image(right-left, h, source + (size_t)left*4, stride) : NULL;
+  IOSurfaceRef images[2] = {NULL, NULL};
+  if (gap_left > left)
+    images[0] = logseq_software_image(gap_left-left, h, source + (size_t)left*4, stride);
+  if (right > gap_right)
+    images[1] = logseq_software_image(right-gap_right, h, source + (size_t)gap_right*4, stride);
   IOSurfaceRef background = NULL;
-  if (left || right < surface->w) {
+  if (left || right < surface->w || gap_left < gap_right) {
     if (band->background && band->pixel == pixel) {
       background = band->background;
       CFRetain(background);
     } else background = logseq_software_image(1, 1, (const unsigned char *)&pixel, 4);
   }
   logseq_software_drop_images(surface, band);
-  band->image = image; band->background = background;
-  band->left = left; band->right = right; band->pixel = pixel;
+  band->background = background;
+  int edges[] = {0, left, gap_left, gap_right, right, surface->w};
+  memcpy(band->edges, edges, sizeof edges);
+  band->pixel = pixel;
   band->ready = true; band->changed = true;
-  if (image) surface->owned_bytes += IOSurfaceGetAllocSize(image);
+  for (int i=0; i<2; i++) {
+    band->images[i] = images[i];
+    if (images[i]) surface->owned_bytes += IOSurfaceGetAllocSize(images[i]);
+  }
   if (background) surface->owned_bytes += IOSurfaceGetAllocSize(background);
   CAMLreturn(Val_unit);
 }
@@ -928,15 +960,14 @@ CAMLprim value logseq_native_software_present(value id_v) {
     LogseqSoftwareBand *band = &surface->bands[i];
     int height = surface->h - i*surface->rows;
     if (height > surface->rows) height = surface->rows;
-    int edges[] = {0, band->left, band->right, surface->w};
-    for (int part=0; part<3; part++) {
-      ls_nsrect rect = {edges[part]*scale_x, i*surface->rows*scale_y,
-                       (edges[part+1]-edges[part])*scale_x, height*scale_y};
+    for (int part=0; part<5; part++) {
+      ls_nsrect rect = {band->edges[part]*scale_x, i*surface->rows*scale_y,
+                       (band->edges[part+1]-band->edges[part])*scale_x, height*scale_y};
       id layer = band->layers[part];
       ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(layer, sel_registerName("setFrame:"), rect);
       ((void (*)(id, SEL, double))objc_msgSend)(layer, sel_registerName("setContentsScale:"), 1./scale_x);
       if (band->changed) ((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setContents:"),
-          (id)(part == 1 ? band->image : band->background));
+          (id)(part % 2 ? band->images[part/2] : band->background));
     }
     band->changed = false;
   }
@@ -962,23 +993,26 @@ CAMLprim value logseq_native_software_read(value id_v) {
     LogseqSoftwareBand *band = &surface->bands[index];
     int height = surface->h - index*surface->rows;
     if (height > surface->rows) height = surface->rows;
-    const unsigned char *source = NULL;
-    size_t row_bytes = 0;
-    if (band->image) {
-      if (IOSurfaceLock(band->image, kIOSurfaceLockReadOnly, NULL))
-        caml_failwith("Cannot read software IOSurface band");
-      source = IOSurfaceGetBaseAddress(band->image);
-      row_bytes = IOSurfaceGetBytesPerRow(band->image);
-    }
     for (int y=0; y<height; y++) {
       unsigned char *row = (unsigned char *)Bytes_val(out)
         + ((size_t)index*surface->rows+y)*surface->w*4;
       for (int x=0; x<surface->w; x++) memcpy(row+(size_t)x*4, &band->pixel, 4);
-      if (source) memcpy(row+(size_t)band->left*4, source+row_bytes*y,
-                         (size_t)(band->right-band->left)*4);
     }
-    if (band->image && IOSurfaceUnlock(band->image, kIOSurfaceLockReadOnly, NULL))
-      caml_failwith("Cannot finish reading software IOSurface band");
+    for (int part=0; part<2; part++) if (band->images[part]) {
+      IOSurfaceRef image = band->images[part];
+      if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
+        caml_failwith("Cannot read software IOSurface band");
+      const unsigned char *source = IOSurfaceGetBaseAddress(image);
+      size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+      int left = band->edges[part*2+1], right = band->edges[part*2+2];
+      for (int y=0; y<height; y++) {
+        unsigned char *row = (unsigned char *)Bytes_val(out)
+          + ((size_t)index*surface->rows+y)*surface->w*4;
+        memcpy(row+(size_t)left*4, source+row_bytes*y, (size_t)(right-left)*4);
+      }
+      if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
+        caml_failwith("Cannot finish reading software IOSurface band");
+    }
   }
   CAMLreturn(out);
 }

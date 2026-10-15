@@ -94,6 +94,21 @@ let software_band_compression_regression id =
     Printf.printf "Sparse band snapshot [%d,%d) owned %d bytes\n%!" left right owned;
     budget "Sparse band ownership includes uniform margins" (owned <= 131_072)
   ) [700,720;0,20;width-20,width];
+  List.iter (fun (first,last,limit) ->
+    let expected=fill (31,47,63,128) in
+    for y=0 to height-1 do
+      List.iter (fun left ->
+        for x=left to left+19 do
+          pixel expected ((y*width+x)*4)
+            (if y mod 3=0 then (0,0,0,0) else (7,y mod 97,19,128))
+        done
+      ) [first;last]
+    done;
+    upload expected;
+    let owned=Native_window.software_owned_bytes id in
+    Printf.printf "Separated band snapshots [%d,%d] owned %d bytes\n%!" first last owned;
+    budget "Separated content retains its empty horizontal gap" (owned <= limit)
+  ) [0,width-20,131_072;100,width-120,147_456];
   let dense=Bytes.init (width*height*4) (fun i ->
     if i mod 4=3 then '\255' else Char.chr ((i*13+i/width) land 255)) in
   upload dense;

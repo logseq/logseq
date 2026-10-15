@@ -171,6 +171,8 @@ let input_of_event e =
 
 
 let () =
+  (* Keep desktop heap slack small while collecting incrementally. *)
+  Gc.set { (Gc.get ()) with space_overhead = 30 };
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
@@ -2323,8 +2325,11 @@ let () =
      if mem_trace && now -. !mem_mark > 2.0 then begin
        mem_mark := now;
        let st = Gc.quick_stat () in
+       let scene = Lui_host.scene host in
+       let software_bytes = if use_cocoa then
+           Native_window.software_owned_bytes (Sdl.get_window_id !win) else 0 in
        Printf.eprintf
-         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d]\n%!"
+         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d software_bytes=%d atlas_bytes=%d]\n%!"
          !frame
          (st.Gc.live_words * 8 / 1048576)
          (st.Gc.heap_words * 8 / 1048576)
@@ -2338,6 +2343,8 @@ let () =
          (Hashtbl.length Native_embed.shallow_cache)
          (Hashtbl.length Native_embed.subtree_cache)
          (Ui_dom_native.Element_handles.length Ui_dom_native.tokens)
+         software_bytes
+         (Bytes.length scene.mask_atlas.pix + Bytes.length scene.color_atlas.pix)
      end);
     let now = perf_s () in
     match Host_metrics.idle_timeout ~dirty ~now ~last_busy:!last_busy with

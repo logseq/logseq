@@ -656,6 +656,53 @@ recording proves a visible frame rate. Combined memory still reaches
 and the guard terminates it. Scanline allocation improves, but this does
 not establish a steady-state application memory bound.
 
+A subsequent frontend GC policy at space overhead 30 completes a
+601.28-second full-app repaint recording without forced collections or a
+protection kill. Its warm CPU p95 is 5.81 ms over 71,374 fresh samples,
+GUI lifetime physical peak is 81,413,080 bytes, and the externally sampled
+combined peak is 100,943,264 physical bytes / 193,478,656 RSS bytes. This
+improves the earlier guard failure, but the combined peak still exceeds
+100 MB. Heap capacity oscillates as incremental collection catches up;
+node and layout-cache counts remain stable.
+
+The presenter also stops retaining the largest uniform internal gap of a
+band when two cropped images cost less than one. The storage estimate
+includes both IOSurface alignment and the system's 16 KiB VM page rounding;
+otherwise a three-row band incorrectly gains an extra surface. The new
+separated-content regressions fail at 1,081,344 / 1,032,192 owned bytes and
+pass at 131,072 / 147,456 bytes. Both metadata readback and real Core Animation
+composition retain exact pixels, including fractional alpha and holes.
+
+With that gap compression and the same GC policy, a 611.01-second full-app
+repaint recording completes. Its 603.78-second warm interval contains 72,573
+fresh active-CPU samples with p95 6.00 ms and maximum 20.05 ms. GUI lifetime
+physical peak is 76,547,008 bytes; externally sampled GUI-plus-worker peaks
+are 97,584,544 physical bytes and 191,397,888 RSS bytes. Warm heap capacity
+ranges from 33,397,816 to 36,062,672 bytes. No post-warmup layout or input is
+recorded. This cohort uses one raster worker, a closed metrics panel, and
+the same inherited `MallocNanoZone=0` environment as earlier comparisons.
+The default four-worker path and open-panel workload remain separate gates.
+The window is invisible throughout, so this still cannot certify visible
+application memory, interaction correctness, or presented FPS.
+
+Heavier cohorts remain failing. With the metrics panel open, the single
+worker completes 60.25 seconds but reaches 106,169,784 combined physical
+bytes and active CPU p95 8.71 ms. Four workers with the panel open reach
+109,069,776 combined physical bytes / 200,392,704 RSS bytes after 2.73
+seconds and are terminated by the guard. Four workers with the panel closed
+also fail at 106,317,264 combined physical bytes / 200,081,408 RSS bytes
+after 7.14 seconds. Two workers with the panel open and a four-worker trial
+using the default system allocator are likewise terminated; neither is a
+memory fix. Their short cold samples do not certify steady-state latency.
+
+The multiworker implementation creates and joins domains on every frame.
+A low-allocation 32-frame tiled redraw regression verifies correct pixels
+but causes 109 minor collections before the worker-lifetime change, exceeding
+the new limit of one collection per frame. Reusable worker ownership and
+full-app validation of the heavier workloads are the next investigation.
+Console memory tracing now includes owned software pixels and atlas bytes
+so these can be distinguished from managed layout/cache memory.
+
 The default remains Metal. Software pixel correctness and reduced isolated
 memory do not certify complete application memory, visible presentation,
 scrolling, editing, or effect support. The 30–100 MB objective remains open.
