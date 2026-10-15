@@ -76,19 +76,50 @@ let viewport_attributes () =
   check "Unrelated attributes emitted lazy-mount events"
     (not (Host_interaction.has_attribute {|{"data-testid":"block"}|} "data-lazy-mount"));
   check "Lazy mount marker was missed"
-    (Host_interaction.has_attribute {|{"data-lazy-mount":"true"}|} "data-lazy-mount")
+    (Host_interaction.has_attribute {|{"data-lazy-mount":"true"}|} "data-lazy-mount");
+  List.iter (fun (payload,name,expected) ->
+    check "Attribute substring scan changed its boundary semantics"
+      (Host_interaction.has_attribute payload name = expected))
+    ["","",true; "","x",false; "x","",true; "x","xx",false;
+     "xmarker","marker",true; "markerx","marker",true;
+     "mmmmarker","marker",true; "markers","markert",false]
 
 let attribute_scan_allocation () =
   let payload = String.make 1000 'x' ^ "data-window-titlebar" in
-  let before = (Gc.quick_stat ()).Gc.minor_words in
+  let before = Gc.allocated_bytes () in
   for _ = 1 to 100 do
     check "Header marker at the end was missed"
       (Host_interaction.has_attribute payload "data-window-titlebar");
     check "Missing header marker matched"
       (not (Host_interaction.has_attribute payload "missing-marker"))
   done;
-  check "Attribute scans allocate a substring per character"
-    ((Gc.quick_stat ()).Gc.minor_words -. before < 10000.)
+  let allocated = Gc.allocated_bytes () -. before in
+  Printf.printf "200 attribute scans allocated %.0f bytes\n%!" allocated;
+  check (Printf.sprintf "Attribute scans allocate %.0f temporary bytes" allocated)
+    (allocated < 4096.)
+
+let viewport_cold_scan_allocation () =
+  let store = Lui_store.create () in
+  for id = 1 to 6000 do
+    Lui_store.apply_op store (CreateNode (id, Column));
+    Lui_store.apply_op store
+      (SetExtensionProp (id,"attrs",StringValue {|{"data-testid":"row"}|}))
+  done;
+  Lui_store.apply_op store
+    (SetExtensionProp (10,"attrs",StringValue {|{"data-lazy-mount":"true"}|}));
+  Lui_store.apply_op store
+    (SetExtensionProp (20,"data-attrs",StringValue {|{"data-virt-count":"100"}|}));
+  let cache = Host_interaction.viewport_cache () in
+  let traversal_before = Gc.allocated_bytes () in
+  Lui_store.iter_preorder store ignore;
+  let traversal_allocated = Gc.allocated_bytes () -. traversal_before in
+  let before = Gc.allocated_bytes () in
+  let ids = Host_interaction.viewport_candidates cache store in
+  let allocated = Gc.allocated_bytes () -. before -. traversal_allocated in
+  Printf.printf "6000-node viewport attribute overhead allocated %.0f bytes\n%!" allocated;
+  check "Cold viewport discovery lost attribute markers" (ids=[10;20]);
+  check (Printf.sprintf "Cold viewport attribute matching allocates %.0f bytes beyond traversal" allocated)
+    (allocated < 524288.)
 
 let geometry_refresh () =
   let store = Lui_store.create () in
@@ -276,6 +307,7 @@ let () =
       "editor caret", visible_caret;
       "interaction paint", interaction_repaints; "viewport markers", viewport_attributes;
       "attribute allocation", attribute_scan_allocation;
+      "cold viewport allocation", viewport_cold_scan_allocation;
       "hit geometry", geometry_refresh;
       "geometry allocation", geometry_refresh_allocation;
       "nested hit geometry", nested_geometry_refresh; "overlay text", overlay_glyphs;

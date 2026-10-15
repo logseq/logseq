@@ -57,18 +57,23 @@ let prepare_paint ui host =
   Hashtbl.iter (fun id () -> Lui_host.note_paint host id) hard;
   Hashtbl.iter (fun id () -> Lui_host.note_moved host id) soft
 
-let has_attribute payload name =
-  let n = String.length payload and m = String.length name in
-  let rec matches i j = j = m ||
-    (payload.[i + j] = name.[j] && matches i (j + 1)) in
-  let rec found i = i + m <= n && (matches i 0 || found (i + 1)) in
-  m = 0 || found 0
+let rec attribute_matches payload name i j =
+  j = String.length name ||
+  (payload.[i + j] = name.[j] && attribute_matches payload name i (j + 1))
+
+let rec attribute_found payload name i =
+  i + String.length name <= String.length payload &&
+  (attribute_matches payload name i 0 || attribute_found payload name (i + 1))
+
+let has_attribute payload name = attribute_found payload name 0
+
+let prop_has_attribute store id name prop =
+  match Lui_store.string_prop store id prop with
+  | Some attributes -> has_attribute attributes name
+  | None -> false
 
 let node_has_attribute store id name =
-  let has prop = match Lui_store.string_prop store id prop with
-    | Some attributes -> has_attribute attributes name
-    | None -> false in
-  has "attrs" || has "data-attrs"
+  prop_has_attribute store id name "attrs" || prop_has_attribute store id name "data-attrs"
 
 let refresh_rects ~store ~base ~scroll_x ~scroll_y ~scrollable rects =
   let intersect (a : Lui_scene.rect) (b : Lui_scene.rect) =
