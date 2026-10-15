@@ -180,6 +180,144 @@ Default Metal memory, the complete 50-Enter workload, and visible presentation
 acceptance remain unproven. The native window observation still returned no
 capturable window; no unlock or visible-FPS success is claimed.
 
+## Pixel-copy controls and actual-vector follow-up
+
+Keep component measurements separate from whole-application acceptance. The
+first presentation experiment reused a frozen, fully rasterized application
+frame. Its full 2880x1800 pixel coverage, including transparency, was retained;
+uniform regions used shared 1x1 surfaces while other regions used Metal layers.
+This measured presentation resources, not vector rendering or interaction.
+
+Three protected runs per cell used one executable in a two-factor comparison:
+
+| Pixel-copy path | Median peak physical bytes | Median peak RSS bytes |
+| --- | ---: | ---: |
+| Full layer, render encoder | 142,001,088 | 107,347,968 |
+| Partitioned layers, render encoders | 104,514,496 | 98,713,600 |
+| Full layer, compute encoder | 124,322,752 | 105,922,560 |
+| Partitioned layers, compute encoder | 88,671,192 | 96,354,304 |
+
+The partitioned frame retained 1,774,080 GPU pixels and 3,409,920 uniform pixels,
+covering all 5,184,000 viewport pixels. Independent readback checks passed.
+Readback-enabled physical peaks are excluded from the table: the diagnostic
+copy itself adds memory, especially when it activates another GPU engine.
+Every presentation callback count remained zero in the occluded environment.
+Neither GPU timestamps nor successful pixel checks establish visible FPS.
+
+These results justify measuring an actual-vector candidate before considering
+a renderer change. They do not justify copying the partition architecture into
+the application: the pixel-copy input excludes vector shading, live scene
+updates, the graph worker, application state, and CPU rasterization cost.
+The raw matrix and provenance are in ignored
+`tmp/native-app/science-partition-results.json`.
+
+### Actual vector workload and pixel check
+
+An isolated compute experiment consumes the captured application's original
+745 packed instances, 46 batches, 638 glyphs, both 512x512 atlases, and 18 image
+slices. The captured scene includes a modal; it is not the fresh Journals
+startup inventory described above. It preserves paint order, scissor and
+rounded clips, transparent cutouts, borders, shadows, image sampling, and
+per-channel glyph blending. Effects are explicitly rejected by this diagnostic
+exporter rather than silently omitted. No complete renderer implementation or
+new default backend is being proposed on this fixture alone.
+
+The candidate shares the existing shader's coverage, paint, shadow, and text
+math. A 16x16 tile index limits each pixel to intersecting instances in original
+paint order. Compared with the existing Metal renderer's output, 94 of
+20,736,000 byte channels differ by one; every other channel matches exactly.
+This fixture-level comparison does not replace the complete parity corpus.
+
+At the initial 10 Hz diagnostic cadence, the generic compute kernel's GPU
+median was 18.50 ms. Separate work-removal controls measured 14.39 ms without
+shadows, 6.47 ms without fills, and 17.85 ms without glyphs. Replacing shading
+with plain color measured 3.28 ms. None of those reduced-work outputs is an
+acceptance result. A conservative interior-fill branch did not improve the
+complete output, and limiting the compute pipeline to 256 threads did not
+resolve the slow low-cadence result. These controls do not prove a particular
+register or memory-stall mechanism; hardware counter evidence would be needed
+for that claim.
+
+### Cadence-controlled comparison and rejected split candidate
+
+Low-cadence timings cannot determine the sustained 120 Hz workload budget.
+The follow-up uses one executable, five alternating-order pairs, 260 completed
+GPU frames per process, 20 warmup frames excluded, and an 8,333,333 ns target
+period. A late frame receives no sleep. This is an offscreen submission target,
+not a display-FPS measurement. No builds or tests run concurrently, and the
+external 200,000,000-byte RSS/physical guard remains enabled.
+
+The counterfactual classifies entire tiles as uniform only when the drawing
+instructions prove their color. It uses a separate lightweight kernel for
+those tiles, preserving opaque overdraw, transparent cutouts, and untouched
+shadow interiors. All 13,949 uniform and 6,391 remaining tiles cover the full
+viewport. Its output is byte-identical to the generic compute output.
+
+Pooled GPU quantiles below use the nearest-rank estimator, `ceil(q*n)-1`, with
+1,200 measured frames per variant. They describe this fixture and these five
+runs, not a statistical guarantee for arbitrary interactions.
+
+| Measurement | Generic compute | Separate uniform tiles |
+| --- | ---: | ---: |
+| GPU median | 6.202 ms | 4.477 ms |
+| GPU p95 | 7.877 ms | 7.406 ms |
+| GPU p99 | 8.031 ms | 8.998 ms |
+| Maximum GPU sample | 8.164 ms | 10.461 ms |
+| Samples over 8.333333 ms | 0 / 1,200 | 28 / 1,200 |
+| Median peak physical bytes | 76,825,176 | 76,825,176 |
+| Median peak RSS bytes | 21,954,560 | 21,987,328 |
+
+CPU file loading, metadata parsing, tile binning, and uniform classification
+take approximately 1.01 ms at the median in both variants; this excludes GPU
+initialization and is not the application's incremental scene-update cost.
+Both offscreen variants still own a full-size output texture. The split
+candidate improves the median but worsens the tail and saves no physical
+memory. Do not retain it as a production optimization on this evidence.
+
+The cadence-controlled generic result also corrects the initial inference:
+the 10 Hz experiment does not establish that generic compute is intrinsically
+too slow for the 8.33 ms GPU budget. Presentation, CPU work, scene changes,
+and complete input outcomes still require their own measurements.
+
+Three full SDL-window generic-vector recordings peak at 108,987,328,
+129,287,080, and 129,303,464 physical bytes before any graph worker or mounted
+application state. The first has two layer-resident drawable allocations
+totaling 41,484,288 bytes; the next two have three totaling 62,226,432 bytes,
+despite the same configured capacity of two. This does not establish why the
+additional texture exists. All use the unchanged Retina viewport, complete
+260 frames, and report zero displayed frames. A separate readback recording
+produces pixels byte-identical to the offscreen compute fixture; its
+129,549,272-byte peak includes readback overhead and is excluded from the
+three normal recordings.
+
+The offscreen 76.8 MB result therefore cannot establish the application's
+100 MB target. Do not port the generic compute path merely because that
+narrower recording fits the memory budget. The next memory decision must
+include window resources and predict a material combined GUI/worker saving
+before production changes.
+
+The existing complete Cocoa startup diagnostic supplies a useful contrasting
+boundary: 72,582,104 physical GUI bytes plus 22,397,408 worker bytes equals
+94,979,512 bytes, with combined RSS 189,530,112 bytes. It includes the normal
+viewport, graph, and four requested raster workers, but uses a diagnostic
+store trace and has no visible-output acceptance. The rapid-Enter workload on
+that path still hits the RSS guard. Before constructing another presentation
+architecture, attribute that actual input-window growth to its process and
+allocation owners. A shared input-path reduction can then be checked against
+all 50 persisted blocks and unchanged latency budgets. Neither this startup
+boundary nor a backend switch alone closes the goal.
+
+All ten cadence recordings exited normally below the guard. Sources,
+executables, captured pixels, hashes, and complete GPU samples remain ignored
+under `tmp/native-app/science-vector-*` and `science_vector_*`; the authoritative
+aggregates are `science-vector-cadence-results.json` and
+`science-vector-window-results.json`. The pre-window source and
+binary used by that matrix are retained as `science_vector_probe_offscreen.m`
+and `science_vector_probe_offscreen`. No application code, renderer defaults,
+worker count, graph workload, or acceptance limit changed in these experiments.
+Default-renderer memory, all 50 Enter actions, and visible 120/60 FPS acceptance
+remain incomplete.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
