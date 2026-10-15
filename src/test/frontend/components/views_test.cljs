@@ -17,8 +17,7 @@
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
             [goog.object :as gobj]
-            [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]))
+            [promesa.core :as p]))
 
 (def ^:private test-graph-id "view-resource-test")
 
@@ -196,21 +195,124 @@
 (deftest all-pages-title-cell-keeps-table-row-alignment-test
   (let [title-cell (:cell (first (#'all-pages/columns)))
         page-uuid (random-uuid)
-        [wrapper-tag [link-tag attrs title]]
-        (with-redefs [rfe/href (fn [_route params]
-                                 (str "#/page/" (get params :name)))]
-          (title-cell nil
-                      {:block/title "Aligned page"
-                       :block/uuid page-uuid}
-                      nil))]
+        [wrapper-tag [inner-tag [title-tag title]]]
+        (title-cell nil
+                    {:block/title "Aligned page"
+                     :block/uuid page-uuid
+                     :block.temp/first-window-preview? true}
+                    nil
+                    nil)]
+    (is (string/includes? (name wrapper-tag) "table-block-title"))
     (is (string/includes? (name wrapper-tag) "h-full"))
     (is (string/includes? (name wrapper-tag) "items-center"))
-    (is (string/includes? (name link-tag) "truncate"))
-    (is (string/includes? (:href attrs) (str page-uuid)))
+    (is (string/includes? (name inner-tag) "flex"))
+    (is (= :div title-tag))
     (is (= "Aligned page" title)
-        "All Pages title cells render the worker-provided display title directly.")
-    (is (not (string/includes? (name link-tag) "page-reference"))
-        "All Pages cells use a plain page link, not page-cp preview DOM.")))
+        "All Pages title cells render the worker-provided display title directly.")))
+
+(deftest table-title-row-actions-only-on-name-column-test
+  (is (true? (#'views/table-title-row-actions? {:property-ident :block/title})))
+  (is (false? (#'views/table-title-row-actions?
+               {:property-ident :logseq.property/description
+                :property {:db/ident :logseq.property/description}}))
+      "Built-in Description (and other text properties) must not get row actions.")
+  (is (false? (#'views/table-title-row-actions?
+               {:property-ident :user.property/notes
+                :property {:db/ident :user.property/notes}})))
+  (is (false? (#'views/table-title-row-actions? {}))))
+
+(deftest all-pages-title-cell-requests-name-column-row-actions-test
+  (let [title-cell (:cell (first (#'all-pages/columns)))
+        row {:block/title "Pages row"
+             :block/uuid (random-uuid)
+             :db/id 7}
+        calls (atom [])]
+    (with-redefs [views/block-title (fn [block opts]
+                                      (swap! calls conj [block opts])
+                                      [:div.table-block-title])]
+      (title-cell nil row nil {:width 240}))
+    (is (= [row] (map first @calls)))
+    (is (= :block/title (:property-ident (second (first @calls))))
+        "All Pages Page name cells use the shared name-column block-title path.")
+    (is (true? (#'views/table-title-row-actions? (second (first @calls)))))))
+
+(deftest table-text-property-cells-do-not-request-row-actions-test
+  (let [property {:db/ident :user.property/description
+                  :block/title "Description"
+                  :logseq.property/type :default}
+        row {:block/title "Tagged page"
+             :block/uuid (random-uuid)
+             :db/id 11}
+        value-block {:block/title "A description"
+                     :block/uuid (random-uuid)
+                     :db/id 12}
+        calls (atom [])]
+    (with-redefs [de/entity? map?
+                  views/block-title (fn [block opts]
+                                      (swap! calls conj [block opts])
+                                      [:div])
+                  property-value/property-value
+                  (fn [_block _property opts]
+                    (when-let [render (:table-text-property-render opts)]
+                      (render value-block
+                              {:create-new-block (fn [])
+                               :property-ident (:db/ident property)})))]
+      (let [columns (views/build-columns {} [property]
+                                         {:add-tags-column? false})
+            desc-column (some #(when (= :user.property/description (:id %)) %) columns)]
+        ((:cell desc-column) nil row desc-column {:width 200})
+        (is (= 1 (count @calls)))
+        (is (= value-block (ffirst @calls)))
+        (is (= :user.property/description
+               (:property-ident (second (first @calls)))))
+        (is (= property (:property (second (first @calls)))))
+        (is (false? (#'views/table-title-row-actions? (second (first @calls))))
+            "Tag table Description cells reuse block-title for editing only.")))))
+
+(deftest table-title-row-actions-render-only-on-name-column-test
+  (with-redefs [state/get-component (fn [k]
+                                      (when (= :block/inline-title k)
+                                        (fn [_config title] title)))
+                util/mobile? (constantly false)]
+    (let [row {:block/title "Project Alpha"
+               :block/uuid (random-uuid)
+               :db/id 1}
+          name-html (render-static
+                     (#'views/block-title-interactive
+                      row
+                      {:property-ident :block/title}))
+          desc-html (render-static
+                     (#'views/block-title-interactive
+                      {:block/title "A description"
+                       :block/uuid (random-uuid)
+                       :db/id 2}
+                      {:property-ident :logseq.property/description
+                       :property {:db/ident :logseq.property/description
+                                  :logseq.property/type :default}
+                       :row row}))]
+      (is (string/includes? name-html "Project Alpha"))
+      (is (string/includes? name-html "ls-icon-arrow-right"))
+      (is (string/includes? name-html "ls-icon-layout-sidebar-right"))
+      (is (string/includes? desc-html "A description"))
+      (is (not (string/includes? desc-html "ls-icon-arrow-right"))
+          "Description cells must not render Open page hover actions.")
+      (is (not (string/includes? desc-html "ls-icon-layout-sidebar-right"))
+          "Description cells must not render Open in sidebar hover actions."))))
+
+(deftest table-name-column-requests-row-actions-test
+  (let [row {:block/title "Task row"
+             :block/uuid (random-uuid)
+             :db/id 3}
+        calls (atom [])]
+    (with-redefs [views/block-title (fn [block opts]
+                                      (swap! calls conj [block opts])
+                                      [:div])]
+      (let [columns (views/build-columns {} [] {:add-tags-column? false})
+            name-column (some #(when (= :block/title (:id %)) %) columns)]
+        ((:cell name-column) nil row name-column {:width 200})
+        (is (= [row] (map first @calls)))
+        (is (= :block/title (:property-ident (second (first @calls)))))
+        (is (true? (#'views/table-title-row-actions? (second (first @calls)))))))))
 
 
 (deftest groups-sort-order-selection-only-writes-selected-choice-test
