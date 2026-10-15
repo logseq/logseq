@@ -237,19 +237,21 @@ let overlay_cached cache ~key (scene : Lui_scene.t) draw =
       | op -> op) ops
   | _ ->
     let ops = draw () in
-    let rec prefix glyphs =
+    (* Reuse the unchanged suffix while separating the overlay from the body.
+       Metrics labels already share their glyphs; copying that suffix once to
+       extract it and again to compare it would allocate on every sample. *)
+    let rec prefix glyphs previous =
       if glyphs == body then []
-      else match glyphs with
-        | glyph::rest -> glyph :: prefix rest
-        | [] -> invalid_arg "Overlay draw must prepend glyphs to the current scene" in
-    let rec reuse fresh old = match fresh,old with
-      | glyph::rest,previous::remaining ->
-        (if glyph=previous then previous else glyph) :: reuse rest remaining
-      | fresh,_ -> fresh in
-    let glyphs = prefix scene.glyphs in
-    let glyphs = match cache.overlay with
-      | Some (_,_,_,old) -> reuse glyphs old
-      | None -> glyphs in
-    scene.glyphs <- glyphs @ body;
+      else match glyphs,previous with
+        | glyph::rest,previous_glyph::previous_rest ->
+          let tail = prefix rest previous_rest in
+          let glyph = if glyph=previous_glyph then previous_glyph else glyph in
+          if glyph==previous_glyph && tail==previous_rest then previous
+          else glyph::tail
+        | glyph::rest,[] -> glyph :: prefix rest []
+        | [],_ -> invalid_arg "Overlay draw must prepend glyphs to the current scene" in
+    let previous = match cache.overlay with Some (_,_,_,glyphs) -> glyphs | None -> [] in
+    let glyphs = prefix scene.glyphs previous in
+    scene.glyphs <- if body=[] then glyphs else glyphs @ body;
     cache.overlay <- Some (key,base,ops,glyphs);
     ops

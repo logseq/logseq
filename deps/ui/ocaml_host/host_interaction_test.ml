@@ -533,3 +533,48 @@ let () =
        (range.gstart=0 && range.gend=1)
    | _ -> failwith "Empty body lost overlay text");
   print_endline "native metrics overlay reuse: OK"
+
+
+let () =
+  let glyph = {Lui_scene.gx=1.;gy=2.;gw=3.;gh=4.;gu=0;gv=0;guw=3;gvh=4;
+    gcolor=Lui_scene.color 0 0 0 255;gwide=0;gcolored=false;gsubpixel=false;gthin=false} in
+  let exercise body budget =
+    let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:32 ~h:32)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:32 ~h:32) in
+    let cache = Host_interaction.overlay_cache () in
+    let stable = List.init 999 (fun index -> {glyph with gx=float index}) in
+    let variants = Array.init 2 (fun index ->
+      ({glyph with gx=float (1000+index)} :: stable) @ body) in
+    let frame sample =
+      scene.glyphs <- body;
+      ignore (Host_interaction.overlay_cached cache ~key:sample scene (fun () ->
+        scene.glyphs <- variants.(sample mod 2); [])) in
+    frame 0;
+    let before = Gc.allocated_bytes () in
+    for sample=1 to 100 do frame sample done;
+    let allocated = (Gc.allocated_bytes () -. before) /. 100. in
+    Printf.printf "native sampled overlay body=%d allocated %.0f bytes/frame\n%!"
+      (List.length body) allocated;
+    check "A metrics sample copied unchanged overlay glyph lists repeatedly"
+      (allocated <= budget);
+    check "Sampled overlay lost its body or reordered glyphs"
+      (scene.glyphs = variants.(0));
+    let replacement = [{glyph with gx=(-5.)}; glyph] in
+    scene.glyphs <- replacement;
+    ignore (Host_interaction.overlay_cached cache ~key:100 scene (fun () ->
+      failwith "A changed body reshaped an unchanged overlay"));
+    check "Overlay reused stale body glyphs"
+      (List.length scene.glyphs=1002 && List.nth scene.glyphs 1000 == List.hd replacement) in
+  exercise [] 4096.;
+  exercise [glyph] 32768.;
+  let scene = Lui_scene.create
+    ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:32 ~h:32)
+    ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:32 ~h:32) in
+  scene.glyphs <- [glyph];
+  let rejected = try
+    ignore (Host_interaction.overlay_cached (Host_interaction.overlay_cache ())
+      ~key:0 scene (fun () -> scene.glyphs <- []; [])); false
+    with Invalid_argument _ -> true in
+  check "An overlay draw discarded the scene body without failing" rejected;
+  print_endline "native sampled overlay allocation: OK"
