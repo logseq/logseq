@@ -695,10 +695,16 @@ static Class logseq_material_class(void) {
 /* Immutable IOSurface bands go directly to the window compositor. The
    renderer can reuse its staging pixels as soon as the copy completes. */
 typedef struct {
+  IOSurfaceRef image, background;
+  id layers[3];
+  int left, right;
+  uint32_t pixel;
+  bool ready, changed;
+} LogseqSoftwareBand;
+
+typedef struct {
   id view;
-  IOSurfaceRef *tiles;
-  id *layers;
-  bool *changed;
+  LogseqSoftwareBand *bands;
   int w, h, rows, count;
   size_t owned_bytes;
 } LogseqSoftwareSurface;
@@ -741,13 +747,26 @@ static Class logseq_software_class(void) {
   return cls;
 }
 
+static void logseq_software_drop_images(LogseqSoftwareSurface *surface, LogseqSoftwareBand *band) {
+  if (band->image) {
+    surface->owned_bytes -= IOSurfaceGetAllocSize(band->image);
+    CFRelease(band->image);
+  }
+  if (band->background) {
+    surface->owned_bytes -= IOSurfaceGetAllocSize(band->background);
+    CFRelease(band->background);
+  }
+}
+
 static void logseq_software_clear(LogseqSoftwareSurface *surface) {
   for (int i=0; i<surface->count; i++) {
-    ((void (*)(id, SEL))objc_msgSend)(surface->layers[i], sel_registerName("removeFromSuperlayer"));
-    if (surface->tiles[i]) CFRelease(surface->tiles[i]);
+    LogseqSoftwareBand *band = &surface->bands[i];
+    for (int part=0; part<3; part++)
+      ((void (*)(id, SEL))objc_msgSend)(band->layers[part], sel_registerName("removeFromSuperlayer"));
+    logseq_software_drop_images(surface, band);
   }
-  free(surface->tiles); free(surface->layers); free(surface->changed);
-  surface->tiles = NULL; surface->layers = NULL; surface->changed = NULL;
+  free(surface->bands);
+  surface->bands = NULL;
   surface->count = 0; surface->owned_bytes = 0;
 }
 
@@ -767,6 +786,29 @@ static IOSurfaceRef logseq_software_band(int w, int h) {
   CFRelease(properties);
   if (!image) caml_failwith("Cannot create software IOSurface band");
   return image;
+}
+
+static IOSurfaceRef logseq_software_image(int w, int h, const unsigned char *source, size_t stride) {
+  IOSurfaceRef image = logseq_software_band(w, h);
+  if (IOSurfaceLock(image, 0, NULL)) {
+    CFRelease(image);
+    caml_failwith("Cannot lock software IOSurface band");
+  }
+  unsigned char *destination = IOSurfaceGetBaseAddress(image);
+  size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+  for (int y=0; y<h; y++)
+    memcpy(destination + row_bytes*y, source + stride*y, (size_t)w*4);
+  if (IOSurfaceUnlock(image, 0, NULL)) {
+    CFRelease(image);
+    caml_failwith("Cannot unlock software IOSurface band");
+  }
+  return image;
+}
+
+static uint32_t logseq_software_pixel(const unsigned char *source) {
+  uint32_t pixel;
+  memcpy(&pixel, source, sizeof(pixel));
+  return pixel;
 }
 
 CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
@@ -801,53 +843,69 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
     logseq_software_clear(surface);
     surface->w = w; surface->h = h; surface->rows = rows;
     surface->count = (h + rows - 1) / rows;
-    surface->tiles = calloc(surface->count, sizeof(IOSurfaceRef));
-    surface->layers = calloc(surface->count, sizeof(id));
-    surface->changed = calloc(surface->count, sizeof(bool));
-    if (!surface->tiles || !surface->layers || !surface->changed) caml_raise_out_of_memory();
+    surface->bands = calloc(surface->count, sizeof(LogseqSoftwareBand));
+    if (!surface->bands) caml_raise_out_of_memory();
     id root = ((id (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("layer"));
     for (int i=0; i<surface->count; i++) {
-      id layer = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("CALayer"), sel_registerName("layer"));
-      ((void (*)(id, SEL, id))objc_msgSend)(root, sel_registerName("addSublayer:"), layer);
-      surface->layers[i] = layer;
+      for (int part=0; part<3; part++) {
+        id layer = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("CALayer"), sel_registerName("layer"));
+        ((void (*)(id, SEL, id))objc_msgSend)(root, sel_registerName("addSublayer:"), layer);
+        surface->bands[i].layers[part] = layer;
+      }
     }
   }
   objc_autoreleasePoolPop(pool);
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value logseq_native_software_tile(value id_v, value band) {
-  CAMLparam2(id_v, band);
+CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
+  CAMLparam2(id_v, band_v);
   LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
-  int y0 = Int_val(Field(band,0)), h = Int_val(Field(band,1));
-  int stride = Int_val(Field(band,2));
-  value pixels = Field(band,3);
+  int y0 = Int_val(Field(band_v,0)), h = Int_val(Field(band_v,1));
+  int stride = Int_val(Field(band_v,2));
+  value pixels = Field(band_v,3);
   if (y0 < 0 || y0 >= surface->h || y0 % surface->rows || h <= 0 ||
       h != (surface->h - y0 < surface->rows ? surface->h - y0 : surface->rows) ||
       stride != surface->w * 4 || caml_string_length(pixels) < (size_t)stride * h)
     caml_invalid_argument("Invalid software image band");
-  IOSurfaceRef image = logseq_software_band(surface->w, h);
-  if (IOSurfaceLock(image, 0, NULL)) {
-    CFRelease(image);
-    caml_failwith("Cannot lock software IOSurface band");
+  const unsigned char *source = (const unsigned char *)Bytes_val(pixels);
+  /* A row majority is a cheap background candidate. Any candidate is
+     lossless: the retained middle contains every pixel that differs. */
+  uint32_t pixel = 0;
+  int balance = 0;
+  for (int x=0; x<surface->w; x++) {
+    uint32_t current = logseq_software_pixel(source + (size_t)x*4);
+    if (!balance) { pixel = current; balance = 1; }
+    else balance += current == pixel ? 1 : -1;
   }
-  size_t row_bytes = IOSurfaceGetBytesPerRow(image);
-  UInt8 *destination = IOSurfaceGetBaseAddress(image);
-  for (int y=0; y<h; y++)
-    memcpy(destination + row_bytes*y, Bytes_val(pixels) + (size_t)stride*y, stride);
-  if (IOSurfaceUnlock(image, 0, NULL)) {
-    CFRelease(image);
-    caml_failwith("Cannot unlock software IOSurface band");
+  int left = surface->w, right = 0;
+  for (int y=0; y<h && (left || right < surface->w); y++) {
+    const unsigned char *row = source + (size_t)stride*y;
+    int x = 0;
+    while (x < left && logseq_software_pixel(row + (size_t)x*4) == pixel) x++;
+    left = x;
+    x = surface->w;
+    while (x > right && logseq_software_pixel(row + (size_t)(x-1)*4) == pixel) x--;
+    right = x;
   }
-  int index = y0 / surface->rows;
-  if (surface->tiles[index]) {
-    surface->owned_bytes -= IOSurfaceGetAllocSize(surface->tiles[index]);
-    CFRelease(surface->tiles[index]);
+  if (left == surface->w) right = left;
+  LogseqSoftwareBand *band = &surface->bands[y0 / surface->rows];
+  IOSurfaceRef image = right > left
+    ? logseq_software_image(right-left, h, source + (size_t)left*4, stride) : NULL;
+  IOSurfaceRef background = NULL;
+  if (left || right < surface->w) {
+    if (band->background && band->pixel == pixel) {
+      background = band->background;
+      CFRetain(background);
+    } else background = logseq_software_image(1, 1, (const unsigned char *)&pixel, 4);
   }
-  surface->owned_bytes += IOSurfaceGetAllocSize(image);
-  surface->tiles[index] = image;
-  surface->changed[index] = true;
+  logseq_software_drop_images(surface, band);
+  band->image = image; band->background = background;
+  band->left = left; band->right = right; band->pixel = pixel;
+  band->ready = true; band->changed = true;
+  if (image) surface->owned_bytes += IOSurfaceGetAllocSize(image);
+  if (background) surface->owned_bytes += IOSurfaceGetAllocSize(background);
   CAMLreturn(Val_unit);
 }
 
@@ -856,7 +914,7 @@ CAMLprim value logseq_native_software_present(value id_v) {
   LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
-    if (!surface->tiles[i]) caml_invalid_argument("Software frame is incomplete");
+    if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
   extern void *objc_autoreleasePoolPush(void);
   extern void objc_autoreleasePoolPop(void *);
   void *pool = objc_autoreleasePoolPush();
@@ -865,17 +923,22 @@ CAMLprim value logseq_native_software_present(value id_v) {
   ((void (*)(Class, SEL, int))objc_msgSend)(transaction, sel_registerName("setDisableActions:"), 1);
   ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("bounds"));
   double scale_y = bounds.h / surface->h;
+  double scale_x = bounds.w / surface->w;
   for (int i=0; i<surface->count; i++) {
-    ls_nsrect rect = {0, i*surface->rows*scale_y, bounds.w,
-                     IOSurfaceGetHeight(surface->tiles[i])*scale_y};
-    ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(surface->layers[i], sel_registerName("setFrame:"), rect);
-    ((void (*)(id, SEL, double))objc_msgSend)(surface->layers[i], sel_registerName("setContentsScale:"),
-                                           surface->w / bounds.w);
-    if (surface->changed[i]) {
-      ((void (*)(id, SEL, id))objc_msgSend)(surface->layers[i], sel_registerName("setContents:"),
-                                         (id)surface->tiles[i]);
-      surface->changed[i] = false;
+    LogseqSoftwareBand *band = &surface->bands[i];
+    int height = surface->h - i*surface->rows;
+    if (height > surface->rows) height = surface->rows;
+    int edges[] = {0, band->left, band->right, surface->w};
+    for (int part=0; part<3; part++) {
+      ls_nsrect rect = {edges[part]*scale_x, i*surface->rows*scale_y,
+                       (edges[part+1]-edges[part])*scale_x, height*scale_y};
+      id layer = band->layers[part];
+      ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(layer, sel_registerName("setFrame:"), rect);
+      ((void (*)(id, SEL, double))objc_msgSend)(layer, sel_registerName("setContentsScale:"), 1./scale_x);
+      if (band->changed) ((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setContents:"),
+          (id)(part == 1 ? band->image : band->background));
     }
+    band->changed = false;
   }
   ((void (*)(Class, SEL))objc_msgSend)(transaction, sel_registerName("commit"));
   ((void (*)(Class, SEL))objc_msgSend)(transaction, sel_registerName("flush"));
@@ -893,20 +956,51 @@ CAMLprim value logseq_native_software_read(value id_v) {
   LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
-    if (!surface->tiles[i]) caml_invalid_argument("Software frame is incomplete");
+    if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
   out = caml_alloc_string((size_t)surface->w * surface->h * 4);
   for (int index=0; index<surface->count; index++) {
-    IOSurfaceRef image = surface->tiles[index];
-    if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
-      caml_failwith("Cannot read software IOSurface band");
-    const UInt8 *source = IOSurfaceGetBaseAddress(image);
-    size_t row_bytes = IOSurfaceGetBytesPerRow(image);
-    for (size_t y=0; y<IOSurfaceGetHeight(image); y++)
-      memcpy(Bytes_val(out) + ((size_t)index*surface->rows+y)*surface->w*4,
-             source + row_bytes*y, (size_t)surface->w*4);
-    if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
+    LogseqSoftwareBand *band = &surface->bands[index];
+    int height = surface->h - index*surface->rows;
+    if (height > surface->rows) height = surface->rows;
+    const unsigned char *source = NULL;
+    size_t row_bytes = 0;
+    if (band->image) {
+      if (IOSurfaceLock(band->image, kIOSurfaceLockReadOnly, NULL))
+        caml_failwith("Cannot read software IOSurface band");
+      source = IOSurfaceGetBaseAddress(band->image);
+      row_bytes = IOSurfaceGetBytesPerRow(band->image);
+    }
+    for (int y=0; y<height; y++) {
+      unsigned char *row = (unsigned char *)Bytes_val(out)
+        + ((size_t)index*surface->rows+y)*surface->w*4;
+      for (int x=0; x<surface->w; x++) memcpy(row+(size_t)x*4, &band->pixel, 4);
+      if (source) memcpy(row+(size_t)band->left*4, source+row_bytes*y,
+                         (size_t)(band->right-band->left)*4);
+    }
+    if (band->image && IOSurfaceUnlock(band->image, kIOSurfaceLockReadOnly, NULL))
       caml_failwith("Cannot finish reading software IOSurface band");
   }
+  CAMLreturn(out);
+}
+
+/* Diagnostic readback through Core Animation's actual layer composition. */
+CAMLprim value logseq_native_software_composite(value id_v) {
+  CAMLparam1(id_v); CAMLlocal1(out);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  out = caml_alloc_string((size_t)surface->w * surface->h * 4);
+  memset(Bytes_val(out), 0, caml_string_length(out));
+  CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate(Bytes_val(out), surface->w, surface->h, 8,
+      (size_t)surface->w * 4, color, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+  CGColorSpaceRelease(color);
+  if (!context) caml_failwith("Cannot create software composition readback");
+  id layer = ((id (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("layer"));
+  ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(layer, sel_registerName("bounds"));
+  CGContextTranslateCTM(context, 0, surface->h);
+  CGContextScaleCTM(context, surface->w / bounds.w, -surface->h / bounds.h);
+  ((void (*)(id, SEL, CGContextRef))objc_msgSend)(layer, sel_registerName("renderInContext:"), context);
+  CGContextRelease(context);
   CAMLreturn(out);
 }
 
@@ -2361,6 +2455,9 @@ CAMLprim value logseq_native_software_owned_bytes(value id) {
 }
 CAMLprim value logseq_native_software_read(value id) {
   (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_composite(value id) {
+  (void)id; caml_failwith("Software composition readback requires macOS");
 }
 CAMLprim value logseq_native_software_hit(value id) {
   (void)id; caml_failwith("CoreGraphics presentation requires macOS");

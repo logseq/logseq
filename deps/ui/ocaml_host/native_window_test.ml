@@ -12,6 +12,7 @@ let physical_footprint () =
 external sidebar_vibrancy : float -> float -> float -> float -> bool -> unit = "logseq_native_sidebar_vibrancy"
 external sidebar_hit : int -> bool = "logseq_native_sidebar_hit"
 external window_opaque : int -> bool = "logseq_native_window_opaque"
+external software_composite : int -> bytes = "logseq_native_software_composite"
 external has_sidebar_material : int -> bool = "logseq_native_has_sidebar_material"
 
 let software_memory_regression () =
@@ -43,6 +44,65 @@ let software_memory_regression () =
   Tsdl.Sdl.quit ();
   check "Software presentation exceeded its 100 MB isolation budget"
     (!peak <= 100_000_000)
+
+let software_band_compression_regression id =
+  let width=2048 and height=131 and rows=64 in
+  let budget_errors=ref [] in
+  let budget message condition = if not condition then budget_errors := message :: !budget_errors in
+  Native_window.software_begin id (width,height,rows);
+  let pixel buffer at (b,g,r,a) =
+    List.iteri (fun channel value -> Bytes.set buffer (at+channel) (Char.chr value)) [b;g;r;a] in
+  let fill color =
+    let result=Bytes.create (width*height*4) in
+    for i=0 to width*height-1 do pixel result (i*4) color done;
+    result in
+  let upload expected =
+    for index=0 to (height+rows-1)/rows-1 do
+      let y=index*rows and count=min rows (height-index*rows) in
+      Native_window.software_tile id (y,count,width*4,
+        Bytes.sub expected (y*width*4) (count*width*4))
+    done;
+    Native_window.software_present id;
+    Gc.full_major ();
+    check "Compressed bands changed retained pixels"
+      (Native_window.software_read id = expected);
+    let actual=software_composite id in
+    if actual <> expected then begin
+      let first=ref 0 in
+      while !first < Bytes.length expected && Bytes.get expected !first = Bytes.get actual !first do incr first done;
+      Printf.eprintf "Composited band mismatch at byte %d: expected=%d actual=%d\n%!"
+        !first (Char.code (Bytes.get expected !first)) (Char.code (Bytes.get actual !first));
+      failwith "Compressed Core Animation layers changed displayed pixels"
+    end in
+  List.iter (fun color ->
+    let expected=fill color in
+    upload expected;
+    let owned=Native_window.software_owned_bytes id in
+    Printf.printf "Uniform band snapshot owned %d bytes\n%!" owned;
+    budget "Uniform band ownership scales with viewport width" (owned <= 65_536)
+  ) [255,255,255,255;0,0,0,0;31,47,63,128];
+  List.iter (fun (left,right) ->
+    let expected=fill (31,47,63,128) in
+    for y=0 to height-1 do
+      for x=left to right-1 do
+        pixel expected ((y*width+x)*4)
+          (if y mod 3=0 then (0,0,0,0) else (7,y mod 97,19,128))
+      done
+    done;
+    upload expected;
+    let owned=Native_window.software_owned_bytes id in
+    Printf.printf "Sparse band snapshot [%d,%d) owned %d bytes\n%!" left right owned;
+    budget "Sparse band ownership includes uniform margins" (owned <= 131_072)
+  ) [700,720;0,20;width-20,width];
+  let dense=Bytes.init (width*height*4) (fun i ->
+    if i mod 4=3 then '\255' else Char.chr ((i*13+i/width) land 255)) in
+  upload dense;
+  upload (fill (0,0,0,0));
+  budget "Uniform replacement retains the previous dense images"
+    (Native_window.software_owned_bytes id <= 65_536);
+  Native_window.software_dispose id;
+  List.iter prerr_endline (List.rev !budget_errors);
+  check "Software band memory regression" (!budget_errors = [])
 
 let software_scene_replay ~tiled path duration =
   let scene : Lui_scene.t = In_channel.with_open_bin path Marshal.from_channel in
@@ -183,6 +243,7 @@ let () =
     sidebar_vibrancy 0. 0. 100. 300. true;
     check "Reopening the sidebar did not restore transparent composition"
       (not (window_opaque window_id));
+    software_band_compression_regression window_id;
     Native_window.software_begin window_id (17,131,64);
     let band = Bytes.make (17 * 64 * 4) '\255' in
     List.iter (fun y ->

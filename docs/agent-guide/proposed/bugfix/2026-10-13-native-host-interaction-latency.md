@@ -602,6 +602,64 @@ fail. Full ordinary-compiler and Flambda builds/test aliases pass. These are
 renderer/test improvements, not evidence that the default Metal app meets
 the memory target.
 
+## Lossless software presentation and scanline allocation
+
+The opt-in software presenter now stores only each band's nonuniform
+horizontal extent. A one-pixel immutable IOSurface supplies the uniform
+margins through nonoverlapping layers; the cropped middle preserves every
+source pixel, including transparent holes and fractional alpha. Dense images
+retain their full width. Background images may be reused only while unchanged;
+in-use images are never overwritten.
+
+Regressions compare both retained readback and actual Core Animation layer
+composition byte for byte. They cover opaque, transparent, and partially
+transparent backgrounds, sparse content against both edges and in the
+middle, dense-to-uniform replacement, resize, partial updates, and disposal.
+At 2048 by 131 pixels, uniform snapshots fall from 1,081,344 to 49,152 owned
+bytes and 20-pixel-wide sparse content uses 98,304 bytes. Full-size isolated
+software presentation peaks around 20.4 MB physical footprint, compared with
+about 61.4 MB before cropping. These are renderer isolation results.
+
+Full-app allocation sampling subsequently identifies shadow scanline arrays,
+clip interval tuples, a per-row recursive closure, and shape interval tuples.
+LUI `16c6c543` reuses the integration arrays per operation, reads intervals
+through the existing integer cache, and returns scalar shape edges. The
+3072-row fill regression fails before the scalar change at 149,762 allocated
+bytes/frame and passes at 2,402, without increasing its 131,072-byte budget.
+The shared-glyph regression tightens from 512 to 128 KiB/frame and passes
+at 105,834 bytes/frame. Outer/inset shadow cases now include height 2048
+under the unchanged 256 KiB budget. All 33 raster tests, full release build,
+and test aliases pass, including pixel parity and multicore output.
+
+A separate failure during full-suite parity reveals an unrooted temporary
+C string in the generic OpenGL shader-source binding. LUI `bfcf2128` uploads
+the rooted source directly; initialization under concurrent major collection
+and the complete GL/parity suites pass on macOS. Other operating systems
+have not been runtime-tested for this binding change.
+
+The cropped full-app software recording before the scalar-edge change still
+reaches 107,693,472 combined physical bytes and 200,048,640 combined RSS bytes;
+the unchanged guard kills it after 12.23 seconds. A frontend-only GC
+space-overhead experiment at 60 reaches essentially the same limit after
+11.68 seconds and is reverted. It does not establish a useful memory fix.
+A half-second steady-state live-allocation sample estimates 65.52 MB
+allocated and 0.08 MB surviving two diagnostic major collections. Startup
+sampling retains about 25.04 MB, led by flex layout and native node snapshots.
+These sampled classifications are not evidence of a long-duration bound;
+forced collection is not used for acceptance.
+
+After the scalar-edge change, an uninstrumented full-app software replay
+reduces host allocation from 127.6 to 87.2 MB/s over the sampled warm
+intervals. Active CPU p95 is 5.63 ms, compared with 5.56 ms before; neither
+recording proves a visible frame rate. Combined memory still reaches
+107,759,056 physical bytes and 200,163,328 RSS bytes after 15.51 seconds,
+and the guard terminates it. Scanline allocation improves, but this does
+not establish a steady-state application memory bound.
+
+The default remains Metal. Software pixel correctness and reduced isolated
+memory do not certify complete application memory, visible presentation,
+scrolling, editing, or effect support. The 30–100 MB objective remains open.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
