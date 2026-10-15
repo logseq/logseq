@@ -730,7 +730,8 @@ static Class logseq_material_class(void) {
 /* Immutable IOSurface bands go directly to the window compositor. The
    renderer can reuse its staging pixels as soon as the copy completes. */
 typedef struct {
-  IOSurfaceRef images[2], background;
+  IOSurfaceRef images[2];
+  CGColorRef background;
   id layers[5];
   int edges[6];
   uint32_t pixel;
@@ -788,8 +789,7 @@ static void logseq_software_drop_images(LogseqSoftwareSurface *surface, LogseqSo
     CFRelease(band->images[i]);
   }
   if (band->background) {
-    surface->owned_bytes -= IOSurfaceGetAllocSize(band->background);
-    CFRelease(band->background);
+    CGColorRelease(band->background);
   }
 }
 
@@ -846,6 +846,20 @@ static size_t logseq_software_image_size(int w, int h) {
   size_t bytes = IOSurfaceAlignProperty(kIOSurfaceAllocSize, row_bytes*h);
   size_t page = (size_t)getpagesize();
   return (bytes+page-1)/page*page;
+}
+
+/* Raster pixels are premultiplied BGRA; layer colors use straight RGBA. */
+static CGColorRef logseq_software_color(uint32_t pixel) {
+  const unsigned char *channels = (const unsigned char *)&pixel;
+  double alpha = channels[3];
+  CGFloat values[] = {alpha ? channels[2]/alpha : 0., alpha ? channels[1]/alpha : 0.,
+                      alpha ? channels[0]/alpha : 0., alpha/255.};
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  if (!space) caml_failwith("Cannot create software band color space");
+  CGColorRef color = CGColorCreate(space, values);
+  CGColorSpaceRelease(space);
+  if (!color) caml_failwith("Cannot create software band color");
+  return color;
 }
 
 static uint32_t logseq_software_pixel(const unsigned char *source) {
@@ -967,7 +981,7 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   }
   if (left == surface->w) right = left;
   /* Split at the largest fully uniform internal gap only when the
-     extra image and background actually save aligned surface storage. */
+     extra image actually saves aligned surface storage. */
   int gap_left = right, gap_right = right, start = left;
   for (int x=left; x<right; x++) {
     int y = 0;
@@ -979,7 +993,6 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   }
   size_t split_size = logseq_software_image_size(gap_left-left, h)
     + logseq_software_image_size(right-gap_right, h);
-  if (!left && right == surface->w) split_size += logseq_software_image_size(1, 1);
   if (gap_left == gap_right || split_size >= logseq_software_image_size(right-left, h))
     gap_left = gap_right = right;
   IOSurfaceRef images[2] = {NULL, NULL};
@@ -987,12 +1000,12 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
     images[0] = logseq_software_image(gap_left-left, h, source + (size_t)left*4, stride);
   if (right > gap_right)
     images[1] = logseq_software_image(right-gap_right, h, source + (size_t)gap_right*4, stride);
-  IOSurfaceRef background = NULL;
+  CGColorRef background = NULL;
   if (left || right < surface->w || gap_left < gap_right) {
     if (band->background && band->pixel == pixel) {
       background = band->background;
       CFRetain(background);
-    } else background = logseq_software_image(1, 1, (const unsigned char *)&pixel, 4);
+    } else background = logseq_software_color(pixel);
   }
   logseq_software_drop_images(surface, band);
   band->background = background;
@@ -1004,7 +1017,6 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
     band->images[i] = images[i];
     if (images[i]) surface->owned_bytes += IOSurfaceGetAllocSize(images[i]);
   }
-  if (background) surface->owned_bytes += IOSurfaceGetAllocSize(background);
   CAMLreturn(Val_unit);
 }
 
@@ -1033,8 +1045,14 @@ CAMLprim value logseq_native_software_present(value id_v) {
       id layer = band->layers[part];
       ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(layer, sel_registerName("setFrame:"), rect);
       ((void (*)(id, SEL, double))objc_msgSend)(layer, sel_registerName("setContentsScale:"), 1./scale_x);
-      if (band->changed) ((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setContents:"),
-          (id)(part % 2 ? band->images[part/2] : band->background));
+      if (band->changed) {
+        if (part % 2)
+          ((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setContents:"),
+              (id)band->images[part/2]);
+        else
+          ((void (*)(id, SEL, CGColorRef))objc_msgSend)(layer, sel_registerName("setBackgroundColor:"),
+              band->background);
+      }
     }
     band->changed = false;
   }
@@ -1057,7 +1075,7 @@ CAMLprim value logseq_native_software_image_ids(value id_v) {
   ids = caml_alloc(surface->count * 3, 0);
   for (int i=0; i<surface->count; i++) {
     LogseqSoftwareBand *band = &surface->bands[i];
-    Store_field(ids, i*3, Val_long(band->background ? IOSurfaceGetID(band->background) : 0));
+    Store_field(ids, i*3, Val_long((intnat)band->background));
     for (int part=0; part<2; part++)
       Store_field(ids, i*3+part+1, Val_long(band->images[part] ? IOSurfaceGetID(band->images[part]) : 0));
   }

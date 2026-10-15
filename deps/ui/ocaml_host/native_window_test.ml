@@ -102,8 +102,8 @@ let software_band_compression_regression id =
     upload expected;
     let owned=Native_window.software_owned_bytes id in
     Printf.printf "Uniform band snapshot owned %d bytes\n%!" owned;
-    budget "Uniform band ownership scales with viewport width" (owned <= 65_536)
-  ) [255,255,255,255;0,0,0,0;31,47,63,128];
+    budget "Uniform backgrounds allocate image backing storage" (owned = 0)
+  ) [255,255,255,255;0,0,0,0;31,47,63,128;37,99,235,255;1,0,1,1;254,127,63,254];
   List.iter (fun (left,right) ->
     let expected=fill (31,47,63,128) in
     for y=0 to height-1 do
@@ -137,7 +137,7 @@ let software_band_compression_regression id =
   upload dense;
   upload (fill (0,0,0,0));
   budget "Uniform replacement retains the previous dense images"
-    (Native_window.software_owned_bytes id <= 65_536);
+    (Native_window.software_owned_bytes id = 0);
   Native_window.software_dispose id;
   List.iter prerr_endline (List.rev !budget_errors);
   check "Software band memory regression" (!budget_errors = [])
@@ -353,9 +353,8 @@ let () =
     let band = Bytes.make (17 * 64 * 4) '\255' in
     List.iter (fun y ->
       Native_window.software_tile window_id (y,min 64 (131-y),17*4,band)) [0;64;128];
-    check "Software window did not own its complete pixel snapshot"
-      (let owned = Native_window.software_owned_bytes window_id in
-       owned >= 17 * 131 * 4 && owned <= 3 * 16384);
+    check "Uniform pixel snapshots allocate IOSurface storage"
+      (Native_window.software_owned_bytes window_id = 0);
     Bytes.fill band 0 (Bytes.length band) '\000';
     Gc.full_major ();
     check "Software image still references the caller's reusable band"

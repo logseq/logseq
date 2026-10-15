@@ -132,6 +132,41 @@ class NativeProfileReportTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             summarize(data)
 
+    def test_physical_limit_includes_worker_and_startup(self):
+        data = self.run_data()
+        for row in data["memory"]:
+            row["processes"]["gui"]["footprint_bytes"] = 50_000_000
+            row["processes"]["worker"]["footprint_bytes"] = 25_000_000
+        data["memory"][0]["processes"]["gui"]["footprint_bytes"] = 80_000_000
+        data["memory"][0]["processes"]["worker"]["footprint_bytes"] = 30_000_000
+        memory = summarize(data)["memory"]
+        self.assertIn("physical_peak_within_limit", memory)
+        self.assertFalse(memory["physical_peak_within_limit"])
+        self.assertEqual(110_000_000, memory["peak_footprint_bytes"])
+
+    def test_physical_limit_uses_decimal_bytes_at_the_boundary(self):
+        for total, within in ((99_999_999, True), (100_000_000, True),
+                              (100_000_001, False), (104_000_000, False)):
+            with self.subTest(total_bytes=total):
+                data = self.run_data()
+                for row in data["memory"]:
+                    row["processes"]["gui"]["footprint_bytes"] = 60_000_000
+                    row["processes"]["worker"]["footprint_bytes"] = total - 60_000_000
+                memory = summarize(data)["memory"]
+                self.assertIn("physical_peak_within_limit", memory)
+                self.assertEqual(100_000_000, memory["physical_peak_limit_bytes"])
+                self.assertEqual(within, memory["physical_peak_within_limit"])
+
+    def test_physical_limit_uses_simultaneous_process_memory(self):
+        data = self.run_data()
+        for index, row in enumerate(data["memory"]):
+            row["processes"]["gui"]["footprint_bytes"] = 90_000_000 if index < 2 else 5_000_000
+            row["processes"]["worker"]["footprint_bytes"] = 5_000_000 if index < 2 else 90_000_000
+        memory = summarize(data)["memory"]
+        self.assertIn("physical_peak_within_limit", memory)
+        self.assertTrue(memory["physical_peak_within_limit"])
+        self.assertEqual(95_000_000, memory["peak_footprint_bytes"])
+
     def test_actual_viewport_and_visibility_must_match_provenance(self):
         for field, value in (("pixel_width", 1440), ("window_visible", "false")):
             data = self.run_data()

@@ -97,6 +97,8 @@ def summarize(data):
         memory_summary["peak_" + name] = values[peak_index]
         memory_summary["peak_" + name + "_processes"] = memory[peak_index]["processes"]
         memory_summary["final_" + name] = values[-1]
+    memory_summary["physical_peak_limit_bytes"] = 100_000_000
+    memory_summary["physical_peak_within_limit"] = memory_summary["peak_footprint_bytes"] <= 100_000_000
     return {"kind": "diagnostic", "provenance": provenance, "duration_s": duration,
             "workload_complete": complete, "handled_actions": handled, "actions": actions,
             "timing_baseline_eligible": complete and visible and not provenance["profiler"] and not lost,

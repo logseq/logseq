@@ -198,7 +198,9 @@ let () =
   and height =
     try int_of_string (Sys.getenv "LOGSEQ_HEIGHT") with _ -> 900
   in
-  let env = try Sys.getenv "LUI_GPU" with Not_found -> "" in
+  let env = match Sys.getenv_opt "LUI_GPU" with
+    | Some value -> value
+    | None -> if Host_platform.is_macos then "cocoa" else "" in
   let use_cocoa = env = "cocoa" in
   if use_cocoa && not Host_platform.is_macos then
     failwith "The CoreGraphics renderer requires macOS";
@@ -215,7 +217,7 @@ let () =
   if memory_replay then Printf.eprintf "native memory replay policy=%s\n%!"
     (if continuous_replay then "continuous" else "changes");
   let raster_workers = match Sys.getenv_opt "LOGSEQ_NATIVE_RASTER_WORKERS" with
-    | None -> 4
+    | None -> if use_cocoa then 1 else 4
     | Some value -> int_of_string value in
   if raster_workers < 1 || raster_workers > 8 then
     invalid_arg "Native raster rendering requires between one and eight workers";
@@ -1051,12 +1053,12 @@ let () =
       Ui.handle ~spatial:(spatial_index ()) ui store rects input
     | _ -> Ui.handle ui store rects input
   in
-  (* Metal + macOS only: keep the .sidebar NSVisualEffectView frame
+  (* Keep the macOS sidebar NSVisualEffectView frame
      glued to the sidebar column and splice the hole into the display
      list each render. engine_rect reads the layout just computed by
      the repaint this render belongs to, so the frame never lags. *)
   let () =
-    if Option.is_some metal then
+    if Host_platform.is_macos && (Option.is_some metal || use_cocoa) then
       pre_render :=
         (fun (s : Lui_scene.t) ->
          match !host_cell with

@@ -2,8 +2,10 @@
 
 The SDL host has build targets for macOS and Linux. It uses LUI's CoreText/AppKit
 backends on macOS and Pango/Fontconfig plus `lui.shell_linux` on Linux.
-macOS keeps Metal as its default renderer; Linux uses OpenGL. In-app
-menus use AppKit on macOS and the shared LUI overlay on Linux.
+macOS rasterizes changed bands and presents immutable IOSurfaces through
+Core Animation, using one raster worker by default. `LUI_GPU=metal` explicitly
+selects Metal. Linux uses OpenGL. In-app menus use AppKit on macOS and the
+shared LUI overlay on Linux.
 On Linux, `LUI_GPU=cpu` selects LUI's software rasterizer and SDL presentation
 without requesting an OpenGL window or context. Linux graphics failures
 are reported rather than silently switching to an invisible renderer.
@@ -67,11 +69,23 @@ do not treat a package containing only the host executable as a complete
 Logseq distribution. LUI's existing `Lui_pkg` and platform packagers
 support explicit resources for future application packaging integration.
 
+For a macOS Logseq bundle, copy [Info.plist](Info.plist) into
+`Contents/Info.plist` before signing. Install the host as
+`Contents/MacOS/LogseqNative`, the worker as
+`Contents/Resources/logseq-db-worker`, and fonts under
+`Contents/Resources/fonts`. Keep the native libraries from the tested build.
+The template enables `MallocSpaceEfficient=1` at process startup so the allocator
+can reclaim unused backing memory. The bundled worker inherits this policy.
+Direct executable launches require the same environment setting to reproduce
+bundle memory measurements. Report physical footprint and RSS separately;
+reclaimable pages can remain resident until the system needs them.
+
 ## Interaction metrics and acceptance
 
-The FPS overlay counts actual Metal drawable presentations. Its dialog
-button opens a live metrics split. Scrollbars start hidden, appear during
-scrolling, and hide after 800 ms without movement.
+The FPS overlay counts actual Metal drawable presentations when Metal is
+selected. Core Animation presentation timing is not yet measured; its displayed
+FPS is not an acceptance result. The dialog button opens a live metrics split.
+Scrollbars start hidden, appear during scrolling, and hide after 800 ms without movement.
 
 Set `LOGSEQ_NATIVE_METRICS` to a JSONL file path to retain phase timings,
 actual presentation intervals, and received key/text counters. Input

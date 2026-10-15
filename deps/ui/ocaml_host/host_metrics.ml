@@ -165,6 +165,10 @@ let snapshot_buffer t ~now =
     (Gc.allocated_bytes ())
     gc.minor_collections gc.major_collections
     (gc.heap_words * (Sys.word_size / 8)) (gc.live_words * (Sys.word_size / 8)) (gc.top_heap_words * (Sys.word_size / 8));
+  Printf.bprintf buffer ",\"minor_allocated_bytes\":%.0f,\"promoted_bytes\":%.0f,\"minor_heap_bytes_per_domain\":%d"
+    (gc.minor_words *. float (Sys.word_size / 8))
+    (gc.promoted_words *. float (Sys.word_size / 8))
+    ((Gc.get ()).minor_heap_size * (Sys.word_size / 8));
   Printf.bprintf buffer ",\"raster_background_domains\":%d" t.raster_background_domains;
   (match t.process_memory with
    | None -> Buffer.add_string buffer ",\"process_memory\":null"

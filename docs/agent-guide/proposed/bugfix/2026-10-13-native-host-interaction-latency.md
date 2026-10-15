@@ -16,9 +16,9 @@ physical footprint, and frame time are different outcomes.
 
 | Priority | Observed failure | Next evidence required |
 | --- | --- | --- |
-| 1 | Default Metal startup exceeds 200 MB before graph mounting completes, with about 4 MiB of managed heap | Attribute native graphics working memory and drawable lifetimes; quantify the saving before changing ownership |
-| 2 | Rapid Enter triggers the memory guard after only a few persisted blocks | Preserve all 50 actions; identify the process and memory category growing during the same input interval |
-| 3 | One-Enter diagnostics spend roughly 31-41 ms predominantly executing on the main thread | Attribute CPU samples to application phases; distinguish hash-table/GC work from its callers before optimizing a cache |
+| 1 | Full-size packaged replay reaches 80.9 MB combined physical peak, but visible full-size validation is still absent | Verify normal visible startup and the same complete interaction sequence without reducing the viewport |
+| 2 | The 603.6-second quiet interval still allocates about 651 KB/s with 0.31 minor collections/s | Reduce measured idle overlay/raster churn under the unchanged 256 KiB/s and 0.1/s limits |
+| 3 | Core Animation presentation timing is unavailable and editing RSS can still exceed 200 MB | Keep physical footprint and RSS separate; obtain actual visible presentation and complete input evidence |
 | Pending | Visible scroll, typing, navigation, resize, and presentation acceptance | Run the unchanged workload matrix with verified visible output and complete action counts |
 
 A helper allocation improvement alone does not close any of these failures.
@@ -1255,8 +1255,10 @@ The teardown regression now retains one fragment and one parent link. All 21
 retained-paint tests pass, including full-paint scene equivalence, remounting,
 virtual-window movement, random updates, root removal, and journal resync.
 Complete LUI release build/test/install aliases and native application release
-build/test aliases pass. Formatting checks pass with the installed formatter
-from the 5.5.0 switch. No Dune files or warning policies change in LUI.
+build/test aliases pass. The earlier formatter invocation returned success while formatting was disabled
+by project detection; that exit status did not verify formatting. Explicitly
+enabled checks show existing whole-file formatting differences on both the
+baseline and changed source. No Dune files or warning policies change in LUI.
 
 The rebuilt production candidate, science-retained-scroll-panel-long-r1,
 uses executable SHA-256
@@ -1297,6 +1299,51 @@ no new cache or storage policy is selected from allocation volume alone. The
 producer's alive column is inapplicable when live tracking is disabled and is
 explicitly excluded from the parsed report. The diagnostic exits normally at
 100 seconds. Evidence is in science-retained-scroll-idle-profile-r1.
+
+## Default native presentation and glyph damage allocation
+
+A fresh current-release default-renderer diagnostic, using the retained-paint
+fix, still crosses the combined physical guard after 1.70 seconds. GUI footprint
+is 182436824 bytes and worker footprint 19874296 bytes, totaling 202311120.
+The guard terminates this isolated run before input acceptance. Evidence is in
+science-retained-default-metal-r1. An opt-in software result cannot establish
+the application's default memory behavior.
+
+The post-scroll allocation capture identifies per-glyph rectangle construction
+in raster operation bounds and atlas-overlap checks. A real Damage.update
+regression with 1000 retained glyphs and a changing panel first allocates
+217057 bytes/frame against its 49152-byte budget. Numeric integer bounds
+accumulation and skipping overlap rectangles/closures when the relevant atlas
+has no changes reduce the same test to 25137 bytes/frame. Fractional, zero,
+empty and nested-clip bounds remain exact; changed mask/color atlas pixels
+still redraw identical glyph records correctly. All 42 raster cases and the
+complete release build/test/install aliases pass, including GPU parity.
+LUI commit d44dc83c records this change on feat/ml-backend. Sources and logs
+are in science-glyph-damage-red-r2.log and science-glyph-damage-green-r2.log.
+
+macOS now selects the existing immutable-IOSurface/Core Animation presenter
+and one raster worker when no renderer environment variable is present.
+Explicit Metal selection remains available; Linux selection is unchanged.
+The native sidebar material and transparent hole hook also run with this
+presenter, preserving its compositor integration. The release native build and
+test aliases pass. Presentation timing remains unavailable on this presenter;
+its displayed FPS does not prove display acceptance. The screen/latency gate
+and the full physical memory bound remain open.
+
+The first default-path diagnostic uses executable SHA-256
+c24996ece3d81d0e36d675784bc17c26f7231dcddb117f3bba634e35d407988a.
+Its frozen source patch and build metadata are in
+science-default-candidate-source.patch and science-default-candidate-provenance.json.
+Neither LUI_GPU nor LOGSEQ_NATIVE_RASTER_WORKERS is supplied. The native log
+confirms the IOSurface renderer and zero background raster domains. A matching
+post-scroll allocation-volume capture estimates 12080000 bytes over 20 seconds,
+compared with 19440000 before. The longer quiet metric interval measures about
+733309 host bytes/s, still above the 256 KiB/s budget. Leading remaining stacks
+are overlay prefix/reuse/reversal lists and raster glyph-array conversions.
+The diagnostic exits normally after 101.70 seconds; it is not a sustained-idle
+or visible-window acceptance run. Its sampled combined peak is 106038712 bytes,
+so the allocation decrease is not a demonstrated physical-memory saving.
+Evidence is in science-default-scroll-idle-profile-r1.
 
 ## Optimistic Enter order during asynchronous delta publication
 
@@ -3192,3 +3239,57 @@ The remote quiet-loop fix replaces an idle gate based on repaint count with elap
 The rebuilt application reduces quiet polling from approximately 120 to 60 iterations/s, but still allocates approximately 0.65–0.75 MB/s in the short panel recording. Its actual RSS reaches 200114176 bytes and the external memory guard kills it. Subsequent launch diagnostics also hit the unchanged 200000000-byte cap. These recordings cannot certify sustained idle behavior, interaction responsiveness, or the FPS requirements. A native memory-map capture reports substantial graphics memory beyond the OCaml heap; ownership and in-flight GPU resources still require investigation.
 
 Merge validation builds the native executable and web bundle and passes the UI test aliases after generating their complete JavaScript test dependencies. Restored allocation fixes pass the native host tests, all 19 acceptance-validator tests, and the LUI test suite. The nearest-ancestor regression measures 12073 bytes/query for 64 ancestors, and the 1000-row scoped query regression measures 216525 bytes/query. These are isolated regression measurements, not application FPS acceptance.
+
+
+## Solid compositor bands and promotion diagnostics
+
+A native CoreAnimation control rendered 98,688 premultiplied color cases through `CALayer.backgroundColor` with exact byte equality. Uniform band regions now use immutable `CGColor` values instead of one-pixel IOSurfaces. Before the change, each uniform fixture owned 49,152 bytes of image backing; afterward all six fixtures own zero image bytes. Sparse and separated content still uses cropped immutable IOSurfaces. The full native window and UI test aliases pass, including immutable versions, alpha composition, clipping, resize, disposal, menu boundaries, and editor behavior. This fixture saving is not an application-level physical-memory result.
+
+An unprofiled default-backend memory map during scrolling reports 26.5 MiB of dirty VM allocations, 28.7 MiB of dirty malloc regions, and 4,160 KiB of IOSurfaces. Malloc payload is 15.9 MiB; the remaining 12.9 MiB includes allocator capacity and fragmentation and is not proven reclaimable. Managed OCaml memory overlaps these VM/malloc categories and must not be added again.
+
+A paired bootstrap control tested whether the temporary initialization domain caused the remaining high-water mark. Combined physical peaks were 104,662,456 bytes with parallel initialization and 105,776,592 bytes with serial initialization. Both ran the same full-size scroll sequence. Serial initialization did not improve the peak and was rejected; production initialization remains parallel. These 85-second controls do not establish sustained idle acceptance.
+
+The metrics exporter now records cumulative minor allocation and promotion bytes, plus configured nursery capacity per domain. These distinguish allocation volume from promoted data and retained heap capacity without forced collections. Runtime tuning remains experimental until the same graph, worker, viewport, and input sequence show an actual combined physical-memory improvement without interaction regressions.
+
+The rebuilt solid-band application completed the 85-second default-backend scroll diagnostic at 103,400,888 bytes of combined physical peak, with 69,452,736 GUI bytes and 26,018,296 worker bytes at the final valid sample. During the active scroll interval it allocated 218.3 MB/s and promoted 44.3 MB/s, a 21.4% promotion ratio. Two single-variable GUI nursery controls retained the same executable and worker: 8 MiB reached 111,412,664 bytes, while 1 MiB reached 103,171,488 bytes. Promotion remained about 20.1% and 22.2%, respectively. Neither control met the 100,000,000-byte peak bound; neither was adopted. The default nursery remains unchanged. These short controls are diagnostic only and are not sustained idle or visible frame acceptance.
+
+
+## Current scroll allocation follow-up
+
+A fresh native allocation-volume capture during seconds 18-28 of the full scroll sequence attributes estimated allocations to retained paint, layout, store traversal, accessibility, and application geometry. It records volume only, with no forced collection and no valid surviving-allocation estimate. Capture overhead disqualifies its physical peak and timings as an unprofiled baseline. The corresponding unprofiled run, including all pointer and wheel events, remains the memory comparison.
+
+The retained fragment lookup used `Hashtbl.find_opt` for every hit, allocating an option wrapper even though callers need the fragment itself. Direct lookup preserves miss creation and fragment identity. A regression first failed at 16,049 bytes per 1,000 hits and now uses 49 bytes. The full retained-paint, layout, input, and application scenario suites pass. This local allocation result does not establish an application physical-memory saving.
+
+Accessibility updates independently walked every changed node's complete current and previous ancestor chains. Shared ancestors were repeatedly visited even when already included in the update. Per-update visited sets now deduplicate each tree separately, preserving different ancestry after reparenting. The new 400-leaf/80-ancestor regression failed at 1,745,968 bytes and passes at 775,856 bytes under its unchanged 1 MiB bound. It compares the complete result with a fresh accessible tree, includes duplicated and reversed dirty ids, and verifies hiding, moving a descendant into a visible root, and restoring visibility in a later batch. Existing insertion, focus, old/new ancestry, platform accessibility, native input, and application suites pass.
+
+The default-backend fragment-lookup application completed all 50 Enter and 200 Unicode input events without crashing. Reopening the worker confirms one exact 200-character/431-byte title and 50 additional empty blocks relative to a no-input startup control. The control starts the empty current journal but never clicks its add button; the action workload also creates the initial editing block, so its total block-count difference is 51. The Enter counter itself is exactly 50. Its combined physical peak is 103,024,176 bytes; it still fails the 100,000,000-byte memory goal. This is persistence and input-handler evidence, not visible editing FPS acceptance.
+
+The fragment-lookup scroll candidate reached 103,925,176 combined physical bytes. Its planned long recording was stopped after 118.31 seconds because the active peak had already failed the target; the early-stop reason is retained beside the recording. It is not a 600-second idle acceptance result. The accessibility change requires a new frozen executable and unchanged-workload recording before attributing any application saving.
+
+The accessibility candidate completes the same unprofiled scroll sequence at 105,006,544 bytes of combined physical peak. Active scroll allocation is approximately 215.9 MB/s and promotion is 44.8 MB/s; accessibility p95 is 5.21 ms, compared with 7.04 ms in the solid-band baseline. The local allocation and phase improvements have not reduced the physical peak.
+
+The shell environment for these cohorts includes `MallocNanoZone=0`, recorded in their provenance. Therefore their renderer default is tested under that allocator override, not an entirely unmodified macOS launch environment. A separate same-executable control removes that setting only for the GUI after launching the unchanged worker. Prior results retain their original configuration and remain valid comparisons within it. The control is not yet evidence that allocator selection explains the remaining physical memory.
+
+
+## Native allocation ownership and startup reclamation policy
+
+A native malloc-stack recording at 24 seconds captures the same full-size scroll path. Its inverted graph attributes approximately 24.5 MiB of mapped storage to OCaml shared-heap pools, 3.83 MiB of malloc payload to large OCaml allocations, 2 MiB to the nursery, 2.02 MiB to compiled frame descriptors, and 1.80 MiB to runtime generic tables. The generic tables include custom-block and ephemeron tracking. IOSurface snapshots account for approximately 5.33 MiB in that capture. These are rounded, inclusive tool estimates with profiling overhead, not an unprofiled physical-memory decomposition; managed heap categories overlap native VM/malloc categories. The `heap` tool cannot inspect writable object contents because the signed app is not debuggable, but malloc stack history and VM mapping succeed.
+
+The same signed executable and unchanged worker completed two unprofiled 85-second controls. With the GUI allocator environment unset, combined physical peak is 103,974,304 bytes; with only `MallocSpaceEfficient=1` added for the GUI, peak is 84,788,640 bytes. GUI lifetime physical peaks are 78,201,768 and 60,244,904 bytes. RSS peaks remain 197,017,600 and 195,411,968 bytes. Scroll allocation and promotion remain about 216 MB/s and 45 MB/s, and the sampled phase distributions show no material timing improvement. The observed saving is physical backing reclamation, not reduced object allocation or a demonstrated RSS saving.
+
+Apple's [allocator implementation](https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/malloc.c#L1738-L1759) enables aggressive reclamation and disables its large-allocation cache under this policy. A real LaunchServices probe shows that the policy is absent from the original bundle startup and is present after adding its `LSEnvironment` entry. The failing and passing probe outputs are retained. The checked-in macOS `Info.plist` now declares the policy before runtime initialization. This uses bundle metadata rather than re-executing the app, mutating allocator internals, or adding periodic compaction.
+
+The signed release artifact includes this exact metadata, the current native host, unchanged worker bytes, the tested native libraries, and fonts. The longer recording launches both processes with the bundle-declared environment, matching inherited worker startup. No renderer or raster-worker override is supplied. The launch probe verifies actual bundle-policy application; SDL input replay remains separate from visible OS-input/FPS acceptance. Completion still requires the full action sequence followed by at least 600 seconds of idle and fresh editing/persistence verification under the packaged policy.
+
+
+## Packaged release long-run result
+
+The packaged default configuration completed 671.60 seconds, including all 602 pointer movements and 2,400 wheel events, followed by a 603.587-second quiet window with zero events and zero layouts. Combined GUI/worker physical peak is 80,905,536 bytes and the final sample is 78,300,480 bytes. GUI lifetime physical peak is 60,654,480 bytes. Combined RSS peaks at 194,707,456 bytes and finishes at 143,884,288 bytes. The complete external recording includes startup. Both processes inherit the bundle-declared reclamation policy, and the bundled worker bytes match the frozen worker used in the prior controls.
+
+Quiet heap capacity changes from 25,258,048 to 25,876,160 bytes; the last GC live observation changes from 12,005,488 to 11,699,888 bytes. There is no accumulating live-data signal in this interval. Allocation remains 651,305 bytes/s and minor GC remains 0.308/s, so the existing idle acceptance gate still fails. Its limits have not been weakened. Every sampled window is occluded, so this recording cannot certify visible interaction or FPS.
+
+The packaged Enter recording completes all 50 Enter presses and 200 Unicode commits (431 bytes) without a crash. A pre-Enter boundary contains 792 blocks; after exit there are 842. Reopening the worker confirms the same total, exactly one matching typed title, and that its block is the last of 51 siblings. Combined physical peak is 76,088,808 bytes. Combined RSS reaches 204,341,248 bytes; this exceeds the RSS protection threshold and is retained explicitly under the previously authorized physical-only diagnostic guard. No RSS reduction claim is made.
+
+A separate LaunchServices run starts the bundle with no caller allocator, renderer, raster-worker, or worker-binary override. The application spawns its own bundled worker; its parent PID matches the GUI. Both processes report `MallocSpaceEfficient=1` from bundle startup/inheritance. Reopening preserves the graph. However, this run is constrained to 576x964 points / 1152x1928 pixels and still reports an occluded window. Its 62,735,704-byte combined physical peak is excluded from full-size acceptance. Window screenshots are available, but they do not establish on-screen visibility.
+
+The profiling report now checks the 100,000,000-byte physical bound against simultaneous GUI/worker samples across the complete recording. New regressions fail before the check and pass afterward, covering a startup overshoot, a worker contribution that crosses the limit, exact decimal-byte boundaries, and non-simultaneous individual process peaks. All 23 profiling-runner/report tests and 30 native acceptance-validator tests pass. The physical sub-gate passes for the full-size packaged replay; overall idle, visible-window, and presentation acceptance remain incomplete.
