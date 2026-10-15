@@ -83,7 +83,16 @@
 
     (set-language! :zh-CN)
     (is (= "确认要从此节点删除属性 \"Priority\" 吗？"
-           (i18n/t :property/delete-from-node-confirm "Priority")))))
+           (i18n/t :property/delete-from-node-confirm "Priority"))))
+
+  (testing "property-page table delete confirm is translated"
+    (set-language! :en)
+    (is (= "Are you sure you want to delete the selected nodes?"
+           (i18n/t :view.table/delete-confirm-title)))
+
+    (set-language! :zh-CN)
+    (is (= "确认要删除所选节点吗？"
+           (i18n/t :view.table/delete-confirm-title)))))
 
 (deftest tt-test
   (testing "tt returns the first translated key"
