@@ -10,9 +10,11 @@
 
 #include <caml/alloc.h>
 #include <caml/callback.h>
+#include <caml/domain_state.h>
 #include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
+#include <caml/threads.h>
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -90,11 +92,15 @@ static int logseq_expose_watch(void *userdata, SDL_Event *event) {
   if (SDL_ThreadID() == state->thread && !state->repainting &&
       event->type == SDL_WINDOWEVENT && event->window.windowID == state->window_id &&
       event->window.event == SDL_WINDOWEVENT_EXPOSED) {
+    /* SDL can invoke this while its blocking event wait releases the runtime. */
+    bool acquire = Caml_state_opt == NULL;
+    if (acquire) caml_acquire_runtime_system();
     const value *callback = caml_named_value("logseq_native_expose");
     state->repainting = 1;
     value result = caml_callback_exn(*callback, Val_unit);
     state->repainting = 0;
     if (Is_exception_result(result)) caml_fatal_error("Native resize repaint failed");
+    if (acquire) caml_release_runtime_system();
   }
   return 0;
 }
@@ -111,6 +117,20 @@ CAMLprim value logseq_native_watch_expose(value id, value enabled) {
     SDL_DelEventWatch(logseq_expose_watch, state);
     state->watching = 0;
   }
+  CAMLreturn(Val_unit);
+}
+
+/* Exercise the event-watch boundary used by SDL_WaitEventTimeout. */
+CAMLprim value logseq_native_test_expose_unlocked(value id) {
+  CAMLparam1(id);
+  SDL_Event event = {0};
+  event.type = SDL_WINDOWEVENT;
+  event.window.windowID = Int_val(id);
+  event.window.event = SDL_WINDOWEVENT_EXPOSED;
+  caml_release_runtime_system();
+  int result = SDL_PushEvent(&event);
+  caml_acquire_runtime_system();
+  if (result < 0) caml_failwith(SDL_GetError());
   CAMLreturn(Val_unit);
 }
 

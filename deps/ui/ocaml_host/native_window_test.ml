@@ -3,6 +3,7 @@ open Lui_protocol
 let check message condition = if not condition then failwith message
 external blend_titlebar : unit -> unit = "logseq_native_titlebar_blend"
 external input_chain : int -> bool = "logseq_native_input_chain"
+external expose_unlocked : int -> unit = "logseq_native_test_expose_unlocked"
 let physical_footprint () =
   let footprint,rss,peak = Native_window.memory_usage () in
   check "Native SDK memory sample has invalid physical, resident, or peak bytes"
@@ -444,9 +445,22 @@ let () =
   Tsdl.Sdl.Event.set event Tsdl.Sdl.Event.window_event_id Tsdl.Sdl.Event.window_event_exposed;
   ignore (sdl_ok (Tsdl.Sdl.push_event event));
   check "Live resize waits for the blocked polling loop before painting" (!repaints=1);
+  let foreign = Thread.create (fun () -> ignore (sdl_ok (Tsdl.Sdl.push_event event))) () in
+  Thread.join foreign;
+  check "A foreign SDL thread entered the window repaint callback" (!repaints=1);
+  expose_unlocked (Tsdl.Sdl.get_window_id window);
+  check "An idle expose failed to reacquire the runtime before repainting" (!repaints=2);
+  Native_window.install window (fun () ->
+    incr repaints;
+    ignore (Sys.opaque_identity (Bytes.make 128 'x'));
+    ignore (sdl_ok (Tsdl.Sdl.push_event event)));
+  expose_unlocked (Tsdl.Sdl.get_window_id window);
+  check "A nested expose reentered the current repaint" (!repaints=3);
+  Gc.minor ();
   Native_window.dispose window;
   ignore (sdl_ok (Tsdl.Sdl.push_event event));
-  check "Disposed window retained its live resize callback" (!repaints=1);
+  expose_unlocked (Tsdl.Sdl.get_window_id window);
+  check "Disposed window retained its live resize callback" (!repaints=3);
   Tsdl.Sdl.destroy_window window;
   Tsdl.Sdl.quit ();
   print_endline "native window drag and live resize: OK"
