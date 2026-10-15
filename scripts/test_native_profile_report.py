@@ -53,8 +53,29 @@ class NativeProfileReportTest(unittest.TestCase):
 
     def test_profiler_results_cannot_be_timing_baselines(self):
         data = self.run_data()
+        for row in data["metrics"]:
+            row["process_memory"]["window_visible"] = True
         data["provenance"]["profiler"] = True
         self.assertFalse(summarize(data)["timing_baseline_eligible"])
+
+    def test_timing_baseline_requires_visibility_for_the_entire_window(self):
+        data = self.run_data()
+        for row in data["metrics"]:
+            row["process_memory"]["window_visible"] = True
+        self.assertTrue(summarize(data)["timing_baseline_eligible"])
+        for index in (1, 2, 3):
+            with self.subTest(hidden_row=index):
+                hidden = copy.deepcopy(data)
+                hidden["metrics"][index]["process_memory"]["window_visible"] = False
+                report = summarize(hidden)
+                self.assertTrue(report["workload_complete"])
+                self.assertFalse(report["timing_baseline_eligible"])
+
+    def test_hidden_setup_outside_the_window_does_not_disqualify_the_baseline(self):
+        data = self.run_data()
+        for row in data["metrics"][1:]:
+            row["process_memory"]["window_visible"] = True
+        self.assertTrue(summarize(data)["timing_baseline_eligible"])
 
     def test_counter_reset_and_missing_provenance_fail(self):
         for path in (("metrics",), ("provenance",)):

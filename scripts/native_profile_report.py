@@ -59,6 +59,7 @@ def summarize(data):
         raise ValueError("UI settlement evidence must be explicit")
     complete = (data["exit_code"] == 0 and actions["ui_settled"]
                 and handled == actions["injected"] == actions["persisted"] == actions["expected"])
+    visible = all(row["process_memory"]["window_visible"] for row in rows)
     denominator = handled if complete and handled else None
     allocated = delta(rows, lambda row: row["gc"]["host_allocated_bytes"])
     phases, lost = {}, []
@@ -98,8 +99,8 @@ def summarize(data):
         memory_summary["final_" + name] = values[-1]
     return {"kind": "diagnostic", "provenance": provenance, "duration_s": duration,
             "workload_complete": complete, "handled_actions": handled, "actions": actions,
-            "timing_baseline_eligible": complete and not provenance["profiler"] and not lost,
-            "window_visible_throughout": all(row["process_memory"]["window_visible"] for row in rows),
+            "timing_baseline_eligible": complete and visible and not provenance["profiler"] and not lost,
+            "window_visible_throughout": visible,
             "host_allocated_bytes": allocated, "host_bytes_per_s": allocated / duration,
             "host_bytes_per_completed_action": allocated / denominator if denominator else None,
             "minor_collections": delta(rows, lambda row: row["gc"]["minor_collections"]),

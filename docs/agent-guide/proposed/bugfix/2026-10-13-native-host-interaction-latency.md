@@ -8,6 +8,27 @@ The macOS OCaml/SDL host feels slow across scrolling, typing, and navigation on 
 
 Profile the actual Metal host on the same graph, add failing native regression coverage for unnecessary repeated work, and remove the confirmed hot-path work at its owner. Preserve input focus, IME, geometry, and startup behavior. Rebuild and reopen the application, then compare the same idle and interaction paths.
 
+## Current measurement priorities
+
+Use the controlled measurement protocol below before selecting another change.
+Keep memory and latency investigations separate: allocated bytes, live heap,
+physical footprint, and frame time are different outcomes.
+
+| Priority | Observed failure | Next evidence required |
+| --- | --- | --- |
+| 1 | Default Metal startup exceeds 200 MB before graph mounting completes, with about 4 MiB of managed heap | Attribute native graphics working memory and drawable lifetimes; quantify the saving before changing ownership |
+| 2 | Rapid Enter triggers the memory guard after only a few persisted blocks | Preserve all 50 actions; identify the process and memory category growing during the same input interval |
+| 3 | One-Enter diagnostics spend roughly 31-41 ms predominantly executing on the main thread | Attribute CPU samples to application phases; distinguish hash-table/GC work from its callers before optimizing a cache |
+| Pending | Visible scroll, typing, navigation, resize, and presentation acceptance | Run the unchanged workload matrix with verified visible output and complete action counts |
+
+A helper allocation improvement alone does not close any of these failures.
+Every experiment must state its predicted effect, use one change, retain failed
+runs, and compare the same graph, build, viewport, worker count, and input.
+Record CPU core type and scheduling alongside diagnostic timings: a run that
+migrates from efficiency to performance cores is not a controlled comparison of
+algorithmic execution time. Baseline eligibility also requires the window to be
+visible throughout the measured interval; it does not itself certify FPS.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
@@ -1448,6 +1469,104 @@ and contains 352 samples with both processes and no nonpositive memory values.
 Combined physical peak is 97584568 bytes and RSS peak is 192315392 bytes. This is
 still a hidden Cocoa one-Enter diagnostic, not default-renderer memory or sustained
 interaction acceptance.
+
+## Clipping allocation and matched application crossover
+
+LUI `f58d20f2` removes generic floating-point comparison boxing from rectangle
+intersection and reuses immutable rectangles only when all computed fields are
+unchanged. Twenty thousand contained intersections first fail the unchanged
+200000-byte allocation limit at 3360096 bytes, then pass at 96 bytes. Coverage
+preserves empty intersections, negative dimensions, infinity, NaN comparison
+order, and floating-point rounding at large and fractional origins. Full LUI
+release suites, renderer pixel parity, native host regressions, and the native
+executable/archive builds pass. The CLI scaffold test requires the install
+targets to exist; after building them, the full suite passes without test or
+threshold changes.
+
+An alternating old/new crossover uses the same signed app path, worker, fresh
+790-block graph, input library, and one-Enter script. The old binary SHA-256
+starts `66d8f285`; the new binary starts `e4408b1d`. Each version has three runs,
+each injecting and handling one Enter and persisting exactly one block. The
+approximately 11.07-second native windows include background work; unknown UI
+settlement prevents treating them as complete-action costs.
+
+| Measurement | Old median (range) | New median (range) |
+| --- | --- | --- |
+| Host allocated bytes | 25854976 (25850200-25865456) | 24041464 (24036928-24051160) |
+| Combined peak physical bytes | 98239928 (97994168-98321872) | 99501520 (97994168-99763712) |
+| Combined peak RSS bytes | 197312512 (196984832-197378048) | 198492160 (197033984-198754304) |
+| Input-to-host-frame ms | 26.40 (26.29-39.28) | 39.57 (37.20-45.95) |
+
+The approximately 7% allocation reduction is repeatable in these runs.
+Application memory does not improve, and the slower latency observations
+require investigation rather than a performance success claim. Three runs do
+not establish a precise confidence interval or a p95. The default Metal startup
+still fails at 202212840 combined physical bytes with 127 nodes mounted.
+
+The unchanged 50-Enter script also fails on both versions. The new version
+crosses the guard at 200605696 combined RSS bytes; reopening its isolated graph
+confirms five persisted blocks. The old version crosses at 200032256 bytes and
+persists four. Different startup offsets and one failed run each cannot rank
+their throughput. Neither completes the workload.
+
+## Input CPU versus scheduling diagnosis
+
+Two System Trace recordings use an input-library kernel signpost immediately
+before returning the Enter keydown to the native host. The trace includes the
+actual isolated GUI PID, and the signpost carries the native performance clock.
+Both recordings handle and persist one Enter. They are explicitly marked as
+profiled diagnostics and preserve the combined-memory guard.
+
+Using each signpost and recorded host latency to approximate the main-thread
+interval gives the following decomposition. SDL's millisecond event timestamp
+and the signpost offset limit boundary precision; these are not exact phase CPU
+measurements or input-to-visible latency.
+
+| Diagnostic | Host latency ms | Running ms | Blocked ms | Runnable ms | Interrupted/preempted ms |
+| --- | --- | --- | --- | --- | --- |
+| Old binary | 31.36 | 30.85 | 0.43 | 0.04 | 0.04 |
+| New binary | 41.47 | 40.47 | 0.78 | 0.04 | 0.18 |
+
+The new sample runs for about 13.44 ms on efficiency cores before moving to
+performance cores; the old sample runs on performance cores throughout. This
+is a measured confounder, not proof that scheduling explains the entire
+difference. Both samples predominantly execute instead of waiting. CPU samples
+include hash-table lookup/comparison, major collection, retained painting,
+geometry, accessibility, and software presentation. Many OCaml stacks omit the
+intermediate application caller, so a generic hash-table sample cannot select a
+particular cache for modification. Preserve the unresolved attribution and
+timing risk before promoting the allocation change as an application speedup.
+
+The report's visibility regression first fails for a hidden start, middle, or
+end sample: all three incorrectly qualify as timing baselines. Baseline
+eligibility now requires visibility throughout the recorded window. Hidden
+setup outside the window remains valid, and explicit profiling still excludes
+an otherwise visible run. All 18 collector/report tests pass. Visibility is
+necessary but insufficient: action correctness, enough observations, actual
+presentation timing, and the existing acceptance limits remain required.
+
+## Minimal GPU completion working memory
+
+A separate headless native Metal probe creates a device, queue, pipeline, and
+1x1 private color texture, then submits one clear without drawing. The external
+50 ms memory guard remains active. Physical footprint rises from approximately
+7.3 MB before submission to 62.1 MB after GPU completion while the public Metal
+resource counter reports 999424 bytes. A single-frame control stays near that
+level for five seconds and falls to approximately 20.8 MB by ten seconds. An
+additional empty command buffer does not reduce the immediate peak.
+
+This establishes a substantial completion-related working cost even without a
+window or graph. It neither attributes every physical page nor proves a leak.
+Public resource counters overlap process accounting and must not be added to
+physical footprint. The probe is diagnostic, not application acceptance.
+
+A full-app appearance control skips six redundant assignments but still
+crosses the guard at 202278376 combined physical bytes. A separate material-init
+control never logs its changed initializer before termination, so its intended
+path was not exercised and it cannot reject the material hypothesis. Neither
+control is retained as a production change. A VM trace's page-fault totals also
+include pre-exec activity and describe cumulative faults, not retained memory;
+they cannot be used as a reclaimable allocation total.
 
 ## Performance target and display limit
 
