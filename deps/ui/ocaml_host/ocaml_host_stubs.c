@@ -319,11 +319,15 @@ static void logseq_menu_action(id self, SEL _cmd, id sender) {
   (void)_cmd;
   long tag = ((long (*)(id, SEL))objc_msgSend)(sender,
                                                sel_registerName("tag"));
+  /* AppKit also dispatches menus inside SDL's unlocked event wait. */
+  bool acquire = Caml_state_opt == NULL;
+  if (acquire) caml_acquire_runtime_system();
   const value *cb = caml_named_value("ocaml_host_menu_command");
   if (cb != NULL) {
     value res = caml_callback_exn(*cb, Val_long(tag));
     (void)Is_exception_result(res);
   }
+  if (acquire) caml_release_runtime_system();
 }
 
 static id menu_nsstr(const char *s) {
@@ -2638,3 +2642,28 @@ CAMLprim value logseq_native_menu_popup(value spec) {
 }
 
 #endif
+
+/* Exercise AppKit menu dispatch from both runtime states used by SDL. */
+CAMLprim value logseq_native_test_menu_action(value tag, value unlocked) {
+  CAMLparam2(tag, unlocked);
+#ifdef __APPLE__
+  if (logseq_menu_target == nil)
+    caml_invalid_argument("Native menu target is not installed");
+  id sender = ((id(*)(Class, SEL))objc_msgSend)(
+      objc_getClass("NSMenuItem"), sel_registerName("new"));
+  ((void(*)(id, SEL, long))objc_msgSend)(sender, sel_registerName("setTag:"), Long_val(tag));
+  id app = ((id(*)(Class, SEL))objc_msgSend)(
+      objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+  bool release = Bool_val(unlocked);
+  if (release) caml_release_runtime_system();
+  bool sent = ((bool(*)(id, SEL, SEL, id, id))objc_msgSend)(app,
+      sel_registerName("sendAction:to:from:"), sel_registerName("logseqMenuAction:"),
+      logseq_menu_target, sender);
+  if (release) caml_acquire_runtime_system();
+  ((void(*)(id, SEL))objc_msgSend)(sender, sel_registerName("release"));
+  if (!sent) caml_failwith("Native menu action was not dispatched");
+#else
+  caml_invalid_argument("Native menu dispatch requires macOS");
+#endif
+  CAMLreturn(Val_unit);
+}

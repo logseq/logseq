@@ -4,6 +4,27 @@ let check message condition = if not condition then failwith message
 external blend_titlebar : unit -> unit = "logseq_native_titlebar_blend"
 external input_chain : int -> bool = "logseq_native_input_chain"
 external expose_unlocked : int -> unit = "logseq_native_test_expose_unlocked"
+external install_menus : unit -> unit = "logseq_native_install_menus"
+external menu_action : int -> bool -> unit = "logseq_native_test_menu_action"
+
+let menu_runtime_regression () =
+  if Host_platform.is_macos then begin
+    let calls = ref [] in
+    Callback.register "ocaml_host_menu_command" (fun tag ->
+      ignore (Sys.opaque_identity (Bytes.make 4096 'x'));
+      Gc.minor ();
+      calls := tag :: !calls;
+      if tag = 101 then menu_action 102 false);
+    install_menus ();
+    menu_action 101 false;
+    check "Nested menu dispatch lost its runtime lock" (!calls = [102;101]);
+    menu_action 103 true;
+    check "An idle menu action did not reacquire the runtime" (!calls = [103;102;101]);
+    menu_action 104 false;
+    Gc.minor ();
+    check "Idle menu dispatch left the runtime in the wrong state" (!calls = [104;103;102;101]);
+    print_endline "native menu runtime boundary: OK"
+  end
 let physical_footprint () =
   let footprint,rss,peak = Native_window.memory_usage () in
   check "Native SDK memory sample has invalid physical, resident, or peak bytes"
@@ -461,6 +482,7 @@ let () =
   ignore (sdl_ok (Tsdl.Sdl.push_event event));
   expose_unlocked (Tsdl.Sdl.get_window_id window);
   check "Disposed window retained its live resize callback" (!repaints=3);
+  menu_runtime_regression ();
   Tsdl.Sdl.destroy_window window;
   Tsdl.Sdl.quit ();
   print_endline "native window drag and live resize: OK"
