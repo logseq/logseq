@@ -2327,7 +2327,7 @@ let () =
        let software_bytes = if use_cocoa then
            Native_window.software_owned_bytes (Sdl.get_window_id !win) else 0 in
        Printf.eprintf
-         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d software_bytes=%d atlas_bytes=%d]\n%!"
+         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d edit_layouts=%d edit_nodes=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d software_bytes=%d atlas_bytes=%d]\n%!"
          !frame
          (st.Gc.live_words * 8 / 1048576)
          (st.Gc.heap_words * 8 / 1048576)
@@ -2336,6 +2336,9 @@ let () =
          (Lui_store.node_count store)
          (Hashtbl.length text_engine.Text_engine.slots)
          (Host_platform.Text.Cache.length text_engine.layouts)
+         (Hashtbl.fold (fun _ (_,cache) total -> total + Host_platform.Text.Cache.length cache)
+            text_engine.editing_layouts 0)
+         (Hashtbl.length text_engine.editing_layouts)
          (Host_platform.Text.Cache.length metrics_text_engine.layouts)
          (Hashtbl.length metrics_labels)
          (Hashtbl.length Native_embed.shallow_cache)

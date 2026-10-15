@@ -755,6 +755,62 @@ let () =
   print_endline "native metrics label retention: OK"
 
 let () =
+  let errors=ref [] in
+  let verify message condition = if not condition then errors := message :: !errors in
+  List.iter (fun kind ->
+    let store=Lui_store.create () in
+    Lui_store.apply_batch store {generation=1;ops=[CreateNode (1,kind);
+      SetProp (1,TextValue,StringValue "x");
+      CreateNode (2,Text);SetProp (2,TextValue,StringValue "Unchanged caption")
+    ]};
+    if kind=Text then
+      Lui_store.apply_op store (SetProp (1,StyleClass,StringValue "ed-r ed-raw"));
+    let scene=Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64) in
+    let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> 2.)
+      ~store:(fun () -> store) in
+    let rect=Lui_scene.rect 0. 0. 420. 400. in
+    let caption,_,_=Text_engine.text_layout engine 2 rect "Unchanged caption" in
+    ignore (Text_engine.text_layout engine 1 rect "x");
+    Gc.full_major ();
+    let before=(Gc.stat ()).live_words in
+    let previous=Weak.create 1 in
+    for length=1 to 200 do
+      let text=String.make length 'x' in
+      Lui_store.apply_op store (SetProp (1,TextValue,StringValue text));
+      ignore (Text_engine.measure_text ~width:420. engine 1 text);
+      let layout,_,_=Text_engine.text_layout engine 1 rect text in
+      if length=199 then Weak.set previous 0 (Some layout);
+      ignore (Text_engine.measure_text engine 1 (String.sub text 0 (length/2)))
+    done;
+    Gc.full_major ();
+    let retained=((Gc.stat ()).live_words-before)*8 in
+    Printf.printf "native edited text kind=%s retained %d bytes after 200 updates\n%!"
+      (if kind=Text then "rich" else "input") retained;
+    verify "Editing retained a superseded paragraph layout" (Weak.get previous 0=None);
+    verify "Editing retained more than 2 MiB of layout history" (retained <= 2*1024*1024);
+    let disposed=Weak.create 1 in
+    (let text=String.make 200 'x' in
+     let current,_,_=Text_engine.text_layout engine 1 rect text in
+     Weak.set disposed 0 (Some current);
+     ignore (Text_engine.measure_text engine 1 (String.sub text 0 100));
+     let repeated,_,_=Text_engine.text_layout engine 1 rect text in
+     verify "Caret-prefix measurement evicted the current wrapped layout" (current==repeated));
+    let repeated_caption,_,_=Text_engine.text_layout engine 2 rect "Unchanged caption" in
+    verify "Editing invalidated an unrelated caption layout" (caption==repeated_caption);
+    Lui_store.apply_op store (DropNode 1);
+    ignore (Text_engine.text_layout engine 2 rect "Unchanged caption");
+    Gc.full_major ();
+    let live_caption,_,_=Text_engine.text_layout engine 2 rect "Unchanged caption" in
+    verify "Editor disposal invalidated the live caption cache" (caption==live_caption);
+    verify "A disposed editor retained its current layout" (Weak.get disposed 0=None)
+  ) [Text;Input];
+  List.iter prerr_endline (List.rev !errors);
+  check "Native edited layout ownership failed" (!errors=[]);
+  print_endline "native edited layout ownership: OK"
+
+let () =
   let ancestors = Array.init 64 (fun id -> Js.Json.JObject
     ["node-id",Js.Json.JNumber (float id); "class",Js.Json.JString "container wrapper"] ) in
   let snapshot = Js.Json.JObject ["node-id",Js.Json.JNumber 100.;

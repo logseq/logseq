@@ -43,10 +43,49 @@ type t = {
   store : unit -> Lui_store.t;
   slots : (glyph_key, slot option) Hashtbl.t;
   layouts : Lui_text.Cache.t;
+  editing_layouts : (int, int * Lui_text.Cache.t) Hashtbl.t;
+  mutable layout_revision : int;
 }
 
 let create ~scene ~scale ~store =
-  { scene; scale; store; slots = Hashtbl.create 512; layouts = Lui_text.Cache.create 2048 }
+  { scene; scale; store; slots = Hashtbl.create 512; layouts = Lui_text.Cache.create 2048;
+    editing_layouts = Hashtbl.create 4; layout_revision = -1 }
+
+let editable_text store id =
+  match Lui_store.kind store id with
+  | "input" | "text-field" | "secure-field" | "search-field" | "textarea"
+  | "number-stepper" | "extension:logseq-editor" -> true
+  | _ ->
+    match Lui_store.string_prop store id "style-class" with
+    | Some cls -> String.starts_with ~prefix:"ed-" cls
+      || cls = "block-editor" || String.starts_with ~prefix:"block-editor " cls
+    | None -> false
+
+(* Editing shapes belong to the current node version, including its caret
+   prefixes and wrap offers. Keep them out of the shared caption history. *)
+let layout_cache t id =
+  let store = t.store () in
+  let store_revision = Lui_store.revision store in
+  if store_revision <> t.layout_revision then begin
+    t.layout_revision <- store_revision;
+    Hashtbl.filter_map_inplace (fun node cached ->
+      if Lui_store.mem store node && editable_text store node then Some cached else None)
+      t.editing_layouts
+  end;
+  if not (editable_text store id) then t.layouts
+  else
+    let node_revision = Lui_store.node_revision (Option.get (Lui_store.find_opt store id)) in
+    match Hashtbl.find_opt t.editing_layouts id with
+    | Some (previous,cache) ->
+      if previous <> node_revision then begin
+        Lui_text.Cache.clear cache;
+        Hashtbl.replace t.editing_layouts id (node_revision,cache)
+      end;
+      cache
+    | None ->
+      let cache = Lui_text.Cache.create 32 in
+      Hashtbl.add t.editing_layouts id (node_revision,cache);
+      cache
 
 (* ---- font + text prop plumbing ---- *)
 
@@ -312,7 +351,7 @@ let text_layout t id (r : Lui_scene.rect) s =
       (w' +. 1.) /. scale
     | _ -> 0.
   in
-  let layout = Lui_text.Cache.layout t.layouts font s ~width:wrap_w in
+  let layout = Lui_text.Cache.layout (layout_cache t id) font s ~width:wrap_w in
   (* Vertical centering inside the node's rect, device pixels. *)
   let text_h = layout.lay_height *. scale in
   let y0 =
@@ -410,5 +449,5 @@ let measure_text ?(width = 0.) t id s =
       if Lui_store.string_prop (t.store ()) id "white-space" = Some "nowrap" then 0.
       else if Float.is_finite width && width > 0. then width /. scale else 0.
     in
-    let w, h = Lui_text.Cache.measure t.layouts ~width (font_of (t.store ()) id) s in
+    let w, h = Lui_text.Cache.measure (layout_cache t id) ~width (font_of (t.store ()) id) s in
     (w *. scale, h *. scale)

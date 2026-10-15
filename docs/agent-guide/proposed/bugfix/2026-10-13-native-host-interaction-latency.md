@@ -844,6 +844,36 @@ editing, resize, multiworker startup, or visible presentation acceptance. The
 window remains invisible, and a read-only console-session check confirms the
 screen is locked. The default Metal path remains unchanged.
 
+## Editing layout ownership
+
+The native SDL input replay delivers 200 ASCII characters while the shared text
+cache grows from 29 to 536 entries. Each historical paragraph prefix and caret
+measurement enters the caption cache. A real CoreText regression retains
+9,455,328 bytes for rich text and 8,213,728 bytes for an input after 200 updates;
+superseded layouts and a disposed editor's current layout remain reachable.
+
+Editable nodes now own a small layout cache for their current node version.
+Changing that version clears its previous shapes. The next text-cache access
+after a store change also removes disposed or no-longer-editable owners. Static
+captions retain the existing shared cache. This changes text-layout ownership,
+without changing storage caching or forcing collections in the application.
+
+The same regression retains 143,208 bytes for rich text and 141,128 bytes for an
+input, below the unchanged 2 MiB limit. It verifies collection of superseded and
+disposed layouts, reuse of the current wrapped layout across caret-prefix
+measurement, and reuse of unrelated captions. The forced native host test alias
+passes, as do the executable and separate native-library builds.
+
+In the rebuilt SDL replay, the shared cache remains at 31 entries and two
+editing owners retain five to six current layouts during 200 input bytes.
+The test graph subsequently contains eight more blocks, but the process guard
+kills the application after 18.86 seconds at 200,359,936 combined RSS bytes and
+106,694,096 combined physical bytes. The previous run reached only three added
+blocks before its guard kill. These partial runs use an accumulating test graph
+and diagnostic tracing, so they do not establish a controlled timing improvement
+or successful 50-Enter acceptance. The remaining Enter peak, default renderer
+memory, and visible interaction requirements remain unresolved.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
