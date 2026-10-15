@@ -2814,7 +2814,9 @@
                       :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
     (shui/table
      (let [rows (:rows table)]
-       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+       ;; overflow-x:auto alone computes overflow-y to auto, which hides the
+       ;; horizontal scrollbar on auto-height tables until a later reflow.
+       [:div.ls-table-rows.content.overflow-x-auto.overflow-y-hidden.force-visible-scrollbar
         [:div.relative
          (table-header table option)
 
