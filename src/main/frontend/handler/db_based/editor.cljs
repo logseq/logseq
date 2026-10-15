@@ -144,7 +144,9 @@
                                         (when heading-level
                                           {:logseq.property/heading heading-level}))
                                  ;; file-graph attributes from parse-block; the DB schema does not allow them
-                                 (dissoc :block/format :block/scheduled :block/deadline))]
+                                 (dissoc :block/format :block/scheduled :block/deadline
+                                         :block/marker :block/priority :block/properties-text-values
+                                         :block/invalid-properties))]
                   (update block' :block/refs
                           (fn [refs]
                             (->> (concat (-> refs
