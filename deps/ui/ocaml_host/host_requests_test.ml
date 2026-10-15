@@ -126,6 +126,23 @@ let () =
   check "Ellipsized sidebar text escaped its resized bounds"
     (scene.glyphs <> [] && List.for_all (fun g ->
        g.Lui_scene.gx +. g.gw <= rect.x +. rect.w +. 2.) scene.glyphs);
+  Lui_store.apply_op store (CreateNode (10000,Column));
+  for index=0 to 999 do
+    let id = 10001 + index in
+    List.iter (Lui_store.apply_op store)
+      [CreateNode (id,Text); InsertChild (10000,id,index)]
+  done;
+  let previous_focus = !Host_requests.editor_focus_bid in
+  Host_requests.editor_focus_bid := None;
+  let before = Gc.allocated_bytes () in
+  for _=1 to 100 do Host_requests.ensure_ed_focus_ env done;
+  let focus_bytes = (Gc.allocated_bytes () -. before) /. 100. in
+  Printf.printf "native unfocused editor recovery allocated %.0f bytes/poll\n%!" focus_bytes;
+  check "Unfocused idle polls allocate a complete node list"
+    (focus_bytes <= 1024.);
+  check "Idle recovery must not focus a non-editor node" (Lui_window.Ui.focused ui = 0);
+  Host_requests.editor_focus_bid := previous_focus;
+  Lui_store.apply_op store (DropNode 10000);
   List.iter (Lui_store.apply_op store)
     [CreateNode (10, Column); CreateExtension (20, "logseq-editor", "test");
      InsertChild (10,20,0); SetExtensionProp (20,"block-id",StringValue "block")];

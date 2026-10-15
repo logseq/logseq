@@ -480,6 +480,42 @@ After the entry-point fix it reports 2080 checks and zero failures. Existing
 Journals assertions and patch-operation budgets are unchanged. Release native
 and Melange compilation and all UI test aliases also pass.
 
+## Unfocused editor recovery allocation
+
+A current-release full-app software repaint cohort estimates 40.48 MB of
+allocation in 0.15 seconds. About 2.56 MB comes from constructing the preorder
+node list for `Host_requests.editor_sink_bid`. The focus recovery runs even
+when no editor exists. The diagnostic frontend reaches 136.15 MB physical
+footprint and 198.33 MB RSS; it still fails the active-memory goal. Sampling
+classifies allocation sites here, not retained-object lifetime.
+
+The 1000-child unfocused recovery regression fails at 64,617 bytes/poll.
+Streaming the traversal alone reduces it to 16,497 bytes/poll but still fails
+the unchanged 1024-byte budget. Each `Lui_store.kind` call creates a temporary
+`Some` wrapper. Its separate regression fails at 160,096 bytes for 10,000
+lookups. A direct lookup preserving missing-node behavior reduces that to
+96 bytes, and the combined recovery regression passes at 465 bytes/poll.
+All LUI build/test targets and native host regressions pass, including editor
+remount focus recovery. No new cache or invalidation state is introduced.
+
+A 60-second default-Metal baseline has a 48.408-second interval after warmup
+with no events or layouts: 2,052,869 host-domain bytes/s and 0.971 minor
+collections/s. The fixed release completes a 625.504-second isolated demo
+recording with the same worker, viewport, and normal GC settings. Its
+612.574-second interval after warmup allocates 181,321 host-domain bytes/s
+and runs 0.083 minor collections/s, with zero input events and layout runs.
+Heap capacity changes from 9,955,776 to 12,522,376 bytes. The unchanged idle
+validator reports no allocation, GC, layout, or event errors. Frontend physical
+peak is 41,763,776 bytes; externally sampled frontend-plus-worker physical peak
+is 62,277,024 bytes and RSS peak is 156,303,360 bytes.
+
+Full acceptance still rejects this recording because the window is invisible
+throughout. It does not certify visible-window memory, scrolling, editing, or
+presentation FPS. A subsequent full-app software repaint diagnostic reaches
+133,334,504 combined physical bytes and 206,946,304 combined RSS bytes after
+1.132 seconds. The guard terminates it. Quiet-loop allocation is improved,
+but the full memory goal remains unmet. No weak-cache changes are included.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

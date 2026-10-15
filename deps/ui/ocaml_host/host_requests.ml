@@ -538,10 +538,11 @@ let queue_input_focus bid focused =
    XFilterEvent for an ibus/XIM timeout. A focused popup, menu, or
    other input is left alone. *)
 let editor_sink_bid store =
-  List.find_map (fun id ->
-    if Lui_store.kind store id = "extension:logseq-editor"
-    then Lui_store.string_prop store id "block-id" else None)
-    (Lui_store.preorder store)
+  let found = ref None in
+  Lui_store.iter_preorder store (fun id ->
+    if Option.is_none !found && Lui_store.kind store id = "extension:logseq-editor" then
+      found := Lui_store.string_prop store id "block-id");
+  !found
 
 let ensure_ed_focus_ (e : env) =
   if Ui.focused e.ui = 0 || not (Lui_store.mem e.store (Ui.focused e.ui)) then
