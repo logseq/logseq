@@ -1,0 +1,1 @@
+Fatal error: exception Failure("native dragging recognizes the actual header identifier")

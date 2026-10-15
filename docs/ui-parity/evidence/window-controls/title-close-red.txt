@@ -1,0 +1,4 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+Fatal error: exception Failure("closing saves the locally owned title before requesting window destruction")

@@ -1,0 +1,6 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+window close cancelled: Failure("expected latest title save rejection")
+window close cancelled: Failure("expected title save rejection")
+window close cancelled: Failure("expected body save rejection")

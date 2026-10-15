@@ -431,6 +431,27 @@ let commit_result uuid buf =
       Js.Promise.resolve ())
   else Js.Promise.resolve ()
 
+(* A close attempt must save the live buffer, including retries after a
+   rejected autosave and input received during an earlier acknowledgement. *)
+let rec save_current () =
+  if not (S.ready ()) then Js.Promise.resolve ()
+  else if !S.structure_pending then
+    Js.Promise.make (fun ~resolve ~reject ->
+        S.enqueue_edit_action ~real:true (fun () ->
+            ignore (save_current ()
+              |> Js.Promise.then_ (fun value -> resolve value [@u]; Js.Promise.resolve ())
+              |> Js.Promise.catch (fun _ -> reject (Failure "Pending editor save failed") [@u]; Js.Promise.resolve ()))))
+  else match S.editing () with
+    | None -> Ops.flush_pending_save ()
+    | Some editor ->
+      let buffer = Ops.trim_title editor.uuid (live_buffer editor.uuid) in
+      let* () = commit_result editor.uuid buffer in
+      match S.editing () with
+      | Some current when current.S.uuid <> editor.uuid
+          || current.S.scope <> editor.scope
+          || Ops.trim_title current.uuid (live_buffer current.uuid) <> buffer -> save_current ()
+      | _ -> Js.Promise.resolve ()
+
 let commit uuid buf = ignore (commit_result uuid buf)
 
 let save_if_dirty uuid = commit uuid (Ops.trim_title uuid (live_buffer uuid))

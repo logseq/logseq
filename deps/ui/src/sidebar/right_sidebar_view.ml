@@ -46,7 +46,7 @@ let topbar_btn key label on_click =
       ]
     ~on_press:(fun _ -> on_click ()) []
 
-let topbar st =
+let topbar ?end_inset st =
   (* cljs right_sidebar.cljs topbar: Contents / Page graph / Help, then
      dev-sidebar-items (rtc, undo-redo, profiler) in developer-mode *)
   let dev_items =
@@ -61,7 +61,7 @@ let topbar st =
     else []
   in
   fun ctx parent ->
-    Ui_components.with_props
+    let header = Ui_components.with_props
     [ Ui_components.Prop.inset_top 0.
     ; Ui_components.Prop.inset_left 0.
     ; Ui_components.Prop.inset_right 0.
@@ -86,7 +86,10 @@ let topbar st =
                   Sidebar_state.open_sticky_item st "help")
             ]
            @ dev_items)
-       ])
+       ]) in
+    (match end_inset with
+     | None -> header
+     | Some inset -> Ui_parts.int_prop_signal Lui_protocol.MarginRight inset Fun.id header)
     ctx parent
 
 (* ---------- item menus ---------- *)
@@ -597,7 +600,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
    docked track animates to/from ~0 the inner column keeps its
    expanded layout and is clipped by the pane's overflow:hidden
    (slide-out) instead of reflowing/shrinking its text *)
-let inner st =
+let inner ?header_end_inset st =
   Ui_parts.int_prop_signal Lui_protocol.MinWidth
     (Signal.map2 (fun a b -> (a, b))
        (Signal.value st.Sidebar_state.right_fraction)
@@ -611,7 +614,7 @@ let inner st =
     [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
         [ column ~key:"rs-col" ~grow:1.
-            [ topbar st
+            [ topbar ?end_inset:header_end_inset st
             ; reactive
                 (fun items ->
                   column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
@@ -634,7 +637,7 @@ let inner st =
                 (Signal.value st.Sidebar_state.items) ] ]
     ])
 
-let render (ms : Model.t Signal.signal) : t =
+let render ?header_end_inset (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let st = Sidebar_state.ensure ms in
   (Logseq_el.fragment
@@ -646,6 +649,6 @@ let render (ms : Model.t Signal.signal) : t =
               (Signal.map
                  (fun (m : Model.t) -> m.Model.right_sidebar_open)
                  ms))
-         (inner st)
+         (inner ?header_end_inset st)
      ])
     ctx parent

@@ -96,3 +96,20 @@ let measurement_changed block_id =
   List.iter (fun listener ->
       if listener.active && listener.block_id = block_id then listener.refresh ())
     !measurement_listeners
+
+(* Locally owned editor buffers must be acknowledged before native shutdown. *)
+type save_listener = { save : unit -> unit Js.Promise.t; mutable mounted : bool }
+let save_listeners : save_listener list ref = ref []
+
+let on_save ~scope save =
+  let listener = { save; mounted = true } in
+  save_listeners := listener :: !save_listeners;
+  Signal.on_dispose scope (fun () ->
+      listener.mounted <- false;
+      save_listeners := List.filter (fun current -> current != listener) !save_listeners)
+
+let save_pending () =
+  List.fold_left (fun previous listener ->
+      Js.Promise.then_ (fun () ->
+          if listener.mounted then listener.save () else Js.Promise.resolve ()) previous)
+    (Js.Promise.resolve ()) !save_listeners

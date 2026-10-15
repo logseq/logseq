@@ -22,6 +22,11 @@ module Lui_shell = Host_platform.Shell
    launch — see its comment. *)
 external native_activate : unit -> unit = "logseq_native_activate"
 
+(* SDL's missing Tsdl binding; the callback runs on the SDL event thread. *)
+external native_window_hit_test :
+  nativeint -> (int -> int -> Host_events.window_hit) option -> unit
+  = "logseq_native_window_hit_test"
+
 (* ocaml_host_stubs.c: fullSizeContentView + transparent titlebar so
    cp__header renders where the title bar sits. *)
 external native_titlebar_blend : unit -> unit
@@ -222,10 +227,7 @@ let () =
     (Sdl.gl_set_attribute Sdl.Gl.context_profile_mask
        Sdl.Gl.context_profile_core);
   sdl_ok (Sdl.gl_set_attribute Sdl.Gl.doublebuffer 1);
-  let flags gl =
-    let base = Sdl.Window.(resizable + allow_highdpi + shown) in
-    if gl then Sdl.Window.(base + opengl) else base
-  in
+  let flags gl = Host_events.window_flags ~is_macos:Host_platform.is_macos ~gl in
   let win =
     ref
       (sdl_ok
@@ -987,6 +989,26 @@ let () =
     end
   in
   let quit = ref false in
+  let push_window_state () =
+    let flags = Sdl.get_window_flags !win in
+    Native_embed.platform_event
+      (Printf.sprintf "window-state\n{\"maximized\":%b,\"fullscreen\":%b}"
+         (Sdl.Window.test flags Sdl.Window.maximized)
+         (Sdl.Window.test flags Sdl.Window.fullscreen))
+  in
+  let window_command = function
+    | `minimize -> Sdl.minimize_window !win; push_window_state ()
+    | `toggle_maximized ->
+        if Sdl.Window.test (Sdl.get_window_flags !win) Sdl.Window.maximized
+        then Sdl.restore_window !win else Sdl.maximize_window !win;
+        push_window_state ()
+    | `close -> quit := true
+    | `toggle_fullscreen ->
+        let fullscreen = Sdl.Window.test (Sdl.get_window_flags !win) Sdl.Window.fullscreen in
+        sdl_ok (Sdl.set_window_fullscreen !win
+          (if fullscreen then Sdl.Window.windowed else Sdl.Window.fullscreen_desktop));
+        push_window_state ()
+  in
   let rec apply_actions acts = List.iter (function
     | Dispatch ev ->
       let name =
@@ -1088,7 +1110,7 @@ let () =
         set_ime_rect (Rects.get rects id)
       end
     | Ime_rect r -> set_ime_rect r
-    | Quit -> quit := true)
+    | Quit -> Native_embed.platform_event "window-close-request\n{}")
     acts
   and push_window_size () =
     (* Logical viewport size — Web_dom.win_inner_* drives the
@@ -1154,6 +1176,19 @@ let () =
     | id :: _ -> id
     | [] -> dom_root ()
   in
+  if not Host_platform.is_macos then
+    native_window_hit_test (Sdl.unsafe_ptr_of_window !win)
+      (Some (fun x y ->
+         let draggable = Host_events.window_draggable
+             ~kind:(Lui_store.kind store)
+             ~identifier:(fun id -> Lui_store.string_prop store id "accessibility-identifier")
+             ~parent:(Lui_store.parent store) in
+         let width, height = Sdl.get_window_size !win in
+         let flags = Sdl.get_window_flags !win in
+         Host_events.window_hit_test ~width ~height ~x ~y
+           ~maximized:(Sdl.Window.test flags Sdl.Window.maximized)
+           ~fullscreen:(Sdl.Window.test flags Sdl.Window.fullscreen)
+           ~draggable:(draggable (dom_hit ~x:(float x) ~y:(float y)))));
   (* DOM `buttons` bitmask: 1 primary, 2 secondary, 4 auxiliary. SDL
      button numbers are 1 left, 2 middle, 3 right while DOM is 0 left,
      1 middle, 2 right — map through Input.mouse_button. *)
@@ -1684,6 +1719,9 @@ let () =
         incr n;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         (match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
+         | `Window_event -> push_window_state ()
+         | _ -> ());
+        (match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
          | `Window_event
            when Host_events.requires_repaint
                   (Sdl.Event.window_event_enum
@@ -1691,10 +1729,16 @@ let () =
              Lui_host.invalidate_paint host;
              host_req_repaint := true
          | _ -> ());
-        let escape_dispatched = ref false in
+        let native_key_dispatched = ref false in
         (match input_of_event e with
+         | Some (Input.Key_down (_, _, repeat))
+           when Host_events.fullscreen_shortcut ~is_macos:Host_platform.is_macos ~repeat
+                  ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
+                  ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod) ->
+           native_key_dispatched := true;
+           window_command `toggle_fullscreen
          | Some (Input.Key_down (Input.Escape, _, _) as input) ->
-           escape_dispatched := true;
+           native_key_dispatched := true;
            emit_dom_event e ~native_default:(fun () ->
              apply_actions (Ui.handle ui store rects input))
          | Some (Input.Resize (w, h)) ->
@@ -1718,7 +1762,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        if not !escape_dispatched then emit_dom_event e
+        if not !native_key_dispatched then emit_dom_event e
       end
       else go := false
     done;
@@ -1752,6 +1796,7 @@ let () =
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
       apply_batch = (fun b -> ignore (Lui_host.apply_batch host b));
       apply_actions;
+      window_command;
       set_ime_rect;
       focused_text_input =
         (fun id ->
@@ -1775,6 +1820,7 @@ let () =
     (Host_platform.prefers_dark ());
   Daemon_client.boot_mark "appearance pushed";
   push_window_size ();
+  push_window_state ();
   Daemon_client.boot_mark "size pushed";
   (match
      List.find_opt
@@ -1980,20 +2026,18 @@ let () =
         Sdl.delay (Int32.of_int (int_of_float remaining))
     end
     else if not dirty then
-      (* Busy (recent event/wakeup/paint): 1ms — wakeup-driven pump
-         chains otherwise pay a sleep per hop across the serialized
-         invoke chain. Quiet for >2s: block in SDL_WaitEventTimeout —
-         input wakes immediately while the pump/sync poll cadence
-         drops from ~500Hz to ~60Hz. NULL event: the waking event
-         stays queued for drain_events. The old [!frame < 60] gate
-         never escaped because [frame] counts repaints, which stop
-         entirely once idle. *)
+      (* SDL hit tests can call back into OCaml while pumping events.
+         Tsdl's WaitEventTimeout releases the runtime lock, so only
+         PollEvent above may pump here. A non-pumping idle sleep keeps
+         callbacks runtime-owned and bounds quiet input latency to 16ms. *)
       if perf_s () -. !last_busy < 2. then Sdl.delay 1l
-      else ignore (Sdl.wait_event_timeout None 16)
+      else Sdl.delay 16l
   done;
   ignore (Native_embed.dispose ());
   (match !gctx_cell with
    | Some c -> Sdl.gl_delete_context c
    | None -> ());
+  if not Host_platform.is_macos then
+    native_window_hit_test (Sdl.unsafe_ptr_of_window !win) None;
   Sdl.destroy_window !win;
   Sdl.quit ()

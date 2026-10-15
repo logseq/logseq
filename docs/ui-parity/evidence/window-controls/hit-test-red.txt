@@ -1,0 +1,6 @@
+Entering directory '/home/user/logseq-ui-parity/native/deps/ui'
+File "test/native_host/host_events_test.ml", line 61, characters 4-31:
+61 |     Host_events.window_hit_test ~maximized ~fullscreen ~draggable
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound value Host_events.window_hit_test
+Leaving directory '/home/user/logseq-ui-parity/native/deps/ui'

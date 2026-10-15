@@ -242,15 +242,33 @@ let title_editor (page : Model.page) : t =
         end
   in
   Editor_sink.on_measurement ~scope:ctx.Lui_ui.ui_scope uuid refresh_frame;
+  let acknowledged = ref (String.trim page.Model.page_title) in
+  let saving : unit Js.Promise.t option ref = ref None in
+  let rec save () =
+    match !saving with
+    | Some pending -> Js.Promise.then_ (fun () -> save ()) pending
+    | None ->
+      let value = String.trim (Runtime.signal_get model_st).Edit_model.source in
+      if value = !acknowledged then Js.Promise.resolve ()
+      else
+        let pending = match page.page_uuid with
+          | Some uuid -> Page_ops.rename uuid value
+          | None -> Js.Promise.resolve () in
+        saving := Some pending;
+        let tracked = pending |> Js.Promise.catch (fun _ ->
+            saving := None;
+            pending) in
+        Js.Promise.then_ (fun () ->
+            acknowledged := value;
+            saving := None;
+            save ()) tracked
+  in
+  Editor_sink.on_save ~scope:ctx.Lui_ui.ui_scope save;
   let commit ?(select = false) () =
-    let value =
-      String.trim
-        (Runtime.signal_get model_st).Edit_model.source
-    in
     (match page.page_uuid with
      | Some u ->
          ignore
-           (Page_ops.rename u value
+           (save ()
             |> Js.Promise.then_ (fun () ->
               Runtime.send Action.Title_edit_done;
               if select then Editor_actions.select_single u;

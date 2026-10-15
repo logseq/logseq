@@ -12,6 +12,7 @@
 #include <caml/callback.h>
 #include <caml/fail.h>
 #include <caml/memory.h>
+#include <caml/misc.h>
 #include <caml/mlvalues.h>
 
 #include <stdlib.h>
@@ -1943,3 +1944,59 @@ CAMLprim value logseq_native_menu_popup(value spec) {
 }
 
 #endif
+
+/* SDL exposes hit-test callbacks, but Tsdl does not bind them. This is
+   installed only for the custom-caption Linux window. No callback is
+   retained after that window is destroyed. SDL pumping must retain
+   the OCaml runtime lock; the host uses PollEvent, not Tsdl's
+   runtime-releasing WaitEventTimeout. */
+#if defined(__linux__)
+#include <SDL.h>
+static value window_hit_test_callback = Val_unit;
+static int window_hit_test_rooted = 0;
+
+static SDL_HitTestResult window_hit_test(SDL_Window *window,
+                                        const SDL_Point *point, void *data) {
+  Caml_check_caml_state();
+  CAMLparam0();
+  CAMLlocal1(result);
+  (void)window;
+  (void)data;
+  static const SDL_HitTestResult results[] = {
+    SDL_HITTEST_NORMAL, SDL_HITTEST_DRAGGABLE, SDL_HITTEST_RESIZE_TOPLEFT,
+    SDL_HITTEST_RESIZE_TOP, SDL_HITTEST_RESIZE_TOPRIGHT, SDL_HITTEST_RESIZE_RIGHT,
+    SDL_HITTEST_RESIZE_BOTTOMRIGHT, SDL_HITTEST_RESIZE_BOTTOM,
+    SDL_HITTEST_RESIZE_BOTTOMLEFT, SDL_HITTEST_RESIZE_LEFT
+  };
+  result = caml_callback2_exn(window_hit_test_callback, Val_int(point->x), Val_int(point->y));
+  if (Is_exception_result(result)) caml_fatal_error("native window hit test failed");
+  CAMLreturnT(SDL_HitTestResult, results[Int_val(result)]);
+}
+#endif
+
+CAMLprim value logseq_native_window_hit_test(value window, value callback) {
+  CAMLparam2(window, callback);
+#if defined(__linux__)
+  SDL_Window *native_window = (SDL_Window *)Nativeint_val(window);
+  if (Is_block(callback)) {
+    if (window_hit_test_rooted) caml_failwith("window hit test already installed");
+    window_hit_test_callback = Field(callback, 0);
+    caml_register_generational_global_root(&window_hit_test_callback);
+    window_hit_test_rooted = 1;
+    if (SDL_SetWindowHitTest(native_window, window_hit_test, NULL) != 0) {
+      caml_remove_generational_global_root(&window_hit_test_callback);
+      window_hit_test_rooted = 0;
+      window_hit_test_callback = Val_unit;
+      caml_failwith(SDL_GetError());
+    }
+  } else {
+    if (SDL_SetWindowHitTest(native_window, NULL, NULL) != 0) caml_failwith(SDL_GetError());
+    if (window_hit_test_rooted) {
+      caml_remove_generational_global_root(&window_hit_test_callback);
+      window_hit_test_rooted = 0;
+      window_hit_test_callback = Val_unit;
+    }
+  }
+#endif
+  CAMLreturn(Val_unit);
+}

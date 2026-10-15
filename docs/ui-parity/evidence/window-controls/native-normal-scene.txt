@@ -1,0 +1,382 @@
+icons=6196
+scroll-range id=96 viewport=12.0,300.0 0.0x224.0 bounds=12.0,300.0 28.0,524.0 cap=0.0 offset=0.0
+scroll-range id=102 viewport=0.0,48.0 1280.0x852.0 bounds=0.0,48.0 1280.0,1112.0 cap=212.0 offset=0.0
+1 stack key=- class=theme-container-inner ls-hl-colored h-full 0,0 1280x900
+  2 row key=- class=- grow=1 0,0 1280x900
+    3 split key=- class=- value=1 grow=1 0,0 1280x900
+      4 column key=- class=- grow=1 0,0 1280x900
+        5 row key=- class=cp__header height=48 0,0 1280x48
+          6 row key=- class=cp__header-l margin-left=0 0,8 80x32
+            7 button key=- class=- height=32 width=32 8,8 32x32
+              8 icon key=- class=ui__icon ls-icon-menu-2 height=20 width=20 name="app:menu-2" ires=ok:app:menu-2 14,14 20x20
+            147 button key=- class=- height=32 width=32 40,8 32x32
+              148 icon key=- class=ui__icon ls-icon-search height=20 width=20 name="search" ires=ok:search 46,14 20x20
+          9 row key=- class=cp__header-r grow=1 80,8 1056x32
+            10 box key=- class=- 1002,24 0x0
+            11 box key=- class=- 1002,24 0x0
+            12 button key=- class=- height=32 width=32 1002,8 32x32
+              13 icon key=- class=ui__icon ls-icon-arrow-left height=20 width=20 name="app:arrow-left" ires=ok:app:arrow-left 1008,14 20x20
+            14 button key=- class=- height=32 width=32 1034,8 32x32
+              15 icon key=- class=ui__icon ls-icon-arrow-right height=20 width=20 name="arrow-right" ires=ok:arrow-right 1040,14 20x20
+            16 row key=- class=- 1066,8 64x32
+              17 button key=- class=toolbar-dots-btn height=32 width=32 1066,8 32x32
+                18 icon key=- class=ui__icon ls-icon-dots height=20 width=20 name="app:dots" ires=ok:app:dots 1072,14 20x20
+              19 button key=- class=- height=32 width=32 1098,8 32x32
+                20 icon key=- class=ui__icon ls-icon-layout-sidebar-right height=20 width=20 name="app:layout-sidebar-right" ires=ok:app:layout-sidebar-right 1104,14 20x20
+              21 spacer key=- class=- 1130,24 0x0
+        22 split key=- class=- value=0.0001 grow=1 0,48 1280x852
+          23 box key=- class=cp__sidebar-left-layout 0,48 0x852
+            24 row key=- class=- grow=1 0,48 0x852
+              25 column key=- class=left-sidebar-inner as-container grow=1 0,48 0x852
+                26 box key=- class=left-sidebar-top height=4 0,48 0x4
+                27 column key=- class=- grow=1 0,52 0x848
+                  28 column key=- class=sidebar-header-container 0,52 0x172
+                    29 box key=- class=- 0,52 24x32
+                      30 row key=- class=cp__graphs-selector 12,52 0x32
+                        31 button key=- class=item grow=1 opacity=0.9 12,52 8x32
+                          32 row key=- class=- grow=1 16,56 0x24
+                            33 row key=- class=thumb height=24 width=24 opacity=0.8 margin-left=-2 14,56 0x24
+                              34 icon key=- class=ui__icon height=16 width=16 name="app:topology-star" ires=ok:app:topology-star 14,60 0x16
+                            35 text key=- class=- grow=1 text="Demo" font-size="var(--text-sm)" font-weight=500 margin-left=4 22,68 0x0
+                            36 icon key=- class=ui__icon height=18 width=18 name="app:selector" ires=ok:app:selector 26,59 0x18
+                    37 box key=- class=sidebar-content-group is-expand 0,88 24x136
+                      38 column key=- class=sidebar-content-group-inner 12,88 0x136
+                        39 row key=- class=hd non-collapsable enter-show-more height=32 12,88 8x32
+                          40 box key=- class=a margin-left=4 20,88 0x32
+                            41 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,88 0x32
+                              42 text key=- class=- text="Navigations" font-size="0.75rem" 20,104 0x0
+                          43 box key=- class=b height=32 width=28 opacity=0 20,88 0x32
+                            44 row key=- class=as-edit opacity=0.8 20,97 0x14
+                              45 icon key=- class=ui__icon height=14 width=14 name="app:filter-edit" margin-left=7 ires=ok:app:filter-edit 27,97 0x14
+                        46 box key=- class=bd 12,120 0x104
+                          47 column key=- class=sidebar-navigations 12,124 0x100
+                            48 box key=- class=journals-nav active 12,124 0x32
+                              49 row key=- class=item group active height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,124 4x32
+                                50 icon key=- class=ui__icon height=16 width=16 name="app:calendar" margin-left=4 ires=ok:app:calendar 18,132 0x16
+                                51 text key=- class=- grow=1 text="Journals" 26,140 0x0
+                                52 row key=- class=- 26,130 0x20
+                                  53 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,130 0x20
+                                    54 row key=- class=shui-shortcut-separate 30,130 0x20
+                                      55 row key=- class=- height=20 30,130 20x20
+                                        56 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,132 8x16
+                                      57 row key=- class=- height=20 54,130 20x20
+                                        58 kbd key=- class= text="J" font-size="var(--lx-text-header)" font-weight=400 61,132 6x16
+                                59 box key=- class=- 0,0 0x0
+                            60 box key=- class=flashcards-nav 12,158 0x32
+                              61 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,158 4x32
+                                62 icon key=- class=ui__icon height=16 width=16 name="app:cards" margin-left=4 ires=ok:app:cards 18,166 0x16
+                                63 text key=- class=- grow=1 text="Flashcards" 26,174 0x0
+                                64 row key=- class=- 26,164 0x20
+                                  65 row key=- class=keyboard-shortcut opacity=0 margin-left=4 30,164 0x20
+                                    66 row key=- class=shui-shortcut-separate 30,164 0x20
+                                      67 row key=- class=- height=20 30,164 20x20
+                                        68 kbd key=- class= text="G" font-size="var(--lx-text-header)" font-weight=400 36,166 8x16
+                                      69 row key=- class=- height=20 54,164 20x20
+                                        70 kbd key=- class= text="F" font-size="var(--lx-text-header)" font-weight=400 60,166 8x16
+                                71 box key=- class=- 0,0 0x0
+                            72 box key=- class=all-pages-nav 12,192 0x32
+                              73 row key=- class=item group height=32 font-size="0.875rem" font-weight=500 opacity=0.8 12,192 4x32
+                                74 icon key=- class=ui__icon height=16 width=16 name="app:files" margin-left=4 ires=ok:app:files 18,200 0x16
+                                75 text key=- class=- grow=1 text="Pages" 26,208 0x0
+                                76 box key=- class=- 0,0 0x0
+                  77 column key=- class=sidebar-contents-container 0,228 24x300
+                    78 box key=- class=sidebar-content-group favorites is-expand 12,232 0x32
+                      79 column key=- class=sidebar-content-group-inner 12,232 0x32
+                        80 row key=- class=hd height=32 12,232 8x32
+                          81 box key=- class=a margin-left=4 20,232 0x32
+                            82 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,232 0x32
+                              83 text key=- class=- text="Favorites" font-size="0.75rem" 20,248 0x0
+                          84 box key=- class=b height=32 width=28 opacity=0.4 20,232 0x32
+                            85 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,241 15x15
+                        86 box key=- class=- 0,0 0x0
+                    87 box key=- class=sidebar-content-group recent has-children is-expand 12,268 0x256
+                      88 column key=- class=sidebar-content-group-inner 12,268 0x256
+                        89 row key=- class=hd height=32 12,268 8x32
+                          90 box key=- class=a margin-left=4 20,268 0x32
+                            91 row key=- class=wrap-th grow=1 font-size="0.875rem" font-weight=500 opacity=0.4 20,268 0x32
+                              92 text key=- class=- text="Recent" font-size="0.75rem" 20,284 0x0
+                          93 box key=- class=b height=32 width=28 opacity=0.4 20,268 0x32
+                            94 icon key=- class=ui__icon more height=15 width=15 name="chevron-down" ires=ok:chevron-down 20,277 15x15
+                        95 box key=- class=bd 12,300 0x224
+                          96 list key=- class= 12,300 0x224
+                            151 column key=- class=recent-item font-weight=500 12,300 0x32
+                              152 row key=- class=link-item group height=32 opacity=0.8 12,300 16x32
+                                153 row key=- class=page-icon 20,308 0x16
+                                  154 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,308 0x16
+                                155 text key=- class=page-title grow=1 text="Long Page" 24,316 0x0
+                              156 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,300 28x28
+                                157 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,305 16x18
+                            158 column key=- class=recent-item font-weight=500 12,332 0x32
+                              159 row key=- class=link-item group height=32 opacity=0.8 12,332 16x32
+                                160 row key=- class=page-icon 20,340 0x16
+                                  161 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,340 0x16
+                                162 text key=- class=page-title grow=1 text="Reference Target" 24,348 0x0
+                              163 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,332 28x28
+                                164 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,337 16x18
+                            165 column key=- class=recent-item font-weight=500 12,364 0x32
+                              166 row key=- class=link-item group height=32 opacity=0.8 12,364 16x32
+                                167 row key=- class=page-icon 20,372 0x16
+                                  168 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,372 0x16
+                                169 text key=- class=page-title grow=1 text="Interaction parity" 24,380 0x0
+                              170 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,364 28x28
+                                171 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,369 16x18
+                            172 column key=- class=recent-item font-weight=500 12,396 0x32
+                              173 row key=- class=link-item group height=32 opacity=0.8 12,396 16x32
+                                174 row key=- class=page-icon 20,404 0x16
+                                  175 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,404 0x16
+                                176 text key=- class=page-title grow=1 text="Native focus verified" 24,412 0x0
+                              177 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,396 28x28
+                                178 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,401 16x18
+                            179 column key=- class=recent-item font-weight=500 12,428 0x32
+                              180 row key=- class=link-item group height=32 opacity=0.8 12,428 16x32
+                                181 row key=- class=page-icon 20,436 0x16
+                                  182 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,436 0x16
+                                183 text key=- class=page-title grow=1 text="Native creation context" 24,444 0x0
+                              184 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,428 28x28
+                                185 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,433 16x18
+                            186 column key=- class=recent-item font-weight=500 12,460 0x32
+                              187 row key=- class=link-item group height=32 opacity=0.8 12,460 16x32
+                                188 row key=- class=page-icon 20,468 0x16
+                                  189 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,468 0x16
+                                190 text key=- class=page-title grow=1 text="Native parity smoke" 24,476 0x0
+                              191 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,460 28x28
+                                192 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,465 16x18
+                            193 column key=- class=recent-item font-weight=500 12,492 0x32
+                              194 row key=- class=link-item group height=32 opacity=0.8 12,492 16x32
+                                195 row key=- class=page-icon 20,500 0x16
+                                  196 icon key=- class=ui__icon height=16 width=16 name="app:file" ires=ok:app:file 20,500 0x16
+                                197 text key=- class=page-title grow=1 text="Parity Home" 24,508 0x0
+                              198 button key=- class=sidebar-page-actions ui__button height=28 width=28 opacity=0.4 -20,492 28x28
+                                199 icon key=- class=ui__icon ls-icon-dots height=18 width=18 name="app:dots" ires=ok:app:dots -14,497 16x18
+          97 column key=- class=flex-1 flex grow=1 0,48 1280x852
+            98 extension:logseq-dom key=- class=- 0,48 1280x0
+            99 box key=- class=- 0,0 0x0
+              100 box key=- class=- 0,0 0x0
+              101 spacer key=- class=- 0,0 0x0
+            102 scroll key=- class=scrollbar-spacing grow=1 orientation="vertical" 0,48 1280x852
+              103 row key=- class=- grow=1 margin-left=16 32,80 1232x820
+                104 box key=- class=cp__sidebar-main-content grow=1 168,80 960x820
+                  105 column key=- class= 168,80 960x820
+                    140 box key=- class=- 168,80 960x820
+                      141 box key=- class=- grow=1 168,80 960x820
+                        142 box key=- class=- 168,80 960x820
+                          143 box key=- class=- 168,80 960x820
+                            144 box key=- class=- 168,80 960x820
+                              235 column key=- class=journal-item content 168,80 960x500
+                                236 box key=- class=page cp__page-inner-wrap is-journals font-size="var(--ls-page-text-size, 16px)" 168,80 960x262
+                                  237 column key=- class=page-inner 176,80 944x166
+                                    238 row key=- class=- 176,80 944x58
+                                      239 extension:logseq-div key=- class=ls-page-title content title 176,80 257x58
+                                        240 box key=- class=- grow=1 176,80 257x58
+                                          241 column key=- class=ls-block 176,80 257x58
+                                            242 row key=- class=block-main-container is-page-title-row ls-pt-no-icon grow=1 margin-left=-30 146,82 287x54
+                                              243 row key=- class=is-with-icon bullet-hidden block-control-wrap height=24 width=24 146,82 24x24
+                                                244 box key=- class=block-control opacity=0.4 146,83 22x22
+                                                  245 box key=- class=control-hide rotating-arrow not-collapsed 146,83 22x13
+                                                    246 icon key=- class=- height=13 width=13 name="app:rotating-arrow" ires=ok:app:rotating-arrow 146,83 13x13
+                                              247 column key=- class=- grow=1 178,82 255x54
+                                                248 column key=- class=- 178,82 255x54
+                                                  249 row key=- class=- 178,82 255x54
+                                                    250 column key=- class=- grow=1 178,82 255x54
+                                                      251 box key=- class=ls-page-title-container block-content-or-editor-wrap grow=1 font-size="var(--ls-page-title-size, 32px)" font-weight=500 178,82 255x54
+                                                        252 box key=- class=block-content-or-editor-inner grow=1 178,82 255x54
+                                                          253 row key=- class=block-row grow=1 178,82 255x54
+                                                            254 column key=- class=block-content-wrapper grow=1 178,82 251x54
+                                                              255 row key=- class=ls-page-title-actions opacity=0 178,62 203x24
+                                                                256 button key=- class=as-ghost height=24 text="Add icon" font-size="12px" 178,62 83x24
+                                                                257 button key=- class=as-ghost height=24 text="Set property" font-size="12px" 269,62 104x24
+                                                                258 box key=- class=- 381,74 0x0
+                                                              259 extension:logseq-div key=- class=block-content 178,82 251x54
+                                                                260 row key=- class=- 178,82 251x54
+                                                                  261 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 178,82 251x54
+                                                                    262 box key=- class=- 178,82 251x54
+                                                                      263 text key=- class=block-title-wrap text="Oct 15th, 2026" 178,82 251x54
+                                                            264 row key=- class=ls-block-right 433,109 0x0
+                                                              265 box key=- class=- 433,109 0x0
+                                            266 column key=- class=- 176,136 257x0
+                                        267 row key=- class=- 176,138 257x0
+                                          268 box key=- class=- 176,138 0x0
+                                      269 row key=- class=- 1120,80 0x58
+                                        270 box key=- class=- 1120,80 0x58
+                                    271 column key=- class=ls-page-blocks margin-left=-20 156,186 964x60
+                                      272 box key=- class=page-blocks-inner 156,186 964x56
+                                        273 box key=- class=blocks-list-wrap 156,186 964x28
+                                          274 column key=- class=ls-block swipe-item 156,186 964x28
+                                            275 row key=- class=block-main-container 156,188 964x24
+                                              276 row key=- class=block-control-wrap height=24 156,188 38x24
+                                                277 link key=- class=block-control font-size="0.875rem" opacity=0.4 156,190 22x22
+                                                  278 box key=- class=control-hide opacity=0 158,192 13x18
+                                                    279 box key=- class=rotating-arrow not-collapsed 158,192 13x13
+                                                      280 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 158,192 13x13
+                                                281 row key=- class=bullet-link-wrap margin-left=0 178,192 16x16
+                                                  282 box key=- class=bullet-container cursor height=16 width=16 178,192 16x16
+                                                    283 box key=- class=bullet height=6 width=6 opacity=1 183,197 6x6
+                                              284 column key=- class=- grow=1 198,188 922x24
+                                                285 column key=- class=- 198,188 922x24
+                                                  286 row key=- class=- 198,188 922x24
+                                                    287 column key=- class=- grow=1 198,188 922x24
+                                                      288 box key=- class=block-content-or-editor-wrap grow=1 198,188 922x24
+                                                        289 box key=- class=block-content-or-editor-inner grow=1 198,188 922x24
+                                                          290 row key=- class=block-row grow=1 198,188 922x24
+                                                            291 box key=- class=- 0,48 0x0
+                                                            292 row key=- class=block-content-wrapper grow=1 198,188 918x24
+                                                              293 box key=- class=block-content grow=1 198,188 918x24
+                                                                294 row key=- class=- 198,188 918x24
+                                                                  295 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 198,188 918x24
+                                                                    296 row key=- class=- 198,188 169x24
+                                                                      297 text key=- class=block-title-wrap text="Journal spacing parity" 198,188 169x24
+                                                              298 row key=- class=- 1116,188 0x24
+                                                            299 row key=- class=ls-block-right 1120,200 0x0
+                                                              300 box key=- class=- 0,48 0x0
+                                                              301 box key=- class=- 0,48 0x0
+                                                      302 box key=- class=- 0,48 0x0
+                                                303 box key=- class=- 0,48 0x0
+                                            304 column key=- class=ls-block-content-indent 156,212 964x0
+                                        305 column key=- class=ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0  opacity=0 156,214 964x28
+                                          306 row key=- class=- 156,214 964x28
+                                            307 row key=- class=bab-inner grow=1 height=28 margin-left=22 178,214 942x28
+                                              308 box key=- class=bullet-container height=16 width=16 178,220 16x16
+                                                309 box key=- class=bullet height=6 width=6 opacity=1 183,225 6x6
+                                  310 column key=- class=- margin-left=4 180,310 940x32
+                                    311 column key=- class=- 180,310 940x32
+                                      312 box key=- class=- 180,310 940x0
+                                      313 box key=- class=- 180,342 940x0
+                                        314 box key=- class=- 0,48 0x0
+                                315 spacer key=- class=- grow=1 168,342 960x237
+                                316 box key=- class=- height=1 168,579 960x1
+                              317 column key=- class=journal-item content journal-last-item 168,580 960x320
+                                318 box key=- class=page cp__page-inner-wrap is-journals font-size="var(--ls-page-text-size, 16px)" 168,580 960x230
+                                  319 column key=- class=page-inner 176,580 944x166
+                                    320 row key=- class=- 176,580 944x58
+                                      321 extension:logseq-div key=- class=ls-page-title content title 176,580 259x58
+                                        322 box key=- class=- grow=1 176,580 259x58
+                                          323 column key=- class=ls-block 176,580 259x58
+                                            324 row key=- class=block-main-container is-page-title-row ls-pt-no-icon grow=1 margin-left=-30 146,582 289x54
+                                              325 row key=- class=is-with-icon bullet-hidden block-control-wrap height=24 width=24 146,582 24x24
+                                                326 box key=- class=block-control opacity=0.4 146,583 22x22
+                                                  327 box key=- class=control-hide rotating-arrow not-collapsed 146,583 22x13
+                                                    328 icon key=- class=- height=13 width=13 name="app:rotating-arrow" ires=ok:app:rotating-arrow 146,583 13x13
+                                              329 column key=- class=- grow=1 178,582 257x54
+                                                330 column key=- class=- 178,582 257x54
+                                                  331 row key=- class=- 178,582 257x54
+                                                    332 column key=- class=- grow=1 178,582 257x54
+                                                      333 box key=- class=ls-page-title-container block-content-or-editor-wrap grow=1 font-size="var(--ls-page-title-size, 32px)" font-weight=500 178,582 257x54
+                                                        334 box key=- class=block-content-or-editor-inner grow=1 178,582 257x54
+                                                          335 row key=- class=block-row grow=1 178,582 257x54
+                                                            336 column key=- class=block-content-wrapper grow=1 178,582 253x54
+                                                              337 row key=- class=ls-page-title-actions opacity=0 178,562 203x24
+                                                                338 button key=- class=as-ghost height=24 text="Add icon" font-size="12px" 178,562 83x24
+                                                                339 button key=- class=as-ghost height=24 text="Set property" font-size="12px" 269,562 104x24
+                                                                340 box key=- class=- 381,574 0x0
+                                                              341 extension:logseq-div key=- class=block-content 178,582 253x54
+                                                                342 row key=- class=- 178,582 253x54
+                                                                  343 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 178,582 253x54
+                                                                    344 box key=- class=- 178,582 253x54
+                                                                      345 text key=- class=block-title-wrap text="Oct 14th, 2026" 178,582 253x54
+                                                            346 row key=- class=ls-block-right 435,609 0x0
+                                                              347 box key=- class=- 435,609 0x0
+                                            348 column key=- class=- 176,636 259x0
+                                        349 row key=- class=- 176,638 259x0
+                                          350 box key=- class=- 176,638 0x0
+                                      351 row key=- class=- 1120,580 0x58
+                                        352 box key=- class=- 1120,580 0x58
+                                    353 column key=- class=ls-page-blocks margin-left=-20 156,686 964x60
+                                      354 box key=- class=page-blocks-inner 156,686 964x56
+                                        355 box key=- class=blocks-list-wrap 156,686 964x28
+                                          356 column key=- class=ls-block swipe-item 156,686 964x28
+                                            357 row key=- class=block-main-container 156,688 964x24
+                                              358 row key=- class=block-control-wrap height=24 156,688 38x24
+                                                359 link key=- class=block-control font-size="0.875rem" opacity=0.4 156,690 22x22
+                                                  360 box key=- class=control-hide opacity=0 158,692 13x18
+                                                    361 box key=- class=rotating-arrow not-collapsed 158,692 13x13
+                                                      362 icon key=- class=- height=13 width=13 name="app:rotating-arrow-down" ires=ok:app:rotating-arrow-down 158,692 13x13
+                                                363 row key=- class=bullet-link-wrap margin-left=0 178,692 16x16
+                                                  364 box key=- class=bullet-container cursor height=16 width=16 178,692 16x16
+                                                    365 box key=- class=bullet height=6 width=6 opacity=1 183,697 6x6
+                                              366 column key=- class=- grow=1 198,688 922x24
+                                                367 column key=- class=- 198,688 922x24
+                                                  368 row key=- class=- 198,688 922x24
+                                                    369 column key=- class=- grow=1 198,688 922x24
+                                                      370 box key=- class=block-content-or-editor-wrap grow=1 198,688 922x24
+                                                        371 box key=- class=block-content-or-editor-inner grow=1 198,688 922x24
+                                                          372 row key=- class=block-row grow=1 198,688 922x24
+                                                            373 box key=- class=- 0,48 0x0
+                                                            374 row key=- class=block-content-wrapper grow=1 198,688 918x24
+                                                              375 box key=- class=block-content grow=1 198,688 918x24
+                                                                376 row key=- class=- 198,688 918x24
+                                                                  377 row key=- class=block-head-wrap grow=1 flex-wrap="wrap" 198,688 918x24
+                                                                    378 row key=- class=- 198,688 304x24
+                                                                      379 extension:logseq-span key=- class=block-title-wrap orientation="horizontal" flex-wrap="wrap" 198,688 304x24
+                                                                        380 text key=- class=- text="Journal fixture linking to " 198,688 187x24
+                                                                        381 extension:logseq-span key=- class=page-reference orientation="horizontal" flex-wrap="wrap" 385,688 117x24
+                                                                          382 text key=- class=bracket text="[[" 385,688 12x24
+                                                                          383 extension:logseq-span key=- class=- orientation="horizontal" flex-wrap="wrap" 397,688 93x24
+                                                                            384 extension:logseq-span key=- class=preview-ref-link orientation="horizontal" flex-wrap="wrap" 397,688 93x24
+                                                                              385 link key=- class=page-ref text="Parity Home" 397,688 93x24
+                                                                          386 text key=- class=bracket text="]]" 490,688 12x24
+                                                              387 row key=- class=- 1116,688 0x24
+                                                            388 row key=- class=ls-block-right 1120,700 0x0
+                                                              389 box key=- class=- 0,48 0x0
+                                                              390 box key=- class=- 0,48 0x0
+                                                      391 box key=- class=- 0,48 0x0
+                                                392 box key=- class=- 0,48 0x0
+                                            393 column key=- class=ls-block-content-indent 156,712 964x0
+                                        394 column key=- class=ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0  opacity=0 156,714 964x28
+                                          395 row key=- class=- 156,714 964x28
+                                            396 row key=- class=bab-inner grow=1 height=28 margin-left=22 178,714 942x28
+                                              397 box key=- class=bullet-container height=16 width=16 178,720 16x16
+                                                398 box key=- class=bullet height=6 width=6 opacity=1 183,725 6x6
+                                  399 column key=- class=- margin-left=4 180,810 940x0
+                                    400 column key=- class=- 180,810 940x0
+                                      401 box key=- class=- 180,810 940x0
+                                        402 box key=- class=- 0,48 0x0
+                                403 spacer key=- class=- grow=1 168,810 960x90
+                      146 box key=- class=- 0,48 0x0
+      109 box key=- class=cp__right-sidebar closed 1280,0 0x900
+        110 row key=- class=- grow=1 1280,0 0x900
+    111 box key=- class= 1280,0 0x900
+      112 spacer key=- class=- 1280,0 0x900
+  113 popover key=- class=cp__overlays 0,0 1280x900
+    114 box key=- class=- grow=1 0,0 1280x900
+      115 box key=- class=- 0,0 1280x0
+      116 box key=- class=- 0,0 0x0
+      117 box key=- class=- 0,0 0x0
+      118 box key=- class=- 0,0 0x0
+      119 box key=- class=- 0,0 0x0
+      120 column key=- class=cp__overlay-layer cp__dialog-shell 0,0 1280x0
+        121 column key=- class=- 0,0 1280x0
+        122 column key=- class=- 0,0 1280x0
+      123 spacer key=- class=- 0,0 1280x450
+      124 spacer key=- class=- 0,450 1280x450
+  125 overlay key=- class=- 1260,880 20x20
+    126 box key=- class=cp__sidebar-help-btn 1260,880 20x20
+      127 box key=- class=inner 1260,880 20x20
+        128 icon key=- class=ui__icon ls-icon-help-small height=20 width=20 name="app:help-small" ires=ok:app:help-small 1260,880 20x20
+  129 spacer key=- class=- 0,0 1280x900
+  130 overlay key=- class=- 1136,0 144x48
+    131 row key=- class=- height=48 1136,0 144x48
+      132 row key=- class=- 1136,0 144x48
+        133 button key=- class=- height=48 width=48 1136,0 48x48
+          134 icon key=- class=ui__icon ls-icon-window-control-minimize height=16 width=16 name="app:window-control-minimize" ires=ok:app:window-control-minimize 1152,16 16x16
+        135 button key=- class=- height=48 width=48 1184,0 48x48
+          136 icon key=- class=ui__icon height=16 width=16 name="app:window-control-maximize" ires=ok:app:window-control-maximize 1200,16 16x16
+        137 button key=- class=- height=48 width=48 1232,0 48x48
+          138 icon key=- class=ui__icon ls-icon-window-control-close height=16 width=16 name="app:window-control-close" ires=ok:app:window-control-close 1248,16 16x16
+  139 spacer key=- class=- 0,0 1280x900
+scene[0] 0,0 1280x900
+scene[1] 14,14 20x20
+scene[2] 46,14 20x20
+scene[9] 0,48 1280x852
+scene[10] 0,48 1280x852
+scene[11] 146,83 13x13
+scene[13] 156,186 964x28
+scene[14] 183,197 6x6
+scene[15] 198,188 918x24
+scene[17] 168,579 960x1
+scene[18] 146,583 13x13
+scene[20] 156,686 964x28
+scene[21] 183,697 6x6
+scene[22] 198,688 918x24
+scene[40] 0,4 1280x900
+scene[41] 0,2 1280x900
+scene[42] 0,0 1280x900

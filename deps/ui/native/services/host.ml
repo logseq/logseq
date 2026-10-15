@@ -122,3 +122,21 @@ let dark_ref = ref false
 
 let set_dark d = dark_ref := d
 let prefers_dark () = !dark_ref
+
+(* Window facts belong to the host; mounted views own their subscriptions. *)
+type window_state = { maximized : bool; fullscreen : bool }
+let window_state_ref = ref { maximized = false; fullscreen = false }
+let window_state_listeners : (window_state -> unit) list ref = ref []
+let window_state () = !window_state_ref
+let on_window_state callback =
+  window_state_listeners := callback :: !window_state_listeners;
+  fun () -> window_state_listeners := List.filter (fun current -> current != callback) !window_state_listeners
+let set_window_state state =
+  if state <> !window_state_ref then begin
+    window_state_ref := state;
+    List.iter (fun callback -> callback state) !window_state_listeners
+  end
+let minimize_window () = !host_op "window-minimize" ""
+let toggle_maximized_window () = !host_op "window-toggle-maximized" ""
+let close_window () = !host_op "window-close" ""
+let toggle_fullscreen_window () = !host_op "window-toggle-fullscreen" ""

@@ -29,12 +29,18 @@ let () =
         ~measure:(fun id text _ _ -> Some (measure id text)) layout store;
       let rect_of id = Option.value (Lui_layout.rect layout id)
           ~default:(Lui_scene.rect 0. 0. 0. 0.) in
+      let window_commands = ref [] in
       let env : Host_requests.env =
         { store; ui = Lui_window.Ui.create (); rects = Lui_window.Rects.create ()
         ; rect_of; scale = (fun () -> scale); measure
         ; apply_batch = (fun _ -> ()); apply_actions = (fun _ -> ())
         ; set_ime_rect = (fun _ -> ()); focused_text_input = (fun _ -> ())
-        ; repaint = (fun () -> ()) } in
+        ; repaint = (fun () -> ()); window_command = (fun command -> window_commands := !window_commands @ [ command ]) } in
+      Host_requests.install env;
+      List.iter (fun name -> Host_requests.handle (name ^ "\n"))
+        [ "window-minimize"; "window-toggle-maximized"; "window-close"; "window-toggle-fullscreen" ];
+      check "caption request names dispatch to the typed host window operations"
+        (!window_commands = [ `minimize; `toggle_maximized; `close; `toggle_fullscreen ]);
       Native_embed.replies := [];
       Host_requests.dom_op env "caret-rect"
         {|{"block-id":"geometry","offset":2}|};

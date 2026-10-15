@@ -1,0 +1,4 @@
+{
+  "ok": true,
+  "resultTransit": "[\"^ \",\"~:block/tx-id\",536870984,\"~:block/uuid\",\"~u6ad08a1e-d799-4896-bc9c-7b6e579dad85\",\"~:block/updated-at\",1792052007566,\"~:block/refs\",[\"~#set\",[[\"~#datascript/Entity\",[\"^ \",\"~:db/id\",4]],[\"^5\",[\"^ \",\"^6\",23]]]],\"~:block/created-at\",1792051742015,\"~:block/tags\",[\"^4\",[[\"^5\",[\"^ \",\"^6\",4]]]],\"~:block/title\",\"Window liWindow lifecycle renamedfecycle parity\",\"^6\",270,\"~:block/name\",\"window liwindow lifecycle renamedfecycle parity\"]"
+}

@@ -274,3 +274,32 @@ master180px and horizontal gutter differences remain; a generic bounded-frame
 candidate failed the existing long-page regression and was rejected, not shipped.
 Evidence and explicit loading/paging limits are in
 `docs/ui-parity/evidence/journal-spacing/validation.md`.
+
+### Native desktop caption controls in progress
+
+Master non-macOS custom titlebars use three48px controls fixed at the global
+upper-right edge, not the shrinking main-pane header: minimize, maximize/restore
+and close; fullscreen replaces them with one exit control. Reuse the existing
+host request channel for SDL window commands and authoritative state echoes.
+Scope window-state subscribers to their mounted views; keep macOS system controls
+unchanged. Reserve the reference144px/48px in the owning header or right-sidebar
+topbar, reuse exact existing window translations and SVG paths, and test action,
+geometry, fullscreen and lifecycle states in real desktop windows. Do not claim
+unsaved-edit shutdown or other platform parity without corresponding evidence.
+
+### Window lifecycle validation and buffered shutdown
+
+Actual decorated SDL maximize left a33px duplicate titlebar; non-macOS
+borderless creation plus native drag/resize hit testing repairs the geometry.
+The narrow callback retains runtime ownership through PollEvent; idle waiting
+uses non-pumping sleep instead of Tsdl's runtime-releasing event wait.
+
+Actual close discarded an active local title buffer. The mounted editor now
+exposes a scoped acknowledged-save hook. Native shutdown awaits local title
+and live body commits, coalesces repeated close requests, revalidates input
+received during acknowledgement, and cancels close on rejection. The existing
+body commit and structural-operation queue are reused. Tests cover delayed
+latest revisions, failure/retry, an already-started autosave and ownership
+cleanup. Actual caption close, OS close and full worker-restart durability
+are recorded in the window-controls evidence. Full shutdown/error/IME and
+macOS parity remain unverified; no complete feature-area claim is made.

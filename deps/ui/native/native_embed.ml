@@ -645,7 +645,16 @@ let platform_event payload =
               | None -> 0.)
           | _ -> 0.
         in
-        Host.set_window_size (f "width") (f "height"))
+        Host.set_window_size (f "width") (f "height");
+        Host.enqueue (fun () -> Platform.emit_event "resize" json))
+      else if name = "window-close-request" then Host.enqueue Chrome.request_window_close
+      else if name = "window-state" then (
+        let fields = match json with
+          | Js.Json.JObject fields -> fields
+          | _ -> invalid_arg "window-state must be an object" in
+        let flag name = Option.get (Js.Json.decodeBoolean (List.assoc name fields)) in
+        let state = { Host.maximized = flag "maximized"; fullscreen = flag "fullscreen" } in
+        Host.enqueue (fun () -> Host.set_window_state state))
       else if name = "appearance" then (
         match json with
         | Js.Json.JObject kvs -> (

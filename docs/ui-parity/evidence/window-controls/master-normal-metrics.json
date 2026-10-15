@@ -1,0 +1,77 @@
+[
+  {
+    "class": " button icon minimize",
+    "rect": {
+      "x": 1136,
+      "y": 0,
+      "width": 48,
+      "height": 48,
+      "top": 0,
+      "right": 1184,
+      "bottom": 48,
+      "left": 1136
+    },
+    "color": "rgb(23, 23, 23)",
+    "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"currentColor\" class=\" icon\"><path d=\"M14 8v1H3V8h11z\"></path></svg>",
+    "svgRect": {
+      "x": 1152,
+      "y": 16,
+      "width": 16,
+      "height": 16,
+      "top": 16,
+      "right": 1168,
+      "bottom": 32,
+      "left": 1152
+    }
+  },
+  {
+    "class": "maximize button icon maximize-toggle",
+    "rect": {
+      "x": 1184,
+      "y": 0,
+      "width": 48,
+      "height": 48,
+      "top": 0,
+      "right": 1232,
+      "bottom": 48,
+      "left": 1184
+    },
+    "color": "rgb(23, 23, 23)",
+    "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"currentColor\" class=\" icon\"><path d=\"M3 3v10h10V3H3zm9 9H4V4h8v8z\"></path></svg>",
+    "svgRect": {
+      "x": 1200,
+      "y": 16,
+      "width": 16,
+      "height": 16,
+      "top": 16,
+      "right": 1216,
+      "bottom": 32,
+      "left": 1200
+    }
+  },
+  {
+    "class": " button icon close",
+    "rect": {
+      "x": 1232,
+      "y": 0,
+      "width": 48,
+      "height": 48,
+      "top": 0,
+      "right": 1280,
+      "bottom": 48,
+      "left": 1232
+    },
+    "color": "rgb(23, 23, 23)",
+    "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"currentColor\" class=\" icon\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z\"></path></svg>",
+    "svgRect": {
+      "x": 1248,
+      "y": 16,
+      "width": 16,
+      "height": 16,
+      "top": 16,
+      "right": 1264,
+      "bottom": 32,
+      "left": 1248
+    }
+  }
+]

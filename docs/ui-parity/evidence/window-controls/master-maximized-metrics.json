@@ -1,0 +1,47 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 940
+  },
+  "controls": [
+    {
+      "class": " button icon minimize",
+      "rect": {
+        "x": 1776,
+        "y": 0,
+        "width": 48,
+        "height": 48,
+        "top": 0,
+        "right": 1824,
+        "bottom": 48,
+        "left": 1776
+      }
+    },
+    {
+      "class": "restore button icon maximize-toggle",
+      "rect": {
+        "x": 1824,
+        "y": 0,
+        "width": 48,
+        "height": 48,
+        "top": 0,
+        "right": 1872,
+        "bottom": 48,
+        "left": 1824
+      }
+    },
+    {
+      "class": " button icon close",
+      "rect": {
+        "x": 1872,
+        "y": 0,
+        "width": 48,
+        "height": 48,
+        "top": 0,
+        "right": 1920,
+        "bottom": 48,
+        "left": 1872
+      }
+    }
+  ]
+}

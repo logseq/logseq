@@ -1,0 +1,232 @@
+vite v8.3.2 building client environment for production...
+transforming...
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 711 modules transformed.
+rendering chunks...
+computing gzip size...
+../../static/js/assets/sqlite3-opfs-async-proxy-DT7qTYPP.js     25.36 kB
+../../static/js/assets/sqlite3-worker1-BS1IRc7P.js           1,727.72 kB
+../../static/js/chunks/diff-PJHU0-Uy.js                          1.27 kB │ gzip:     0.64 kB │ map:      2.05 kB
+../../static/js/chunks/haskell-literate-B9httjuo.js              1.64 kB │ gzip:     0.70 kB │ map:      2.43 kB
+../../static/js/chunks/rolldown-runtime-7_rZTKki.js              1.79 kB │ gzip:     0.80 kB
+../../static/js/chunks/brainfuck-Rt2VAMMb.js                     1.81 kB │ gzip:     0.74 kB │ map:      3.48 kB
+../../static/js/chunks/properties-CJ0c1znW.js                    2.07 kB │ gzip:     0.78 kB │ map:      3.60 kB
+../../static/js/chunks/htmlembedded-CGZOUfrs.js                  2.07 kB │ gzip:     0.77 kB │ map:      2.90 kB
+../../static/js/chunks/protobuf-dbcuQAvD.js                      2.25 kB │ gzip:     0.97 kB │ map:      3.72 kB
+../../static/js/chunks/cmake-hUxvDzH7.js                         2.34 kB │ gzip:     0.93 kB │ map:      4.27 kB
+../../static/js/chunks/asciiarmor-DNVGyoK3.js                    2.46 kB │ gzip:     0.88 kB │ map:      4.13 kB
+../../static/js/chunks/troff-Bh9v0alC.js                         2.54 kB │ gzip:     0.87 kB │ map:      4.34 kB
+../../static/js/chunks/yaml-frontmatter-Ea-_BNbK.js              2.61 kB │ gzip:     0.93 kB │ map:      4.31 kB
+../../static/js/chunks/active-line-DlOb-DtE.js                   2.66 kB │ gzip:     0.99 kB │ map:      4.47 kB
+../../static/js/chunks/toml-B5chtpgx.js                          2.66 kB │ gzip:     0.94 kB │ map:      4.86 kB
+../../static/js/chunks/solr-DNt8xwNq.js                          2.73 kB │ gzip:     1.01 kB │ map:      4.61 kB
+../../static/js/chunks/overlay-DuAClWhb.js                       2.78 kB │ gzip:     0.89 kB │ map:      5.06 kB
+../../static/js/chunks/handlebars-cRLUp5M2.js                    2.79 kB │ gzip:     0.97 kB │ map:      4.09 kB
+../../static/js/chunks/tornado-BpLPSajb.js                       2.84 kB │ gzip:     1.11 kB │ map:      4.29 kB
+../../static/js/chunks/spreadsheet-YzLUeuxR.js                   2.88 kB │ gzip:     1.01 kB │ map:      5.26 kB
+../../static/js/chunks/http-FufEND1t.js                          2.88 kB │ gzip:     0.98 kB │ map:      4.81 kB
+../../static/js/chunks/pegjs-CABtYQUo.js                         3.26 kB │ gzip:     1.13 kB │ map:      5.81 kB
+../../static/js/chunks/factor-9AdcCK_o.js                        3.39 kB │ gzip:     1.03 kB │ map:      5.63 kB
+../../static/js/chunks/yaml-CPHswB52.js                          3.43 kB │ gzip:     1.20 kB │ map:      6.07 kB
+../../static/js/chunks/rpm-maKiIMhe.js                           3.43 kB │ gzip:     1.29 kB │ map:      5.86 kB
+../../static/js/chunks/mbox-GVhBEZDc.js                          3.47 kB │ gzip:     1.18 kB │ map:      5.96 kB
+../../static/js/chunks/z80-ojv_IJOs.js                           3.48 kB │ gzip:     1.28 kB │ map:      5.72 kB
+../../static/js/chunks/vue-D-AGug-Q.js                           3.65 kB │ gzip:     1.16 kB │ map:      4.70 kB
+../../static/js/chunks/rust-g3KKrXpe.js                          3.69 kB │ gzip:     1.36 kB │ map:      4.99 kB
+../../static/js/chunks/eiffel-Bkf5yLo_.js                        3.86 kB │ gzip:     1.45 kB │ map:      6.36 kB
+../../static/js/chunks/sieve-CiF5CR8g.js                         3.97 kB │ gzip:     1.31 kB │ map:      7.33 kB
+../../static/js/chunks/mathematica-_OeNQHVY.js                   4.13 kB │ gzip:     1.33 kB │ map:      8.32 kB
+../../static/js/chunks/dockerfile-D40BIaRM.js                    4.21 kB │ gzip:     1.17 kB │ map:      7.65 kB
+../../static/js/chunks/pascal-DwgusLBL.js                        4.25 kB │ gzip:     1.70 kB │ map:      6.72 kB
+../../static/js/chunks/twig-B58niHTz.js                          4.25 kB │ gzip:     1.38 kB │ map:      7.56 kB
+../../static/js/chunks/haml-B95rUmJb.js                          4.43 kB │ gzip:     1.31 kB │ map:      8.32 kB
+../../static/js/chunks/gfm-BLp-trxQ.js                           4.51 kB │ gzip:     1.97 kB │ map:      7.29 kB
+../../static/js/chunks/smalltalk-CW4gQ3HW.js                     4.53 kB │ gzip:     1.43 kB │ map:      7.76 kB
+../../static/js/chunks/turtle-BgyFpd0w.js                        4.58 kB │ gzip:     1.52 kB │ map:      8.17 kB
+../../static/js/chunks/forth-D1nnGv7P.js                         4.61 kB │ gzip:     1.84 kB │ map:      7.89 kB
+../../static/js/chunks/tcl-D_2rCoZ-.js                           4.63 kB │ gzip:     1.77 kB │ map:      7.71 kB
+../../static/js/chunks/mumps-BenBXSI5.js                         4.63 kB │ gzip:     1.56 kB │ map:      8.60 kB
+../../static/js/chunks/yacas-TBeuVNsG.js                         4.64 kB │ gzip:     1.69 kB │ map:      8.62 kB
+../../static/js/chunks/dtd-D78f1p2_.js                           4.65 kB │ gzip:     1.47 kB │ map:      8.45 kB
+../../static/js/chunks/apl-ByMAudqT.js                           4.70 kB │ gzip:     1.88 kB │ map:      8.44 kB
+../../static/js/chunks/fcl-Z7O3CbqS.js                           4.71 kB │ gzip:     1.59 kB │ map:      7.99 kB
+../../static/js/chunks/elm-CPtXzyKo.js                           4.71 kB │ gzip:     1.38 kB │ map:      9.29 kB
+../../static/js/chunks/jsx-CfNlhybq.js                           4.77 kB │ gzip:     1.56 kB │ map:      8.74 kB
+../../static/js/chunks/puppet-CZoB0wJw.js                        4.88 kB │ gzip:     1.72 kB │ map:     10.56 kB
+../../static/js/chunks/octave-Bek_eM85.js                        4.94 kB │ gzip:     1.65 kB │ map:      7.50 kB
+../../static/js/chunks/pig-wIy6QVZE.js                           4.95 kB │ gzip:     2.06 kB │ map:      8.57 kB
+../../static/js/chunks/commonlisp-ByQU1HU_.js                    4.97 kB │ gzip:     1.71 kB │ map:      8.02 kB
+../../static/js/chunks/multiplex-BTS2oa3E.js                     4.98 kB │ gzip:     1.46 kB │ map:      8.55 kB
+../../static/js/chunks/ebnf-JObm2MKE.js                          4.99 kB │ gzip:     1.50 kB │ map:      9.67 kB
+../../static/js/chunks/dart-BmOkSkDP.js                          5.03 kB │ gzip:     1.71 kB │ map:      9.02 kB
+../../static/js/chunks/wast-UY-xJYjp.js                          5.08 kB │ gzip:     1.99 kB │ map:      6.70 kB
+../../static/js/chunks/webidl-DI8GZe6i.js                        5.13 kB │ gzip:     1.82 kB │ map:      9.07 kB
+../../static/js/chunks/jinja2-Dol6GnKh.js                        5.29 kB │ gzip:     1.58 kB │ map:      9.64 kB
+../../static/js/chunks/velocity-DEnWD9UA.js                      5.62 kB │ gzip:     1.70 kB │ map:     10.81 kB
+../../static/js/chunks/shell-DJ5eDlza.js                         5.68 kB │ gzip:     1.83 kB │ map:      9.56 kB
+../../static/js/chunks/ntriples-DIBQ3DhG.js                      5.93 kB │ gzip:     1.39 kB │ map:     10.69 kB
+../../static/js/chunks/htmlmixed-CLw3RNmZ.js                     5.98 kB │ gzip:     2.02 kB │ map:      9.72 kB
+../../static/js/chunks/matchbrackets-D5mZIsGu.js                 6.03 kB │ gzip:     1.96 kB │ map:     11.45 kB
+../../static/js/chunks/modelica-CIlgEVcE.js                      6.23 kB │ gzip:     2.09 kB │ map:     11.03 kB
+../../static/js/chunks/oz-D0bwXDTh.js                            6.25 kB │ gzip:     1.96 kB │ map:     10.93 kB
+../../static/js/chunks/smarty-DeX0bPFy.js                        6.27 kB │ gzip:     1.88 kB │ map:     11.33 kB
+../../static/js/chunks/go-C-lHUM-g.js                            6.41 kB │ gzip:     2.03 kB │ map:     10.57 kB
+../../static/js/chunks/lua-jAV46W5A.js                           6.63 kB │ gzip:     2.10 kB │ map:     10.20 kB
+../../static/js/chunks/stex-DxB4wt1n.js                          6.66 kB │ gzip:     1.78 kB │ map:     12.85 kB
+../../static/js/chunks/r-C53gZUGh.js                             6.69 kB │ gzip:     2.12 kB │ map:     11.59 kB
+../../static/js/chunks/vhdl-C3D84ZW_.js                          6.70 kB │ gzip:     2.26 kB │ map:     11.03 kB
+../../static/js/chunks/closebrackets-B1NWeVut.js                 7.01 kB │ gzip:     2.11 kB │ map:     13.00 kB
+../../static/js/chunks/sparql-BE3d4rlD.js                        7.02 kB │ gzip:     2.34 kB │ map:     11.51 kB
+../../static/js/chunks/ttcn-cfg-Cj6ZNXg_.js                      7.10 kB │ gzip:     2.40 kB │ map:     11.69 kB
+../../static/js/chunks/asn.1-DKXl4afr.js                         7.12 kB │ gzip:     2.66 kB │ map:     11.91 kB
+../../static/js/chunks/tiddlywiki-0pdcaVcC.js                    7.13 kB │ gzip:     1.98 kB │ map:     13.38 kB
+../../static/js/chunks/mscgen-B3BZq9cE.js                        7.17 kB │ gzip:     1.57 kB │ map:     11.66 kB
+../../static/js/chunks/livescript-Db7hJeeA.js                    7.22 kB │ gzip:     2.29 kB │ map:     11.78 kB
+../../static/js/chunks/d-wIHNZlQy.js                             7.52 kB │ gzip:     2.42 kB │ map:     12.56 kB
+../../static/js/chunks/haskell-DhzXj5PT.js                       7.54 kB │ gzip:     2.61 kB │ map:     14.05 kB
+../../static/js/chunks/cypher-9B4mqJe8.js                        7.55 kB │ gzip:     2.44 kB │ map:     12.04 kB
+../../static/js/chunks/swift-nEOt-Nrf.js                         7.67 kB │ gzip:     2.54 kB │ map:     12.85 kB
+../../static/js/chunks/tiki-B-Radv5G.js                          7.67 kB │ gzip:     2.05 kB │ map:     14.23 kB
+../../static/js/chunks/simple-EtsOLTbp.js                        7.69 kB │ gzip:     2.46 kB │ map:     14.11 kB
+../../static/js/chunks/q-cLTeOR-S.js                             7.72 kB │ gzip:     2.39 kB │ map:     11.88 kB
+../../static/js/chunks/asterisk-DdEaPIQq.js                      7.79 kB │ gzip:     2.32 kB │ map:     12.61 kB
+../../static/js/chunks/dylan-Cpx66tX8.js                         8.08 kB │ gzip:     2.33 kB │ map:     15.80 kB
+../../static/js/chunks/gas-CL3Cdofi.js                           8.11 kB │ gzip:     1.92 kB │ map:     14.53 kB
+../../static/js/chunks/mirc-C9trr-Cc.js                          8.11 kB │ gzip:     3.27 kB │ map:     12.94 kB
+../../static/js/chunks/fortran-By8bTnIq.js                       8.25 kB │ gzip:     2.64 kB │ map:     13.48 kB
+../../static/js/chunks/groovy-D3sjeqG1.js                        8.37 kB │ gzip:     2.54 kB │ map:     14.37 kB
+../../static/js/chunks/nsis-35ni4nuP.js                          8.41 kB │ gzip:     3.41 kB │ map:     10.02 kB
+../../static/js/chunks/mllike-CtrSgFtf.js                        8.64 kB │ gzip:     2.11 kB │ map:     13.76 kB
+../../static/js/chunks/cobol-DQ74mS5G.js                         8.67 kB │ gzip:     3.68 kB │ map:     13.53 kB
+../../static/js/chunks/django-C7XFkAqi.js                        8.72 kB │ gzip:     2.12 kB │ map:     17.61 kB
+../../static/js/chunks/ecl-RRSGyaZo.js                           8.77 kB │ gzip:     3.04 kB │ map:     13.71 kB
+../../static/js/chunks/vb-BHFd2OpT.js                            8.80 kB │ gzip:     2.64 kB │ map:     15.35 kB
+../../static/js/chunks/coffeescript-Du0f56wn.js                  8.88 kB │ gzip:     2.62 kB │ map:     16.19 kB
+../../static/js/chunks/ttcn-BXhdMfyF.js                          9.37 kB │ gzip:     3.03 kB │ map:     15.95 kB
+../../static/js/chunks/nginx-B90P0oM2.js                        10.06 kB │ gzip:     3.34 kB │ map:     13.84 kB
+../../static/js/chunks/sass-DDGmqKpR.js                         10.10 kB │ gzip:     2.44 kB │ map:     18.93 kB
+../../static/js/chunks/ruby-qk_Ail-Y.js                         10.44 kB │ gzip:     3.08 kB │ map:     18.34 kB
+../../static/js/chunks/julia-BrSn0slI.js                        10.67 kB │ gzip:     2.99 kB │ map:     18.55 kB
+../../static/js/chunks/scheme-BT8zK2pM.js                       11.05 kB │ gzip:     3.36 kB │ map:     20.23 kB
+../../static/js/chunks/crystal-BT5Y0S1u.js                      11.27 kB │ gzip:     2.87 kB │ map:     21.10 kB
+../../static/js/chunks/vbscript-CL6v_afz.js                     11.96 kB │ gzip:     3.47 kB │ map:     20.44 kB
+../../static/js/chunks/powershell-BgsECxTG.js                   12.40 kB │ gzip:     4.10 kB │ map:     18.34 kB
+../../static/js/chunks/textile-D8f7CQyf.js                      12.68 kB │ gzip:     3.30 kB │ map:     23.45 kB
+../../static/js/chunks/sas-DnV6JSyg.js                          12.79 kB │ gzip:     4.70 kB │ map:     20.88 kB
+../../static/js/chunks/xml-BlHvIBnP.js                          13.01 kB │ gzip:     3.30 kB │ map:     22.23 kB
+../../static/js/chunks/python-DsVcNeD5.js                       13.18 kB │ gzip:     3.74 kB │ map:     23.93 kB
+../../static/js/chunks/gherkin-Dk1xihva.js                      13.37 kB │ gzip:     5.81 kB │ map:     17.26 kB
+../../static/js/chunks/xquery-B7jBE0Mc.js                       13.62 kB │ gzip:     3.46 kB │ map:     24.28 kB
+../../static/js/chunks/rst-DcKUAzV9.js                          15.04 kB │ gzip:     3.02 kB │ map:     28.24 kB
+../../static/js/chunks/pug-g8yipd1X.js                          15.22 kB │ gzip:     3.31 kB │ map:     26.16 kB
+../../static/js/chunks/slim-BQHzkJhj.js                         16.09 kB │ gzip:     3.63 kB │ map:     29.08 kB
+../../static/js/chunks/erlang-BEdaX0xx.js                       16.28 kB │ gzip:     4.02 kB │ map:     31.24 kB
+../../static/js/chunks/idl-8uPDFIyI.js                          16.77 kB │ gzip:     5.31 kB │ map:     21.58 kB
+../../static/js/chunks/haxe-9iXqU_ut.js                         17.26 kB │ gzip:     4.23 kB │ map:     30.81 kB
+../../static/js/chunks/clojure-GnrZhaU9.js                      17.40 kB │ gzip:     4.95 kB │ map:     24.72 kB
+../../static/js/chunks/php-BXM_QyWk.js                          17.83 kB │ gzip:     5.99 kB │ map:     24.14 kB
+../../static/js/chunks/show-hint-9-GHEjw9.js                    18.37 kB │ gzip:     5.13 kB │ map:     33.12 kB
+../../static/js/chunks/soy-R-LCgIZs.js                          19.57 kB │ gzip:     4.28 kB │ map:     36.46 kB
+../../static/js/chunks/perl-Cis6H5WX.js                         19.96 kB │ gzip:     4.33 kB │ map:     72.71 kB
+../../static/js/chunks/meta-CrcyG6Bd.js                         20.13 kB │ gzip:     4.24 kB │ map:     30.21 kB
+../../static/js/chunks/verilog-CGRmddh3.js                      21.04 kB │ gzip:     5.89 kB │ map:     42.20 kB
+../../static/js/chunks/markdown-e5Kwy9l8.js                     27.31 kB │ gzip:     6.72 kB │ map:     48.82 kB
+../../static/js/chunks/vi-DVWNDYaV.js                           31.79 kB │ gzip:     8.90 kB │ map:      0.07 kB
+../../static/js/chunks/clike-DqIuJAHj.js                        32.55 kB │ gzip:     8.70 kB │ map:     54.75 kB
+../../static/js/chunks/javascript-DynvUDdi.js                   37.91 kB │ gzip:     7.95 kB │ map:     67.52 kB
+../../static/js/chunks/css-D2pILGUq.js                          41.46 kB │ gzip:     9.73 kB │ map:     63.11 kB
+../../static/js/chunks/stylus-jIPeboW7.js                       43.11 kB │ gzip:    10.43 kB │ map:     66.91 kB
+../../static/js/chunks/sql-Mkebe7Jg.js                          52.58 kB │ gzip:    14.69 kB │ map:     68.65 kB
+../../static/js/chunks/nb-no-CxlFZfwU.js                        93.88 kB │ gzip:    26.60 kB │ map:      0.07 kB
+../../static/js/chunks/af-DJ0d9l56.js                           93.95 kB │ gzip:    27.29 kB │ map:      0.07 kB
+../../static/js/chunks/zh-hant-CTIlGg17.js                      96.27 kB │ gzip:    29.64 kB │ map:      0.08 kB
+../../static/js/chunks/id-C-7HuYK3.js                           96.38 kB │ gzip:    26.66 kB │ map:      0.07 kB
+../../static/js/chunks/nl-0dNtwFtP.js                           97.84 kB │ gzip:    27.32 kB │ map:      0.07 kB
+../../static/js/chunks/pl-Cqi5O9Y_.js                           98.69 kB │ gzip:    28.77 kB │ map:      0.07 kB
+../../static/js/chunks/cs-CXQsotJ6.js                           98.90 kB │ gzip:    28.85 kB │ map:      0.07 kB
+../../static/js/chunks/sk-mjSuuKYO.js                           99.30 kB │ gzip:    29.32 kB │ map:      0.07 kB
+../../static/js/chunks/ca-DoKwyeUQ.js                          100.02 kB │ gzip:    28.07 kB │ map:      0.07 kB
+../../static/js/chunks/it-DdoOQToa.js                          100.50 kB │ gzip:    28.11 kB │ map:      0.07 kB
+../../static/js/chunks/pt-pt-BDRKetAa.js                       100.67 kB │ gzip:    27.86 kB │ map:      0.07 kB
+../../static/js/chunks/pt-br-BZZWier7.js                       101.26 kB │ gzip:    28.28 kB │ map:      0.07 kB
+../../static/js/chunks/es-CGdlR1ct.js                          101.83 kB │ gzip:    28.47 kB │ map:      0.07 kB
+../../static/js/chunks/ko-DYrGYY2i.js                          102.66 kB │ gzip:    28.51 kB │ map:      0.07 kB
+../../static/js/chunks/de--ZOvCgMD.js                          102.81 kB │ gzip:    29.13 kB │ map:      0.07 kB
+../../static/js/chunks/fr-C3g5Vfat.js                          105.53 kB │ gzip:    29.18 kB │ map:      0.07 kB
+../../static/js/chunks/zh-cn-D2n8w_Su.js                       105.84 kB │ gzip:    32.37 kB │ map:      0.07 kB
+../../static/js/chunks/tr-wKedR5Kb.js                          111.33 kB │ gzip:    31.28 kB │ map:      0.07 kB
+../../static/js/chunks/ja-D0xtUcX5.js                          114.15 kB │ gzip:    30.45 kB │ map:      0.07 kB
+../../static/js/chunks/ar-OJM0Z2xi.js                          114.34 kB │ gzip:    28.68 kB │ map:      0.07 kB
+../../static/js/chunks/fa-cuuQ7pqk.js                          117.94 kB │ gzip:    28.65 kB │ map:      0.07 kB
+../../static/js/chunks/printf-BOZuhb2w.js                      120.50 kB │ gzip:    24.09 kB │ map:    455.84 kB
+../../static/js/chunks/module-Dx8avWd_.js                      127.75 kB │ gzip:    35.11 kB │ map:    225.97 kB
+../../static/js/chunks/ru-DQE3QHRp.js                          130.75 kB │ gzip:    32.22 kB │ map:      0.07 kB
+../../static/js/chunks/uk-BePUSHrD.js                          156.56 kB │ gzip:    38.07 kB │ map:      0.07 kB
+../../static/js/chunks/icon-names-LD-sY3ay.js                  243.63 kB │ gzip:    47.62 kB │ map:      0.08 kB
+../../static/js/chunks/codemirror-ClWT_MiH.js                  322.07 kB │ gzip:    78.65 kB │ map:    650.26 kB
+../../static/js/main.js                                      6,062.22 kB │ gzip: 1,044.36 kB │ map: 15,114.42 kB
+../../static/js/chunks/publishing_memory-C0_f-cTp.js         9,764.56 kB │ gzip: 1,922.10 kB │ map: 17,180.53 kB
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:269:3 ]
+     │
+ 269 │   eval(goog.CLOSURE_EVAL_PREFILTER_.createScript(b));
+     │   ──┬─
+     │     ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:543:16 ]
+     │
+ 543 │       return !!eval(goog.CLOSURE_EVAL_PREFILTER_.createScript(f));
+     │                ──┬─
+     │                  ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:993:18 ]
+     │
+ 993 │     isChrome87 = eval(goog.global.trustedTypes.emptyScript) !== goog.global.trustedTypes.emptyScript;
+     │                  ──┬─
+     │                    ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ ../db-worker/node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:269:3 ]
+     │
+ 269 │   eval(goog.CLOSURE_EVAL_PREFILTER_.createScript(b));
+     │   ──┬─
+     │     ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ ../db-worker/node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:543:16 ]
+     │
+ 543 │       return !!eval(goog.CLOSURE_EVAL_PREFILTER_.createScript(f));
+     │                ──┬─
+     │                  ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+[EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     ╭─[ ../db-worker/node_modules/.pnpm/transit-js@0.8.874/node_modules/transit-js/transit.js:993:18 ]
+     │
+ 993 │     isChrome87 = eval(goog.global.trustedTypes.emptyScript) !== goog.global.trustedTypes.emptyScript;
+     │                  ──┬─
+     │                    ╰─── Use of direct `eval` here.
+     │
+     │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+─────╯
+
+✓ built in 6.23s

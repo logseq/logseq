@@ -1,0 +1,4 @@
+WM_STATE(WM_STATE):
+		window state: Normal
+		icon window: 0x0
+_NET_WM_STATE(ATOM) =

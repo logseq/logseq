@@ -44,6 +44,69 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ]
 
+let close_pending = ref false
+let request_window_close () =
+  if not !close_pending then begin
+    close_pending := true;
+    ignore
+      (Editor_sink.save_pending ()
+       |> Js.Promise.then_ (fun () -> Editor_actions.save_current ())
+       |> Js.Promise.then_ (fun () ->
+           Host.close_window ();
+           close_pending := false;
+           Js.Promise.resolve ())
+       |> Js.Promise.catch (fun error ->
+           close_pending := false;
+           prerr_endline ("window close cancelled: " ^ Printexc.to_string error);
+           Js.Promise.resolve ()))
+  end
+
+let window_state_signal context =
+  let state = Signal.state context.Lui_ui.ui_scheduler (Host.window_state ()) in
+  let unsubscribe = Host.on_window_state (fun value -> Signal.set state value) in
+  Signal.on_dispose context.Lui_ui.ui_scope unsubscribe;
+  Signal.value state
+
+let caption_width (state : Host.window_state) =
+  if Platform.is_mac () then 0 else if state.fullscreen then 48 else 144
+
+let window_controls : t =
+ fun context parent ->
+  if Platform.is_mac () then (box ~display:`none []) context parent
+  else
+    let state = window_state_signal context in
+    let caption_button ?(size = 16.) key label icon action =
+      button ~key ~accessibility_identifier:key ~label
+        ~width:48 ~height:48 ~padding:0 ~corner_radius:0 ~variant:`ghost
+        ~background:"transparent" ~main:`center ~cross:`center
+        ~on_press:(fun _ -> action ()) [ Icons.icon ~size icon ] in
+    let maximize =
+      Ui_parts.prop_signal Lui_protocol.AccessibilityLabel state
+        (fun (value : Host.window_state) ->
+          if value.maximized then I18n.t "window/restore" else I18n.t "window/maximize")
+        (button ~key:"window-toggle-maximized" ~accessibility_identifier:"window-toggle-maximized"
+           ~width:48 ~height:48 ~padding:0 ~corner_radius:0 ~variant:`ghost
+           ~background:"transparent" ~main:`center ~cross:`center
+           ~on_press:(fun _ -> Host.toggle_maximized_window ())
+           [ Lui_elements.icon ~point_size:16 ~style_class:"ui__icon"
+               ~name:(reactive (fun (value : Host.window_state) ->
+                   Icons.name_ref (if value.maximized then "window-control-restore"
+                     else "window-control-maximize")) state) [] ]) in
+    (Ui_components.with_props [ Ui_components.Prop.z_index 10 ]
+      (overlay ~key:"window-controls" ~alignment:`top_trailing
+        [ row ~height:48
+            [ if_ ~test:(reactive (fun (value : Host.window_state) -> value.fullscreen) state)
+                (caption_button ~size:18. "window-toggle-fullscreen" (I18n.t "window/exit-fullscreen")
+                   "arrows-minimize" Host.toggle_fullscreen_window)
+            ; if_ ~test:(reactive (fun (value : Host.window_state) -> not value.fullscreen) state)
+                (row
+                   [ caption_button "window-minimize" (I18n.t "window/minimize")
+                       "window-control-minimize" Host.minimize_window
+                   ; maximize
+                   ; caption_button "window-close" (I18n.t "window/close")
+                       "window-control-close" request_window_close ])
+            ] ])) context parent
+
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar —
    mounted twice (header .l when the sidebar is closed, the sidebar's
    own top strip when open): the key must differ per site or the
@@ -180,14 +243,20 @@ let topbar (ms : Model.t Signal.signal) : t list =
              [ left_menu_btn ()
              ; if_ ~test:(reactive (fun (m : Model.t) -> m.repo <> None) ms)
                  (search_btn ()) ]
-      ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
-          ~padding_horizontal:5 ~style_class:"cp__header-r"
-          ([ rtc_item ms; home_item ms ] @ history_buttons () @
-          [ row ~key:"toolbar-menu-anchor" ~cross:`center
-              [ dots_btn; right_toggle_btn ms
-              ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
-                    a.page_menu = b.page_menu && a.data_gen = b.data_gen)
-                  Page_menu.toolbar_view ms ] ]) ]
+      ; (fun context parent ->
+          let window = window_state_signal context in
+          let inset = Logseq_el.own context (Signal.map2
+              (fun (m : Model.t) state -> if m.right_sidebar_open then 0 else caption_width state)
+              ms window) in
+          (Ui_parts.int_prop_signal Lui_protocol.MarginRight inset Fun.id
+            (row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
+               ~padding_horizontal:6 ~style_class:"cp__header-r"
+               ([ rtc_item ms; home_item ms ] @ history_buttons () @
+               [ row ~key:"toolbar-menu-anchor" ~cross:`center
+                   [ dots_btn; right_toggle_btn ms
+                   ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+                         a.page_menu = b.page_menu && a.data_gen = b.data_gen)
+                       Page_menu.toolbar_view ms ] ]))) context parent) ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
@@ -247,8 +316,11 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
    carries .open/.closed; only renders contents while open. The pane
    stays mounted — the docked split's track owns its width (0 while
    closed). *)
-let right_sidebar (ms : Model.t Signal.signal) =
-  Ui_parts.class_signal ms
+let right_sidebar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let window = window_state_signal context in
+  let inset = Logseq_el.own context (Signal.map caption_width window) in
+  (Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       "cp__right-sidebar "
       ^ if m.right_sidebar_open then "open" else "closed")
@@ -261,7 +333,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
               [ Ui_components.Prop.overflow `hidden ]
               (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
                  ~background:"muted"
-                 [ Right_sidebar_view.render ms ]) ]))
+                 [ Right_sidebar_view.render ~header_end_inset:inset ms ]) ]))) context parent
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
    is an overlay layer; on the native host it is the docked split's
@@ -309,7 +381,9 @@ let left_sidebar (ms : Model.t Signal.signal) =
    (the native kit has no split animation today). *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:3
+  Ui_parts.int_prop_signal Lui_protocol.Gap ms
+    (fun (m : Model.t) -> if m.left_sidebar_open then 3 else 0)
+    (split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
@@ -318,11 +392,13 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
          ms (Signal.value st.Sidebar_state.left_fraction))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content
+    (left_sidebar ms) content)
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:3
+  Ui_parts.int_prop_signal Lui_protocol.Gap ms
+    (fun (m : Model.t) -> if m.right_sidebar_open then 3 else 0)
+    (split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:3
     ~value:
       (reactive
          (fun (m : Model.t) f ->
@@ -330,7 +406,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
          ms (Signal.value st.Sidebar_state.right_fraction))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
-    first second
+    first second)
 
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)
@@ -663,6 +739,7 @@ let shell (ms : Model.t Signal.signal) : t =
         ]
     ; overlays ms
     ; help_area ms
+    ; window_controls
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with
               | Model.Not_found _, Model.Not_found _ -> true

@@ -1,0 +1,6 @@
+Entering directory '/home/user/logseq-ui-parity/native/deps/ui'
+File "test/native_host/host_events_test.ml", line 48, characters 15-39:
+48 |   let normal = Host_events.window_flags ~is_macos:false ~gl:false in
+                    ^^^^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound value Host_events.window_flags
+Leaving directory '/home/user/logseq-ui-parity/native/deps/ui'

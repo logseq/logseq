@@ -22,14 +22,14 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in linux) flags=$(pkg-config --cflags fontconfig) || exit; printf '(%s)' \"$flags\";; *) printf '()';; esac"))))
+    "case '%{system}' in linux) flags=$(pkg-config --cflags fontconfig sdl2) || exit; printf '(%s)' \"$flags\";; *) printf '()';; esac"))))
 
 (rule
  (target host_link_flags.sexp)
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in macosx) printf '(-cclib -lobjc)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
+    "case '%{system}' in macosx) printf '(-cclib -lobjc)';; linux) flags=$(pkg-config --libs fontconfig sdl2) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
 
 (rule
  (copy ../native/asset_dom.ml asset_dom.ml))

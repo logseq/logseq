@@ -266,6 +266,16 @@ let custom_icons : (string * string) list =
        14.72)\" rx=\"7.78547\" ry=\"6.13006\"/></svg>" ) ]
 ;;
 
+(* Exact desktop caption glyphs from components/svg.cljs; unique names avoid
+   replacing the Tabler icons used by other application surfaces. *)
+let window_control_icons =
+  let svg paths = {|<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">|} ^ paths ^ "</svg>" in
+  [ "window-control-minimize", svg {|<path d="M14 8v1H3V8h11z"/>|}
+  ; "window-control-maximize", svg {|<path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"/>|}
+  ; "window-control-restore", svg {|<path d="M3 5v9h9V5H3zm8 8H4V6h7v7z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M5 5h1V4h7v7h-1v1h2V3H5v2z"/>|}
+  ; "window-control-close", svg {|<path fill-rule="evenodd" clip-rule="evenodd" d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z"/>|}
+  ]
+
 (* tabler-icons-extension font glyphs (tie tie-* in web, \\ea01-
    \\ea1f) extracted from resources/css/fonts/tabler-icons-extension.woff2
    as svg outlines; native has no icon font, so the app: registry carries
@@ -392,7 +402,7 @@ let app_icon_svgs ?(ext = []) () : (string * string) list =
            | kids ->
                Some (name, svg_of_children ~size:24. name kids))
   in
-  base @ ext @ (custom_icons @ extension_icons @ status_icons @ priority_icons)
+  base @ ext @ (custom_icons @ window_control_icons @ extension_icons @ status_icons @ priority_icons)
 ;;
 
 (* `app:` icon registry — name -> data URI of the svg markup. Same
@@ -411,7 +421,7 @@ let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
   List.fold_left
     (fun m (k, v) -> Lui_protocol.String_map.add k v m)
     Lui_protocol.String_map.empty
-    (enc base @ ext @ enc (custom_icons @ extension_icons @ status_icons @ priority_icons))
+    (enc base @ ext @ enc (custom_icons @ window_control_icons @ extension_icons @ status_icons @ priority_icons))
 ;;
 
 let status_color name =

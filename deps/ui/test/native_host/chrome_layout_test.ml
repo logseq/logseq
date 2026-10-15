@@ -13,6 +13,15 @@ let () =
     (Dom_ext.el_contains parent child);
   check "native element containment excludes unrelated nodes"
     (not (Dom_ext.el_contains child parent));
+  let previous_size = Host.inner_width (), Host.inner_height () in
+  let resize_observed = ref None in
+  Ui_services.dom_on_window_event "resize" (fun _ ->
+      resize_observed := Some (Host.inner_width (), Host.inner_height ()));
+  Native_embed_snapshot.platform_event "window-size\n{\"width\":1280,\"height\":900}";
+  Host.drain ();
+  check "native size reports notify viewport subscribers after updating host dimensions"
+    (!resize_observed = Some (1280., 900.));
+  Host.set_window_size (fst previous_size) (snd previous_size);
   let seen_prevented = ref false in
   Ui_services.dom_on_document_event ~capture:true "parity-prevention"
     (fun ev -> ev.prevent_default ());
@@ -84,6 +93,7 @@ let () =
   Logseq_codemirror.register registry;
   Logseq_editor.register registry;
   let view _context model _send = Chrome.shell model in
+  let window_listeners_before = List.length !Host.window_state_listeners in
   let app = Lui_app.create_with_extensions backend registry initial (fun _model model -> model) view in
   ignore (Lui_app.start app);
   let layout = Lui_layout.create () in
@@ -105,6 +115,48 @@ let () =
   let modifier = if Platform.is_mac () then "⌘" else "ctrl" in
   check "history tooltips use the current platform binding display"
     (keys back_id = modifier ^ " [" && keys forward_id = modifier ^ " ]");
+  if not (Platform.is_mac ()) then
+    List.iter (fun identifier ->
+        check ("native custom titlebar exposes " ^ identifier)
+          (List.exists (fun node ->
+              Lui_store.string_prop store node "accessibility-identifier" = Some identifier)
+            (Lui_store.preorder store)))
+      [ "window-minimize"; "window-toggle-maximized"; "window-close" ];
+  if not (Platform.is_mac ()) then begin
+    let previous_state = Host.window_state () and previous_op = !Host.host_op in
+    let operations = ref [] in
+    Host.set_host_op (fun name _ -> operations := !operations @ [ name ]);
+    List.iter (fun identifier ->
+        ignore (Lui_app.dispatch_event app (Lui_protocol.Press (by_id identifier)));
+        ignore (Lui_app.flush app))
+      [ "window-minimize"; "window-toggle-maximized"; "window-close" ];
+    Host.set_window_state { Host.maximized = true; fullscreen = false };
+    ignore (Lui_app.flush app);
+    check "authoritative maximized state changes the caption label to Restore"
+      (Lui_store.string_prop store (by_id "window-toggle-maximized") "accessibility-label"
+       = Some (I18n.t "window/restore"));
+    check "the maximized caption uses the reference restore glyph"
+      (List.exists (fun node -> Lui_store.string_prop store node "name" =
+           Some "app:window-control-restore") (Lui_store.preorder store));
+    Host.set_window_state { Host.maximized = false; fullscreen = true };
+    ignore (Lui_app.flush app);
+    check "fullscreen leaves only the exit control"
+      (not (List.exists (fun node -> Lui_store.string_prop store node "accessibility-identifier" =
+          Some "window-close") (Lui_store.preorder store)));
+    Lui_layout.sync ~width:1280. ~height:900. layout store;
+    let exit = Option.get (Lui_layout.rect layout (by_id "window-toggle-fullscreen")) in
+    check "the fullscreen exit control occupies the last forty-eight pixels"
+      (exit.x = 1232. && exit.y = 0. && exit.w = 48. && exit.h = 48.);
+    ignore (Lui_app.dispatch_event app
+        (Lui_protocol.Press (by_id "window-toggle-fullscreen")));
+    ignore (Lui_app.flush app);
+    check "caption controls use the existing host request channel"
+      (!operations = [ "window-minimize"; "window-toggle-maximized"; "window-close"
+                     ; "window-toggle-fullscreen" ]);
+    Host.set_window_state previous_state;
+    ignore (Lui_app.flush app);
+    Host.set_host_op previous_op
+  end;
   let previous_back = !Platform.back_stack and previous_forward = !Platform.fwd_stack in
   let previous_hash = Ui_services.nav_hash () in
   Ui_services.nav_set_hash "#/page/previous";
@@ -130,6 +182,34 @@ let () =
   Platform.replace_url_fragment previous_hash;
   Platform.back_stack := previous_back;
   Platform.fwd_stack := previous_forward;
+  ignore (Lui_app.send app initial);
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~width:1280. ~height:900. layout store;
+  let hit_rects = Lui_window.Rects.create () in
+  List.iter (fun id -> Option.iter (Hashtbl.replace hit_rects id)
+      (Lui_layout.rect layout id)) (Lui_store.preorder store);
+  let hit x y = List.hd (Lui_window.hit_path store hit_rects ~x ~y) in
+  let rec within ancestor id =
+    id = ancestor || match Lui_store.parent store id with
+      | Some parent -> within ancestor parent | None -> false in
+  let draggable x y =
+    Host_events.window_draggable ~kind:(Lui_store.kind store)
+      ~identifier:(fun id -> Lui_store.string_prop store id "accessibility-identifier")
+      ~parent:(Lui_store.parent store) (hit x y) in
+  check "native dragging recognizes the actual header identifier"
+    (draggable 400. 24.);
+  check "native dragging does not capture header controls or body input"
+    (not (draggable 24. 24.) && not (draggable 400. 300.));
+  if not (Platform.is_mac ()) then
+    check "native dragging does not capture caption controls"
+      (not (draggable 1256. 24.));
+  check "the caption overlay leaves unused header space reachable"
+    (within (by_id "head") (hit 400. 24.));
+  check "the caption overlay leaves ordinary page input reachable"
+    (within (by_id "main-content-container") (hit 400. 300.));
+  if not (Platform.is_mac ()) then
+    check "caption buttons opt back into pointer input"
+      (within (by_id "window-close") (hit 1256. 24.));
   List.iter (fun left_sidebar_open ->
       ignore (Lui_app.send app { initial with left_sidebar_open });
       ignore (Lui_app.flush app);
@@ -149,13 +229,26 @@ let () =
       List.iter (fun width ->
           Lui_layout.sync ~width ~height:900. layout store;
           let head = Option.get (Lui_layout.rect layout (by_id "head")) in
+          if not (Platform.is_mac ()) then begin
+            let close = Option.get (Lui_layout.rect layout (by_id "window-close")) in
+            let minimize = Option.get (Lui_layout.rect layout (by_id "window-minimize")) in
+            Hashtbl.clear hit_rects;
+            List.iter (fun id -> Option.iter (Hashtbl.replace hit_rects id)
+                (Lui_layout.rect layout id)) (Lui_store.preorder store);
+            check "caption controls remain clickable above the open right dock"
+              (within (by_id "window-close") (hit (width -. 24.) 24.));
+            check "caption controls remain at the global window edge independently of the right dock"
+              (close.x = width -. 48. && minimize.x = width -. 144.
+               && close.y = 0. && close.w = 48. && close.h = 48.)
+          end;
           let menu_id = List.find (fun id ->
               match Lui_store.string_prop store id "style-class" with
               | Some classes -> List.mem "ls-dots-menu" (String.split_on_char ' ' classes)
               | None -> false) (Lui_store.preorder store) in
           let menu = Option.get (Lui_layout.rect layout menu_id) in
           check "the menu follows its header controls rather than the window edge"
-            (Float.abs (menu.x +. menu.w -. (head.x +. head.w -. 5.)) < 0.5);
+            (let caption = if Platform.is_mac () || right_sidebar_open then 0. else 144. in
+             Float.abs (menu.x +. menu.w -. (head.x +. head.w -. 6. -. caption)) < 0.5);
           check "the toolbar menu sits directly below the reference trigger"
             (menu.y = 40. && menu.w = 256.))
         [ 1280.; 1100. ])
@@ -391,6 +484,14 @@ let () =
        (Option.get (Lui_layout.rect layout node)).h >= 102.) footers);
   Runtime.worker := previous_worker;
   ignore (Lui_app.dispose app);
+  check "disposing native chrome releases every window-state subscriber"
+    (List.length !Host.window_state_listeners = window_listeners_before);
+  List.iter (fun name ->
+      let svg = List.assoc name (Icons.app_icon_svgs ()) in
+      check "caption glyphs preserve the reference sixteen-pixel SVG coordinate system"
+        (I18n.contains svg "viewBox=\"0 0 16 16\""))
+    [ "window-control-minimize"; "window-control-maximize"
+    ; "window-control-restore"; "window-control-close" ];
   let page = Option.get (Decode.page_of_summary (Wire.Map
       [ Wire.Keyword "page-title", Wire.String "Clipboard fixture"
       ; Wire.Keyword "page-uuid", Wire.Uuid "11111111-1111-4111-8111-111111111111" ])) in
@@ -542,6 +643,7 @@ let () =
       [ Wire.Keyword "page-title", Wire.String "Title input ownership"
       ; Wire.Keyword "page-uuid", Wire.Uuid "66666666-6666-4666-8666-666666666666" ])) in
   let listeners_before = List.length !Editor_sink.measurement_listeners in
+  let saves_before = List.length !Editor_sink.save_listeners in
   let app = Lui_app.create_with_extensions backend registry () (fun () () -> ())
       (fun context _model _send ->
          Editor_state.ensure context;
@@ -598,8 +700,176 @@ let () =
   let rect = Option.get (Lui_layout.rect layout caret) in
   check "a caret at the title's right edge cannot flex-shrink to zero width"
     (rect.x = 180. && rect.w = 2. && rect.h = 54.);
+  let previous_worker = !Runtime.worker and previous_op = !Host.host_op in
+  let dead, _, _ = Js.Promise.pending () in
+  let saved, resolve_saved, _ = Js.Promise.pending () in
+  let latest, resolve_latest, _ = Js.Promise.pending () in
+  let mutations = ref [] and close_requests = ref 0 in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun method_name arguments ->
+      if method_name = "thread-api/apply-outliner-ops" then begin
+        mutations := !mutations @ [ arguments ];
+        if List.length !mutations = 1 then saved else latest
+      end else Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  Runtime.read_model := (fun () ->
+      { Model.initial with repo = Some "title-close-fixture"; editing_title = true });
+  Host.set_host_op (fun operation _ ->
+      if operation = "window-close" then incr close_requests);
+  ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+      (sink, Logseq_editor.identifier, "insert",
+       Lui_protocol.String_map.singleton "text" (Lui_protocol.StringValue " pending"))));
+  ignore (Lui_app.flush app);
+  Chrome.request_window_close ();
+  check "closing saves the locally owned title before requesting window destruction"
+    (!mutations <> [] && !close_requests = 0);
+  Chrome.request_window_close ();
+  check "repeated close requests do not duplicate the pending title save"
+    (List.length !mutations = 1);
+  ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+      (sink, Logseq_editor.identifier, "insert",
+       Lui_protocol.String_map.singleton "text" (Lui_protocol.StringValue " latest"))));
+  ignore (Lui_app.flush app);
+  resolve_saved Wire.Nil;
+  Host.drain ();
+  check "input received while closing gets a second acknowledged title save"
+    (List.length !mutations = 2 && !close_requests = 0);
+  resolve_latest Wire.Nil;
+  Host.drain ();
+  check "the close request follows the worker save acknowledgement" (!close_requests = 1);
+  let first_revision, resolve_revision, _ = Js.Promise.pending () in
+  let last_revision, _, reject_revision = Js.Promise.pending () in
+  let revisions = ref 0 in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun method_name _ ->
+      if method_name = "thread-api/apply-outliner-ops" then begin
+        incr revisions;
+        if !revisions = 1 then first_revision else last_revision
+      end else Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  let insert text =
+    ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+        (sink, Logseq_editor.identifier, "insert",
+         Lui_protocol.String_map.singleton "text" (Lui_protocol.StringValue text))));
+    ignore (Lui_app.flush app) in
+  insert " revision";
+  Chrome.request_window_close ();
+  insert " newest";
+  resolve_revision Wire.Nil;
+  Host.drain ();
+  reject_revision (Failure "expected latest title save rejection");
+  Host.drain ();
+  check "a successful older title save cannot mask rejection of the latest revision"
+    (!revisions = 2 && !close_requests = 1 && not !Chrome.close_pending);
+  let rejected, _, reject_save = Js.Promise.pending () in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun method_name _ ->
+      if method_name = "thread-api/apply-outliner-ops" then rejected
+      else Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+      (sink, Logseq_editor.identifier, "insert",
+       Lui_protocol.String_map.singleton "text" (Lui_protocol.StringValue " rejected"))));
+  ignore (Lui_app.flush app);
+  Chrome.request_window_close ();
+  reject_save (Failure "expected title save rejection");
+  check "a rejected buffered title save cancels window destruction"
+    (!close_requests = 1 && not !Chrome.close_pending);
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  Chrome.request_window_close ();
+  Host.drain ();
+  check "a cancelled close can be retried after the save succeeds" (!close_requests = 2);
+  let body = Model.empty_block ~uuid:"body-close-fixture" ~title:"Original body" ~is_page:false in
+  Runtime.read_model := (fun () ->
+      { Model.initial with repo = Some "title-close-fixture"; route = Model.Page "fixture"
+      ; route_page = Some { page with page_blocks = [ body ] } });
+  Editor_state.set (fun state -> { state with editing = Some
+      (Editor_state.mk_editing ~uuid:(Option.get body.block_uuid) ~buffer:"Pending body close"
+         ~scope:"main" ~base:"Original body" ()) });
+  let first_body, _, reject_body = Js.Promise.pending () in
+  let retry_body, resolve_body, _ = Js.Promise.pending () in
+  let body_attempts = ref 0 and body_payloads = ref [] in
+  let saves_body title arguments = match arguments with
+    | [ Wire.String "title-close-fixture"; Wire.Array operations; _ ] ->
+      List.exists (function
+        | Wire.Array [ Wire.Keyword "save-block"; Wire.Array [ (Wire.Map _ as block); _ ] ] ->
+          Wire.map_get_uuid block "block/uuid" = body.block_uuid
+          && Wire.map_get_string block "block/title" = Some title
+        | _ -> false) operations
+    | _ -> false in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun method_name arguments ->
+      if method_name = "thread-api/apply-outliner-ops" then begin
+        body_payloads := !body_payloads @ [ arguments ];
+        incr body_attempts;
+        if !body_attempts = 1 then first_body else retry_body
+      end else Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  Chrome.request_window_close ();
+  Host.drain ();
+  check "body shutdown waits for its current dirty buffer acknowledgement"
+    (!body_attempts = 1 && !close_requests = 2);
+  reject_body (Failure "expected body save rejection");
+  Host.drain ();
+  check "a rejected body save leaves the editor open for retry"
+    (!close_requests = 2 && not !Chrome.close_pending);
+  Chrome.request_window_close ();
+  Host.drain ();
+  check "retrying close resubmits a dirty body even after its save queue was cleared"
+    (!body_attempts = 2 && !close_requests = 2
+     && List.for_all (saves_body "Pending body close") !body_payloads);
+  resolve_body Wire.Nil;
+  Host.drain ();
+  check "body shutdown follows the successful retry acknowledgement" (!close_requests = 3);
+  let autosave, resolve_autosave, _ = Js.Promise.pending () in
+  let final_save, resolve_final_save, _ = Js.Promise.pending () in
+  let post_input, resolve_post_input, _ = Js.Promise.pending () in
+  let inflight_attempts = ref 0 and inflight_payloads = ref [] in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun method_name arguments ->
+      if method_name = "thread-api/apply-outliner-ops" then begin
+        inflight_payloads := !inflight_payloads @ [ arguments ];
+        incr inflight_attempts;
+        match !inflight_attempts with 1 -> autosave | 2 -> final_save | _ -> post_input
+      end else Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  Outliner_ops.schedule_save (Option.get body.block_uuid) "Pending body close";
+  Thread.delay 0.45;
+  Host.drain ();
+  check "the production autosave timer can leave a write in flight with no queued save"
+    (!inflight_attempts = 1 && !Outliner_ops.pending_save = None);
+  Editor_state.set (fun state -> { state with editing = Option.map (fun editor ->
+      Editor_state.with_model editor (Edit_model.set_source editor.model "Newest body close")) state.editing });
+  Chrome.request_window_close ();
+  Host.drain ();
+  check "close does not confuse an empty debounce queue with an acknowledged current buffer"
+    (!inflight_attempts = 2 && !close_requests = 3);
+  Editor_state.set (fun state -> { state with editing = Option.map (fun editor ->
+      Editor_state.with_model editor (Edit_model.set_source editor.model "Typed while closing")) state.editing });
+  resolve_final_save Wire.Nil;
+  Host.drain ();
+  check "body input accepted during shutdown receives another awaited save"
+    (!inflight_attempts = 3 && !close_requests = 3
+     && saves_body "Newest body close" (List.nth !inflight_payloads 1)
+     && saves_body "Typed while closing" (List.nth !inflight_payloads 2));
+  resolve_post_input Wire.Nil;
+  Host.drain ();
+  check "an in-flight autosave does not bypass the latest body acknowledgement" (!close_requests = 4);
+  resolve_autosave Wire.Nil;
+  Host.drain ();
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message = (fun _ _ -> ()); dead };
+  Editor_state.structure_pending := true;
+  Chrome.request_window_close ();
+  check "shutdown queues behind an outstanding structural edit"
+    (!close_requests = 4 && !Chrome.close_pending);
+  Editor_state.structure_pending := false;
+  Editor_state.drain_edit_actions ();
+  Host.drain ();
+  check "shutdown resumes after structural editing settles" (!close_requests = 5);
+  Editor_state.set (fun state -> { state with editing = None });
+  Runtime.worker := previous_worker;
+  Host.set_host_op previous_op;
   Runtime.read_model := previous_model;
   ignore (Lui_app.dispose app);
+  check "disposing a title editor releases its buffered-save owner"
+    (List.length !Editor_sink.save_listeners = saves_before);
   check "disposing a title editor releases its geometry reply owner"
     (List.length !Editor_sink.measurement_listeners = listeners_before);
   Editor_sink.measurement_changed (Option.get page.page_uuid)
