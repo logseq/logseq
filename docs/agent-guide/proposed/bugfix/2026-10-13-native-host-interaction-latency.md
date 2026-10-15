@@ -1568,6 +1568,100 @@ control is retained as a production change. A VM trace's page-fault totals also
 include pre-exec activity and describe cumulative faults, not retained memory;
 they cannot be used as a reclaimable allocation total.
 
+## Drawable backing identity and host isolation
+
+The next process-local trace records IOSurface IDs, configured drawable capacity,
+texture size, and native VM ledgers around actual drawable acquisition. The
+same release app, worker, graph, full viewport, and independent combined-memory
+guard remain in use. Each recording is explicitly instrumented; its timings
+cannot qualify as a baseline. The app executable remains `e4408b1d`.
+
+Three distinct 2880x1800 IOSurfaces appear while `maximumDrawableCount` continues
+to report two. This is not just three wrappers around two shared surfaces.
+The public layer residency set independently confirms three allocations and
+62226432 bytes, each texture occupying 20742144 bytes. The first texture remains
+alive while the later two alternate. Configured capacity and drawable dimensions
+therefore cannot establish the count or lifetime of actual backing storage.
+The existing configuration assertions do not prove a two-surface memory bound.
+
+One recording observes the graphics footprint ledger rising from 2031616 to
+73973760 bytes between the first and second acquisition. GUI physical footprint
+rises from about 33.3 MB to 133.1 MB over those observations. Subsequent writes
+to the other full-size surfaces add approximately 21 MB each. The guard then
+terminates the GUI and worker at 202982840 combined physical bytes, including
+182551512 GUI bytes and 20431328 worker bytes. The latest native log still has
+127 nodes and about 5 MiB of managed heap. Resource size, ledger values, and
+physical footprint overlap and must not be added into an ownership total.
+
+A paused reverse-reference snapshot includes paths through the layer residency
+set and Core Animation image queue. Such trees also expose weak references,
+internal non-owning links, and temporary diagnostic stack roots. They do not
+prove exclusive ownership or justify releasing a framework-owned texture.
+The SDK explicitly forbids modifying the layer-owned residency set.
+
+The following full-app controls exercise their changed paths and still retain
+three backing surfaces. Each is terminated by the unchanged guard. The table
+records failed predictions; small differences from single instrumented runs
+are not ranked as improvements.
+
+| Control | Combined physical bytes at guard |
+| --- | ---: |
+| Flush main-thread transactions after SDL polling | 200574440 |
+| Flush the initial size transaction before drawable acquisition | 200312272 |
+| Flush background transactions after acquisition and presentation submission | 200443344 |
+| Keep presentation pending through GPU command completion | 204703136 |
+| Omit display-link creation | 202556880 |
+| Run application launch completion once | 208471528 |
+| Suppress activation and window raising after the first acquisition | 205047296 |
+
+A separate prewarm control installs successfully but never encounters its 1x1
+render-encoder path. It cannot attribute the failure to prewarming. No control
+is retained in production, and neither presentation tracking nor frame-rate
+requests are removed to obtain a favorable memory result.
+
+The isolation ladder now distinguishes these cases:
+
+| Diagnostic, without a graph worker | Backing surfaces | Sampled peak physical bytes |
+| --- | ---: | ---: |
+| AppKit clear, retaining the preceding target | 2 | 119505712 |
+| AppKit clear, releasing the preceding target | 2 | 119227160 |
+| SDL clear | 2 | 120144808 |
+| SDL triangle with ordinary blending | 2 | 119817152 |
+| SDL triangle with dual-source blending | 2 | 119751616 |
+| SDL triangle plus a presentation handler | 2 | 120013760 |
+| LUI replay of the actual first startup scene | 2 | 143885224 |
+
+All these processes exit normally under the 50 ms external guard. Presentation
+callbacks in the minimal hidden-window probe report timestamp zero, which is
+not evidence of a displayed frame. The earlier SDL probe whose dynamic library
+could not load is excluded. These probes do not verify application behavior,
+sustained idle bounds, or visible FPS.
+
+The captured first scene contains 23 operations and 20 glyphs at the original
+2880x1800 size. It is replayed using installed LUI `f58d20f2` and the same bundled
+SDL 2.32.6 library. Its graphics ledger also reaches 73973760 bytes, so this cost
+does not require the Logseq graph, model, or document-query caches. Its late
+idle physical median is 69256104 bytes; the corresponding simple dual-source
+triangle median is 61277120 bytes. Active working memory and idle retention
+remain distinct measurements.
+
+A second replay binary links the exact native host stubs and cumulatively adds
+titlebar setup, repeated collapsed-sidebar setup, activation, and native menus.
+The unchanged replay and all four integration steps retain two surfaces, with
+sampled physical peaks of 143885272, 143442904, 144016320, 143426496, and 144065496
+bytes. These results exclude those initialization calls alone as a sufficient
+reproduction of the extra backing surface. They do not exclude interactions
+with the full host's frame cadence, changing scenes, or application packaging.
+
+The next comparison must match those remaining differences in a differential
+scene replay. Independently, the active fixed-scene replay already exceeds
+100 MB without the application model or graph worker. Managed-cache changes
+alone cannot establish the full memory target on this renderer path. Renderer
+alternatives still require complete application memory, pixel, input, resize,
+and latency acceptance before changing the default. All isolated measurement
+children have exited; raw logs, source probes, hashes, and the captured scene
+remain ignored local investigation artifacts.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
