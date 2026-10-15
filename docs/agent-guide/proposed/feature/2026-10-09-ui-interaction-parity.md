@@ -358,3 +358,28 @@ properties row's 8px top/-32px bottom compensation. Omit absent tab/props slots
 rather than retaining spacer gaps. Reuse existing shadow and down-caret recipes.
 Test production layout expanded/collapsed/reopened and real native item actions;
 keep unverified drag, keyboard/ARIA and platform-specific rendering explicit.
+
+### Explicit add-row owner routing
+
+Actual native Contents add-row clicks insert into the unrelated main route;
+master inserts below Contents. The explicit parent UUID must never fall back to
+the route merely because it is not among loaded journals. Insert at the owning
+page/block's bottom using its UUID, preserve its editing scope for click and
+Enter, and retain Library page-typed insertion semantics. Carry the owning
+view's existing Library insertion flag alongside its UUID, not metadata from an
+unrelated route, a cross-area registry, or an extra asynchronous lookup. Do not
+render an add row until its owner exists. Retain existing structural-save/focus
+recovery. Test actual operation targets, block-root children, journals/main
+behavior, Library semantics and required owner context;
+verify native side-pane typing and persistence separately from pointer layout.
+
+Native delegated events must retain nearest-first outward ancestry, including
+ancestors returned from a composed closest lookup. Snapshot caching must include
+application identity, not only generation/count tuples. Own structural responses
+notify mounted stores through existing affected-key subscriptions once per
+combined deferred/current batch; preserve existing canonical acknowledgement
+ownership. Async sidebar data merges retain live membership/fold state and reject
+obsolete generations. Clean editor resynchronization revalidates graph, session,
+input and canonical source after awaited reference resolution. Actual sidebar
+Undo can still restore worker data before its active input follows; record that
+as an unresolved interaction rather than expanding this checkpoint's claim.

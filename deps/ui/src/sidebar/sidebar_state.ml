@@ -44,6 +44,7 @@ type t =
   ; nav_tag_titles : (string * string) list Signal.state
   ; favorited : bool Signal.state
   ; items : item list Signal.state
+  ; items_refresh_generation : int ref
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
   ; (* Left width is pixel-owned; right width is viewport-relative. *)
@@ -923,11 +924,32 @@ let refresh_item repo (it : item) : item Js.Promise.t =
   | _ -> fallback
 
 let refresh_items repo st =
+  incr st.items_refresh_generation;
+  let generation = !(st.items_refresh_generation) in
   let items = Runtime.signal_get st.items in
   if items <> [] then
     ignore
       ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
-       Runtime.signal_set st.items (Array.to_list arr);
+       let* () = if Runtime.repo () = repo && generation = !(st.items_refresh_generation) then (
+         let refreshed = List.map2 (fun previous fresh -> previous.key, fresh)
+             items (Array.to_list arr) in
+         (* Keep live widget state and membership: an async data refresh
+            must not reopen a folded card or resurrect a closed one. *)
+         Runtime.signal_set st.items
+           (List.map (fun current ->
+              match List.assoc_opt current.key refreshed with
+              | None -> current
+              | Some fresh -> { fresh with key = current.key
+                  ; collapsed = current.collapsed
+                  ; props_collapsed = current.props_collapsed })
+             (Runtime.signal_get st.items));
+         (* Undo/remote refresh may restore the cursor before these rows
+            arrive. Only a clean sidebar editor follows the fresh source. *)
+         match Editor_state.editing () with
+         | Some edit when edit.Editor_state.scope = "sidebar" ->
+             Outliner_ops.resync_open_editor ()
+         | _ -> Js.Promise.resolve ())
+       else Js.Promise.resolve () in
        Js.Promise.resolve ())
        |> Js.Promise.catch (fun _ ->
               Ui_services.log_error "sidebar refresh failed";
@@ -981,17 +1003,21 @@ let page_set_tags =
   [ "page-membership"; "page-lookup"; "route-page"; "journals"
   ; "recycle-roots"; "class-tree" ]
 
+module Uuid_set = Set.Make (String)
+
 let item_hits affected st =
-  List.exists
-    (fun (i : item) ->
-      match i.uuid with
-      | Some u ->
-          List.exists
-            (fun k ->
-              k = Subs_state.watch_key_uuid "entity" u
-              || k = Subs_state.watch_key_uuid "children" u)
-            affected
-      | None -> false)
+  let changed = List.fold_left (fun changed key ->
+      match Subs_state.key_tag key, Wire.elems key with
+      | Some ("entity" | "children"), [ _; value ] ->
+        (match Wire.as_uuid value with
+         | Some uuid -> Uuid_set.add uuid changed
+         | None -> changed)
+      | _ -> changed) Uuid_set.empty affected in
+  let contains uuid = match uuid with
+    | Some uuid -> Uuid_set.mem uuid changed | None -> false in
+  let rec blocks_hit blocks = List.exists (fun block ->
+      contains block.Model.block_uuid || blocks_hit block.Model.block_children) blocks in
+  List.exists (fun (item : item) -> contains item.uuid || blocks_hit item.blocks)
     (Runtime.signal_get st.items)
 
 let on_sync st affected =
@@ -1028,11 +1054,15 @@ let on_model st (m : Model.t) =
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
        loaded_repo := Some repo;
+       incr st.items_refresh_generation;
        install_worker_hook st;
        load_favorites repo st;
        load_recents repo st;
        load_nav_tag_titles repo st;
        refresh_favorited repo st
+   | None when !loaded_repo <> None ->
+       loaded_repo := None;
+       incr st.items_refresh_generation
    | _ -> ());
   (match m.Model.route_page with
    | Some p when m.Model.phase = Model.Ready ->
@@ -1214,6 +1244,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; nav_tag_titles = Signal.state owner []
         ; favorited = Signal.state owner false
         ; items = Signal.state owner []
+        ; items_refresh_generation = ref 0
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []
         ; left_width = Signal.state owner (load_left_width (Ui_services.dom_viewport_width ()))

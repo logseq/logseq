@@ -439,6 +439,10 @@ let delta_uuids (delta : Wire.t) : string list =
 let delta_affected (delta : Wire.t) : Wire.t list =
   match parse delta with Some p -> p.affected | None -> []
 
+(* Snapshot the immutable batch without consuming it; the subsequent
+   route refresh still owns draining and applying these deltas. *)
+let peek_deferred () = !deferred
+
 (* a refetched tree already contains every received delta's effects —
    marking the failed batch's revs applied after a refetch seeds the
    basis so the NEXT broadcast splices instead of refetching again

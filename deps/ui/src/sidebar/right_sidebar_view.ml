@@ -570,6 +570,9 @@ let item_body st idx (it : Sidebar_state.item) =
                         (Tree.block_row ~scope:"sidebar")
                         it.blocks
                       @ [ Add_button.el ?puuid:it.Sidebar_state.uuid
+                            ~as_page:(match it.Sidebar_state.page with
+                              | Some page -> page.Model.page_is_library
+                              | None -> false)
                             ~flags:(fun ctx ->
                               Signal.constant ctx.Lui_ui.ui_scheduler
                                 (has_children, indented))

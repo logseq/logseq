@@ -132,6 +132,13 @@ let () =
       (Lui_store.preorder store)
   in
   ignore (Lui_app.flush app);
+  let button = by_id "left-menu" in
+  let snapshot = Native_embed_snapshot.ext_snapshot (Lui_app.runtime app) button in
+  let parent = Option.get (Lui_store.parent store button) in
+  check "native element ancestors are ordered from the nearest parent outwards"
+    (match Dom_ext.ancestors_of snapshot with
+     | first :: _ -> Js.Json.decodeNumber (Dom_ext.prop "node-id" first) = Some (float parent)
+     | [] -> false);
   List.iter (fun identifier ->
       check ("native desktop header exposes " ^ identifier)
         (List.exists (fun node ->

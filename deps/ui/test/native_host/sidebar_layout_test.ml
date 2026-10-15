@@ -11,7 +11,9 @@ let () =
         Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost
     ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
   let model = { Model.initial with right_sidebar_open = true } in
-  let app = Lui_app.create backend model Update.apply
+  let registry = Lui_extension.registry () in
+  Logseq_editor.register registry;
+  let app = Lui_app.create_with_extensions backend registry model Update.apply
       (fun context model _send ->
          Editor_state.ensure context;
          let state = Sidebar_state.ensure model in
@@ -89,5 +91,156 @@ let () =
   sync ();
   check "small viewports retain the reference 16px gap instead of the desktop 32px gap"
     ((rect (by_id "sbi-contents-fixture")).h = 204.);
+  let child_uuid = "33333333-4444-4555-8666-777777777777" in
+  let child = Model.empty_block ~uuid:child_uuid ~title:"Sidebar child" ~is_page:false in
+  Runtime.signal_set state.items [ { item with blocks = [ child ] } ];
+  check "sidebar body edits invalidate the card that owns the changed descendant"
+    (Sidebar_state.item_hits [ Subs_state.watch_key_uuid "entity" child_uuid ] state);
+  check "unrelated body edits do not refetch sidebar cards"
+    (not (Sidebar_state.item_hits
+      [ Subs_state.watch_key_uuid "entity" "44444444-5555-4666-8777-888888888888" ] state));
+  let previous_model = !Runtime.read_model in
+  Runtime.read_model := (fun () -> { (previous_model ()) with repo = Some "sidebar-refresh-fixture" });
+  let info = Wire.Map
+      [ Wire.Keyword "page-title", Wire.String "Contents"
+      ; Wire.Keyword "page-uuid", Wire.Uuid uuid ] in
+  let pending, resolve, _ = Js.Promise.pending () in
+  let dead, _, _ = Js.Promise.pending () in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ _args ->
+        match method_ with
+        | "thread-api/get-page-route-info" -> pending
+        | "thread-api/get-page-blocks-tree" -> Js.Promise.resolve (Wire.Array
+            [ Wire.Map [ Wire.Keyword "block/uuid", Wire.Uuid "22222222-3333-4444-8555-666666666666"
+                ; Wire.Keyword "block/title", Wire.String "Refreshed sidebar content" ] ])
+        | _ -> Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  Runtime.signal_set state.items [ item ];
+  Editor_state.clear_overrides ();
+  Editor_state.set (fun state -> { state with Editor_state.editing = Some
+      (Editor_state.mk_editing ~uuid:"22222222-3333-4444-8555-666666666666"
+         ~scope:"sidebar" ~buffer:"Old sidebar buffer" ~base:"Old sidebar buffer" ()) });
+  Sidebar_state.refresh_items "sidebar-refresh-fixture" state;
+  Runtime.signal_set state.items [ { item with collapsed = true; props_collapsed = false } ];
+  resolve info;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  let refreshed = List.hd (Runtime.signal_get state.items) in
+  check "sidebar refresh publishes new body data"
+    (List.exists (fun block -> block.Model.block_title = "Refreshed sidebar content") refreshed.blocks);
+  check "a pending sidebar refresh preserves the latest fold and properties state"
+    (refreshed.collapsed && not refreshed.props_collapsed && refreshed.key = item.key);
+  check "a completed sidebar refresh resynchronizes its clean active editor"
+    (match Editor_state.editing () with
+     | Some edit -> edit.Editor_state.buffer = "Refreshed sidebar content"
+     | None -> false);
+  Editor_state.set (fun state -> { state with Editor_state.editing = Some
+      (Editor_state.mk_editing ~uuid:"22222222-3333-4444-8555-666666666666"
+         ~scope:"sidebar" ~buffer:"Old sidebar buffer" ~base:"Old sidebar buffer" ()) });
+  let lookup, resolve_lookup, _ = Js.Promise.pending () in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ _args ->
+        if method_ = "thread-api/pull" then lookup else Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  let referenced = Model.empty_block ~uuid:"22222222-3333-4444-8555-666666666666"
+      ~title:"[[55555555-6666-4777-8888-999999999999]]" ~is_page:false in
+  Runtime.signal_set state.items [ { item with blocks = [ referenced ]; collapsed = true } ];
+  ignore (Outliner_ops.resync_open_editor ());
+  Editor_state.set (fun state -> match state.Editor_state.editing with
+      | Some edit -> { state with editing = Some
+          (Editor_state.with_model edit (Edit_model.set_source edit.model "Input after refresh began")) }
+      | None -> state);
+  resolve_lookup Wire.Nil;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  check "late editor resync cannot overwrite input typed while title resolution was pending"
+    (match Editor_state.editing () with
+     | Some edit -> edit.Editor_state.buffer = "Input after refresh began"
+     | None -> false);
+  let canonical_a = { referenced with Model.block_title = "Canonical A" } in
+  let canonical_b = { referenced with Model.block_title = "[[66666666-7777-4888-8999-aaaaaaaaaaaa]]" } in
+  let lookup_b, resolve_b, _ = Js.Promise.pending () in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ _args ->
+        if method_ = "thread-api/pull" then lookup_b else Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  Editor_state.set (fun state -> { state with Editor_state.editing = Some
+      (Editor_state.mk_editing ~uuid:"22222222-3333-4444-8555-666666666666"
+         ~scope:"sidebar" ~buffer:"Canonical A" ~base:"Canonical A" ()) });
+  Runtime.signal_set state.items [ { item with blocks = [ canonical_b ]; collapsed = true } ];
+  ignore (Outliner_ops.resync_open_editor ());
+  Runtime.signal_set state.items [ { item with blocks = [ canonical_a ]; collapsed = true } ];
+  ignore (Outliner_ops.resync_open_editor ());
+  resolve_b Wire.Nil;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  check "stale title resolution cannot replace a newer canonical source that required no editor change"
+    (match Editor_state.editing () with
+     | Some edit -> edit.Editor_state.buffer = "Canonical A"
+     | None -> false);
+  let first_lookup, resolve_first, _ = Js.Promise.pending () in
+  let second_lookup, resolve_second, _ = Js.Promise.pending () in
+  let second_ref = "77777777-8888-4999-8aaa-bbbbbbbbbbbb" in
+  let latest_title = "[[" ^ second_ref ^ "]]" in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ args ->
+        match method_, List.rev args with
+        | "thread-api/pull", Wire.Array [ _; Wire.Uuid uuid ] :: _ ->
+          if uuid = second_ref then second_lookup else first_lookup
+        | _ -> Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  Editor_state.set (fun state -> { state with Editor_state.editing = Some
+      (Editor_state.mk_editing ~uuid:"22222222-3333-4444-8555-666666666666"
+         ~scope:"sidebar" ~buffer:"Clean initial" ~base:"Clean initial" ()) });
+  Runtime.signal_set state.items [ { item with blocks = [ canonical_b ]; collapsed = true } ];
+  ignore (Outliner_ops.resync_open_editor ());
+  Runtime.signal_set state.items [ { item with blocks =
+      [ { canonical_b with Model.block_title = latest_title } ]; collapsed = true } ];
+  ignore (Outliner_ops.resync_open_editor ());
+  resolve_first Wire.Nil;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  resolve_second Wire.Nil;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  check "overlapping clean-editor resyncs keep the latest canonical source authoritative"
+    (match Editor_state.editing () with
+     | Some edit -> edit.Editor_state.buffer = latest_title
+     | None -> false);
+  Editor_state.set (fun state -> { state with Editor_state.editing = None });
+  let pending, resolve, _ = Js.Promise.pending () in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ _args ->
+        if method_ = "thread-api/get-page-route-info" then pending
+        else Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  Sidebar_state.refresh_items "sidebar-refresh-fixture" state;
+  Runtime.signal_set state.items [];
+  resolve info;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  check "a pending sidebar refresh cannot resurrect a card closed while it was loading"
+    (Runtime.signal_get state.items = []);
+  let old_info, resolve_old, _ = Js.Promise.pending () in
+  let new_info, resolve_new, _ = Js.Promise.pending () in
+  let version = ref "fresh" in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun method_ args ->
+        match method_, args with
+        | "thread-api/get-page-route-info", [ _; Wire.String "First lookup" ] -> old_info
+        | "thread-api/get-page-route-info", _ -> new_info
+        | "thread-api/get-page-blocks-tree", _ -> Js.Promise.resolve (Wire.Array
+            [ Wire.Map [ Wire.Keyword "block/uuid", Wire.Uuid "22222222-3333-4444-8555-666666666666"
+                ; Wire.Keyword "block/title", Wire.String !version ] ])
+        | _ -> Js.Promise.resolve Wire.Nil)
+    ; on_message = (fun _ _ -> ()); dead };
+  Runtime.signal_set state.items [ { item with kind = "page"; page_ref = Some "First lookup" } ];
+  Sidebar_state.refresh_items "sidebar-refresh-fixture" state;
+  Runtime.signal_set state.items [ { item with kind = "page"; page_ref = Some "Second lookup" } ];
+  Sidebar_state.refresh_items "sidebar-refresh-fixture" state;
+  resolve_new info;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  version := "stale";
+  resolve_old info;
+  for _ = 1 to 20 do Host.drain (); ignore (Lui_app.flush app) done;
+  let latest = List.hd (Runtime.signal_get state.items) in
+  check "an older sidebar fetch cannot overwrite a newer completed refresh"
+    (List.exists (fun block -> block.Model.block_title = "fresh") latest.blocks);
+  Runtime.worker := None;
+  Runtime.read_model := previous_model;
   ignore (Lui_app.dispose app);
   print_endline "native sidebar card layout: OK"

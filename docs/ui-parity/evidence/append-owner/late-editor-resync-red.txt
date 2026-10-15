@@ -1,0 +1,21 @@
+native split gestures: OK
+native scroll geometry: OK
+native window damage: OK
+native app theme rendering: OK
+native settings layout: OK
+native text rendering: OK
+native add-row owner routing: OK
+sidebar width ownership: OK
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+File "test/native_host/dune", line 128, characters 7-26:
+128 |  (name sidebar_layout_test)
+             ^^^^^^^^^^^^^^^^^^^
+Fatal error: exception Failure("late editor resync cannot overwrite input typed while title resolution was pending")
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+window close cancelled: Failure("expected latest title save rejection")
+window close cancelled: Failure("expected title save rejection")
+window close cancelled: Failure("expected body save rejection")

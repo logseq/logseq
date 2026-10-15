@@ -258,14 +258,20 @@ let selector_matches (sel : string) (el : element)
          match_chain comps el ancestors)
 
 let closest (el : element) (sel : string) : element option =
-  let rec walk candidates ancestors =
-    match candidates with
+  let rec walk = function
     | [] -> None
-    | c :: rest ->
-        if selector_matches sel c (rest @ ancestors) then Some c
-        else walk rest (ancestors @ [ c ])
+    | candidate :: ancestors ->
+      if selector_matches sel candidate ancestors then
+        (* Returning an ancestor must retain its own parent chain, as a
+           real DOM element does. Delegated handlers compose closest calls. *)
+        Some (match candidate with
+          | Js.Json.JObject fields -> Js.Json.JObject
+              (("ancestors", Js.Json.JArray (Array.of_list ancestors))
+               :: List.remove_assoc "ancestors" fields)
+          | other -> other)
+      else walk ancestors
   in
-  walk (el :: ancestors_of el) []
+  walk (el :: ancestors_of el)
 
 (* ---------- scoped / child-combinator selectors ----------
 

@@ -1042,12 +1042,16 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                 ~data_attrs:[ ("style", "overflow:hidden") ]
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
+                    ~data_attrs:[ ("data-cid", "preview") ]
                     (List.map
                        (Tree.block_row ~scope:"preview" ~editable:false)
                        p.S.pv_blocks
                      @ [ (* cljs page-preview-content mounts the real
                             page-cp, which carries add-button *)
                          Add_button.el
+                           ~as_page:(match p.S.pv_page with
+                             | Some page -> page.Model.page_is_library
+                             | None -> false)
                            ?puuid:
                              (match p.S.pv_page with
                               | Some pg -> pg.Model.page_uuid

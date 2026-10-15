@@ -1,0 +1,55 @@
+native scroll geometry: OK
+native split gestures: OK
+native window damage: OK
+native app theme rendering: OK
+native text rendering: OK
+native settings layout: OK
+native sidebar card layout: OK
+owner-sidebar-refresh repo=sidebar-refresh-fixture items=1
+owner-sidebar-editor none
+owner-sidebar-fetched counts=1
+owner-sidebar-refresh repo=sidebar-refresh-fixture items=1
+owner-sidebar-editor none
+owner-sidebar-fetched counts=0
+sidebar width ownership: OK
+owner-sidebar-model repo=none
+owner-sidebar-model repo=none
+owner-sidebar-model repo=none
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+File "test/native_host/dune", line 145, characters 7-24:
+145 |  (name append_owner_test)
+             ^^^^^^^^^^^^^^^^^
+owner-append scope=sidebar owner=11111111-2222-4333-8444-666666666666
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",1,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=main owner=route
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",2,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=main owner=11111111-2222-4333-8444-777777777777
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",3,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=sidebar owner=11111111-2222-4333-8444-888888888888
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",4,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=sidebar owner=11111111-2222-4333-8444-999999999999
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",5,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=sidebar owner=11111111-2222-4333-8444-666666666666
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",6,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=main owner=route
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",7,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=sidebar owner=11111111-2222-4333-8444-666666666666
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",8,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+owner-append scope=main owner=11111111-2222-4333-8444-666666666666
+owner-response repo=append-owner-fixture current=append-owner-fixture value=["^ ","~:delta",["^ ","~:rev",9,"~:blocks",[],"~:deleted",[],"~:children",[],"~:affected-keys",[["^4","~u11111111-2222-4333-8444-666666666666"]]]]
+owner-affected count=1
+Fatal error: exception Failure("delegated add-row clicks preserve the owning container")
+File "test/native_host/dune", line 48, characters 7-25:
+48 |  (name chrome_layout_test)
+            ^^^^^^^^^^^^^^^^^^
+Fatal error: exception Failure("native element ancestors are ordered from the nearest parent outwards")

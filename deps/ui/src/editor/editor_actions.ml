@@ -734,7 +734,7 @@ let enqueue_split ~restore persist =
         Js.Promise.resolve ())
       else if Queue.is_empty split_commits then (
         S.optimistic_split_ready := false;
-        Ops.refresh_via_delta last_response)
+        Ops.refresh_via_delta ~repo:(fst context) last_response)
       else (
         let job = Queue.take split_commits in
         split_restore := Some job.restore;
@@ -2286,59 +2286,34 @@ let arrow_edge uuid up =
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in
    (its data-parentblockid attr carries the page uuid) *)
-let append_block ?for_page ?(scope = "main") () =
-  let page =
+let append_block ?for_page ?as_page ?(scope = "main") () =
+  (* Add rows already know their page/block owner. Never substitute the
+     current route for an explicit sidebar, preview or dialog target. *)
+  let owner, page_typed =
     match for_page with
-    | Some u -> (
-        match (Runtime.model ()).Model.journals with
-        | js ->
-            List.find_opt
-              (fun (p : Model.page) -> p.Model.page_uuid = Some u)
-              js)
-    | None -> (Runtime.model ()).Model.route_page
+    | Some uuid -> Some uuid, Option.value as_page ~default:false
+    | None ->
+      let page = (Runtime.model ()).Model.route_page in
+      Option.bind page (fun p -> p.Model.page_uuid),
+      Option.value as_page ~default:
+        (match page with Some p -> p.Model.page_is_library | None -> false)
   in
-  let page =
-    match page, (Runtime.model ()).Model.route_page with
-    | Some _ as p, _ -> p
-    | None, p -> p
-  in
-  match page with
+  match owner with
   | None -> ()
-  | Some p -> (
-      match p.Model.page_uuid with
-      | None -> ()
-      | Some puuid ->
-          let new_uuid = Ui_services.env_random_uuid () in
-          let target, sibling =
-            match List.rev p.Model.page_blocks with
-            | last :: _ -> (
-                match last.Model.block_uuid with
-                | Some u -> (u, true)
-                | None -> (puuid, false))
-            | [] -> (puuid, false)
-          in
-          let stage st =
-            { st with
-              S.editing =
-                Some
-                  (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope ~base:"" ())
-            }
-          in
-          (* empty page: editor state is created at the first block_row
-             mount, which happens inside this op's refresh — defer the
-             edit-mode entry into the initial state so the row mounts
-             straight into the editor *)
-          let restore = S.editing () in
-          if S.ready () then S.set stage
-          else S.defer_init stage;
-          with_focus_after ~restore new_uuid 0
-            (Ops.apply_and_refresh
-               [ Ops.insert_blocks
-                   [ Ops.block_map ~title:"" ~page:p.Model.page_is_library
-                       new_uuid
-                   ]
-                   target ~sibling
-               ]))
+  | Some owner ->
+    let new_uuid = Ui_services.env_random_uuid () in
+    let stage st =
+      { st with S.editing = Some
+          (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope ~base:"" ()) } in
+    (* Empty owners may have no block row yet; stage edit mode before the
+       structural refresh mounts their first row. *)
+    let restore = S.editing () in
+    if S.ready () then S.set stage else S.defer_init stage;
+    with_focus_after ~restore new_uuid 0
+      (Ops.apply_and_refresh
+         [ Ops.insert_blocks ~bottom:true
+             [ Ops.block_map ~title:"" ~page:page_typed new_uuid ]
+             owner ~sibling:false ])
 
 (* ---------- quick add (Meta+e, components/quick_add.cljs) ---------- *)
 

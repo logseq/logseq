@@ -28,10 +28,9 @@ let body (_ms : Model.t Signal.signal) : t =
           [ text ~key:"qa-t" ~style_class:"ls-qa-title" ~font_weight:500
               ~value:(U.t "editor.quick-add/title") [] ]
       ; box ~key:"qa-c" ~style_class:"ls-qa-content"
-          ~data_attrs:[ ("style", "margin-left:-1.5rem") ]
-          (* cljs .page-blocks-inner[data-cid] marks the editable
-             container region — carried as the a11y id until the
-             imperative [data-cid] lookup migrates *)
+          ~data_attrs:[ ("style", "margin-left:-1.5rem"); ("data-cid", "quick-add") ]
+          (* Keep the editable container's scope available to delegated
+             block and add-row interactions. *)
           ~accessibility_identifier:"quick-add"
           [ reactive ~equal:( == )
               (fun blocks ->

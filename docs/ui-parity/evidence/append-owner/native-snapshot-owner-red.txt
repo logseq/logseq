@@ -1,0 +1,19 @@
+native split gestures: OK
+native scroll geometry: OK
+native window damage: OK
+native app theme rendering: OK
+native settings layout: OK
+native text rendering: OK
+sidebar width ownership: OK
+native sidebar card layout: OK
+native add-row owner routing: OK
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+File "test/native_host/dune", line 48, characters 7-25:
+48 |  (name chrome_layout_test)
+            ^^^^^^^^^^^^^^^^^^
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+Fatal error: exception Failure("native title editor snapshots expose editable input semantics")

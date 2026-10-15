@@ -21,9 +21,9 @@ open Lui_elements
    about #e9e9e9 — the bullet the empty journal actually shows. Keep
    the row hidden once real blocks exist, and paint the empty-page
    dot at full opacity in the same gray as a block bullet. *)
-let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
+let el ?puuid ?(as_page = false) ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
-  if Ui_services.env_publishing () then Logseq_el.nothing context parent
+  if Ui_services.env_publishing () || puuid = None then Logseq_el.nothing context parent
   else
     let fs = flags context in
     (* the doc-level click/Enter listener matches closest
@@ -35,6 +35,7 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
        (column ~key:"bab"
           ~data_attrs:
             (("tabindex", "0")
+             :: ("data-insert-as-page", string_of_bool as_page)
              :: (match puuid with
                  | Some u -> [ ("data-parentblockid", u) ]
                  | None -> []))

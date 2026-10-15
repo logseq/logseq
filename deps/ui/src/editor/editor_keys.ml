@@ -13,6 +13,16 @@ let ev_key ev = Option.value ~default:"" ev.Ui_services.key
 let closest sel t =
   match t with Some el -> el.Ui_services.closest sel | None -> None
 
+let append_from_button (button : Ui_services.el) =
+  let as_page = match button.Ui_services.attr "data-insert-as-page" with
+    | Some "true" -> true
+    | Some "false" -> false
+    | _ -> invalid_arg "Add rows require their owner's insertion kind" in
+  let owner = match button.Ui_services.attr "data-parentblockid" with
+    | Some uuid -> uuid
+    | None -> invalid_arg "Add rows require a parent UUID" in
+  A.append_block ~for_page:owner ~as_page ~scope:(A.scope_of_el button) ()
+
 let is_editable_target t =
   match t with Some el -> el.Ui_services.editable () | None -> false
 
@@ -805,7 +815,7 @@ let on_normal_key ev =
       match closest ".block-add-button" (ev.Ui_services.target) with
       | Some btn ->
           ev.Ui_services.prevent_default ();
-          A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid") ()
+          append_from_button btn
       | None -> (
           match S.anchor () with
           | Some u when selected () ->
@@ -1580,8 +1590,7 @@ let on_click ev =
          state yet *)
       match closest ".block-add-button" target with
   | Some btn ->
-      A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid")
-        ~scope:(A.scope_of_el btn) ()
+      append_from_button btn
   | None ->
       if S.ready () then
         (

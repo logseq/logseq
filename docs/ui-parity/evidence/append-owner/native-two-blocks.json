@@ -1,0 +1,4 @@
+{
+  "ok": true,
+  "resultTransit": "[[\"^ \",\"~:block/parent\",[\"^ \",\"~:db/id\",187],\"~:block.temp/reactions\",[],\"~:block/children\",[\"~#list\",[]],\"~:block/level\",1,\"~:block/created-at\",1792062047474,\"~:block/order\",\"a0\",\"~:block/page\",[\"^ \",\"^1\",187],\"~:block/title\",\"Sidebar append ownership parity\",\"~:block/updated-at\",1792062069926,\"~:block/uuid\",\"~uff257d01-21ce-4f4e-9a07-a5c54aaabb36\",\"^1\",294],[\"^ \",\"^0\",[\"^ \",\"^1\",187],\"^2\",[],\"^3\",[\"^4\",[]],\"^5\",1,\"^6\",1792062882661,\"^7\",\"a1\",\"^8\",[\"^ \",\"^1\",187],\"^9\",\"Sidebar second append\",\"^:\",1792062883669,\"^;\",\"~u2973e54d-ba52-45cf-a5b7-40f1661880ea\",\"^1\",295]]"
+}

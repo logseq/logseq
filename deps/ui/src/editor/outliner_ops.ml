@@ -1253,8 +1253,15 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                 | _ -> ());
              Ui_task.resolve ok))
 
-let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
-  match
+let refresh_via_delta ~repo (resp : Wire.t option) : unit Js.Promise.t =
+  if Runtime.repo () <> repo then Js.Promise.resolve () else
+  let deltas = Page_delta.peek_deferred ()
+      @ match Option.bind resp (fun result -> Wire.get result "delta") with
+        | Some delta -> [ delta ] | None -> [] in
+  let affected = List.sort_uniq compare
+      (List.concat_map (fun delta -> match Wire.get delta "affected-keys" with
+         | Some keys -> Wire.elems keys | None -> []) deltas) in
+  let refresh = match
     (Option.bind resp (fun r -> Wire.get r "delta"), (Runtime.model ()).Model.route_page)
   with
   | Some delta, None when !Runtime.current_journals <> [] -> (
@@ -1268,7 +1275,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           if ok then (
             (* property areas hold worker data outside the spliced
                model — debounced with the journals side refresh *)
-            request_side_refresh ~props:true [];
+            request_side_refresh ~props:(affected = []) [];
             Js.Promise.resolve ())
           else refresh_page ())
       | _ -> refresh_journals_via_delta delta)
@@ -1288,13 +1295,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';
-          (* property areas hold worker data outside the spliced model;
-             the broadcast echo of this tx is deduped, so refresh them
-             here or their chips stay stale. Not awaited — the refresh
-             is a full-area refetch and would gate the caller's next
-             step (the Enter refocus mounts the new editor ~150ms
-             late) on cosmetic property chips *)
-          ignore (Runtime.hooks.refresh_property_areas ());
+          if affected = [] then ignore (Runtime.hooks.refresh_property_areas ());
           Js.Promise.resolve ()
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
@@ -1311,11 +1312,18 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
       let* () = refresh_page () in
       Page_delta.note_applied_of_delta delta;
       Js.Promise.resolve ()
-  | _ -> refresh_page ()
+  | _ -> refresh_page () in
+  let* () = refresh in
+  (* Notify other mounted stores once for the whole batch. The final
+     acknowledgement can be a no-op after a deferred autosave. This
+     also owns property invalidation, avoiding a second manual fetch. *)
+  if Runtime.repo () = repo && affected <> [] then Runtime.run_sync_subs affected;
+  Js.Promise.resolve ()
 
 let apply_and_refresh ?opts ops =
+  let repo = Runtime.repo () in
   let* resp = apply_result ?opts ops in
-  let* () = refresh_via_delta resp in
+  let* () = refresh_via_delta ~repo resp in
   (* the quick-add dialog's block list lives outside
             .page-blocks-inner; a page refresh alone won't repaint it *)
   if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
@@ -1323,15 +1331,18 @@ let apply_and_refresh ?opts ops =
   Js.Promise.resolve ()
 
 let apply_and_refresh_deferred ?opts ops =
+  let repo = Runtime.repo () in
   let* resp = apply_result ?opts ops in
-  if S.ready () && S.editing () <> None then (
+  let* () = if Runtime.repo () <> repo then Js.Promise.resolve ()
+  else if S.ready () && S.editing () <> None then (
     (* the deferred refresh would drop the op's delta — queue it so the
        next refresh/broadcast merges the saves it carries *)
     (match Option.bind resp (fun r -> Wire.get r "delta") with
      | Some d -> Page_delta.stash_deferred d
      | None -> ());
     Js.Promise.resolve ())
-  else refresh_via_delta resp
+  else refresh_via_delta ~repo resp in
+  Js.Promise.resolve ()
 
 (* cljs insert-blocks! result {:blocks [...inserted maps]} — last block's
    real uuid (keep-uuid? regenerates on collision, so callers cannot
@@ -1479,16 +1490,19 @@ let title_on_entry uuid title =
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply +
    splice the response delta *)
 let apply_parsed_and_refresh ?opts ~rest pairs =
+  let repo = Runtime.repo () in
   let* a =
     Js.Promise.all
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
+  if Runtime.repo () <> repo then Js.Promise.resolve () else
   let* resp = apply_result ?opts (Array.to_list a @ rest) in
-  refresh_via_delta resp
+  refresh_via_delta ~repo resp
 
 let apply_and_refresh_result ?opts ops =
+  let repo = Runtime.repo () in
   let* r = apply_result ?opts ops in
-  let* () = refresh_via_delta r in
+  let* () = refresh_via_delta ~repo r in
   Js.Promise.resolve r
 
 
@@ -1498,6 +1512,7 @@ let apply_and_refresh_result ?opts ops =
    Returns the promise so callers that move editing afterwards (paste)
    sequence after the model write *)
 let resync_open_editor ?(force = false) () : unit Js.Promise.t =
+  let repo = Runtime.repo () in
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -1507,10 +1522,10 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
              display override while the store catches up, and reading the
              raw block_title here would clobber text the worker already
              persisted *)
-          let title = S.title_for e.uuid b.Model.block_title in
+          let canonical_title = S.title_for e.uuid b.Model.block_title in
           let* title =
-            if source_block e.uuid then Js.Promise.resolve title
-            else title_for_edit title
+            if source_block e.uuid then Js.Promise.resolve canonical_title
+            else title_for_edit canonical_title
           in
           (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
@@ -1521,7 +1536,13 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
           then
             S.set (fun st ->
                 match st.S.editing with
-                | Some e' when e'.uuid = e.uuid ->
+                | Some e' when e'.uuid = e.uuid && e'.epoch == e.epoch
+                    && String.equal e'.model.Edit_model.source e.model.Edit_model.source
+                    && (force || e'.buffer = e'.base)
+                    && Runtime.repo () = repo
+                    && (match S.find e.uuid with
+                        | Some current -> S.title_for e.uuid current.Model.block_title = canonical_title
+                        | None -> false) ->
                     { st with
                    S.editing =
                      Some

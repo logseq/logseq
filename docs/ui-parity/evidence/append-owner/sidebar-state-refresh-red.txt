@@ -1,0 +1,24 @@
+native scroll geometry: OK
+native window damage: OK
+native split gestures: OK
+native app theme rendering: OK
+native text rendering: OK
+native settings layout: OK
+File "test/native_host/dune", line 145, characters 7-24:
+145 |  (name append_owner_test)
+             ^^^^^^^^^^^^^^^^^
+Fatal error: exception Failure("own structural responses notify affected sidebar stores before their broadcast is deduplicated")
+sidebar width ownership: OK
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+File "test/native_host/dune", line 128, characters 7-26:
+128 |  (name sidebar_layout_test)
+             ^^^^^^^^^^^^^^^^^^^
+Fatal error: exception Failure("a pending sidebar refresh preserves the latest fold and properties state")
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+window close cancelled: Failure("expected latest title save rejection")
+window close cancelled: Failure("expected title save rejection")
+window close cancelled: Failure("expected body save rejection")

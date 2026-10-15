@@ -238,12 +238,19 @@ let snapshot_epoch (rt : Lui_runtime.application) =
   , List.length !(rt.Lui_runtime.pending_ops) )
 
 let snapshot_epoch_ref = ref (-1, -1, -1)
+(* The generation ref is a per-application identity token; keeping it
+   does not retain the application's full tree after disposal. *)
+let snapshot_owner : int ref option ref = ref None
 let shallow_cache : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 1024
 let subtree_cache : (int, Js.Json.t list) Hashtbl.t = Hashtbl.create 8
 
 let invalidate_stale_snapshots (rt : Lui_runtime.application) =
   let epoch = snapshot_epoch rt in
-  if epoch <> !snapshot_epoch_ref then begin
+  let same_owner = match !snapshot_owner with
+    | Some generation -> generation == rt.Lui_runtime.runtime_generation
+    | None -> false in
+  if not same_owner || epoch <> !snapshot_epoch_ref then begin
+    snapshot_owner := Some rt.Lui_runtime.runtime_generation;
     snapshot_epoch_ref := epoch;
     Hashtbl.reset shallow_cache;
     Hashtbl.reset subtree_cache
@@ -268,7 +275,7 @@ let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
             walk parent (shallow_of rt parent :: acc) (depth + 1)
         | None -> acc
     in
-    walk node [] 0
+    List.rev (walk node [] 0)
   in
   match shallow_of rt node with
   | Js.Json.JObject kvs ->
