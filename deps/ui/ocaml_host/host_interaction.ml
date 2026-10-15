@@ -207,11 +207,14 @@ let memory_replay_mode ~enabled mode =
   | false,Some _ -> invalid_arg "Replay mode requires a replay duration"
   | true,Some _ -> invalid_arg "Unknown native memory replay mode"
 
-let should_paint ~replay ~visible ~dirty =
+(* Retained backing content remains useful to window previews and accessibility
+   while occluded. Updating it does not establish onscreen presentation. *)
+let can_render ~replay ~visible ~backing = visible || backing || replay <> Replay_off
+
+let should_paint ~replay ~visible ~backing ~dirty =
   match replay with
   | Replay_continuous -> true
-  | Replay_changes -> dirty
-  | Replay_off -> visible && dirty
+  | Replay_changes | Replay_off -> can_render ~replay ~visible ~backing && dirty
 
 let presentation () = {pending=false}
 let present state ~ready ~submit scene =

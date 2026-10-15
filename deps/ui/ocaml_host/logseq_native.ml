@@ -2275,7 +2275,7 @@ let () =
        does not establish visible presentation FPS or input acceptance. *)
     if continuous_replay then Option.iter Lui_raster.Tile_renderer.invalidate cocoa_tiles;
     let dirty = Host_interaction.should_paint ~replay:replay_mode ~visible:can_present
-      ~dirty:(Ui.want_frame ui host || !host_req_repaint) in
+      ~backing:use_cocoa ~dirty:(Ui.want_frame ui host || !host_req_repaint) in
     let retry = presentation.Host_interaction.pending in
     if dirty then begin
       paint_frame ();
@@ -2285,7 +2285,8 @@ let () =
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
     end
-    else if (can_present || memory_replay) && (Host_interaction.presentation_due presentation
+    else if Host_interaction.can_render ~replay:replay_mode ~visible:can_present
+        ~backing:use_cocoa && (Host_interaction.presentation_due presentation
              || overlay_fps () <> !painted_fps
              || (metrics.panel_open && perf_s () -. !last_render >= 0.25))
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin

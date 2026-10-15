@@ -454,7 +454,7 @@ let () =
   print_endline "native pending presentation: OK"
 
 let () =
-  let exercise mode ~visible ~expected =
+  let exercise mode ~visible ~backing ~expected =
     let renders=ref 0 in
     let renderer={Lui_host.name="replay-policy";
       render=(fun _ -> incr renders;Bytes.empty)} in
@@ -464,25 +464,31 @@ let () =
     let replay=Host_interaction.memory_replay_mode ~enabled:(mode<>Some "off")
       (if mode=Some "off" then None else mode) in
     let frame visible =
-      if Host_interaction.should_paint ~replay ~visible ~dirty:(Lui_host.wants_repaint host)
+      if Host_interaction.should_paint ~replay ~visible ~backing ~dirty:(Lui_host.wants_repaint host)
       then ignore (Lui_host.repaint host) in
     ignore (Lui_host.apply_batch host {generation=1;ops=[CreateNode (1,Box);
       SetProp (1,BackgroundValue,StringValue "#ff0000")]});
     for _=1 to 20 do frame visible done;
-    check "Replay policy did not preserve its unchanged-scene behavior" (!renders=expected);
+    check (Printf.sprintf "Repaint policy visible=%b backing=%b rendered %d frames, expected %d"
+      visible backing !renders expected) (!renders=expected);
     ignore (Lui_host.apply_batch host {generation=2;ops=[
       SetProp (1,BackgroundValue,StringValue "#0000ff")]});
-    frame true;
+    frame (not backing);
     check "Replay policy lost a changed scene" (!renders=expected+1);
     check "Replay policy painted stale pixels"
       (List.exists (function Lui_scene.Fill fill ->
         fill.fcolor=Lui_scene.color 0 0 255 255 | _ -> false)
         (Lui_host.scene host).Lui_scene.ops) in
-  exercise None ~visible:false ~expected:20;
-  exercise (Some "continuous") ~visible:false ~expected:20;
-  exercise (Some "changes") ~visible:false ~expected:1;
-  exercise (Some "off") ~visible:false ~expected:0;
-  exercise (Some "off") ~visible:true ~expected:1;
+  exercise None ~visible:false ~backing:false ~expected:20;
+  exercise (Some "continuous") ~visible:false ~backing:false ~expected:20;
+  exercise (Some "changes") ~visible:false ~backing:false ~expected:1;
+  exercise (Some "off") ~visible:false ~backing:false ~expected:0;
+  exercise (Some "off") ~visible:true ~backing:false ~expected:1;
+  exercise (Some "off") ~visible:false ~backing:true ~expected:1;
+  check "An occluded backing store cannot refresh its diagnostic overlay"
+    (Host_interaction.can_render ~replay:Replay_off ~visible:false ~backing:true);
+  check "An occluded onscreen renderer became eligible for presentation"
+    (not (Host_interaction.can_render ~replay:Replay_off ~visible:false ~backing:false));
   List.iter (fun (enabled,mode) ->
     let rejected=try ignore (Host_interaction.memory_replay_mode ~enabled (Some mode));false
       with Invalid_argument _ -> true in
