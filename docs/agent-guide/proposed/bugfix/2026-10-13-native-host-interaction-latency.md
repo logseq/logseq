@@ -539,6 +539,94 @@ runtime counts, and attribution remain under ignored
 `tmp/native-app/science-enter-50-a11y-idle-650*`. The temporary producer and
 Memtrace link dependency were restored after freezing the diagnostic binary.
 
+## Default Metal memory after startup
+
+The earlier 200 MB protection runs ended during startup and did not measure
+retained GUI memory after loading the page. A bounded diagnostic now keeps the
+same release executable, installed LUI revision
+`943e9acd7bac25e18b69d39136b62ac5e1a3c513`, fixed worker, isolated graph,
+2880 by 1800 physical viewport, and 50-Enter replay running for 90 seconds.
+Only an ignored collector copy raises the combined physical guard to 400 MB;
+the normal collector and its 200 MB guard are unchanged. RSS is recorded without
+a threshold in this explicitly labelled diagnostic. No Memtrace producer is
+linked. A screenshot confirms the loaded page, and all 50 actions are handled
+and persisted. UI settlement and presentation FPS remain unverified.
+
+The GUI SDK records a lifetime peak of 204,932,056 physical bytes. External
+sampling sees a combined peak of 227,902,928 bytes, consisting of 199,492,568 GUI
+bytes and 28,410,360 worker bytes at that instant. These peaks occur at different
+times and must not be added. Median GUI footprint is 104.60 MB at 35–55 seconds
+and 106.22 MB at 80–89 seconds; corresponding worker medians are 27.08 MB.
+The final combined footprint is 133.65 MB. Startup working memory therefore
+retires substantially, but the remaining GUI allocation is still a separate
+optimization target. A 90-second diagnostic cannot establish long-run stability.
+
+A `vmmap` snapshot at approximately 67 seconds reports 100.7 MiB physical
+footprint, with these major, disjoint VM categories:
+
+| VM category | Dirty plus swapped memory | Interpretation |
+| --- | ---: | --- |
+| `VM_ALLOCATE` | About 35.8 MiB | Includes the OCaml heap and other VM allocations; not all managed live payload |
+| Malloc zones | About 31.5 MiB | 19.6 MiB allocated payload and 11.9 MiB fragmentation/unused capacity |
+| `IOSurface` | 19.8 MiB | Consistent with one full-resolution BGRA frame |
+| Other graphics categories | About 3.8 MiB | `IOAccelerator (graphics)` and `owned unmapped (graphics)` |
+| Remaining private categories | About 9.8 MiB | Framework data, metadata, stacks, page tables, and other private regions |
+
+The VM figures use binary units; application counters use decimal bytes. Do not
+add the managed GC heap to this VM breakdown: managed large objects may reside
+in malloc pages, so those measurements overlap. Near 53 seconds the runtime
+reports 32,626,016 heap-capacity bytes and 22,596,864 last-GC live bytes. Heap
+capacity is not the same as currently live payload.
+
+The matching `heap` snapshot reports 20,585,776 allocated bytes, of which
+15,097,604 bytes in 23,001 allocations are classified as non-object. Resolving
+those allocation stacks, including OCaml runtime tables and large objects, is
+more useful than treating all GUI footprint as an unavoidable Metal baseline.
+The malloc-zone fragmentation is also a measured follow-up target, not proof
+that all those pages can be reclaimed without changing allocation behavior.
+The worker's approximately 27 MB remains acceptable for this investigation.
+
+A second, explicitly profiled run enables `MallocStackLogging` only for the GUI
+and captures live allocations after the same input workload. All 50 actions
+persist and both processes exit normally. The live malloc snapshot resolves
+these previously untyped allocations:
+
+| Allocation owner | Live allocated bytes in the profiled snapshot |
+| --- | ---: |
+| OCaml managed large objects, `caml_shared_try_alloc` | 5,585,920 |
+| Runtime frame descriptors, `add_frame_descriptors` | 2,113,536 |
+| GC custom, ephemeron, and reference tables, `realloc_generic_table` | 1,884,160 |
+| Input/output channel buffers | 409,600 |
+| GC marking stack | 278,528 |
+
+The managed large-object row overlaps the GC heap and is not extra native
+payload. Runtime tables and frame descriptors are outside managed live-object
+counts. These stacks establish allocation owners, not a fix or an avoidable
+retention size. The profiled snapshot also has 16.2 MiB of performance-tool data
+and two full-frame-equivalent IOSurfaces rather than one; its footprint cannot
+be substituted for the unprofiled baseline or corrected by subtracting a single
+constant. Raw snapshots and parsed stack groups are retained under ignored
+`tmp/native-app/science-metal-poststartup-malloc-90/`.
+
+Apple documents that drawables are expensive resources, with a default pool
+limit of three and a supported limit of two. A 2880 by 1800 BGRA8 frame requires
+20,736,000 bytes before alignment. Multiple buffers can therefore account for
+tens of megabytes during active rendering, but the documentation does not
+establish a universal 100–200 MB minimum for a Metal GUI. Apple also distinguishes
+logical buffer length from allocated size and recommends inspecting live
+resources in the Metal memory viewer.
+
+Sources:
+
+- [Synchronizing CPU and GPU work](https://developer.apple.com/documentation/metal/synchronizing-cpu-and-gpu-work)
+- [Analyzing memory usage](https://developer.apple.com/documentation/xcode/analyzing-memory-usage)
+
+The recording and snapshots are retained under ignored
+`tmp/native-app/science-metal-poststartup-90/`; the guard override and source
+hashes are recorded in `science-metal-poststartup-90-provenance.json`. This
+result corrects startup-only attribution and does not certify the memory,
+interaction-latency, or FPS goals.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
