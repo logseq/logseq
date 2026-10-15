@@ -113,11 +113,14 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
    data_sig splice path so a delta republishes only the touched rows
    instead of remounting the whole list — mirrors the native twin's
    keyed rows_sig. *)
-let rows_sig ~key ~cmp:_ ~mount ?(on_end = fun () -> ())
+let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     ?(initial_rows = -1) ?overscan ~estimate_size
     (source : 'a list Signal.signal) : t =
  fun ctx parent ->
   ignore initial_rows;
+  if Ui_services.env_rtc_test_mode () && not (Logseq_virt.force_virtualized ()) then
+    keyed ~source ~key ~cmp ~mount ctx parent
+  else
   let sched = ctx.Lui_ui.ui_scheduler in
   let arr_sig = Logseq_el.own ctx (Signal.map Array.of_list source) in
   list ~key_of:key ~estimate_size ~on_end ?overscan

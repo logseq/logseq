@@ -467,6 +467,19 @@ A separate build of the unmodified `27019f4dff` UI produces exactly the same
 local changes; it does not establish a passing Web suite. The screen remains
 locked, so active native UI, memory, and presentation acceptance remain open.
 
+The Journals failures are subsequently traced to `Virt_list.rows_sig` ignoring
+the existing `rtc-test=true` eager-rendering contract. The recording host has
+no queryable DOM, so its virtualizer cannot attach and the day list remains
+empty. The signal-row entry now uses keyed mounting in that mode, preserving
+item identity through insertion, removal, and reordering. Ordinary rendering
+and the explicit `virtualized=true` override retain virtualization.
+
+Ten mode and row-lifecycle checks are added before the fix: the suite reports
+2080 checks and 24 failures, including the original 18 Journals failures.
+After the entry-point fix it reports 2080 checks and zero failures. Existing
+Journals assertions and patch-operation budgets are unchanged. Release native
+and Melange compilation and all UI test aliases also pass.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

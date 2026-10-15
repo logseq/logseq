@@ -1053,6 +1053,54 @@ let journal_day ?(uuid = "jd1") blocks : Model.page =
   ; page_journal_day = Some 20261004
   ; page_title = "Oct 4th, 2026" }
 
+let test_signal_rows_modes () =
+  let location = Stub_dom.get_field Stub_dom.global "location" in
+  let previous_search = Stub_dom.get_field location "search" in
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field location "search" previous_search) (fun () ->
+    let mount query initial =
+      Stub_dom.set_field location "search" (Stub_dom.json_of query);
+      let registry = Views_drive.registry () in
+      S.mount ~registry ~profile:Logseq_el.web_profile ~initial
+        ~reducer:(fun _ next -> next)
+        ~view:(fun _ source _ -> Lui_elements.column
+          [ Virt_list.rows_sig ~key:Fun.id ~cmp:String.compare
+              ~estimate_size:(fun _ -> 32.)
+              ~mount:(fun item -> Lui_elements.text ~value_signal:item []) source ]) ()
+    in
+    let nodes session = M.all_nodes session.S.tree in
+    let windowed session = List.exists (fun n ->
+      n.M.kind = "extension:logseq-virt") (nodes session) in
+    List.iter (fun query ->
+      let session = mount query ["windowed"] in
+      check ("Signal rows keep virtualization enabled for " ^ query) (windowed session);
+      ignore (Lui_app.dispose session.S.app)) [""; "?rtc-test=true&virtualized=true"];
+    let session = mount "?rtc-test=true" ["first"; "second"] in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let row value = List.find_opt (fun n ->
+        n.M.kind = "text" && M.string_prop n "text" = Some value) (nodes session) in
+      let id value = Option.map (fun n -> n.M.id) (row value) in
+      let publish items = ignore (Lui_app.send session.S.app items); S.flush session in
+      check "RTC signal rows mount without a DOM virtualizer" (not (windowed session));
+      check "RTC signal rows display already-loaded items"
+        (row "first" <> None && row "second" <> None);
+      let first = id "first" and second = id "second" in
+      publish ["third"; "second"; "first"];
+      check "RTC signal rows mount inserted items" (row "third" <> None);
+      check "RTC signal row reordering preserves mounted identities"
+        (first <> None && second <> None && first = id "first" && second = id "second");
+      let order = match row "first" with
+        | Some {M.parent=Some parent; _} ->
+            List.filter_map (fun n -> M.string_prop n "text") (M.children session.S.tree parent)
+        | _ -> [] in
+      check "RTC signal row order follows the source" (order = ["third"; "second"; "first"]);
+      publish ["first"];
+      check "RTC signal rows remove deleted items" (row "second" = None && row "third" = None);
+      publish [];
+      check "RTC signal rows clear an empty source" (row "first" = None);
+      publish ["reopened"];
+      check "RTC signal rows resume after an empty source" (row "reopened" <> None)))
+
 (* Leaving journals and coming back must still show the loaded day.
    Navigate_to keeps model.journals; the region remounts on the route
    change and has to paint the same day title and blocks. *)
@@ -1919,6 +1967,7 @@ let run ~finish =
   test_views_table ();
   test_render_libs_dom ();
   test_embed_parity ();
+  test_signal_rows_modes ();
   test_journal_roundtrip ();
   test_journal_splice_row_level ();
   test_page_splice_row_level ();
