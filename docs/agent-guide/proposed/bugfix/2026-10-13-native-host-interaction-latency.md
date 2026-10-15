@@ -434,6 +434,111 @@ profiler and termination markers exclude it from normal runtime acceptance.
 The complete default-Metal memory budget and visible presentation acceptance
 remain open.
 
+## Incremental accessibility follow-up
+
+The allocation trace identified accessibility synchronization as a measurable
+Enter cost. A first candidate deduplicated overlapping dirty subtrees. Although
+its synthetic allocation regression improved, three complete application pairs
+showed no material physical-memory or accessibility-latency improvement. That
+candidate was withdrawn before testing the next hypothesis.
+
+A diagnostic census of the actual 50-Enter patch stream recorded 1,647 node
+creations and 1,790 child insertions. Adding a child dirties its parent; the
+accessibility updater then expanded both old and current subtrees of that
+parent, recomputing every unchanged sibling. The public updater contract takes
+the store's drained dirty set, which already includes directly changed, moved,
+and removed nodes.
+
+The replacement expands descendants only when inherited visibility changes.
+Directly dirty nodes and both ancestor chains still reconcile child order,
+accessible names, and removals. A separate child-ID traversal removes an
+intermediate node list without retaining another cache or changing order.
+
+The 6,000-sibling insertion regression failed at 7,067,168 allocated bytes and
+passes at 434,440 bytes against the unchanged 524,288-byte budget. Reading
+10,000 child IDs fell from approximately 720,000 to 480,000 bytes. Visibility,
+hidden ancestry, reparenting, removal, duplicate dirty IDs, and root replacement
+tests compare incremental records with a fresh tree.
+
+Three alternating before/after pairs used release OCaml 5.5.1, the same graph,
+worker, full viewport, four requested raster workers, Cocoa diagnostic backend,
+and 50 Enter events at 10 Hz. All six runs handled and persisted all 50 actions.
+The table reports medians across the three runs of each variant. Physical
+process values are taken at each run's combined physical peak.
+
+| Diagnostic measurement | Before | Candidate |
+| --- | ---: | ---: |
+| Host allocation over the input recording window | 929.11 MB | 877.97 MB |
+| Accessibility synchronization p95 | 9.27 ms | 0.60 ms |
+| Active-frame p95 | 21.65 ms | 18.33 ms |
+| GUI physical memory at combined peak | 93.62 MB | 94.60 MB |
+| Worker physical memory at combined peak | 28.69 MB | 29.05 MB |
+| Combined peak physical memory | 122.18 MB | 123.65 MB |
+
+This is a CPU and allocation improvement, not a demonstrated retained-memory
+saving. Frame time still exceeds the 16.67 ms editing budget. The diagnostic
+RSS override, unverified UI settlement, and incomplete visible presentation
+evidence prevent these runs from certifying interaction or FPS acceptance.
+The default renderer is unchanged and its memory budget remains open.
+
+A separate temporary oracle rebuilt the complete accessibility tree after
+every application repaint. All 126 comparisons matched the incremental tree;
+the app exited normally with all 50 Enter actions persisted. This extra work
+is excluded from performance comparisons. The complete LUI test suite and
+native host tests pass against the staged candidate. The temporary census and
+parity hooks were removed from application sources.
+The fix is published as LUI `943e9acd` on `feat/ml-backend`. A standalone
+formatter check remains nonzero for both modified implementation files and
+their unchanged baseline; this change does not reformat the surrounding code.
+This decision document passes validation. Repository-wide document validation
+still reports the same 13 unrelated pre-existing failures.
+
+The source patch, frozen executable identities, per-run provenance, full
+reports, withdrawn candidate, and parity diagnostic remain ignored under
+`tmp/native-app/science-a11y-*` and `science-enter-patch-census/`.
+
+### Long allocation capture
+
+A subsequent Memtrace recording retained the same full viewport for 650
+seconds, including more than 600 seconds after the final input. All 50 Enter
+actions were handled and persisted, and both processes exited normally. A
+600-second trace window beginning 30 seconds after replay startup estimates
+112.08 MB allocated, or 186.8 KB/s. The corresponding runtime counter window
+spans 599.01 seconds and records 114.05 MB, or 190.4 KB/s, 48 minor collections,
+four major collections, and no additional layouts. There are 44 additional
+SDL events, so this is a quiet application diagnostic rather than a zero-event
+idle acceptance run.
+
+| Inclusive allocation stack in the trace window | Estimated bytes |
+| --- | ---: |
+| Ctypes foreign-call invocation | 54,160,000 |
+| SDL event waiting | 32,400,000 |
+| Event draining | 14,400,000 |
+| Metrics JSON snapshot | 10,560,000 |
+| Native performance-clock reads | 7,760,000 |
+
+These inclusive stacks overlap. SDL waiting belongs to the Ctypes total;
+adding the rows would double-count allocations. The largest confirmed
+background sources include polling and FFI wrappers, not repeated layout.
+Changing the idle timeout alone would delay worker responses: the current
+worker wakeup sets a flag without waking SDL. Any event-loop change must cover
+that boundary and preserve asynchronous UI updates.
+
+Before disposing the still-mounted app, two diagnostic major collections leave
+22,166,544 live managed bytes in 42,373,856 bytes of heap capacity. Use this
+explicit GC checkpoint for live managed payload; sampled lifetime estimates
+and callbacks around the final checkpoint are not an exact substitute. During
+the runtime counter window, heap capacity increases about 3.18 MB while the
+last-GC live observation decreases about 1.81 MB. This does not establish an
+unbounded retained-object leak.
+
+The profiled run peaks at 104,039,432 physical GUI bytes plus 25,854,456 worker
+bytes. Profiling and metrics exports remain enabled, so these values do not
+replace uninstrumented memory or FPS acceptance. Raw trace, decoded events,
+runtime counts, and attribution remain under ignored
+`tmp/native-app/science-enter-50-a11y-idle-650*`. The temporary producer and
+Memtrace link dependency were restored after freezing the diagnostic binary.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
