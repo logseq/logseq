@@ -1,0 +1,48 @@
+shared-boundaries: OK
+native window damage: OK
+native split gestures: OK
+native scroll geometry: OK
+native host platform: OK
+native app theme rendering: OK
+PASS deferred completion and observer order
+PASS cross-thread completion and owner validation
+PASS rejection propagation and thrown continuations
+PASS first completion wins
+PASS ordered all and empty all
+PASS all rejects on the first failure
+PASS cancellation cleanup and late completion
+PASS cancelled dependent callbacks never run
+PASS queued completions run in submission order
+PASS rejected arm still releases its queued successor
+PASS graph-switch retires stale completions
+PASS creation exceptions reject asynchronously
+PASS real native I/O completion enters the application thread
+PASS services: installation, storage, theme, navigation, document, ops
+PASS ui_effect: scoped tasks, timers, load, request
+native settings layout: OK
+native text rendering: OK
+native sidebar card layout: OK
+native caret at scale 1: 20,0 height 24
+native caret at scale 2: 20,0 height 24
+native editor coordinate contract: OK
+sidebar width ownership: OK
+PASS deferred completion and observer order
+PASS cross-thread completion and owner validation
+PASS rejection propagation and thrown continuations
+PASS first completion wins
+PASS ordered all and empty all
+PASS all rejects on the first failure
+PASS cancellation cleanup and late completion
+PASS cancelled dependent callbacks never run
+PASS queued completions run in submission order
+PASS rejected arm still releases its queued successor
+PASS graph-switch retires stale completions
+PASS creation exceptions reject asynchronously
+PASS services: installation, storage, theme, navigation, document, ops
+PASS ui_effect: scoped tasks, timers, load, request
+native page geometry: title 178,82 body 198,188
+long native page range 702
+native header layout: OK
+window close cancelled: Failure("expected latest title save rejection")
+window close cancelled: Failure("expected title save rejection")
+window close cancelled: Failure("expected body save rejection")

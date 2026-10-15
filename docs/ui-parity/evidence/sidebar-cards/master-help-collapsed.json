@@ -1,0 +1,28 @@
+[
+  {
+    "cls": "item-type-help collapsed flex sidebar-item content color-level rounded-md shadow-lg",
+    "rect": {
+      "x": 732,
+      "y": 48,
+      "width": 540,
+      "height": 32,
+      "top": 48,
+      "right": 1272,
+      "bottom": 80,
+      "left": 732
+    }
+  },
+  {
+    "cls": "item-type-contents  flex sidebar-item content color-level rounded-md shadow-lg",
+    "rect": {
+      "x": 732,
+      "y": 88,
+      "width": 540,
+      "height": 220,
+      "top": 88,
+      "right": 1272,
+      "bottom": 308,
+      "left": 732
+    }
+  }
+]

@@ -341,3 +341,20 @@ continuing a second write format. Seed actual viewport dimensions before app
 initialization. Test clamping, open/close, viewport changes, persisted restore
 and pointer capture; keep keyboard/accessibility, hover transitions and narrow
 layout cases explicitly incomplete until their actual paths are verified.
+
+### Right-sidebar card folding and layout
+
+Actual master Contents cards collapse from 220px to their 32px header and hide
+body input; native changes only CSS classes, leaving the body visible and
+interactive. Encode hidden-body display, collapsed minimum height and disclosure
+orientation with existing typed properties/icons. Preserve mounted body state
+rather than rebuilding an editor solely to hide it.
+
+The same actual comparison shows missing typed body padding/margins, a stretched
+properties button, a phantom empty-tab gap, and omitted card radius/shadow.
+Translate authoritative layout ownership into typed props: body 8px top padding,
+page 12px side/20px bottom margins, page-inner 32px gaps/64px bottom margin, and the
+properties row's 8px top/-32px bottom compensation. Omit absent tab/props slots
+rather than retaining spacer gaps. Reuse existing shadow and down-caret recipes.
+Test production layout expanded/collapsed/reopened and real native item actions;
+keep unverified drag, keyboard/ARIA and platform-specific rendering explicit.

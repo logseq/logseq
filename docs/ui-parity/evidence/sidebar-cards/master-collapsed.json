@@ -1,0 +1,219 @@
+[
+  {
+    "tag": "DIV",
+    "id": "",
+    "cls": "item-type-contents collapsed flex sidebar-item content color-level rounded-md shadow-lg",
+    "text": null,
+    "rect": {
+      "x": 732,
+      "y": 48,
+      "width": 540,
+      "height": 32,
+      "top": 48,
+      "right": 1272,
+      "bottom": 80,
+      "left": 732
+    },
+    "css": {
+      "display": "flex",
+      "flexGrow": "0",
+      "minHeight": "0px",
+      "padding": "0px",
+      "margin": "0px",
+      "gap": "normal",
+      "borderRadius": "6px",
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.1) 0px 10px 15px -3px, rgba(0, 0, 0, 0.1) 0px 4px 6px -4px",
+      "backgroundColor": "rgb(248, 248, 248)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "normal",
+      "alignItems": "normal"
+    }
+  },
+  {
+    "tag": "DIV",
+    "id": "",
+    "cls": "rounded-b-md flex flex-row justify-between sidebar-item-header color-level rounded-t-md",
+    "text": null,
+    "rect": {
+      "x": 732,
+      "y": 48,
+      "width": 540,
+      "height": 32,
+      "top": 48,
+      "right": 1272,
+      "bottom": 80,
+      "left": 732
+    },
+    "css": {
+      "display": "flex",
+      "flexGrow": "0",
+      "minHeight": "auto",
+      "padding": "0px",
+      "margin": "0px",
+      "gap": "normal",
+      "borderRadius": "6px",
+      "boxShadow": "none",
+      "backgroundColor": "rgb(243, 243, 243)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "space-between",
+      "alignItems": "normal"
+    }
+  },
+  {
+    "tag": "DIV",
+    "id": "sidebar-panel-content-0",
+    "cls": "hidden  sidebar-panel-content px-2",
+    "text": null,
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "css": {
+      "display": "none",
+      "flexGrow": "0",
+      "minHeight": "0px",
+      "padding": "8px 8px 0px",
+      "margin": "0px",
+      "gap": "normal",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "normal",
+      "alignItems": "normal"
+    }
+  },
+  {
+    "tag": "DIV",
+    "id": "",
+    "cls": " flex-1 page relative cp__page-inner-wrap",
+    "text": null,
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "css": {
+      "display": "block",
+      "flexGrow": "1",
+      "minHeight": "0px",
+      "padding": "0px",
+      "margin": "0px 12px 20px",
+      "gap": "normal",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "normal",
+      "alignItems": "normal"
+    }
+  },
+  {
+    "tag": "DIV",
+    "id": "",
+    "cls": " relative grid gap-4 sm:gap-8 page-inner mb-16",
+    "text": null,
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "css": {
+      "display": "grid",
+      "flexGrow": "0",
+      "minHeight": "0px",
+      "padding": "0px",
+      "margin": "0px 0px 64px",
+      "gap": "32px",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "normal",
+      "alignItems": "normal"
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "id": "",
+    "cls": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost h-7 rounded py-1 px-1 text-muted-foreground",
+    "text": "Open properties",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "css": {
+      "display": "inline-flex",
+      "flexGrow": "0",
+      "minHeight": "0px",
+      "padding": "4px",
+      "margin": "0px",
+      "gap": "4px",
+      "borderRadius": "6px",
+      "boxShadow": "none",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "fontSize": "14px",
+      "fontWeight": "500",
+      "justifyContent": "center",
+      "alignItems": "center"
+    }
+  },
+  {
+    "tag": "DIV",
+    "id": "",
+    "cls": " ls-page-blocks",
+    "text": null,
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "css": {
+      "display": "block",
+      "flexGrow": "0",
+      "minHeight": "60px",
+      "padding": "0px",
+      "margin": "0px 0px 0px -20px",
+      "gap": "normal",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "justifyContent": "normal",
+      "alignItems": "normal"
+    }
+  }
+]

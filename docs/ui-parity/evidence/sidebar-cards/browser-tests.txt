@@ -1,0 +1,14 @@
+✔ journal rows preserve reference minimums and separators in desktop mode (2203.617161ms)
+✔ journal rows preserve reference minimums and separators in nonvirtual-test mode (2019.712634ms)
+✔ journal rows preserve reference minimums and separators in forced-virtual-test mode (1973.564365ms)
+✔ page spacing has one typed margin owner, without legacy web padding (1556.525977ms)
+✔ hidden-only page properties stay collapsed until explicitly shown (1768.446972ms)
+✔ sidebar cards fold without losing their mounted body or reference spacing (1427.578654ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11742.245216

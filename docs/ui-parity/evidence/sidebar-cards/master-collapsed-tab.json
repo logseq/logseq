@@ -1,0 +1,30 @@
+[
+  {
+    "tag": "BUTTON",
+    "id": "base-ui-_r_gg_",
+    "cls": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost px-2 py-2 h-8 w-8 text-muted-foreground",
+    "text": "",
+    "insideCollapsedBody": false
+  },
+  {
+    "tag": "BUTTON",
+    "id": "base-ui-_r_gi_",
+    "cls": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost px-2 py-2 h-8 w-8 text-muted-foreground",
+    "text": "",
+    "insideCollapsedBody": false
+  },
+  {
+    "tag": "BUTTON",
+    "id": "skip-to-main",
+    "cls": "",
+    "text": "Skip to main content",
+    "insideCollapsedBody": false
+  },
+  {
+    "tag": "BUTTON",
+    "id": "left-menu",
+    "cls": "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost box-content h-6 w-6 p-1 overflow-hidden cp__header-left-menu",
+    "text": "",
+    "insideCollapsedBody": false
+  }
+]

@@ -289,9 +289,15 @@ let item_header st idx (it : Sidebar_state.item) =
             ~style_class:
               (if collapsed then "rotating-arrow collapsed"
                else "rotating-arrow not-collapsed")
-            [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ]
-        ; box ~key:("ht-" ^ it.key) ~grow:1.
-            [ item_title it ] ]
+            [ if collapsed || not (Ui_services.env_native_block_controls ()) then
+                Ui_parts.rotating_arrow ("arw-" ^ it.key)
+              else
+                icon ~key:("arw-" ^ it.key)
+                  ~name:(`app "rotating-arrow-down") ~point_size:13 [] ]
+        ; Ui_components.with_props
+            [ Ui_components.Prop.font_size "14px"
+            ; Ui_components.Prop.font_weight 500 ]
+            (box ~key:("ht-" ^ it.key) ~grow:1. [ item_title it ]) ]
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
@@ -405,11 +411,10 @@ let help_pane st =
    hr.my-4. collapsed? = (not class?) — class pages start expanded.
    The area mounts declaratively inside the host div. *)
 let sidebar_props_row st (it : Sidebar_state.item) =
-  let empty = spacer ~key:("props-none-" ^ it.key) [] in
   match it.Sidebar_state.kind with
   | "contents" | "page" -> (
       match it.Sidebar_state.page with
-      | None -> empty
+      | None -> []
       | Some p ->
           let collapsed = it.Sidebar_state.props_collapsed in
           let uuid = Option.value p.Model.page_uuid ~default:"" in
@@ -428,23 +433,25 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                       ~is_tag:p.Model.page_is_tag ]
               ; divider ~key:("phr-" ^ it.key) ~padding_vertical:16 [] ]
           in
-          box ~key:("props-" ^ it.key)
-            [ column ~gap:8
-                (button ~variant:`ghost ~size:`sm
-                   ~style_class:"ui__button"
-                   ~foreground:
-                     "var(--ls-secondary-text-color, \
-                      hsl(var(--muted-foreground)))"
-                   ~text:
-                     (t
-                        (if collapsed then "page/open-properties"
-                         else "page/hide-properties"))
-                   ~on_press:(fun _ ->
-                     Sidebar_state.toggle_props st it.key)
-                   []
-                 :: body)
-            ])
-  | _ -> empty
+          [ column ~key:("props-" ^ it.key) ~gap:8
+              ~margin_top:8 ~margin_bottom:(-32)
+              (row ~cross:`center
+                 [ Ui_components.with_props
+                     [ Ui_components.Prop.font_size "12px"
+                     ; Ui_components.Prop.font_weight 500 ]
+                     (button ~variant:`ghost ~size:`sm
+                        ~height:28 ~padding_horizontal:4 ~padding_vertical:4
+                        ~style_class:"ui__button"
+                        ~foreground:
+                          "var(--ls-secondary-text-color, \
+                           hsl(var(--muted-foreground)))"
+                        ~text:
+                          (t (if collapsed then "page/open-properties"
+                              else "page/hide-properties"))
+                        ~on_press:(fun _ -> Sidebar_state.toggle_props st it.key)
+                        []) ]
+               :: body) ])
+  | _ -> []
 
 (* cljs page-inner (show-tabs?): class/property pages render
    .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view —
@@ -455,21 +462,21 @@ let object_tabs_host (it : Sidebar_state.item) =
   | Some p
     when p.Model.page_is_tag || p.Model.page_is_property -> (
       match p.Model.page_uuid with
-      | None -> spacer ~key:("tabs-none-" ^ it.key) []
+      | None -> []
       | Some uuid ->
           let kind =
             if p.Model.page_is_tag then Views_state.KTagPage uuid
             else Views_state.KPropertyPage uuid
           in
-          box ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
+          [ box ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
             [ box ~grow:1.
                 [ box
                     ~style_class:"ui__tabs-content"
                     [ box ~key:("tabs-c-" ^ it.key)
                         [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
                 ]
-            ])
-  | _ -> spacer ~key:("tabs-none-" ^ it.key) []
+            ] ])
+  | _ -> []
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
@@ -492,20 +499,19 @@ let item_body st idx (it : Sidebar_state.item) =
   in
   (* cljs right_sidebar page items render the full page-inner body:
      .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs).
-     The cljs data-page-tags / data-sb-inner marker attrs have no readers
-     and are dropped; the -20px page margin-left was a DOM-only inline
-     style with no typed prop — dropped *)
+     The page's margins and grid spacing are typed so native and web
+     share the same geometry; absent slots must not consume a gap. *)
   match it.Sidebar_state.kind with
   | "search" ->
       (* cljs build-sidebar-item :search mounts a cmdk-block, not the
          page-inner block tree *)
       box ~key:("body-" ^ it.key)
         ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~display:(if it.Sidebar_state.collapsed then `none else `block)
         ~style_class:
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
-        ~data_attrs:[ ("style", "padding-top:8px") ]
-        [ box ~key:("cmdkb-" ^ it.key)
+        [ box ~key:("cmdkb-" ^ it.key) ~margin_top:8
             ~style_class:"cp__cmdk__block rounded-md"
             [ Cmdk_view.sidebar
                 ~services:(Cmdk_host.services
@@ -517,35 +523,39 @@ let item_body st idx (it : Sidebar_state.item) =
          .sidebar-panel-content — no page-inner/blocks wrap *)
       box ~key:("body-" ^ it.key)
         ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~display:(if it.Sidebar_state.collapsed then `none else `block)
         ~style_class:
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
         ~padding_horizontal:8
-        ~data_attrs:[ ("style", "padding-top:8px") ]
-        [ help_pane st ]
+        [ box ~margin_top:8 [ help_pane st ] ]
   | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+    ~display:(if it.Sidebar_state.collapsed then `none else `block)
     ~style_class:
       ("sidebar-panel-content"
        ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
-    ~data_attrs:[ ("style", "padding-top:8px") ]
     ?padding_horizontal:
       (match it.Sidebar_state.kind with
        | "search" | "shortcut-settings" -> None
        | _ -> Some 8)
-    [ column ~key:("wrap-" ^ it.key) ~grow:1.
+    [ column ~key:("wrap-" ^ it.key)
+        ~margin_top:8 ~margin_horizontal:12 ~margin_bottom:20
         ~style_class:"page cp__page-inner-wrap"
-        ~data_attrs:
-          [ ("style", "position:relative;margin:0 12px 20px") ]
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative ]
-            (column ~key:("inner-" ^ it.key) ~gap:16
+            (fun ctx parent ->
+               (* Gap has no reactive constructor label; own the adapter's
+                  viewport derivation with this mounted card. *)
+               let gap = D.own ctx
+                   (Signal.map (fun vw -> if vw < 640. then 16 else 32)
+                      (Signal.value st.Sidebar_state.viewport_w)) in
+               Ui_parts.int_prop_signal P.Gap gap Fun.id
+               (column ~key:("inner-" ^ it.key) ~margin_bottom:64
                ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
-            ([ sidebar_props_row st it
-              ; object_tabs_host it
-             ; box ~key:("pbi-" ^ it.key)
+            (sidebar_props_row st it @ object_tabs_host it
+             @ [ box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  ~margin_left:(-20) ~min_height:60
                  ~data_attrs:[ ("style", "overflow:hidden") ]
@@ -571,14 +581,16 @@ let item_body st idx (it : Sidebar_state.item) =
                | "page", Some uuid ->
                    [ Page.references_view ~page_uuid:uuid
                        ~has_refs:(it.linked_refs <> []) () ]
-               | _ -> [])))
+               | _ -> []))) ctx parent)
         ]
     ]
 
 
 let sidebar_item st idx (it : Sidebar_state.item) =
-  column ~key:("item-" ^ it.key)
-    ~min_height:100
+  Ui_components.with_props [ Ui_components.sub_card_shadow ]
+  (column ~key:("item-" ^ it.key)
+    ~min_height:(if it.Sidebar_state.collapsed then 32 else 100)
+    ~margin_bottom:8 ~corner_radius:6
     ~background:"var(--lx-gray-02, var(--color-level-1))"
     ~style_class:
       ("sidebar-item content color-level item-type-"
@@ -592,7 +604,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
         [ item_header st idx it
         ; item_body st idx it
         ; item_menu_host st it ])
-    ]
+    ])
 
 (* ---------- inner ---------- *)
 
