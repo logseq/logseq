@@ -102,6 +102,84 @@ ignored `tmp/native-app/science-scene-sequence-frames/`,
 `science-sequence-ab-results.json`. This experiment changed no production code
 or renderer defaults and does not satisfy native interaction acceptance.
 
+## Attribution follow-up and rejected query candidate
+
+Further protected diagnostics narrowed the startup graphics investigation:
+
+- Packaging the same signed scene-replay executable initially changed two
+  drawable textures and approximately 149 MB peak physical footprint into
+  three textures and approximately 169 MB. Repetition reversed the result:
+  an independent bundle identifier also produced three textures, while the
+  original identifier subsequently produced two. Both used backing scale 2.
+  Bundle identity is not a demonstrated cause. A full-application independent
+  identifier control still acquired three textures and crossed the combined
+  guard at 207,816,168 physical bytes.
+- Passive tracing of drawable dimensions, layer bounds/frame, color space,
+  drawable capacity, display synchronization, transaction presentation, and
+  extended-range setters found no such mutation after the first acquisition
+  in a full-app run that acquired three textures. The configured capacity
+  stayed two. Do not infer a property-driven pool rebuild from texture count.
+- Omitting presented-handler registration in the packaged replay still
+  produced three textures: physical peaks were 169,198,504 control bytes and
+  169,542,592 counterfactual bytes. Native context deallocation occurred in
+  both runs. These observations do not support removing presentation metrics
+  or claiming a context retain cycle.
+
+A separate Cocoa startup diagnostic completed with four requested raster
+workers and the normal viewport. After the diagnostic's explicit collections,
+GC reported 25,645,744 live managed bytes. This is not the default-Metal startup
+snapshot and cannot be substituted for its working-memory measurements.
+
+A first-match query candidate avoided eagerly constructing unrelated tree
+snapshots. Before/after regression measurements on a 6,000-node native tree
+were 7,973,368/3,544 allocated bytes for a document query,
+1,442,368/2,296 for ID lookup, and 1,155,112/3,136 for a scoped query.
+The tests failed for allocation before the candidate and passed afterward;
+selector order, scope roots, ancestors, updates, complete traversal,
+unsuccessful-search caching, and disposal were covered. The native host suite
+and release build also passed. That result did not establish application gain.
+
+Three unprofiled release Cocoa runs per variant used the same graph, viewport,
+four requested raster workers, worker executable, and one-Enter replay. Every
+run handled and persisted one additional block, but none had visible-window or
+UI-settlement evidence. Their measurement-window medians were:
+
+| Measurement | Original | Query candidate |
+| --- | ---: | ---: |
+| Host allocated bytes | 24,012,600 | 24,012,768 |
+| Combined GUI/worker peak physical bytes | 97,420,728 | 96,568,808 |
+| Combined GUI/worker peak RSS bytes | 192,004,096 | 190,971,904 |
+
+Individual input-to-host-frame observations were 29.62, 43.12, and 39.68 ms
+before, versus 40.56, 31.53, and 44.14 ms after. No stable response-time
+improvement was demonstrated. The sub-1 MB physical difference does not close
+the default-renderer budget gap, while measured interaction allocation was
+unchanged. The candidate was therefore withdrawn. Production sources and the
+packaged profile executable were restored; the candidate patch, failing/passing
+logs, and exact run reports remain under ignored `tmp/native-app/science-query-*`
+and `science-early-query-candidate.patch`.
+
+A subsequent temporary query profiler on the original implementation attributed
+actual calls rather than selecting another synthetic first-match workload:
+
+| Caller and query | Allocated bytes | Instrumented wall time |
+| --- | ---: | ---: |
+| Journal fill, `main-content-container` lookup | 3,836,016 | 5.06 ms |
+| Editor overlay refresh, active editor ID lookup | 1,079,160 | 0.67 ms |
+| Reload deferral, overlay-presence selector | 2,030,784 | 16.16 ms |
+
+The overlay-presence query occurred approximately 0.9 seconds after Enter; it
+must not be described as the initial input-critical stall. These timings are
+profiled diagnostics. The remaining allocation belongs to other work and
+requires attribution; do not equate the query total with the complete
+24 MB interaction-window total. Temporary instrumentation was removed after
+recording. Raw caller stacks, a clock calibration, and producer patches remain
+in `science-query-attribution-run/`, `science-query-clock-calibration.json`,
+and `science-query-attribution-source.patch` under the same ignored directory.
+Default Metal memory, the complete 50-Enter workload, and visible presentation
+acceptance remain unproven. The native window observation still returned no
+capturable window; no unlock or visible-FPS success is claimed.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
