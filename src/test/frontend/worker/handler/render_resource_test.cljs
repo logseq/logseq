@@ -2532,6 +2532,33 @@
            (-> response ldb/write-transit-str ldb/read-transit-str))
         "Query error payloads must stay transit-encodable.")))
 
+(deftest render-snapshots-isolates-invalid-datalog-query-content-test
+  (let [{:keys [conn view-row]} (render-resource-fixture)
+        journals-key [:journals]]
+    (doseq [query [;; Legacy simple-query list under :query in an advanced query.
+                   '(task WAIT WAITING)
+                   "not datalog"
+                   []
+                   [:where '[?e :block/title]]]]
+      (let [failing-query [:query {:kind :datalog
+                                   :query query
+                                   :current-block-uuid view-row}]
+            response (render-engine/render-snapshots
+                      @conn
+                      {:blocks []
+                       :children []
+                       :resources [failing-query journals-key]}
+                      {})]
+        (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+            "Invalid user datalog content must not fail sibling resources.")
+        (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+        (is (re-find #"Invalid renderer query resource"
+                     (get-in response [:slots [:resource failing-query] :value :error :message])))
+        (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+        (is (true? (get-in response [:slots [:resource failing-query] :watch :all?])))
+        (is (= response
+               (-> response ldb/write-transit-str ldb/read-transit-str)))))))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}
@@ -2761,7 +2788,6 @@
                  [:query {:kind :datalog
                           :query '[:find ?e :where [?e :block/title]]
                           :inputs [row-entity]}]
-                 [:query {:kind :datalog :query "not datalog"}]
                  [:query {:kind :datalog
                           :query '[:find ?e :where [?e :block/title]]
                           :result-transform-edn '(fn [rows] rows)}]]]

@@ -74,7 +74,17 @@
   (and (integer? value)
        (<= 10000101 value 99991231)))
 
+(defn- valid-datalog-query-content?
+  "User-authored :query in an advanced query. A list such as
+  (task WAIT WAITING) is invalid datalog, not a malformed resource spec."
+  [query]
+  (and (vector? query)
+       (= :find (first query))))
+
 (defn- require-query-spec!
+  "Fail-fast for resource-spec contracts from code. Query *content* shape
+  (whether a datalog :query is a [:find ...] vector) is validated later so
+  a bad user query becomes a per-resource error instead of crashing the page."
   [query-spec]
   (let [kind (:kind query-spec)
         allowed-keys (case kind
@@ -83,6 +93,7 @@
                        nil)]
     (when-not (and (map? query-spec)
                    allowed-keys
+                   (contains? query-spec :query)
                    (every? allowed-keys (keys query-spec))
                    (or (not (contains? query-spec :current-page-title))
                        (and (string? (:current-page-title query-spec))
@@ -105,15 +116,20 @@
                               (boolean? (:cards? query-spec))))
 
                      :datalog
-                     (and (vector? (:query query-spec))
-                          (= :find (first (:query query-spec)))
-                          (or (not (contains? query-spec :inputs))
+                     (and (or (not (contains? query-spec :inputs))
                               (vector? (:inputs query-spec)))
                           (or (not (contains? query-spec :rules))
                               (vector? (:rules query-spec))))
 
                      false))
       (common/fail! "Invalid renderer query resource" {:query-spec query-spec})))
+  query-spec)
+
+(defn- require-datalog-query-content!
+  [query-spec]
+  (when (and (= :datalog (:kind query-spec))
+             (not (valid-datalog-query-content? (:query query-spec))))
+    (common/fail! "Invalid renderer query resource" {:query-spec query-spec}))
   query-spec)
 
 (defn- quoted-query-text
@@ -295,6 +311,7 @@
                (not (:repo runtime)))
       (common/fail! "Full-text query resource requires repository" {}))
     (try
+      (require-datalog-query-content! query-spec)
       [(query-watch-keys db query-spec)
        {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
                                  query-spec)}]
