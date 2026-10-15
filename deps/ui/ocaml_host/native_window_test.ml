@@ -13,6 +13,7 @@ external sidebar_vibrancy : float -> float -> float -> float -> bool -> unit = "
 external sidebar_hit : int -> bool = "logseq_native_sidebar_hit"
 external window_opaque : int -> bool = "logseq_native_window_opaque"
 external software_composite : int -> bytes = "logseq_native_software_composite"
+external software_image_ids : int -> int array = "logseq_native_software_image_ids"
 external has_sidebar_material : int -> bool = "logseq_native_has_sidebar_material"
 
 let software_memory_regression () =
@@ -118,6 +119,72 @@ let software_band_compression_regression id =
   Native_window.software_dispose id;
   List.iter prerr_endline (List.rev !budget_errors);
   check "Software band memory regression" (!budget_errors = [])
+
+let software_band_reuse_regression id =
+  let width=2048 and height=131 and rows=64 in
+  let errors=ref [] in
+  let verify message condition = if not condition then errors := message :: !errors in
+  Native_window.software_begin id (width,height,rows);
+  let upload bytes =
+    for index=0 to (height+rows-1)/rows-1 do
+      let y=index*rows and count=min rows (height-index*rows) in
+      Native_window.software_tile id (y,count,width*4,
+        Bytes.sub bytes (y*width*4) (count*width*4))
+    done in
+  List.iter (fun pattern ->
+    let expected=Bytes.init (width*height*4) (fun index ->
+      let channel=index mod 4 and x=(index/4) mod width and y=index/(width*4) in
+      let colored=pattern=2 || (pattern=1 && (x<20 || x>=width-20)) in
+      Char.chr (if channel=3 then 128 else if colored then (x+y+channel*17) mod 128 else 31)) in
+    upload expected;
+    let ids=software_image_ids id in
+    check "Software identity fixture did not allocate its snapshot" (Array.exists ((<>) 0) ids);
+    for _=1 to 4 do
+      upload expected;
+      verify "Identical band replaced an immutable presentation image"
+        (software_image_ids id=ids)
+    done;
+    Native_window.software_present id;
+    check "Repeated uploads before presentation changed displayed pixels"
+      (software_composite id=expected);
+    check "Repeated uploads changed retained pixels" (Native_window.software_read id=expected);
+    upload expected;
+    verify "Identical presented bands replaced their resources" (software_image_ids id=ids);
+    let before_update=software_image_ids id in
+    (* Change the last pixel in the short final band, then upload it twice
+       before presenting: an equal upload must preserve pending changes. *)
+    Bytes.set expected (Bytes.length expected-4) '\007';
+    let last_y=128 in
+    let last=Bytes.sub expected (last_y*width*4) ((height-last_y)*width*4) in
+    Native_window.software_tile id (last_y,height-last_y,width*4,last);
+    let changed=software_image_ids id in
+    check "Changed pixels retained every previous image identity" (changed<>before_update);
+    Native_window.software_tile id (last_y,height-last_y,width*4,last);
+    verify "A repeated pending update replaced its resources" (software_image_ids id=changed);
+    for i=0 to 5 do
+      verify "Updating the last band replaced an unrelated band" (changed.(i)=before_update.(i))
+    done;
+    Native_window.software_present id;
+    check "A repeated pending update lost the changed final pixel"
+      (software_composite id=expected && Native_window.software_read id=expected);
+    let before_background=software_image_ids id in
+    let at=(65*width+width/2)*4+1 in
+    Bytes.set expected at (Char.chr ((Char.code (Bytes.get expected at)+1) mod 128));
+    let middle=Bytes.sub expected (64*width*4) (64*width*4) in
+    Native_window.software_tile id (64,64,width*4,middle);
+    let changed_background=software_image_ids id in
+    check "Changed background pixels retained every previous identity"
+      (changed_background<>before_background);
+    Native_window.software_tile id (64,64,width*4,middle);
+    verify "A repeated background update replaced its resources"
+      (software_image_ids id=changed_background);
+    Native_window.software_present id;
+    check "A repeated background update lost its changed pixel"
+      (software_composite id=expected && Native_window.software_read id=expected)
+  ) [0;1;2];
+  List.iter prerr_endline (List.rev !errors);
+  check "Immutable software band reuse failed" (!errors=[]);
+  print_endline "native immutable software band reuse: OK"
 
 let software_scene_replay ~tiled path duration =
   let scene : Lui_scene.t = In_channel.with_open_bin path Marshal.from_channel in
@@ -259,6 +326,7 @@ let () =
     check "Reopening the sidebar did not restore transparent composition"
       (not (window_opaque window_id));
     software_band_compression_regression window_id;
+    software_band_reuse_regression window_id;
     Native_window.software_begin window_id (17,131,64);
     let band = Bytes.make (17 * 64 * 4) '\255' in
     List.iter (fun y ->

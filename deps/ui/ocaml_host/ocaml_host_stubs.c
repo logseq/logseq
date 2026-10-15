@@ -819,6 +819,37 @@ static uint32_t logseq_software_pixel(const unsigned char *source) {
   return pixel;
 }
 
+static bool logseq_software_matches(LogseqSoftwareBand *band,
+                                   const unsigned char *source, size_t stride, int h) {
+  if (!band->ready) return false;
+  /* Inspect images first: changed content usually rejects the band before
+     its larger uniform margins need comparison. Existing surfaces stay immutable. */
+  for (int part=0; part<2; part++) if (band->images[part]) {
+    IOSurfaceRef image = band->images[part];
+    if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
+      caml_failwith("Cannot compare software IOSurface band");
+    const unsigned char *pixels = IOSurfaceGetBaseAddress(image);
+    size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+    int left = band->edges[part*2+1], right = band->edges[part*2+2];
+    bool equal = true;
+    for (int y=0; y<h && equal; y++)
+      equal = memcmp(source + stride*y + (size_t)left*4,
+                     pixels + row_bytes*y, (size_t)(right-left)*4) == 0;
+    if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
+      caml_failwith("Cannot finish comparing software IOSurface band");
+    if (!equal) return false;
+  }
+  for (int part=0; part<5; part+=2) {
+    int left = band->edges[part], right = band->edges[part+1];
+    for (int x=left; x<right; x++)
+      if (logseq_software_pixel(source + (size_t)x*4) != band->pixel) return false;
+    for (int y=1; y<h; y++)
+      if (memcmp(source + stride*y + (size_t)left*4,
+                 source + (size_t)left*4, (size_t)(right-left)*4)) return false;
+  }
+  return true;
+}
+
 CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
   CAMLparam2(id_v, dimensions);
   SDL_Window *window = logseq_software_window(id_v);
@@ -878,6 +909,8 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
       stride != surface->w * 4 || caml_string_length(pixels) < (size_t)stride * h)
     caml_invalid_argument("Invalid software image band");
   const unsigned char *source = (const unsigned char *)Bytes_val(pixels);
+  LogseqSoftwareBand *band = &surface->bands[y0 / surface->rows];
+  if (logseq_software_matches(band, source, stride, h)) CAMLreturn(Val_unit);
   /* A row majority is a cheap background candidate. Any candidate is
      lossless: the retained middle contains every pixel that differs. */
   uint32_t pixel = 0;
@@ -914,7 +947,6 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   if (!left && right == surface->w) split_size += logseq_software_image_size(1, 1);
   if (gap_left == gap_right || split_size >= logseq_software_image_size(right-left, h))
     gap_left = gap_right = right;
-  LogseqSoftwareBand *band = &surface->bands[y0 / surface->rows];
   IOSurfaceRef images[2] = {NULL, NULL};
   if (gap_left > left)
     images[0] = logseq_software_image(gap_left-left, h, source + (size_t)left*4, stride);
@@ -980,6 +1012,21 @@ CAMLprim value logseq_native_software_present(value id_v) {
 CAMLprim value logseq_native_software_owned_bytes(value id_v) {
   LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
   return Val_long(surface ? surface->owned_bytes : 0);
+}
+
+/* Resource identities for presentation ownership regressions. */
+CAMLprim value logseq_native_software_image_ids(value id_v) {
+  CAMLparam1(id_v); CAMLlocal1(ids);
+  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  if (!surface) caml_invalid_argument("Software surface is not initialized");
+  ids = caml_alloc(surface->count * 3, 0);
+  for (int i=0; i<surface->count; i++) {
+    LogseqSoftwareBand *band = &surface->bands[i];
+    Store_field(ids, i*3, Val_long(band->background ? IOSurfaceGetID(band->background) : 0));
+    for (int part=0; part<2; part++)
+      Store_field(ids, i*3+part+1, Val_long(band->images[part] ? IOSurfaceGetID(band->images[part]) : 0));
+  }
+  CAMLreturn(ids);
 }
 
 CAMLprim value logseq_native_software_read(value id_v) {
@@ -2486,6 +2533,10 @@ CAMLprim value logseq_native_software_present(value id) {
 }
 CAMLprim value logseq_native_software_owned_bytes(value id) {
   (void)id; caml_failwith("CoreGraphics presentation requires macOS");
+}
+CAMLprim value logseq_native_software_image_ids(value id) {
+  (void)id;
+  caml_invalid_argument("Software presentation requires macOS");
 }
 CAMLprim value logseq_native_software_read(value id) {
   (void)id; caml_failwith("CoreGraphics presentation requires macOS");

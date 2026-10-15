@@ -801,6 +801,49 @@ image would avoid replacing compositor resources without overwriting pixels
 that the compositor may still read. This requires a failing resource-identity
 regression, exact pixel/readback checks, and another full-app measurement.
 
+## Immutable software band reuse
+
+The resource-identity regression confirms that repeated equal uploads replace
+immutable IOSurfaces. It fails for sparse and fully populated images and for
+duplicate uploads of a pending update. Uniform bands already reuse their
+background pixel, but introducing a single changed pixel creates an image
+which the next identical upload used to replace again.
+
+The presenter now compares the submitted bytes with the retained band before
+creating another snapshot. Image comparisons take read-only surface locks;
+uniform intervals validate their first row and compare subsequent rows without
+allocating a reconstructed image. A matching upload leaves both resource
+ownership and the pending-change flag untouched. Changed pixels still create
+new immutable surfaces, preserving compositor readers and caller buffer reuse.
+
+The same regression passes for uniform, separated-content, and fully populated
+bands with fractional alpha. It checks uploads before presentation, a changed
+last pixel in the short final band, a changed pixel in a background interval,
+duplicate pending updates, unrelated bands, retained readback, and actual Core
+Animation composition. The native host test alias, executable, and separate
+native library build pass; resize and disposal regressions remain green.
+
+The four-worker open-panel application cohort still exceeds the guard after
+3.30 seconds, at 107,906,512 combined physical bytes / 200,114,176 RSS bytes.
+Resource reuse is confirmed, but this does not resolve the multiworker startup
+peak. A longer single-worker open-panel cohort is measured separately.
+
+That cohort completes 610.25 seconds without forced collections or a protection
+kill. Its 603.06-second warm interval contains 72,485 fresh active-CPU samples,
+with zero lost samples, p95 5.42 ms and maximum 18.55 ms. GUI lifetime physical
+peak is 75,252,672 bytes; sampled GUI-plus-worker peaks are 96,994,696 physical
+bytes and 189,431,808 RSS bytes. Warm heap capacity ranges from 31,618,536 to
+34,656,872 bytes, starting at 33,428,800 and ending at 33,441,808 bytes.
+Host allocation remains 90.27 MB/s because this diagnostic forces full raster
+redraws at 120 Hz even when application state is unchanged; there are no
+post-warmup layout runs or input events. It is not an idle-allocation pass.
+
+This establishes a sustained full-size software-path memory and CPU result
+with one worker and the metrics panel open. It does not establish scrolling,
+editing, resize, multiworker startup, or visible presentation acceptance. The
+window remains invisible, and a read-only console-session check confirms the
+screen is locked. The default Metal path remains unchanged.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
