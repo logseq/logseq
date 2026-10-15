@@ -249,24 +249,25 @@ let shallow_of (rt : Lui_runtime.application) node : Js.Json.t =
       Hashtbl.replace shallow_cache node s;
       s
 
-let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
-  invalidate_stale_snapshots rt;
-  let ancestors =
-    let rec walk n depth =
-      if depth >= 64 then []
-      else
-        match Hashtbl.find_opt rt.Lui_runtime.runtime_parents n with
-        | Some parent ->
-            shallow_of rt parent :: walk parent (depth + 1)
-        | None -> []
-    in
-    walk node 0
+let snapshot_ancestors (rt : Lui_runtime.application) node =
+  let rec walk n depth =
+    if depth >= 64 then []
+    else
+      match Hashtbl.find_opt rt.Lui_runtime.runtime_parents n with
+      | Some parent -> shallow_of rt parent :: walk parent (depth + 1)
+      | None -> []
   in
+  Array.of_list (walk node 0)
+
+let snapshot_with_ancestors rt node ancestors =
   match shallow_of rt node with
   | Js.Json.JObject kvs ->
-      Js.Json.JObject
-        (kvs @ [ ("ancestors", Js.Json.JArray (Array.of_list ancestors)) ])
+      Js.Json.JObject (("ancestors", Js.Json.JArray ancestors) :: kvs)
   | el -> el
+
+let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
+  invalidate_stale_snapshots rt;
+  snapshot_with_ancestors rt node (snapshot_ancestors rt node)
 
 let collect_subtree (root : int) : Js.Json.t list =
   match !current_app with
@@ -277,14 +278,20 @@ let collect_subtree (root : int) : Js.Json.t list =
       (match Hashtbl.find_opt subtree_cache root with
        | Some els -> els
        | None ->
-           let rec dfs node acc =
-             let acc = ext_snapshot rt node :: acc in
+           let rec dfs node ancestors acc =
+             let acc = snapshot_with_ancestors rt node ancestors :: acc in
              match Hashtbl.find_opt rt.Lui_runtime.runtime_children node
              with
-             | Some kids -> Lui_sequence.fold_left (fun a k -> dfs k a) acc kids
+             | Some kids when Lui_sequence.length kids > 0 ->
+                 (* Siblings share an immutable nearest-first ancestor array. *)
+                 let length = min 64 (Array.length ancestors + 1) in
+                 let child_ancestors = Array.make length (shallow_of rt node) in
+                 Array.blit ancestors 0 child_ancestors 1 (length - 1);
+                 Lui_sequence.fold_left (fun a k -> dfs k child_ancestors a) acc kids
+             | Some _ -> acc
              | None -> acc
            in
-           let els = List.rev (dfs root []) in
+           let els = List.rev (dfs root (snapshot_ancestors rt root) []) in
            Hashtbl.replace subtree_cache root els;
            els)
 

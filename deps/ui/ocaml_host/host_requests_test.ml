@@ -603,6 +603,50 @@ let () = Native_embed.with_entry_lock (fun () ->
   check "Disposed element handles retain their snapshots" (not (Weak.check weak 0));
   print_endline "native snapshot cache lifetime: OK")
 
+let () = Native_embed.with_entry_lock (fun () ->
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let app=Lui_app.create backend Model.initial (fun model _ -> model)
+    (fun _ _ _ ->
+      let rec nest depth child = if depth=0 then child
+        else Lui_elements.column ~style_class:"ancestor" [nest (depth-1) child] in
+      Lui_elements.column
+        [Lui_elements.text ~value:"earlier sibling" [];
+         nest 70 (Lui_elements.column (List.init 1000 (fun _ ->
+           Lui_elements.text ~value:"deep snapshot leaf" [])))]) in
+  let old_app= !Native_embed.current_app in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Native_embed.invalidate_stale_snapshots (Lui_app.runtime app);
+    Native_embed.current_app := old_app) (fun () ->
+    Native_embed.current_app := Some app;
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let rt=Lui_app.runtime app in
+    Native_embed.invalidate_stale_snapshots rt;
+    let ids=Lui_store.preorder store in
+    List.iter (fun id -> ignore (Native_embed.shallow_of rt id)) ids;
+    let before=Gc.allocated_bytes () in
+    let snapshots=Native_embed.collect_subtree (Lui_app.root_node app) in
+    let allocated=Gc.allocated_bytes () -. before in
+    Printf.printf "native deep subtree snapshots allocated %.0f bytes\n%!" allocated;
+    check "Subtree snapshots repeat ancestor walks and property lists" (allocated <= 524288.);
+    check "Subtree collection changed preorder"
+      (List.map (fun el -> int_of_float (Option.get (Dom_ext.num_prop "node-id" el))) snapshots=ids);
+    List.iter2 (fun id snapshot ->
+      check "Collected snapshot differs from its event target"
+        (snapshot=Native_embed.ext_snapshot rt id)) ids snapshots;
+    let leaves=List.filter (fun el -> Dom_ext.str_prop "text" el=Some "deep snapshot leaf") snapshots in
+    check "Deep snapshot lost a leaf or changed its ancestor limit"
+      (List.length leaves=1000 && List.for_all (fun el -> List.length (Dom_ext.ancestors_of el)=64) leaves);
+    let leaf=List.hd leaves in
+    let leaf_id=int_of_float (Option.get (Dom_ext.num_prop "node-id" leaf)) in
+    check "A scoped subtree lost ancestors outside its collection root"
+      (Native_embed.collect_subtree leaf_id=[leaf]);
+    check "A cached subtree changed its snapshots"
+      (Native_embed.collect_subtree (Lui_app.root_node app)==snapshots));
+  print_endline "native shared snapshot ancestry: OK")
+
 let () =
   let snapshot id = Js.Json.JObject ["node-id",Js.Json.JNumber (float id)] in
   let original = Ui_dom_native.el_of (snapshot 700001) in

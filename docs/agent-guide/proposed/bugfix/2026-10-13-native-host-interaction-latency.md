@@ -900,6 +900,36 @@ and persists 20 added blocks. This confirms removal of a real allocation site,
 not successful 50-Enter or memory acceptance. Neither partial replay proves a
 timing improvement, and neither certifies visible input or FPS.
 
+## Shared immutable subtree ancestry
+
+A later allocation-survival capture during Enter finds repeated ancestor-list
+construction and shallow-snapshot lookups at the largest individual sites.
+Stacks containing the native embedding layer account for an estimated 65.52 MB
+of allocation. This is an overlapping stack category, not an exclusive cost
+breakdown. Its diagnostic major collections do not establish normal memory use.
+
+Subtree traversal now constructs the nearest-first ancestor array once for a
+parent's children and shares that immutable array among siblings. Only the
+collection root resolves its parents through the runtime tables. Full snapshots
+prepend their ancestry field to the existing immutable property list rather
+than copying that list. Standalone event targets use the same snapshot shape.
+
+The 70-level, 1000-leaf regression fails at 4,807,384 allocated bytes and passes
+at 197,840 bytes, below the unchanged 524,288-byte bound. It checks preorder,
+equality with independently generated event targets, the 64-ancestor limit,
+ancestors outside a scoped collection root, and repeated cached collection.
+The forced native host suite passes, including snapshot disposal, held handles,
+pointer delivery, scrolling, resize, and software-presentation lifetime tests.
+
+The same fresh-baseline, one-worker SDL Enter diagnostic now persists 24 blocks
+before the unchanged guard kills the GUI after 9.89 seconds. Combined sampled
+physical memory peaks at 102,090,168 bytes and RSS at 200,294,400 bytes. There are
+25 injected Enter keydowns, so this is still a failed 50-Enter run. The earlier
+selector-only cohort peaks at 106,235,368 physical bytes and persists 20 blocks.
+The lower peak and the allocation regression justify retaining this change,
+but neither cohort satisfies the full application memory or interaction goal.
+The default renderer and raster-worker count remain unchanged.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
