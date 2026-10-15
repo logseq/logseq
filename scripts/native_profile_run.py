@@ -37,6 +37,21 @@ def over_limit(row):
                for name in ("rss_bytes", "footprint_bytes"))
 
 
+def sample_processes(processes, read_usage):
+    usage = {}
+    for role, process in list(processes.items()):
+        if process.poll() is not None:
+            continue
+        try:
+            measured = read_usage(process.pid)
+            if process.poll() is None:
+                usage[role] = measured
+        except ProcessLookupError:
+            if process.poll() is None:
+                raise
+    return usage
+
+
 def clone_graph(source, target):
     target.mkdir()
     for name in ("last-repo", "server-list"):
@@ -120,8 +135,7 @@ def main():
 
     def sample(channel):
         row = {"seconds": time.monotonic() - started,
-               "processes": {role: memory_usage(process.pid) for role, process in list(processes.items())
-                             if process.poll() is None}}
+               "processes": sample_processes(processes, memory_usage)}
         memory.append(row)
         channel.write(json.dumps(row) + "\n")
         if over_limit(row):

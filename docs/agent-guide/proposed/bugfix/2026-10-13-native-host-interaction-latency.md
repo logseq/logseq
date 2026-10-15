@@ -1398,6 +1398,57 @@ repair does not satisfy application memory, latency, or visible FPS acceptance.
 Default-renderer startup memory and interaction latency remain separate measured
 bottlenecks; neither should be selected from generic heap growth alone.
 
+## Drawable lifetime and sampling validity follow-up
+
+A diagnostic layer-method trace records every drawable-size change and acquired
+texture without changing either operation. The current release reaches the
+combined guard at 200164840 physical bytes before the first scripted input.
+The layer changes from 1x1 to 2880x1800 once; no idle shrink occurs before the
+failure. Three distinct 20742144-byte textures appear, then two are reused.
+This rejects idle pool resizing as the cause of this startup peak. It does not
+prove that every retained texture is necessary or that the driver working set
+cannot be reduced.
+
+Game Memory profiling of a standalone copy also fails before application main:
+the actual target remains suspended until the diagnostic timeout. The isolated
+target, worker, and recorder are terminated and the unusable trace is removed.
+Developer mode is reported disabled; this observation alone does not establish
+why profiler launch stalls. No global security settings are changed. Successful
+Metal System Trace resource evidence remains valid independently of this failed
+allocator-profiling attempt.
+
+Two separate live-allocation captures cover the first four main-loop seconds
+on the Cocoa diagnostic backend, before scripted input. They exclude allocations
+before that loop and perform two diagnostic major collections at the end.
+Estimated allocated bytes are 101200000 and 103040000; surviving sampled bytes
+are 21920000 and 22560000. Assigning each stack to its first non-standard-library
+subsystem gives the following exclusive estimates, without adding nested owners:
+
+| Allocation subsystem | First capture surviving bytes | Second capture surviving bytes |
+| --- | ---: | ---: |
+| Flex layout | 4960000 | 5040000 |
+| Raster buffers and rendering | 3600000 | 3600000 |
+| Native element snapshots | 2880000 | 3120000 |
+| Signals | 2800000 | 2320000 |
+| Layout mirror | 1200000 | 1760000 |
+
+These sampled owners guide managed-memory investigation; they do not explain
+the much earlier default-Metal graphics peak. They are neither a census of the
+whole heap nor exact reclaimable savings. The first recording exposes a
+collector race: normal GUI exit between `poll` and `proc_pid_rusage` raises
+`ESRCH`. Another recording includes a terminating GUI's zero-footprint sample.
+Neither observation is an application allocation failure or a real memory drop.
+
+The collector now omits a child that exits during the memory read, rechecks its
+status after successful reads, and still propagates read failures for a running
+child. Real subprocess regressions first fail for both exit boundaries and then
+pass; the live-child error remains an error. All 16 profiling tests pass. A fresh
+unprofiled application recording exits normally, handles and persists one Enter,
+and contains 352 samples with both processes and no nonpositive memory values.
+Combined physical peak is 97584568 bytes and RSS peak is 192315392 bytes. This is
+still a hidden Cocoa one-Enter diagnostic, not default-renderer memory or sustained
+interaction acceptance.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
