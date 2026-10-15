@@ -50,7 +50,7 @@ type env = {
   set_ime_rect : Lui_scene.rect -> unit;
   focused_text_input : int -> unit;
   repaint : unit -> unit;
-  window_command : [ `minimize | `toggle_maximized | `close | `toggle_fullscreen ] -> unit;
+  window_command : [ `minimize | `toggle_maximized | `close | `toggle_fullscreen | `set_title of string ] -> unit;
 }
 
 let env : env option ref = ref None
@@ -829,6 +829,7 @@ let handle (envelope : string) =
       | None -> ()
       | Some e -> (
           match name with
+          | "window-title" -> e.window_command (`set_title payload)
           | "window-minimize" -> e.window_command `minimize
           | "window-toggle-maximized" -> e.window_command `toggle_maximized
           | "window-close" -> e.window_command `close

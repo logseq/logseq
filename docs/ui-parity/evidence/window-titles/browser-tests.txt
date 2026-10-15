@@ -1,0 +1,13 @@
+✔ journal rows preserve reference minimums and separators in desktop mode (6438.937154ms)
+✔ journal rows preserve reference minimums and separators in nonvirtual-test mode (3551.325896ms)
+✔ journal rows preserve reference minimums and separators in forced-virtual-test mode (3392.188748ms)
+✔ page spacing has one typed margin owner, without legacy web padding (1677.062886ms)
+✔ hidden-only page properties stay collapsed until explicitly shown (1780.457716ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17765.998896

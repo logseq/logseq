@@ -1,0 +1,2 @@
+WM_NAME(UTF8_STRING) = "Pages"
+_NET_WM_NAME(UTF8_STRING) = "Pages"

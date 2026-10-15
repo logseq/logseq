@@ -1,0 +1,2 @@
+WM_NAME(UTF8_STRING) = "Window 标题 final"
+_NET_WM_NAME(UTF8_STRING) = "Window 标题 final"

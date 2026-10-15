@@ -1,0 +1,2 @@
+WM_NAME(UTF-8) = "Window 标题 parity"
+_NET_WM_NAME(UTF8_STRING) = "Window 标题 parity"

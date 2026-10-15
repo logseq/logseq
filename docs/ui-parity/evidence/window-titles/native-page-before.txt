@@ -1,0 +1,2 @@
+WM_NAME(STRING) = "logseq"
+_NET_WM_NAME(UTF8_STRING) = "logseq"

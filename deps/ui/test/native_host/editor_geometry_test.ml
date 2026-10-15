@@ -41,6 +41,11 @@ let () =
         [ "window-minimize"; "window-toggle-maximized"; "window-close"; "window-toggle-fullscreen" ];
       check "caption request names dispatch to the typed host window operations"
         (!window_commands = [ `minimize; `toggle_maximized; `close; `toggle_fullscreen ]);
+      Host_requests.handle "window-title\nPage title 中文";
+      Host_requests.handle "window-title\n";
+      check "window titles preserve Unicode and empty values at every backing scale"
+        (!window_commands = [ `minimize; `toggle_maximized; `close; `toggle_fullscreen
+                           ; `set_title "Page title 中文"; `set_title "" ]);
       Native_embed.replies := [];
       Host_requests.dom_op env "caret-rect"
         {|{"block-id":"geometry","offset":2}|};

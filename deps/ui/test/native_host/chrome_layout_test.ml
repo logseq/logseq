@@ -4,6 +4,34 @@ let () =
   Platform.install_ui_services ~assert_owner:(fun () -> ())
     ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let previous_request = !Platform.host_request in
+  let titles = ref [] in
+  Platform.host_request := (fun payload -> titles := !titles @ [ payload ]);
+  Ui_services.doc_set_title "Window title 中文";
+  Ui_services.doc_set_title "";
+  check "native document titles reach the actual window service without changing their text"
+    (!titles = [ "window-title\nWindow title 中文"; "window-title\n" ]);
+  titles := [];
+  let previous_page = !Subs_state.current_page and previous_route = !Subs_state.current_route in
+  let title_page title = Option.get (Decode.page_of_summary (Wire.Map
+      [ Wire.Keyword "page-title", Wire.String title
+      ; Wire.Keyword "page-uuid", Wire.Uuid "abababab-abab-4bab-8bab-abababababab" ])) in
+  Update.effects (Action.Navigate_to (Model.Page "title-route"));
+  Update.effects (Action.Page_loaded (title_page "Original route title"));
+  Update.effects (Action.Page_loaded (title_page "Renamed page title"));
+  check "metadata refresh does not replace the reference's navigation-owned window title"
+    (!titles = [ "window-title\nOriginal route title" ]);
+  Update.effects (Action.Navigate_to Model.Home);
+  check "static navigation still publishes its existing translated title"
+    (!titles = [ "window-title\nOriginal route title"; "window-title\nLogseq" ]);
+  Update.effects (Action.Navigate_to (Model.Page "title-route"));
+  Update.effects (Action.Page_loaded (title_page "Renamed page title"));
+  check "returning to a renamed page publishes the new navigation title"
+    (!titles = [ "window-title\nOriginal route title"; "window-title\nLogseq"
+               ; "window-title\nRenamed page title" ]);
+  Subs_state.current_page := previous_page;
+  Subs_state.current_route := previous_route;
+  Platform.host_request := previous_request;
   let parent = Js.Json.JObject [ "node-id", Js.Json.JNumber 970. ] in
   let child = Js.Json.JObject
       [ "node-id", Js.Json.JNumber 971.; "ancestors", Js.Json.JArray [| parent |] ] in

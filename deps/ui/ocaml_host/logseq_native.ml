@@ -231,7 +231,7 @@ let () =
   let win =
     ref
       (sdl_ok
-         (Sdl.create_window "logseq" ~w:width ~h:height
+         (Sdl.create_window "Logseq" ~w:width ~h:height
             (flags (not prefer_metal && not software_window))))
   in
   Daemon_client.boot_mark "window created";
@@ -245,7 +245,7 @@ let () =
         Sdl.destroy_window !win;
         win :=
           sdl_ok
-            (Sdl.create_window "logseq" ~w:width ~h:height (flags true));
+            (Sdl.create_window "Logseq" ~w:width ~h:height (flags true));
         None
     else None
   in
@@ -997,6 +997,7 @@ let () =
          (Sdl.Window.test flags Sdl.Window.fullscreen))
   in
   let window_command = function
+    | `set_title title -> Sdl.set_window_title !win title
     | `minimize -> Sdl.minimize_window !win; push_window_state ()
     | `toggle_maximized ->
         if Sdl.Window.test (Sdl.get_window_flags !win) Sdl.Window.maximized
@@ -1770,7 +1771,6 @@ let () =
   in
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name "Logseq";
-  ignore (Lui_shell.set_window_title "Logseq");
   (* The selected platform and generic host profile drive the app's
      shortcuts, app-icons push and host-gated views. *)
   let init_patches = Domain.join init_d in

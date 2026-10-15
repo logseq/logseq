@@ -1,0 +1,2 @@
+WM_NAME(UTF-8) = "Long Page"
+_NET_WM_NAME(UTF8_STRING) = "Long Page"

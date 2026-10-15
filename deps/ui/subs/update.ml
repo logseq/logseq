@@ -23,6 +23,7 @@ let effects (action : Action.t) : unit =
         (Json.Object []);
       Subs_state.current_route := None
   | Action.Page_loaded page ->
+      let entering_page = !Subs_state.current_page = None in
       Subs_state.app_hooks.nav_load_done ();
       (* a fresh full-fetch replaces the tree at an unknown rev — the
          delta basis only survives splices applied through Page_delta *)
@@ -32,9 +33,10 @@ let effects (action : Action.t) : unit =
          into the mounted list's signal so rows repaint even when the
          view skips a remount *)
       Subs_state.push_page_items page;
-      (* cljs route.cljs update-page-title!: document.title follows the
-         loaded page's title *)
-      Ui_services.doc_set_title page.Model.page_title;
+      (* Master publishes the title on navigation, not metadata reload.
+         Renaming the current page keeps its history-entry title until
+         the next navigation loads that page again. *)
+      if entering_page then Ui_services.doc_set_title page.Model.page_title;
       Subs_state.sync_hash_graph_id ();
       (match !Subs_state.after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->

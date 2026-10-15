@@ -303,3 +303,19 @@ latest revisions, failure/retry, an already-started autosave and ownership
 cleanup. Actual caption close, OS close and full worker-restart durability
 are recorded in the window-controls evidence. Full shutdown/error/IME and
 macOS parity remain unverified; no complete feature-area claim is made.
+
+### Native OS window titles
+
+The shared update effects already publish page and static-route document titles,
+but the native document-title adapter discards them. Forward that existing
+service through the host channel to the actual SDL window; do not add a second
+route-title derivation or mirror the page model into native chrome. Verify
+Unicode payloads and actual task/window title changes, including navigation.
+Keep unverified built-in/block formatting and multiwindow behavior explicit.
+
+Paired rename execution exposed a second title mismatch: master keeps the old
+history-entry title until the next navigation. Shared page-load effects now
+publish only when entering a page, using the existing current-page lifecycle
+rather than adding a title cache. Tests cover metadata refresh, static-route
+publication and returning to the renamed page. Actual Unicode rename,
+navigation and full native worker restart evidence is recorded separately.

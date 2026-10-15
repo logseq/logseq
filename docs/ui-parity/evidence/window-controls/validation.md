@@ -63,7 +63,7 @@ Some Electron title typing attempts did not reach the input despite an apparent 
 ## Remaining work and limits
 
 - Caption hover/pressed/focus styling, close-button destructive hover, double-click header behavior, arbitrary narrow widths, and comprehensive OS menus remain unverified or different. They are not accepted differences.
-- Native task/window title still reads `logseq` rather than the current page title. Route/window restoration and multiwindow behavior remain unverified.
+- At this checkpoint, native task/window title still read `logseq`; basic routing and rename-publication behavior is repaired in the subsequent [window-title checkpoint](../window-titles/validation.md). Complete title formatting, route/window restoration and multiwindow behavior remain unverified.
 - Full error/recovery/IME shutdown, CodeMirror/property editors and every pending non-editor operation are not covered by the title/body barrier tests. Do not claim complete shutdown/data-persistence parity.
 - macOS AppKit, traffic lights, CoreText, materials and OS-menu behavior cannot be established on this Linux host.
 - Existing retained-cache blanking, GL tooltip disappearance, glyph opacity, percent flex-basis, web overlay hit policy and journal scroll/gutter differences remain recorded elsewhere. This chunk does not fix or hide them.

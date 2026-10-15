@@ -120,8 +120,7 @@ let storage_unquote s =
 
 let storage_quote v = "\"" ^ v ^ "\""
 
-(* the native window title is host-managed — the call is a no-op *)
-let set_document_title (_ : string) : unit = ()
+let set_document_title title = request_host "window-title" title
 
 let local_storage_get k =
   load_state ();
