@@ -695,13 +695,52 @@ after 7.14 seconds. Two workers with the panel open and a four-worker trial
 using the default system allocator are likewise terminated; neither is a
 memory fix. Their short cold samples do not certify steady-state latency.
 
-The multiworker implementation creates and joins domains on every frame.
-A low-allocation 32-frame tiled redraw regression verifies correct pixels
-but causes 109 minor collections before the worker-lifetime change, exceeding
-the new limit of one collection per frame. Reusable worker ownership and
-full-app validation of the heavier workloads are the next investigation.
+The multiworker implementation previously created and joined domains on every
+frame. A low-allocation 32-frame tiled redraw regression verified correct pixels
+but caused 109 minor collections before the worker-lifetime change. Producers
+now belong to their tile renderer and wait for another job instead of exiting
+after each frame. The isolated redraw regression records zero minor collections
+after the change. Release joins the owned domains; resize, changing worker
+counts, upload errors, rendering errors, and release/reuse remain covered.
+The complete classic-runtime LUI build and test suite passes.
 Console memory tracing now includes owned software pixels and atlas bytes
 so these can be distinguished from managed layout/cache memory.
+
+Persistent workers alone do not fix the heavy application cohort. With four
+workers and the metrics panel open, the guard still terminates the application
+at 109,315,560 combined physical bytes / 200,556,544 RSS bytes. A smaller child
+minor heap does not solve that failure and was reverted. No reduced worker
+count is adopted as an application memory fix.
+
+## In-process native patch transport
+
+The SDL host encoded each native patch batch to JSON, joined the strings, and
+decoded them back into the original protocol values inside the same process.
+An integration regression queues two generations containing 512 text children,
+escaped Unicode, and typed property changes. The original enqueue/drain path
+allocates 8,899,416 bytes; direct typed batches allocate 240 bytes under the
+unchanged 65,536-byte limit. The queue releases consumed batches.
+
+Native input, initialization, focus/blur, and mailbox handling now apply typed
+batches directly. Hosts crossing the C bridge still encode at their callback
+boundary. The wire regression decodes that boundary output, applies it to the
+real store, and verifies batch order, generations, mounted children, values,
+and the empty-result contract. The native host regression suite, executable,
+and separate native library build pass.
+
+This removes confirmed allocation churn but does not establish the application
+memory bound. The four-worker open-panel recording still reaches 108,742,120
+combined physical bytes / 200,065,024 RSS bytes before protection terminates it.
+Reducing frontend GC space overhead further from 30 to 5 also fails at
+108,922,320 physical bytes / 200,261,632 RSS bytes, so that experiment is reverted.
+
+A subsequent diagnostic freezes the test process before the cap, at 186,417,152
+combined RSS bytes and 95,110,584 combined physical bytes, to inspect ownership.
+The GUI map reports about 27.3 MiB of dirty `VM_ALLOCATE`, 28.9 MiB of dirty
+malloc regions containing 23.5 MiB of allocations, and 3.9 MiB of mapped
+IOSurfaces. These are a startup snapshot, not steady-state peaks or proof of a
+retention leak. Further optimization requires identifying retained owners
+within those categories rather than continuing to tune GC policy.
 
 The default remains Metal. Software pixel correctness and reduced isolated
 memory do not certify complete application memory, visible presentation,

@@ -3,11 +3,9 @@
    patch-callback FFI); the SDL window loop feeds input through
    Lui_window.Ui and returns rendered frames through Lui_host.
 
-   Patch flow: every Native_embed entry (initialize/dispatch/pump)
-   returns the joined "[batch, ...]" wire JSON; Patch_decode turns it
-   back into patch_batch values applied to Lui_host — the same
-   contract lui_ocaml_* exports use, minus the string copies on the
-   outbound direction.
+   Patch flow: Native_embed entries return typed batches applied directly
+   to Lui_host. Cross-language hosts encode JSON at their callback boundary;
+   the in-process SDL host shares the original immutable protocol values.
 
    Outbound flow: Host.enqueue's wakeup lands in Bridge (flag → pump
    next frame) and platform_request envelopes land in Host_requests
@@ -846,14 +844,14 @@ let () =
           , Float.max 1. clip.Lui_scene.h )
   in
   Lui_host.set_vport host vport_of;
-  let apply_patch_json (s : string) =
-    if s <> "" then begin
+  let apply_patches batches =
+    if batches <> [] then begin
       let started = perf_s () in
       List.iter
         (fun b ->
            metrics.patch_ops <- metrics.patch_ops + List.length b.Lui_protocol.ops;
            ignore (Lui_host.apply_batch host b))
-        (Patch_decode.batches_of_string s);
+        batches;
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
       Host_requests.flush_pending_focus ();
@@ -1243,8 +1241,8 @@ let () =
       end;
       (try
          let r = Native_embed.dispatch_lui ev in
-         dbg "  dispatch -> %d bytes" (String.length r);
-         apply_patch_json r
+         dbg "  dispatch -> %d batches" (List.length r);
+         apply_patches r
        with Invalid_argument msg ->
          warn "dispatch rejected event: %s" msg)
     | Clipboard_write s -> ignore (Lui_shell.clipboard_write s)
@@ -1684,7 +1682,7 @@ let () =
           ; ",\"meta\":"; jbool (mods.Input.meta)
           ; ",\"ctrl\":"; jbool (mods.Input.ctrl)
           ; ",\"repeat\":"; jbool repeat; "}" ] in
-        apply_patch_json
+        apply_patches
           (Native_embed.keyboard_event target (dom_payload target fields) values)
       end
       else emit_dom (if down then "keydown" else "keyup") target fields;
@@ -1924,7 +1922,7 @@ let () =
               if tgt <> 0
                  && Lui_store.kind store tgt = "extension:logseq-editor"
               then
-                apply_patch_json
+                apply_patches
                   (Native_embed.extension_event tgt "logseq-editor" "insert"
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
@@ -1943,7 +1941,7 @@ let () =
      shortcuts, app-icons push and host-gated views. *)
   let init_patches = Domain.join init_d in
   Daemon_client.boot_mark "app initialized";
-  apply_patch_json init_patches;
+  apply_patches init_patches;
   Daemon_client.boot_mark "init patches applied";
   (* No synchronous first paint: the frame loop repaints once after
      draining the mailbox, so boot pumps are not each gated behind a
@@ -2216,8 +2214,8 @@ let () =
       if n > 0 && Atomic.exchange Bridge.pending_wakeup false then begin
         last_busy := t0;
         let r = Native_embed.pump () in
-        if !debug then warn "pump -> %d bytes" (String.length r);
-        apply_patch_json r;
+        if !debug then warn "pump -> %d batches" (List.length r);
+        apply_patches r;
         pump_all (n - 1)
       end
     in

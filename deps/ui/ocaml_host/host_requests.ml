@@ -510,17 +510,15 @@ let try_set_input_focus (e : env) (bid : string) (focused : bool) : bool =
        Ui.set_focused e.ui e.store ctx.sink;
        e.focused_text_input ctx.sink;
        List.iter e.apply_batch
-         (Patch_decode.batches_of_string
-            (Native_embed.extension_event ctx.sink "logseq-editor"
-               "focus" "{}"))
+         (Native_embed.extension_event ctx.sink "logseq-editor"
+            "focus" "{}")
      end
      else begin
        Ui.set_focused e.ui e.store 0;
        e.focused_text_input 0;
        List.iter e.apply_batch
-         (Patch_decode.batches_of_string
-            (Native_embed.extension_event ctx.sink "logseq-editor"
-               "blur" "{}"))
+         (Native_embed.extension_event ctx.sink "logseq-editor"
+            "blur" "{}")
      end);
     true
 

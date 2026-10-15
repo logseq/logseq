@@ -1,7 +1,6 @@
-(* Native app entry — same assembly as js_app/main.ml but rendering
-   through a native LUI backend. The C bridge calls the registered
-   callbacks; every call returns the pending patch JSON which the bridge
-   hands to the host's apply path. *)
+(* Native app entry — same assembly as js_app/main.ml. In-process
+   entries return typed patch batches. Cross-language callbacks encode
+   those values only at the C bridge boundary. *)
 
 external wakeup : unit -> unit = "logseq_lui_wakeup"
 external platform_request : string -> unit = "logseq_lui_platform_request"
@@ -10,7 +9,7 @@ external platform_request : string -> unit = "logseq_lui_platform_request"
    resolutions, daemon invokes) can flush several times inside a single
    pump, so batches queue here and drain together — dropping intermediate
    batches loses nodes the later diffs reference. *)
-let pending_batches : string Queue.t = Queue.create ()
+let pending_batches : Lui_protocol.patch_batch Queue.t = Queue.create ()
 
 (* Input-path entries (key/mouse/extension events) now run on the main
    systhread while wakeup-driven [pump] runs on the OCaml worker systhread.
@@ -34,22 +33,15 @@ let with_entry_lock f =
   | x -> entry_owner := None; Mutex.unlock entry_lock; x
   | exception e -> entry_owner := None; Mutex.unlock entry_lock; raise e
 
-let take_patches () : string =
-  if Queue.is_empty pending_batches then ""
-  else begin
-    let b = Buffer.create 4096 in
-    Buffer.add_char b '[';
-    let first = ref true in
-    Queue.iter
-      (fun json ->
-         if not !first then Buffer.add_char b ',';
-         first := false;
-         Buffer.add_string b json)
-      pending_batches;
-    Buffer.add_char b ']';
-    Queue.clear pending_batches;
-    Buffer.contents b
-  end
+let take_patches () =
+  let batches = Queue.fold (fun acc batch -> batch :: acc) [] pending_batches in
+  Queue.clear pending_batches;
+  List.rev batches
+
+let enqueue_batch batch =
+  Queue.add batch pending_batches;
+  true
+
 let current_app : (Model.t, Action.t) Lui_app.reducer_app option ref = ref None
 
 (* ---------- document queries over the LUI extension tree ----------
@@ -329,8 +321,8 @@ let take_patches_dbg where =
   let out = take_patches () in
   (match Sys.getenv_opt "LOGSEQ_PERF" with
    | Some _ ->
-       Printf.eprintf "[perf] patches %s bytes=%d t=%.3f\n%!" where
-         (String.length out) (Unix.gettimeofday ())
+       Printf.eprintf "[perf] patches %s batches=%d t=%.3f\n%!" where
+         (List.length out) (Unix.gettimeofday ())
    | None -> ());
   out
 
@@ -354,7 +346,7 @@ let perf_mark name t0 =
   if Lazy.force perf_log
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
-let initialize_unlocked platform_code host_code (_payload : string) : string =
+let initialize_unlocked platform_code host_code (_payload : string) =
   Printexc.record_backtrace true;
   Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Queue.clear pending_batches;
@@ -376,11 +368,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   in
   let backend =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
-    ; apply_batch =
-        (fun batch ->
-          let json = Lui_wire.encode_batch batch in
-          Queue.add json pending_batches;
-          true)
+    ; apply_batch = enqueue_batch
     }
   in
   let registry = Lui_extension.registry () in
@@ -477,7 +465,7 @@ let initialize platform_code host_code payload =
    inside drain/dispatch (blocking daemon IO) can let another entry emit
    into the shared queue first; clearing here would drop those batches and
    skip a wire generation, which the host rejects as invalidBatch. *)
-let dispatch_lui (event : Lui_protocol.event) : string =
+let dispatch_lui (event : Lui_protocol.event) =
   with_entry_lock (fun () ->
       let t0 = perf_ms () in
       (match !current_app with
@@ -570,7 +558,7 @@ let picked node payload =
   in
   dispatch_lui (Lui_protocol.ExtensionEvent (node, "picked", "", m))
 
-let extension_event node identifier name values : string =
+let extension_event node identifier name values =
   with_entry_lock (fun () ->
       let t0 = perf_ms () in
       (match !current_app with
@@ -599,7 +587,7 @@ let extension_event node identifier name values : string =
 
 (* drain the Host mailbox on the app thread; called via the wakeup the
    OCaml side fired when async work completed *)
-let pump () : string =
+let pump () =
   with_entry_lock (fun () ->
       let t0 = perf_ms () in
       Host.drain ();
@@ -681,7 +669,7 @@ let keyboard_event node payload values =
       ignore (Lui_app.flush app)) !current_app;
     take_patches_dbg "keyboard")
 
-let dispose () : string =
+let dispose () =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
   with_entry_lock (fun () ->
@@ -705,36 +693,79 @@ let resync _ =
       ignore (Lui_app.flush app);
       Queue.clear pending_batches;
       Queue.add
-        (Lui_wire.encode_batch (Lui_runtime.resync_batch (Lui_app.runtime app)))
-        pending_batches;
+        (Lui_runtime.resync_batch (Lui_app.runtime app)) pending_batches;
       take_patches ())
 
+(* Preserve the wire ABI for hosts that cross the C bridge. *)
+module Ffi = struct
+  let encode_batches batches =
+    match batches with
+    | [] -> ""
+    | _ ->
+      let buffer = Buffer.create 4096 in
+      Buffer.add_char buffer '[';
+      List.iteri (fun i batch ->
+        if i > 0 then Buffer.add_char buffer ',';
+        Buffer.add_string buffer (Lui_wire.encode_batch batch)) batches;
+      Buffer.add_char buffer ']';
+      Buffer.contents buffer
+
+  let initialize platform_code host_code payload = encode_batches (initialize platform_code host_code payload)
+  let appear node = encode_batches (appear node)
+  let load node = encode_batches (load node)
+  let press node = encode_batches (press node)
+  let press_ex node modifiers = encode_batches (press_ex node modifiers)
+  let long_press node = encode_batches (long_press node)
+  let text_changed node text = encode_batches (text_changed node text)
+  let submit node = encode_batches (submit node)
+  let dismiss node = encode_batches (dismiss node)
+  let double_press node = encode_batches (double_press node)
+  let press_detail node x y modifiers button target_class = encode_batches (press_detail node x y modifiers button target_class)
+  let pointer_down node x y modifiers button target_class = encode_batches (pointer_down node x y modifiers button target_class)
+  let pointer_up node x y modifiers button target_class = encode_batches (pointer_up node x y modifiers button target_class)
+  let pointer_enter node = encode_batches (pointer_enter node)
+  let pointer_leave node = encode_batches (pointer_leave node)
+  let context_menu_press node x y modifiers button target_class = encode_batches (context_menu_press node x y modifiers button target_class)
+  let toggle_changed node checked = encode_batches (toggle_changed node checked)
+  let radio_changed node = encode_batches (radio_changed node)
+  let slider_changed node value = encode_batches (slider_changed node value)
+  let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
+  let visible_range node first last = encode_batches (visible_range node first last)
+  let picked node payload = encode_batches (picked node payload)
+  let extension_event node identifier name values = encode_batches (extension_event node identifier name values)
+  let pump () = encode_batches (pump ())
+  let dispose () = encode_batches (dispose ())
+  let resync target = encode_batches (resync target)
+  let platform_event = platform_event
+  let root_node = root_node
+end
+
 let () =
-  Callback.register "lui_ocaml_init" initialize;
-  Callback.register "lui_ocaml_appear" appear;
-  Callback.register "lui_ocaml_load" load;
-  Callback.register "lui_ocaml_press" press;
-  Callback.register "lui_ocaml_press_ex" press_ex;
-  Callback.register "lui_ocaml_long_press" long_press;
-  Callback.register "lui_ocaml_text_changed" text_changed;
-  Callback.register "lui_ocaml_submit" submit;
-  Callback.register "lui_ocaml_dismiss" dismiss;
-  Callback.register "lui_ocaml_double_press" double_press;
-  Callback.register "lui_ocaml_press_detail" press_detail;
-  Callback.register "lui_ocaml_pointer_down" pointer_down;
-  Callback.register "lui_ocaml_pointer_up" pointer_up;
-  Callback.register "lui_ocaml_pointer_enter" pointer_enter;
-  Callback.register "lui_ocaml_pointer_leave" pointer_leave;
-  Callback.register "lui_ocaml_context_menu_press" context_menu_press;
-  Callback.register "lui_ocaml_toggle_changed" toggle_changed;
-  Callback.register "lui_ocaml_radio_changed" radio_changed;
-  Callback.register "lui_ocaml_slider_changed" slider_changed;
-  Callback.register "lui_ocaml_scroll_completed" scroll_completed;
-  Callback.register "lui_ocaml_visible_range" visible_range;
-  Callback.register "lui_ocaml_picked" picked;
-  Callback.register "lui_ocaml_extension_event" extension_event;
-  Callback.register "lui_ocaml_pump" pump;
-  Callback.register "lui_ocaml_platform_event" platform_event;
-  Callback.register "lui_ocaml_dispose" dispose;
-  Callback.register "lui_ocaml_root_node" root_node;
-  Callback.register "lui_ocaml_resync" resync
+  Callback.register "lui_ocaml_init" Ffi.initialize;
+  Callback.register "lui_ocaml_appear" Ffi.appear;
+  Callback.register "lui_ocaml_load" Ffi.load;
+  Callback.register "lui_ocaml_press" Ffi.press;
+  Callback.register "lui_ocaml_press_ex" Ffi.press_ex;
+  Callback.register "lui_ocaml_long_press" Ffi.long_press;
+  Callback.register "lui_ocaml_text_changed" Ffi.text_changed;
+  Callback.register "lui_ocaml_submit" Ffi.submit;
+  Callback.register "lui_ocaml_dismiss" Ffi.dismiss;
+  Callback.register "lui_ocaml_double_press" Ffi.double_press;
+  Callback.register "lui_ocaml_press_detail" Ffi.press_detail;
+  Callback.register "lui_ocaml_pointer_down" Ffi.pointer_down;
+  Callback.register "lui_ocaml_pointer_up" Ffi.pointer_up;
+  Callback.register "lui_ocaml_pointer_enter" Ffi.pointer_enter;
+  Callback.register "lui_ocaml_pointer_leave" Ffi.pointer_leave;
+  Callback.register "lui_ocaml_context_menu_press" Ffi.context_menu_press;
+  Callback.register "lui_ocaml_toggle_changed" Ffi.toggle_changed;
+  Callback.register "lui_ocaml_radio_changed" Ffi.radio_changed;
+  Callback.register "lui_ocaml_slider_changed" Ffi.slider_changed;
+  Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
+  Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
+  Callback.register "lui_ocaml_picked" Ffi.picked;
+  Callback.register "lui_ocaml_extension_event" Ffi.extension_event;
+  Callback.register "lui_ocaml_pump" Ffi.pump;
+  Callback.register "lui_ocaml_platform_event" Ffi.platform_event;
+  Callback.register "lui_ocaml_dispose" Ffi.dispose;
+  Callback.register "lui_ocaml_root_node" Ffi.root_node;
+  Callback.register "lui_ocaml_resync" Ffi.resync

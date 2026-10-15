@@ -4,6 +4,48 @@ open Lui_protocol
 
 let check message condition = if not condition then failwith message
 
+let transport_batches () =
+  let payload = "\n\t\"你好\"\\" ^ String.make 1024 'x' in
+  let children = List.concat_map (fun i ->
+    let id = 900001+i in
+    [CreateNode (id, Text); SetProp (id, TextValue, StringValue payload);
+     InsertChild (900000, id, i)]) (List.init 512 Fun.id) in
+  [{generation=1; ops=CreateNode (900000, Column) :: children};
+   {generation=2; ops=[SetProp (900001, TextValue, StringValue "updated");
+     SetProp (900001, Enabled, BoolValue false);
+     SetProp (900001, Opacity, FloatValue 0.625);
+     SetProp (900001, WidthValue, IntValue 42)]}]
+
+let () =
+  let expected = transport_batches () in
+  Native_embed.with_entry_lock (fun () ->
+    Queue.clear Native_embed.pending_batches;
+    List.iter (fun batch -> ignore (Native_embed.enqueue_batch batch)) expected);
+  let actual = Patch_decode.batches_of_string (Native_embed.Ffi.pump ()) in
+  check "Cross-language transport changed batch order, generations, or values" (actual=expected);
+  let store = Lui_store.create () in
+  List.iter (Lui_store.apply_batch store) actual;
+  check "Transport lost a later text update"
+    (Lui_store.string_prop store 900001 "text" = Some "updated");
+  check "Transport lost mounted children" (Lui_store.node_count store=513);
+  check "Empty cross-language transport changed its no-work result" (Native_embed.Ffi.pump ()="");
+  print_endline "native patch wire boundary: OK"
+
+let () =
+  let batches = transport_batches () in
+  let allocated = Native_embed.with_entry_lock (fun () ->
+    Queue.clear Native_embed.pending_batches;
+    let before = Gc.allocated_bytes () in
+    List.iter (fun batch -> ignore (Native_embed.enqueue_batch batch)) batches;
+    ignore (Native_embed.take_patches ());
+    Gc.allocated_bytes () -. before) in
+  Printf.printf "native in-process patch transport allocated %.0f bytes\n%!" allocated;
+  check "In-process patch transport copies or serializes the batch payload"
+    (allocated <= 65_536.);
+  check "In-process transport retained already consumed batches"
+    (Queue.is_empty Native_embed.pending_batches);
+  print_endline "native patch allocation: OK"
+
 let () =
   let before = Gc.allocated_bytes () in
   ignore (Option.get (Icon_data.get "menu-2"));
