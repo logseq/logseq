@@ -930,6 +930,45 @@ The lower peak and the allocation regression justify retaining this change,
 but neither cohort satisfies the full application memory or interaction goal.
 The default renderer and raster-worker count remain unchanged.
 
+## Keyed rollback checkpoints and retained rows
+
+The Enter allocation capture estimates 15.76 MB in stacks containing keyed
+reconciliation. Its checkpoint copies runtime tables for every existing row's
+entire subtree, even when the collection only appends a new row or reorders
+retained rows. The parent owns the reordered child sequence; retained item
+updates use queued signal writes rather than mutating those subtrees inside
+the keyed transaction.
+
+The checkpoint now includes the parent and the complete subtrees actually
+removed by the transaction. A 128-row fixture with 33 nodes per row fails its
+524,288-byte append limit at 2,439,800 bytes and passes at 232,328 bytes. Reorder
+uses 236,096 bytes, retaining every original row identity without remounting.
+A separate regression removes a row containing a button, then rejects an
+invalid table child during insertion. Rollback restores the removed subtree,
+its working input handler, and a following keyed segment; a subsequent valid
+replacement disposes the removed owner exactly once.
+
+LUI commit `2aafc5db` on `feat/ml-backend` contains the change. The full build
+and test aliases pass, including all 122 core tests and native input scenarios.
+The local classic compiler switch installs that revision, and the rebuilt
+application passes native host tests and both native artifact builds.
+The optional formatting check cannot run because `ocamlformat` is absent.
+
+The fresh full-graph diagnostic persists 27 blocks before the unchanged guard
+terminates it at 10.08 seconds: 105,874,896 combined physical bytes and
+200,065,024 RSS bytes. At approximately 3178 mounted nodes, the trace reports
+30 MiB managed live memory versus 32 MiB in the previous shared-ancestry run.
+This is a reduction at a comparable node count, not a claim of a lower overall
+peak across runs with different completed work.
+
+A second fresh cohort disables debug output and allocation sampling. It still
+terminates at 9.21 seconds, with 106,169,832 physical bytes and 200,343,552 RSS
+bytes. Twenty-seven keydowns are injected but only 25 new blocks are confirmed
+in the database. This rules out diagnostic stack retention as the sole cause
+of the remaining protection failure. Both cohorts still force full-size
+software redraws while occluded and use one raster worker. Neither meets
+50-Enter, visible FPS, default-renderer memory, or full application acceptance.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
