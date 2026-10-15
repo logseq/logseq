@@ -107,6 +107,56 @@ let geometry_refresh () =
   let last = Lui_window.Rects.get rects 100 in
   check "Offscreen descendants escaped their scroll clip" (last.h = 0.)
 
+let geometry_refresh_allocation () =
+  let store = Lui_store.create () in
+  for id=1 to 1000 do
+    Lui_store.apply_op store (CreateNode (id, Column));
+    if id>1 then Lui_store.apply_op store (InsertChild (id-1,id,0))
+  done;
+  let rects = Lui_window.Rects.create () in
+  let bounds = Lui_scene.rect 10. 20. 100. 40. in
+  let refresh () = Host_interaction.refresh_rects ~store ~base:(fun _ -> bounds)
+    ~scroll_x:(fun _ -> 0.) ~scroll_y:(fun _ -> 0.) ~scrollable:(fun _ -> false) rects in
+  refresh ();
+  let before = Gc.allocated_bytes () in
+  refresh ();
+  let allocated = Gc.allocated_bytes () -. before in
+  check "Geometry refresh changed unscrolled bounds"
+    (Lui_window.Rects.get rects 1000=bounds);
+  Printf.printf "1000-node hit geometry refresh allocated %.0f bytes\n%!" allocated;
+  check "Geometry refresh allocates intermediate transforms and rectangles per node"
+    (allocated <= 200000.)
+
+let nested_geometry_refresh () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1,Scroll);
+    CreateNode (2,Scroll); CreateNode (3,Column); CreateNode (4,Column);
+    InsertChild (1,2,0); InsertChild (2,3,0); InsertChild (1,4,1)]};
+  let root_scroll = ref true in
+  let rects = Lui_window.Rects.create () in
+  let base = function
+    | 1 -> Lui_scene.rect 0. 0. 300. 200.
+    | 2 -> Lui_scene.rect 50. 50. 200. 150.
+    | 3 -> Lui_scene.rect 70. 80. 400. 500.
+    | _ -> Lui_scene.rect 500. 500. 10. 10. in
+  let refresh () = Host_interaction.refresh_rects ~store ~base
+    ~scroll_x:(fun id ->
+      check "Leaf offsets must not be queried for a nonexistent child transform" (id=1 || id=2);
+      if id=1 && !root_scroll then 10. else if id=2 then 5. else 0.)
+    ~scroll_y:(fun id -> if id=1 && !root_scroll then 20. else if id=2 then 7. else 0.)
+    ~scrollable:(fun id -> id=1 || id=2) rects in
+  refresh ();
+  check "A scroll container must inherit only its ancestors' offsets"
+    (Lui_window.Rects.get rects 2=Lui_scene.rect 40. 30. 200. 150.);
+  check "Nested offsets and clips must apply to descendants together"
+    (Lui_window.Rects.get rects 3=Lui_scene.rect 55. 53. 185. 127.);
+  check "Clipped siblings must retain their shifted origin and empty extent"
+    (Lui_window.Rects.get rects 4=Lui_scene.rect 490. 480. 0. 0.);
+  root_scroll := false;
+  refresh ();
+  check "A new scroll frame must replace the previous inherited transform"
+    (Lui_window.Rects.get rects 3=Lui_scene.rect 65. 73. 185. 127.)
+
 let overlay_glyphs () =
   let atlas = Lui_scene.Atlas.create ~bpp:1 ~w:16 ~h:16 in
   let scene = Lui_scene.create ~mask_atlas:atlas ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:16 ~h:16) in
@@ -226,7 +276,9 @@ let () =
       "editor caret", visible_caret;
       "interaction paint", interaction_repaints; "viewport markers", viewport_attributes;
       "attribute allocation", attribute_scan_allocation;
-      "hit geometry", geometry_refresh; "overlay text", overlay_glyphs;
+      "hit geometry", geometry_refresh;
+      "geometry allocation", geometry_refresh_allocation;
+      "nested hit geometry", nested_geometry_refresh; "overlay text", overlay_glyphs;
       "unconstrained measure", unconstrained_measure; "scroll end", scroll_end ];
   List.iter (fun test ->
     try test () with Failure message -> failures := message :: !failures;
