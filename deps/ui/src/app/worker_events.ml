@@ -150,16 +150,14 @@ let ui_busy ~now ~last_fire =
   let edit_throttled =
     editing_active && now -. last_fire < edit_reload_min_ms
   in
-  let popup_open =
-    (* same overlay surfaces as editor_keys' outside-click routing *)
-    Ui_services.dom_query
-      "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
-    <> None
-  in
   let ui_active =
     editing_active && now -. !last_ui_input_ms < edit_input_idle_ms
   in
-  !Editor_state.structure_pending || typing_active || edit_throttled || popup_open || ui_active
+  !Editor_state.structure_pending || typing_active || edit_throttled || ui_active
+  (* Inspect overlays only when the state guards would otherwise allow reload. *)
+  || Ui_services.dom_query
+      "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
+     <> None
 
 let init () =
   (* the subscription pipeline's touch points into the app — one place

@@ -1117,6 +1117,96 @@ let () =
       ".missing, .ui__dropdown-menu-content",0];
   print_endline "native unused query ancestry allocation: OK"
 
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_app = !Native_embed.current_app in
+  let previous_editor = !Editor_state.st in
+  let previous_elements = !Dom_ext.doc_elements_provider in
+  let previous_pending = !Editor_state.structure_pending in
+  let previous_edit_input = !Editor_state.last_edit_input_ms in
+  let previous_ui_input = !Worker_events.last_ui_input_ms in
+  let failures = ref [] in
+  let verify label condition = if not condition then failures := label :: !failures in
+  let queries = ref 0 in
+  let now = 100000. in
+  let with_page popup run =
+    Editor_state.st := None;
+    Editor_state.structure_pending := false;
+    Editor_state.last_edit_input_ms := 0.;
+    Worker_events.last_ui_input_ms := 0.;
+    let store = Lui_store.create () in
+    let backend = {backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+    let app = Lui_app.create backend Model.initial (fun model _ -> model)
+      (fun context _ _ ->
+        Editor_state.ensure context;
+        let overlays = match popup with
+          | None -> []
+          | Some (id,cls) -> [Lui_elements.box ~accessibility_identifier:id ~style_class:cls []] in
+        Lui_elements.column
+          (List.init 1000 (fun _ -> Lui_elements.text ~value:"reload row" []) @ overlays)) in
+    Native_embed.current_app := Some app;
+    Fun.protect ~finally:(fun () ->
+      ignore (Lui_app.dispose app);
+      Native_embed.invalidate_stale_snapshots (Lui_app.runtime app)) (fun () ->
+      ignore (Lui_app.start app); ignore (Lui_app.flush app);
+      ignore (Native_embed.collect_elements ());
+      run ())
+  in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.current_app := previous_app;
+    Editor_state.st := previous_editor;
+    Dom_ext.doc_elements_provider := previous_elements;
+    Editor_state.structure_pending := previous_pending;
+    Editor_state.last_edit_input_ms := previous_edit_input;
+    Worker_events.last_ui_input_ms := previous_ui_input) (fun () ->
+    Dom_ext.doc_elements_provider := (fun () -> incr queries; Native_embed.collect_elements ());
+    with_page None (fun () ->
+      let editor = Editor_state.mk_editing ~uuid:"reload-test-editor"
+        ~buffer:"" ~base:"" ~scope:"main" () in
+      let check_busy label ~editing ~pending ~edit_age ~pointer_age ~reload_age =
+        Editor_state.set_silent (fun state ->
+          {state with editing=(if editing then Some editor else None)});
+        Editor_state.structure_pending := pending;
+        Editor_state.last_edit_input_ms := now -. edit_age;
+        Worker_events.last_ui_input_ms := now -. pointer_age;
+        let queried = !queries and before = Gc.allocated_bytes () in
+        for _=1 to 20 do
+          verify (label ^ " must defer reload")
+            (Worker_events.ui_busy ~now ~last_fire:(now -. reload_age))
+        done;
+        let allocated = (Gc.allocated_bytes () -. before) /. 20. in
+        Printf.printf "native busy reload %s allocated %.0f bytes/check\n%!" label allocated;
+        verify (label ^ " scans popup nodes despite an existing reload guard") (!queries=queried);
+        verify (label ^ " allocates a document query despite an existing reload guard")
+          (allocated <= 4096.)
+      in
+      check_busy "structure pending" ~editing:false ~pending:true
+        ~edit_age:1000. ~pointer_age:1000. ~reload_age:9000.;
+      check_busy "active typing" ~editing:true ~pending:false
+        ~edit_age:1. ~pointer_age:1000. ~reload_age:9000.;
+      check_busy "edit throttle" ~editing:true ~pending:false
+        ~edit_age:1000. ~pointer_age:1000. ~reload_age:1.;
+      check_busy "recent pointer" ~editing:true ~pending:false
+        ~edit_age:1000. ~pointer_age:1. ~reload_age:9000.;
+      Editor_state.last_edit_input_ms := now -. Worker_events.edit_input_idle_ms;
+      Worker_events.last_ui_input_ms := now -. Worker_events.edit_input_idle_ms;
+      verify "Expired interaction guards must allow an unobstructed reload"
+        (not (Worker_events.ui_busy ~now ~last_fire:(now -. Worker_events.edit_reload_min_ms)));
+      Editor_state.set_silent (fun state -> {state with editing=None});
+      Worker_events.last_ui_input_ms := now;
+      verify "Pointer activity without an editor must not throttle reload"
+        (not (Worker_events.ui_busy ~now ~last_fire:now)));
+    List.iter (fun popup -> with_page (Some popup) (fun () ->
+      verify "An open popup must still block an otherwise idle reload"
+        (Worker_events.ui_busy ~now ~last_fire:0.)))
+      ["ui__ac",""; "reload-popup","cp__cmdk__modal";
+       "reload-popup","ui__popover-content"; "reload-popup","ls-context-menu-content";
+       "date-time-picker",""; "reload-popup","ls-editor-link-form";
+       "reload-popup","ls-property-dialog"]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native reload deferral must preserve guards without redundant popup scans" (!failures=[]);
+  print_endline "native reload deferral allocation: OK")
+
 let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_REPLAY" with
   | None -> ()
   | Some path ->

@@ -75,6 +75,7 @@ def main():
     parser.add_argument("--lui-revision", required=True)
     parser.add_argument("--duration-s", type=float, required=True)
     parser.add_argument("--expected-actions", type=int, required=True)
+    parser.add_argument("--external-profiler", help="Name an attached profiler so this run cannot qualify as an unprofiled baseline")
     args = parser.parse_args()
     for name in ("baseline", "output", "executable", "worker", "input_script", "input_library"):
         setattr(args, name, getattr(args, name).resolve())
@@ -91,7 +92,8 @@ def main():
                   "input_sha256": digest(args.input_script), "input_library_sha256": digest(args.input_library),
                   "build_profile": args.build_profile, "lui_revision": args.lui_revision,
                   "backend": args.backend, "viewport": [1440, 900, 2880, 1800],
-                  "raster_workers": 4, "profiler": False,
+                  "raster_workers": 4, "profiler": args.external_profiler is not None,
+                  "external_profiler": args.external_profiler,
                   "logseq_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                   "source_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"])).hexdigest(),
                   "runner_sha256": digest(Path(__file__)), "replay_mode": "changes",

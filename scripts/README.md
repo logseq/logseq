@@ -47,6 +47,11 @@ Successful collection writes `recording.json` and a diagnostic `report.json`.
 Build-profile and installed LUI revision labels describe the caller's build;
 binary hashes identify the actual executable and worker used.
 
+When attaching Instruments or another external profiler, pass
+`--external-profiler <name>`. This marks the recording as profiled, so its
+timings cannot qualify as an unprofiled baseline. Allocation-profile environment
+overrides remain rejected by this baseline runner.
+
 These reports distinguish injected, handled, and persisted actions. UI
 settlement remains unverified by this SDL runner, so it does not report
 completed-action costs or acceptance success. Quantiles with fewer than 20

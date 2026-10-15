@@ -1331,6 +1331,73 @@ terminated. The reporter regressions cover aggregation, incomplete workloads,
 counter resets, missing roles/provenance, reduced viewports, invalid visibility,
 insufficient quantile samples, and ring loss; all 13 tests pass.
 
+## Native resource attribution and reload guard experiment
+
+A six-second Instruments Metal System Trace starts before the isolated app,
+using the tracing-start notification rather than a fixed startup delay. The
+export contains the actual GUI PID 44888. The collector records
+`--external-profiler xctrace-metal-system`, preserves the combined-memory guard,
+and terminates both isolated processes at 201164264 combined physical bytes.
+These instrumented timings and peaks do not qualify as an unprofiled baseline.
+
+The resource allocation table identifies three distinct 20742144-byte textures,
+each labeled `CAMetalLayer Display Drawable`. Their stacks enter
+`CAMetalLayer.nextDrawable` from the native Metal render block. The recorded
+device allocation counter peaks at 65273856 bytes. The mask and color atlases
+are much smaller, 278528 and 1064960 bytes. No drawable deallocation appears
+before the guard exit, which is insufficient to prove a lifetime leak.
+Unknown per-resource system/video-memory values remain unknown; resource sizes
+must not be added to process physical footprint. The kernel resource allocation
+table is empty, so this trace does not attribute the separate graphics memory
+category observed by `vmmap` to individual resources.
+
+The trace also shows synchronous expose drawing inside a Core Animation
+transaction. A diagnostic interposer defers that callback to the ordinary SDL
+event loop. It still exits at 203703808 combined physical bytes with only 127
+nodes mounted. This hypothesis fails its memory prediction; no expose or resize
+behavior change is retained. An earlier system trace missed the target process,
+and attempted Game Memory launches did not reach application startup. Those
+recordings are excluded from application conclusions.
+
+For interaction allocation, a separate six-second Memprof capture includes the
+same one-Enter script. Live tracking and two diagnostic major collections are
+explicitly enabled. It estimates 28400000 allocated bytes and 1760000 surviving
+bytes; 3600000 sampled bytes have `Worker_events.ui_busy` in their stack. This
+path eagerly scans every native element for popups even when pending structure,
+typing, editing throttle, or recent pointer activity already forbids reload.
+
+The native runtime regression mounts 1000 actual text rows and exercises the
+real document-query provider. Before the fix, the four existing busy guards
+each perform the unnecessary scan and allocate approximately 468661-468669
+bytes/check. Short-circuiting on those guards reduces this to 61-69 bytes/check
+under the unchanged 4096-byte limit. Expiry boundaries, pointer activity without
+an editor, and all seven popup selectors retain their reload behavior. The full
+native host release tests and executable/archive builds pass.
+
+Three unprofiled fresh-graph one-Enter runs preserve the script, worker, graph,
+viewport, and raster-worker configuration. Each injects and handles one Enter
+and persists one block. Their measured host allocation windows contain
+25994024, 25981632, and 25987720 bytes, approximately 6.2% below the preceding
+27695888-27697000-byte controls. Input-to-host-frame observations are 44.45,
+40.26, and 43.90 ms: latency has not reliably improved and remains above target.
+Combined physical peaks are 96699856, 95323576, and 96732600 bytes; no material
+process-memory improvement is established.
+
+The matching post-fix Memprof capture estimates 26720000 allocated bytes and
+2560000 surviving bytes, including 1600000 bytes under `ui_busy`. Remaining
+popup scans occur when state guards allow reload; this change does not eliminate
+that legitimate query. Sampling uncertainty and diagnostic collections prevent
+using either surviving-byte estimate as a retention trend. Both captures handle
+and persist exactly one Enter; UI settlement remains unverified.
+
+The 50-Enter workload still triggers the guard at 200065024 combined RSS bytes
+and 105596368 physical bytes. Eight keydowns are injected, seven appear in the
+last exported handled counter, and reopening the isolated graph confirms seven
+persisted blocks, 790 to 797. This is a failed workload. The local allocation
+repair does not satisfy application memory, latency, or visible FPS acceptance.
+Default-renderer startup memory and interaction latency remain separate measured
+bottlenecks; neither should be selected from generic heap growth alone.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
