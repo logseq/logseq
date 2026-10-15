@@ -29,6 +29,79 @@ migrates from efficiency to performance cores is not a controlled comparison of
 algorithmic execution time. Baseline eligibility also requires the window to be
 visible throughout the measured interval; it does not itself certify FPS.
 
+## Measured decision: repeated startup submissions
+
+The next optimization must be selected from a measured failure, with a predicted
+saving and an unchanged-workload comparison. An unnecessary operation is not,
+by itself, evidence that removing it closes the memory or latency gap.
+
+### Capture and hypothesis
+
+A protected full-application run captured four consecutive native Metal scenes
+before the 200 MB combined-process guard terminated startup. Their revisions
+were 2, 4, 6, and 8. Scenes 0 and 1 had identical canvas, ops, glyphs, atlas
+pixels, and CPU-rendered pixels; scenes 2 and 3 also matched exactly. All four
+used the unchanged 2880x1800 device viewport. The full application acquired
+three distinct IOSurface-backed textures, with 62,226,432 allocated bytes in
+the layer's read-only residency set.
+
+Hypothesis: omitting the two visually redundant submissions could reduce
+native graphics residency. Test that hypothesis before retaining another
+frame snapshot or adding renderer invalidation rules.
+
+### Controlled result
+
+A standalone SDL/Metal replay used the actual four captured scenes, the current
+release LUI library, the bundled SDL 2.32.6, native titlebar/menu/activation
+setup, and the same viewport. Requested drawable-acquisition offsets were
+0, 319.790, 379.600, and 398.567 ms. The counterfactual omitted scenes 1 and 3,
+retaining both distinct outputs. Six serial protected runs compared three
+original sequences with three counterfactual sequences; no builds or tests
+ran during recording. Every run exited normally below the 200 MB guard.
+
+| Measurement | Four submissions | Two submissions |
+| --- | --- | --- |
+| Median peak physical footprint | 148,554,712 bytes | 149,062,616 bytes |
+| Median peak RSS | 99,958,784 bytes | 100,515,840 bytes |
+| Distinct drawable textures in every run | 2 | 2 |
+| Maximum layer residency allocation count | 2 | 2 |
+| Median physical footprint during seconds 12-16 | 74,089,432 bytes | 74,236,888 bytes |
+
+The first exploratory run started its offsets before first-frame preparation;
+its acquisitions did not match the intended cadence. It remains saved and is
+excluded above. Corrected original runs acquired subsequent drawables at
+319.753-323.021, 378.040-381.218, and 398.559-399.216 ms. The counterfactual's
+second acquisition occurred at 373.252-381.138 ms. These are diagnostic replay
+observations, not an exact scheduling guarantee or visible-FPS acceptance.
+The short idle interval measures startup reclamation, not sustained-idle
+acceptance; the existing 600-second requirement is unchanged.
+
+### Decision and remaining evidence
+
+This experiment found no physical-memory saving from removing the duplicate
+submissions in isolation. Do not add a frame-content cache as the proposed
+memory fix on this evidence. It also did not reproduce the full application's
+third texture, so it cannot establish that deduplication would have no benefit
+in that different path. The full application remains over budget.
+
+The isolated renderer's approximately 149 MB active peak and approximately
+74 MB late-idle footprint make native graphics working memory the first
+memory-attribution target. A managed-allocation optimization must state how
+much of the remaining budget gap it can address. The next graphics experiment
+must explain the full-application versus replay difference using actual
+acquisitions and resource lifetimes, rather than configured pool capacity.
+CPU optimization remains a separate investigation of the main-thread
+31-41 ms Enter path; GPU work and allocation rates cannot substitute for that
+CPU attribution. Require a failing regression, a measured before/after saving,
+and preserved behavior before accepting any production change.
+
+Raw scene files, exact pixel comparisons, executable/source hashes, acquisition
+logs, per-run external memory samples, and aggregate results remain under
+ignored `tmp/native-app/science-scene-sequence-frames/`,
+`science-scene-sequence-pixels/`, `science-sequence-ab-*/`, and
+`science-sequence-ab-results.json`. This experiment changed no production code
+or renderer defaults and does not satisfy native interaction acceptance.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
