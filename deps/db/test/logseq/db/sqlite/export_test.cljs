@@ -1527,3 +1527,22 @@
                                                                :edn-label "invalid tx EDN"})]
        (is (some? (:error result)))
        (is (re-find #"validation error" (:error result)))))))
+
+(deftest patch-invalid-keywords-preserves-unicode-idents
+  (let [patch #'sqlite-export/patch-invalid-keywords
+        invalid-ident (keyword "user.property" "2nd")
+        legacy-map {::sqlite-export/kv-values
+                    [{:db/ident :logseq.kv/graph-initial-schema-version
+                      :kv/value {:major 64 :minor 8}}]
+                    :data {:tag-ident :user.class/über-abc1234
+                           :property-ident invalid-ident}}]
+    (testing "graphs initialized before 64.9 still get leading-digit keywords repaired"
+      (let [patched (patch legacy-map)]
+        (is (= :user.property/NUM-2nd (get-in patched [:data :property-ident])))))
+    (testing "non-ASCII ident names are not mangled by the legacy ASCII sanitizer"
+      (let [patched (patch legacy-map)]
+        (is (= :user.class/über-abc1234 (get-in patched [:data :tag-ident])))))
+    (testing "newer graphs are left untouched"
+      (let [new-map (assoc-in legacy-map [::sqlite-export/kv-values 0 :kv/value] {:major 64 :minor 9})]
+        (is (= invalid-ident
+               (get-in (patch new-map) [:data :property-ident])))))))
