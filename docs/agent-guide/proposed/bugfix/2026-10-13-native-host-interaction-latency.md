@@ -627,6 +627,134 @@ hashes are recorded in `science-metal-poststartup-90-provenance.json`. This
 result corrects startup-only attribution and does not certify the memory,
 interaction-latency, or FPS goals.
 
+## Managed live payload and input synchronization
+
+A fresh Metal Memtrace diagnostic uses the current release source and installed
+LUI revision `943e9acd7bac25e18b69d39136b62ac5e1a3c513`. It samples at 0.0005,
+completes and persists all 50 Enter actions, and forces two diagnostic major
+collections at 60 seconds while the page remains mounted. The retained marker
+is delayed another second so deallocation callbacks can run. Exact GC live
+payload is 19,223,696 bytes in 32,847,288 bytes of heap capacity; sampled live
+payload is 17,536,000 bytes. The estimates are not exact object sizes.
+
+| Disjoint sampled live owner | Estimated bytes |
+| --- | ---: |
+| Flex layout | 3,616,000 |
+| Signals | 2,496,000 |
+| Native element snapshots | 1,904,000 |
+| Scene, including CPU atlas pixels | 1,616,000 |
+| Retained store | 1,344,000 |
+| Layout adapter | 1,088,000 |
+| View runtime | 960,000 |
+| Retained paint fragments | 880,000 |
+
+Unlike the earlier software-renderer lifetime snapshot, this Metal checkpoint
+does not identify a single multi-megabyte loop allocation as retained payload.
+The temporary producer, explicit collections, and Memtrace dependency are not
+part of the shipped source. Raw evidence is retained under ignored
+`tmp/native-app/science-metal-live-current-v3*`. Two earlier launch attempts
+are excluded: one used the previous binary and ended early, and the other
+failed dynamic-library loading before metrics started.
+
+The input trace attributes approximately 31.7 MB of allocation to temporary
+preorder lists built by autofocus, appearance, overlay, and scroll store scans.
+Those scans now use the existing intrusive-tree iterator. Lifecycle sets keep
+physical identity when membership is unchanged; equal-size member replacements
+still rebuild them. Native event admission reads required properties directly
+through the shared protocol predicate rather than constructing a temporary
+property map containing every admission flag.
+
+Four 6000-node allocation regressions first fail at approximately 289 KB per
+scan, or 577 KB for the two scroll scans. They now use 514, 506, 386, and 914
+bytes respectively, under unchanged 16 KiB budgets. A dense 6000-node appearance
+case first measures 3,557,360 bytes and now uses 864,592 bytes, below its unchanged
+1,000,000-byte budget. The initial direct-set-insertion experiment regressed the
+dense case and was replaced before committing. Tests preserve tree order,
+visible/enabled autofocus eligibility, overlay scope and stacking, appearance
+removal/re-addition, equal-size member replacement, and tracked-list order.
+A native-admission matrix covers every standard kind, both ordinary/treeitem
+roles, and all 32 flag combinations. Existing protocol tests retain the
+independent expected admission behavior.
+
+The full LUI build/test aliases and native application host tests pass. The
+formatter invocation cannot certify formatting because the repository has no
+formatter configuration and the tool declines to run without opt-in. No compiler
+warnings are disabled. Application memory and timing must still be measured with
+the rebuilt binary; fixture allocation savings are not retained-memory or FPS
+acceptance.
+
+A separate unchanged-binary allocator control removes the inherited
+`MallocNanoZone=0` setting only from the GUI. Its 35–55-second GUI median is
+102.89 MB and its 80–89-second median is 104.71 MB, versus 104.60 and 106.22 MB
+in the earlier run. One such pair cannot distinguish a small allocator gain
+from run variation and does not solve the memory target. Worker configuration
+is unchanged.
+
+### Application crossover and idle menu callback
+
+The release crossover uses the full Metal viewport, the same isolated graph,
+worker executable, SDL library, runtime settings, and 50 Enter actions at ten
+per second. In the first completed before/after pair, both applications handle
+and persist all 50 actions and exit normally. Host allocation decreases from
+882,734,328 to 804,155,056 bytes. GUI physical-footprint medians at 80–89 seconds
+are 105.91 MB before and 101.53 MB after. The second optimized run allocates
+834,375,280 bytes and has a 103.97 MB GUI median over the same interval. These
+samples show variability; they do not establish a stable sub-100 MB result.
+The first pair's active-frame p95 remains 20.88 and 20.31 ms, respectively, so
+neither passes the editing frame-time target. Presentation FPS is not certified.
+
+The reversed pair's baseline run aborts before input with `no domain lock held`.
+Its system crash report identifies `caml_callback_exn` called by an AppKit menu
+action during `SDL_WaitEventTimeout`. The host's menu callback did not reacquire
+the OCaml runtime released by that wait. This failed recording is excluded from
+memory/timing comparisons rather than treated as a completed baseline.
+
+A regression dispatches the real AppKit menu target through `sendAction`, first
+with the runtime held and nested dispatch, then from the unlocked state used by
+SDL. The callback allocates and runs a minor collection. It reproduces the same
+fatal error before the fix. The callback now conditionally acquires the runtime
+and restores its original ownership afterward. The regression and full native
+host tests pass, including allocation after an unlocked callback. The original
+system crash report and red/green logs remain under ignored
+`tmp/native-app/science-native-menu-crash.ips` and
+`tmp/native-app/science-menu-runtime-*.log`.
+
+Input synchronization is committed in LUI as
+`d62bb7efa9843d5b45bc347ebfef0b0bea43396c` on `feat/ml-backend`. The runtime
+package is explicitly reinstalled after updating its pin; pin synchronization
+alone is not evidence that installed code changed. The final app must be built
+against that installed package and include the menu boundary repair. The
+memory goal remains open, with GUI and worker footprint reported separately.
+
+### Installed release verification
+
+The installed classic runtime package's protocol and focus sources match LUI
+`d62bb7efa9843d5b45bc347ebfef0b0bea43396c`. A fresh build against that installed
+package passes the native host test alias and includes the menu runtime repair
+committed as `e415ce47ec`. Both release and profiling bundles are rebuilt,
+ad-hoc signed, and verified; their executable SHA-256 is
+`8b38f2af28aec9e09bc662c7e761c9a752c8ea67e7f1a76f1e24f0c23c96b5e6`.
+Neither executable contains the temporary Memtrace producer.
+
+The final release runs the same 90-second Metal workload and handles and
+persists all 50 actions. Every metrics sample reports a visible window, and a
+native screenshot confirms the loaded page and created rows. At 80–89 seconds,
+median GUI physical footprint is 104,973,296 bytes and worker footprint is
+28,574,200 bytes, approximately 133.55 MB combined. Host allocation is
+828,889,624 bytes. Active-frame p95 is 20.95 ms, and the displayed FPS counter
+still reads zero despite successful rendering. This verifies the rebuilt
+workload and avoids a premature memory or frame-rate claim. Physical memory
+varies across runs, including the earlier optimized 101.53 and 103.97 MB GUI
+medians. Startup combined physical peak is 227,690,008 bytes, above the normal
+200 MB guard; the explicitly labelled 400 MB diagnostic collector remains
+necessary for this investigation. The applications exit after recording.
+
+The final run is retained under ignored
+`tmp/native-app/science-input-menu-final-metal-90/`. The memory target and the
+long idle, scrolling, and frame-time acceptance remain open. Document validation
+passes for this decision; the full documentation check still reports thirteen
+pre-existing invalid documents outside this change.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content
