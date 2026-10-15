@@ -212,41 +212,75 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
              ~default:"") )
     ]
 
-(* Snapshot caches — collecting the doc walks every extension node and
-   parses each node's "attrs" JSON, and the query paths (selector lookups,
-   event-target resolution, shadow scope checks) each used to rebuild it
-   from scratch, which multiplied a full-tree walk per element lifecycle
-   event into a GC storm. The epoch key covers every mutation channel:
-   apply_batch bumps the generation, creates/removes change the extension
-   node count, and prop writes enqueue pending ops. *)
+(* Subtree snapshots include ancestry, so each mutation invalidates them.
+   Shallow snapshots depend only on their node's immutable property maps
+   and kind; retain unchanged ones across epochs. Runtime ownership also
+   separates applications whose generations and node ids happen to match. *)
 let snapshot_epoch (rt : Lui_runtime.application) =
   ( Lui_runtime.generation rt
   , Hashtbl.length rt.Lui_runtime.runtime_extension_nodes
-  , List.length !(rt.Lui_runtime.pending_ops) )
+  , !(rt.Lui_runtime.pending_ops) )
 
-let snapshot_epoch_ref = ref (-1, -1, -1)
-let shallow_cache : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 1024
+let snapshot_epoch_ref = ref (-1, -1, [])
+let snapshot_owner : Lui_runtime.application option ref = ref None
+type shallow_snapshot = {
+  standard_props : Lui_protocol.wire_value Lui_protocol.Property_map.t;
+  extension_props : Lui_protocol.wire_value Lui_protocol.String_map.t;
+  standard_kind : Lui_protocol.node_kind option;
+  extension_kind : string option;
+  snapshot : Js.Json.t;
+}
+let shallow_cache : (int, shallow_snapshot) Hashtbl.t = Hashtbl.create 1024
 let subtree_cache : (int, Js.Json.t list) Hashtbl.t = Hashtbl.create 8
+
+let standard_props rt node =
+  Option.value (Hashtbl.find_opt rt.Lui_runtime.runtime_properties node)
+    ~default:Lui_protocol.Property_map.empty
+
+let extension_props rt node =
+  Option.value (Hashtbl.find_opt rt.Lui_runtime.runtime_extension_properties node)
+    ~default:Lui_protocol.String_map.empty
+
+let shallow_current rt node cached =
+  cached.standard_props == standard_props rt node
+  && cached.extension_props == extension_props rt node
+  && cached.standard_kind = Hashtbl.find_opt rt.Lui_runtime.mounted_nodes node
+  && cached.extension_kind = Hashtbl.find_opt rt.Lui_runtime.runtime_extension_nodes node
 
 let invalidate_stale_snapshots (rt : Lui_runtime.application) =
   let epoch = snapshot_epoch rt in
-  if epoch <> !snapshot_epoch_ref then begin
+  let generation,extensions,pending = epoch in
+  let previous_generation,previous_extensions,previous_pending = !snapshot_epoch_ref in
+  (* Rollback may replace pending operations without changing their count. *)
+  let same_epoch = generation=previous_generation && extensions=previous_extensions
+    && pending==previous_pending in
+  let same_owner = match !snapshot_owner with Some owner -> owner == rt | None -> false in
+  if not same_owner || not same_epoch then begin
     snapshot_epoch_ref := epoch;
-    Hashtbl.reset shallow_cache;
+    snapshot_owner := if Hashtbl.length rt.mounted_nodes=0
+      && Hashtbl.length rt.runtime_extension_nodes=0 then None else Some rt;
+    if not same_owner then Hashtbl.reset shallow_cache;
     Hashtbl.reset subtree_cache;
-    let alive id = Hashtbl.mem rt.Lui_runtime.mounted_nodes id in
-    Hashtbl.filter_map_inplace (fun id value -> if alive id then Some value else None)
-      attrs_parse_cache;
+    let alive id = Hashtbl.mem rt.Lui_runtime.mounted_nodes id
+      || Hashtbl.mem rt.Lui_runtime.runtime_extension_nodes id in
+    Hashtbl.filter_map_inplace (fun id cached ->
+      if alive id && shallow_current rt id cached then Some cached else None) shallow_cache;
+    Hashtbl.filter_map_inplace (fun id ((raw,_) as value) ->
+      if alive id && ext_prop_string (extension_props rt id) "attrs"=Some raw
+      then Some value else None) attrs_parse_cache;
     Dom_ext.prune_nodes alive;
     Ui_dom_native.prune_tokens ()
   end
 
 let shallow_of (rt : Lui_runtime.application) node : Js.Json.t =
   match Hashtbl.find_opt shallow_cache node with
-  | Some s -> s
-  | None ->
+  | Some cached when shallow_current rt node cached -> cached.snapshot
+  | _ ->
       let s = ext_shallow_snapshot rt node in
-      Hashtbl.replace shallow_cache node s;
+      Hashtbl.replace shallow_cache node
+        {standard_props=standard_props rt node; extension_props=extension_props rt node;
+         standard_kind=Hashtbl.find_opt rt.mounted_nodes node;
+         extension_kind=Hashtbl.find_opt rt.runtime_extension_nodes node; snapshot=s};
       s
 
 let snapshot_ancestors (rt : Lui_runtime.application) node =

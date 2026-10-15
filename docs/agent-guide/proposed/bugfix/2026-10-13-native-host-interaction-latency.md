@@ -969,6 +969,52 @@ of the remaining protection failure. Both cohorts still force full-size
 software redraws while occluded and use one raster worker. Neither meets
 50-Enter, visible FPS, default-renderer memory, or full application acceptance.
 
+## Node-owned native snapshots
+
+A new 0.25-second Enter allocation capture after the keyed-checkpoint fix
+estimates 93.04 MB of total allocation, including 10.48 MB in stacks containing
+shallow snapshot construction. Checkpoint stacks account for 0.64 MB in this
+capture. These overlapping sampled stack categories are diagnostic evidence,
+not an exclusive cost breakdown or a frame-rate measurement.
+
+The subtree epoch previously discarded every shallow snapshot whenever any
+node changed. Shallow entries now retain the immutable property-map identities
+and node kinds they describe. Unchanged entries survive epoch changes; changed
+or removed owners are pruned. Full subtree snapshots still invalidate because
+their ancestry may have changed. Cache ownership also separates distinct
+application runtimes with matching generations and node ids, and disposal
+releases that runtime owner.
+
+The 1000-row, one-row-update regression fails at 1,904,920 allocated bytes and
+passes at 242,608 bytes under its unchanged 524,288-byte bound. It verifies
+reuse of an unrelated row and fresh text and attributes for the edited row.
+Rollback regressions cover reused standard kinds and extension identifiers.
+They also expose a stale subtree when rollback replaces a pending operation
+list with another list of equal length. Epoch checks now compare immutable
+pending-list identity in constant time instead of counting operations.
+
+Another regression exposes live extension nodes being classified as disposed:
+the old liveness predicate checked only standard nodes. It now includes
+extension nodes, retaining their valid parsed attributes and DOM overlays.
+Parsed attribute entries are removed when their owning raw attribute changes
+or disappears. Disposal still removes attributes, geometry, live fields, and
+held snapshots. The native host suite and both native artifact builds pass.
+
+The rebuilt, unprofiled fresh-graph Enter cohort persists 26 blocks before the
+guard terminates it after 10.19 seconds, at 105,924,048 combined physical bytes
+and 200,130,560 RSS bytes. Twenty-seven keydowns were injected. This remains
+failed memory and 50-Enter acceptance; reduced snapshot allocation alone has
+not established a materially lower full application peak.
+
+A separate startup-survival diagnostic completes normally after 8.24 seconds.
+It estimates 20.88 MB surviving from 210.56 MB sampled allocation. Individual
+retained sites include flex styles and nodes, retained paint fragments, store
+property tables, and measurement state. This capture begins at loop entry and
+excludes earlier bootstrap allocations. It forces diagnostic major collections
+and software redraws, so its 88,950,200 combined physical-byte peak is not normal
+memory acceptance. Default-renderer, multiworker, and visible interaction gates
+remain unresolved.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

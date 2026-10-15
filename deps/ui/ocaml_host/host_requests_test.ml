@@ -591,6 +591,18 @@ let () = Native_embed.with_entry_lock (fun () ->
     "rect",Js.Json.JObject ["width",Js.Json.JNumber 100.]; "ref",snapshot]);
   Dom_ext.note_node_natural_size (Js.Json.JObject ["nodeId",Js.Json.JNumber (float id)]);
   check "Live attributes were not cached" (Hashtbl.mem Native_embed.attrs_parse_cache id);
+  Lui_runtime.set_extension_prop rt id "style-class" (StringValue "updated-class");
+  ignore (Lui_app.flush app);
+  Native_embed.invalidate_stale_snapshots rt;
+  check "A live extension lost its parsed attributes after another property changed"
+    (Hashtbl.mem Native_embed.attrs_parse_cache id);
+  check "A live extension lost its DOM mutation overlay"
+    (Hashtbl.mem Dom_ext.overlays id);
+  Lui_runtime.remove_extension_prop rt id "attrs";
+  ignore (Lui_app.flush app);
+  Native_embed.invalidate_stale_snapshots rt;
+  check "Removed attributes remain in the parsed snapshot cache"
+    (not (Hashtbl.mem Native_embed.attrs_parse_cache id));
   ignore (Lui_app.dispose app);
   Native_embed.invalidate_stale_snapshots rt;
   check "Disposed row attributes remain retained" (not (Hashtbl.mem Native_embed.attrs_parse_cache id));
@@ -646,6 +658,115 @@ let () = Native_embed.with_entry_lock (fun () ->
     check "A cached subtree changed its snapshots"
       (Native_embed.collect_subtree (Lui_app.root_node app)==snapshots));
   print_endline "native shared snapshot ancestry: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let app=Lui_app.create backend Model.initial (fun model _ -> model)
+    (fun _ _ _ -> Lui_elements.column (List.init 1000 (fun id ->
+      Lui_elements.text ~value:("snapshot row " ^ string_of_int id)
+        ~data_attrs:["data-owner",string_of_int id; "data-detail",String.make 64 'x'] []))) in
+  let old_app= !Native_embed.current_app in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Native_embed.invalidate_stale_snapshots (Lui_app.runtime app);
+    Native_embed.current_app := old_app) (fun () ->
+    Native_embed.current_app := Some app;
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let rt=Lui_app.runtime app in
+    let root=Lui_app.root_node app in
+    ignore (Native_embed.collect_subtree root);
+    let target=List.find (fun id -> Lui_store.string_prop store id "text"=Some "snapshot row 0")
+      (Lui_store.preorder store) in
+    let sibling=List.find (fun id -> Lui_store.string_prop store id "text"=Some "snapshot row 1")
+      (Lui_store.preorder store) in
+    let original=Native_embed.shallow_of rt sibling in
+    Lui_runtime.set_prop rt target TextValue (StringValue "changed snapshot row");
+    ignore (Lui_app.flush app);
+    let before=Gc.allocated_bytes () in
+    let snapshots=Native_embed.collect_subtree root in
+    let bytes=Gc.allocated_bytes () -. before in
+    Printf.printf "native one-row snapshot refresh allocated %.0f bytes\n%!" bytes;
+    check "Snapshot refresh copied unchanged node properties" (bytes <= 524288.);
+    check "An unrelated row lost its cached immutable snapshot"
+      (original==Native_embed.shallow_of rt sibling);
+    check "A changed row returned its old snapshot text"
+      (List.exists (fun el -> Dom_ext.str_prop "text" el=Some "changed snapshot row") snapshots);
+    Lui_runtime.set_prop rt target DataAttrs
+      (StringValue (Lui_protocol.data_attrs_encode ["data-owner","updated"]));
+    ignore (Lui_app.flush app);
+    let updated=Native_embed.ext_snapshot rt target in
+    check "A changed attribute returned stale parsed data"
+      (Dom_ext.el_attr updated "data-owner"=Some "updated"));
+  print_endline "native per-node snapshot reuse: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let registry=Lui_extension.registry () in
+  List.iter (fun name -> Lui_extension.register_component registry
+    (Lui_extension.component name [profile MacOS GenericHost] false [] [] []))
+    ["snapshot-first";"snapshot-second"];
+  let app=Lui_app.create_with_extensions backend registry Model.initial
+    (fun model _ -> model) (fun _ _ _ -> Lui_elements.column []) in
+  ignore (Lui_app.start app); ignore (Lui_app.flush app);
+  let rt=Lui_app.runtime app in
+  let old_app= !Native_embed.current_app in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.invalidate_stale_snapshots rt;
+    Native_embed.current_app := old_app) (fun () ->
+    Native_embed.current_app := Some app;
+    let saved=Lui_runtime.checkpoint rt in
+    let old_id=Lui_runtime.create_node rt Text in
+    Lui_runtime.insert_child rt (Lui_app.root_node app) old_id 0;
+    ignore (Native_embed.ext_snapshot rt old_id);
+    ignore (Native_embed.collect_subtree (Lui_app.root_node app));
+    Lui_runtime.restore rt saved;
+    let new_id=Lui_runtime.create_node rt Button in
+    Lui_runtime.insert_child rt (Lui_app.root_node app) new_id 0;
+    check "Rollback did not reuse the candidate identity" (new_id=old_id);
+    check "Reused node identity returned the previous kind"
+      (Dom_ext.tag_name (Native_embed.ext_snapshot rt new_id)="button");
+    check "A rollback with equal pending-operation counts reused a stale subtree"
+      (List.exists (fun el -> Dom_ext.num_prop "node-id" el=Some (float new_id)
+        && Dom_ext.tag_name el="button")
+        (Native_embed.collect_subtree (Lui_app.root_node app)));
+    Lui_runtime.restore rt saved;
+    let old_extension=Lui_runtime.create_extension_node rt "snapshot-first" in
+    ignore (Native_embed.ext_snapshot rt old_extension);
+    Lui_runtime.restore rt saved;
+    let new_extension=Lui_runtime.create_extension_node rt "snapshot-second" in
+    check "Reused extension identity returned the previous identifier"
+      (new_extension=old_extension
+       && Dom_ext.tag_name (Native_embed.ext_snapshot rt new_extension)="snapshot-second");
+    Lui_runtime.restore rt saved);
+  print_endline "native snapshot identity after rollback: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let make text =
+    let store=Lui_store.create () in
+    let backend={backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+    let app=Lui_app.create backend Model.initial (fun model _ -> model)
+      (fun _ _ _ -> Lui_elements.column [Lui_elements.text ~value:text []]) in
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);app in
+  let first=make "first runtime" and second=make "second runtime" in
+  let old_app= !Native_embed.current_app in
+  Fun.protect ~finally:(fun () ->
+    List.iter (fun app -> ignore (Lui_app.dispose app);
+      Native_embed.invalidate_stale_snapshots (Lui_app.runtime app)) [first;second];
+    Native_embed.current_app := old_app) (fun () ->
+    List.iter (fun (app,text) ->
+      Native_embed.current_app := Some app;
+      let snapshots=Native_embed.collect_subtree (Lui_app.root_node app) in
+      check "Snapshot cache crossed application ownership"
+        (List.exists (fun el -> Dom_ext.str_prop "text" el=Some text) snapshots))
+      [first,"first runtime";second,"second runtime";first,"first runtime"]);
+  check "Snapshot ownership retains a disposed runtime"
+    (Option.is_none !Native_embed.snapshot_owner);
+  print_endline "native snapshot runtime ownership: OK")
 
 let () =
   let snapshot id = Js.Json.JObject ["node-id",Js.Json.JNumber (float id)] in
