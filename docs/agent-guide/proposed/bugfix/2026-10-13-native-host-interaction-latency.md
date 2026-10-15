@@ -746,6 +746,61 @@ The default remains Metal. Software pixel correctness and reduced isolated
 memory do not certify complete application memory, visible presentation,
 scrolling, editing, or effect support. The 30–100 MB objective remains open.
 
+## Continuous-corner pixel allocation
+
+A fresh standalone replay of the saved 2880×1800 application scene isolates
+the raster path from graph startup. Sampling identifies continuous-corner
+distance and clipped sharp inset-shadow coverage among its largest repeated
+allocation sites. Corner distance constructs four coordinate pairs, lists,
+and a capturing callback for every evaluated pixel. Clip coverage likewise
+captures its accumulator in a per-pixel traversal closure.
+
+Two new renderer regressions reproduce 12,956,114 bytes per continuous-border
+redraw and 19,991,474 bytes per clipped sharp-inset redraw. Both fail their
+1,000,000-byte limit before the change. Corner reach and distance now use
+scalar helpers, and clip coverage walks its existing stack without a callback.
+The same cases allocate 687,602 and 221,954 bytes per redraw afterward. The
+36 raster tests pass, including reference pixels, changing clips, partial
+damage, parallel bands, resize, and renderer error/lifetime cases. These are
+renderer integration results; application memory acceptance still requires
+a rebuilt full-app measurement under the existing guard.
+
+The complete classic-runtime LUI build and test aliases and the rebuilt native
+host regressions pass. The CLI scaffold initially runs before local-install
+artifacts are complete in the combined build/test invocation; after the build
+finishes, the same invocation passes without changing its checks. Reference
+and cross-renderer pixel comparisons also pass.
+
+An unprofiled 120-redraw replay of that same application scene, using four
+workers, reduces allocation from 13,202,888 to 1,923,757 bytes/frame. Its elapsed
+time changes from 0.611 to 0.576 seconds; these short aggregate durations are
+not application frame-acceptance measurements. The four-worker full-app
+open-panel cohort still fails, reaching 109,037,008 combined physical bytes /
+200,523,776 RSS bytes after 2.22 seconds. Startup ownership remains a separate
+problem despite the substantial reduction in pixel allocation.
+
+Malloc stack tracing also identifies runtime-owned large strings and arrays
+and remembered/custom-block tables among native malloc allocations. Malloc
+regions therefore overlap the managed-heap accounting and must not be added
+to it as if they were all independent graphics or framework resources. The
+instrumented cohort is diagnostic and does not replace uninstrumented peaks.
+
+The single-worker open-panel comparison completes 60.19 seconds without a
+protection kill. GUI lifetime physical peak is 80,118,744 bytes; sampled
+GUI-plus-worker peaks are 100,844,960 physical bytes and 191,463,424 RSS bytes.
+Its 53.25-second warm interval has 6,452 fresh active-CPU samples with p95
+8.73 ms and maximum 24.06 ms. Host allocation is 89.59 MB/s, compared with
+111.52 MB/s in the earlier open-panel recording. This remains a short,
+invisible diagnostic and still fails the 8.33 ms work budget. The default
+worker count and renderer remain unchanged.
+
+Inspection of the software presenter identifies another ownership path to
+verify: every submitted band creates new immutable IOSurfaces even when its
+pixels equal the retained band. Retaining an already identical immutable
+image would avoid replacing compositor resources without overwriting pixels
+that the compositor may still read. This requires a failing resource-identity
+regression, exact pixel/readback checks, and another full-app measurement.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
