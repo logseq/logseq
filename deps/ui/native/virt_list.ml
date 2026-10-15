@@ -31,7 +31,8 @@ let lazy_spine ctx =
   | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost -> true
   | _ -> false
 
-let lazy_row ?node_key ?(style_class="") ~key ~estimate_size near ns child : t =
+let lazy_row ?node_key ?(style_class="") ?(pinned=fun () -> false)
+    ~key ~estimate_size near ns child : t =
  fun ctx parent ->
   let extent = Signal.state ctx.Lui_ui.ui_scheduler (estimate_size 0) in
   (* The native viewport widget owns this binding through Logseq_el.
@@ -50,7 +51,7 @@ let lazy_row ?node_key ?(style_class="") ~key ~estimate_size near ns child : t =
         if not (Float.is_finite height) || height < 0. then
           invalid_arg "Invalid lazy row measured height";
         Signal.set extent height;
-        Signal.set near false
+        if not (pinned ()) then Signal.set near false
       end)
     [if_ ~test:ns child]) ctx parent
 

@@ -51,7 +51,7 @@ let uuids_of_payload payload =
    near row's uuid — a single publish round lifts all their latches.
    Other hosts keep the eager mount — the native backend already windows the
    journals page and the web gate lives in the outer list. *)
-let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
+let lazy_rows ~active_key ~key ~cmp ~mount ~estimate_height ~source : t =
  fun ctx parent ->
   if Lui_ui.host ctx <> Lui_protocol.GenericHost then
     (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
@@ -76,12 +76,21 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
              (fun uuid -> Signal.set (near_of uuid) true)
              (uuids_of_payload payload))
        [ Lui_elements.keyed ~source ~key ~cmp
-           ~mount:(fun bs ->
+           ~mount:(fun bs row_ctx row_parent ->
              let b = Signal.get bs in
              let uuid = key b in
              let near = near_of uuid in
-             let near_sig = (Signal.value (near)) in
+             let near_sig = Signal.value near in
+             (* Editor activation can precede the viewport event for a new row.
+                Keep the latch raised until the host measures and releases it. *)
+             Option.iter (fun source ->
+               ignore (Signal.own row_ctx.Lui_ui.ui_scope
+                 (Signal.subscribe ~emit_initial:true source (fun active ->
+                   if active=Some uuid then Signal.set near true)))) active_key;
              Virt_list.lazy_row ~key:uuid ~estimate_size:(fun _ -> estimate_height b)
-               near near_sig (mount bs)) ])
+               ~pinned:(fun () -> match active_key with
+                 | Some source -> Signal.get source=Some uuid
+                 | None -> false)
+               near near_sig (mount bs) row_ctx row_parent) ])
       ctx parent
   end

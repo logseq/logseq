@@ -61,7 +61,7 @@ let target_fps = 120.
 let frame_budget_ms = 1000. /. target_fps
 let next_deadline ~previous ~now = max now (previous +. 1. /. target_fps)
 let idle_timeout ~dirty ~now ~last_busy =
-  if not dirty && now -. last_busy >= 2. then Some 16 else None
+  if not dirty && now -. last_busy >= 2. then Some 1000 else None
 let sample_history () =
   {values=Array.make 240 0.; formatted=Array.make 240 None;
    indices=Array.make 240 0; scratch=Array.make 240 0;

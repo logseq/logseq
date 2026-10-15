@@ -1061,6 +1061,7 @@ let page_wrap_cls (m : Model.t) (page : Model.page) : string =
 let journal_item_sig (ms : Model.t Signal.signal)
     (ps : Model.page Signal.signal) : t =
  fun ctx parent ->
+  S.ensure ctx;
   let p0 = Signal.get ps in
   let key =
     Option.value p0.Model.page_uuid ~default:p0.Model.page_title
@@ -1158,6 +1159,10 @@ let journal_item_sig (ms : Model.t Signal.signal)
                              [ ("data-level", "0")
                              ; ("style", "position:relative") ]
                            [ Lazy_children.lazy_rows ~source:blocks_sig
+                               ~active_key:(Some (Logseq_el.own ctx
+                                 (Signal.map (function
+                                   | Some (uuid, "main") -> Some uuid
+                                   | _ -> None) (S.editing_target_sig ()))))
                                ~key:Tree.block_key ~cmp:String.compare
                                ~estimate_height:(fun b ->
                                  32. +. Tree.estimate_children_height b)

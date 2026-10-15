@@ -134,9 +134,20 @@ CAMLprim value logseq_native_test_expose_unlocked(value id) {
   CAMLreturn(Val_unit);
 }
 
-/* OCaml-internal: native_embed.ml's `external wakeup` lands here. The
-   host loop polls Bridge.pending_wakeup once per frame; a flag is all
-   the main thread needs (the host's <=16ms pump cadence). */
+/* A notification accompanies the pending flag so a quiet host can block
+   without delaying cross-thread mailbox or platform-request delivery. */
+CAMLprim value logseq_native_notify_event_loop(value unit_v) {
+  CAMLparam1(unit_v);
+  if (SDL_WasInit(SDL_INIT_EVENTS)) {
+    SDL_Event event = {0};
+    event.type = SDL_USEREVENT;
+    event.user.code = 0x4c53574b;
+    if (SDL_PushEvent(&event) < 0) caml_failwith(SDL_GetError());
+  }
+  CAMLreturn(Val_unit);
+}
+
+/* OCaml-internal: native_embed.ml's `external wakeup` lands here. */
 CAMLprim void logseq_lui_wakeup(void) {
   const value *cb = caml_named_value("ocaml_host_wakeup");
   if (cb != NULL) {

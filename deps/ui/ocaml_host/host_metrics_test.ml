@@ -12,7 +12,7 @@ let () =
   check "Scheduler queues obsolete frames after a long reflow"
     (Host_metrics.next_deadline ~previous:1. ~now:1.1 >= 1.1);
   check "Quiet native loops must wait for an event independent of repaint count"
-    (Host_metrics.idle_timeout ~dirty:false ~now:10. ~last_busy:0. = Some 16);
+    (Host_metrics.idle_timeout ~dirty:false ~now:10. ~last_busy:0. = Some 1000);
   check "Recent activity must keep mailbox chains responsive"
     (Host_metrics.idle_timeout ~dirty:false ~now:1. ~last_busy:0. = None);
   check "A dirty frame must not wait for an event"

@@ -982,7 +982,17 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        :: (if List.length kids >= 64 then
              [ ("data-virtuoso-scroller", "true") ]
            else []))
-    (if virtualize && List.length kids >= 64 then
+    (if Lui_ui.host ctx = Lui_protocol.GenericHost then
+       [ Lazy_children.lazy_rows ~key:block_key ~cmp:String.compare
+           ~active_key:(Some (Logseq_el.own ctx
+             (Signal.map (function
+               | Some (uuid, target_scope) when target_scope=scope -> Some uuid
+               | _ -> None) (S.editing_target_sig ()))))
+           ~estimate_height:(fun block -> 32. +. estimate_children_height block)
+           ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
+           ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
+                     ~library ~virtualize) ]
+     else if virtualize && List.length kids >= 64 then
        [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
            ~initial_rows:48
            ~render:(block_row ~scope ~editable ~depth:(depth + 1) ~library

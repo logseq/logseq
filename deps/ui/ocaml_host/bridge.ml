@@ -8,6 +8,11 @@
    deadlock if handled synchronously. *)
 
 let pending_wakeup = Atomic.make false
+external notify_event_loop : unit -> unit = "logseq_native_notify_event_loop"
+
+let wakeup () =
+  if not (Atomic.exchange pending_wakeup true) then notify_event_loop ()
+
 let requests : string Queue.t = Queue.create ()
 let requests_lock = Mutex.create ()
 
@@ -19,9 +24,9 @@ let take_requests () =
   out
 
 let () =
-  Callback.register "ocaml_host_wakeup" (fun () ->
-      Atomic.set pending_wakeup true);
+  Callback.register "ocaml_host_wakeup" wakeup;
   Callback.register "ocaml_host_platform_request" (fun (s : string) ->
       Mutex.lock requests_lock;
       Queue.add s requests;
-      Mutex.unlock requests_lock)
+      Mutex.unlock requests_lock;
+      wakeup ())

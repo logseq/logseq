@@ -976,6 +976,131 @@ The combined 30–100 MB goal remains unmet. These diagnostics use a temporary
 its 200 MB guard. No forced collection, allocator override, debugger pause, or
 occluded-window replay counts as final interaction acceptance.
 
+## Nested native row mounting and editor lifetime
+
+Native Journals row gates only bounded top-level blocks. A mounted parent with
+53 children eagerly created the whole nested tree, even when those children
+were beyond the viewport. The new native integration regression first measured
+1644 nodes and failed its 128-node initial limit. Nested children now use the
+same per-row viewport lifecycle as top-level rows: 55 initial nodes, with
+estimated extents, mount/unmount/reentry, and row identity preserved. Browser
+list windowing keeps its existing path.
+
+The active editing target now raises its row's mount latch before native focus
+arrives. The target includes the pane scope, and its derived signal ignores
+buffer-only changes. A separate regression exposed an intermediate failure:
+a viewport unmount could dispose the newly mounted editor while native focus
+was still pending. Active rows now retain the latch during that interval while
+still recording their measured extent. A different pane cannot pin the row.
+
+The actual native app reproduction injects 50 Enter actions, then the literal
+focus-tail text, then Escape. Before the fix, the model has 51 rows but none
+contains that text. After the fix, the final row contains it exactly once, all
+orders are present and sorted, and native focus diagnostics match the active
+editing UUID before Escape. This is isolated SDL input, not OS-input or IME
+acceptance. Evidence is in science-enter-focus-tail-red-r1,
+science-enter-focus-tail-pinned-green-r3, and its semantic-results.json.
+
+The native release targets and test aliases pass; the independently executed
+shared Web entry point reports 2080 checks and zero failures. The production
+candidate hash is 6324bfa3815197834d5318a279c978bede8963da3f62e2ffb9d2f6475f4f1bfc.
+
+An earlier 2-raster-worker control reduced sampled combined physical peak from
+119293368 to 100058552 bytes, but also changed layout counts and retained heap.
+The eager nested-tree mount depended on viewport timing, so the whole saving
+cannot be attributed to domain count. No default worker-count or backend change
+is selected from that pair.
+
+The extended candidate workload adds 200 Unicode characters after 50 Enter,
+then requires over 600 seconds after Escape. The first attempt stops at the
+normal combined 200 MB RSS guard after 13.35 seconds, with 103630360 physical
+bytes. Its count query preceded editor activation; it is excluded from semantic
+and sustained-idle acceptance. Database queries also warm worker caches. The
+replacement removes queries from the measured interval. It exits normally after
+640.68 seconds, then reopens the same graph without resetting it. The reopened
+journal has 51 ordered rows and the final row contains all 200 Unicode
+characters exactly once. The native counters record 50 Enter actions, 200 text
+commits, and 431 UTF-8 bytes. It temporarily guards physical footprint at
+200 MB while reporting RSS, as authorized for diagnosis.
+
+Sampled combined physical peak is 105416168 bytes; final GUI and worker
+footprints are 76612592 and 26722808 bytes. Combined sampled RSS peak is
+208945152 bytes. During 608.62 quiet seconds, event and layout counts do not
+change, host allocation averages 195928 bytes/s, and sampled live bytes fall
+from 27360960 to 26745408. Heap capacity grows from 31580136 to 35547480 bytes.
+These sampled live-byte totals do not establish a leak, but polling and managed
+heap capacity still contribute to idle memory. Complete timing histories have
+no lost samples: active-frame p95 is 15.82 ms, input-latency p95 is 17.79 ms,
+and layout p95 is 5.95 ms. Occluded software presentation does not establish
+visible FPS. Neither the active peak nor the final combined footprint meets
+the 100 MB goal.
+
+Raw records are in science-nested-rows-cocoa2-long-r1,
+science-nested-rows-cocoa2-long-r2, and science-nested-rows-long-reopen-r1.
+Both memory runs use the normal full viewport; the replacement explicitly
+selects the existing software backend with two raster workers. The default
+Metal backend and its GPU submission working-memory issue remain open.
+
+## Native mailbox wakeups and idle polling
+
+A one-raster-worker control completes the same 640-second workload and reopens
+the same graph with all 51 rows and the final 200-character title intact.
+Combined physical peak is 102352360 bytes. The last positive GUI and worker
+samples are 64570352 and 29229560 bytes. One zero-footprint GUI read during
+process exit is excluded, not treated as a memory improvement. During 608.42
+seconds without new events or layouts, host allocation averages 196181 bytes/s.
+The worker-count control still fails the peak budget and is not a default change.
+
+A separate 60-second allocation-only profile on the persisted graph estimates
+11280000 allocated bytes. Inclusive stack groups include SDL blocking waits
+(3200000 bytes), metric serialization (1520000), focus checks (1440000), and
+event draining (1280000). These are sampled estimates and can overlap. The
+native bridge only sets an atomic flag, forcing the host to poll every 16 ms.
+A real cross-thread mailbox regression fails because the blocking SDL wait
+reaches its timeout despite a queued callback.
+
+The bridge now accompanies the first pending notification with an SDL user
+event. Bursts coalesce until the main loop consumes the pending flag. Quiet
+macOS waits can last up to one second and still wake for input and asynchronous
+work. Recent activity retains its existing pacing; Linux shell pumping and
+pending visible presentation retain 16 ms waits; an open metrics panel uses
+250 ms. Regressions verify delivery during a blocking wait, preservation of
+the queued event, all 100 callbacks in a burst, one notification per burst,
+and calls before SDL initialization and after shutdown. The complete native
+release targets and test aliases pass. Raw failed/passing test logs and the
+allocation profile remain under the ignored native diagnostic directory.
+
+The frozen production-source candidate has SHA-256
+99cd78711fdf744abb6ced46c5c3f76d1f9d76558e347313cbfce640312c6dee.
+Its full workload recording, science-event-wake-cocoa1-long-r1, exits normally
+after 642.08 seconds. A same-graph reopen verifies 51 ordered rows and the exact
+200-character final title. During 609.67 seconds without further input, two SDL
+events arrive but layout count does not change. Host allocation averages
+59513 bytes/s, versus 196181 bytes/s before the change. Quiet-loop averages are
+approximately one iteration/s between notifications; their brief active pacing
+raises the whole interval average to 1.39 iterations/s. Complete metric-history
+exports remain enabled. Sampled live bytes fall from 25444008 to 25058632,
+while heap capacity rises from 28119088 to 32004736 bytes.
+
+Sampled combined physical peak is 100025880 bytes, and the last positive GUI
+and worker samples are 67732488 and 30147064 bytes. One process-exit sample is
+excluded. Combined RSS peak is 203669504 bytes. Complete timing histories lose
+no samples: active-frame p95 is 17.09 ms, input-latency p95 is 20.77 ms, and
+layout p95 is 6.95 ms. The run still fails the strict 100 MB physical bound and
+the editing frame budget. This software-backend diagnostic does not solve the
+default Metal submission allocation or establish displayed FPS; default backend
+and raster-worker count remain unchanged.
+
+A separate static-icon representation control rejects a predicted saving
+before any production change. Three alternating fresh-process pairs compare
+the existing compiled children constants with a packed build-time Marshal
+payload and name/offset index. After two diagnostic major collections, physical
+footprints are approximately 1.77–1.80 MB for the existing constants and
+1.77–1.79 MB for the packed representation. This does not support a multi-MB
+physical-memory saving from packing the constants. The control is an isolated
+module fixture, not an application measurement; no icon codec or cache change
+is adopted. Sources and results remain in science-icon-static-control.
+
 ## Optimistic Enter order during asynchronous delta publication
 
 The native application reproduces new empty rows above their original block

@@ -2361,9 +2361,13 @@ let () =
     match Host_metrics.idle_timeout ~dirty ~now ~last_busy:!last_busy with
     | Some timeout ->
         if not can_present || not presentation.pending then Option.iter Lui_metal.trim metal;
-        (* The event remains queued for drain_events. Apply this to Metal
-           too: it has no GL vsync and would otherwise keep polling at
-           the active-frame cadence even when nothing needs repainting. *)
+        (* SDL input and bridge notifications interrupt this wait. Keep the
+           Linux shell pump and pending presentations at their existing
+           cadence; an open metrics panel refreshes four times a second. *)
+        let timeout =
+          if not Host_platform.is_macos || (can_present && presentation.pending) then 16
+          else if metrics.panel_open then 250
+          else timeout in
         ignore (Sdl.wait_event_timeout None timeout)
     | None when not vsync ->
         frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;

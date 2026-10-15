@@ -232,6 +232,7 @@ let equal_collapse_view a b =
 
 type field_sigs =
   { editing_sig : editing option Signal.signal
+  ; editing_target_sig : (string * string) option Signal.signal
   ; selected_sig : String_set.t Signal.signal
   ; anchor_sig : string option Signal.signal
   ; action_bar_sig : bool Signal.signal
@@ -250,6 +251,10 @@ let field_sigs () =
       let f =
         { editing_sig =
             Signal.cutoff ( = ) (Signal.map (fun st -> st.editing) s)
+        ; editing_target_sig =
+            Signal.cutoff ( = )
+              (Signal.map (fun st ->
+                Option.map (fun editing -> editing.uuid, editing.scope) st.editing) s)
         ; selected_sig =
             Signal.cutoff String_set.equal
               (Signal.map (fun st -> st.selected) s)
@@ -277,6 +282,7 @@ let field_sigs () =
       f
 
 let editing_sig () = (field_sigs ()).editing_sig
+let editing_target_sig () = (field_sigs ()).editing_target_sig
 let selected_sig () = (field_sigs ()).selected_sig
 let anchor_sig () = (field_sigs ()).anchor_sig
 let action_bar_sig () = (field_sigs ()).action_bar_sig

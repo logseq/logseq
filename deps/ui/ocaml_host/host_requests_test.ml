@@ -411,7 +411,7 @@ let lazy_row_extent mode = Native_embed.with_entry_lock (fun () ->
           ~on_dom_event:(fun _ _ -> ignore (Sys.opaque_identity resource))
           [Lui_elements.column ~height:40
             [Lui_elements.text ~value:"row" []; Lui_elements.box ~height:12 []]] context parent in
-      if mode=2 then Lazy_children.lazy_rows
+      if mode=2 then Lazy_children.lazy_rows ~active_key:None
         ~key:(fun id -> "extent-row-" ^ string_of_int id) ~cmp:String.compare
         ~mount:(fun _ -> render 0) ~estimate_height:(fun _ -> 64.)
         ~source:(Signal.constant context.Lui_ui.ui_scheduler (List.init 10 Fun.id))
@@ -527,7 +527,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
       (fun context _ _ ->
         Weak.set weak 0 (Some context.Lui_ui.ui_scheduler);
-        Lazy_children.lazy_rows ~key:(fun id -> "dispose-row-" ^ string_of_int id)
+        Lazy_children.lazy_rows ~active_key:None ~key:(fun id -> "dispose-row-" ^ string_of_int id)
           ~cmp:String.compare ~estimate_height:(fun _ -> 64.)
           ~mount:(fun _ -> Lui_elements.column ~height:40 [])
           ~source:(Signal.constant context.Lui_ui.ui_scheduler [1;2])) in
@@ -538,6 +538,79 @@ let () = Native_embed.with_entry_lock (fun () ->
   Gc.full_major ();
   check "Lazy row latches retain a disposed app scheduler" (not (Weak.check weak 0));
   print_endline "native lazy row disposal: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let old_state = !Editor_state.st and old_fields = !Editor_state.field_sigs_opt in
+  Editor_state.st := None; Editor_state.field_sigs_opt := None;
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := old_state; Editor_state.field_sigs_opt := old_fields) (fun () ->
+    let store = Lui_store.create () and errors = ref [] in
+    let expect message condition = if not condition then errors := message :: !errors in
+    let backend = {backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+    let registry = Lui_extension.registry () in
+    Logseq_el.register_all registry; Logseq_codemirror.register registry;
+    Logseq_editor.register registry;
+    let children = List.init 53 (fun index -> Model.empty_block
+      ~uuid:("nested-" ^ string_of_int index) ~title:"nested row" ~is_page:false) in
+    let parent_block = {(Model.empty_block ~uuid:"nested-parent" ~title:"parent" ~is_page:false)
+      with Model.block_children=children} in
+    let parent_state = ref None in
+    let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
+      (fun context _ _ ->
+        Editor_state.ensure context;
+        let state = Signal.state context.Lui_ui.ui_scheduler parent_block in
+        parent_state := Some state;
+        Tree.child_list ~depth:0 ~editable:true ~library:false ~virtualize:false
+          "nested-parent" "main" (Signal.value state)) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app); ignore (Lui_app.flush app);
+      let initial_nodes = Lui_store.node_count store in
+      Printf.printf "nested rows initial_nodes=%d\n%!" initial_nodes;
+      expect "Nested native rows eagerly mount offscreen content" (initial_nodes < 128);
+      let marker uuid = List.find_opt (fun id -> match Lui_store.string_prop store id "attrs" with
+        | Some attrs -> Host_interaction.has_attribute attrs uuid
+        | None -> false) (Lui_store.preorder store) in
+      let mounted uuid = List.exists (fun id ->
+        Lui_store.string_prop store id "accessibility-identifier"=Some ("ls-block-" ^ uuid))
+        (Lui_store.preorder store) in
+      let emit name id = Platform.emit_event name
+        (Js.Json.JObject ["nodeId",Js.Json.JNumber (float id); "height",Js.Json.JNumber 32.]) in
+      (match marker "nested-0" with
+       | None -> expect "Nested native rows have no viewport markers" false
+       | Some id ->
+         emit "lazy-mount" id; ignore (Lui_app.flush app);
+         expect "Entering a nested row did not mount its content" (mounted "nested-0");
+         expect "One nested row mounted every sibling" (Lui_store.node_count store < 180);
+         emit "lazy-unmount" id; ignore (Lui_app.flush app);
+         expect "Leaving a nested row retained its content" (not (mounted "nested-0"));
+         emit "lazy-mount" id; ignore (Lui_app.flush app);
+         expect "Returning to a nested row lost its content" (mounted "nested-0"));
+      let focus uuid =
+        Editor_state.set (fun state -> {state with editing=Some
+          (Editor_state.mk_editing ~uuid ~buffer:"" ~scope:"main" ~base:"" ())});
+        ignore (Lui_app.flush app);
+        expect "Offscreen editing target was not mounted" (mounted uuid);
+        expect "Offscreen editing target has no native editor"
+          (List.exists (fun id -> Lui_store.string_prop store id "block-id"=Some uuid)
+            (Lui_store.preorder store)) in
+      Editor_state.set (fun state -> {state with editing=Some
+        (Editor_state.mk_editing ~uuid:"nested-52" ~buffer:"" ~scope:"right" ~base:"" ())});
+      ignore (Lui_app.flush app);
+      expect "Editing another pane mounted an offscreen main-pane row" (not (mounted "nested-52"));
+      focus "nested-52";
+      (match marker "nested-52" with
+       | None -> expect "Active nested row lost its viewport marker" false
+       | Some id ->
+         emit "lazy-unmount" id; ignore (Lui_app.flush app);
+         expect "A viewport update disposed the active editor before focus settled"
+           (mounted "nested-52"));
+      let next = Model.empty_block ~uuid:"nested-53" ~title:"" ~is_page:false in
+      Signal.set (Option.get !parent_state) {parent_block with block_children=children@[next]};
+      focus "nested-53";
+      List.iter prerr_endline (List.rev !errors);
+      check "Nested row viewport and editing lifecycle" (!errors=[]))));
+  print_endline "native nested row window: OK"
 
 let () = List.iter lazy_row_extent [0;1;2;3];
   print_endline "native lazy row extent: OK"
@@ -606,7 +679,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Logseq_el.register_all registry; Logseq_codemirror.register registry;
   let key id = "viewport-batch-" ^ string_of_int id in
   let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
-    (fun context _ _ -> Lazy_children.lazy_rows ~key ~cmp:String.compare
+    (fun context _ _ -> Lazy_children.lazy_rows ~active_key:None ~key ~cmp:String.compare
       ~estimate_height:(fun _ -> 40.) ~source:(Signal.constant context.Lui_ui.ui_scheduler (List.init 20 Fun.id))
       ~mount:(fun _ context parent -> incr mounted; Lui_elements.column ~height:40 [] context parent)) in
   ignore (Lui_app.start app); ignore (Lui_app.flush app);

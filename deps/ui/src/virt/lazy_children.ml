@@ -107,5 +107,6 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
 (* Web journal rows stay eager — the page-level virtualizer owns the
    windowing and nested per-row IO gates would fight its measurements.
    Only the native twin gates rows (native first-frame cost). *)
-let lazy_rows ~key ~cmp ~mount ~estimate_height:_ ~source : t =
+let lazy_rows ~active_key ~key ~cmp ~mount ~estimate_height:_ ~source : t =
+  ignore active_key;
   Lui_elements.keyed ~source ~key ~cmp ~mount
