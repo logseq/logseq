@@ -12,7 +12,9 @@ test('hidden-only page properties stay collapsed until explicitly shown', async 
     await page.getByTestId('page title').waitFor({timeout: 120000});
     await page.keyboard.press('Control+k');
     await page.locator('.cp__cmdk__modal .cp__cmdk-search-input').fill('Hidden property fixture');
-    await page.keyboard.press('Enter');
+    await page.locator('.search-results > div').filter({
+      hasText: "Create page called 'Hidden property fixture'"
+    }).click();
     await page.getByTestId('page title').filter({hasText: 'Hidden property fixture'}).waitFor();
     await page.locator('.ed-input').waitFor();
     await page.keyboard.press('Escape');

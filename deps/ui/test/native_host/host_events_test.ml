@@ -22,4 +22,9 @@ let () =
   check "unconsumed Escape keeps the normal host default" (not (dispatch false));
   check "unconsumed host defaults run after document listeners"
     (!calls = [ "document"; "default" ]);
+  let pasted = ref [] in
+  Host_events.paste_text ~insert:(fun text -> pasted := text :: !pasted) "";
+  check "empty native clipboard text does not replace an editor selection" (!pasted = []);
+  Host_events.paste_text ~insert:(fun text -> pasted := text :: !pasted) " ";
+  check "nonempty native clipboard text preserves whitespace" (!pasted = [ " " ]);
   print_endline "native window damage: OK"

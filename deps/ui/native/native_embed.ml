@@ -614,7 +614,7 @@ let pump () : string =
       perf_mark "pump.total" t0;
       out)
 
-(* SDL Escape needs document capture and its patches before host defaults. *)
+(* Native defaults need synchronous document capture and its patches. *)
 let document_event name payload =
   with_entry_lock (fun () ->
       Host.drain ();

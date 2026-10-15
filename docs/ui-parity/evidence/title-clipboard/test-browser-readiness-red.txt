@@ -1,0 +1,32 @@
+✖ page spacing has one typed margin owner, without legacy web padding (31322.617548ms)
+✖ hidden-only page properties stay collapsed until explicitly shown (31303.314014ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 63703.150075
+
+✖ failing tests:
+
+test at deps/ui/test/page_spacing_browser_test.cjs:9:1
+✖ page spacing has one typed margin owner, without legacy web padding (31322.617548ms)
+  locator.waitFor: Timeout 30000ms exceeded.
+  Call log:
+  [2m  - waiting for getByTestId('page title').filter({ hasText: 'Spacing fixture page' }) to be visible[22m
+  
+      at TestContext.<anonymous> (/home/user/logseq-ui-parity/native/deps/ui/test/page_spacing_browser_test.cjs:28:84) {
+    name: 'TimeoutError'
+  }
+
+test at deps/ui/test/property_visibility_browser_test.cjs:7:1
+✖ hidden-only page properties stay collapsed until explicitly shown (31303.314014ms)
+  locator.waitFor: Timeout 30000ms exceeded.
+  Call log:
+  [2m  - waiting for getByTestId('page title').filter({ hasText: 'Hidden property fixture' }) to be visible[22m
+  
+      at TestContext.<anonymous> (/home/user/logseq-ui-parity/native/deps/ui/test/property_visibility_browser_test.cjs:16:87) {
+    name: 'TimeoutError'
+  }

@@ -1518,15 +1518,34 @@ let () =
       if down && (not repeat) && primary_shortcut
          && not (mods.Input.alt || mods.Input.shift)
       then
-        (match dom_key scancode with
-         | "c" -> emit_dom "copy" target []
-         | "x" -> emit_dom "cut" target []
+        (let clipboard_event name fields fallback =
+           let patches, consumed = Native_embed.document_event name
+               (Js.Json.parseExn (dom_payload target fields)) in
+           apply_patch_json patches;
+           (* A block editor's document handler owns structured clipboard
+              operations. Other rich-text owners (titles) need the same
+              surface fallback as the browser's hidden input. *)
+           if not consumed && target <> 0
+              && Lui_store.kind store target = "extension:logseq-editor"
+           then fallback ()
+         in
+         let menu name () = apply_patch_json
+             (Native_embed.extension_event target "logseq-editor"
+                "menu" (Printf.sprintf {|{"name":%s}|} (jstr name))) in
+         match dom_key scancode with
+         | "c" -> clipboard_event "copy" [] (menu "copy")
+         | "x" -> clipboard_event "cut" [] (menu "cut")
          | "v" ->
              let text =
                Option.value (Lui_shell.clipboard_read ()) ~default:""
              in
-             emit_dom "paste" target
+             clipboard_event "paste"
                [ ("clipboardData", "{\"text\":" ^ jstr text ^ "}") ]
+               (fun () ->
+                 Host_events.paste_text text ~insert:(fun text ->
+                     apply_patch_json
+                       (Native_embed.extension_event target "logseq-editor"
+                          "insert" (Printf.sprintf {|{"text":%s}|} (jstr text)))))
          | _ -> ());
       (* on web the hidden textarea's own keydown listener emits the
          conduit "key" event alongside the document dispatch — give the

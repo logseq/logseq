@@ -484,3 +484,81 @@ let () =
   check "disposing a title editor releases its geometry reply owner"
     (List.length !Editor_sink.measurement_listeners = listeners_before);
   Editor_sink.measurement_changed (Option.get page.page_uuid)
+
+let () =
+  let store = Lui_store.create () in
+  let backend =
+    { Lui_protocol.backend_profile =
+        Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost
+    ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let registry = Lui_extension.registry () in
+  Logseq_editor.register registry;
+  let uuid = "77777777-7777-4777-8777-777777777777" in
+  let page = Option.get (Decode.page_of_summary (Wire.Map
+      [ Wire.Keyword "page-title", Wire.String "Clipboard title"
+      ; Wire.Keyword "page-uuid", Wire.Uuid uuid ])) in
+  let app = Lui_app.create_with_extensions backend registry () (fun () () -> ())
+      (fun _context _model _send -> Page.title_editor page) in
+  ignore (Lui_app.start app);
+  ignore (Lui_app.flush app);
+  let sink = List.find (fun node ->
+      Lui_store.string_prop store node "block-id" = Some uuid)
+      (Lui_store.preorder store) in
+  let previous_host_op = !Host.host_op in
+  let copied = ref [] in
+  Host.set_host_op (fun operation payload ->
+      if operation = "clipboard" then copied := payload :: !copied);
+  let event name fields =
+    ignore (Lui_app.dispatch_event app (Lui_protocol.ExtensionEvent
+        (sink, Logseq_editor.identifier, name,
+         List.fold_left (fun acc (key, value) -> Lui_protocol.String_map.add key value acc)
+           Lui_protocol.String_map.empty fields)));
+    ignore (Lui_app.flush app) in
+  let menu name = event "menu" [ "name", Lui_protocol.StringValue name ] in
+  let select_all () = event "key"
+      [ "key", Lui_protocol.StringValue "a"; "ctrl", Lui_protocol.BoolValue true ] in
+  let previous_trees = !Editor_state.clipboard
+  and previous_text = !Editor_state.clipboard_text in
+  Editor_state.clipboard := [ Model.empty_block ~uuid:"old" ~title:"Clipboard title" ~is_page:false ];
+  Editor_state.clipboard_text := "Clipboard title";
+  menu "copy";
+  check "collapsed title copy uses the reference block-ref format"
+    (!copied = [ "[[" ^ uuid ^ "]]" ]);
+  check "plain title copy retires the previous structured clipboard provenance"
+    (!Editor_state.clipboard = [] && !Editor_state.clipboard_text = "");
+  copied := [];
+  menu "cut";
+  check "collapsed title cut does not overwrite the clipboard" (!copied = []);
+  select_all ();
+  menu "copy";
+  check "selected title copy reads its local model, not the empty native sink"
+    (!copied = [ "Clipboard title" ]);
+  copied := [];
+  menu "cut";
+  check "selected title cut copies its selected source exactly once"
+    (!copied = [ "Clipboard title" ]);
+  check "selected title cut removes the source from its local buffer"
+    (not (List.exists (fun node ->
+        Lui_store.string_prop store node "text" = Some "Clipboard title")
+      (Lui_store.preorder store)));
+  event "insert" [ "text", Lui_protocol.StringValue "First line\nSecond line" ];
+  List.iter (fun text ->
+      check "title paste preserves multiline source without creating outline blocks"
+        (List.exists (fun node -> Lui_store.string_prop store node "text" = Some text)
+          (Lui_store.preorder store))) [ "First line"; "Second line" ];
+  select_all ();
+  copied := [];
+  menu "copy";
+  check "multiline title copy preserves source newlines"
+    (!copied = [ "First line\nSecond line" ]);
+  event "insert" [ "text", Lui_protocol.StringValue "café 😀 suffix" ];
+  event "pointer" [ "offset", Lui_protocol.IntValue 6 ];
+  event "pointer" [ "offset", Lui_protocol.IntValue 10; "extend", Lui_protocol.BoolValue true ];
+  copied := [];
+  menu "copy";
+  check "native title selection copies whole UTF-8 characters from byte offsets"
+    (!copied = [ "😀" ]);
+  Host.set_host_op previous_host_op;
+  Editor_state.clipboard := previous_trees;
+  Editor_state.clipboard_text := previous_text;
+  ignore (Lui_app.dispose app)

@@ -127,6 +127,8 @@ let schema =
         ]
     ; Lui_extension.event "focus" []
     ; Lui_extension.event "blur" []
+    ; Lui_extension.event "menu"
+        [ Lui_extension.event_field "name" Lui_extension.StringScalar true ]
     ; Lui_extension.event "pointer"
         [ Lui_extension.event_field "offset" Lui_extension.IntScalar true
         ; Lui_extension.event_field "extend" Lui_extension.BoolScalar

@@ -24,7 +24,9 @@ test('page spacing has one typed margin owner, without legacy web padding', asyn
     await assertSpacing();
     await page.keyboard.press('Control+k');
     await page.locator('.cp__cmdk__modal .cp__cmdk-search-input').fill('Spacing fixture page');
-    await page.keyboard.press('Enter');
+    await page.locator('.search-results > div').filter({
+      hasText: "Create page called 'Spacing fixture page'"
+    }).click();
     await page.getByTestId('page title').filter({hasText: 'Spacing fixture page'}).waitFor();
     await assertSpacing();
   } finally {

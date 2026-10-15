@@ -170,6 +170,10 @@ let clipboard : Model.block list ref = ref []
    paste is detected by comparing the event's text against it *)
 let clipboard_text : string ref = ref ""
 
+let clear_structured_clipboard () =
+  clipboard := [];
+  clipboard_text := ""
+
 (* cljs has a single editing block: entering block edit dismisses any
    inline secondary editor (e.g. a property value cell) and vice versa.
    editor_actions binds [close_block_editor] to blur_commit;

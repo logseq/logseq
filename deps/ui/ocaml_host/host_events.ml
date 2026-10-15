@@ -8,3 +8,7 @@ let dispatch_key ~document ~default =
   let prevented = document () in
   if not prevented then default ();
   prevented
+
+(* A missing text format is not an instruction to delete the selection. *)
+let paste_text ~insert text =
+  if text <> "" then insert text

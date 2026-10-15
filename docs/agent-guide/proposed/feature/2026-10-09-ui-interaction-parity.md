@@ -210,5 +210,20 @@ also trigger outline/global commands. Scoped geometry owners refresh the
 current locally owned title frame on native replies and release on disposal.
 An end-edge caret keeps its typed minimum width. Actual paired Ctrl+A/rename,
 worker persistence and unchanged 45-block trees are recorded in
-`docs/ui-parity/evidence/title-ownership/validation.md`. Native title clipboard
-is a separately reproduced remaining gap; no full title/editor parity claim.
+`docs/ui-parity/evidence/title-ownership/validation.md`. The title clipboard gap is addressed by the subsequent checkpoint below; no
+full title/editor parity claim.
+
+### Native title clipboard checkpoint
+
+Native clipboard shortcuts synchronously offer the event to document owners
+before using the existing rich-editor surface intent. Title copy/cut reads its
+local source/selection; paste uses the existing insertion intent. Matching
+platform schemas declare the existing menu event. Empty text is not insertion,
+so unavailable/non-text clipboard formats cannot erase a selection. Plain title
+and body copy/cut retire stale structured clipboard provenance. No worker, DB
+schema, migration or dependency changes are required. Failing-first production
+tests, actual paired title interactions, native ordinary-input regressions, and
+exactly-once structured worker writes are recorded in
+`docs/ui-parity/evidence/title-clipboard/validation.md`. An active native body
+editor can remain visually empty after structured replacement until Escape;
+this remains a separate unresolved editor issue, not a full clipboard claim.

@@ -1532,6 +1532,7 @@ let on_copy ev =
            browser's DOM serialization (which would leak .ed-pad ZWSPs
            and pill display labels) *)
         let lo, hi = A.sel_span e.S.uuid in
+        S.clear_structured_clipboard ();
         ev.Ui_services.clipboard_set "text/plain"
           (if lo = hi then "[[" ^ e.S.uuid ^ "]]"
            else String.sub e.S.buffer lo (hi - lo));
@@ -1548,6 +1549,7 @@ let on_cut ev =
            || editing_block_target (ev.Ui_services.target) -> (
         let lo, hi = A.sel_span e.S.uuid in
         if lo <> hi then (
+          S.clear_structured_clipboard ();
           ev.Ui_services.clipboard_set "text/plain"
             (String.sub e.S.buffer lo (hi - lo));
           A.splice_range e.S.uuid lo hi "";

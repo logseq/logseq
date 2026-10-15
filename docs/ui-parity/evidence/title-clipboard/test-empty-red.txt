@@ -1,0 +1,4 @@
+File "test/native_host/host_events_test.ml", line 26, characters 2-24:
+26 |   Host_events.paste_text ~insert:(fun text -> pasted := text :: !pasted) "";
+       ^^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound value Host_events.paste_text

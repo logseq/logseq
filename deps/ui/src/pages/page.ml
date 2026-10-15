@@ -280,6 +280,22 @@ let title_editor (page : Model.page) : t =
     let m = Runtime.signal_get model_st in
     match ev with
     | Edit_input.Blur -> commit ()
+    | Edit_input.Menu "copy" ->
+        S.clear_structured_clipboard ();
+        Ui_services.clipboard_copy
+          (match Edit_model.selection_range m with
+           | Some (lo, hi) -> String.sub m.Edit_model.source lo (hi - lo)
+           | None -> "[[" ^ uuid ^ "]]")
+    | Edit_input.Menu "cut" ->
+        (match Edit_model.selection_range m with
+         | None -> ()
+         | Some (lo, hi) ->
+             S.clear_structured_clipboard ();
+             Ui_services.clipboard_copy (String.sub m.Edit_model.source lo (hi - lo));
+             Editor_sink.invalidate uuid;
+             Signal.set model_st (Edit_model.splice m lo hi "");
+             Runtime.flush ();
+             refresh_frame ())
     | _ ->
         let conduit =
           Option.value (Editor_sink.conduit uuid)
