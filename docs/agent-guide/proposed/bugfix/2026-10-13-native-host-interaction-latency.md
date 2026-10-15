@@ -865,6 +865,117 @@ allocation owners above. Attempts to query the exited first process produce
 no usable evidence. Current measured ownership does not establish that the
 remaining footprint is necessary, nor does it close the memory target.
 
+## Runtime pool census and active graphics attribution
+
+The October 16 investigation uses the native Metal executable and the existing
+cloned graph. These are diagnostic attribution runs, not memory or frame-rate
+acceptance. Production behavior is unchanged by the following controls.
+
+A read-only debugger census walks all runtime pool lists and checks their totals
+against runtime counters. Before compaction, 850 active pools occupy 27852800
+bytes: occupied object slots account for 18357760 bytes, free slots for 9275336
+bytes, and headers/internal fragmentation for 219704 bytes. Another 162 globally
+cached empty pools have 5308416 bytes of virtual capacity. Large allocations
+account for 4035168 bytes. Occupied slots can include unreachable objects awaiting
+collection; these figures must not be described as reachable live data. Debugger
+pauses also invalidate timing and sustained-idle conclusions from that recording.
+The census is saved in science-pool-census-current-r1/pool-census.json under the
+ignored native diagnostic directory.
+
+Two reverse-order controls distinguish runtime pool reclamation from native
+allocator pressure relief. Compacting first reduces physical footprint from
+99206104 to 82805720 bytes and heap capacity from 31586800 to 19180824 bytes;
+subsequent malloc-zone pressure relief returns zero bytes. Reversing the order
+also returns zero bytes from pressure relief, then compaction reduces footprint
+from 100516848 to 84001776 bytes. Compaction takes 54.3–55.9 ms. Combined GUI and
+worker footprint still measures about 112.3 MB afterward. Periodic compaction is
+therefore rejected: it misses both the memory target and the editing frame
+budget. The two controls are summarized in
+science-heap-capacity-oracle-results.json.
+
+A fresh startup-to-retained Memtrace recording uses the current root and LUI
+revisions. Two diagnostic major collections before mounted-view disposal report
+18827592 live bytes. The sampled estimate is 17360000 bytes across 198 retained
+samples. Sampled owners include flex state (3.84 MB), signal state (3.04 MB), scene
+state (1.84 MB), layout state (1.84 MB), and the UI store (1.36 MB). Sampling error
+limits individual source-line conclusions. This recording identifies managed
+owners, but cannot account for the larger physical graphics peak. Evidence is
+in science-current-retained-memtrace-r1.
+
+The parent environment supplies MallocNanoZone=0. GUI-only controls removing that
+variable or setting it to 1 produce approximately 101.4 MB and 99.4 MB steady GUI
+footprints respectively, before adding approximately 28 MB of worker memory.
+Neither supplies a budget-sized reduction. Allocator environment variables must
+be included in future run provenance; no production allocator setting is changed.
+
+A same-process active/quiet vmmap pair identifies the dominant peak categories.
+At 8.24–8.98 seconds during rapid Enter, GUI footprint is 197.2 MiB, including
+59.3 MiB of IOSurface residency and 65.4 MiB of owned unmapped graphics memory.
+At 45 seconds, footprint is 87.0 MiB, IOSurface residency is 19.8 MiB, and owned
+unmapped graphics memory is 1.4 MiB. VM_ALLOCATE residency stays at 24.6 MiB in
+both snapshots. These categories explain most of the transient increase, but do
+not yet identify the exact allocation owner or prove that overlapping graphics
+accounting can be added independently. The snapshots and capture interval are
+in science-active-peak-map-r1.
+
+Forcing framebuffer-only drawables in a diagnostic interposer still reaches
+approximately 215 MB GUI footprint. It does not establish readback or backdrop
+parity, and is not a production candidate. The first Metal System Trace attempt
+is invalid: a wrapper timeout killed the recorder while it was saving, leaving
+an unexportable trace. A replacement 25-second recording saves and exports
+successfully. It attaches after startup and records transient 128 KiB instance
+buffers, plus the device allocation counter falling from about 62.3 MiB to 22.7 MiB after activity. Its
+kernel resource table is also empty, so exact graphics ownership remains open.
+A separate Game Memory attachment never starts: a recorder stack sample shows
+it waiting in AuthorizationCopyRights during MemoryPlugin startup. It is
+terminated after the bounded test app exits and is excluded from conclusions.
+The subsequent diagnostic records graphics-ledger changes around in-process
+IOKit calls without requiring debugger authorization.
+
+The in-process IOKit interposer first covers only external-method calls and
+records 720 calls without observing the large allocation. That coverage is
+insufficient: Metal submission uses a fast trap. A second recording also covers
+all seven public IOConnectTrap variants. It observes the graphics footprint
+ledger rising by exactly 67108864 bytes inside trap4 selector 0, called from
+IOGPUCommandQueueSubmitCommandBuffers through the Metal submission queue. The
+same call increases physical footprint from 91210736 to 184304624 bytes; the
+larger physical delta can include concurrent page residency and must not be
+assigned entirely to the graphics ledger change. The first startup submission
+also records a 71155712-byte graphics increase. Later resource-pool purgeability
+updates return individual 1 MiB allocations. This directly locates a dominant
+increase at GPU submission, rather than merely correlating heap samples with
+frames. It does not establish a leaked resource, a configurable allocation size,
+or a safe production fix. The diagnostic library does not change call arguments
+or results. Raw stacks and extracted events are in science-iokit-ledger-r2.
+
+A current-release software-presentation control runs the same graph, full
+viewport, and 50-Enter script without profiling. Its sampled combined physical
+peak is approximately 119.3 MB, versus approximately 243.2 MB in the instrumented
+Metal IOKit recording. This pair identifies a large renderer-dependent cost,
+but is not a clean timing crossover: the Metal process is instrumented and the
+software process is not. The software run records all 50 Enter key-downs; its
+late GUI and worker medians are approximately 88.7 MB and 30.0 MB. Recorded host
+input-latency p95 is 23.58 ms across 54 observations, while presentation samples
+are absent. Neither memory nor visible-interaction acceptance passes, and the
+default renderer remains unchanged. A separate Memtrace run measures 23141944
+live bytes after diagnostic major collections, versus 18827592 bytes on Metal.
+Its sampled retained estimate is 22.80 MB across 218 objects; approximately 3.92 MB is attributed to raster image
+staging. These measurements bound the managed-payload difference, and do not
+attribute the entire physical remainder to that payload. The tiled software path
+also explicitly rejects shader effects, so it is not a feature-equivalent
+default replacement on this evidence. Evidence is in
+science-current-cocoa-r1 and science-current-cocoa-memtrace-r1.
+
+The local date changed during these runs. A baseline count taken before editor
+activation can include the initial click-created row as well as 50 Enter actions.
+Future Enter-only acceptance must measure the baseline after editor activation
+and before the first Enter, rather than reuse a historical graph count.
+
+The combined 30–100 MB goal remains unmet. These diagnostics use a temporary
+400 MB combined physical guard and bounded lifetime; the normal collector keeps
+its 200 MB guard. No forced collection, allocator override, debugger pause, or
+occluded-window replay counts as final interaction acceptance.
+
 ## Optimistic Enter order during asynchronous delta publication
 
 The native application reproduces new empty rows above their original block
@@ -949,8 +1060,9 @@ None. The user authorized fixing all-operation native latency; the remaining que
 
 ## Native memory budget
 
-The current target is 30–100 MB for the native GUI process, measured using
-macOS `ri_phys_footprint`, with RSS reported separately. Verify the release
+The current target is 30–100 MB for the combined native GUI and graph worker,
+measured using macOS physical footprint, with RSS reported separately. A GUI-only
+result must not be reported as meeting the application budget. Verify the release
 application on the existing graph at its normal 1440×900 logical window size,
 including startup, at least 600 seconds of idle time, navigation, scrolling,
 editing, and resize. Preserve rich text editing and the interaction acceptance
