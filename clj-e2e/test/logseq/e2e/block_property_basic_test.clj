@@ -426,10 +426,14 @@
                     (get child-tag "id")
                     (get parent-tag "id"))
       (page/new-page "tag object host")
-        (let [object (ls-api-call! :editor.appendBlockInPage
-                                   (current-page-name)
-                                   (str "sample child object #" child-tag-name)
-                                   {:properties {inherited-property "kept"}})]
+      (let [object (ls-api-call! :editor.appendBlockInPage
+                                 (current-page-name)
+                                 "sample child object"
+                                 {:properties {inherited-property "kept"}})]
+        ;; Tag via the API: a bare `#child` in content always creates a
+        ;; top-level tag instead of reusing the namespaced child tag
+        (ls-api-call! :editor.addBlockTag
+                      (get object "uuid") (get child-tag "id"))
         (page/goto-page parent-tag-name)
         (assert/assert-is-visible
          (loc/filter ".ls-view-body" :has-text "sample child object"))

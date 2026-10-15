@@ -73,8 +73,10 @@
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
         page {:db/id 42
               :block/title "Existing Page"
-              :block/uuid page-uuid}
+              :block/uuid page-uuid
+              :block/tags [{:db/ident :logseq.class/Page}]}
         page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+                        :logseq.property/built-in?
                         {:block/tags [:db/id :db/ident :block/uuid :block/title]}
                         {:block/parent ...}]
         calls (atom [])]
@@ -305,6 +307,55 @@
             "A resolved user class titled Tag must not be treated as built-in #Tag")
         (is (seq (filter #(= :apply-outliner-ops (first %)) @calls))
             "create-page should run for a resolved user tag")))))
+
+(defn- pull-from-conn
+  [conn]
+  (fn [api _repo selector lookup-ref]
+    (is (= :thread-api/pull api))
+    (let [entity-id (if (and (vector? lookup-ref)
+                             (= :block/name (first lookup-ref)))
+                      (:db/id (ldb/get-page @conn (second lookup-ref)))
+                      lookup-ref)]
+      (p/resolved (some->> entity-id (d/pull @conn selector))))))
+
+(deftest-async create-page-beside-namespaced-child-test
+  (let [conn (db-test/create-conn)
+        [_ nested-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+        nested (d/entity @conn [:block/uuid nested-uuid])]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/<invoke-db-worker (pull-from-conn conn)
+                    db-transact/apply-outliner-ops
+                    (fn [_conn ops _opts]
+                      (let [[op [title create-options]] (first ops)]
+                        (is (= :create-page op))
+                        (p/resolved (outliner-page/create! conn title create-options))))]
+      (p/let [result (page-common-handler/<create! "Bar" {:redirect? false :edit? false})
+              bars (d/q '[:find [?e ...] :where [?e :block/title "Bar"]] @conn)]
+        (is (some? result))
+        (is (not= (:db/id nested) (:db/id result))
+            "Creating Bar after Foo/Bar must not reuse the nested page")
+        (is (nil? (:block/parent (d/entity @conn (:db/id result))))
+            "The new Bar is a top-level page")
+        (is (= 2 (count bars))
+            "Both the nested Bar and the top-level Bar exist")))))
+
+(deftest-async create-page-beside-existing-tag-test
+  (let [conn (db-test/create-conn)
+        [_ tag-uuid] (outliner-page/create! conn "Foo" {:class? true})
+        tag (d/entity @conn [:block/uuid tag-uuid])]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/<invoke-db-worker (pull-from-conn conn)
+                    db-transact/apply-outliner-ops
+                    (fn [_conn ops _opts]
+                      (let [[op [title create-options]] (first ops)]
+                        (is (= :create-page op))
+                        (p/resolved (outliner-page/create! conn title create-options))))]
+      (p/let [result (page-common-handler/<create! "foo" {:redirect? false :edit? false})]
+        (is (some? result))
+        (is (not= (:db/id tag) (:db/id result))
+            "Creating page foo after tag #Foo must not reuse the tag")
+        (is (ldb/internal-page? (d/entity @conn (:db/id result))))
+        (is (ldb/class? (d/entity @conn (:db/id tag))))))))
 
 (deftest-async create-page-allows-db-less-page-tag
   (let [calls (atom [])
