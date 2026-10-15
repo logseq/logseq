@@ -1,0 +1,57 @@
+{
+  "native-restarted-contents": [
+    {
+      "uuid": "ff257d01-21ce-4f4e-9a07-a5c54aaabb36",
+      "title": "Sidebar append ownership parity",
+      "order": "a0"
+    },
+    {
+      "uuid": "2973e54d-ba52-45cf-a5b7-40f1661880ea",
+      "title": "Sidebar second append",
+      "order": "a1"
+    }
+  ],
+  "native-restarted-quick-add": [
+    {
+      "uuid": "f24c2740-c091-4f6c-9f12-e2abe60dc02c",
+      "title": "",
+      "order": "a0"
+    },
+    {
+      "uuid": "b91c3352-6845-4534-b4b0-719229a7d24f",
+      "title": "Quick add owner parity",
+      "order": "a1"
+    }
+  ],
+  "native-restarted-main": [
+    {
+      "uuid": "ee3a186f-a68c-43dd-868d-df2b3fe1da9f",
+      "title": "",
+      "order": "a1"
+    }
+  ],
+  "master-fixture-restored": [
+    {
+      "uuid": "6ad0ab28-c35e-41cb-8a4d-cd12e1f505e5",
+      "title": "Sidebar append ownership parity",
+      "order": "a0"
+    },
+    {
+      "uuid": "6ad0b5b4-1ed8-4145-872e-2727f782cc0e",
+      "title": "Sidebar second append",
+      "order": "a1"
+    }
+  ],
+  "master-quick-restored": [
+    {
+      "uuid": "6ad0bad9-bcc1-499d-88cb-8d4f6ea42b14",
+      "title": "",
+      "order": "a0"
+    },
+    {
+      "uuid": "6ad0bada-3e6e-456e-9bb5-09130f4d8038",
+      "title": "Quick add owner parity",
+      "order": "a1"
+    }
+  ]
+}

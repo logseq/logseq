@@ -383,3 +383,25 @@ obsolete generations. Clean editor resynchronization revalidates graph, session,
 input and canonical source after awaited reference resolution. Actual sidebar
 Undo can still restore worker data before its active input follows; record that
 as an unresolved interaction rather than expanding this checkpoint's claim.
+
+### History restoration in owned outline containers
+
+Actual native merge Undo restores its cursor from stale sidebar data before the
+broadcast-driven owner refresh; Redo likewise leaves two old rows until the
+background pipeline runs. Refresh the cursor's existing container source before
+reading its canonical title or restoring selection/focus. Extend the existing
+block-source registration with an awaitable refresh, rather than introducing a
+second owner registry or asking the worker for a parallel title-only cache.
+Main/zoom sources retain their existing awaited route refresh; Quick add and
+sidebar owners expose awaited reads with context guards. Background sidebar
+resynchronization remains separate so it cannot supersede the history session
+while that history read is in flight. Test held owner reads, both history
+directions, cursor position, graph/navigation retirement and real native timing.
+
+An awaited owner read must join its authoritative replacement when superseded,
+not resolve successfully from an unpublished generation. Retain one latest task
+per owner, propagate current failures and join past obsolete failures without
+extra polling/RPCs. Read history titles from that owner, not another mounted copy
+of the same block UUID. Quick add owner changes retire pending publication.
+Validate owner failures through the production Undo path, including surfaced
+error, queue release and recovery; restore test worker/state fixtures afterward.

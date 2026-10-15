@@ -810,6 +810,42 @@ let test_property_command_refresh (h : host) =
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
 
+(* Web invokes can complete out of order; the native client's identical-read
+   coalescing prevents this two-transport ordering in the native fixture. *)
+let test_quick_add_read_order (h : host) =
+  if h.native then Js.Promise.resolve () else
+  let previous_worker = !Runtime.worker and previous_quick_add = Quick_add_state.value () in
+  let owner = "77777777-8888-4999-8aaa-bbbbbbbbbbbb" in
+  Quick_add_state.set (fun _ -> { page_uuid = Some owner
+      ; blocks = [ Test_check.block "quick-first" "Merged" ] });
+  let complete_old = ref (fun (_ : W.t) -> ())
+  and complete_new = ref (fun (_ : W.t) -> ()) in
+  let old = Js.Promise.make (fun ~resolve ~reject:_ ->
+      complete_old := (fun value -> resolve value [@u])) in
+  let newer = Js.Promise.make (fun ~resolve ~reject:_ ->
+      complete_new := (fun value -> resolve value [@u])) in
+  let reads = ref 0 in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/get-page-blocks-tree" then (
+          incr reads; if !reads = 1 then old else newer)
+        else Js.Promise.resolve (worker_handler h name args))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  Quick_add_state.reload ();
+  let awaited = Quick_add_state.reload_result () in
+  !complete_new (W.Array [ block_w (Test_check.block "quick-first" "First")
+      ; block_w (Test_check.block "quick-second" "Second") ]);
+  let* () = awaited in
+  !complete_old (W.Array [ block_w (Test_check.block "quick-first" "Merged") ]);
+  let* () = h.wait_ms 25 in
+  check "an obsolete Quick add reload cannot replace newer canonical history rows"
+    (List.map (fun block -> block.Model.block_title) (Quick_add_state.value ()).blocks
+     = [ "First"; "Second" ]);
+  Quick_add_state.set (fun _ -> previous_quick_add);
+  Runtime.worker := previous_worker;
+  Js.Promise.resolve ()
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -835,5 +871,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_history_after_navigation h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  let* () = test_quick_add_read_order h in
   h.restore saved;
   Js.Promise.resolve ()

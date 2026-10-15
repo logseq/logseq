@@ -46,7 +46,7 @@
 | E04 | Slash, page/block reference, tag, emoji, link and date autocomplete | components/editor.cljs; handler/editor.cljs | editor/; native/editor_cmds_host.ml; popups/ | Inventory | Pending paired execution |
 | E05 | Focus, Escape/outside-save, IME, selection retention, shortcut suppression | components/editor.cljs; modules/shortcut/ | editor/; ocaml_host/logseq_native.ml | Partial | Actual native Escape saves/selects and removes the repaired caret; production logical/device coordinate tests cover scale1/2. Title input snapshots now exclude editing from normal/global shortcuts; scoped geometry owners release on disposal. Confirmed dependency blocker: Tab reaches hidden collapsed-sidebar controls; actual hidden activation and reference comparison recorded in [card evidence](evidence/sidebar-cards/validation.md). Blink, pointer placement, complete focus/IME/chord suppression and macOS evidence remain. [Editor](evidence/editor-native/validation.md), [title](evidence/title-ownership/validation.md) |
 | E06 | Selection and multiselect, selection action bar, selected-block operations | components/block/selection.cljs; selection.cljs | editor/block_selection.ml; blocks/selection_bar.ml | Inventory | Pending paired execution |
-| E07 | Undo/redo: typing, split, merge, indent, paste; caret/selection restoration | clj-e2e undo_redo_test.clj; editor_basic_test.clj | editor/editor_actions.ml; outliner_ops.ml | Partial | Paired actual typing undo/redo and Enter-undo restore the insertion offset, proven by follow-up text and worker reads. Sidebar nonempty merge Undo restores worker rows but leaves native active editor text stale even after settling; explicitly unresolved. [Reproduction](evidence/append-owner/validation.md). Indent, paste and selection history remain. [Evidence](evidence/editor-native/validation.md) |
+| E07 | Undo/redo: typing, split, merge, indent, paste; caret/selection restoration | clj-e2e undo_redo_test.clj; editor_basic_test.clj | editor/editor_actions.ml; outliner_ops.ml | Partial | Paired actual typing undo/redo and Enter-undo restore the insertion offset, proven by follow-up text and worker reads. Sidebar/Quick add history now awaits the canonical owning tree instead of restoring stale input. Actual paired nonempty merge Undo/Redo/Undo, restored-caret typing and Quick add typing history pass, including data durability after native UI/worker restart. [History evidence](evidence/sidebar-history/validation.md). Reference rapid post-history probe cleanup deleted an earlier space rather than the typed pipe; exact caret transition remains unverified and is not a Backspace pass. Indent, paste and selection history remain. [Evidence](evidence/editor-native/validation.md) |
 | E08 | Clipboard: block-ref/text copy, cut, structured/plain/multiline paste | handler/editor.cljs; clj-e2e editor tests | editor/; native/services/platform_native.ml | Partial | Actual paired title selected/collapsed copy/cut, plain/multiline paste and native Unicode source round-trip verified. Empty native paste no longer deletes a selection; plain title/body copy retires stale structured provenance. Ordinary native search input copy/cut/paste remains intact. Structured paste executes once in both workers, but the active native target initially displays blank until Escape; this and full structured/multiblock/history paths remain. [Evidence](evidence/title-clipboard/validation.md) |
 | E09 | Indent/outdent, fold/unfold, number/document modes, keyboard reorder | clj-e2e outliner_basic_test.clj | editor/; blocks/tree.ml | Inventory | Pending paired execution |
 | E10 | Pointer drag/drop, nested target insertion, multi-block reordering | components/dnd.cljs; block/drop.cljs | native/block_dnd.ml | Inventory | Pending paired execution |
@@ -124,5 +124,14 @@ Explicit owner/kind/scope routing, native outward ancestry and mounted-store
 invalidation now preserve sidebar/dialog insertion and saved text without leaking
 into the main page. Actual paired nonempty append/fold-save and native UI/worker
 restart pass. Shared2119/0, native suites, fresh browser6/6 and focused E2E1/1 pass.
-Sidebar merge Undo still has a stale active-editor display despite correct worker
-rows; no full history or feature-area parity claim. [Evidence and remaining work](evidence/append-owner/validation.md).
+The subsequent [history-owner repair](evidence/sidebar-history/validation.md) removes
+stale cursor restoration; full history and feature-area parity remain incomplete. [Evidence and remaining work](evidence/append-owner/validation.md).
+
+### Independently owned history checkpoint
+
+History now waits for the refreshed sidebar/Quick add source and restores from
+that owner. Latest-read supersession, obsolete/current errors and dialog-owner
+retirement have focused production regressions. Actual paired merge and typing
+Undo/Redo plus restored-caret input pass. Shared2120/0, native suites, fresh
+browser6/6 and focused E2E1/1 pass. Broader history remains Partial.
+[Evidence, before/after and unresolved cases](evidence/sidebar-history/validation.md).

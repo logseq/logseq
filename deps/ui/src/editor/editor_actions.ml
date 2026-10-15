@@ -2105,7 +2105,16 @@ let restore_history result =
     | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
     | _ -> [] in
   let undo = Wire.map_get result "undo?" = Some (Wire.Bool true) in
-  match (if undo then cursors else List.rev cursors) with
+  let cursors = if undo then cursors else List.rev cursors in
+  let scope = match cursors with
+    | cursor :: _ -> Option.get (Wire.map_get_string cursor "scope")
+    | [] -> S.interaction_scope () in
+  let source = S.independent_source scope in
+  let* () = match source with
+    | Some source -> source.S.refresh ()
+    | None -> Js.Promise.resolve () in
+  if not (current ()) then Js.Promise.resolve () else
+  match cursors with
   | [] -> Ops.resync_open_editor ~force:true ()
   | cursor :: _ ->
       S.history_input_before := None;
@@ -2113,7 +2122,13 @@ let restore_history result =
       (match Wire.map_get_uuid cursor "block-uuid" with
        | Some uuid ->
            let scope = Option.get (Wire.map_get_string cursor "scope") in
-           let* title = Ops.title_for_edit (model_title uuid) in
+           let block = match source with
+             | Some source -> S.find_in (source.S.blocks ()) uuid
+             | None -> S.find uuid in
+           (match block with
+           | None -> Js.Promise.resolve ()
+           | Some block ->
+           let* title = Ops.title_for_edit block.Model.block_title in
            if not (current ()) then Js.Promise.resolve () else
            let caret = match Wire.map_get cursor "caret" with
              | Some (Wire.Int caret) -> caret
@@ -2127,7 +2142,7 @@ let restore_history result =
            S.set (fun st -> { st with S.editing = Some e;
              S.selected = S.String_set.empty; anchor = None; action_bar = false });
            request_focus uuid caret;
-           Js.Promise.resolve ()
+           Js.Promise.resolve ())
        | None ->
            let selected = match Wire.map_get cursor "selected-blocks" with
              | Some (Wire.List xs) ->

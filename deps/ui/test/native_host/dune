@@ -154,3 +154,20 @@
   (setenv LOGSEQ_UI_STATE_DIR %{workspace_root}/test/native_host/append-owner-state
    (run %{test})))
  (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(rule
+ (copy ../../ocaml_host/ocaml_host_stubs.c history_scope_host_stubs.c))
+
+(test
+ (name history_scope_test)
+ (modules history_scope_test)
+ (libraries logseq_ui_ocamlhost native_host_test_support lui.store)
+ (foreign_stubs
+  (language c)
+  (names history_scope_host_stubs)
+  (flags (:standard (:include ../../ocaml_host/host_c_flags.sexp))))
+ (link_flags (:standard (:include ../../ocaml_host/host_link_flags.sexp)))
+ (action
+  (setenv LOGSEQ_UI_STATE_DIR %{workspace_root}/test/native_host/history-scope-state
+   (run %{test})))
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))

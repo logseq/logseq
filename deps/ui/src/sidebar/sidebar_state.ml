@@ -45,6 +45,7 @@ type t =
   ; favorited : bool Signal.state
   ; items : item list Signal.state
   ; items_refresh_generation : int ref
+  ; items_refresh_task : unit Js.Promise.t ref
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
   ; (* Left width is pixel-owned; right width is viewport-relative. *)
@@ -923,37 +924,54 @@ let refresh_item repo (it : item) : item Js.Promise.t =
       | None -> fallback)
   | _ -> fallback
 
-let refresh_items repo st =
+(* A successful awaited read means the latest owner data is ready, even if
+   a background read superseded the request that the caller started. *)
+let rec await_items_refresh repo st =
+  let generation = !(st.items_refresh_generation) in
+  let pending = !(st.items_refresh_task) in
+  let* () = pending |> Js.Promise.catch (fun _ ->
+      if generation = !(st.items_refresh_generation) then pending
+      else Js.Promise.resolve ()) in
+  if Runtime.repo () = repo && generation <> !(st.items_refresh_generation) then
+    await_items_refresh repo st
+  else Js.Promise.resolve ()
+
+let refresh_items_result repo st =
   incr st.items_refresh_generation;
   let generation = !(st.items_refresh_generation) in
   let items = Runtime.signal_get st.items in
-  if items <> [] then
-    ignore
-      ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
-       let* () = if Runtime.repo () = repo && generation = !(st.items_refresh_generation) then (
-         let refreshed = List.map2 (fun previous fresh -> previous.key, fresh)
-             items (Array.to_list arr) in
-         (* Keep live widget state and membership: an async data refresh
-            must not reopen a folded card or resurrect a closed one. *)
-         Runtime.signal_set st.items
-           (List.map (fun current ->
-              match List.assoc_opt current.key refreshed with
-              | None -> current
-              | Some fresh -> { fresh with key = current.key
-                  ; collapsed = current.collapsed
-                  ; props_collapsed = current.props_collapsed })
-             (Runtime.signal_get st.items));
-         (* Undo/remote refresh may restore the cursor before these rows
-            arrive. Only a clean sidebar editor follows the fresh source. *)
-         match Editor_state.editing () with
-         | Some edit when edit.Editor_state.scope = "sidebar" ->
-             Outliner_ops.resync_open_editor ()
-         | _ -> Js.Promise.resolve ())
-       else Js.Promise.resolve () in
-       Js.Promise.resolve ())
-       |> Js.Promise.catch (fun _ ->
-              Ui_services.log_error "sidebar refresh failed";
-              Js.Promise.resolve ()))
+  let pending = if items = [] then Js.Promise.resolve () else
+  let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
+  if Runtime.repo () = repo && generation = !(st.items_refresh_generation) then (
+    let refreshed = List.map2 (fun previous fresh -> previous.key, fresh)
+        items (Array.to_list arr) in
+    (* Keep live widget state and membership: an async data refresh
+       must not reopen a folded card or resurrect a closed one. *)
+    Runtime.signal_set st.items
+      (List.map (fun current ->
+         match List.assoc_opt current.key refreshed with
+         | None -> current
+         | Some fresh -> { fresh with key = current.key
+             ; collapsed = current.collapsed
+             ; props_collapsed = current.props_collapsed })
+        (Runtime.signal_get st.items)));
+  Js.Promise.resolve () in
+  st.items_refresh_task := pending;
+  await_items_refresh repo st
+
+let refresh_items repo st =
+  ignore
+    ((let* () = refresh_items_result repo st in
+      (* Background source updates follow only a clean sidebar editor.
+         History instead restores its cursor after the awaited owner read. *)
+      match Editor_state.editing () with
+      | Some edit when edit.Editor_state.scope = "sidebar"
+          && not !(Editor_state.structure_pending) ->
+          Outliner_ops.resync_open_editor ()
+      | _ -> Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+            Ui_services.log_error "sidebar refresh failed";
+            Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
 
@@ -1245,6 +1263,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; favorited = Signal.state owner false
         ; items = Signal.state owner []
         ; items_refresh_generation = ref 0
+        ; items_refresh_task = ref (Js.Promise.resolve ())
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []
         ; left_width = Signal.state owner (load_left_width (Ui_services.dom_viewport_width ()))
@@ -1256,7 +1275,8 @@ let init (ms : Model.t Signal.signal) : t =
       model_signal := Some ms;
       (* sidebar item blocks are editable: expose them to Editor_state.find
          so click-to-edit works on .cp__right-sidebar block rows *)
-      Editor_state.add_block_source ~scope:"sidebar" (fun () ->
+      Editor_state.add_block_source ~scope:"sidebar"
+        ~refresh:(fun () -> refresh_items_result (Runtime.repo ()) st) (fun () ->
           List.concat_map (fun (it : item) -> it.blocks)
             (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));

@@ -1,0 +1,17 @@
+[
+  {
+    "action": "undone",
+    "value": "Quick add owner parity",
+    "caret": 22
+  },
+  {
+    "action": "redone",
+    "value": "Quick add owner parity|",
+    "caret": 23
+  },
+  {
+    "action": "restored",
+    "value": "Quick add owner parity",
+    "caret": 22
+  }
+]

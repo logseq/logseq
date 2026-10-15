@@ -1,0 +1,16 @@
+[
+  'apply-outliner-ops failed',
+  'save-block',
+  Error [MelangeError]: Failure
+      at new MelangeError (/home/user/logseq-ui-parity/native/deps/ui/_build/default/test/ui_test/node_modules/melange.js/caml_js_exceptions.js:8:21)
+      at Object.failwith (/home/user/logseq-ui-parity/native/deps/ui/_build/default/test/ui_test/node_modules/melange/stdlib.js:16:9)
+      at /home/user/logseq-ui-parity/native/deps/ui/_build/default/test/ui_test/test/test_drive.js:4054:23 {
+    MEL_EXN_ID: 'Failure',
+    _1: 'worker rejects: thread-api/apply-outliner-ops',
+    [cause]: {
+      MEL_EXN_ID: 'Failure',
+      _1: 'worker rejects: thread-api/apply-outliner-ops'
+    }
+  }
+]
+2120 checks, 0 failures, 0 expected-failures, 0 unexpected-passes

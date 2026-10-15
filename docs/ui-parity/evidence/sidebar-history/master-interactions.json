@@ -1,0 +1,21 @@
+[
+  {
+    "action": "Delete merge",
+    "value": "Sidebar append ownership paritySidebar second append"
+  },
+  {
+    "action": "Undo",
+    "value": "Sidebar append ownership parity",
+    "caret": 31
+  },
+  {
+    "action": "Redo",
+    "value": "Sidebar append ownership paritySidebar second append",
+    "caret": 31
+  },
+  {
+    "action": "Undo then type at restored caret",
+    "value": "Sidebar append ownership parity|",
+    "caret": 32
+  }
+]

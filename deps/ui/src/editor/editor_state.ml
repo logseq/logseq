@@ -463,21 +463,35 @@ let rec find_in blocks uuid =
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
-(* Container owners expose their trees for lookup, navigation and selection. *)
-let extra_sources : (string * (unit -> Model.block list)) list ref = ref []
+(* Container owners expose their canonical trees and the read that refreshes
+   them. History must await that same owner before restoring its cursor. *)
+type block_source =
+  { blocks : unit -> Model.block list
+  ; refresh : unit -> unit Js.Promise.t
+  }
+let extra_sources : (string * block_source) list ref = ref []
 
-let add_block_source ~scope f = extra_sources := (scope, f) :: !extra_sources
+let add_block_source ~scope ~refresh blocks =
+  extra_sources := (scope, { blocks; refresh }) :: !extra_sources
+
+let is_page_scope scope =
+  scope = "main" || match Runtime.route () with
+    | Model.Block_zoom uuid -> scope = "zoom-" ^ uuid
+    | _ -> false
 
 let blocks_in_scope scope =
-  let page_scope =
-    match Runtime.route () with
-    | Model.Block_zoom uuid -> "zoom-" ^ uuid
-    | _ -> "main"
-  in
-  if scope = "main" || scope = page_scope then page_blocks ()
+  if is_page_scope scope then page_blocks ()
   else match scope with
     | "quick-add" -> (Quick_add_state.value ()).Quick_add_state.blocks
-    | _ -> (List.assoc scope !extra_sources) ()
+    | _ -> (List.assoc scope !extra_sources).blocks ()
+
+(* Route refresh is already awaited by history. These containers store
+   their trees independently, so history must read the refreshed owner itself. *)
+let independent_source scope =
+  if scope = "quick-add" then Some
+    { blocks = (fun () -> (Quick_add_state.value ()).Quick_add_state.blocks)
+    ; refresh = Quick_add_state.reload_result }
+  else List.assoc_opt scope !extra_sources
 
 let find uuid =
   match find_in (page_blocks ()) uuid with
@@ -486,7 +500,7 @@ let find uuid =
       let rec go = function
         | [] -> None
         | (_, f) :: fs -> (
-            match find_in (f ()) uuid with Some _ as r -> r | None -> go fs)
+            match find_in (f.blocks ()) uuid with Some _ as r -> r | None -> go fs)
       in
       go !extra_sources
       |> (fun r ->
