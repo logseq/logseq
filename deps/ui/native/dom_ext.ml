@@ -388,8 +388,7 @@ let step_matches ~scope (el : element) (step : sstep) : bool =
   | Some c -> match_compound el c
 
 (* match a step chain against (el, ancestors); ancestors nearest-first *)
-let rec match_steps ~scope (steps : sstep list) (el : element)
-    (ancestors : element list) : bool =
+let match_steps ~scope (steps : sstep list) (el : element) : bool =
   match steps with
   | [] -> false
   | [step] -> step_matches ~scope el step
@@ -411,23 +410,23 @@ let rec match_steps ~scope (steps : sstep list) (el : element)
                       if step_matches ~scope a st then seek st.s_comb ss tail
                       else seek combinator (st :: ss) tail))
         in
-        seek last.s_comb rest ancestors)
+        seek last.s_comb rest (ancestors_of el))
 
 let parse_scoped_selector (sel : string) =
   sel
   |> String.split_on_char ','
   |> List.map parse_steps
 
-let scoped_matches ~scope selectors el ancestors =
+let scoped_matches ~scope selectors el =
   match selectors with
-  | [steps] -> match_steps ~scope steps el ancestors
-  | selectors -> List.exists (fun steps -> match_steps ~scope steps el ancestors) selectors
+  | [steps] -> match_steps ~scope steps el
+  | selectors -> List.exists (fun steps -> match_steps ~scope steps el) selectors
 
 let query_selector_all_scoped ~(scope : element) ~(els : element list)
     (sel : string) : element list =
   let selectors = parse_scoped_selector sel in
   List.filter
-    (fun el -> scoped_matches ~scope selectors el (ancestors_of el))
+    (fun el -> scoped_matches ~scope selectors el)
     els
 
 (* The native "DOM" is the LUI extension tree — native_embed installs
@@ -445,7 +444,7 @@ let query_selector (el : element) (sel : string) : element option =
       let els = !subtree_elements_provider (int_of_float id) in
       let selectors = parse_scoped_selector sel in
       List.find_opt
-        (fun e -> scoped_matches ~scope:el selectors e (ancestors_of e))
+        (fun e -> scoped_matches ~scope:el selectors e)
         els
   | None -> None
 
@@ -459,7 +458,7 @@ let query_selector_all (el : element) (sel : string) : element list =
 let doc_query_selector (sel : string) : element option =
   let selectors = parse_scoped_selector sel in
   List.find_opt
-    (fun el -> scoped_matches ~scope:document_el selectors el (ancestors_of el))
+    (fun el -> scoped_matches ~scope:document_el selectors el)
     (!doc_elements_provider ())
 
 let doc_query_selector_all (sel : string) : element list =

@@ -874,6 +874,32 @@ and diagnostic tracing, so they do not establish a controlled timing improvement
 or successful 50-Enter acceptance. The remaining Enter peak, default renderer
 memory, and visible interaction requirements remain unresolved.
 
+## Unused selector ancestry during Enter
+
+A fresh full-graph SDL Enter replay reaches the unchanged protection limit at
+8.82 seconds, with 201,523,200 combined RSS bytes and 107,349,456 physical bytes.
+The database gains 22 blocks before termination. Allocation sampling over a
+half-second diagnostic interval identifies 2.08 MB at ancestor-array copying
+inside the dropdown-menu query invoked by every keydown; all selector-related
+sampled sites total 2.64 MB. Raster work dominates the full allocation recording
+because the occluded-window diagnostic forces redraws at 120 Hz.
+
+Scoped matching previously converted every candidate's complete ancestor array
+to a list before checking whether the selector needed ancestry at all. Matching
+now reads ancestry only after a multi-step selector's candidate compound matches.
+Simple selectors and rejected candidates avoid that copy. The 1000-node,
+64-ancestor regression fails at 1,728,525 bytes/query and passes at 136,525 bytes
+under its unchanged 262,144-byte limit. A missing menu query uses 32,549 bytes;
+unmatched descendant and alternative selectors also pass the same bound.
+Existing direct-child, descendant, and nearest-ancestor semantics remain green.
+
+An identical fresh-baseline graph replay reduces estimated selector allocation
+in the diagnostic interval from 2.64 MB to 0.16 MB. It still hits the guard at
+9.03 seconds, with 200,425,472 combined RSS bytes and 106,235,368 physical bytes,
+and persists 20 added blocks. This confirms removal of a real allocation site,
+not successful 50-Enter or memory acceptance. Neither partial replay proves a
+timing improvement, and neither certifies visible input or FPS.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

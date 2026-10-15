@@ -872,6 +872,28 @@ let () =
       = [direct;nested]);
   print_endline "native scoped selector compilation: OK"
 
+let () =
+  let ancestors = Array.init 64 (fun id -> Js.Json.JObject
+    ["node-id",Js.Json.JNumber (float id); "class",Js.Json.JString "container scope"]) in
+  let rows = List.init 1000 (fun id -> Js.Json.JObject
+    ["node-id",Js.Json.JNumber (float (id+1000)); "class",Js.Json.JString "row item";
+     "ancestors",Js.Json.JArray ancestors]) in
+  let scope = ancestors.(63) in
+  List.iter (fun (selector,expected) ->
+    let before = Gc.allocated_bytes () in
+    for _=1 to 20 do
+      check "Native deep query changed matching results"
+        (List.length (Dom_ext.query_selector_all_scoped ~scope ~els:rows selector)=expected)
+    done;
+    let allocated = (Gc.allocated_bytes () -. before) /. 20. in
+    Printf.printf "native 1000-row deep query %s allocated %.0f bytes/query\n%!"
+      selector allocated;
+    check "Native queries copied ancestor paths that matching did not need"
+      (allocated <= 262144.)
+  ) [".item",1000; ".ui__dropdown-menu-content",0; ".scope .missing",0;
+      ".missing, .ui__dropdown-menu-content",0];
+  print_endline "native unused query ancestry allocation: OK"
+
 let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_REPLAY" with
   | None -> ()
   | Some path ->
