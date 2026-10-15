@@ -1101,6 +1101,91 @@ physical-memory saving from packing the constants. The control is an isolated
 module fixture, not an application measurement; no icon codec or cache change
 is adopted. Sources and results remain in science-icon-static-control.
 
+## Native timer ownership and metrics serialization
+
+A fresh 18-second CPU sample during 50 Enter actions and 200 Unicode text
+commits observes 1536 distinct thread sections, including 738 with native
+Host timer frames. These counts describe threads observed across the interval,
+not simultaneous concurrency. Diagnostic counters for the complete workload
+record 1572 scheduled timers, a peak of 25 timer threads, and 504 cancellation
+records still retained at exit. Delay counts are 836 at 0 ms, 200 at 400 ms,
+139 at 40 ms, 115 at 150 ms, 106 each at 120 and 300 ms, 53 at 12 ms, and 17
+at 250 ms. Evidence is in science-cocoa1-cpu-input-r1 and science-timer-census-r1.
+
+Each timer previously created a system thread. Cancellation neither released
+its captured callback immediately nor suppressed a callback already queued for
+the UI. Cancelled handles remained in a global table indefinitely. Real native
+regressions fail for due-callback cancellation, immediate release of 1 MiB
+payloads at both 0 and 60000 ms, zero-delay ordering, cancellation from another
+callback, and inactive-handle retention. Clearing 10000 inactive handles retains
+385424 bytes in the original implementation and zero bytes after the change.
+The resource checks use diagnostic collections; application execution does not.
+
+Zero-delay work now goes directly to the existing asynchronous mailbox. One
+worker serves delayed deadlines through a monotonic clock and an interruptible
+wake pipe. Queued tasks retain handles only; callbacks leave the active table
+when cancelled or dispatched. Due batches preserve their deadline order and
+callbacks execute on the UI entry thread. A shorter newly registered deadline
+interrupts the worker's current wait. Mtime is an explicit native dependency.
+Focused regressions and the complete native release build/test aliases pass.
+
+The replacement CPU sample observes 346 distinct thread sections and one timer
+worker. Both profiled runs handle all 50 Enter actions and 200 text commits;
+their sampled combined physical peaks are 98731520 and 97207832 bytes. Profiler
+runs do not establish application timing or the final memory bound.
+
+The unprofiled replacement, science-timer-queue-cocoa1-long-r1, exits normally
+after 640.73 seconds. A same-graph reopen verifies 51 ordered rows and the exact
+200-character final title. Sampled combined physical peak is 99681768 bytes;
+GUI lifetime peak is 69403632 bytes and worker peak is 30278136 bytes. Final
+GUI and worker footprints are 66175984 and 30278136 bytes. RSS peak is
+202194944 bytes under the temporary physical-only diagnostic guard. During
+608.89 seconds without further input, one SDL event arrives but no layout runs.
+Host allocation averages 58597 bytes/s. Sampled live bytes change from 24329888
+to 25011392 and heap capacity from 27657440 to 31811256 bytes. Active-frame p95
+is 17.06 ms, input-latency p95 21.28 ms, and layout p95 6.53 ms; no timing
+samples are lost. The frame budget still fails. This is a closed-panel,
+occluded software-renderer cohort, not default-renderer or visible acceptance.
+
+Metric history export is a separate measured allocation source: the native log
+copies the complete serialized history on every export. A real-file regression
+with full histories first allocates 72745 bytes/export and fails its 8192-byte
+budget. Writing the reusable serialization buffer directly allocates 5443
+bytes/export and preserves all 31 recording boundaries, complete histories,
+and the final timestamp. String snapshot callers retain their existing immutable
+result; both interfaces share one formatter. Sample contents and export cadence
+are unchanged. The complete native release targets and test aliases pass.
+
+An open-panel cohort remains failing: science-timer-queue-panel-r1 reaches
+102581736 combined physical bytes; science-stream-queue-panel-r1 reaches
+105498136 bytes. Both handle 50 Enter actions and 200 text commits and exit
+normally after approximately 36 seconds. The worker and GUI contributions both
+vary between those runs, so the serialization allocation reduction is not a
+proven physical-memory saving. The panel-open result and unchanged default
+Metal submission cost keep the full 30–100 MB objective open.
+
+Matched vmmap controls on the streaming candidate capture near the final text
+commits. GUI physical footprint is approximately 63.3 MiB with the panel closed
+and 68.3 MiB open. Mapped IOSurface dirty bytes rise from 1792 to 4144 KiB; the
+open-panel map also contains 2336 KiB of owned unmapped memory, absent from the
+closed map. VM_ALLOCATE changes from about 25.5 to 26.0 MiB and malloc-zone
+dirty residency from about 27.4 to 27.5 MiB. These are diagnostic category
+snapshots, not simultaneous full-app acceptance or proof of the unmapped
+allocation's owner. Both allocator summaries show approximately 12.5 MiB of
+fragmentation/unused capacity; that figure is not automatically reclaimable.
+Evidence is in science-stream-vmmap-closed-r1 and science-stream-vmmap-panel-r1.
+
+A separate native surface experiment compares all 256 opaque gray levels through
+actual CALayer composition into a BGRA bitmap. BGRA and 8-bit single-component
+IOSurfaces both reproduce every channel exactly across 65536 pixels. Surface
+ownership is 262144 and 65536 bytes respectively, with or without the optional
+contents-format hint. Apple's [contentsFormat documentation](https://developer.apple.com/documentation/quartzcore/calayer/contentsformat)
+describes a hint, not a guaranteed application memory saving. This experiment
+supports a bounded format investigation, not a production renderer change;
+colored and translucent data still require their full representation. No image
+format or default backend change is included in the timer/export fix. The
+source and raw results are in science-gray-surface-control.
+
 ## Optimistic Enter order during asynchronous delta publication
 
 The native application reproduces new empty rows above their original block

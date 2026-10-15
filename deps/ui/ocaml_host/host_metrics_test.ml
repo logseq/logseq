@@ -192,6 +192,41 @@ let () =
   let allocated = (Gc.allocated_bytes () -. before) /. 30. in
   check (Printf.sprintf "Full live histories allocate %.0f bytes per snapshot" allocated)
     (allocated < 160000.);
+  let streaming = Host_metrics.create ~now:0. in
+  for sample=1 to 240 do
+    List.iter (fun (phase,_) ->
+      Host_metrics.record_phase streaming phase (float sample /. 1234567.)) Host_metrics.phases
+  done;
+  let expected = Host_metrics.snapshot streaming ~now:0. in
+  let phase_suffix value =
+    let marker = ",\"phases\":" in
+    let rec find index =
+      if index + String.length marker > String.length value then
+        failwith "Metrics export lost its phase histories"
+      else if String.sub value index (String.length marker) = marker then index
+      else find (index+1) in
+    let index = find 0 in
+    String.sub value index (String.length value-index) in
+  let path = Filename.temp_file "native-metrics-" ".jsonl" in
+  Fun.protect ~finally:(fun () -> Sys.remove path) (fun () ->
+    let allocated = Out_channel.with_open_bin path (fun channel ->
+      Host_metrics.write_snapshot channel streaming ~now:0.; output_char channel '\n';
+      let before = Gc.allocated_bytes () in
+      for tick=1 to 30 do
+        Host_metrics.record_phase streaming Loop_interval (float tick);
+        Host_metrics.write_snapshot channel streaming ~now:(float tick);
+        output_char channel '\n'
+      done;
+      (Gc.allocated_bytes () -. before) /. 30.) in
+    let lines = In_channel.with_open_bin path In_channel.input_lines in
+    check "Streaming metrics lost or joined recording boundaries" (List.length lines=31);
+    check "Streaming metrics changed complete timing histories"
+      (phase_suffix (List.hd lines) = phase_suffix expected);
+    check "Streaming metrics exported a stale timestamp"
+      (contains (List.hd (List.rev lines)) "\"time_s\":30.000");
+    Printf.printf "streaming full metrics histories allocated %.0f bytes/export\n%!" allocated;
+    check "Metrics export copies the complete serialized history on every tick"
+      (allocated < 8192.));
   let rolling = Host_metrics.create ~now:0. in
   let expected = ref [] in
   for sample = 1 to 300 do

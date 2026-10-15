@@ -155,7 +155,7 @@ let json_float value =
   let text = Float.to_string value in
   if text.[String.length text - 1] = '.' then text ^ "0" else text
 
-let snapshot t ~now =
+let snapshot_buffer t ~now =
   let gc = Gc.quick_stat () in
   let buffer = t.export_buffer in
   Buffer.clear buffer;
@@ -214,7 +214,10 @@ let snapshot t ~now =
     done;
     Buffer.add_string buffer "]}") phases;
   Buffer.add_string buffer "}}";
-  Buffer.contents buffer
+  buffer
+
+let snapshot t ~now = Buffer.contents (snapshot_buffer t ~now)
+let write_snapshot channel t ~now = Buffer.output_buffer channel (snapshot_buffer t ~now)
 
 let record_present t ~now ~work_ms =
   (match t.input_at with

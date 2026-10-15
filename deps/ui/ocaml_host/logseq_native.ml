@@ -2322,7 +2322,7 @@ let () =
            Host_metrics.record_presentation_samples metrics ~total values
        | None -> ());
       Option.iter (fun channel ->
-        output_string channel (Host_metrics.snapshot metrics ~now);
+        Host_metrics.write_snapshot channel metrics ~now;
         output_char channel '\n'; flush channel) metrics_log
     end;
     (let iter_ms = (perf_s () -. t0) *. 1000. in

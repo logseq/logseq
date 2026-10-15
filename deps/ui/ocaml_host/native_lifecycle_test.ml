@@ -60,3 +60,70 @@ let () =
   Native_embed.wakeup ();
   Atomic.set Bridge.pending_wakeup false;
   print_endline "native mailbox blocking wake: OK"
+
+let () =
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  Host.set_wakeup Native_embed.wakeup;
+  Host.drain ();
+  let await_wakeup () =
+    let deadline = Unix.gettimeofday () +. 2. in
+    while not (Atomic.get Bridge.pending_wakeup) && Unix.gettimeofday () < deadline do
+      Thread.delay 0.001
+    done;
+    check "A native timer did not enqueue its callback" (Atomic.exchange Bridge.pending_wakeup false) in
+  Atomic.set Bridge.pending_wakeup false;
+  let called = ref false in
+  let id = Host.set_timeout (fun () -> called := true) 0 in
+  expect "A zero-delay timer ran inline" (not !called);
+  await_wakeup ();
+  Host.clear_timeout id;
+  Host.drain ();
+  expect "Cancelling a due timer still executes its queued callback" (not !called);
+  let schedule_resource weak delay =
+    let resource = Bytes.make 1_048_576 'x' in
+    Weak.set weak 0 (Some resource);
+    Host.set_timeout (fun () -> ignore (Sys.opaque_identity resource)) delay in
+  List.iter (fun delay ->
+    let weak = Weak.create 1 in
+    Atomic.set Bridge.pending_wakeup false;
+    let id = schedule_resource weak delay in
+    if delay=0 then await_wakeup ();
+    Host.clear_timeout id;
+    Gc.full_major (); Gc.full_major ();
+    expect (Printf.sprintf "Cancelled %d ms timer retains its captured payload" delay)
+      (not (Weak.check weak 0));
+    Host.drain ()) [0;60_000];
+  Atomic.set Bridge.pending_wakeup false;
+  let order = ref [] and owner = Thread.id (Thread.self ()) in
+  for index = 1 to 32 do
+    ignore (Host.set_timeout (fun () ->
+      expect "A native timer callback ran outside the entry thread"
+        (Thread.id (Thread.self ()) = owner);
+      order := index :: !order) 0)
+  done;
+  await_wakeup (); Thread.delay 0.02; Host.drain ();
+  expect "Zero-delay timers lost registration order" (List.rev !order = List.init 32 ((+) 1));
+  Atomic.set Bridge.pending_wakeup false;
+  let second = ref 0 and seen = ref [] in
+  ignore (Host.set_timeout (fun () -> seen := "first" :: !seen; Host.clear_timeout !second) 0);
+  second := Host.set_timeout (fun () -> seen := "second" :: !seen) 0;
+  await_wakeup (); Thread.delay 0.02; Host.drain ();
+  expect "A callback cannot cancel another queued timer" (!seen = ["first"]);
+  Atomic.set Bridge.pending_wakeup false;
+  let seen = ref [] in
+  let late = Host.set_timeout (fun () -> seen := "late" :: !seen) 1000 in
+  ignore (Host.set_timeout (fun () -> seen := "early" :: !seen) 10);
+  await_wakeup (); Host.drain (); Host.clear_timeout late;
+  expect "An earlier timer did not interrupt a later deadline" (!seen = ["early"]);
+  Gc.full_major (); Gc.full_major ();
+  let before = (Gc.stat ()).live_words in
+  for id = 1_000_000 to 1_009_999 do Host.clear_timeout id done;
+  Gc.full_major (); Gc.full_major ();
+  let retained = ((Gc.stat ()).live_words - before) * (Sys.word_size / 8) in
+  Printf.printf "clearing inactive timers retained %d bytes\n%!" retained;
+  expect "Clearing inactive timer handles retains cancellation records" (retained < 65_536);
+  Atomic.set Bridge.pending_wakeup false;
+  List.iter prerr_endline (List.rev !failures);
+  check "Native timer cancellation and ownership" (!failures = []);
+  print_endline "native timer cancellation and ownership: OK"

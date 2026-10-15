@@ -39,33 +39,97 @@ let drain () : unit =
 
 (* ---------- timers (setTimeout equivalent) ---------- *)
 
+module Timer_deadlines = Set.Make (struct
+  type t = float * int
+  let compare (time_a, id_a) (time_b, id_b) =
+    let order = Float.compare time_a time_b in
+    if order=0 then Int.compare id_a id_b else order
+end)
+
+type timer = { deadline : float; callback : unit -> unit }
 let timer_next = ref 0
-let cancelled : (int, unit) Hashtbl.t = Hashtbl.create 8
+let timers : (int, timer) Hashtbl.t = Hashtbl.create 16
+let deadlines = ref Timer_deadlines.empty
 let timers_lock = Mutex.create ()
+let timer_read, timer_write = Unix.pipe ~cloexec:true ()
+let () = Unix.set_nonblock timer_read; Unix.set_nonblock timer_write
+let timer_signal = Bytes.make 1 't'
+let timer_time () = Int64.to_float (Mtime_clock.elapsed_ns ()) *. 1e-9
+
+let notify_timers () =
+  try ignore (Unix.single_write timer_write timer_signal 0 1)
+  with Unix.Unix_error ((Unix.EAGAIN | Unix.EWOULDBLOCK), _, _) -> ()
+
+(* Queued tasks retain only the handle. Cancellation releases the callback
+   immediately, including when its deadline has passed but the UI is busy. *)
+let run_timer id () =
+  Mutex.lock timers_lock;
+  let timer = Hashtbl.find_opt timers id in
+  Hashtbl.remove timers id;
+  Mutex.unlock timers_lock;
+  Option.iter (fun timer -> timer.callback ()) timer
 
 let set_timeout (f : unit -> unit) (ms : int) : int =
+  if ms < 0 then invalid_arg "Native timer delay must be nonnegative";
+  let deadline = timer_time () +. float_of_int ms /. 1000. in
   Mutex.lock timers_lock;
   incr timer_next;
   let id = !timer_next in
+  Hashtbl.add timers id {deadline; callback=f};
+  if ms > 0 then deadlines := Timer_deadlines.add (deadline,id) !deadlines;
   Mutex.unlock timers_lock;
-  ignore
-    (Thread.create
-       (fun () ->
-         Unix.sleepf (float_of_int ms /. 1000.);
-         let dead =
-           Mutex.lock timers_lock;
-           let d = Hashtbl.mem cancelled id in
-           Mutex.unlock timers_lock;
-           d
-         in
-         if not dead then enqueue f)
-       ());
+  if ms=0 then enqueue (run_timer id) else notify_timers ();
   id
 
-let clear_timeout (id : int) : unit =
+let clear_timeout id =
   Mutex.lock timers_lock;
-  Hashtbl.replace cancelled id ();
-  Mutex.unlock timers_lock
+  let timer = Hashtbl.find_opt timers id in
+  Option.iter (fun timer ->
+    Hashtbl.remove timers id;
+    deadlines := Timer_deadlines.remove (timer.deadline,id) !deadlines) timer;
+  Mutex.unlock timers_lock;
+  if Option.is_some timer then notify_timers ()
+
+(* One sleeping worker serves every delayed timer. Its wake pipe interrupts
+   the current deadline when a timer is inserted or cancelled. *)
+let timer_loop () =
+  let signal_buffer = Bytes.create 64 in
+  let rec drain_signal () =
+    match Unix.read timer_read signal_buffer 0 (Bytes.length signal_buffer) with
+    | 0 -> failwith "Native timer wake pipe closed"
+    | _ -> drain_signal ()
+    | exception Unix.Unix_error ((Unix.EAGAIN | Unix.EWOULDBLOCK), _, _) -> ()
+    | exception Unix.Unix_error (Unix.EINTR, _, _) -> drain_signal () in
+  while true do
+    Mutex.lock timers_lock;
+    let now = timer_time () in
+    let rec take_due ready =
+      match Timer_deadlines.min_elt_opt !deadlines with
+      | Some (deadline,id) when deadline <= now ->
+        deadlines := Timer_deadlines.remove (deadline,id) !deadlines;
+        take_due (id :: ready)
+      | next -> List.rev ready, next in
+    let ready,next = take_due [] in
+    Mutex.unlock timers_lock;
+    if ready <> [] then begin
+      Mutex.lock lock;
+      List.iter (fun id -> Queue.push (run_timer id) queue) ready;
+      Mutex.unlock lock;
+      !wakeup_cb ()
+    end;
+    let timeout = match next with
+      | None -> -1.
+      | Some (deadline,_) -> max 0. (deadline -. timer_time ()) in
+    let readable,_,_ =
+      try Unix.select [timer_read] [] [] timeout
+      with Unix.Unix_error (Unix.EINTR, _, _) -> [],[],[] in
+    if readable <> [] then drain_signal ()
+  done
+
+let _timer_worker = Thread.create (fun () ->
+  try timer_loop () with error ->
+    prerr_endline ("Native timer scheduler failed: " ^ Printexc.to_string error);
+    exit 2) ()
 
 (* ---------- uuid ---------- *)
 

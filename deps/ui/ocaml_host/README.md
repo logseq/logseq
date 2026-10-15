@@ -31,7 +31,7 @@ From the repository root, with the OCaml switch selected:
 ```sh
 (cd deps/db-worker && sh scripts/install-opam-deps.sh)
 (cd deps/ui && sh scripts/install-opam-deps.sh)
-opam install -y uri
+opam install -y uri mtime
 (cd deps/db-worker && opam exec -- dune build bin/main.exe)
 (cd deps/ui && opam exec -- dune build ocaml_host/logseq_native.exe)
 (cd deps/ui && opam exec -- dune runtest ocaml_host)

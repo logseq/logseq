@@ -20,4 +20,4 @@ opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn
 opam pin add -y -n melange-edn-native git+https://github.com/logseq/melange-edn.git#main
 opam update lui ocaml-signal rrbvec melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native
 opam upgrade -y lui ocaml-signal rrbvec melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native
-opam install . --deps-only --with-test --yes 2>/dev/null || opam install lui ocaml-signal rrbvec melange-webapi melange-fetch melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native digestif tsdl tgls imagelib decompress -y
+opam install . --deps-only --with-test --yes 2>/dev/null || opam install lui ocaml-signal rrbvec melange-webapi melange-fetch melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native digestif tsdl tgls imagelib decompress mtime -y
