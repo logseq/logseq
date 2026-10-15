@@ -175,6 +175,21 @@ let lazy_mount_groups store ids =
   List.rev_map (fun parent -> parent,List.rev !(Hashtbl.find groups parent)) !order
 
 type presentation = { mutable pending : bool }
+type memory_replay_mode = Replay_off | Replay_changes | Replay_continuous
+let memory_replay_mode ~enabled mode =
+  match enabled,mode with
+  | false,None -> Replay_off
+  | true,None | true,Some "continuous" -> Replay_continuous
+  | true,Some "changes" -> Replay_changes
+  | false,Some _ -> invalid_arg "Replay mode requires a replay duration"
+  | true,Some _ -> invalid_arg "Unknown native memory replay mode"
+
+let should_paint ~replay ~visible ~dirty =
+  match replay with
+  | Replay_continuous -> true
+  | Replay_changes -> dirty
+  | Replay_off -> visible && dirty
+
 let presentation () = {pending=false}
 let present state ~ready ~submit scene =
   if ready then begin submit scene; state.pending <- false; true end

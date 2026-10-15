@@ -347,6 +347,43 @@ let () =
   print_endline "native pending presentation: OK"
 
 let () =
+  let exercise mode ~visible ~expected =
+    let renders=ref 0 in
+    let renderer={Lui_host.name="replay-policy";
+      render=(fun _ -> incr renders;Bytes.empty)} in
+    let hooks={Lui_paint.default_hooks with color_of=Lui_window.Theme.color_of;
+      layout=(fun _ -> Lui_paint.placement_of_rect (Lui_scene.rect 0. 0. 100. 40.))} in
+    let host=Lui_host.create ~hooks ~renderer ~width:200 ~height:100 ~scale:1. () in
+    let replay=Host_interaction.memory_replay_mode ~enabled:(mode<>Some "off")
+      (if mode=Some "off" then None else mode) in
+    let frame visible =
+      if Host_interaction.should_paint ~replay ~visible ~dirty:(Lui_host.wants_repaint host)
+      then ignore (Lui_host.repaint host) in
+    ignore (Lui_host.apply_batch host {generation=1;ops=[CreateNode (1,Box);
+      SetProp (1,BackgroundValue,StringValue "#ff0000")]});
+    for _=1 to 20 do frame visible done;
+    check "Replay policy did not preserve its unchanged-scene behavior" (!renders=expected);
+    ignore (Lui_host.apply_batch host {generation=2;ops=[
+      SetProp (1,BackgroundValue,StringValue "#0000ff")]});
+    frame true;
+    check "Replay policy lost a changed scene" (!renders=expected+1);
+    check "Replay policy painted stale pixels"
+      (List.exists (function Lui_scene.Fill fill ->
+        fill.fcolor=Lui_scene.color 0 0 255 255 | _ -> false)
+        (Lui_host.scene host).Lui_scene.ops) in
+  exercise None ~visible:false ~expected:20;
+  exercise (Some "continuous") ~visible:false ~expected:20;
+  exercise (Some "changes") ~visible:false ~expected:1;
+  exercise (Some "off") ~visible:false ~expected:0;
+  exercise (Some "off") ~visible:true ~expected:1;
+  List.iter (fun (enabled,mode) ->
+    let rejected=try ignore (Host_interaction.memory_replay_mode ~enabled (Some mode));false
+      with Invalid_argument _ -> true in
+    check "Invalid replay configuration was silently accepted" rejected)
+    [true,"unknown";false,"changes"];
+  print_endline "native replay painting policy: OK"
+
+let () =
   let cache = Host_interaction.overlay_cache () in
   let scene = Lui_scene.create
     ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:32 ~h:32)

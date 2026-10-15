@@ -1015,6 +1015,33 @@ and software redraws, so its 88,950,200 combined physical-byte peak is not norma
 memory acceptance. Default-renderer, multiworker, and visible interaction gates
 remain unresolved.
 
+## Separate changed-scene replay from continuous redraw stress
+
+The occluded-window diagnostic previously forced a complete tile invalidation
+and repaint every loop. That remains the default continuous stress mode.
+`LOGSEQ_NATIVE_MEMORY_REPLAY_MODE=changes` now permits normal dirty-scene
+painting while occluded without forcing unchanged frames. Both modes retain
+the duration, full viewport, external memory guard, and truthful visibility
+exports. The selected policy is printed in the run log. Changes-only replay
+does not provide visible presentation or OS-input evidence.
+
+The pre-change full-app regression has zero events and zero layouts over
+2.016 seconds but produces 242 active frames despite requesting changes-only
+replay. The same assertion passes after the change, with zero active frames
+over 2.007 seconds. A controlled host regression checks final changed pixels,
+visible and occluded behavior, unchanged-scene suppression, retained continuous
+stress, and rejected invalid configuration. The native host suites and both
+native artifact builds pass.
+
+The short one-worker changes-only recording exits normally with a peak of
+82,134,456 combined physical bytes and 177,029,120 RSS bytes. This six-second
+replay is a diagnostic check, not the required sustained acceptance interval.
+A fresh four-worker Enter cohort still hits the unchanged guard after 6.96
+seconds at 106,104,296 physical bytes and 200,343,552 RSS bytes. Five Enter
+keydowns are injected and only four new blocks persist. Separating the normal
+painting policy therefore does not resolve multiworker memory acceptance.
+The default application renderer and raster-worker count remain unchanged.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.

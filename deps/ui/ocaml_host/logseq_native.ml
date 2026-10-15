@@ -209,6 +209,11 @@ let () =
      invalid_arg "Memory replay requires a positive finite duration"
    | _ -> ());
   let memory_replay = Option.is_some memory_replay_duration in
+  let replay_mode = Host_interaction.memory_replay_mode ~enabled:memory_replay
+    (Sys.getenv_opt "LOGSEQ_NATIVE_MEMORY_REPLAY_MODE") in
+  let continuous_replay = replay_mode=Host_interaction.Replay_continuous in
+  if memory_replay then Printf.eprintf "native memory replay policy=%s\n%!"
+    (if continuous_replay then "continuous" else "changes");
   let raster_workers = match Sys.getenv_opt "LOGSEQ_NATIVE_RASTER_WORKERS" with
     | None -> 4
     | Some value -> int_of_string value in
@@ -2266,9 +2271,9 @@ let () =
     (* Exercise the real embedded app, its layout, and every viewport pixel
        while occluded. Visibility exports remain truthful; this diagnostic
        does not establish visible presentation FPS or input acceptance. *)
-    if memory_replay then Option.iter Lui_raster.Tile_renderer.invalidate cocoa_tiles;
-    let dirty = (can_present || memory_replay) &&
-      (memory_replay || Ui.want_frame ui host || !host_req_repaint) in
+    if continuous_replay then Option.iter Lui_raster.Tile_renderer.invalidate cocoa_tiles;
+    let dirty = Host_interaction.should_paint ~replay:replay_mode ~visible:can_present
+      ~dirty:(Ui.want_frame ui host || !host_req_repaint) in
     let retry = presentation.Host_interaction.pending in
     if dirty then begin
       paint_frame ();
@@ -2278,7 +2283,7 @@ let () =
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
     end
-    else if can_present && (Host_interaction.presentation_due presentation
+    else if (can_present || memory_replay) && (Host_interaction.presentation_due presentation
              || overlay_fps () <> !painted_fps
              || (metrics.panel_open && perf_s () -. !last_render >= 0.25))
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
