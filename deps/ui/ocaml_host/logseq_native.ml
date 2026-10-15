@@ -339,6 +339,9 @@ let () =
            img.Lui_raster.Image.pix) }
   in
   let cocoa_tiles = if use_cocoa then Some (Lui_raster.Tile_renderer.create ()) else None in
+  let raster_background_domains () = match cocoa_tiles with
+    | Some tiles -> Lui_raster.Tile_renderer.background_domains tiles
+    | None -> 0 in
   let cocoa_renderer tiles =
     let id = Sdl.get_window_id !win in
     { Lui_host.name = "lui_raster+iosurface";
@@ -2305,6 +2308,7 @@ let () =
      | _ -> ());
     if now -. !last_metrics_export >= 1. then begin
       last_metrics_export := now;
+      metrics.raster_background_domains <- raster_background_domains ();
       if Host_platform.is_macos && Option.is_some metrics_log then begin
         let footprint_bytes,rss_bytes,peak_footprint_bytes = Native_window.memory_usage () in
         let pixel_width,pixel_height = drawable () in
@@ -2332,7 +2336,7 @@ let () =
        let software_bytes = if use_cocoa then
            Native_window.software_owned_bytes (Sdl.get_window_id !win) else 0 in
        Printf.eprintf
-         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d edit_layouts=%d edit_nodes=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d software_bytes=%d atlas_bytes=%d]\n%!"
+         "[mem f=%d live=%dMB heap=%dMB free=%dMB top=%dMB nodes=%d slots=%d layouts=%d edit_layouts=%d edit_nodes=%d metric_layouts=%d metric_labels=%d snapshots=%d subtrees=%d handles=%d raster_background_domains=%d software_bytes=%d atlas_bytes=%d]\n%!"
          !frame
          (st.Gc.live_words * 8 / 1048576)
          (st.Gc.heap_words * 8 / 1048576)
@@ -2349,6 +2353,7 @@ let () =
          (Hashtbl.length Native_embed.shallow_cache)
          (Hashtbl.length Native_embed.subtree_cache)
          (Ui_dom_native.Element_handles.length Ui_dom_native.tokens)
+         (raster_background_domains ())
          software_bytes
          (Bytes.length scene.mask_atlas.pix + Bytes.length scene.color_atlas.pix)
      end);

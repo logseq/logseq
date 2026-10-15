@@ -21,6 +21,7 @@ type process_memory = { footprint_bytes : int; peak_footprint_bytes : int;
 
 type t = {
   mutable process_memory : process_memory option;
+  mutable raster_background_domains : int;
   mutable key_downs : int;
   mutable enter_downs : int;
   mutable text_commits : int;
@@ -66,7 +67,7 @@ let sample_history () =
    used=0; next=0; total=0; sum=0.; summary=None; serialized_header=None}
 let create ~now =
   let work_samples = sample_history () in
-  {process_memory=None; export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
+  {process_memory=None; raster_background_domains=0; export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
   presentation_seen=0; gpu_submitted=0; gpu_busy_skips=0; phases=List.map (fun (phase, _) -> phase,
   sample_history ()) phases; samples=work_samples.values; work_samples; work_sorted=false; count=0; cursor=0;
   presented=0; started=now; fps=0.; frame_ms=0.; paint_ms=0.; layout_ms=0.;
@@ -162,6 +163,7 @@ let snapshot t ~now =
     (Gc.allocated_bytes ())
     gc.minor_collections gc.major_collections
     (gc.heap_words * (Sys.word_size / 8)) (gc.live_words * (Sys.word_size / 8)) (gc.top_heap_words * (Sys.word_size / 8));
+  Printf.bprintf buffer ",\"raster_background_domains\":%d" t.raster_background_domains;
   (match t.process_memory with
    | None -> Buffer.add_string buffer ",\"process_memory\":null"
    | Some memory ->

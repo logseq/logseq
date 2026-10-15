@@ -1042,6 +1042,44 @@ keydowns are injected and only four new blocks persist. Separating the normal
 painting policy therefore does not resolve multiworker memory acceptance.
 The default application renderer and raster-worker count remain unchanged.
 
+## Caller participation in parallel tile rendering
+
+The four-worker tile renderer previously started four background domains while
+the application domain only consumed completed uploads. A resident-domain
+regression first fails for two requested workers: it observes two background
+domains instead of one. The caller now renders the first band and takes
+additional bands whenever no completed producer upload is available. Uploads
+remain on the caller, parallelism is unchanged, and the pool retains one fewer
+background domain. LUI commit `e3d00a23` contains this change.
+
+Tests cover requested counts 1, 2, 4, and 8, exactly one upload per completed
+band, correct pixels, repeated frames, and complete domain release. Failure
+coverage includes invalid pixels affecting only the caller's first band and
+errors affecting all bands, followed by successful renderer reuse. The standard
+37-case raster suite and full LUI build/test aliases pass.
+
+The captured scrolling fixture preserves its original limits. Four-worker
+tiled rendering measures p95 6.45 ms versus 5.95 ms in the installed baseline,
+remaining below 8.33 ms. Serial tiled rendering still fails 16.67 ms: the new
+run measures 17.99 ms, and an independent probe linked against the previous
+installed implementation measures 18.53 ms. The serial path is unchanged by
+the pool modification. These CPU fixtures do not certify application FPS.
+
+The rebuilt application exports `raster_background_domains` in metrics and
+memory traces; the real four-worker cohort consistently reports three. Its
+pre-input 2.5–4.5-second interval has the same 2517-node graph: median combined
+physical memory is 89,982,416 bytes versus 93,603,304 bytes before the change,
+and median RSS is 184,762,368 versus 188,317,696 bytes. The intervals contain
+36 and 35 external samples, respectively. This is a short allocation/resource
+comparison rather than sustained memory acceptance.
+
+The cohort still hits the protection guard after 8.07 seconds at 106,137,040
+physical bytes and 200,458,240 RSS bytes. Eight Enter keydowns are injected and
+seven new blocks persist, so 50-Enter and full application memory acceptance
+remain failures. Both cohorts use the changes-only software replay with four
+requested workers, without debug output or allocation profiling. The default
+Metal renderer is unchanged and visible interaction remains unverified.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
