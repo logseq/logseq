@@ -185,35 +185,44 @@ and apply_pending () : unit Ui_task.t =
       let* merged =
         Ui_task.catch
           (Page_delta.with_apply_queue (fun () ->
-              match !Subs_state.current_page with
-              | Some base -> (
-                  let rec fold (p : Model.page) = function
-                    | [] -> Ui_task.resolve (Page_delta.Applied p)
-                    | d :: rest -> (
-                        let* applied =
-                          perf_time_p "apply_to_page"
-                            (Page_delta.apply_to_page ~strict:true
-                               (h.helpers_of p) p d)
-                        in
-                        match applied with
-                        | Page_delta.Applied p' -> fold p' rest
-                        | Page_delta.Unchanged -> fold p rest
-                        | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
-                  in
-                  let* m = fold base deltas in
-                  (match m with
-                   | Page_delta.Applied p'
-                     when p' != base
-                          &&
-                          (match !Subs_state.current_page with
-                           | Some c -> c == base
-                           | None -> false) ->
-                       perf_time "publish_page" (fun () -> h.publish_page p');
-                       perf_time "refresh_side" (fun () ->
-                           h.refresh_page_side p')
-                   | _ -> ());
-                  Ui_task.resolve m)
-              | None -> Ui_task.resolve Page_delta.Failed))
+              let rec attempt () =
+                let checkpoint = Page_delta.checkpoint_apply () in
+                match !Subs_state.current_page with
+                | Some base ->
+                    let rec fold (p : Model.page) = function
+                      | _ when not (Page_delta.checkpoint_current checkpoint) ->
+                          Ui_task.resolve Page_delta.Unchanged
+                      | [] -> Ui_task.resolve (Page_delta.Applied p)
+                      | d :: rest -> (
+                          let* applied =
+                            perf_time_p "apply_to_page"
+                              (Page_delta.apply_to_page ~strict:true
+                                 (h.helpers_of p) p d)
+                          in
+                          match applied with
+                          | Page_delta.Applied p' -> fold p' rest
+                          | Page_delta.Unchanged -> fold p rest
+                          | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
+                    in
+                    let* merged = fold base deltas in
+                    (match merged, !Subs_state.current_page with
+                     | Page_delta.Applied _, Some current
+                       when current != base
+                            && current.Model.page_uuid = base.Model.page_uuid
+                            && Page_delta.restore_unpublished checkpoint ->
+                         attempt ()
+                     | _ ->
+                         (match merged, !Subs_state.current_page with
+                          | Page_delta.Applied p', Some current
+                            when p' != base && current == base
+                                 && Page_delta.checkpoint_current checkpoint ->
+                              perf_time "publish_page" (fun () -> h.publish_page p');
+                              perf_time "refresh_side" (fun () -> h.refresh_page_side p')
+                          | _ -> ());
+                         Ui_task.resolve merged)
+                | None -> Ui_task.resolve Page_delta.Unchanged
+              in
+              attempt ()))
           (fun _ ->
             (* a rejected fold (enrichment/refetch helpers can reject)
                must not swallow the batch — treat it as an unspliceable
@@ -274,33 +283,51 @@ and apply_pending () : unit Ui_task.t =
       if !Subs_state.current_journals <> [] && deltas <> []
          && not unknown
       then
-        let start_js = !Subs_state.current_journals in
         let all_dup =
           (not apply_template)
           && List.for_all Page_delta.delta_already_applied deltas
         in
-        let* merged =
+        let* merged, start_js =
           Ui_task.catch
             (Page_delta.with_apply_queue (fun () ->
-                let rec go js = function
-                  | [] -> Ui_task.resolve (Page_delta.Applied js)
-                  | d :: rest -> (
-                      let* applied =
-                        Page_delta.apply_to_journals ~strict:true
-                          h.helpers_of js d
-                      in
-                      match applied with
-                      | Page_delta.Applied js' -> go js' rest
-                      | Page_delta.Unchanged -> go js rest
-                      | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
+                let rec attempt () =
+                  let checkpoint = Page_delta.checkpoint_apply () in
+                  let base = !Subs_state.current_journals in
+                  let rec go js = function
+                    | _ when not (Page_delta.checkpoint_current checkpoint) ->
+                        Ui_task.resolve Page_delta.Unchanged
+                    | [] -> Ui_task.resolve (Page_delta.Applied js)
+                    | d :: rest -> (
+                        let* applied =
+                          Page_delta.apply_to_journals ~strict:true
+                            h.helpers_of js d
+                        in
+                        match applied with
+                        | Page_delta.Applied js' -> go js' rest
+                        | Page_delta.Unchanged -> go js rest
+                        | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
+                  in
+                  let* merged = go base deltas in
+                  match merged with
+                  | Page_delta.Applied _
+                    when !Subs_state.current_journals != base
+                         && Page_delta.restore_unpublished checkpoint ->
+                      attempt ()
+                  | _ ->
+                      (match merged with
+                       | Page_delta.Applied js' when js' != base
+                           && !Subs_state.current_journals == base
+                           && Page_delta.checkpoint_current checkpoint ->
+                           h.publish_journals js'
+                       | _ -> ());
+                      Ui_task.resolve (merged, base)
                 in
-                go start_js deltas))
-            (fun _ -> Ui_task.resolve Page_delta.Failed)
+                attempt ()))
+            (fun _ -> Ui_task.resolve (Page_delta.Failed, !Subs_state.current_journals))
         in
         (match merged with
          | Page_delta.Applied js' when js' != start_js
-                        && !Subs_state.current_journals == start_js ->
-             h.publish_journals js';
+                        && !Subs_state.current_journals == js' ->
              if not all_dup then begin
                finish ();
                h.prune_overrides

@@ -1332,3 +1332,151 @@ let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_TRACE_REPLAY" with
           replay ()
         | exception End_of_file -> () in
       replay ())
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Wire in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := Failure message :: !failures in
+  let old_read = !Runtime.read_model and old_send = !Runtime.app_send
+  and old_flush = !Runtime.app_flush and old_state = !Editor_state.st
+  and old_page = !Runtime.current_page and old_journals = !Runtime.current_journals
+  and old_route = !Runtime.current_route and old_hooks = !Subs.hooks in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model := old_read; Runtime.app_send := old_send;
+    Runtime.app_flush := old_flush; Editor_state.st := old_state;
+    Runtime.current_page := old_page; Runtime.current_journals := old_journals;
+    Runtime.current_route := old_route; Subs.hooks := old_hooks;
+    Subs.clear_pending_deltas (); Page_delta.reset ()) (fun () ->
+    List.iter (fun (journals,broadcast) -> try
+      Page_delta.apply_queue := None;
+      let scheduler = Signal.scheduler () in
+      Editor_state.st := Some (Signal.state scheduler Editor_state.initial);
+      Runtime.app_flush := (fun () -> Signal.stabilize scheduler);
+      Page_delta.reset ();
+      let first = { (Model.empty_block ~uuid:"first" ~title:"first" ~is_page:false)
+        with Model.block_order = Some "a0" } in
+      let pending = Model.empty_block ~uuid:"second" ~title:"" ~is_page:false in
+      let summary = Option.get (Decode.page_of_summary
+        (W.Map [W.Keyword "block/uuid",W.Uuid "page";
+                W.Keyword "block/title",W.String "page"])) in
+      let page = { summary with Model.page_blocks = [first;pending] } in
+      let route = if journals then Model.Journals else Model.Page "page" in
+      let model = ref {Model.initial with route;
+        route_page=(if journals then None else Some page);
+        journals=(if journals then [page] else [])} in
+      Runtime.read_model := (fun () -> !model);
+      Runtime.current_route := Some route;
+      Runtime.current_page := (if journals then None else Some page);
+      Runtime.current_journals := (if journals then [page] else []);
+      Runtime.app_send := (function
+        | Action.Page_loaded value ->
+          model := {!model with Model.route_page=Some value};
+          Runtime.current_page := Some value; true
+        | Action.Journals_spliced values ->
+          model := {!model with Model.journals=values};
+          Runtime.current_journals := values; true
+        | _ -> failwith "Unexpected action in optimistic splice regression");
+      let current () = if journals then List.hd (!model).Model.journals
+        else Option.get (!model).Model.route_page in
+      let delta rev uuid order = W.Map
+        [W.Keyword "rev",W.Int rev;
+         W.Keyword "blocks",W.Map [W.Uuid uuid,W.Map
+           [W.Keyword "block/uuid",W.Uuid uuid;
+            W.Keyword "block/title",W.String "";
+            W.Keyword "block/order",W.String order]];
+         W.Keyword "deleted",W.Map [];
+         W.Keyword "children",W.Map [W.Uuid "page",W.Map
+           [W.Keyword "base-rev",W.Int (rev-1);
+            W.Keyword "remove",W.Array [];
+            W.Keyword "upsert",W.Array [W.Array [W.Uuid uuid;W.String order]]]]] in
+      let errors = ref [] in
+      let hold = ref true and release = ref None and reloads = ref 0 in
+      let publish page =
+        model := {!model with Model.route_page=Some page};
+        Runtime.current_page := Some page in
+      let publish_journals pages =
+        model := {!model with Model.journals=pages};
+        Runtime.current_journals := pages in
+      Subs.install_hooks
+        { reload=(fun () -> incr reloads);
+          refresh_page_side=(fun _ -> ()); prune_overrides=(fun _ -> ());
+          invalidate_pull_uuids=(fun _ -> ()); invalidate_pull_caches=(fun () -> ());
+          fire_db_hooks=(fun _ -> ()); ui_busy=(fun ~now:_ ~last_fire:_ -> false);
+          schedule=(fun _ -> ()); publish_page=publish; publish_journals;
+          refetch_page=(fun _ -> failwith "Unexpected refetch in optimistic splice");
+          resync_editing=(fun () -> ());
+          helpers_of=(fun _ ->
+            { Page_delta.resolve=(fun blocks ->
+                if !hold then begin
+                  hold := false;
+                  let task,resolve,_ = Ui_task.pending () in
+                  release := Some (fun () -> resolve blocks); task
+                end else Ui_task.resolve blocks);
+              fill_embeds=Ui_task.resolve; merge_collapsed=(fun _ _ -> ());
+              refresh_page_fields=Ui_task.resolve }) };
+      let complete () =
+        Option.iter (fun resolve -> release := None; resolve ()) !release;
+        Host.drain () in
+      let start value =
+        let task = if broadcast then begin
+          Subs.pending_deltas := [value];
+          Subs.pending_unknown_delta := false;
+          Subs.pending_apply_template := false;
+          Subs_state.promise_of_task (Subs.apply_pending ())
+        end else
+          Outliner_ops.refresh_via_delta (Some (W.Map [W.Keyword "delta",value])) in
+        ignore (Js.Promise.catch (fun error -> errors := error :: !errors;
+          Js.Promise.resolve ()) task) in
+      start (delta 1 "second" "a1");
+      check "Splice must be pending while optimistic input arrives"
+        (not (Page_delta.already_applied 1));
+      let later = Model.empty_block ~uuid:"third" ~title:"" ~is_page:false in
+      let optimistic = Option.get (Model.split_insert (current ()) ~uuid:"second"
+        ~before:"" ~new_block:later ~sibling:true) in
+      if journals then begin
+        model := {!model with Model.journals=[optimistic]};
+        Runtime.current_journals := [optimistic]
+      end else begin
+        model := {!model with Model.route_page=Some optimistic};
+        Runtime.current_page := Some optimistic
+      end;
+      Editor_state.set (fun state -> {state with Editor_state.editing=Some
+        (Editor_state.mk_editing ~uuid:"third" ~buffer:"unsaved" ~scope:"main"
+          ~base:"" ())});
+      complete ();
+      start (delta 2 "third" "a2");
+      Host.drain ();
+      List.iter (fun error -> raise error) !errors;
+      let blocks = (current ()).Model.page_blocks in
+      expect ((if broadcast then "Broadcast " else "Operation ") ^
+        (if journals then "journals" else "page") ^
+        " splice lost an Enter commit during optimistic input")
+        (List.map (fun (block:Model.block) -> block.block_uuid,block.block_order) blocks
+          = [Some "first",Some "a0";Some "second",Some "a1";Some "third",Some "a2"]);
+      expect "Splice must preserve the latest editor and its unsaved input"
+        (match Editor_state.editing () with Some edit -> edit.uuid="third" && edit.buffer="unsaved"
+         | None -> false);
+      Page_delta.apply_queue := None;
+      Page_delta.reset ();
+      hold := true;
+      start (delta 3 "second" "a1");
+      Page_delta.reset ();
+      let loaded = { (current ()) with Model.page_title="reloaded" } in
+      if journals then begin
+        model := {!model with Model.journals=[loaded]};
+        Runtime.current_journals := [loaded]
+      end else begin
+        model := {!model with Model.route_page=Some loaded};
+        Runtime.current_page := Some loaded
+      end;
+      complete ();
+      expect "Successful splices must not reload the route" (!reloads = 0);
+      List.iter (fun error -> raise error) !errors;
+      expect "An invalidated splice must not publish over a fresh load" (current () == loaded);
+      expect "An invalidated splice must not mark its revision applied"
+        (not (Page_delta.already_applied 3))
+    with error -> failures := error :: !failures) [true,false;false,false;true,true;false,true];
+    List.iter (fun error -> prerr_endline (Printexc.to_string error)) (List.rev !failures);
+    if !failures <> [] then failwith "Optimistic Enter commit ordering failed"));
+  print_endline "native optimistic Enter commit ordering: OK"

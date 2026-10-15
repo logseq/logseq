@@ -755,6 +755,159 @@ long idle, scrolling, and frame-time acceptance remain open. Document validation
 passes for this decision; the full documentation check still reports thirteen
 pre-existing invalid documents outside this change.
 
+### Scalar property binding retention and application control
+
+The retained-allocation trace identifies signals as a substantial live owner.
+Typed scalar properties previously created an owned conversion signal before
+installing their scoped runtime observer. Conversion now happens in the
+observer, removing the intermediate computation without changing ownership of
+the caller's source. LUI commit `0247464c03d0275bf4228b9294ad43a4bc91ee14`
+contains the change on `feat/ml-backend`.
+
+A 2000-node retention regression fails at 1104 extra bytes per binding before
+the change and passes at 328 afterward, under its unchanged 768-byte budget.
+Separate tests cover all affected value conversions, batched publication,
+derived-source diamonds, shared borrowed sources, and queued node/scope
+disposal. The full LUI suite and native host test alias pass. This fixture
+saving is not a prediction of the full application's physical-memory saving.
+
+The controlled release pair uses identical graph, worker, SDL, viewport, and
+50-Enter input, with no builds or tests during recording. Both runs last about
+92 seconds, handle and persist all 50 actions, report visible windows, and exit
+normally. At 80-89 seconds, GUI medians are 105399256 bytes before and 104137712
+after; worker medians are 28541432 and 27509240 bytes. Host allocations are
+818676168 and 819268488 bytes, respectively. Active-frame p95 is 19.35 versus
+19.47 ms. This is a small physical-memory difference in one pair, without a
+measured allocation or timing improvement; it does not solve the main problem.
+
+The before executable SHA-256 is
+`8b38f2af28aec9e09bc662c7e761c9a752c8ea67e7f1a76f1e24f0c23c96b5e6`;
+the candidate is
+`847f1cf9dd50eb6419c9569258075c43cc8e91f07a3883ca9b2924e7f94575a7`.
+The candidate was built against an isolated installation of the committed LUI
+sources. After the captures, the global runtime pin is synchronized and LUI is
+explicitly reinstalled; both installed binding source files match that commit.
+After the Enter publication fix below, the normal release bundle is rebuilt
+against this installation. Its packaged executable SHA-256 is
+`1c21241460f37d9b5ec366f345093de21596f3fd18137269be837d6100bab64c`;
+the temporary model-order trace is absent. Recordings remain under ignored
+`tmp/native-app/science-property-binding-before-metal-r1/` and
+`science-property-binding-after-metal-r2/`. The first candidate recording was
+stopped to restore manual input and is excluded despite its successful exit
+code. Isolated SDL replay deliberately discards real mouse and keyboard events;
+its input success cannot establish operating-system input or IME acceptance.
+The normal 200 MB guard and all acceptance targets remain unchanged.
+
+### Physical ownership beyond the managed-allocation trace
+
+The previous native-allocation analysis summarized malloc blocks but omitted
+the anonymous-VM backtraces already present in the system capture. That was an
+attribution gap: Memtrace's live-object owners alone do not explain the GUI's
+physical footprint. Stop selecting small allocation optimizations from those
+owners until the major physical regions are reconciled.
+
+The candidate's unprofiled `vmmap` snapshot at approximately 60 seconds reports
+98.8 MiB of physical footprint. Its disjoint region categories are approximately
+34.9 MiB of anonymous `VM_ALLOCATE`, 30.5 MiB in malloc zones, 19.8 MiB of
+IOSurface backing, and 13.6 MiB in the remaining categories/accounting residual.
+The malloc-zone total consists of about 18.5 MiB of allocated payload and
+12.0 MiB of allocator-reported fragmentation. These rounded categories describe
+one snapshot, not the independently measured 80-89-second median. Managed large
+objects occupy malloc blocks and must not be added again to the region totals.
+The residual is not yet attributed to individual owners.
+
+Two fresh system-stack captures on the candidate confirm that the largest
+anonymous-VM owner is `caml_shared_try_alloc -> caml_mem_map ->
+caml_plat_mem_map`. The second inverted physical call tree attributes about
+31.3 MiB to those major-heap mappings, 5.95 MiB of malloc payload to managed
+large allocations, and 2.00 MiB to minor-heap commitment. Runtime metadata and
+buffers include 2.10 MiB from `caml_stat_calloc_noexc`, 1.80 MiB from
+`realloc_generic_table`, and 480 KiB of input-channel buffers. These are current
+live allocations or mapped dirty/compressed pages, not cumulative allocation
+traffic or reserved virtual address space. The same capture's nearby GC
+observation reports 31949456 heap bytes and 21942168 last-observed live bytes.
+Do not subtract these different accounting views and label the difference an
+exact free-pool measurement.
+
+The installed OCaml 5.5.1 runtime source explains one missing accounting path:
+`pool_release` in `runtime/shared_heap.c` subtracts a released pool from the
+domain's `pool_words` and puts it on `pool_freelist.free` without unmapping it.
+`caml_gc_quick_stat` in `runtime/gc_ctrl.c` reports active pool and large-object
+words; compaction explicitly unmaps that global free list. This establishes
+that the HUD's heap-capacity field does not include every retained runtime
+mapping. A debugger snapshot after the Enter burst directly walks 202 free
+pools, checking that each has no domain owner and that the chain has no cycle.
+The installed runtime's 4096-word pool size makes this 6619136 bytes of retained
+virtual pool capacity. This is not an exact dirty/compressed-page measurement.
+Active-pool slack and retained application owners still need to be separated
+before choosing a fix.
+The earlier diagnostic compaction result cannot substitute for this separation
+or justify adding compaction pauses to the application.
+
+The free-list snapshot is saved under ignored
+`tmp/native-app/science-free-pool-count.json`, with its debugger transcript in
+`science-free-pools-after-metal-r2/pool-debugger.txt`. It is a short, paused
+diagnostic and cannot satisfy the 600-second idle requirement. The initial
+debugger script import fails because its filename contains hyphens; that
+attempt yields no count. The corrected script attaches, reads the chain, and
+detaches successfully. Neither attempt is a performance baseline.
+
+Raw captures remain under ignored
+`tmp/native-app/science-physical-owners-after-metal-r1/` and
+`science-physical-owners-after-metal-r2/`. Both handle and persist 50 actions
+and exit normally after about 92 seconds under the finite 400 MB diagnostic
+guard. Stack logging adds its own 16.2 MiB category and changes allocator and
+drawable behavior; the second recording also changes window visibility. It is
+ownership evidence, not a timing baseline or an estimate of unprofiled memory
+obtained by subtracting a constant profiler cost. The first malloc-only class
+filter returns an empty tree; the second unfiltered inverted tree provides the
+allocation owners above. Attempts to query the exited first process produce
+no usable evidence. Current measured ownership does not establish that the
+remaining footprint is necessary, nor does it close the memory target.
+
+## Optimistic Enter order during asynchronous delta publication
+
+The native application reproduces new empty rows above their original block
+while the database has the correct order. An isolated input recording leaves
+four optimistic rows without canonical `block_order`; a later membership patch
+sorts those missing values before the original row. Reopening materializes the
+canonical database order, explaining the apparent recovery.
+
+Both operation responses and subscription broadcasts enrich deltas
+asynchronously. A newer optimistic Enter replaces the page/list during that
+work. The old result is then discarded by the physical-identity publication
+guard, but its revisions have already been marked applied. Later responses
+skip those revisions, permanently omitting their canonical rows in the current
+view. Operation responses already stash every delta; adding another stash
+would not repair the publication race.
+
+Serialized apply attempts now checkpoint revision bookkeeping. If optimistic
+input replaces their base, they restore unpublished bookkeeping and retry the
+same batch against the latest page/list. A full load invalidates the attempt's
+epoch, preventing its old asynchronous completion from marking revisions or
+publishing over the loaded model. Journals subscription publication also stays
+inside the serialized queue. Current editor identity and unsaved input survive.
+
+Native integration regressions exercise real operation and subscription paths
+for page and Journals, including input during enrichment and a full load during
+an outstanding apply. Both operation-order cases and stale-revision cases fail
+before their fix; both subscription-order cases fail before extending the fix
+to broadcasts. All pass afterward. The complete native host suite passes,
+and the shared JavaScript suite reports 2080 checks and zero failures.
+
+A rebuilt diagnostic application and real worker process receive 50 Enter
+presses at 10 per second. The first journal grows from 7 to 57 top-level blocks;
+all canonical orders are present and sorted, with the original `hello` first.
+After stopping and reopening the same graph without cloning or resetting it,
+the complete captured UUID/title/order trees are identical. Periodic model
+samples establish settled metadata independently of whether a metadata-only
+change triggers layout. Ignored evidence is saved in
+`tmp/native-app/science-enter-order-complete-green/`,
+`science-enter-order-reopen-green/`, and `science-enter-order-results.json`.
+This isolated SDL replay validates ordering and persistence, not operating-system
+input, IME, memory-budget, or presentation-FPS acceptance. The temporary model
+trace is excluded from production source and binaries.
+
 ## Alternatives considered
 
 ### Change renderer or reduce graph content

@@ -976,7 +976,7 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
 let apply_queued _page delta =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
-  let route_at_start = !Runtime.current_route in
+  let context = Runtime.repo (), Runtime.route () in
   let perf =
     match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
   in
@@ -988,40 +988,50 @@ let apply_queued _page delta =
   Subs_state.promise_of_task
     (Page_delta.with_apply_queue (fun () ->
          let ( let* ) = Ui_task.( let* ) in
-         match (Runtime.model ()).Model.route_page with
-         | Some base -> (
-             let h = delta_helpers base in
-             let rec go page = function
-               | [] -> Ui_task.resolve (Some page)
-               | d :: rest -> (
-                   let t0 = ms () in
-                   let* applied =
-                     Page_delta.apply_to_page ~strict:false h page d
-                   in
-                   if perf then
-                     Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
-                       (ms () -. t0);
-                   match applied with
-                   | Page_delta.Applied page' -> go page' rest
-                   | Page_delta.Unchanged -> go page rest
-                   | Page_delta.Failed -> Ui_task.resolve None)
-             in
-             let* a = go base deltas in
-             (match a with
-              | Some p'
-                when p' != base
-                     && !Runtime.current_route = route_at_start
-                     &&
-                     (match (Runtime.model ()).Model.route_page with
-                      | Some c -> c == base
-                      | None -> false) ->
-                  let t0 = ms () in
-                  (let _ = Ui_services.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
-                  if perf then
-                    Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
-              | _ -> ());
-             Ui_task.resolve (a, touched, deltas))
-         | None -> Ui_task.resolve (None, touched, deltas)))
+         let rec attempt () =
+           let checkpoint = Page_delta.checkpoint_apply () in
+           match (Runtime.model ()).Model.route_page with
+           | Some base -> (
+               let h = delta_helpers base in
+               let rec go page = function
+                 | _ when not (Page_delta.checkpoint_current checkpoint) -> Ui_task.resolve (Some base)
+                 | [] -> Ui_task.resolve (Some page)
+                 | d :: rest -> (
+                     let t0 = ms () in
+                     let* applied =
+                       Page_delta.apply_to_page ~strict:false h page d
+                     in
+                     if perf then
+                       Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
+                         (ms () -. t0);
+                     match applied with
+                     | Page_delta.Applied page' -> go page' rest
+                     | Page_delta.Unchanged -> go page rest
+                     | Page_delta.Failed -> Ui_task.resolve None)
+               in
+               let* a = go base deltas in
+               match a, (Runtime.model ()).Model.route_page with
+               | Some _, Some current
+                 when context = (Runtime.repo (), Runtime.route ())
+                      && current != base
+                      && current.Model.page_uuid = base.Model.page_uuid
+                      && Page_delta.restore_unpublished checkpoint ->
+                   attempt ()
+               | _ ->
+                   (match a with
+                    | Some page when page != base
+                        && Page_delta.checkpoint_current checkpoint
+                        && context = (Runtime.repo (), Runtime.route ())
+                        && (match (Runtime.model ()).Model.route_page with
+                            | Some current -> current == base | None -> false) ->
+                        let t0 = ms () in
+                        Ui_services.perf_mark "splice:page-loaded";
+                        Runtime.send (Action.Page_loaded page);
+                        if perf then Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
+                    | _ -> ());
+                   Ui_task.resolve (a, touched, deltas))
+           | None -> Ui_task.resolve (None, touched, deltas)
+         in attempt ()))
 
 (* journals-route fold of the op response (+ any deferred deltas) —
    the route page lives in current_journals, so the page-route splice
@@ -1151,6 +1161,7 @@ let request_side_refresh ~props owners =
 
 let splice_journals ?(strict = false) (deltas : Wire.t list) :
     bool Js.Promise.t =
+  let context = Runtime.repo (), Runtime.route () in
   let deltas = Page_delta.drain_deferred () @ deltas in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
   let build_index (js : Model.page list) =
@@ -1174,83 +1185,88 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
   Subs_state.promise_of_task
     (Page_delta.with_apply_queue (fun () ->
          let ( let* ) = Ui_task.( let* ) in
-         let base = (Runtime.model ()).Model.journals in
-         match base with
-         | [] -> Ui_task.resolve false
-         | _ ->
-             let arr = Array.of_list base in
-             let idx = ref (build_index base) in
-             let owners = ref [] in
-             let rec fold_delta ~retried d =
-               let empty =
-                 match Page_delta.parse d with
-                 | Some p ->
-                     Page_delta.SMap.is_empty p.canon
-                     && Page_delta.SSet.is_empty p.deleted
-                     && Page_delta.SMap.is_empty p.patches
-                 | None -> false
+         let rec attempt () =
+           let checkpoint = Page_delta.checkpoint_apply () in
+           let base = (Runtime.model ()).Model.journals in
+           match base with
+           | [] -> Ui_task.resolve false
+           | _ ->
+               let arr = Array.of_list base in
+               let idx = ref (build_index base) in
+               let owners = ref [] in
+               let rec fold_delta ~retried d =
+                 let empty =
+                   match Page_delta.parse d with
+                   | Some p ->
+                       Page_delta.SMap.is_empty p.canon
+                       && Page_delta.SSet.is_empty p.deleted
+                       && Page_delta.SMap.is_empty p.patches
+                   | None -> false
+                 in
+                 (* Saving an unchanged buffer produces an empty delta.
+                    It has no journal owner and needs no route reload. *)
+                 if not (Page_delta.checkpoint_current checkpoint)
+                    || empty || Page_delta.delta_already_applied d then
+                   Ui_task.resolve `Applied
+                 else
+                   let cands =
+                     List.sort_uniq compare
+                       (List.filter_map
+                          (fun k -> Hashtbl.find_opt !idx k)
+                          (Page_delta.delta_keys d))
+                   in
+                   let rec try_cands = function
+                     | [] ->
+                         if retried then Ui_task.resolve `Unmatched
+                         else (
+                           (* a uuid an earlier delta in this batch created
+                              isn't in the index yet — rebuild and retry *)
+                           idx := build_index (Array.to_list arr);
+                           fold_delta ~retried:true d)
+                     | i :: rest -> (
+                         let j = arr.(i) in
+                         let* applied =
+                           Page_delta.apply_to_page ~strict (delta_helpers j)
+                             j d
+                         in
+                         match applied with
+                         | Page_delta.Applied j' ->
+                             arr.(i) <- j';
+                             owners := j' :: !owners;
+                             Ui_task.resolve `Applied
+                         | Page_delta.Failed -> Ui_task.resolve `Unmatched
+                         | Page_delta.Unchanged -> try_cands rest)
+                   in
+                   try_cands cands
                in
-               (* Saving an unchanged buffer produces an empty delta.
-                  It has no journal owner and needs no route reload. *)
-               if empty || Page_delta.delta_already_applied d then
-                 Ui_task.resolve `Applied
-               else
-                 let cands =
-                   List.sort_uniq compare
-                     (List.filter_map
-                        (fun k -> Hashtbl.find_opt !idx k)
-                        (Page_delta.delta_keys d))
-                 in
-                 let rec try_cands = function
-                   | [] ->
-                       if retried then Ui_task.resolve `Unmatched
-                       else (
-                         (* a uuid an earlier delta in this batch created
-                            isn't in the index yet — rebuild and retry *)
-                         idx := build_index (Array.to_list arr);
-                         fold_delta ~retried:true d)
-                   | i :: rest -> (
-                       let j = arr.(i) in
-                       let* applied =
-                         Page_delta.apply_to_page ~strict (delta_helpers j)
-                           j d
-                       in
-                       match applied with
-                       | Page_delta.Applied j' ->
-                           arr.(i) <- j';
-                           owners := j' :: !owners;
-                           Ui_task.resolve `Applied
-                       | Page_delta.Failed -> Ui_task.resolve `Unmatched
-                       | Page_delta.Unchanged -> try_cands rest)
-                 in
-                 try_cands cands
-             in
-             let rec fold = function
-               | [] -> Ui_task.resolve true
-               | d :: rest -> (
-                   let* r = fold_delta ~retried:false d in
-                   match r with
-                   | `Applied -> fold rest
-                   | `Unmatched -> Ui_task.resolve false)
-             in
-             let* ok = fold deltas in
-             ignore
-               (Ui_services.perf_mark
-                  (if ok then "jdelta:spliced" else "jdelta:unmatched"));
-             (if ok then
-                match (Runtime.model ()).Model.journals with
-                | cur when cur == base ->
-                    if !owners <> [] then begin
-                      (* fold and publish inside the apply queue so a
-                         racing arm can't interleave between our splice
-                         and our publish *)
-                      Runtime.send
-                        (Action.Journals_spliced (Array.to_list arr));
-                      S.prune_overrides touched;
-                      request_side_refresh ~props:false !owners
-                    end
-                | _ -> ());
-             Ui_task.resolve ok))
+               let rec fold = function
+                 | [] -> Ui_task.resolve true
+                 | d :: rest -> (
+                     let* r = fold_delta ~retried:false d in
+                     match r with
+                     | `Applied -> fold rest
+                     | `Unmatched -> Ui_task.resolve false)
+               in
+               let* ok = fold deltas in
+               ignore
+                 (Ui_services.perf_mark
+                    (if ok then "jdelta:spliced" else "jdelta:unmatched"));
+               if ok && context = (Runtime.repo (), Runtime.route ())
+                  && (Runtime.model ()).Model.journals != base
+                  && Page_delta.restore_unpublished checkpoint then
+                 attempt ()
+               else begin
+                 if ok && Page_delta.checkpoint_current checkpoint
+                    && context = (Runtime.repo (), Runtime.route ())
+                    && (Runtime.model ()).Model.journals == base
+                    && !owners <> [] then begin
+                   Runtime.send (Action.Journals_spliced (Array.to_list arr));
+                   S.prune_overrides touched;
+                   request_side_refresh ~props:false !owners
+                 end;
+                 Ui_task.resolve ok
+               end
+         in attempt ()))
 
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match

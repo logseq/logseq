@@ -115,6 +115,32 @@ let parse (delta : Wire.t) : parsed option =
    can only splice onto a state at exactly that rev *)
 let basis : int option ref = ref None
 let applied : ISet.t ref = ref ISet.empty
+let materialization_epoch = ref 0
+
+type apply_checkpoint =
+  { checkpoint_epoch : int
+  ; checkpoint_basis : int option
+  ; checkpoint_applied : ISet.t
+  }
+
+let checkpoint_apply () =
+  { checkpoint_epoch = !materialization_epoch
+  ; checkpoint_basis = !basis
+  ; checkpoint_applied = !applied
+  }
+
+let checkpoint_current checkpoint =
+  checkpoint.checkpoint_epoch = !materialization_epoch
+
+(* Only the serialized apply queue may restore an unpublished attempt.
+   A fresh load invalidates its checkpoint instead of reviving old state. *)
+let restore_unpublished checkpoint =
+  if not (checkpoint_current checkpoint) then false
+  else begin
+    basis := checkpoint.checkpoint_basis;
+    applied := checkpoint.checkpoint_applied;
+    true
+  end
 
 (* op responses skipped while an editor is open — their deltas stay
    queued so the next refresh (or broadcast) merges the saves they
@@ -129,6 +155,7 @@ let drain_deferred () =
   ds
 
 let reset () =
+  incr materialization_epoch;
   basis := None;
   applied := ISet.empty;
   deferred := []
@@ -498,6 +525,7 @@ let delta_keys (delta : Wire.t) : string list =
    ran, and a non-contiguous base self-heals through the next broadcast *)
 let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
     (delta : Wire.t) : Model.page splice Ui_task.t =
+  let epoch = !materialization_epoch in
   match parse delta with
   | None -> Ui_task.resolve Failed
   | Some p -> (
@@ -528,7 +556,8 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           h.resolve (List.map snd decoded)
         in
         let* filled = h.fill_embeds filled in
-        if already_applied p.rev then Ui_task.resolve Unchanged
+        if epoch <> !materialization_epoch || already_applied p.rev then
+          Ui_task.resolve Unchanged
         else
         let canon_nodes = Hashtbl.create (List.length filled) in
         List.iter2
@@ -574,10 +603,6 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
         in
         if env.failed || unconsumed then Ui_task.resolve Failed
         else (
-          let add_c, rem_c = collapsed_sets p in
-          if not (SSet.is_empty add_c && SSet.is_empty rem_c) then
-            h.merge_collapsed add_c rem_c;
-          note_applied p.rev;
           let page' = { page with Model.page_blocks = top } in
           let* page' =
             match page.Model.page_uuid with
@@ -585,8 +610,15 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
                 h.refresh_page_fields page'
             | _ -> Ui_task.resolve page'
           in
-          own_commit := Some page';
-          Ui_task.resolve (Applied page')))
+          if epoch <> !materialization_epoch then Ui_task.resolve Unchanged
+          else begin
+            let add_c, rem_c = collapsed_sets p in
+            if not (SSet.is_empty add_c && SSet.is_empty rem_c) then
+              h.merge_collapsed add_c rem_c;
+            note_applied p.rev;
+            own_commit := Some page';
+            Ui_task.resolve (Applied page')
+          end))
 
 (* fold [delta] onto the journal page(s) it touches — same tri-state as
    [apply_to_page]: [Unchanged] when no loaded day is touched (delta
