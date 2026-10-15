@@ -141,9 +141,12 @@ let viewport_events ?(pinned=fun _ -> false) cache ~store ~rect_of ~height ~lazy
     let r : Lui_scene.rect = rect_of id in
     if attrs_has id "data-lazy-mount" then begin
       let visible = r.y < edge && r.y +. r.h > -256. in
+      (* Warmup content can already be mounted before the first entry
+         event. Its automatic height identifies that mounted state. *)
       if not (Hashtbl.mem lazy_fired id) && visible then begin
         Hashtbl.replace lazy_fired id (); emit "lazy-mount" id
-      end else if Hashtbl.mem lazy_fired id && not visible && not (pinned id) then begin
+      end else if not visible && not (pinned id)
+          && (Hashtbl.mem lazy_fired id || Lui_store.string_prop store id "height"=Some "auto") then begin
         Hashtbl.remove lazy_fired id; emit "lazy-unmount" id
       end
     end else if attrs_has id "data-virt-count" then begin

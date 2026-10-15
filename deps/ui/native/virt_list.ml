@@ -117,9 +117,9 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       Printf.sprintf "%s|%d" (key_of it)
         (Option.value (Hashtbl.find_opt versions (key_of it)) ~default:0)
     in
-    (* [initial_rows >= 0]: rows outside the first [initial_rows] keys
-       mount behind a one-way `near` latch — cljs page-root-virtual-list
-       parity where offscreen rows don't exist in the DOM at all. The
+    (* [initial_rows >= 0]: every row has a viewport-owned mount state.
+       The first [initial_rows] keys start mounted for the initial paint;
+       they can leave the viewport like any later row. The
        placeholder is a childless `.ls-virt-row[data-lazy-mount]` the
        flat spine reads as a spacer; its onAppear dom-event flips `near`
        and the real row mounts in place. Row data stays in the keyed
@@ -140,7 +140,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       match Hashtbl.find_opt near_states k with
       | Some s -> s
       | None ->
-          let s = Signal.state sched false in
+          let s = Signal.state sched (Hashtbl.mem eager k) in
           Hashtbl.replace near_states k s;
           s
     in
@@ -148,7 +148,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       let k = key_of it in
       (* hosts without a lazy-mount spine (GenericHost/SDL) emit every
          row eagerly — the spacer would otherwise latch at 0px forever *)
-      if initial_rows < 0 || not (lazy_spine ctx) || Hashtbl.mem eager k then
+      if initial_rows < 0 || not (lazy_spine ctx) then
         box  [ render it ]
       else
         let near = near_of k in
@@ -184,10 +184,11 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     Logseq_el.attrs_signal count_sig (fun n ->
         [ ("data-virt-count", string_of_int n) ])
   in
-  (* same lazy latch as [list]: rows outside the first [initial_rows]
-     keys start as a childless `.ls-virt-row[data-lazy-mount]` spacer and
-     mount their real content when the spine reports them near the
-     viewport. Keyed by row id — index-based gating would dirty every
+  (* Same viewport-owned state as [list]: warmup rows start mounted,
+     and the other keys start as a childless spacer. Both retain their
+     measured extent when unmounted. The native spine's entry event
+     mounts real content when the row approaches the viewport.
+     Keyed by row id — index-based gating would dirty every
      downstream signal on a splice. *)
   let initial_rows = clamp_initial_rows ctx initial_rows in
   let eager : (string, unit) Hashtbl.t = Hashtbl.create 64 in
@@ -203,7 +204,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     match Hashtbl.find_opt near_states k with
     | Some s -> s
     | None ->
-        let s = Signal.state sched false in
+        let s = Signal.state sched (Hashtbl.mem eager k) in
         Hashtbl.replace near_states k s;
         s
   in
@@ -211,7 +212,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     let k = key (Signal.get item_sig) in
     (* hosts without a lazy-mount spine (GenericHost/SDL) emit every
        row eagerly — the spacer would otherwise latch at 0px forever *)
-    if initial_rows < 0 || not (lazy_spine ctx) || Hashtbl.mem eager k then
+    if initial_rows < 0 || not (lazy_spine ctx) then
       box  [ mount item_sig ]
     else
       let near = near_of k in

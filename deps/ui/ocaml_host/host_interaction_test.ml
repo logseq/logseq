@@ -286,6 +286,29 @@ let () =
 let () =
   let store = Lui_store.create () in
   Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column);
+    SetExtensionProp (1,"attrs",StringValue "data-lazy-mount");
+    SetExtensionProp (1,"height",StringValue "auto")]};
+  let cache = Host_interaction.viewport_cache () in
+  let lazy_fired = Hashtbl.create 1 and virt_end_fired = Hashtbl.create 1 in
+  let pinned = ref true and emitted = ref [] in
+  let step expected =
+    emitted := [];
+    Host_interaction.viewport_events cache ~store ~height:600.
+      ~pinned:(fun _ -> !pinned)
+      ~rect_of:(fun _ -> Lui_scene.rect 0. 2000. 100. 40.)
+      ~lazy_fired ~virt_end_fired ~emit:(fun name id -> emitted := (name,id)::!emitted);
+    check "Warmup viewport disposal must respect mounted and pinned state"
+      (List.rev !emitted=expected) in
+  step [];
+  pinned := false;
+  step ["lazy-unmount",1];
+  Lui_store.apply_op store (SetExtensionProp (1,"height",StringValue "40."));
+  step [];
+  print_endline "warmup viewport disposal: OK"
+
+let () =
+  let store = Lui_store.create () in
+  Lui_store.apply_batch store {generation=1;ops=[CreateNode (1, Column);
     SetExtensionProp (1,"attrs",StringValue "data-lazy-mount") ]};
   let cache = Host_interaction.viewport_cache () in
   let lazy_fired = Hashtbl.create 1 and virt_end_fired = Hashtbl.create 1 in

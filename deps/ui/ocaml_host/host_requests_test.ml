@@ -432,6 +432,8 @@ let lazy_row_extent mode = Native_embed.with_entry_lock (fun () ->
     match Lui_store.string_prop store id "attrs" with
     | Some attrs -> Host_interaction.has_attribute attrs "data-lazy-mount"
     | None -> false) (Lui_store.preorder store) in
+  let markers = List.filter (fun id ->
+    (Option.get (Lui_layout.rect layout id)).h=64.) markers in
   check "All deferred rows must retain their estimated scroll extent"
     (List.length markers=(if mode>=2 then 10 else 7) && List.for_all (fun id ->
       match Lui_layout.rect layout id with Some rect -> rect.h=64. | None -> false) markers);
@@ -539,6 +541,62 @@ let () = Native_embed.with_entry_lock (fun () ->
 
 let () = List.iter lazy_row_extent [0;1;2;3];
   print_endline "native lazy row extent: OK"
+
+let warmup_row_disposal mode = Native_embed.with_entry_lock (fun () ->
+  let store = Lui_store.create () and rendered = ref 0 in
+  let resources = Hashtbl.create 3 in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;
+  let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
+    (fun context _ _ ->
+      let render id context parent =
+        incr rendered;
+        let resource = ref (String.make 4096 'x') and weak = Weak.create 1 in
+        Weak.set weak 0 (Some resource); Hashtbl.replace resources id weak;
+        Logseq_el.el ~events:"resource-check"
+          ~on_dom_event:(fun _ _ -> ignore (Sys.opaque_identity resource))
+          [Lui_elements.column ~height:40 [Lui_elements.text ~value:"row" []]] context parent in
+      if mode=0 then Virt_list.list ~initial_rows:3 ~estimate_size:(fun _ -> 64.)
+        ~key_of:string_of_int ~render (Array.init 10 Fun.id)
+      else Virt_list.rows_sig ~initial_rows:3 ~estimate_size:(fun _ -> 64.)
+        ~key:string_of_int ~cmp:String.compare
+        ~mount:(fun item -> render (Signal.get item))
+        (Signal.constant context.Lui_ui.ui_scheduler (List.init 10 Fun.id))) in
+  ignore (Lui_app.start app); ignore (Lui_app.flush app);
+  check "Warmup rows must render before the first viewport pass" (!rendered=3);
+  let markers = List.filter (fun id ->
+    match Lui_store.string_prop store id "attrs" with
+    | Some attrs -> Host_interaction.has_attribute attrs "data-lazy-mount"
+    | None -> false) (Lui_store.preorder store) in
+  check "Warmup rows must participate in viewport disposal" (List.length markers=10);
+  let first = List.hd markers and mounted_nodes = Lui_store.node_count store in
+  check "Mounted warmup rows must expose their automatic height"
+    (Lui_store.string_prop store first "height"=Some "auto");
+  let layout = Lui_layout.create () in
+  Lui_layout.sync ~width:800. ~height:600. layout store;
+  List.iteri (fun index id ->
+    check "Warmup rows must use content height while deferred rows keep their estimate"
+      ((Option.get (Lui_layout.rect layout id)).h=(if index<3 then 40. else 64.))) markers;
+  let resource = Hashtbl.find resources 0 in
+  Platform.emit_event "lazy-unmount" (Js.Json.JObject
+    ["nodeId",Js.Json.JNumber (float first);"height",Js.Json.JNumber 40.]);
+  ignore (Lui_app.flush app);
+  Gc.full_major ();
+  check "Offscreen warmup content must release its nodes and owned resources"
+    (Lui_store.node_count store < mounted_nodes && not (Weak.check resource 0));
+  Lui_layout.sync ~width:800. ~height:600. layout store;
+  check "Warmup disposal must preserve measured scroll extent"
+    ((Option.get (Lui_layout.rect layout first)).h=40.);
+  Platform.emit_event "lazy-mount" (Js.Json.JObject ["nodeId",Js.Json.JNumber (float first)]);
+  ignore (Lui_app.flush app);
+  check "Returning to a warmup row must remount its content" (!rendered=4);
+  ignore (Lui_app.dispose app))
+
+let () = List.iter warmup_row_disposal [0;1];
+  print_endline "native warmup row disposal: OK"
 
 let () = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () and mounted = ref 0 in

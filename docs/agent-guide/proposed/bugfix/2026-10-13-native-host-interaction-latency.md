@@ -1122,6 +1122,51 @@ p95 14.67 ms and median allocation 1,748,432 bytes/frame, down from approximatel
 major collection. Allocation remains substantial; this repair does not certify
 the application memory target, sustained input, or visible presentation FPS.
 
+## UI store reader allocation and warmup row ownership
+
+A fresh demo graph with changes-only painting still reaches the combined
+200 MB RSS protection limit during rapid Enter. A 650 ms allocation capture,
+requested after the scripted End key and before Enter, estimates 69.60 MB
+of allocation, including 14.08 MB whose first allocation site is
+`Hashtbl.find_opt`. Many typed UI property reads wrap the live node and stored
+value in temporary options before immediately inspecting them.
+
+LUI commit `76628547` removes those intermediate options while retaining the
+public result types and existing absent/mistyped/deleted-node behavior. Two
+allocation regressions first fail: 10,000 scalar/stored-option read rounds
+allocate 800,096 bytes, and typed/raw property rounds allocate 1,760,096 bytes.
+They pass after the change at 96 and 640,096 bytes respectively. All 22 store
+cases, full LUI build/test aliases, and native host regressions pass. In the
+same scripted 650 ms diagnostic window, estimated total allocation becomes
+61.84 MB and first-site `Hashtbl.find_opt` allocation becomes 4.32 MB. These
+sampled intervals establish reduced allocation, not sustained memory acceptance.
+
+Another ownership problem affects initial virtual-list rows. `initial_rows`
+previously bypasses the viewport mount wrapper permanently. Journals starts
+four such days, whose contents consequently cannot leave the mounted tree.
+Both native list entry points now start warmup rows mounted inside the same
+viewport-owned wrapper as deferred rows. The host also recognizes automatic
+height as already-mounted content when an offscreen warmup row has never
+received an entry event. Focused, pressed, and open-menu ancestors retain the
+existing pin protection.
+
+New regressions first fail for missing warmup viewport markers and missing
+offscreen disposal. They now verify initial content heights versus deferred
+estimates, actual node/resource release, preservation of measured scroll
+extent, remount on return, and pinned-row protection. Existing 100-cycle
+disposal budgets remain unchanged. Native host tests and executable/archive
+builds pass.
+
+The real demo cohort drops from 2517 to 2403 nodes before input. Over the
+same 2.5–4.5-second pre-input interval, median combined physical memory falls
+from 90,179,024 to 89,589,200 bytes and median RSS from 184,795,136 to
+184,238,080 bytes (35 and 34 samples). Rapid Enter still fails the guard after
+8.25 seconds at 106,776,040 physical bytes and 200,949,760 RSS bytes. Ten Enter
+keydowns are injected; reopening the isolated worker confirms 799 blocks,
+nine more than the pristine 790-block graph. Both isolated processes are killed
+at the unchanged protection limit. The 50-Enter, default-renderer memory, and
+visible presentation requirements remain unmet.
+
 ## Performance target and display limit
 
 The work budget is 8.33 ms for 120 FPS. The connected DELL S3422DW is currently reported by macOS at 100 Hz, so this display cannot show 120 distinct frames per second. The HUD counts drawable presented-handler notifications rather than render-loop attempts.
