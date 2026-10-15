@@ -1102,9 +1102,9 @@ let journal_item_sig (ms : Model.t Signal.signal)
   let key =
     Option.value p0.Model.page_uuid ~default:p0.Model.page_title
   in
-  let is_last () =
-    match List.rev (Signal.get ms).Model.journals with
-    | last :: _ -> last.Model.page_uuid = (Signal.get ps).Model.page_uuid
+  let is_last (p : Model.page) (m : Model.t) =
+    match List.rev m.Model.journals with
+    | last :: _ -> last.Model.page_uuid = p.Model.page_uuid
     | [] -> false
   in
   let title_eq ((a : Model.page), ea) ((b : Model.page), eb) =
@@ -1130,31 +1130,25 @@ let journal_item_sig (ms : Model.t Signal.signal)
     a.Model.page_linked_refs == b.Model.page_linked_refs
     && is_today_journal a = is_today_journal b
   in
-  let is_first () =
-    match (Signal.get ms).Model.journals with
-    | first :: _ ->
-        first.Model.page_uuid = (Signal.get ps).Model.page_uuid
+  let is_first (p : Model.page) (m : Model.t) =
+    match m.Model.journals with
+    | first :: _ -> first.Model.page_uuid = p.Model.page_uuid
     | [] -> false
   in
-  Ui_parts.class_signal
-    (Logseq_el.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
-    (fun _ ->
-      "journal-item content"
-      ^ if is_last () then " journal-last-item" else "")
+  let row_state = Logseq_el.own ctx
+      (Signal.map2 (fun p m -> (is_first p m, is_last p m)) ps ms) in
+  (* Every normal desktop journal is first-child inside its virtual row.
+     Reference nonvirtual test mode places the days in one shared parent. *)
+  let minimum (first, _) =
+    if first || not (Ui_services.env_rtc_test_mode ())
+       || Ui_services.nav_query_param "virtualized" = Some "true"
+    then 500 else 250
+  in
+  Ui_parts.class_signal row_state
+    (fun (_, last) -> "journal-item content" ^ if last then " journal-last-item" else "")
+    (Ui_parts.int_prop_signal Lui_protocol.MinHeight row_state minimum
     (column ~key:("ji-" ^ key)
-       ~data_attrs:
-         [ ( "style"
-           , "overflow-anchor:none;"
-             ^
-             if is_first () then "padding-top:0;min-height:500px"
-             else "min-height:250px"
-             ^ ";padding-bottom:102px"
-             ^
-             if is_last () then ""
-             else
-               ";border-bottom:1px solid \
-                var(--lx-gray-04, var(--ls-border-color))" )
-         ]
+       ~data_attrs:[ "style", "overflow-anchor:none" ]
     [ (* data-page-tags is the page-wrap plugin contract *)
       page_typography (box ~key:("jiw-" ^ key)
         ~style_class:(page_wrap_cls (Signal.get ms) p0)
@@ -1226,7 +1220,11 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 ps
             ]
         ])
-    ])
+    ; spacer ~key:"journal-footer" ~grow:1. ~min_height:102 []
+    ; if_ ~test:(reactive (fun (_, last) -> not last) row_state)
+        (box ~key:"journal-separator" ~height:1 ~min_height:1
+           ~background:"var(--lx-gray-04, var(--ls-border-color))" [])
+    ]))
     ctx parent
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:

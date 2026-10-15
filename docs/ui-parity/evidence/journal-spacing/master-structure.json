@@ -1,0 +1,14 @@
+[
+  {
+    "firstChild": true,
+    "style": null,
+    "parent": "<div data-index=\"0\" data-item-index=\"0\" data-known-size=\"500\" style=\"overflow-anchor: none;\"><div class=\" journal-item content relative\"><div data-page-tags=\"[&quot;Journal&quot;]\" class=\"is-journals  flex-1 page relative cp__page-inner-wrap\"><div cl",
+    "parentChildCount": 1
+  },
+  {
+    "firstChild": true,
+    "style": null,
+    "parent": "<div data-index=\"1\" data-item-index=\"1\" data-known-size=\"500\" style=\"overflow-anchor: none;\"><div class=\"journal-last-item journal-item content relative\"><div data-page-tags=\"[&quot;Journal&quot;]\" class=\"is-journals  flex-1 page relative cp__page-in",
+    "parentChildCount": 1
+  }
+]

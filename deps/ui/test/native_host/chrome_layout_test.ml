@@ -317,6 +317,78 @@ let () =
     (scroll_rect.h = 652. && snd (Lui_layout.content_extent layout) = 700.);
   Signal.set sidebar_state.viewport_w 1280.;
   ignore (Lui_app.flush app);
+  let day1 =
+    { page with Model.page_uuid = Some "00000001-2026-1015-0000-000000000000"
+    ; page_title = "Oct 15th, 2026"; page_journal_day = Some 20261015
+    ; page_blocks = [ { block with Model.block_uuid = Some "day-one-block" } ] } in
+  let day2 =
+    { day1 with Model.page_uuid = Some "00000001-2026-1014-0000-000000000000"
+    ; page_title = "Oct 14th, 2026"; page_journal_day = Some 20261014
+    ; page_blocks = [ { block with Model.block_uuid = Some "day-two-block" } ] } in
+  ignore (Lui_app.send app
+      { model with route = Model.Home; route_page = None; journals = [ day1; day2 ] });
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~width:1280. ~height:900.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let journal_nodes () = List.filter (fun node ->
+      match Lui_store.string_prop store node "style-class" with
+      | Some classes -> List.mem "journal-item" (String.split_on_char ' ' classes)
+      | None -> false) (Lui_store.preorder store) in
+  let journal_rects = List.map (fun node -> Option.get (Lui_layout.rect layout node))
+      (journal_nodes ()) in
+  check "the native journal fixture renders both days" (List.length journal_rects = 2);
+  check "normal desktop journal rows match the reference virtual-row five-hundred-pixel minimum"
+    (List.for_all (fun (rect : Lui_scene.rect) -> rect.h = 500.) journal_rects);
+  check "the next journal begins immediately after its preceding row"
+    ((List.nth journal_rects 1).y = (List.hd journal_rects).y +. 500.);
+  let separators () = List.filter (fun node ->
+      Lui_store.string_prop store node "background" =
+        Some "var(--lx-gray-04, var(--ls-border-color))") (Lui_store.preorder store) in
+  check "only a non-final journal has a real native separator" (List.length (separators ()) = 1);
+  let separator = Option.get (Lui_layout.rect layout (List.hd (separators ()))) in
+  check "the journal separator occupies the final pixel of the row"
+    (separator.h = 1. && separator.y = (List.hd journal_rects).y +. 499.);
+  let previous_search = Platform.location_search () in
+  Platform.set_location_search "?rtc-test=true";
+  ignore (Lui_app.send app
+      { model with route = Model.Home; route_page = None; journals = [ day2; day1 ] });
+  ignore (Lui_app.flush app);
+  check "nonvirtual test mode gives only the first day the five-hundred-pixel minimum"
+    (List.map (fun node -> Lui_store.int_prop store node "min-height") (journal_nodes ())
+     = [ Some 500; Some 250 ]);
+  let rec under ancestor node = node = ancestor ||
+    match Lui_store.parent store node with
+    | Some parent -> under ancestor parent
+    | None -> false in
+  check "reordering days transfers the separator to the new non-final row"
+    (List.length (separators ()) = 1
+     && under (List.hd (journal_nodes ())) (List.hd (separators ()))
+     && not (under (List.nth (journal_nodes ()) 1) (List.hd (separators ()))));
+  Platform.set_location_search previous_search;
+  ignore (Lui_app.send app
+      { model with route = Model.Home; route_page = None
+      ; journals = [ { day1 with page_blocks = long_blocks }; day2 ] });
+  ignore (Lui_app.flush app);
+  let remaining = ref 1000 in
+  while not (complete ()) && !remaining > 0 do
+    decr remaining; Unix.sleepf 0.001; Host.drain (); ignore (Lui_app.flush app)
+  done;
+  check "the tall journal fixture renders all original rows" (complete ());
+  Lui_layout.sync ~width:1280. ~height:900.
+    ~hidden:(Lui_window.Ui.hidden ui store)
+    ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+    layout store;
+  let first_rect = Option.get (Lui_layout.rect layout (List.hd (journal_nodes ()))) in
+  let separator_rect = Option.get (Lui_layout.rect layout (List.hd (separators ()))) in
+  check "long journal content expands rather than clipping to its minimum"
+    (first_rect.h > 1000. && separator_rect.y = first_rect.y +. first_rect.h -. 1.);
+  let footers = List.filter (fun node -> Lui_store.kind store node = "spacer"
+      && Lui_store.int_prop store node "min-height" = Some 102) (Lui_store.preorder store) in
+  check "both journal footers retain at least the reference bottom padding"
+    (List.length footers = 2 && List.for_all (fun node ->
+       (Option.get (Lui_layout.rect layout node)).h >= 102.) footers);
   Runtime.worker := previous_worker;
   ignore (Lui_app.dispose app);
   let page = Option.get (Decode.page_of_summary (Wire.Map

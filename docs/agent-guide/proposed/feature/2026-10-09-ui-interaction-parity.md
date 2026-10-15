@@ -258,3 +258,19 @@ it through the same pointer move. This narrows the rendering investigation;
 it does not establish a dependency root cause or claim the gap is fixed.
 Evidence lives in `docs/ui-parity/evidence/interaction-paint/validation.md`.
 Do not use a blanket cache/layout invalidation or edit the dependency repository.
+
+### Settled journal row geometry checkpoint
+
+Actual master desktop wraps every journal in its own virtual-list row, making
+its journal-item the first child and applying the500px minimum to every row.
+Direct nonvirtual test-mode rows instead apply500px only to the first and250px
+to later rows. Native currently hides these metrics in ignored inline CSS and
+omits visible separators. Use typed minimums, a real at-least102px footer spacer
+and a one-pixel separator only before a following day. Keep row identity and
+reactive first/last ownership through model publications. Actual master DOM
+metrics, native production layout, three browser modes and paired desktop
+editing/persistence validate this subset. Native scroll cap212px versus actual
+master180px and horizontal gutter differences remain; a generic bounded-frame
+candidate failed the existing long-page regression and was rejected, not shipped.
+Evidence and explicit loading/paging limits are in
+`docs/ui-parity/evidence/journal-spacing/validation.md`.

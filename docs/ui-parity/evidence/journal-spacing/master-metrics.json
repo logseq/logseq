@@ -1,0 +1,61 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 900,
+    "dpr": 1
+  },
+  "items": [
+    {
+      "class": " journal-item content relative",
+      "title": "Oct 15th, 2026",
+      "rect": {
+        "x": 160.5,
+        "y": 80,
+        "w": 960,
+        "h": 500
+      },
+      "minHeight": "500px",
+      "paddingTop": "0px",
+      "paddingBottom": "102px",
+      "borderBottom": "1px solid rgb(235, 234, 235)",
+      "children": [
+        {
+          "class": "is-journals  flex-1 page relative cp__page-inner-wrap",
+          "rect": {
+            "x": 160.5,
+            "y": 80,
+            "w": 960,
+            "h": 262
+          },
+          "marginBottom": "0px"
+        }
+      ]
+    },
+    {
+      "class": "journal-last-item journal-item content relative",
+      "title": "Oct 14th, 2026",
+      "rect": {
+        "x": 160.5,
+        "y": 580,
+        "w": 960,
+        "h": 500
+      },
+      "minHeight": "500px",
+      "paddingTop": "0px",
+      "paddingBottom": "102px",
+      "borderBottom": "0px none rgb(235, 234, 235)",
+      "children": [
+        {
+          "class": "is-journals  flex-1 page relative cp__page-inner-wrap",
+          "rect": {
+            "x": 160.5,
+            "y": 580,
+            "w": 960,
+            "h": 230
+          },
+          "marginBottom": "0px"
+        }
+      ]
+    }
+  ]
+}

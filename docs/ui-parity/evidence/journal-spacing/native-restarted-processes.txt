@@ -1,0 +1,3 @@
+    PID    PPID    PGID     SID STAT COMMAND
+  75455       1   75455   75455 Ssl  /home/user/logseq-ui-parity/native/deps/ui/_build/default/ocaml_host/logseq_native.exe
+  75462   75455   75455   75455 Sl   /home/user/logseq-ui-parity/native/deps/db-worker/_build/default/bin/main.exe --root-dir /home/user/logseq-ui-parity/data/native-root --graphs-dir /home/user/logseq-ui-parity/data/native-root/graphs --repo logseq_db_Demo --owner-source electron

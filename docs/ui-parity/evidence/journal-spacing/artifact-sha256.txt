@@ -1,0 +1,2 @@
+15883e7619c71babde488c4440434865845e936ac83512e261b5804811c46209  deps/ui/_build/default/ocaml_host/logseq_native.exe
+fcb5743cf4121a8b05293f218d61e4ff96acf182a9929ceb111d187b1296865b  static/js/main.js

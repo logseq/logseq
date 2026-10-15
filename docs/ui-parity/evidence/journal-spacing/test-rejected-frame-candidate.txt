@@ -1,0 +1,3 @@
+native page geometry: title 178,82 body 198,188
+long native page range 0
+Fatal error: exception Failure("long pages retain a real scroll range after the viewport is bounded")

@@ -1,0 +1,3 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+Fatal error: exception Failure("journal descendant overflow matches the actual desktop scroll range without duplicate bottom padding")

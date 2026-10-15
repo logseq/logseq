@@ -1,0 +1,19 @@
+[
+  {
+    "minHeight": 500,
+    "y": 80,
+    "height": 500,
+    "separators": [
+      {
+        "y": 579,
+        "height": 1
+      }
+    ]
+  },
+  {
+    "minHeight": 250,
+    "y": 580,
+    "height": 332,
+    "separators": []
+  }
+]

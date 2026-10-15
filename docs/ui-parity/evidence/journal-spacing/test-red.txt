@@ -1,0 +1,3 @@
+native page geometry: title 178,82 body 198,188
+long native page range 702
+Fatal error: exception Failure("normal desktop journal rows match the reference virtual-row five-hundred-pixel minimum")
