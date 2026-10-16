@@ -142,7 +142,14 @@
                  "Link"
                  (:full_text ast-content)
                  "Plain"
-                 ast-content)))
+                 ast-content
+                 ;; `#x^^h^^{{x}}`: the parser takes the macro into the tag
+                 "Macro"
+                 (let [{:keys [name arguments]} ast-content]
+                   (str "{{" name (when (seq arguments) (str "(" (string/join "," arguments) ")")) "}}"))
+                 ;; any other inline the parser puts in a tag: dropped, not a
+                 ;; failed export of the whole page
+                 nil)))
            inline-coll)))
 
 ;;; utils (ends)

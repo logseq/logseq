@@ -19,6 +19,7 @@
             [frontend.util :as util]
             [frontend.worker.export :as worker-export]
             [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def test-files
@@ -554,6 +555,16 @@
 	- 4")
              (string/trim second-content)))
       (done))))
+
+(deftest export-tag-followed-by-a-macro
+  (testing "the parser takes a macro right after a tag into the tag: the export keeps it, and does not fail"
+    (let [block-uuid #uuid "6b000000-0000-4000-8000-0000000000d1"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks [{:block/title "a #x^^h^^{{x}}" :block/uuid block-uuid :build/keep-uuid? true}]}]})]
+      (is (= "- a #x^^h^^{{x}}\n"
+             (worker-export/export-blocks-as-format db block-uuid :markdown {} {}))))))
 
 (deftest export-blocks-as-markdown-open-blocks-only
   (async done
