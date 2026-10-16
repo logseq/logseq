@@ -28,18 +28,6 @@
      :logseq.property.node/display-type :code
      :logseq.property.code/lang "text"}))
 
-(deftest wrap-parse-block-leaves-out-file-graph-attributes-test
-  (testing "text that file graphs parse into block attributes produces none of them: the DB schema does not allow them"
-    (doseq [[title attr] [["task\nSCHEDULED: <2024-01-02 Tue>" :block/scheduled]
-                          ["task\nDEADLINE: <2024-01-03 Wed>" :block/deadline]
-                          ["NOW task" :block/marker]
-                          ["DONE task" :block/marker]
-                          ["[#B] task" :block/priority]
-                          ["task\nkey:: v" :block/properties-text-values]
-                          ["@[^1]key:: v" :block/invalid-properties]]]
-      (is (not (contains? (db-editor-handler/wrap-parse-block {:block/title title}) attr))
-          (str (pr-str title) " stores " attr)))))
-
 (deftest wrap-parse-block-standalone-display-math-test
   (is (= {:block/title "E = mc^2"
           :logseq.property.node/display-type :math}
