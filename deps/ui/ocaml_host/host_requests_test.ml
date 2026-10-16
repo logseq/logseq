@@ -382,6 +382,50 @@ let () = Native_embed.with_entry_lock (fun () ->
       (abs_float (content.x -. expected_x) <= 2.);
     check "Journals must retain the production 32-point top spacing"
       (content.y >= viewport.y +. 64.)) [2880.,1800.; 2000.,1200.; 1280.,900.];
+  let inner = find_class "left-sidebar-inner" in
+  let splits = List.filter (fun id -> Lui_store.kind store id="split")
+    (Lui_store.preorder store) in
+  let left_split = List.find (fun id -> Lui_store.parent store sidebar=Some id) splits in
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let expanded = (Option.get (Lui_layout.rect layout inner)).Lui_scene.w in
+  let expanded_value=Option.get (Lui_store.float_prop store left_split "value") in
+  Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue 0.03));
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let contracted = (Option.get (Lui_layout.rect layout inner)).Lui_scene.w in
+  check "Narrowing the sidebar reflows its text and titlebar controls together"
+    (contracted >= expanded -. 2.);
+  Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue expanded_value));
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let right_split = Option.get (Lui_store.parent store left_split) in
+  let right_value = Option.get (Lui_store.float_prop store right_split "value") in
+  let right_sidebar = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "right-sidebar")
+    (Lui_store.preorder store) in
+  Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue 0.7));
+  List.iter (fun (split,pane,endpoint) ->
+    Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+    let rects = Lui_window.Rects.create () in
+    List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+      (Lui_layout.rect layout id)) (Lui_store.preorder store);
+    let first = List.hd (Lui_store.child_ids store split) in
+    let first_rect = Lui_window.Rects.get rects first in
+    let x = (first_rect.x +. first_rect.w +. 3.) /. 2. in
+    let ui = Lui_window.Ui.create () in
+    Lui_window.Ui.set_scale ui 2.;
+    ignore (Lui_window.Ui.handle ui store rects
+      (Lui_window.Input.Button_down (x,200.,Lui_window.Input.Left,1,Lui_window.Input.mods_none)));
+    ignore (Lui_window.Ui.handle ui store rects
+      (Lui_window.Input.Button_up (endpoint,200.,Lui_window.Input.Left,Lui_window.Input.mods_none)));
+    Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+    check (Printf.sprintf "Dragging native sidebar %d leaves %.1f points (split %d, value %.4f)"
+      pane ((Option.get (Lui_layout.rect layout pane)).Lui_scene.w /. 2.) split
+      (Option.get (Lui_store.float_prop store split "value")))
+      ((Option.get (Lui_layout.rect layout pane)).Lui_scene.w >= 479.);
+    Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue expanded_value));
+    Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue 0.7)))
+    [left_split,sidebar,-2000.;right_split,right_sidebar,3000.];
+  Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue right_value));
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
   let icons = List.filter (fun id -> Lui_store.kind store id = "icon")
     (Lui_store.preorder store) in
   check "The shell must contain visible toolbar and navigation icons" (icons <> []);

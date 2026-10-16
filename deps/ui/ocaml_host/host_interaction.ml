@@ -57,6 +57,15 @@ let advance_frame ui host ~now ~reduced_motion =
   Lui_host.tick host ~now;
   Lui_window.Ui.tick_scrollbars ui ~now_ms:(now *. 1000.)
 
+let apply_event_batch host event batch =
+  let direct_resize =
+    match event with
+    | Lui_protocol.ValueChanged (id, _) ->
+        Lui_store.kind (Lui_host.store host) id = "split"
+    | _ -> false
+  in
+  Lui_host.apply_batch ~animate_resize:(not direct_resize) host batch
+
 let prepare_paint ui host =
   let hard, soft = Lui_window.Ui.paint_hints ui (Lui_host.store host) in
   Hashtbl.iter (fun id () -> Lui_host.note_paint host id) hard;

@@ -798,3 +798,32 @@ let () =
   List.iter prerr_endline (List.rev !failures);
   check "Native split cursor regression" (!failures=[]);
   print_endline "native split resize cursor: OK"
+
+
+let () =
+  let host=Lui_host.create ~layout:(module Lui_layout) ~hooks:Lui_paint.default_hooks
+    ~renderer:{name="nested-resize-test";render=(fun _ -> Bytes.empty)}
+    ~width:1000 ~height:600 ~scale:1. () in
+  let store=Lui_host.store host in
+  let apply ops=ignore (Lui_host.apply_batch host {generation=1;ops}) in
+  apply [CreateNode (1,Split);CreateNode (2,Split);CreateNode (3,Column);
+    CreateNode (4,Column);CreateNode (5,Column);
+    SetProp (1,ProgressValue,FloatValue 0.7);SetProp (2,ProgressValue,FloatValue 0.3);
+    SetProp (1,ResizeDuration,IntValue 300);SetProp (2,ResizeDuration,IntValue 300);
+    InsertChild (1,2,0);InsertChild (1,3,1);InsertChild (2,4,0);InsertChild (2,5,1)];
+  Lui_host.tick host ~now:0.; ignore (Lui_host.repaint host);
+  let width ()=(Option.get (Lui_host.layout_rect host 4)).Lui_scene.w in
+  let original=width () in
+  List.iteri (fun index right ->
+    (* The direct pointer path mirrors the outer value before dispatch. *)
+    Lui_store.apply_op store (SetProp (1,ProgressValue,FloatValue right));
+    ignore (Host_interaction.apply_event_batch host (ValueChanged (1,right))
+      {generation=1;ops=[SetProp (1,ProgressValue,FloatValue right);
+        SetProp (2,ProgressValue,FloatValue (0.21 /. right))]});
+    Lui_host.tick host ~now:(float (index+1) *. 0.01);
+    ignore (Lui_host.repaint host);
+    check "Right sidebar dragging animates the left sidebar compensation"
+      (Float.abs (width () -. original) <= 1.);
+    check "Direct dependent resize leaves an animation fighting the pointer"
+      (not (Lui_host.wants_repaint host))) [0.55;0.8;0.65];
+  print_endline "native independent sidebar resize: OK"

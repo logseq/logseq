@@ -238,7 +238,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-       ~min_height:0
+       ~min_width:240 ~min_height:0
        ~style_class:"cp__right-sidebar closed"
           [ Ui_components.with_props
               [ Ui_components.Prop.overflow `hidden ]
@@ -253,6 +253,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
    width), surface background via the `muted` token. The shade-mask is
    an overlay-mode affordance and doesn't exist in a docked layout. *)
 let left_sidebar (ms : Model.t Signal.signal) =
+  let st = Sidebar_state.ensure ms in
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       "cp__sidebar-left-layout"
@@ -260,9 +261,17 @@ let left_sidebar (ms : Model.t Signal.signal) =
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-          ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+          ~min_width:240 ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
              [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
+                    ~min_width:(reactive
+                      (fun (m : Model.t) lf rf viewport ->
+                        let outer = if m.right_sidebar_open then 1. -. rf else 1. in
+                        let track = max 0. ((viewport -. 3.) *. outer -. 3.) in
+                        max 240 (int_of_float (lf *. track)))
+                      ms (Signal.value st.Sidebar_state.left_fraction)
+                      (Signal.value st.Sidebar_state.right_fraction)
+                      (Signal.value st.Sidebar_state.viewport_w))
                     (* web: --left-sidebar-bg-color = --lx-gray-02 (the
                        near-white mauve-02 tone, one step above the page);
                        the native `muted` slot is the matching

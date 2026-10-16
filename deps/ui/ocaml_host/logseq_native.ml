@@ -904,13 +904,15 @@ let () =
           , Float.max 1. clip.Lui_scene.h )
   in
   Lui_host.set_vport host vport_of;
-  let apply_patches batches =
+  let apply_patches ?event batches =
     if batches <> [] then begin
       let started = perf_s () in
       List.iter
         (fun b ->
            metrics.patch_ops <- metrics.patch_ops + List.length b.Lui_protocol.ops;
-           ignore (Lui_host.apply_batch host b))
+           ignore (match event with
+             | Some event -> Host_interaction.apply_event_batch host event b
+             | None -> Lui_host.apply_batch host b))
         batches;
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
@@ -1299,7 +1301,7 @@ let () =
       (try
          let r = Native_embed.dispatch_lui ev in
          dbg "  dispatch -> %d batches" (List.length r);
-         apply_patches r
+         apply_patches ~event:ev r
        with Invalid_argument msg ->
          warn "dispatch rejected event: %s" msg)
     | Clipboard_write s -> ignore (Lui_shell.clipboard_write s)
@@ -2226,6 +2228,17 @@ let () =
     (* LOGSEQ_NATIVE_TREEDUMP=1: SIGUSR1 dumps the retained tree
        (id kind key class rect, indented) to the debug log. *)
     if Atomic.exchange dump_tree_flag false then begin
+      Option.iter (fun path ->
+        let body = Lui_host.scene host in
+        let scene = match !cached_overlay with
+          | Some (_,_,_,ops,glyphs,width) -> { body with ops; glyphs; width }
+          | None -> body in
+        Out_channel.with_open_bin path (fun channel ->
+          Marshal.to_channel channel scene []);
+        if use_cocoa then
+          Out_channel.with_open_bin (path ^ ".bgra") (fun channel ->
+            output_bytes channel (Native_window.software_read (Sdl.get_window_id !win))))
+        (Sys.getenv_opt "LOGSEQ_NATIVE_SCENE_CAPTURE");
       dbg "icons=%d" (Host_icons.count ());
       let rec out depth id =
         let r = Rects.get rects id in
