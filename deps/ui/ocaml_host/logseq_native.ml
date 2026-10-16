@@ -171,6 +171,66 @@ let input_of_event e =
 let () =
   (* Keep desktop heap slack small while collecting incrementally. *)
   Gc.set { (Gc.get ()) with space_overhead = 30 };
+  let allocation_profile = ref None in
+  let allocation_done = ref false in
+  let allocation_samples = Hashtbl.create 32 in
+  let allocation_mutex = Mutex.create () in
+  let allocation_live = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_LIVE" = Some "1" in
+  let allocation_path = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_PROFILE" in
+  let allocation_trigger = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_TRIGGER" in
+  let allocation_delay = match Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_DELAY" with
+    | None -> 20. | Some value -> float_of_string value in
+  let allocation_duration = match Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_DURATION" with
+    | None -> 10. | Some value -> float_of_string value in
+  if not (Float.is_finite allocation_delay) || allocation_delay < 0.
+     || not (Float.is_finite allocation_duration) || allocation_duration <= 0.
+  then invalid_arg "Invalid native allocation profiling interval";
+  let capture_started = ref 0. in
+  let sample_allocation (sample : Gc.Memprof.allocation) =
+    let stack = Printexc.raw_backtrace_to_string sample.callstack in
+    Mutex.protect allocation_mutex (fun () ->
+    let counts = match Hashtbl.find_opt allocation_samples stack with
+      | Some counts -> counts
+      | None -> let counts = ref 0,ref 0 in
+        Hashtbl.add allocation_samples stack counts; counts in
+    let allocated,_ = counts in
+    allocated := !allocated + sample.n_samples;
+    if allocation_live then Some (counts,sample.n_samples) else None)
+  in
+  let deallocate ((_,released),samples) =
+    Mutex.protect allocation_mutex (fun () -> released := !released + samples) in
+  let finish_allocation () =
+    match allocation_path,!allocation_profile with
+    | Some path,Some profile when not !allocation_done ->
+      allocation_done := true;
+      if allocation_live then begin Gc.full_major (); Gc.full_major () end;
+      Gc.Memprof.stop ();
+      Gc.Memprof.discard profile;
+      allocation_profile := None;
+      let rows = Mutex.protect allocation_mutex (fun () ->
+        let rows = Hashtbl.fold (fun stack (count,released) acc ->
+          (!count,!count - !released,stack)::acc) allocation_samples [] in
+        Hashtbl.reset allocation_samples;
+        rows) in
+      Out_channel.with_open_text path (fun channel ->
+        List.iter (fun (count,live,stack) ->
+          Printf.fprintf channel "Estimated %.0f bytes; alive %.0f bytes\n%s\n"
+            (float count *. 80000.) (float live *. 80000.) stack)
+          (List.sort (fun (a,al,_) (b,bl,_) ->
+            if allocation_live then compare bl al else compare b a) rows))
+    | _ -> () in
+  let start_allocation now =
+    capture_started := now;
+    allocation_profile := Some (Gc.Memprof.start ~sampling_rate:0.0001 ~callstack_size:12
+      {Gc.Memprof.alloc_minor=sample_allocation; alloc_major=sample_allocation;
+       promote=(fun allocation -> Some allocation);
+       dealloc_minor=deallocate; dealloc_major=deallocate}) in
+  (* A newly spawned domain inherits its parent's active profile. Starting
+     only in the main loop misses application bootstrap and its domain. *)
+  (match allocation_path,allocation_trigger with
+   | Some _,None when allocation_delay = 0. -> start_allocation (perf_s ())
+   | _ -> ());
+  at_exit finish_allocation;
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
@@ -2029,50 +2089,7 @@ let () =
   let frame_deadline = ref (perf_s ()) in
   let last_render = ref (perf_s ()) in
   let memory_replay_started = perf_s () in
-  let allocation_profile = ref None in
-  let allocation_done = ref false in
-  let allocation_samples = Hashtbl.create 32 in
-  let allocation_live = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_LIVE" = Some "1" in
-  let allocation_path = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_PROFILE" in
-  let allocation_trigger = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_TRIGGER" in
-  let allocation_delay = match Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_DELAY" with
-    | None -> 20. | Some value -> float_of_string value in
-  let allocation_duration = match Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_DURATION" with
-    | None -> 10. | Some value -> float_of_string value in
-  if not (Float.is_finite allocation_delay) || allocation_delay < 0.
-     || not (Float.is_finite allocation_duration) || allocation_duration <= 0.
-  then invalid_arg "Invalid native allocation profiling interval";
   let allocation_started = perf_s () in
-  let capture_started = ref allocation_started in
-  let sample_allocation (sample : Gc.Memprof.allocation) =
-    let stack = Printexc.raw_backtrace_to_string sample.callstack in
-    let counts = match Hashtbl.find_opt allocation_samples stack with
-      | Some counts -> counts
-      | None -> let counts = ref 0,ref 0 in
-        Hashtbl.add allocation_samples stack counts; counts in
-    let allocated,_ = counts in
-    allocated := !allocated + sample.n_samples;
-    if allocation_live then Some (counts,sample.n_samples) else None
-  in
-  let deallocate ((_,released),samples) = released := !released + samples in
-  let finish_allocation () =
-    match allocation_path,!allocation_profile with
-    | Some path,Some profile when not !allocation_done ->
-      allocation_done := true;
-      if allocation_live then begin Gc.full_major (); Gc.full_major () end;
-      Gc.Memprof.stop ();
-      Gc.Memprof.discard profile;
-      allocation_profile := None;
-      let rows = Hashtbl.fold (fun stack (count,released) acc ->
-        (!count,!count - !released,stack)::acc) allocation_samples [] in
-      Hashtbl.reset allocation_samples;
-      Out_channel.with_open_text path (fun channel ->
-        List.iter (fun (count,live,stack) ->
-          Printf.fprintf channel "Estimated %.0f bytes; alive %.0f bytes\n%s\n"
-            (float count *. 80000.) (float live *. 80000.) stack)
-          (List.sort (fun (a,al,_) (b,bl,_) ->
-            if allocation_live then compare bl al else compare b a) rows))
-    | _ -> () in
   let paint_frame () =
     host_req_repaint := false;
     let paint_started = perf_s () in
@@ -2116,11 +2133,7 @@ let () =
       | Some _,None -> t0 -. allocation_started >= allocation_delay in
     (match allocation_path with
      | Some _ when allocation_requested && not !allocation_done && !allocation_profile = None ->
-       capture_started := t0;
-       allocation_profile := Some (Gc.Memprof.start ~sampling_rate:0.0001 ~callstack_size:12
-         {Gc.Memprof.alloc_minor=sample_allocation; alloc_major=sample_allocation;
-          promote= (fun allocation -> Some allocation);
-          dealloc_minor=deallocate; dealloc_major=deallocate})
+       start_allocation t0
      | Some _ when !allocation_profile <> None && not !allocation_done
          && (not allocation_requested || t0 -. !capture_started >= allocation_duration) ->
        finish_allocation ()
