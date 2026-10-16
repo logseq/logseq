@@ -725,6 +725,110 @@ abc
         "a math block that is a task is a math block")
     (is (= #{:logseq.class/Task :logseq.class/Math-block} (tag-idents math))
         "a math block that is a task keeps its Task tag")))
+(deftest-async import-keeps-text-around-embeds-unknown-embeds-and-multiline-math
+  (p/let [source-file (write-temp-graph-file
+                       "pages/A.md"
+                       (str "- Beta {{embed [[Alpha]]}} after\n"
+                            "- {{embed [[Gamma]]}}\n"
+                            "- b {{embed [[10307562-adaf-4557-89c4-bc8bbcd0d20e]]}}\n"
+                            "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"
+                            "- last\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          gamma-file (write-temp-graph-file "pages/Gamma.md" "- gamma\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file gamma-file] conn {})
+          page-a (db-test/find-page-by-title @conn "A")
+          blocks (->> (:block/_parent page-a) (sort-by :block/order) vec)]
+    (is (= 5 (count blocks))
+        "The whole file imports")
+    (is (= "Beta after" (:block/title (nth blocks 0)))
+        "Text around an embed is kept")
+    (is (= ["Alpha"] (map (comp :block/title :block/link) (:block/_parent (nth blocks 0))))
+        "The embed of a block with text is its child block")
+    (is (= "Gamma" (:block/title (:block/link (nth blocks 1))))
+        "A block that is only an embed links its target")
+    (is (string/starts-with? (:block/title (nth blocks 2)) "b")
+        "An embed of an unknown page keeps the block")
+    (is (= "E = mc^2" (:block/title (nth blocks 3)))
+        "A multi-line display math block keeps its formula")
+    (is (= :math (:logseq.property.node/display-type (nth blocks 3)))
+        "A multi-line display math block is a math block")
+    (is (= "last" (:block/title (nth blocks 4))))))
+
+(deftest-async import-embed-with-heading-or-status
+  (p/let [source-file (write-temp-graph-file
+                       "pages/E.md"
+                       (str "- ### {{embed [[Alpha]]}}\n"
+                            "- DONE {{embed [[Alpha]]}}\n"
+                            "- DONE UNDONE {{embed [[Alpha]]}}\n"
+                            "- DONE DONE {{embed [[Alpha]]}}\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file] conn {})
+          [heading-embed done-embed undone-text done-text :as blocks] (->> (:block/_parent (db-test/find-page-by-title @conn "E")) (sort-by :block/order))]
+    (is (= 4 (count blocks)) "All source blocks are retained")
+    (is (= ["UNDONE" "DONE"] (mapv :block/title [undone-text done-text])))
+    (is (every? #(= :logseq.property/status.done (:db/ident (:logseq.property/status %)))
+                [undone-text done-text]))
+    (is (= "Alpha" (:block/title (:block/link heading-embed))) "an embed with a heading is an embed block")
+    (is (= 3 (:logseq.property/heading heading-embed)))
+    (is (= "Alpha" (:block/title (:block/link done-embed))) "an embed with a status is an embed block")
+    (is (= :logseq.property/status.done (:db/ident (:logseq.property/status done-embed))))))
+
+(deftest-async import-preserves-literal-embed-macros
+  (p/doseq [literal ["`{{embed [[Beta]]}}`"
+                    "``{{embed [[Beta]]}}``"
+                    "\n```text\n{{embed [[Beta]]}}\n```"]]
+    (p/let [source (write-temp-graph-file "pages/Literal.md"
+                                        (str "- " (string/replace (str "示例 " literal "\n{{embed [[Alpha]]}} after")
+                                                                  "\n" "\n  ") "\n"))
+            target (write-temp-graph-file "pages/Alpha.md" "- target\n")
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source target] conn {})
+            block (first (:block/_parent (db-test/find-page-by-title @conn "Literal")))]
+      (is (= (str "示例 " literal "\n after") (:block/title block)))
+      (is (= ["Alpha"] (mapv (comp :block/title :block/link) (ordered-children block)))))))
+
+(deftest-async import-preserves-multiple-embeds
+  (p/let [source (write-temp-graph-file "pages/Embeds.md"
+                                      (str "- before {{embed [[Alpha]]}} middle {{embed [[Beta]]}} after\n"
+                                           "- {{embed [[Alpha]]}} {{embed [[Beta]]}}\n"))
+          alpha (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          beta (write-temp-graph-file "pages/Beta.md" "- beta\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source alpha beta] conn {})
+          blocks (ordered-children (db-test/find-page-by-title @conn "Embeds"))]
+    (is (= ["before middle after" ""] (mapv :block/title blocks)))
+    (is (= [["Alpha" "Beta"] ["Alpha" "Beta"]]
+           (mapv #(mapv (comp :block/title :block/link) (ordered-children %)) blocks)))))
+
+(deftest-async import-thematic-break-block
+  (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          blocks (->> (:block/_page (db-test/find-page-by-title @conn "H")) (sort-by :block/order))]
+    (is (= ["a" "---" "b"] (mapv :block/title blocks))
+        "a block whose text is a thematic break keeps it")))
+
+(deftest-async import-multiline-math-as-first-block
+  (p/let [source-file (write-temp-graph-file
+                       "pages/M.md"
+                       (str "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          block (first (:block/_page (db-test/find-page-by-title @conn "M")))]
+    (is (= "E = mc^2" (:block/title block)))
+    (is (= :math (:logseq.property.node/display-type block)))))
 
 (deftest-async import-keeps-numeric-looking-text-a-number-would-change
   (p/let [file (write-temp-graph-file
@@ -751,6 +855,7 @@ abc
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        missing-mixed-embed-uuid #uuid "66666666-6666-4666-8666-666666666666"
         target-uuid #uuid "22222222-2222-2222-2222-222222222222"
         empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
         empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
@@ -759,6 +864,9 @@ abc
                          (str "Plain pre-block\n"
                               "- Missing ref ((" missing-uuid "))\n"
                               "- {{embed ((" missing-embed-uuid "))}}\n"
+                              "- Missing mixed {{embed [[" missing-mixed-embed-uuid "]]}}\n"
+                              "  - Original child\n"
+                              "- Forward embed {{embed [[" target-uuid "]]}}\n"
                               "- Existing ref ((" target-uuid "))\n"
                               "- ((" empty-title-property-uuid "))\n"
                               "  heading:: true\n"
@@ -775,6 +883,8 @@ abc
             missing-block (db-test/find-block-by-content @conn #"Missing ref")
             existing-block (db-test/find-block-by-content @conn #"Existing ref")
             target-block (db-test/find-block-by-content @conn "Target block")
+            missing-mixed-block (db-test/find-block-by-content @conn "Missing mixed")
+            forward-embed-block (db-test/find-block-by-content @conn "Forward embed")
             empty-title-blocks (blocks-by-title @conn "")
             empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
             empty-title-parent-block (some #(when (some (fn [child]
@@ -791,6 +901,13 @@ abc
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid missing-mixed-embed-uuid]))
+          "Missing UUID embeds do not leave placeholder entities")
+      (is (= ["Original child"] (mapv :block/title (ordered-children missing-mixed-block)))
+          "Only generated children for missing embeds are removed")
+      (is (= [(:db/id target-block)]
+             (mapv (comp :db/id :block/link) (ordered-children forward-embed-block)))
+          "Embeds of targets imported later are retained")
       (is (nil? (d/entity @conn [:block/uuid missing-embed-uuid]))
           "Missing OG block embeds do not leave placeholder entities")
       (is (empty? (d/q '[:find ?b
@@ -802,7 +919,7 @@ abc
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 3 (count empty-title-blocks))
+      (is (= 3 (count (remove :block/link empty-title-blocks)))
           "Blocks whose titles become empty after cleanup are preserved")
       (is (true? (:logseq.property/heading empty-title-property-block))
           "Empty-title blocks keep imported heading properties")
