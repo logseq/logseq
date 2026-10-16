@@ -164,7 +164,10 @@
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
                           :logseq.property.view/gallery-card-height]}]
-   ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]])
+   ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]
+   ["65.35" {:delete-properties [:block/scheduled :block/deadline :block/marker
+                                 :block/priority :block/properties-text-values
+                                 :block/invalid-properties]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

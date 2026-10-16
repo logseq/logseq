@@ -134,6 +134,12 @@
 
 (def ^:private migration-deleted-attrs
   #{:block/path-refs
+    :block/scheduled
+    :block/deadline
+    :block/marker
+    :block/priority
+    :block/properties-text-values
+    :block/invalid-properties
     :block/pre-block?
     :logseq.property.embedding/hnsw-label
     :logseq.property.embedding/hnsw-label-updated-at})
