@@ -392,11 +392,15 @@
               [_ page-id] (outliner-page/create! conn title {:journal? true :today-journal? true})]
           (d/entity @conn [:block/uuid page-id])))))
 
-(defn- resolve-property-ident [db value]
-  (or (when-let [entity (find-entity db value)] (:db/ident entity))
+(defn- resolve-property-ident
+  "The ident of the property `value` names (uuid, ident or title); nil when it
+  names no entity or an entity that is not a property (a class, a block)."
+  [db value]
+  (or (when-let [entity (find-entity db value)]
+        (when (property? entity) (:db/ident entity)))
       (when (string? value)
         (let [ident (keyword value)]
-          (or (when (d/entity db ident) ident)
+          (or (when (property? (d/entity db ident)) ident)
               (some->> (d/datoms db :avet :block/title value)
                        (map #(d/entity db (:e %)))
                        (filter property?)
