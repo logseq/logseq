@@ -165,6 +165,39 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest move-block-before-and-after-are-adjacent-to-nonfirst-target
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [page (test-helper/find-page-by-title "Editor API Page")
+                    bravo (test-helper/find-block-by-content "bravo")
+                    charlie (test-helper/find-block-by-content "charlie")
+                    _ (api-editor/move_block (str (:block/uuid charlie)) (str (:block/uuid bravo)) #js {:before true})
+                    before (db-based-api/get-page-block-uuids (str (:block/uuid page)))
+                    _ (api-editor/move_block (str (:block/uuid charlie)) (str (:block/uuid bravo)) #js {:before false})
+                    after (db-based-api/get-page-block-uuids (str (:block/uuid page)))
+                    alpha (test-helper/find-block-by-content "alpha")
+                    alpha-child (test-helper/find-block-by-content "alpha-child")
+                    _ (api-editor/move_block (str (:block/uuid charlie)) (str (:block/uuid alpha)) #js {:before true})
+                    first-position (db-based-api/get-page-block-uuids (str (:block/uuid page)))
+                    _ (api-editor/move_block (str (:block/uuid charlie)) (str (:block/uuid alpha-child)) #js {:before true})
+                    nested (api-editor/get_block (str (:block/uuid charlie)) #js {})
+                    children (db-based-api/get-block-tree (str (:block/uuid alpha)) 20 10)
+                    roots (fn [result]
+                            (->> (api-test/js->clj-kw result)
+                                 (filter #(= (:db/id page) (get-in % [:parent :id])))
+                                 (mapv :title)))]
+              (is (= ["alpha" "charlie" "bravo"] (roots before)))
+              (is (= ["alpha" "bravo" "charlie"] (roots after)))
+              (is (= ["charlie" "alpha" "bravo"] (roots first-position)))
+              (is (= (:db/id alpha) (get-in (api-test/js->clj-kw nested) [:parent :id])))
+              (is (= (:db/id page) (get-in (api-test/js->clj-kw nested) [:page :id])))
+              (is (= ["charlie" "alpha-child"]
+                (mapv :title (get-in (api-test/js->clj-kw children) [:block :children])))))))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
 (deftest block-properties-round-trip
   (async done
     (load-editor-page!)

@@ -1,0 +1,46 @@
+{
+  "manifest_version": "0.3",
+  "name": "logseq-native",
+  "display_name": "Logseq Local MCP",
+  "version": "0.1.6",
+  "description": "Connect Claude Desktop to the native MCP server in a running local Logseq app.",
+  "author": {
+    "name": "Logseq local development"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "LOGSEQ_MCP_URL": "${user_config.logseq_mcp_url}",
+        "LOGSEQ_MCP_TOKEN": "${user_config.logseq_api_token}"
+      }
+    }
+  },
+  "user_config": {
+    "logseq_mcp_url": {
+      "type": "string",
+      "title": "Logseq MCP URL",
+      "description": "Loopback MCP endpoint from the running Logseq desktop app.",
+      "default": "http://127.0.0.1:12315/mcp",
+      "required": true
+    },
+    "logseq_api_token": {
+      "type": "string",
+      "title": "Logseq API token",
+      "description": "Create a fresh token in the Logseq API server menu. Claude Desktop stores this as a sensitive value.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["win32"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}
