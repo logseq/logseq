@@ -113,6 +113,12 @@
                                  class-as-property-body (json-body class-as-property)]
                            (is (= 400 (.-status class-as-property)) "a class named as the property")
                            (is (= "property not found" (:error class-as-property-body))))))
+               (p/then (fn [_]
+                         (p/let [created (sync-handler/handle-http self (semantic-json-request "/semantic/properties?graph-id=graph-1" "POST" {:title "rating" :type "number"}))
+                                 created-body (json-body created)
+                                 object-title (sync-handler/handle-http self (semantic-json-request (str "/semantic/properties/" (:uuid created-body) "?graph-id=graph-1") "PATCH" {:title {}}))]
+                           (is (= 201 (.-status created)))
+                           (is (= 400 (.-status object-title)) "a property title that is not a string"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))
