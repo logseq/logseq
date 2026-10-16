@@ -214,8 +214,8 @@
 
           :else
           ;; Parsed tags from a db-less frontend parse can carry file-graph
-          ;; :block/type, which is invalid on a class page.
-          (db-class/build-new-class db (dissoc v :block/type))))
+          ;; :block/type and journal attrs. build-new-class strips those.
+          (db-class/build-new-class db v)))
 
       :else
       v)))
@@ -336,6 +336,7 @@
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
                                                                  :skip-existing-page-check? true
+                                                                 :skip-journal? class?
                                                                  :class? class?}))]
                         result))
                     parts)]
@@ -406,10 +407,10 @@
                     :else
                     #{:logseq.class/Page})
         existing-names-page (ldb/page-exists? db title types)
-        journal-page-uuid (some-> (gp-block/page-name->map title db false date-formatter
-                                                           {:class? class?
-                                                            :skip-existing-page-check? true})
-                                  :block/uuid)
+        journal-page-uuid (when-not class?
+                            (some-> (gp-block/page-name->map title db false date-formatter
+                                                             {:skip-existing-page-check? true})
+                                    :block/uuid))
         existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
                                         (d/entity db [:block/uuid journal-page-uuid]))
         existing-page-id (if class-ident-namespace?
@@ -423,6 +424,7 @@
         existing-page (or (some->> existing-page-id (d/entity db))
                           existing-page-by-journal-uuid)]
     (if (and existing-page
+             (not (and class? (ldb/journal? existing-page)))
              (or (:block/journal-day existing-page)
                  (not (:block/parent existing-page))
                  (ldb/recycled? existing-page)))
@@ -431,8 +433,9 @@
         (cond
           (and class?
                (not (ldb/class? existing-page))
-               (ldb/internal-page? existing-page))
-          ;; Convert existing page to class
+               (ldb/internal-page? existing-page)
+               (not (ldb/journal? existing-page)))
+          ;; Convert existing page to class. Journals stay journals.
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
                                                           (when class-ident-namespace?
@@ -459,9 +462,13 @@
           :else
           {:page-uuid (:block/uuid existing-page)
            :title (:block/title existing-page)}))
-      (let [page (cond-> (gp-block/page-name->map title db true date-formatter
+      (let [page-uuid' (when (uuid? uuid')
+                         (when-not (and class? (ldb/journal? (d/entity db [:block/uuid uuid'])))
+                           uuid'))
+            page (cond-> (gp-block/page-name->map title db true date-formatter
                                                 {:class? class?
-                                                 :page-uuid (when (uuid? uuid') uuid')
+                                                 :skip-journal? class?
+                                                 :page-uuid page-uuid'
                                                  :skip-existing-page-check? true})
                    encrypted-title? (assoc :block/name encrypted-name))
             [page parents'] (if (and (not (:block/journal-day page))

@@ -26,6 +26,47 @@
     (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
     (is (not= movie-class Movie-class) "The two classes are not the same")))
 
+(defn- assert-valid-date-class
+  [conn class title]
+  (is (ldb/class? class) (str title " is a class"))
+  (is (= title (:block/title class)))
+  (is (nil? (:block/journal-day class)))
+  (is (nil? (:block.temp/original-page-name class)))
+  (is (not (ldb/journal? class)))
+  (is (not= (common-uuid/gen-uuid :journal-page-uuid 20240101) (:block/uuid class)))
+  (is (= "user.class" (namespace (:db/ident class))))
+  (is (= [:logseq.class/Root]
+         (get (db-test/readable-properties class) :logseq.property.class/extends)))
+  (is (nil? (:errors (db-validate/validate-db @conn)))
+      (str "Closed schema accepts class " (pr-str title))))
+
+(deftest create-class-from-date-like-title
+  (doseq [title ["Jan 1st, 2024" "jan 1st, 2024" "2024-01-01"]]
+    (let [conn (db-test/create-conn)
+          [_ uuid'] (outliner-page/create! conn title {:class? true})
+          class (d/entity @conn [:block/uuid uuid'])]
+      (assert-valid-date-class conn class title)))
+  (testing "titles that are not journal names still create classes"
+    (let [conn (db-test/create-conn)]
+      (doseq [title ["20240101" "jan 1st, 2024x"]]
+        (let [[_ uuid'] (outliner-page/create! conn title {:class? true})
+              class (d/entity @conn [:block/uuid uuid'])]
+          (is (ldb/class? class))
+          (is (nil? (:block/journal-day class)))
+          (is (nil? (:errors (db-validate/validate-db @conn))))))))
+  (testing "an existing journal is not turned into or merged with a class"
+    (let [conn (db-test/create-conn)
+          [_ journal-uuid] (outliner-page/create! conn "Jan 1st, 2024" {})
+          journal (d/entity @conn [:block/uuid journal-uuid])
+          [_ class-uuid] (outliner-page/create! conn "Jan 1st, 2024" {:class? true})
+          class (d/entity @conn [:block/uuid class-uuid])
+          journal' (d/entity @conn [:block/uuid journal-uuid])]
+      (is (ldb/journal? journal))
+      (is (= 20240101 (:block/journal-day journal')))
+      (is (ldb/journal? journal'))
+      (is (not= journal-uuid class-uuid))
+      (assert-valid-date-class conn class "Jan 1st, 2024"))))
+
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/property1 {:logseq.property/type :default}}
