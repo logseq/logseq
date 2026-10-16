@@ -1,7 +1,7 @@
 (* Host-side theme resolution for the paint color_of hook.
 
    The app pushes one "theme-snapshot" envelope per mode
-   ({mode, vars, kit}); `vars` is the resolved CSS custom-property
+   ({mode, vars, kit}); `vars` is the CSS custom-property
    table — the same map the host installs through
    style::set_css_var. A later "ui-state" (or the appearance channel)
    picks the active mode. color_of resolves:
@@ -86,102 +86,64 @@ let var_ref (s : string) : (string * string option) option =
 let rec resolve_value (s : string) (depth : int) : string option =
   if depth > 8 then None
   else
-    match var_ref s with
-    | Some (name, fallback) -> (
-        match Hashtbl.find_opt (vars_of_mode !mode) name with
-        | Some v -> resolve_value v (depth + 1)
-        | None -> (
-            match fallback with
-            | Some f -> resolve_value f (depth + 1)
-            | None -> None))
+    let len = String.length s in
+    let rec find_var start =
+      match String.index_from_opt s start 'v' with
+      | Some i when i + 4 <= len ->
+          if String.sub s i 4 = "var(" then Some i else find_var (i + 1)
+      | _ -> None
+    in
+    match find_var 0 with
     | None -> Some s
-
-(* "fn(var(--x) [/ a])" — hsl()/rgb() functional notation wrapped
-   around a var(). The vars table stores resolved colors, never
-   channel triples, so the inner token name resolves against the same
-   chain; [alpha] scales the resolved color's alpha. *)
-let fn_var_ref (s : string) : (string * float option) option =
-  let len = String.length s in
-  match String.index_opt s '(' with
-  | Some i when len > i + 2 && s.[len - 1] = ')' -> (
-    let inner = String.sub s (i + 1) (len - i - 2) in
-    match String.split_on_char '/' inner with
-    | [ head ] -> (
-      match var_ref (String.trim head) with
-      | Some (name, _fallback) -> Some (name, None)
-      | None -> None)
-    | [ head; a ] -> (
-      match var_ref (String.trim head) with
-      | Some (name, _fallback) -> (
-        let a = String.trim a in
-        let pct =
-          String.length a > 0 && a.[String.length a - 1] = '%'
+    | Some first ->
+        let output = Buffer.create len in
+        let rec closing i nesting =
+          if i = len then None
+          else
+            match s.[i] with
+            | '(' -> closing (i + 1) (nesting + 1)
+            | ')' when nesting = 1 -> Some i
+            | ')' -> closing (i + 1) (nesting - 1)
+            | _ -> closing (i + 1) nesting
         in
-        match
-          float_of_string_opt
-            (if pct then String.sub a 0 (String.length a - 1) else a)
-        with
-        | Some v ->
-          Some (name, Some (if pct then v /. 100. else v))
-        | None -> Some (name, None))
-      | None -> None)
-    | _ -> None)
-  | _ -> None
-
-let rec color_of (s : string) : Lui_scene.color option =
-  let spec = if s = "scrim" then "hsl(var(--background) / 0.9)" else s in
-  let v =
-    match var_ref spec with
-    | Some _ -> resolve_value spec 0
-    | None -> Some spec
-  in
-  match v with
-  | None -> None
-  | Some v -> (
-      (* var() resolution may land on another token name, a hex
-         literal, or a var-free CSS color — try each resolver. *)
-      match Lui_window.Theme.color_of_hex v with
-      | Some _ as c -> c
-      | None -> (
-          match Lui_theme.color_of !mode v with
-          | Some _ as c -> c
-          | None -> (
-              match Lui_window.Theme.color_of v with
-              | Some _ as c -> c
-              | None -> (
-                  match fn_var_ref v with
+        let rec expand cursor start =
+          match closing (start + 4) 1 with
+          | None -> None
+          | Some stop -> (
+              let expression = String.sub s start (stop - start + 1) in
+              match var_ref expression with
+              | None -> None
+              | Some (name, fallback) -> (
+                  let value =
+                    match Hashtbl.find_opt (vars_of_mode !mode) name with
+                    | Some value -> Some value
+                    | None -> fallback
+                  in
+                  match
+                    Option.bind value (fun value ->
+                        resolve_value value (depth + 1))
+                  with
                   | None -> None
-                  | Some (name, alpha) -> (
-                      let tok =
-                        if
-                          String.length name > 2
-                          && String.sub name 0 2 = "--"
-                        then String.sub name 2 (String.length name - 2)
-                        else name
-                      in
-                      let apply_alpha c =
-                        match alpha with
-                        | None -> c
-                        | Some a ->
-                          { c with Lui_scene.a =
-                              int_of_float (Float.round (a *. float c.Lui_scene.a)) }
-                      in
-                      match color_of ("var(--" ^ tok ^ ")") with
-                      | Some c -> Some (apply_alpha c)
-                      | None -> (
-                          let tok =
-                            (* --x-foreground slots alias onto the plain
-                               foreground rather than per-surface text
-                               entries *)
-                            if
-                              String.ends_with ~suffix:"-foreground" tok
-                              && Lui_theme.color_of !mode tok = None
-                            then "foreground"
-                            else tok
-                          in
-                          match Lui_theme.color_of !mode tok with
-                          | Some c ->
-                            Some (apply_alpha c)
-                          | None -> None))))))
+                  | Some value -> (
+                      Buffer.add_substring output s cursor (start - cursor);
+                      Buffer.add_string output value;
+                      let cursor = stop + 1 in
+                      match find_var cursor with
+                      | Some next -> expand cursor next
+                      | None ->
+                          Buffer.add_substring output s cursor (len - cursor);
+                          Some (Buffer.contents output))))
+        in
+        expand 0 first
+
+let color_of (s : string) : Lui_scene.color option =
+  let spec = if s = "scrim" then "hsl(var(--background) / 0.9)" else s in
+  Option.bind (resolve_value spec 0) (fun value ->
+      match Lui_window.Theme.color_of_hex value with
+      | Some _ as color -> color
+      | None -> (
+          match Lui_theme.color_of !mode value with
+          | Some _ as color -> color
+          | None -> Lui_window.Theme.color_of value))
 
 let count_of_mode m = Hashtbl.length (vars_of_mode m)

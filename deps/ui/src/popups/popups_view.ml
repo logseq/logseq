@@ -247,7 +247,7 @@ let ac_empty_placeholder (v : S.view) : t =
     ~padding_vertical:8 ~padding_horizontal:16 ~font_size:"0.875rem"
     ~foreground:
       "var(--lx-gray-10, var(--ls-secondary-text-color, \
-         var(--muted-foreground)))"
+         hsl(var(--muted-foreground))))"
     ~value:label []
 ;;
 

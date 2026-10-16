@@ -531,56 +531,54 @@ let cmdk_vars = function
     ; "--lx-nav-active", "rgb(255 255 255 / 0.08)"
     ]
 
-(* shui/index.css + colors.css tokens the web stylesheet owns — the
-   shared component props reference hsl(var(--primary)),
-   hsl(var(--muted)), etc., so the native vars table carries the same
-   names as literal colors. The logseq accent's light values come from
-   colors.css [data-color=logseq], the generic shadcn set from
-   theme/index.css :root, and the dark set from colors.css's logseq dark
-   block. *)
+(* CSS HSL channel variables keep their stylesheet representation on
+   every host. Web stylesheets own their mode/accent cascade; native
+   resolves the same channels inside hsl(var(...)) declarations. *)
 let shui_vars = function
   | Light ->
-    [ "--background", "hsl(0, 0%, 100%)"
-    ; "--foreground", "hsl(222.2, 84%, 4.9%)"
-    ; "--card", "hsl(0, 0%, 100%)"
-    ; "--card-foreground", "hsl(222.2, 84%, 4.9%)"
-    ; "--popover", "hsl(0, 0%, 100%)"
-    ; "--popover-foreground", "hsl(222.2, 84%, 4.9%)"
-    ; "--primary", "hsl(200, 97%, 37%)"
-    ; "--primary-foreground", "hsl(255, 92%, 100%)"
-    ; "--secondary", "hsl(240, 4.8%, 95.9%)"
-    ; "--secondary-foreground", "hsl(222.2, 47.4%, 11.2%)"
-    ; "--muted", "hsl(210, 40%, 96.1%)"
-    ; "--muted-foreground", "hsl(0, 0%, 52.3%)"
-    ; "--accent", "hsl(200, 97%, 37%)"
-    ; "--accent-foreground", "hsl(255, 92%, 100%)"
-    ; "--destructive", "hsl(0, 84.2%, 60.2%)"
-    ; "--destructive-foreground", "hsl(210, 40%, 98%)"
-    ; "--border", "hsl(300, 1%, 92%)"
-    ; "--input", "hsl(0, 0%, 90.9%)" (* rx-gray-05 *)
-    ; "--ring", "hsl(200, 97%, 37%)"
+    [ "--background", "0 0% 100%"
+    ; "--foreground", "222.2 84% 4.9%"
+    ; "--card", "0 0% 100%"
+    ; "--card-foreground", "222.2 84% 4.9%"
+    ; "--popover", "0 0% 100%"
+    ; "--popover-foreground", "222.2 84% 4.9%"
+    ; "--primary", "200 97% 37%"
+    ; "--primary-foreground", "255 92% 100%"
+    ; "--secondary", "240 4.8% 95.9%"
+    ; "--secondary-foreground", "222.2 47.4% 11.2%"
+    ; "--muted", "210 40% 96.1%"
+    ; "--muted-foreground", "0 0% 52.3%"
+    ; "--accent", "200 97% 37%"
+    ; "--accent-foreground", "255 92% 100%"
+    ; "--destructive", "0 84.2% 60.2%"
+    ; "--destructive-foreground", "210 40% 98%"
+    ; "--border", "300 1% 92%"
+    ; "--input", "0 0% 90.9%" (* rx-gray-05 *)
+    ; "--ring", "200 97% 37%"
     ]
   | Dark ->
-    [ "--background", "hsl(192, 100%, 11%)"
-    ; "--foreground", "hsl(0, 0%, 95%)"
-    ; "--card", "hsl(192, 100%, 10%)"
-    ; "--card-foreground", "hsl(0, 0%, 95%)"
-    ; "--popover", "hsl(192, 100%, 11%)"
-    ; "--popover-foreground", "hsl(0, 0%, 95%)"
-    ; "--primary", "hsl(200, 97%, 37%)"
-    ; "--primary-foreground", "hsl(255, 92%, 100%)"
-    ; "--secondary", "hsl(203, 50%, 20%)"
-    ; "--secondary-foreground", "hsl(0, 0%, 98%)"
-    ; "--muted", "hsl(192, 100%, 13%)"
-    ; "--muted-foreground", "hsl(0, 0%, 49.4%)"
-    ; "--accent", "hsl(192, 80%, 10%)"
-    ; "--accent-foreground", "hsl(255, 92%, 100%)"
-    ; "--destructive", "hsl(0, 62.8%, 30.6%)"
-    ; "--destructive-foreground", "hsl(210, 40%, 98%)"
-    ; "--border", "hsl(192, 100%, 14%)"
-    ; "--input", "hsl(203, 35%, 25%)"
-    ; "--ring", "hsl(200, 97%, 37%)"
+    [ "--background", "192 100% 11%"
+    ; "--foreground", "0 0% 95%"
+    ; "--card", "192 100% 10%"
+    ; "--card-foreground", "0 0% 95%"
+    ; "--popover", "192 100% 11%"
+    ; "--popover-foreground", "0 0% 95%"
+    ; "--primary", "200 97% 37%"
+    ; "--primary-foreground", "255 92% 100%"
+    ; "--secondary", "203 50% 20%"
+    ; "--secondary-foreground", "0 0% 98%"
+    ; "--muted", "192 100% 13%"
+    ; "--muted-foreground", "0 0% 49.4%"
+    ; "--accent", "192 80% 10%"
+    ; "--accent-foreground", "255 92% 100%"
+    ; "--destructive", "0 62.8% 30.6%"
+    ; "--destructive-foreground", "210 40% 98%"
+    ; "--border", "192 100% 14%"
+    ; "--input", "203 35% 25%"
+    ; "--ring", "200 97% 37%"
     ]
+
+let stylesheet_owned_var name = List.mem_assoc name (shui_vars Light)
 
 (* colors.css binds --lx-gray-* onto the rx-gray steps (and
    --lx-gray-*-alpha onto the matching alpha step); emit the same

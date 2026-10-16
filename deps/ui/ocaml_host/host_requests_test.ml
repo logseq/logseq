@@ -2110,39 +2110,92 @@ let () =
 
 let () =
   let old_mode = !Theme_vars.mode in
-  let errors = ref [] in
+  let old_light = Hashtbl.copy Theme_vars.light_vars
+  and old_dark = Hashtbl.copy Theme_vars.dark_vars in
+  let restore table saved =
+    Hashtbl.reset table;
+    Hashtbl.iter (Hashtbl.replace table) saved
+  in
   Fun.protect
     ~finally:(fun () ->
-      Theme_vars.set_dark (old_mode = Lui_theme.Dark);
-      Hashtbl.remove Theme_vars.light_vars "--test-opacity-color")
+      restore Theme_vars.light_vars old_light;
+      restore Theme_vars.dark_vars old_dark;
+      Theme_vars.set_dark (old_mode = Lui_theme.Dark))
     (fun () ->
       Theme_vars.set_dark false;
-      Hashtbl.replace Theme_vars.light_vars "--test-opacity-color" "#12345680";
       List.iter
-        (fun (css, alpha) ->
-          let actual = Theme_vars.color_of css in
-          if actual <> Some (Lui_scene.color 18 52 86 alpha) then
-            errors :=
-              ("Resolved variable opacity is incorrect: " ^ css) :: !errors)
+        (fun (name, value) -> Hashtbl.replace Theme_vars.light_vars name value)
         [
-          ("hsl(var(--test-opacity-color) / 0.5)", 64);
-          ("rgb(var(--test-opacity-color) / 0%)", 0);
-          ("hsl(var(--test-opacity-color) / 100%)", 128);
-          ("rgb(var(--test-opacity-color))", 128);
+          ("--test-rgb", "18 52 86");
+          ("--test-hsl", "0 0% 100%");
+          ("--test-alpha", "25%");
+          ("--test-alias", "var(--test-rgb)");
+          ("--test-color", "#12345680");
+          ("--test-cycle-a", "var(--test-cycle-b)");
+          ("--test-cycle-b", "var(--test-cycle-a)");
         ];
       List.iter
-        (fun dark ->
-          Theme_vars.set_dark dark;
-          let bg = Option.get (Theme_vars.color_of "background") in
-          let expected = { bg with Lui_scene.a = 230 } in
-          if Theme_vars.color_of "scrim" <> Some expected then
-            errors :=
-              "Native modal scrim does not use the active background at ninety \
-               percent" :: !errors)
-        [ false; true ];
-      List.iter prerr_endline (List.rev !errors);
-      check "Native functional color alpha and modal backdrop" (!errors = []));
-  print_endline "native color alpha and modal backdrop: OK"
+        (fun (css, expected) ->
+          check
+            ("Native CSS color substitution: " ^ css)
+            (Theme_vars.color_of css = expected))
+        [
+          ("rgb(var(--test-rgb) / 0.5)", Some (Lui_scene.color 18 52 86 128));
+          ("rgb(var(--test-rgb) / 0%)", Some (Lui_scene.color 18 52 86 0));
+          ("rgb(var(--test-rgb) / 100%)", Some (Lui_scene.color 18 52 86 255));
+          ("rgb(var(--test-rgb))", Some (Lui_scene.color 18 52 86 255));
+          ( "rgb(var(--test-alias) / var(--test-alpha))",
+            Some (Lui_scene.color 18 52 86 64) );
+          ("hsl(var(--test-hsl) / 50%)", Some (Lui_scene.color 255 255 255 128));
+          ( "rgb(var(--test-missing, 18 52 86) / .5)",
+            Some (Lui_scene.color 18 52 86 128) );
+          ( "hsl(var(--test-missing, var(--test-hsl)) / .5)",
+            Some (Lui_scene.color 255 255 255 128) );
+          ("var(--test-color)", Some (Lui_scene.color 18 52 86 128));
+          ("rgb(var(--test-color))", None);
+          ("hsl(var(--test-color) / 50%)", None);
+          ("hsl(var(--test-missing))", None);
+          ("hsl(var(--test-cycle-a))", None);
+        ];
+      List.iter
+        (fun css ->
+          check
+            ("Malformed CSS is rejected without throwing: " ^ css)
+            (try Theme_vars.color_of css = None
+             with Invalid_argument _ -> false))
+        [ "var()"; "hsl(var())"; "rgb(var(--test-rgb)" ];
+      List.iter
+        (fun (mode, name, background, border) ->
+          let snapshot = Ui_theme.snapshot mode in
+          Theme_vars.install_snapshot
+            (Yojson.Safe.to_string
+               (`Assoc
+                  [
+                    ("mode", `String name);
+                    ( "vars",
+                      `Assoc
+                        (List.map
+                           (fun (key, value) -> (key, `String value))
+                           snapshot.vars) );
+                  ]));
+          Theme_vars.set_dark (mode = Ui_theme.Dark);
+          check
+            "Native modal scrim uses the active background at ninety percent"
+            (Theme_vars.color_of "scrim"
+            = Some { background with Lui_scene.a = 230 });
+          check "Native modal border matches the CSS channel color"
+            (Theme_vars.color_of "hsl(var(--border))" = Some border))
+        [
+          ( Ui_theme.Light,
+            "light",
+            Lui_scene.color 255 255 255 255,
+            Lui_scene.color 235 234 235 255 );
+          ( Ui_theme.Dark,
+            "dark",
+            Lui_scene.color 0 45 56 255,
+            Lui_scene.color 0 57 71 255 );
+        ]);
+  print_endline "native CSS color substitution and modal backdrop: OK"
 
 let () =
   let property name =

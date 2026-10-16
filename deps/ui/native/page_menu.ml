@@ -243,7 +243,7 @@ let confirm_view (c : Model.confirm) =
                 ~style_class:desc_cls ~value:desc
                 ~font_size:"0.875rem"
                 ~foreground:"var(--ls-secondary-text-color, \
-                   var(--muted-foreground))" [] ]
+                   hsl(var(--muted-foreground)))" [] ]
         ; Ui_components.alert_dialog_footer ~key:"adlg-f"
             [ btn "adlg-cancel" I18n.cancel `outline close
             ; btn "adlg-confirm" I18n.confirm `primary (fun () ->

@@ -32,7 +32,7 @@ let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
     button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
       ?label ~style_class:extra
       ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
-      ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+      ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
       ~on_press:(fun _ -> on_click ()) []
   in
   mk (if title_ = "" then None else Some title_)
@@ -215,7 +215,7 @@ let tabs_el inst ~op : t =
            ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
            ~data_attrs:[ ("style", "margin-left: -4px") ]
            ~foreground:
-             "var(--ls-secondary-text-color, var(--muted-foreground))"
+             "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
            ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst) []) ]
     ctx parent
 
@@ -265,7 +265,7 @@ let sorting_popup inst anchor =
                            ~white_space:"nowrap"
                            ~foreground:
                              "var(--ls-secondary-text-color, \
-                              var(--muted-foreground))"
+                              hsl(var(--muted-foreground)))"
                            [] ]
                    ; row ~cross:`center ~gap:8
                        [ (* cljs shui/select trigger: order-button
@@ -297,7 +297,7 @@ let sorting_popup inst anchor =
                               ~style_class:"ls-sort-x"
                               ~foreground:
                                 "var(--ls-secondary-text-color, \
-                                 var(--muted-foreground))"
+                                 hsl(var(--muted-foreground)))"
                               ~label:I.delete_sort
                               ~icon:(Views_table.icon_of "x")
                               ~on_press:(fun _ -> remove_sort so) []) ]
@@ -317,7 +317,7 @@ let sorting_popup inst anchor =
                     ~corner_radius:4 ~style_class:"ls-sort-delete"
                     ~foreground:
                       "var(--ls-secondary-text-color, \
-                       var(--muted-foreground))"
+                       hsl(var(--muted-foreground)))"
                     ~data_attrs:
                       [ ( "style"
                         , "padding:0.375rem 0.5rem 0.375rem 0.75rem" ) ]
@@ -605,7 +605,7 @@ let more_actions_el inst : t =
   button ~variant:`ghost ~size:`sm ~icon:`ellipsis
     ~label:(I.t "ui/show-more")
     ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
-    ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+    ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
 
@@ -618,7 +618,7 @@ let display_type_el inst : t =
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
   button ~variant:`ghost ~size:`sm
     ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
-    ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+    ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
     ~accessibility_identifier:wrap_id
     ~label:(I.t "property.built-in/view-type")
     ~icon_signal:
@@ -805,7 +805,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         [ text ~value:(filter_value_label inst f) [] ]
     ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
         ~padding_horizontal:4
-        ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+        ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
         ~on_press:(fun _ ->
           V.update inst (fun s ->
               { s with
@@ -949,7 +949,7 @@ let ref_filter_dialog inst anchor =
            Ui_components.with_props
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
-                    var(--muted-foreground))" ) ]
+                    hsl(var(--muted-foreground)))" ) ]
              (button ~variant:`ghost ~border_width:1 ~corner_radius:6
                 ~padding_vertical:2 ~padding_horizontal:8
                 ~background:"transparent" ~style_class:"ls-ref-btn"
@@ -1045,7 +1045,7 @@ let ref_filter_dialog inst anchor =
                     rgba(0, 0, 0, 0.06))"
                  ~foreground:
                    "var(--ls-secondary-text-color, \
-                    var(--muted-foreground))"
+                    hsl(var(--muted-foreground)))"
                  [ icon ~name:(Views_table.icon_of "filter") ~point_size:20
                      ~style_class:"ls-icon-filter" [] ]
              ; column
@@ -1063,7 +1063,7 @@ let ref_filter_dialog inst anchor =
              ~padding_horizontal:8 ~corner_radius:6
              ~style_class:"cp__filters-input-panel"
              ~foreground:
-               "var(--ls-secondary-text-color, var(--muted-foreground))"
+               "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
              [ icon ~name:(Views_table.icon_of "search")
                  ~style_class:"ls-icon-search" []
              ; Ui_components.with_props
@@ -1095,7 +1095,7 @@ let refs_filter_btn inst : t =
     (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
        ~icon:(Views_table.icon_of "filter-cog")
        ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
-       ~foreground:"var(--ls-secondary-text-color, var(--muted-foreground))"
+       ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
        ~on_press:(fun _ ->
          match
@@ -1205,7 +1205,7 @@ let render_head inst : t =
                   ~padding_vertical:2
                   ~foreground:
                     "var(--ls-secondary-text-color, \
-                     var(--muted-foreground))"
+                     hsl(var(--muted-foreground)))"
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1221,7 +1221,7 @@ let render_head inst : t =
                ~height:28 ~min_height:28 ~padding_horizontal:4
                ~padding_vertical:2
                ~foreground:
-                 "var(--ls-secondary-text-color, var(--muted-foreground))"
+                 "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->

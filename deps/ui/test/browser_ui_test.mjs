@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test, {after} from 'node:test';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
+import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -401,5 +402,41 @@ test('settings navigation keeps icons before labels across tab changes and reope
   button('Close');
   openSettings();
   verify();
+  button('Close');
+});
+
+test('modal surfaces retain valid theme colors across mode changes and reopen', () => {
+  open();
+  openSettings();
+  button('General');
+  const verify = () => assertModalTheme(evaluate(
+    `(${measureModalTheme.toString()})(document.querySelector('[role="dialog"]'))`,
+  ));
+  for (const mode of ['light', 'dark', 'light']) {
+    button(`${mode} ${mode}`);
+    verify();
+  }
+  button('Close');
+  openSettings();
+  verify();
+  button('Close');
+});
+
+test('keymap filter selection retains readable text on its muted surface', () => {
+  open();
+  openSettings();
+  const verify = () => assertKeymapFilterPaint(evaluate(
+    `(${measureKeymapFilterPaint.toString()})(document.querySelector('[role="dialog"]'))`,
+  ));
+  for (const mode of ['light', 'dark', 'light']) {
+    button('General');
+    button(`${mode} ${mode}`);
+    button('Keymap');
+    for (const index of [1, 2, 3, 0]) {
+      const target = evaluate(`document.querySelectorAll('.shortcut-filter-pills button')[${index}].id`);
+      browser('click', `#${target}`);
+      verify();
+    }
+  }
   button('Close');
 });

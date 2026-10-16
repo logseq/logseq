@@ -65,7 +65,7 @@ let selector_row st =
            ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
            ~padding_horizontal:4
            ~foreground:
-             "var(--ls-secondary-text-color, var(--muted-foreground))"
+             "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
            ~label:(t_ "flashcard/add-cards-query-tooltip")
            ~icon:`plus
            ~on_press:(fun _ -> Cards_state.add_cards_block st)

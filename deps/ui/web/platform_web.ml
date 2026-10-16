@@ -55,15 +55,17 @@ let theme_set_pref v =
 
 let theme_apply_dataset effective = doc_set_data "theme" effective
 
-(* Root custom-property delivery — the shared Ui_theme snapshot lands
-   verbatim on documentElement so canonical --lx-*, legacy --ls-* and
-   --lui-* names all resolve for still-live CSS. *)
+(* Shared tokens land on the root; CSS-owned mode/accent channels keep
+   their stylesheet cascade instead of being pinned by inline values. *)
 let root_set_prop : string -> string -> unit =
   [%mel.raw
     "function (k, v) { document.documentElement.style.setProperty(k, v) }"]
 
 let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
-  List.iter (fun (name, value) -> root_set_prop name value) snap.vars
+  List.iter
+    (fun (name, value) ->
+      if not (Ui_theme.stylesheet_owned_var name) then root_set_prop name value)
+    snap.vars
 
 let theme_apply_classes effective =
   if effective = "dark" then begin

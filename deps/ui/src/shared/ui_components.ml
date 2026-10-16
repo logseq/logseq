@@ -183,7 +183,7 @@ let cmdk_group_header ~key children =
           hsl(var(--muted))))"
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          var(--muted-foreground)))"
+          hsl(var(--muted-foreground))))"
        children)
 
 (* A two-point leading spacer keeps the count's inset in row flow. *)
@@ -260,7 +260,7 @@ let cmdk_item_header ~key children =
            ("style", "white-space: nowrap; text-overflow: ellipsis") ]
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          var(--muted-foreground)))"
+          hsl(var(--muted-foreground))))"
        (spacer ~key:"i" ~width:32 ~height:1 [] :: children))
 
 let cmdk_item_main ~key children =
@@ -299,7 +299,7 @@ let cmdk_info_text ~key children =
        ~min_width:0
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          var(--muted-foreground)))"
+          hsl(var(--muted-foreground))))"
        children)
 
 let cmdk_badge ~key ~value : t =
@@ -504,7 +504,7 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
        ~border_width:0
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          var(--muted-foreground)))"
+          hsl(var(--muted-foreground))))"
        [ row ~key:"inner" ~cross:`center ~gap:6 children ])
 
 (* -- cmdk misc -------------------------------------------------------- *)
@@ -648,7 +648,7 @@ let form_desc ~key ~value : t =
   text ~key ~font_size:"0.75rem" ~value
     ~foreground:
       "var(--lx-gray-10, var(--ls-secondary-text-color, \
-       var(--muted-foreground)))"
+       hsl(var(--muted-foreground))))"
     []
 
 (* The field paints first; its hit-transparent leading icon paints above the
@@ -735,7 +735,8 @@ let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
       ; Prop.opacity (if c then 1. else off_opacity)
       ; Prop.hover_opacity 1.
       ]
-      (toggle_button ~key ~variant:`ghost ~text ~checked:c ~on_toggle
+      (toggle_button ~key ~variant:`ghost ~text ~foreground:"inherit"
+         ~checked:c ~on_toggle
          ~min_height:0 ~height:(pad_v * 2 + 14) ~padding_vertical:pad_v
          ~padding_horizontal:pad_h ~corner_radius:radius
          ~border_width:(if on_border then 1 else 0)

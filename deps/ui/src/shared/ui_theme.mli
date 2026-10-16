@@ -6,8 +6,10 @@
     values that shared views and adapters consume; [vars] and [kit] are
     the derived delivery tables:
 
-    - [vars] is the CSS custom-property table the web adapter applies to
-      [document.documentElement.style] verbatim. Canonical [--lx-*]
+    - [vars] is the CSS custom-property table delivered to both hosts.
+      The web adapter leaves {!stylesheet_owned_var} entries to the
+      stylesheet cascade and applies the remaining entries to
+      [document.documentElement.style]. Canonical [--lx-*]
       names carry the token; every emitted [--ls-*] name is a legacy
       alias for un-migrated CSS (only accent-invariant names are emitted
       as literals — see {!accent_bound}; accent-bound tokens ship as
@@ -133,6 +135,10 @@ type snapshot = {
     appear only as canonical [--lx-*] names holding [var(--ls-<name>)]
     references. *)
 val accent_bound : string list
+
+(** Whether a variable is owned by Web's mode/accent stylesheet cascade.
+    Native snapshots retain its CSS channel value for color substitution. *)
+val stylesheet_owned_var : string -> bool
 
 val snapshot : mode -> snapshot
 

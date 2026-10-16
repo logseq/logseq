@@ -284,6 +284,14 @@ let run () =
   and dark = Ui_theme.snapshot Ui_theme.Dark in
   check_variant light;
   check_variant dark;
+  List.iter
+    (fun (snapshot, background, border) ->
+      check "background retains CSS HSL channels"
+        (find "--background" snapshot.Ui_theme.vars = Some background);
+      check "border retains CSS HSL channels"
+        (find "--border" snapshot.Ui_theme.vars = Some border))
+    [ (light, "0 0% 100%", "300 1% 92%");
+      (dark, "192 100% 11%", "192 100% 14%") ];
   (* both variants emit the same var name set — mode flips can never
      leave stale names on the root *)
   let names (s : Ui_theme.snapshot) = List.map fst s.vars |> List.sort compare in

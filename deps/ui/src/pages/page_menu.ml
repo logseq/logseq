@@ -365,7 +365,7 @@ let confirm_view (c : Model.confirm) =
                [ text ~key:"adlg-d" ~style_class:desc_cls ~value:desc
                    ~font_size:"0.875rem"
                    ~foreground:"var(--ls-secondary-text-color, \
-                      var(--muted-foreground))" [] ])
+                      hsl(var(--muted-foreground)))" [] ])
         ; Ui_components.alert_dialog_footer ~key:"adlg-f"
             [ (* cljs dialog-confirm footer buttons are :size :sm *)
               button ~key:"adlg-cancel" ~variant:`outline ~size:`sm

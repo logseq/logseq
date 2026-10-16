@@ -288,7 +288,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          (box ~style_class:"hd"
             [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
                 ~font_size:"0.75rem" ~font_weight:500
-                ~foreground:"var(--lx-gray-07, var(--muted-foreground))"
+                ~foreground:"var(--lx-gray-07, hsl(var(--muted-foreground)))"
                 [] ]
           :: [ column ~gap:0 (grid_rows label items) ]))
   in
