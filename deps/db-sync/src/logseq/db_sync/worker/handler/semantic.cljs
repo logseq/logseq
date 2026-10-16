@@ -1032,7 +1032,8 @@
     :semantic/properties-update
     (p/let [body (body-clj request)
             property (resolve-property db (:property-id path-params))]
-      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body)))
+      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body))
+              (and (contains? body :title) (not (non-blank-string? (:title body)))))
         (http/bad-request "invalid property-id or update")
         (let [schema (cond-> {}
                        (:type body) (assoc :logseq.property/type (keyword (:type body)))
