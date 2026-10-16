@@ -129,6 +129,7 @@
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
