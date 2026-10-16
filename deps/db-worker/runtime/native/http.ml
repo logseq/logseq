@@ -78,8 +78,22 @@ let fetch (req : request) : response =
         Eio.Promise.resolve done_u ()
       in
       let meth = Httpun.Method.of_string req.method_ in
+      let request_headers =
+        match req.body with
+        | Some body
+          when not
+            (List.exists
+               (fun (name, _) ->
+                  match String.lowercase_ascii name with
+                  | "content-length" | "transfer-encoding" -> true
+                  | _ -> false)
+               req.headers) ->
+            ("content-length", string_of_int (String.length body)) :: req.headers
+        | _ -> req.headers
+      in
       let headers =
-        Httpun.Headers.of_list (("host", host) :: ("connection", "close") :: req.headers)
+        Httpun.Headers.of_list
+          (("host", host) :: ("connection", "close") :: request_headers)
       in
       let req' =
         Httpun.Request.create ~headers meth target

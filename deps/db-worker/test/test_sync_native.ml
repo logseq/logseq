@@ -1133,6 +1133,139 @@ let () =
     (Common_uuid.gen_uuid "db-ident-block-uuid" "logseq.class/Comments"
      = "00000002-2556-9161-5000-000000000000")
 
+(* Exercise the native transport rather than replacing HTTP with a test hook. *)
+let await_network task =
+  let mutex = Mutex.create () in
+  let condition = Condition.create () in
+  let result = ref None in
+  let finish value =
+    Mutex.lock mutex;
+    result := Some value;
+    Condition.signal condition;
+    Mutex.unlock mutex
+  in
+  Db_worker_effect.on_any task
+    (fun value -> finish (Ok value)) (fun exn -> finish (Error exn));
+  Mutex.lock mutex;
+  while !result = None do Condition.wait condition mutex done;
+  let value = Option.get !result in
+  Mutex.unlock mutex;
+  match value with Ok value -> value | Error exn -> raise exn
+
+let with_asset_server f =
+  let stored = Hashtbl.create 4 in
+  let server =
+    Http_server.create (fun req res ->
+        let path = Http_server.req_url req in
+        let status, body =
+          match Http_server.req_method req with
+          | "PUT" ->
+              Hashtbl.replace stored path
+                (await (Http_server.read_body_buffer req));
+              200, ""
+          | "GET" ->
+              (match Hashtbl.find_opt stored path with
+               | Some body -> 200, body
+               | None -> 404, "missing asset")
+          | _ -> 405, "method not allowed"
+        in
+        Http_server.write_head res ~status
+          ~headers:[ "Content-Length", string_of_int (String.length body) ];
+        Http_server.write res body;
+        Http_server.res_end res)
+  in
+  let port = await (Http_server.listen server ~port:0 ~host:"127.0.0.1") in
+  Fun.protect
+    (fun () -> f (Printf.sprintf "http://127.0.0.1:%d" port) stored)
+    ~finally:(fun () -> ignore (await (Http_server.close server)))
+
+let () =
+  with_asset_server (fun base stored ->
+      let payload = String.init 256 Char.chr in
+      Hashtbl.replace stored "/binary" payload;
+      (try
+         let response =
+           await_network
+             (Http_bytes.send
+                { url = base ^ "/binary"; method_ = "GET"; headers = []; body = None })
+         in
+         check "native binary HTTP preserves all byte values" (response.body = payload);
+         check "native binary HTTP preserves response headers"
+           (Sync_assets.header_opt "content-length" response.headers = Some "256");
+         let missing =
+           await_network
+             (Http_bytes.send
+                { url = base ^ "/missing"; method_ = "GET"; headers = []; body = None })
+         in
+         check "native binary HTTP preserves error status" (missing.status = 404)
+       with exn ->
+         check ("native binary HTTP: " ^ Printexc.to_string exn) false);
+      List.iter
+        (fun e2ee ->
+           let label = if e2ee then "encrypted" else "plain" in
+           let uploader = "native-asset-uploader-" ^ label in
+           let receiver = "native-asset-receiver-" ^ label in
+           let asset_id = fresh_uuid () in
+           let key = Wire.Binary (String.init 32 Char.chr) in
+           let previous_key = !Sync_deps.ensure_graph_aes_key in
+           Sync_crypt.init ();
+           Sync_deps.ensure_graph_aes_key := Some (fun _ -> Db_worker_effect.pure key);
+           List.iter
+             (fun repo ->
+                let conn = asset_conn asset_id in
+                ignore
+                  (Datascript.transact_conn_string conn
+                     (Printf.sprintf
+                        "[{:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value %b}]" e2ee));
+                Worker_state.set_datascript_conn repo conn)
+             [ uploader; receiver ];
+           set_sync_config base;
+           set_auth_token ();
+           Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ());
+           Fun.protect
+             (fun () ->
+                try
+                  await (Asset_store.write_bytes ~repo:uploader ~name:(asset_id ^ ".png") payload);
+                  await_network
+                    (Sync_assets.upload_remote_asset uploader (Some "graph") asset_id
+                       (Some "png") (Some "sha-256-value"));
+                  let uploaded = Hashtbl.find stored ("/assets/graph/" ^ asset_id ^ ".png") in
+                  if e2ee then begin
+                    check "encrypted asset upload is nonempty ciphertext"
+                      (String.length uploaded > String.length payload && uploaded <> payload);
+                    check "encrypted asset upload decrypts with graph key"
+                      (await (Sync_crypt.decrypt_uint8array_impl key (Transit_codec.of_string uploaded)) = payload)
+                  end else check "plain asset upload preserves bytes" (uploaded = payload);
+                  await_network
+                    (Sync_assets.download_remote_asset_impl receiver (Some "graph") asset_id (Some "png"));
+                  Worker_state.drop_datascript_conn receiver;
+                  check (label ^ " asset downloads and reopens in another client")
+                    (await (Asset_store.read_bytes ~repo:receiver ~name:(asset_id ^ ".png")) = payload);
+                  let missing_id = fresh_uuid () in
+                  let failure =
+                    try
+                      await_network
+                        (Sync_assets.download_remote_asset_impl receiver (Some "graph") missing_id (Some "png"));
+                      None
+                    with exn -> Some exn
+                  in
+                  check "missing remote asset reports HTTP 404"
+                    (match failure with
+                     | Some (Dispatcher.Exn_info (_, fields)) ->
+                         (match Wire.get "data" (Wire.Map fields) with
+                          | Some data -> Wire.get "status" data = Some (Wire.Int 404)
+                          | None -> false)
+                     | _ -> false);
+                  check "missing remote asset does not create a local file"
+                    (not (await (Asset_store.exists ~repo:receiver ~name:(missing_id ^ ".png"))))
+                with exn ->
+                  check (label ^ " asset roundtrip: " ^ Printexc.to_string exn) false)
+             ~finally:(fun () ->
+               List.iter Worker_state.drop_datascript_conn [ uploader; receiver ];
+               Sync_deps.ensure_graph_aes_key := previous_key;
+               Worker_state.set_db_sync_config Wire.Nil))
+        [ false; true ])
+
 (* ---- summary ---- *)
 
 let () =

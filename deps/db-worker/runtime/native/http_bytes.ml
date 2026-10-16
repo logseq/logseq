@@ -18,8 +18,12 @@ let req_to_hooks (r : request) : Native_test_hooks.http_req =
 let resp_of_hooks (r : Native_test_hooks.http_resp) : response =
   { status = r.status; headers = r.headers; body = r.body }
 
-let real_send (_ : request) : response Db_worker_effect.t =
-  Db_worker_effect.error (Failure "Http_bytes: not implemented on native yet")
+let real_send (req : request) : response Db_worker_effect.t =
+  Db_worker_effect.map
+    (fun (resp : Http.response) ->
+       { status = resp.status; headers = resp.headers; body = resp.body })
+    (Http.send
+       { url = req.url; method_ = req.method_; headers = req.headers; body = req.body })
 
 (* Test driver: tests rebind this like the cljs js/fetch stub. *)
 let send_impl = ref real_send
