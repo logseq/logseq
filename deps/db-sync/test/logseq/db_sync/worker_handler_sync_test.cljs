@@ -119,6 +119,14 @@
                                  object-title (sync-handler/handle-http self (semantic-json-request (str "/semantic/properties/" (:uuid created-body) "?graph-id=graph-1") "PATCH" {:title {}}))]
                            (is (= 201 (.-status created)))
                            (is (= 400 (.-status object-title)) "a property title that is not a string"))))
+               (p/then (fn [_]
+                         (p/let [page (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Page B"}))
+                                 page-body (json-body page)
+                                 negative (sync-handler/handle-http self (semantic-json-request "/semantic/block-properties/batch-set?graph-id=graph-1" "POST"
+                                                                                             {:entries [{:block-id (:uuid page-body) :property-id "logseq.property/status" :value -1}]}))
+                                 fraction (sync-handler/handle-http self (semantic-json-request (str "/semantic/blocks/" (:uuid page-body) "/properties/logseq.property%2Fstatus?graph-id=graph-1") "PUT" {:value 1.5}))]
+                           (is (= 400 (.-status negative)) "a ref property value of -1")
+                           (is (= 400 (.-status fraction)) "a ref property value of 1.5"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))

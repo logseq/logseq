@@ -450,7 +450,9 @@
                         [property-ident (string/lower-case value)] value)
                 value)
         entity (cond
-                 (number? value) (d/entity db value)
+                 ;; an entity id; datascript throws on any other number (-1, 1.5)
+                 (pos-int? value) (d/entity db value)
+                 (number? value) nil
                  (qualified-keyword? value) (d/entity db value)
                  (and (string? value) (common-util/uuid-string? value))
                  (d/entity db [:block/uuid (uuid value)])
