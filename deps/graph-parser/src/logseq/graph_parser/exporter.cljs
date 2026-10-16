@@ -2113,10 +2113,11 @@
              ;; ensure there's no nested $$ pair (i.e. not two separate inline formulas)
              (not (string/includes? (subs title 2 (- (count title) 2)) "$$")))
       (let [math-content (string/trim (subs title 2 (- (count title) 2)))]
-        (merge block
-               {:block/title math-content
-                :logseq.property.node/display-type :math
-                :block/tags [:logseq.class/Math-block]}))
+        ;; the block's other tags (a task's Task, user tags) are kept
+        (-> block
+            (merge {:block/title math-content
+                    :logseq.property.node/display-type :math})
+            (update :block/tags (fnil conj []) :logseq.class/Math-block)))
       block)))
 
 (defn- split-title-by-code-fences
@@ -2233,10 +2234,11 @@
             (cond
               pure-single-code?
               (let [{:keys [text lang]} (first code-segs)]
-                [(cond-> (assoc block'
-                                :block/title text
-                                :block/tags [:logseq.class/Code-block]
-                                :logseq.property.node/display-type :code)
+                [(cond-> (-> block'
+                             (assoc :block/title text
+                                    :logseq.property.node/display-type :code)
+                             ;; the block's other tags (a task's Task, user tags) are kept
+                             (update :block/tags (fnil conj []) :logseq.class/Code-block))
                    lang (assoc :logseq.property.code/lang lang))
                  []])
               has-mixed-content?
@@ -2278,8 +2280,9 @@
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                    (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                    (handle-quotes (select-keys options [:log-fn]))
-                   (handle-math)
                    (update-block-marker db options)
+                   ;; after the task marker is removed: `TODO $$ ... $$` is a math block
+                   (handle-math)
                    (update-block-priority options)
                    (update-block-heading)
                    (add-missing-timestamps options)

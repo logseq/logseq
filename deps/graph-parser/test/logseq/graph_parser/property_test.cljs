@@ -1,8 +1,13 @@
 (ns logseq.graph-parser.property-test
-  (:require [cljs.test :refer [are deftest testing]]
+  (:require [cljs.test :refer [are deftest is testing]]
             [logseq.graph-parser.property :as gp-property]))
 
 (def test-db "test-db")
+
+(deftest test-remove-properties-with-unmatched-fences
+  (doseq [content ["```text\n```python\ncaption:: sample\n```"
+                   "```text\nline\n```extra\ncaption:: sample"]]
+    (is (= content (gp-property/remove-properties :markdown content)))))
 
 (deftest test->new-properties
   (are [x y] (= (gp-property/->new-properties x) y)

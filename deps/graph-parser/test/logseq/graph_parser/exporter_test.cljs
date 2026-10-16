@@ -676,6 +676,56 @@ abc
         (is (= expected-tags (set (map :block/title (:block/tags block))))
             "All explicit tags are preserved")))))
 
+(deftest-async import-fenced-blocks-with-properties-after-their-fence
+  (p/doseq [[opening title closing display-type language]
+            [["```clojure" "(x 1)" "```" :code "clojure"]
+             ["TODO ```clojure" "(x 1)" "```" :code "clojure"]
+             ["$$" "E = mc^2" "$$" :math nil]
+             ["DONE $$" "E = mc^2" "$$" :math nil]]]
+    (let [block-uuid #uuid "11111111-1111-4111-8111-111111111112"]
+      (p/let [file (write-temp-graph-file
+                    "pages/C.md"
+                    (str "- " opening "\n"
+                         "  " title "\n"
+                         "  " closing "\n"
+                         "  id:: " block-uuid "\n"
+                         "  rating:: 5\n"
+                         "- {{embed ((" block-uuid "))}}\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              block (d/entity @conn [:block/uuid block-uuid])]
+        (testing opening
+          (is (= title (:block/title block))
+              "Property lines after the closing fence are not part of the title")
+          (is (= display-type (:logseq.property.node/display-type block)))
+          (is (= language (:logseq.property.code/lang block)))
+          (is (some? (get block :user.property/rating))
+              "The property after the fence is the block's property"))))))
+
+(deftest-async import-code-and-math-blocks-keep-task-and-tags
+  (p/let [file (write-temp-graph-file
+                "pages/T.md"
+                (str "- TODO ```clojure\n"
+                     "  (x 1)\n"
+                     "  ```\n"
+                     "- DONE $$\n"
+                     "  E = mc^2\n"
+                     "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          [code math] (->> (:block/_page (db-test/find-page-by-title @conn "T")) (sort-by :block/order))
+          tag-idents (fn [b] (set (map :db/ident (:block/tags b))))]
+    (is (= :code (:logseq.property.node/display-type code)))
+    (is (= #{:logseq.class/Task :logseq.class/Code-block} (tag-idents code))
+        "a code block that is a task keeps its Task tag")
+    (is (= "E = mc^2" (:block/title math)))
+    (is (= :math (:logseq.property.node/display-type math))
+        "a math block that is a task is a math block")
+    (is (= #{:logseq.class/Task :logseq.class/Math-block} (tag-idents math))
+        "a math block that is a task keeps its Task tag")))
+
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
