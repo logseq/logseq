@@ -13,6 +13,7 @@
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.handler.semantic :as semantic-handler]
+            [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
@@ -135,10 +136,14 @@
           graph-id)))))
 
 (defn graph-id-from-request [request]
-  (let [header-id (.get (.-headers request) "x-graph-id")
-        url (js/URL. (.-url request))
+  ;; The sync path is authoritative: it is the graph whose Durable Object was
+  ;; addressed. The query parameter is set by dispatch when it rewrites the
+  ;; forwarded URL. A client-supplied `x-graph-id` header or `graph-id`
+  ;; parameter must never select a different graph (e.g. on WebSocket
+  ;; upgrades, which are forwarded unrewritten).
+  (let [url (js/URL. (.-url request))
         param-id (.get (.-searchParams url) "graph-id")
-        graph-id (or header-id param-id (graph-id-from-sync-path url))]
+        graph-id (or (graph-id-from-sync-path url) param-id)]
     (when (seq graph-id)
       graph-id)))
 
@@ -822,6 +827,24 @@
           (set! (.-conn self) nil)
           (http/json-response :sync/admin-reset {:ok true}))))))
 
+(defn- handle-sync-close-sockets
+  "DO-internal route: closes the WebSockets of the given user. Reached only
+  through a direct Durable Object fetch (membership removal); the public
+  `/sync/<graph-id>/...` surface blocks `/internal/*` tails."
+  [^js self ^js request]
+  (let [url (js/URL. (.-url request))
+        user-id (.get (.-searchParams url) "user-id")]
+    (if (not (seq user-id))
+      (http/bad-request "missing user id")
+      (do
+        (doseq [^js ws (.getWebSockets (.-state self))]
+          (when-let [user (presence/get-user self ws)]
+            (when (= user-id (:user-id user))
+              (presence/remove-presence! self ws)
+              (.close ws 1000 "membership revoked"))))
+        (presence/broadcast-online-users! self)
+        (http/json-response :sync/close-sockets {:ok true})))))
+
 (defn- handle-sync-tx-batch
   [^js self request]
   (.then (common/read-json request)
@@ -929,6 +952,9 @@
     :sync/admin-reset
     (handle-sync-admin-reset self)
 
+    :sync/close-sockets
+    (handle-sync-close-sockets self request)
+
     :sync/tx-batch
     (handle-sync-tx-batch self request)
 
@@ -937,15 +963,6 @@
 
     (http/not-found)))
 
-(defn- strip-sync-prefix [path]
-  (if (string/starts-with? path "/sync/")
-    (let [rest-path (subs path (count "/sync/"))
-          slash-idx (string/index-of rest-path "/")]
-      (if (neg? slash-idx)
-        "/"
-        (subs rest-path slash-idx)))
-    path))
-
 (defn handle-http [^js self request]
   (letfn [(with-cors-error [resp]
             (if (or (p/promise? resp) (instance? js/Promise resp))
@@ -953,15 +970,15 @@
                       (fn [e]
                         (log/error :db-sync/http-error {:error e})
                         (common/json-response
-                         {:error "server error"
-                          :debug-message (str e)
-                          :debug-stack (when (instance? js/Error e) (.-stack e))}
+                         {:error "server error"}
                          500)))
               resp))]
     (try
+      ;; The path is routed exactly as received: a `/sync/` prefix is never
+      ;; stripped here, so a `/sync/<g>/sync/<x>/semantic/...` request cannot
+      ;; resolve to the internal `/semantic/...` routes.
       (let [url (js/URL. (.-url request))
-            raw-path (.-pathname url)
-            path (strip-sync-prefix raw-path)
+            path (.-pathname url)
             method (.-method request)]
         (with-cors-error
           (cond
@@ -981,7 +998,5 @@
       (catch :default e
         (log/error :db-sync/http-error {:error e})
         (common/json-response
-         {:error "server error"
-          :debug-message (str e)
-          :debug-stack (when (instance? js/Error e) (.-stack e))}
+         {:error "server error"}
          500)))))

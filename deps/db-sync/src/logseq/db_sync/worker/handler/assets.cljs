@@ -21,6 +21,14 @@
    "jxl" "image/jxl"
    "pdf" "application/pdf"})
 
+(def ^:private inline-content-types
+  "Content types safe to render inline from the API origin. Everything else is
+  served as an attachment with `nosniff`, and SVG additionally gets a CSP
+  sandbox, so stored attacker-controlled HTML or script cannot execute on the
+  sync origin."
+  #{"image/png" "image/jpeg" "image/gif" "image/webp" "image/bmp"
+    "image/x-icon" "image/jxl" "image/svg+xml" "application/pdf"})
+
 (defn- response-content-type [stored-content-type asset-type]
   (or (get asset-type->content-type (string/lower-case asset-type))
       stored-content-type
@@ -212,6 +220,26 @@
     :else
     (p/resolved body)))
 
+(defn- sha-256-hex
+  [buf]
+  (p/let [digest (.digest (.-subtle js/crypto) "SHA-256" buf)]
+    (->> (js/Uint8Array. digest)
+         (js/Array.from)
+         (map (fn [octet] (.padStart (.toString octet 16) 2 "0")))
+         (apply str))))
+
+(defn- <verify-checksum!
+  "Checks the declared SHA-256 of a plaintext (non-E2EE) upload against the
+  bytes actually stored, so one member cannot plant different bytes under a
+  legitimate file's checksum."
+  [buf checksum]
+  (if (seq checksum)
+    (p/let [hex (sha-256-hex buf)]
+      (when (not= hex checksum)
+        (throw (ex-info "asset checksum mismatch"
+                        {:type :db-sync/asset-checksum-mismatch}))))
+    (p/resolved nil)))
+
 (defn- handle-get-asset
   [^js bucket key asset-type]
   (.then (.get bucket key)
@@ -222,6 +250,9 @@
                    content-type (response-content-type (.-contentType metadata) asset-type)
                    content-encoding (.-contentEncoding metadata)
                    cache-control (.-cacheControl metadata)
+                   lower-content-type (string/lower-case content-type)
+                   inline? (contains? inline-content-types lower-content-type)
+                   svg? (= "image/svg+xml" lower-content-type)
                    size (parse-size (or (.-size obj)
                                         (some-> (.-body obj) .-byteLength)))
                    content-length (cond
@@ -230,9 +261,13 @@
                                     :else nil)]
                (p/let [body (<body-with-known-length (.-body obj) size)
                        headers (cond-> {"content-type" content-type
-                                        "content-disposition" (str "inline; filename=\""
+                                        "content-disposition" (str (if inline? "inline" "attachment")
+                                                                   "; filename=\""
                                                                    (last (string/split key #"/")) "\"")
-                                        "x-asset-type" asset-type}
+                                        "x-asset-type" asset-type
+                                        "x-content-type-options" "nosniff"}
+                                 svg?
+                                 (assoc "content-security-policy" "sandbox")
                                  (and (string? content-length)
                                       (pos? (.-length content-length)))
                                  (assoc "content-length" content-length)
@@ -293,14 +328,22 @@
                       size-limit (if e2ee? max-encrypted-asset-size max-asset-size)]
                 (if (> (.-byteLength buf) size-limit)
                   (http/error-response "asset too large" 413)
-                  (p/let [_ (.put bucket
+                  (-> (p/let [_ (when-not e2ee?
+                                 ;; On E2EE graphs the body is an encrypted package and
+                                 ;; the declared checksum describes the plaintext.
+                                 (<verify-checksum! buf (.get (.-headers request) "x-amz-meta-checksum")))
+                          _ (.put bucket
                                   key
                                   buf
                                   #js {:httpMetadata #js {:contentType (or (.get (.-headers request) "content-type")
                                                                            "application/octet-stream")}
                                        :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
                                                             :type asset-type}})]
-                    (http/json-response :assets/put {:ok true} 200))))
+                        (http/json-response :assets/put {:ok true} 200))
+                      (p/catch (fn [error]
+                                 (if (= :db-sync/asset-checksum-mismatch (:type (ex-data error)))
+                                   (http/bad-request "asset checksum mismatch")
+                                   (throw error)))))))
 
               "DELETE"
               (.then (.delete bucket key)
