@@ -5072,6 +5072,76 @@ let () =
           expect_named_contains "rules task" body "task";
           Js.Promise.resolve pass));
 
+  test_promise
+    "CLI parity query execute resolves relative inputs through the db-worker"
+    (fun () ->
+      let cfg = config ~repo:"demo" () in
+      let action =
+        expect_ok "journal query build"
+          (Query.build cfg (Global_opts.create ())
+             (Query.Parsed_run
+                {
+                  query_edn =
+                    Some
+                      "[:find ?e :in $ ?day ?status :where [?e \
+                       :block/journal-day ?day]]";
+                  name = None;
+                  inputs_edn = Some "[:today :logseq.property/status.done]";
+                }))
+      in
+      let resolve_body = ref None in
+      let query_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/resolve-query-inputs" body
+            then (
+              resolve_body := Some body;
+              (* the worker resolves :today and returns the status unchanged *)
+              "[20261010,\"~:logseq.property/status.done\"]")
+            else (
+              query_body := Some body;
+              "[]"))
+      in
+      with_server server (fun base_url ->
+          let cfg = { cfg with Cli_config.base_url = Some base_url } in
+          let* result =
+            effect_to_promise
+              (execute_with_output Query.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "query execute ok" false (Cli_result.is_error result);
+          let resolve_args =
+            expect_some "resolve args"
+              (Edn_util.as_seq
+                 (invoke_args (expect_some "resolve request" !resolve_body)))
+          in
+          let resolve_inputs =
+            expect_some "resolve inputs"
+              (Edn_util.as_seq (Vec.nth resolve_args 1))
+          in
+          expect_equal "resolve input keyword" "today"
+            (expect_some "resolve input"
+               (Edn_util.as_keyword (Vec.nth resolve_inputs 0)));
+          expect_int "resolve options empty" 0
+            (Vec.length
+               (expect_some "resolve options"
+                  (Edn_util.as_map (Vec.nth resolve_args 2))));
+          let query_body = expect_some "query request" !query_body in
+          expect_named_contains "query method" query_body "thread-api/q";
+          let query_args =
+            expect_some "query args" (Edn_util.as_seq (invoke_args query_body))
+          in
+          let query =
+            expect_some "query vector" (Edn_util.as_seq (Vec.nth query_args 1))
+          in
+          expect_int "query and inputs" 3 (Vec.length query);
+          expect_int64 "today sent as a journal day" 20261010L
+            (expect_some "today int" (Edn_util.as_int64 (Vec.nth query 1)));
+          expect_equal "status keyword forwarded unchanged"
+            "logseq.property/status.done"
+            (expect_some "status keyword"
+               (Edn_util.as_keyword (Vec.nth query 2)));
+          Js.Promise.resolve pass));
+
   test "CLI parity query list merges built-in and custom query metadata"
     (fun () ->
       let raw_config =
