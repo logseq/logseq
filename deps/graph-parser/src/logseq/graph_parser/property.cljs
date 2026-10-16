@@ -172,7 +172,7 @@
           ;; a block that starts with a code or math fence has its properties
           ;; after the closing fence (inside the fence they would be code)
           closing (when fence
-                    (some (fn [[i line]] (when (string/starts-with? (string/trim line) fence) i))
+                    (some (fn [[i line]] (when (= (string/trim line) fence) i))
                           (map-indexed vector (rest lines))))
           lines (cond
                   closing
