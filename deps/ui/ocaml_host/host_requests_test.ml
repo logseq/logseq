@@ -1981,6 +1981,37 @@ let () =
           && rect.y +. rect.h <= float height);
         check "Language menu must stop growing at 288 logical points"
           (rect.h <= 288. *. scale);
+        let key input =
+          A.handle surface (W.Input.Key_down (input, W.Input.mods_none, false))
+        in
+        ignore (key W.Input.End);
+        check "The actual select menu does not navigate to its final option"
+          (W.Ui.hl_item (A.ui surface) = last);
+        ignore (A.repaint surface);
+        let final = W.Rects.get (A.rects surface) last in
+        check "Keyboard navigation leaves the selected language offscreen"
+          (final.y >= rect.y && final.y +. final.h <= rect.y +. rect.h);
+        let activation = key W.Input.Return in
+        check "Select keyboard activation does not target its final option once"
+          (List.length
+             (List.filter
+                (function W.Dispatch (Press id) -> id = last | _ -> false)
+                activation)
+          = 1);
+        check "Select keyboard activation uses the visible logical coordinates"
+          (List.exists
+             (function
+               | W.Dispatch (PressDetail (id, detail)) when id = last ->
+                   detail.x >= final.x /. scale
+                   && detail.x <= (final.x +. final.w) /. scale
+                   && detail.y >= final.y /. scale
+                   && detail.y <= (final.y +. final.h) /. scale
+               | _ -> false)
+             activation);
+        ignore (key W.Input.Home);
+        check "The actual select menu does not return to its first option"
+          (W.Ui.hl_item (A.ui surface) = Lui_store.node_id (List.hd items));
+        ignore (A.repaint surface);
         let shift =
           Host_interaction.scroll_shifts
             ~store:(fun () -> store)

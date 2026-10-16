@@ -1104,12 +1104,14 @@ let () =
   in
   let spatial_index () = Host_interaction.hit_index hit_cache
     ~store ~rects ~epoch:!hit_epoch in
+  let component_input = ref false in
+  let on_component_input () = component_input := true in
   let handle_input input =
     match input with
     | Input.Move _ | Input.Button_down _ | Input.Button_up _
     | Input.Wheel _ | Input.Wheel_mods _ ->
-      Ui.handle ~spatial:(spatial_index ()) ui store rects input
-    | _ -> Ui.handle ui store rects input
+      Ui.handle ~spatial:(spatial_index ()) ~on_component_input ui store rects input
+    | _ -> Ui.handle ~on_component_input ui store rects input
   in
   (* Keep the macOS sidebar NSVisualEffectView frame
      glued to the sidebar column and splice the hole into the display
@@ -1231,10 +1233,11 @@ let () =
   in
   let text_input = Native_window.text_input () in
   let focused_text_input id =
-    let on = id <> 0 && Lui_store.mem store id
-             && text_entry (Lui_store.kind store id) in
+    let editable = id <> 0 && Lui_store.mem store id
+                   && text_entry (Lui_store.kind store id) in
+    let on = editable || Ui.menu_input_active ui store in
     Native_window.request_text_input text_input on;
-    if on then set_ime_rect (Rects.get rects id)
+    if editable then set_ime_rect (Rects.get rects id)
   in
   let quit = ref false in
   let rec apply_action = function
@@ -1675,7 +1678,6 @@ let () =
     | _ -> None
   in
   let on_dom_key ~down ~scancode ~keymod ~repeat =
-    if down then Host_metrics.note_key metrics (dom_key scancode);
     let mods = mods_of_keymod keymod in
     let target =
       let menu = Ui.open_menu ui in
@@ -1890,9 +1892,16 @@ let () =
     while !go do
       if Sdl.poll_event (Some e) then begin
         incr n;
+        component_input := false;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         metrics.event_count <- metrics.event_count + 1;
         let input = input_of_event e in
+        (match input with
+         | Some (Input.Key_down _) ->
+           Host_metrics.note_key metrics
+             (dom_key (Sdl.Event.get e Sdl.Event.keyboard_scancode))
+         | Some (Input.Text_input s) -> Host_metrics.note_text metrics s
+         | _ -> ());
         (match input with
          | Some (Input.Button_down (_,_,Input.Left,_,_)) -> Native_window.hold_pointer text_input true
          | Some (Input.Button_up (_,_,Input.Left,_)) -> Native_window.hold_pointer text_input false
@@ -1941,7 +1950,8 @@ let () =
            in
            let epoch0 = Ui.scroll_epoch ui in
            apply_actions (handle_input input);
-           if page_dir <> 0. && Ui.scroll_epoch ui = epoch0 then begin
+           if page_dir <> 0. && not !component_input
+              && Ui.scroll_epoch ui = epoch0 then begin
              let fid = Ui.focused ui in
              let editor_owns =
                fid <> 0
@@ -1960,8 +1970,7 @@ let () =
                end
            end;
            (match input with
-            | Input.Text_input s ->
-              Host_metrics.note_text metrics s;
+            | Input.Text_input s when not !component_input ->
               (* the editor sink's conduit reads text commits as
                  "insert" — Ui.handle's TextChanged path stays unused
                  because the extension admits no such event *)
@@ -1974,7 +1983,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        emit_dom_event e
+        if not !component_input then emit_dom_event e
         end
       end
       else go := false
@@ -2352,6 +2361,9 @@ let () =
     (* Caret geometry is text-entry only, and only when the anchor
        moved. A non-editable focus must not run this every frame. *)
     let fid = Ui.focused ui in
+    Native_window.request_text_input text_input
+      (Ui.menu_input_active ui store
+       || (fid <> 0 && text_entry (Lui_store.kind store fid)));
     if fid = 0 || not (text_entry (Lui_store.kind store fid)) then
       caret_key := (-1, -1, "", 0., 0., 0.)
     else begin
