@@ -82,28 +82,65 @@ let accepts filter row =
 
 module Command_set = Set.Make (String)
 
-let count filter =
-  List.fold_left (fun commands -> function
-      | Shortcut row when accepts filter row -> Command_set.add row.title commands
-      | _ -> commands) Command_set.empty items
-  |> Command_set.cardinal
-
-let visible_items ~query ~filter ~label =
-  let needle = String.lowercase_ascii (String.trim query) in
-  let matches row =
-    accepts filter row
-    && (needle = "" || Str_util.contains
-          (String.lowercase_ascii (label row)) needle)
+let unique_rows items =
+  let _, rows =
+    List.fold_left
+      (fun (seen, rows) -> function
+        | Shortcut row when not (Command_set.mem row.title seen) ->
+            (Command_set.add row.title seen, row :: rows)
+        | _ -> (seen, rows))
+      (Command_set.empty, []) items
   in
+  List.rev rows
+
+let command_name row =
+  let title = String.sub row.title 1 (String.length row.title - 1) in
+  let id =
+    match String.index_opt title '#' with
+    | Some index -> String.sub title 0 index
+    | None -> title
+  in
+  match String.rindex_opt id '/' with
+  | Some index -> String.sub id (index + 1) (String.length id - index - 1)
+  | None -> id
+
+let query_items ~query ~label =
+  let query = String.trim query in
   let flush category rows result =
-    match category, rows with
-    | Some category, _ :: _ -> List.rev_append (Category category :: List.rev rows) result
+    let rows = List.rev rows in
+    let rows =
+      if query = "" then rows
+      else
+        Fuzzy.fuzzy_search ~limit:max_int
+          ~extract:(fun row -> command_name row ^ " " ^ label row)
+          rows query
+    in
+    match (category, rows) with
+    | Some category, _ :: _ ->
+        List.rev_append
+          (Category category :: List.map (fun row -> Shortcut row) rows)
+          result
     | _ -> result
   in
   let category, rows, result =
-    List.fold_left (fun (category, rows, result) -> function
-        | Category next -> Some next, [], flush category rows result
-        | Shortcut row when matches row -> category, Shortcut row :: rows, result
-        | _ -> category, rows, result) (None, [], []) items
+    List.fold_left
+      (fun (category, rows, result) -> function
+        | Category next -> (Some next, [], flush category rows result)
+        | Shortcut row -> (category, row :: rows, result))
+      (None, [], []) items
   in
   List.rev (flush category rows result)
+
+let count ?(query = "") ?(label = fun row -> row.label) filter =
+  query_items ~query ~label |> unique_rows
+  |> List.fold_left
+       (fun count row -> if accepts filter row then count + 1 else count)
+       0
+
+let visible_items ~query ~filter ~label =
+  let matched = query_items ~query ~label in
+  if filter = All then matched
+  else
+    unique_rows matched
+    |> List.filter_map (fun row ->
+        if accepts filter row then Some (Shortcut row) else None)

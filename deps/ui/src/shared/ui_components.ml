@@ -656,9 +656,26 @@ let form_desc ~key ~value : t =
    the same content box on every host. Trailing controls remain in row flow. *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
     ?pad_right ?background ?(borderless = false) ?(trailing = []) ?autofocus
-    ~placeholder ~text_signal:text ~on_text () : t =
+    ?clear_label ?on_clear ~placeholder ~text_signal:text ~on_text () : t =
   let on_input ev =
     match ev with P.TextChanged (_, q) -> on_text q | _ -> ()
+  in
+  let clear =
+    match clear_label with
+    | None -> []
+    | Some label ->
+        [
+          if_
+            ~test:(reactive (fun value -> String.trim value <> "") text)
+            (with_props
+               [ Prop.position `absolute; Prop.inset_right 4. ]
+               (button ~key:"clear" ~variant:`ghost ~width:20 ~height:20
+                  ~min_width:0 ~min_height:0 ~padding:4 ~label ~icon:`x
+                  ~on_press:(fun _ ->
+                    on_text "";
+                    Option.iter (fun focus -> focus ()) on_clear)
+                  []));
+        ]
   in
   with_props
     [ Prop.position `relative ]
@@ -671,6 +688,8 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
             if borderless then [ Prop.border_width 0; Prop.focus_shadow "none" ]
             else [])
             (search_field ~key:"in" ~grow:1. ~min_width:0 ~height ?background
+               ?style_class:
+                 (Option.map (fun _ -> "ls-search-with-clear") clear_label)
                ~placeholder ?autofocus ~text_signal:text ~on_input []);
           with_props
             [
@@ -681,7 +700,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
             ]
             (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ]);
         ]
-       @ trailing))
+       @ clear @ trailing))
 
 (* Settings nav item — `.settings-menu-item` visual spec: 6/8px padding,
    4px radius, 14px/20px type; hover and active paint ride the
@@ -723,7 +742,7 @@ let nav_item ~key ~data_id ~icon:icon_ ~text:label ~selected_signal:selected
    `radius`/`pad_v`/`pad_h`/`font_size` select the variant. The kind has
    no background/opacity signal channels, so the paint rides a reactive
    rebuild on `checked`. *)
-let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
+let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ?text ?text_signal
     ~checked_signal:checked ?(off_opacity = 0.7) ?(on_border = true)
     ?(on_background =
         "var(--lx-gray-04, var(--ls-tertiary-background-color, \
@@ -735,7 +754,7 @@ let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ~text
       ; Prop.opacity (if c then 1. else off_opacity)
       ; Prop.hover_opacity 1.
       ]
-      (toggle_button ~key ~variant:`ghost ~text ~foreground:"inherit"
+      (toggle_button ~key ~variant:`ghost ?text ?text_signal ~foreground:"inherit"
          ~checked:c ~on_toggle
          ~min_height:0 ~height:(pad_v * 2 + 14) ~padding_vertical:pad_v
          ~padding_horizontal:pad_h ~corner_radius:radius

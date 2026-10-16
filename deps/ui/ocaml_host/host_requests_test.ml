@@ -3052,6 +3052,75 @@ let () =
             (List.mem search
                (W.hit_path store (A.rects surface) ~x:(search_region.x +. 24.)
                   ~y:(search_region.y +. (search_region.h /. 2.))));
+          let previous_app = !Native_embed.current_app
+          and previous_flush = !Runtime.app_flush
+          and previous_provider = !Dom_ext.doc_elements_provider
+          and previous_host_op = !Host.host_op in
+          Fun.protect
+            ~finally:(fun () ->
+              Native_embed.current_app := previous_app;
+              Runtime.app_flush := previous_flush;
+              Dom_ext.doc_elements_provider := previous_provider;
+              Host.host_op := previous_host_op)
+            (fun () ->
+              Native_embed.current_app := Some app;
+              (Runtime.app_flush := fun () -> ignore (Lui_app.flush app));
+              Dom_ext.doc_elements_provider := Native_embed.collect_elements;
+              let focused_input = ref 0 in
+              let env : Host_requests.env =
+                {
+                  store;
+                  ui = A.ui surface;
+                  rects = A.rects surface;
+                  rect_of = rect;
+                  scale = (fun () -> 2.);
+                  measure =
+                    (fun _ _ -> failwith "Unexpected keymap measurement request");
+                  text_layout =
+                    (fun _ _ -> failwith "Unexpected keymap text-layout request");
+                  apply_batch = (fun _ -> failwith "Unexpected keymap batch request");
+                  apply_actions = (fun _ -> failwith "Unexpected keymap action request");
+                  set_ime_rect = (fun _ -> failwith "Unexpected keymap IME request");
+                  focused_text_input = (fun id -> focused_input := id);
+                  repaint = (fun () -> failwith "Unexpected keymap repaint request");
+                }
+              in
+              (Host.host_op :=
+                 fun name body ->
+                   if name <> "dom-op" then
+                     failwith ("Unexpected keymap host request: " ^ name);
+                   let separator = String.index body '\n' in
+                   Host_requests.dom_op env
+                     (String.sub body 0 separator)
+                     (String.sub body (separator + 1)
+                        (String.length body - separator - 1)));
+              let dispatch event =
+                ignore (Lui_app.dispatch_event app event);
+                ignore (Lui_app.flush app)
+              in
+              let count_class name =
+                List.length
+                  (List.filter (fun id -> has_class id name) (Lui_store.preorder store))
+              in
+              dispatch (TextChanged (search, "Undo"));
+              expect "Native Keymap search does not retain categorized fuzzy matches"
+                (count_class "shortcut-row" = 13 && count_class "th" = 0);
+              let clear =
+                List.find
+                  (fun id ->
+                    Lui_store.string_prop store id "accessibility-label"
+                    = Some (I18n.t "keymap/clear-search"))
+                  (Lui_store.preorder store)
+              in
+              W.Ui.set_focused (A.ui surface) store clear;
+              dispatch (Press clear);
+              expect "Native query clear must preserve the field and reset its text"
+                (Lui_store.string_prop store search "text" = Some ""
+                && List.mem search (Lui_store.preorder store));
+              expect "Native query clear must restore host text-input focus"
+                (W.Ui.focused (A.ui surface) = search && !focused_input = search);
+              expect "Native query clear must restore category headings"
+                (count_class "th" > 0));
           List.iter prerr_endline (List.rev !errors);
           check "Native Keymap visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"

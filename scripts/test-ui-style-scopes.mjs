@@ -30,3 +30,15 @@ test('selector groups do not absorb a following section', async () => {
   })
   assert.deepEqual(mixedSections, [], 'Remove obsolete selectors with their migrated declarations')
 })
+
+test('a shared search clear action owns browser cancel chrome', async () => {
+  const source = await readFile(stylesheet, 'utf8')
+  const root = postcss.parse(source, { from: stylesheet.pathname })
+  const owners = []
+  root.walkRules(rule => {
+    if (rule.selector !== '.ls-search-with-clear::-webkit-search-cancel-button') return
+    owners.push(rule.nodes.some(node => node.type === 'decl'
+      && node.prop === '-webkit-appearance' && node.value === 'none'))
+  })
+  assert.deepEqual(owners, [true], 'Only fields with a shared clear action suppress browser cancel chrome')
+})

@@ -106,6 +106,73 @@ let run_views ~registry ~profile ~finish =
   check "reopening settings starts with its language picker closed"
     (not (List.exists (fun n -> n.M.kind = "dropdown-menu") (nodes reopened)));
   ignore (Lui_app.dispose reopened.S.app);
+  let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  let keymap_nodes () = nodes keymap in
+  let keymap_rows () =
+    List.filter (fun n -> class_has n "shortcut-row") (keymap_nodes ())
+  in
+  let input =
+    List.find (fun n -> n.M.kind = "search-field") (keymap_nodes ())
+  in
+  let clear_buttons () =
+    List.filter
+      (fun n ->
+        M.string_prop n "accessibility-label"
+        = Some (I18n.t "keymap/clear-search"))
+      (keymap_nodes ())
+  in
+  let category_headers () =
+    List.filter (fun n -> class_has n "th") (keymap_nodes ())
+  in
+  let pill prefix =
+    List.find
+      (fun n ->
+        match M.string_prop n "text" with
+        | Some text -> String.starts_with ~prefix text
+        | None -> false)
+      (keymap_nodes ())
+  in
+  check "keymap initially hides query clear" (clear_buttons () = []);
+  S.text_changed keymap input.M.id "Undo";
+  check "keymap search uses fuzzy command identifiers and descriptions"
+    (List.length (keymap_rows ()) > 1);
+  check "query results flatten categories" (category_headers () = []);
+  eqi "query results retain matches in their original categories" 13
+    (List.length (keymap_rows ()));
+  check "query counts follow matching commands"
+    (M.string_prop (pill "All") "text"
+    <> Some
+         (I18n.keymap_all
+         ^ Ui_services.literal_text " · "
+         ^ string_of_int (Keymap_data.count Keymap_data.All)));
+  eqi "nonempty query shows exactly one clear control" 1
+    (List.length (clear_buttons ()));
+  S.toggle keymap (pill "Disabled").M.id true;
+  eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
+  S.toggle keymap (pill "Disabled").M.id false;
+  eqi "pressing the active filter restores all query results" 13
+    (List.length (keymap_rows ()));
+  S.toggle keymap (pill "Disabled").M.id true;
+  (match clear_buttons () with
+  | [ clear ] -> S.press keymap clear.M.id
+  | _ -> ());
+  check "query clear resets text without replacing the search field"
+    (M.string_prop input "text" = Some ""
+    && List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()));
+  check "query clear removes its control" (clear_buttons () = []);
+  S.toggle keymap (pill "All").M.id true;
+  check "all without a query restores category headers"
+    (category_headers () <> []);
+  S.text_changed keymap input.M.id "zzzz-no-shortcut";
+  check "empty keymap search shows its translated empty state"
+    (List.exists
+       (fun n ->
+         M.string_prop n "text" = Some (I18n.t "keymap/no-matching-shortcuts"))
+       (keymap_nodes ()));
+  S.text_changed keymap input.M.id "  ";
+  check "whitespace query restores categories and hides clear"
+    (category_headers () <> [] && clear_buttons () = []);
+  ignore (Lui_app.dispose keymap.S.app);
   let storage_key = "parity-server-url" in
   let previous_url = Ui_services.storage_get storage_key in
   Ui_services.storage_remove storage_key;

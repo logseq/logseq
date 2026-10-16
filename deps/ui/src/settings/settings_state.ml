@@ -334,3 +334,8 @@ let set_date_format fmt =
            ; Wire.String fmt
            ])
   | None -> ()
+
+let focus_keymap_search () =
+  match Ui_services.dom_query ".cp__shortcut-page-x input" with
+  | Some input -> input.Ui_services.focus ()
+  | None -> ()

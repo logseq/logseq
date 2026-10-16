@@ -377,68 +377,115 @@ type keymap_model =
   ; km_collapsed : string list
   }
 
+(* ":<id>#<handler>" -> the command.<id> dict key *)
+let command_key_of (title : string) : string =
+  let s =
+    if String.length title > 0 && String.get title 0 = ':' then
+      String.sub title 1 (String.length title - 1)
+    else title
+  in
+  let s =
+    match String.index_opt s '#' with
+    | Some i -> String.sub s 0 i
+    | None -> s
+  in
+  "command." ^ s
+
+let keymap_label row = I18n.t (command_key_of row.Keymap_data.title)
+
 let keymap_pill st ~key ~title filter =
   let active s = s.km_filter = filter in
   Ui_components.chip_toggle ~key ~radius:9999 ~pad_v:2 ~pad_h:8
     ~font_size:"0.75rem"
-    ~text:(title ^ Ui_services.literal_text " \xc2\xb7 " ^ string_of_int (Keymap_data.count filter))
+    ~text:
+      (reactive
+         (fun s ->
+           title
+           ^ Ui_services.literal_text " \xc2\xb7 "
+           ^ string_of_int
+               (Keymap_data.count ~query:s.km_query ~label:keymap_label filter))
+         (Signal.value st))
     ~checked:(reactive active (Signal.value st))
     ~on_toggle:(fun _ ->
-        Runtime.signal_set st { (Runtime.signal_get st) with km_filter = filter }) ()
+      let model = Runtime.signal_get st in
+      Runtime.signal_set st
+        {
+          model with
+          km_filter =
+            (if model.km_filter = filter then Keymap_data.All else filter);
+        })
+    ()
 
 let keymap_controls st =
-  let categories = List.filter_map (function
-      | Keymap_data.Category title -> Some title | _ -> None) Keymap_data.items in
-  column ~key:"km-ctl"
-    ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
+  let categories =
+    List.filter_map
+      (function Keymap_data.Category title -> Some title | _ -> None)
+      Keymap_data.items
+  in
+  column ~key:"km-ctl" ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
     ~margin_top:22 ~margin_bottom:8
-    [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
+    [
+      row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
         ~main:`space_between ~flex_wrap:`wrap ~gap:8
-        [ box ~key:"km-sw-w" ~grow:1. ~min_width:0
-            [ Ui_components.search_row ~key:"km-sw" ~height:26
+        [
+          box ~key:"km-sw-w" ~grow:1. ~min_width:0
+            [
+              Ui_components.search_row ~key:"km-sw" ~height:26
                 ~font_size:"0.875rem" ~pad_left:28 ~pad_right:28 ~autofocus:true
                 ~placeholder:T.keymap_search_placeholder
                 ~text_signal:(reactive (fun s -> s.km_query) (Signal.value st))
+                ~clear_label:(I18n.t "keymap/clear-search")
+                ~on_clear:S.focus_keymap_search
                 ~on_text:(fun query ->
-                    Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }) ()
+                  Runtime.signal_set st
+                    { (Runtime.signal_get st) with km_query = query })
+                ();
+            ];
+          Ui_components.with_props
+            [
+              Ui_components.Prop.hover_background
+                "var(--lx-gray-04, var(--ls-quaternary-background-color, \
+                 hsl(var(--accent))))";
             ]
-        ; Ui_components.with_props
-            [ ( Ui_components.Prop.hover_background
-                  "var(--lx-gray-04, var(--ls-quaternary-background-color, \
-                   hsl(var(--accent))))" ) ]
-            (button ~key:"km-kb"
-               ~style_class:"shortcut-keystroke-inactive"
-               ~height:30 ~min_height:0 ~min_width:144
-               ~padding_vertical:0 ~padding_horizontal:10 ~corner_radius:6
-               ~border_width:1
+            (button ~key:"km-kb" ~style_class:"shortcut-keystroke-inactive"
+               ~height:30 ~min_height:0 ~min_width:144 ~padding_vertical:0
+               ~padding_horizontal:10 ~corner_radius:6 ~border_width:1
                ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
                ~background:"var(--lx-gray-02, hsl(var(--muted)))"
-               ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys [])
-        ]
-    ; row ~key:"km-pills" ~style_class:"shortcut-pills-row"
-        ~cross:`center ~main:`space_between ~gap:8 ~flex_wrap:`wrap
-        [ toggle_group ~key:"km-fp"
-            ~gap:4 ~style_class:"shortcut-filter-pills" ~border_width:0
-            ~background:"transparent"
-            [ keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All
-            ; keymap_pill st ~key:"km-pc" ~title:T.keymap_custom Keymap_data.Custom
-            ; keymap_pill st ~key:"km-pu" ~title:T.keymap_unset Keymap_data.Unset
-            ; keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled Keymap_data.Disabled
-            ]
-        ; row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
+               ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys []);
+        ];
+      row ~key:"km-pills" ~style_class:"shortcut-pills-row" ~cross:`center
+        ~main:`space_between ~gap:8 ~flex_wrap:`wrap
+        [
+          toggle_group ~key:"km-fp" ~gap:4 ~style_class:"shortcut-filter-pills"
+            ~border_width:0 ~background:"transparent"
+            [
+              keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All;
+              keymap_pill st ~key:"km-pc" ~title:T.keymap_custom
+                Keymap_data.Custom;
+              keymap_pill st ~key:"km-pu" ~title:T.keymap_unset
+                Keymap_data.Unset;
+              keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled
+                Keymap_data.Disabled;
+            ];
+          row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
             ~height:22 ~gap:8
-            [ button ~key:"km-fold" ~style_class:"icon-link"
-                ~width:18 ~height:18 ~min_width:0 ~min_height:0 ~padding:0
+            [
+              button ~key:"km-fold" ~style_class:"icon-link" ~width:18
+                ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                 ~label:T.keymap_toggle_categories ~icon:(`app "fold")
                 ~on_press:(fun _ ->
-                    let model = Runtime.signal_get st in
-                    let collapsed = if model.km_collapsed = [] then categories else [] in
-                    Runtime.signal_set st { model with km_collapsed = collapsed }) []
-            ; button ~key:"km-rf" ~style_class:"icon-link"
-                ~width:18 ~height:18 ~min_width:0 ~min_height:0 ~padding:0
-                ~label:T.keymap_refresh_all ~icon:(`app "refresh") []
-            ]
-        ]
+                  let model = Runtime.signal_get st in
+                  let collapsed =
+                    if model.km_collapsed = [] then categories else []
+                  in
+                  Runtime.signal_set st { model with km_collapsed = collapsed })
+                [];
+              button ~key:"km-rf" ~style_class:"icon-link" ~width:18 ~height:18
+                ~min_width:0 ~min_height:0 ~padding:0
+                ~label:T.keymap_refresh_all ~icon:(`app "refresh") [];
+            ];
+        ];
     ]
 
 let keymap_binding ~key (b : Keymap_data.binding) =
@@ -489,20 +536,6 @@ let keymap_category = function
   | "Plugins" -> "shortcut.category/plugins"
   | _ -> "shortcut.category/others"
 
-(* ":<id>#<handler>" -> the command.<id> dict key *)
-let command_key_of (title : string) : string =
-  let s =
-    if String.length title > 0 && String.get title 0 = ':' then
-      String.sub title 1 (String.length title - 1)
-    else title
-  in
-  let s =
-    match String.index_opt s '#' with
-    | Some i -> String.sub s 0 i
-    | None -> s
-  in
-  "command." ^ s
-
 let keymap_th ~key ~collapsed ~on_press label =
   list_item ~key ~style_class:"th" ~on_press
     ~min_height:30 ~margin_bottom:8
@@ -547,41 +580,67 @@ let keymap_row ~key (r : Keymap_data.row) =
 
 let keymap_pane () : t =
  fun context parent ->
-  let st = Signal.state context.Lui_ui.ui_scheduler
-      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [] } in
+  let st =
+    Signal.state context.Lui_ui.ui_scheduler
+      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [] }
+  in
   let rows model =
-    let items = Keymap_data.visible_items ~query:model.km_query ~filter:model.km_filter
-        ~label:(fun row -> I18n.t (command_key_of row.Keymap_data.title)) in
-    let _, _, elements = List.fold_left (fun (category, visible, elements) item ->
-        match item with
-        | Keymap_data.Category label ->
-            let collapsed = List.mem label model.km_collapsed in
-            let header = keymap_th ~key:("km-category-" ^ label) ~collapsed label
-                ~on_press:(fun _ ->
+    let items =
+      Keymap_data.visible_items ~query:model.km_query ~filter:model.km_filter
+        ~label:keymap_label
+    in
+    let _, _, elements =
+      List.fold_left
+        (fun (category, visible, elements) item ->
+          match item with
+          | Keymap_data.Category label when String.trim model.km_query <> "" ->
+              (label, true, elements)
+          | Keymap_data.Category label ->
+              let collapsed = List.mem label model.km_collapsed in
+              let header =
+                keymap_th ~key:("km-category-" ^ label) ~collapsed label
+                  ~on_press:(fun _ ->
                     let current = Runtime.signal_get st in
-                    let collapsed = if List.mem label current.km_collapsed then
-                        List.filter ((<>) label) current.km_collapsed
-                      else label :: current.km_collapsed in
-                    Runtime.signal_set st { current with km_collapsed = collapsed }) in
-            label, not collapsed, header :: elements
-        | Keymap_data.Shortcut row when visible ->
-            category, visible,
-            keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row :: elements
-        | _ -> category, visible, elements) ("", true, []) items in
-    list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
-      ~margin:0 ~padding:0 (List.rev elements)
+                    let collapsed =
+                      if List.mem label current.km_collapsed then
+                        List.filter (( <> ) label) current.km_collapsed
+                      else label :: current.km_collapsed
+                    in
+                    Runtime.signal_set st
+                      { current with km_collapsed = collapsed })
+              in
+              (label, not collapsed, header :: elements)
+          | Keymap_data.Shortcut row when visible ->
+              ( category,
+                visible,
+                keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row
+                :: elements )
+          | _ -> (category, visible, elements))
+        ("", true, []) items
+    in
+    if items = [] then
+      column ~key:"km-empty" ~cross:`center ~gap:8 ~padding:24
+        [
+          icon ~name:`search ~size:`lg [];
+          text ~value:(I18n.t "keymap/no-matching-shortcuts") [];
+        ]
+    else
+      list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
+        ~margin:0 ~padding:0 (List.rev elements)
   in
   (Ui_components.with_props
-     [ Ui_components.Prop.font_size "0.875rem"
-     ; Ui_components.Prop.line_height "1.25rem"
+     [
+       Ui_components.Prop.font_size "0.875rem";
+       Ui_components.Prop.line_height "1.25rem";
      ]
-   (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
-      ~grow:1. ~min_height:0
-     [ keymap_controls st
-     ; scroll ~key:"km-art" ~orientation:`vertical ~grow:1.
-         ~min_height:0
-         [ reactive rows (Signal.value st) ]
-     ])) context parent
+     (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" ~grow:1.
+        ~min_height:0
+        [
+          keymap_controls st;
+          scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0
+            [ reactive rows (Signal.value st) ];
+        ]))
+    context parent
 
 (* ---- advanced pane ---- *)
 

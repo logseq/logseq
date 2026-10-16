@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test, {after} from 'node:test';
+import {measureKeymapSearch, assertKeymapSearch} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
 
@@ -438,5 +439,26 @@ test('keymap filter selection retains readable text on its muted surface', () =>
       verify();
     }
   }
+  button('Close');
+});
+
+test('keymap query ranks commands, updates counts and clears without replacing its field', () => {
+  open();
+  openSettings();
+  button('Keymap');
+  const measure = () => evaluate(`(${measureKeymapSearch.toString()})(document.querySelector('[role="dialog"]'))`);
+  const inputId = measure().inputId;
+  browser('fill', `#${inputId}`, 'Undo');
+  assertKeymapSearch(measure(), {query: 'Undo', inputId});
+  button('Disabled · 1');
+  assert.equal(measure().labels.length, 1);
+  button('Disabled · 1');
+  assertKeymapSearch(measure(), {query: 'Undo', inputId});
+  button('Clear search');
+  assertKeymapSearch(measure(), {query: '', inputId, focused: true});
+  browser('fill', `#${inputId}`, 'zzzz-no-shortcut');
+  assertKeymapSearch(measure(), {query: 'zzzz-no-shortcut', inputId});
+  button('Clear search');
+  assertKeymapSearch(measure(), {query: '', inputId, focused: true});
   button('Close');
 });

@@ -28,6 +28,11 @@
 
 /* ---- shared -------------------------------------------------------- */
 
+/* Shared search controls provide their own accessible clear action. */
+.ls-search-with-clear::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
 .hidden {
   display: none;
 }
