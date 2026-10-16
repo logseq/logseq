@@ -9,6 +9,7 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
+   (java.io File)
    (java.nio.file Paths)
    (java.util.function Consumer)))
 
@@ -20,6 +21,13 @@
   (-> (Paths/get (str "../" relative-path) (into-array String []))
       (.toAbsolutePath)
       (.normalize)))
+
+(defn- temp-txt-asset
+  [contents]
+  (let [file (File/createTempFile "logseq-e2e-notes-" ".txt")]
+    (.deleteOnExit file)
+    (spit file contents)
+    (.toPath file)))
 
 (deftest image-upload-lightbox-and-resize-test
   (testing "uploaded images create stable asset blocks and retain resized metadata"
@@ -101,3 +109,31 @@
         (assert/assert-is-visible (w/get-by-text "Are you sure you want to delete this image?"))
         (w/click (w/get-by-text "Confirm"))
         (assert/assert-have-count ".ls-page-blocks .asset-container img" 0)))))
+
+(deftest non-media-asset-upload-and-reuse-test
+  (testing "txt assets render as clickable links and re-upload inserts a reference"
+    (let [page (w/get-page)
+          txt-file (temp-txt-asset (str "logseq e2e notes " (random-uuid)))
+          pending-files (atom [txt-file txt-file])
+          chooser-handler (reify Consumer
+                            (accept [_ chooser]
+                              (let [file (first @pending-files)]
+                                (swap! pending-files rest)
+                                (.setFiles chooser
+                                           (into-array java.nio.file.Path [file])))))]
+      (.onFileChooser page chooser-handler)
+      (b/new-block "")
+      (util/input-command "Upload an asset")
+      (util/exit-edit)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 1)
+      (let [link (.first (w/-query ".ls-page-blocks a.asset-ref"))]
+        (is (not (string/blank? (.getAttribute link "href"))))
+        (is (string/ends-with? (or (.getAttribute link "download")
+                                   (.innerText link))
+                               ".txt")))
+      (b/new-block "")
+      (util/input-command "Upload an asset")
+      (w/wait-for (util/get-by-text "Asset exists already" false))
+      (util/exit-edit)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 2)
+      (.offFileChooser page chooser-handler))))

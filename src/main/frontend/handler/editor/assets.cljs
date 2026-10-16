@@ -37,6 +37,10 @@
   (p/let [buffer (.arrayBuffer file)]
     (fs/write-asset-file! repo file-path buffer)))
 
+(defn- existing-asset-ref-block
+  [existing-asset]
+  {:block/title (ref/->page-ref (:block/uuid existing-asset))})
+
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]
   ;; WARN file name maybe fully qualified path when paste file
@@ -55,7 +59,7 @@
         (notification/show! (t :asset/already-exists (:block/title existing-asset) (:block/uuid existing-asset))
                             :warning
                             false)
-        nil)
+        {::existing-asset existing-asset})
       ;; new asset block
       (let [block-id (or (:block/uuid opts) (ldb/new-block-id))
             ext (when file-name (db-asset/asset-path->type file-name))
@@ -113,7 +117,22 @@
                                          :asset-dir-rpath asset-dir-rpath
                                          :block/uuid (when (and (zero? idx) empty-target?)
                                                        (:block/uuid edit-block))})))
-            blocks (remove nil? blocks*)
+            existing-assets (keep ::existing-asset blocks*)
+            new-asset-blocks (remove ::existing-asset blocks*)
+            ;; Re-uploading an existing file should still insert a reference when
+            ;; the user is dropping/pasting into a block. Property pickers and
+            ;; other callers without an editor target only need the entity.
+            ;; Reuse the empty editor block's uuid so replace-empty-target? and
+            ;; the later edit-block! keep the editor in sync (otherwise exit-edit
+            ;; saves the stale empty title over the inserted ref).
+            ref-blocks (when (or edit-block target-block)
+                         (map-indexed
+                          (fn [idx asset]
+                            (cond-> (existing-asset-ref-block asset)
+                              (and (zero? idx) empty-target? (:block/uuid edit-block))
+                              (assoc :block/uuid (:block/uuid edit-block))))
+                          existing-assets))
+            blocks (concat new-asset-blocks ref-blocks)
             insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (not pdf-area?)))
             target (cond
                      target-block
@@ -131,19 +150,27 @@
         (throw (ex-info "invalid target" {:files files
                                           :asset-page asset-page
                                           :edit-block edit-block})))
-      (when (seq blocks)
-        (p/do!
+      (p/do!
+       (when (seq blocks)
          (ui-outliner-tx/transact!
           {:outliner-op :insert-blocks}
           (outliner-op/insert-blocks! blocks target {:keep-uuid? true
                                                      :bottom? true
                                                      :sibling? (boolean (and edit-block (= edit-block target)))
-                                                     :replace-empty-target? insert-to-current-block-page?}))
-         (p/let [results (db-async/<get-blocks repo (map :block/uuid blocks) {:children? false})
-                 blocks (editor/unwrap-block-results results)]
-           (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]
-             (editor/edit-block! block :max))
-           blocks))))))
+                                                     :replace-empty-target? insert-to-current-block-page?})))
+       (p/let [results (if (seq new-asset-blocks)
+                         (db-async/<get-blocks repo (map :block/uuid new-asset-blocks) {:children? false})
+                         [])
+               fetched (editor/unwrap-block-results results)
+               edit-target (or (some (fn [block]
+                                       (when (= (:block/uuid block) (:block/uuid edit-block))
+                                         block))
+                                     fetched)
+                               (when (and empty-target? (seq ref-blocks) (:block/uuid edit-block))
+                                 (assoc edit-block :block/title (:block/title (first ref-blocks)))))]
+         (when edit-target
+           (editor/edit-block! edit-target :max))
+         (concat fetched existing-assets))))))
 
 
 (defn db-upload-assets!
