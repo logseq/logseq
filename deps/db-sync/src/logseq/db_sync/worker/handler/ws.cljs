@@ -7,56 +7,65 @@
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
 
+(defn- token-expired?
+  [user]
+  (when-let [exp (:exp user)]
+    (<= exp (js/Math.floor (/ (.now js/Date) 1000)))))
+
 (defn handle-ws-message! [^js self ^js ws raw]
-  (let [message (-> raw protocol/parse-message ws/coerce-ws-client-message)]
-    (if-not (map? message)
-      (ws/send! ws {:type "error" :message "invalid request"})
-      (case (:type message)
-        "hello"
-        (let [checksum (sync-handler/current-checksum self)]
-          (ws/send! ws (cond-> {:type "hello"
-                                :t (sync-handler/t-now self)}
-                         (string? checksum) (assoc :checksum checksum))))
+  ;; The socket was authorized at upgrade time; an access token that has since
+  ;; expired must not keep full write access.
+  (if (token-expired? (presence/get-user self ws))
+    (.close ws 1000 "token expired")
+    (let [message (-> raw protocol/parse-message ws/coerce-ws-client-message)]
+      (if-not (map? message)
+        (ws/send! ws {:type "error" :message "invalid request"})
+        (case (:type message)
+          "hello"
+          (let [checksum (sync-handler/current-checksum self)]
+            (ws/send! ws (cond-> {:type "hello"
+                                  :t (sync-handler/t-now self)}
+                           (string? checksum) (assoc :checksum checksum))))
 
-        "ping"
-        (ws/send! ws {:type "pong"})
+          "ping"
+          (ws/send! ws {:type "pong"})
 
-        "presence"
-        (let [editing-block-uuid (:editing-block-uuid message)
-              user (presence/get-user self ws)]
-          (presence/update-presence! self ws {:editing-block-uuid editing-block-uuid})
-          (ws/broadcast! self ws {:type "presence"
-                                  :editing-block-uuid editing-block-uuid
-                                  :user-id (:user-id user)}))
+          "presence"
+          (let [editing-block-uuid (:editing-block-uuid message)
+                user (presence/get-user self ws)]
+            (presence/update-presence! self ws {:editing-block-uuid editing-block-uuid})
+            (ws/broadcast! self ws {:type "presence"
+                                    :editing-block-uuid editing-block-uuid
+                                    :user-id (:user-id user)}))
 
-        "pull"
-        (let [raw-since (:since message)
-              since (if (some? raw-since) (sync-handler/parse-int raw-since) 0)]
-          (if (or (and (some? raw-since) (not (number? since))) (neg? since))
-            (ws/send! ws {:type "error" :message "invalid since"})
-            (ws/send! ws (sync-handler/pull-response self since))))
+          "pull"
+          (let [raw-since (:since message)
+                since (if (some? raw-since) (sync-handler/parse-int raw-since) 0)]
+            (if (or (and (some? raw-since) (not (number? since))) (neg? since))
+              (ws/send! ws {:type "error" :message "invalid since"})
+              (ws/send! ws (sync-handler/pull-response self since))))
 
-        ;; "snapshot"
-        ;; (send! ws (snapshot-response self))
+          ;; "snapshot"
+          ;; (send! ws (snapshot-response self))
 
-        "tx/batch"
-        (let [txs (:txs message)
-              user (presence/get-user self ws)
-              t-before (sync-handler/parse-int (:t-before message))]
-          (if (sequential? txs)
-            (ws/send! ws (sync-handler/handle-tx-batch!
-                          self
-                          ws
-                          txs
-                          t-before
-                          (cond-> {:graph-id (aget self "graph-id")}
-                            (:client-revision message)
-                            (assoc :client-revision (:client-revision message))
-                            (:username user)
-                            (assoc :username (:username user)))))
-            (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
+          "tx/batch"
+          (let [txs (:txs message)
+                user (presence/get-user self ws)
+                t-before (sync-handler/parse-int (:t-before message))]
+            (if (sequential? txs)
+              (ws/send! ws (sync-handler/handle-tx-batch!
+                            self
+                            ws
+                            txs
+                            t-before
+                            (cond-> {:graph-id (aget self "graph-id")}
+                              (:client-revision message)
+                              (assoc :client-revision (:client-revision message))
+                              (:username user)
+                              (assoc :username (:username user)))))
+              (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
 
-        (ws/send! ws {:type "error" :message "unknown type"})))))
+          (ws/send! ws {:type "error" :message "unknown type"}))))))
 
 (defn handle-ws [^js self request]
   (let [graph-id (sync-handler/graph-id-from-request request)]

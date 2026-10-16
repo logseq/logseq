@@ -59,9 +59,14 @@
   (p/let [claims (auth/auth-claims request env)
           user-id (when claims (aget claims "sub"))
           db (aget env "DB")]
-    (if (string? user-id)
-      (index/<user-has-access-to-graph? db graph-id user-id)
-      false)))
+    (cond
+      (nil? claims) false
+      ;; Tokens granted to third-party OAuth clients are confined to the
+      ;; semantic API surface; they never open a sync WebSocket.
+      (auth/third-party-oauth-token? claims env) false
+      :else (if (string? user-id)
+              (index/<user-has-access-to-graph? db graph-id user-id)
+              false))))
 
 (defn- attach-ws! [^js ctx ^js socket]
   (let [state (.-state ctx)]

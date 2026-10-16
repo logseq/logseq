@@ -17,11 +17,9 @@
      (let [coerced (coerce/coerce coercer data {:schema schema-key :dir :response})]
        (if (= coerced coerce/invalid-coerce)
          (do
-           (js/console.error "DEBUG json-response coercion FAILED for" (pr-str schema-key) "data:" (pr-str data))
+           (js/console.error "json-response coercion FAILED for" (pr-str schema-key) "data:" (pr-str data))
            (common/json-response
-            {:error "server error"
-             :debug-coercion-failed (pr-str schema-key)
-             :debug-data (pr-str data)}
+            {:error "server error"}
             500))
          (common/json-response coerced status)))
      (common/json-response data status))))
