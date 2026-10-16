@@ -347,6 +347,21 @@
       {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
        :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)})))
 
+(defn- valid-block-tree?
+  "A non-empty list of blocks, each a map with a string :title and optional
+  :children of the same shape."
+  [nodes]
+  (and (sequential? nodes)
+       (seq nodes)
+       (every? (fn [node]
+                 (and (map? node)
+                      (string? (:title node))
+                      (or (nil? (:children node))
+                          (and (sequential? (:children node))
+                               (or (empty? (:children node))
+                                   (valid-block-tree? (:children node)))))))
+               nodes)))
+
 (defn- tree-block [conn e2ee? node]
   (assoc (prepare-block-title! conn e2ee? (:title node)) :block/uuid (random-uuid)))
 
@@ -628,7 +643,7 @@
     (p/let [body (body-clj request)
             target (find-entity db (:block-id path-params))]
       (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
-              (not (sequential? (:blocks body))) (empty? (:blocks body)))
+              (not (valid-block-tree? (:blocks body))))
         (http/bad-request "invalid target, position, or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (:position body) e2ee?)]
           (broadcast-change! self)
@@ -637,7 +652,7 @@
     :semantic/blocks-insert-tree
     (p/let [body (body-clj request)
             target (find-entity db (:target-id body))]
-      (if (or (nil? target) (not (sequential? (:blocks body))) (empty? (:blocks body)))
+      (if (or (nil? target) (not (valid-block-tree? (:blocks body))))
         (http/bad-request "invalid target or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append") e2ee?)]
           (broadcast-change! self)
@@ -715,7 +730,7 @@
 
     :semantic/capture
     (p/let [body (body-clj request)]
-      (if (or (not (sequential? (:blocks body))) (empty? (:blocks body)))
+      (if-not (valid-block-tree? (:blocks body))
         (http/bad-request "missing blocks")
         (let [today (ensure-today-page! conn)
               inserted (insert-tree! conn today (:blocks body) "append" e2ee?)]
