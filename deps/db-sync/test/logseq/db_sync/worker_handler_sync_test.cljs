@@ -101,6 +101,11 @@
                    (is (= "Page name can't include \"/\"." (:error slash-body)))
                    (is (= 400 (.-status hash)))
                    (is (= "Page name can't include \"#\"." (:error hash-body)))))
+               (p/then (fn [_]
+                         (p/let [number-title (sync-handler/handle-http self (semantic-json-request "/semantic/capture?graph-id=graph-1" "POST" {:blocks [{:title 1}]}))
+                                 nested (sync-handler/handle-http self (semantic-json-request "/semantic/capture?graph-id=graph-1" "POST" {:blocks [{:title "a" :children [{}]}]}))]
+                           (is (= 400 (.-status number-title)) "a block title that is not a string")
+                           (is (= 400 (.-status nested)) "a child block without a title"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))
