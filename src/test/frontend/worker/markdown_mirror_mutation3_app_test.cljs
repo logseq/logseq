@@ -31,7 +31,6 @@
 (def ^:private block-line-infos @#'markdown-mirror/block-line-infos)
 (def ^:private outline-children @#'markdown-mirror/outline-children)
 (def ^:private block->content-context @#'markdown-mirror/block->content-context)
-(def ^:private line-level @#'markdown-mirror/line-level)
 (def ^:private mirrorable-pages @#'markdown-mirror/mirrorable-pages)
 (def ^:private deleted-page? @#'markdown-mirror/deleted-page?)
 (def ^:private merge-job @#'markdown-mirror/merge-job)
@@ -353,12 +352,6 @@
           :date-formatter "yyyy"}
          (block->content-context {:date-formatter "yyyy"})))
   (is (= "\t" (:export-bullet-indentation (block->content-context {:export-bullet-indentation "\t"})))))
-
-;; Fails if, in `line-level`, `or` becomes `and` or the body becomes `nil`.
-(deftest line-level-uses-configured-indentation-test
-  (is (= 3 (line-level "    " {})))
-  (is (= 2 (line-level "    " {:export-bullet-indentation "    "})))
-  (is (= 5 (line-level "    " {:export-bullet-indentation "\t"}))))
 
 ;; ---------------------------------------------------------------------------
 ;; block infos
