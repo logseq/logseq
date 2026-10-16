@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test, {after} from 'node:test';
+import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -385,3 +386,20 @@ for (const level of [1,2,3,4,5,6]) {
     assert.ok(Math.abs(editing.y-read.y)<0.5, `text y moved from ${read.y} to ${editing.y}`);
   });
 }
+
+test('settings navigation keeps icons before labels across tab changes and reopen', () => {
+  open();
+  openSettings();
+  const verify = () => assertSettingsNavigation(evaluate(
+    `(${measureSettingsNavigation.toString()})(document.querySelector('[role="dialog"]'))`,
+  ));
+  verify();
+  for (const name of ['Editor', 'Keymap', 'Advanced', 'Features', 'General']) {
+    button(name);
+    verify();
+  }
+  button('Close');
+  openSettings();
+  verify();
+  button('Close');
+});

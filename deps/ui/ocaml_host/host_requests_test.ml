@@ -2576,6 +2576,40 @@ let () =
               ~scale:(fun () -> 2.)
               ~store:(fun () -> store)
           in
+          List.iter
+            (fun item ->
+              let rec descendants id =
+                List.concat_map
+                  (fun child ->
+                    let child_id = Lui_store.node_id child in
+                    child_id :: descendants child_id)
+                  (Lui_store.children store id)
+              in
+              let children = descendants item in
+              let image =
+                List.find (fun id -> has_class id "ls-nav-item-icon") children
+              in
+              let label =
+                if Lui_store.string_prop store item "text" <> None then item
+                else List.find (fun id -> Lui_store.kind store id = "text") children
+              in
+              let value = Option.get (Lui_store.string_prop store label "text") in
+              let _, text_x, _ =
+                Text_engine.text_layout text_engine label (rect label) value
+              in
+              expect
+                (Printf.sprintf
+                   "Settings navigation icon inset %.2f, expected 16 device pixels"
+                   ((rect image).x -. (rect item).x))
+                (abs_float ((rect image).x -. (rect item).x -. 16.) < 0.01);
+              expect "Settings navigation text must follow its icon by four points"
+                (abs_float (text_x -. (rect image).x -. (rect image).w -. 8.) < 0.01);
+              expect "Settings navigation icon must stay vertically centered"
+                (abs_float
+                   ((rect image).y +. ((rect image).h /. 2.) -. (rect item).y
+                  -. ((rect item).h /. 2.))
+                <= 1.))
+            nav;
           expect
             "Settings modal title does not use its measured thirty-two-point \
              line box"

@@ -689,34 +689,33 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
    replaces the `.active`/`.dark .active` pair). The `.active` class
    itself stays on the element via the caller's class_signal (native
    hook). *)
-let nav_item ~key ~data_id ~icon:icon_ ~text ~selected_signal:selected
+let nav_item ~key ~data_id ~icon:icon_ ~text:label ~selected_signal:selected
     ~on_press () : t =
-  (* cljs settings-menu-link: px-2 py-1.5 flex items-center; the ui/icon
-     svg is 18px followed by the strong label ~8px later (icon slot ends
-     at x+8+18, label at +34). The host paints the kind's own label at
-     padding-horizontal, so the leading icon rides as a positioned
-     child pulled back inside the label inset. *)
-  let icn_el =
-    with_props
-      [ Prop.margin_left (-26); Prop.margin_top 1 ]
-      (Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_)
-  in
-  with_props [ Prop.hover_background "var(--lx-nav-active)" ]
-    (with_props
-       [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem" ]
-       (list_item ~key ~text ~corner_radius:4 ~min_height:0 ~height:32
-          ~padding_vertical:6 ~padding_horizontal:34 ~main:`start
-          ~foreground:"inherit"
-          ~style_class:"settings-menu-item"
-          ~accessibility_identifier:data_id
-          ~data_attrs:[ "data-id", data_id; "style", "gap:0" ]
-          ~background_signal:
-            (Signal.map
-               (fun a ->
-                 if a then "var(--lx-nav-active)" else "transparent")
-               selected)
-          ~selected_signal:selected ~on_press:on_press
-          (icn_el :: [])))
+  with_props
+    [
+      Prop.hover_background "var(--lx-nav-active)";
+      Prop.font_size "0.875rem";
+      Prop.line_height "1.25rem";
+      Prop.font_weight 400;
+    ]
+    (list_item ~key ~corner_radius:4 ~min_height:0 ~height:32
+       ~padding_vertical:6 ~padding_horizontal:8 ~main:`start ~cross:`center
+       ~foreground:"inherit" ~style_class:"settings-menu-item"
+       ~accessibility_identifier:data_id
+       ~data_attrs:[ ("data-id", data_id) ]
+       ~background:
+         (reactive
+            (fun active ->
+              if active then "var(--lx-nav-active)" else "transparent")
+            selected)
+       ~selected_signal:selected ~on_press
+       [
+         row ~key:"content" ~cross:`center ~gap:4
+           [
+             Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_;
+             text ~key:"label" ~value:label [];
+           ];
+       ])
 
 (* Pill/chip toggle — the `.shortcut-filter-pill` (9999 bordered) and
    `.secondary-tabs > button` (6px radius, 4/12 padding) shapes share one
