@@ -222,10 +222,11 @@
     (add-items-in-li loc [code])))
 
 (defn- block-quote
+  "Builds the quote's content in a zipper of its own, rooted like the page's:
+  a list inside the quote then has a node to insert at the right of."
   [loc block-ast-coll]
-  (add-items-in-li
-   loc
-   [(z/root (reduce block-ast->hiccup (goto-last (ul-hiccup-zip [:blockquote])) block-ast-coll))]))
+  (let [[_ [_ & placeholder-items] & more] (z/root (reduce block-ast->hiccup (goto-last empty-ul-hiccup) block-ast-coll))]
+    (add-items-in-li loc [(into [:blockquote] (concat placeholder-items more))])))
 
 (defn- block-latex-env
   [loc [name options content]]
@@ -374,7 +375,8 @@
 ;;; block/inline-ast -> hiccup (ends)
 
 ;;; export fns
-(defn export-helper
+(defn export-hiccup
+  "The hiccup that export-helper renders."
   [content format options]
   (let [remove-options (set (:remove-options options))
         other-options (:other-options options)]
@@ -413,7 +415,11 @@
             hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))
             ;; remove placeholder tag
             hiccup* (vec (cons :ul (drop 2 hiccup)))]
-        (-> hiccup* h/render-html utils/prettifyXml)))))
+        hiccup*))))
+
+(defn export-helper
+  [content format options]
+  (-> (export-hiccup content format options) h/render-html utils/prettifyXml))
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"
