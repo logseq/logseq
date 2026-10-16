@@ -1,6 +1,7 @@
 external set_drag_regions : int -> float array -> unit = "logseq_native_drag_regions"
 external watch_expose : int -> bool -> unit = "logseq_native_watch_expose"
 external performance_time : unit -> float = "logseq_native_performance_time"
+external reduced_motion : unit -> bool = "logseq_native_reduced_motion"
 external presentable : int -> bool = "logseq_native_window_presentable"
 external memory_usage : unit -> int * int * int = "logseq_native_memory_usage"
 external software_begin : int -> int * int * int -> unit = "logseq_native_software_begin"

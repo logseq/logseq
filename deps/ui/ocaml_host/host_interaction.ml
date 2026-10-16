@@ -52,6 +52,11 @@ let caret_ops ~scale ~color (rect : Lui_scene.rect) =
           fborder_color = Lui_scene.color 0 0 0 0;
           fdashed = false; fwide = 0; fopacity = 1. } ]
 
+let advance_frame ui host ~now ~reduced_motion =
+  Lui_host.set_reduced_motion host reduced_motion;
+  Lui_host.tick host ~now;
+  Lui_window.Ui.tick_scrollbars ui ~now_ms:(now *. 1000.)
+
 let prepare_paint ui host =
   let hard, soft = Lui_window.Ui.paint_hints ui (Lui_host.store host) in
   Hashtbl.iter (fun id () -> Lui_host.note_paint host id) hard;
@@ -303,3 +308,29 @@ let overlay_cached cache ~key (scene : Lui_scene.t) draw =
     scene.glyphs <- if body=[] then glyphs else glyphs @ body;
     cache.overlay <- Some (key,base,ops,glyphs);
     ops
+
+let pointer_cursor ui store rects node =
+  let rec up id depth =
+    if id <= 0 || depth > 64 then "default"
+    else
+      let kind = Lui_store.kind store id in
+      match Lui_store.string_prop store id "cursor" with
+      | Some c when c <> "" && c <> "auto" && c <> "inherit" -> c
+      | _ ->
+        if kind = "extension:logseq-editor" || kind = "text-field"
+           || kind = "textarea" || kind = "input"
+           || kind = "search-field" || kind = "secure-field"
+        then "text"
+        else if kind = "link" || kind = "button" || kind = "menu-item"
+                || kind = "toggle" || kind = "checkbox"
+        then "pointer"
+        else if kind = "split" &&
+          (let x,y=Lui_window.Ui.pointer ui in
+           Lui_window.Ui.split_handle ui store rects id ~x ~y) then "col-resize"
+        else if Lui_query.presented_overlay store id then "default"
+        else
+          match Lui_store.parent store id with
+          | Some p -> up p (depth + 1)
+          | None -> "default"
+  in
+  if Lui_window.Ui.resizing_split ui then "col-resize" else up node 0

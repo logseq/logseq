@@ -298,10 +298,8 @@ let left_sidebar (ms : Model.t Signal.signal) =
            ]
        ]))
 
-(* docked splits — the native renderer draws Split natively and fires
-   ValueChanged on drag; the persisted fraction drives ProgressValue
-   back. ~resize_duration/~resize_easing are ignored on this backend
-   (the native kit has no split animation today). *)
+(* The host advances split transitions on its frame clock. The
+   application owns the persisted pane fractions. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
   split ~key:"left-split" ~grow:1. ~gap:3

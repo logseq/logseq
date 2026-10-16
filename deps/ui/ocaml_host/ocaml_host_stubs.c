@@ -2708,3 +2708,15 @@ CAMLprim value logseq_native_test_menu_action(value tag, value unlocked) {
 #endif
   CAMLreturn(Val_unit);
 }
+
+CAMLprim value logseq_native_reduced_motion(value unit_v) {
+  (void)unit_v;
+#ifdef __APPLE__
+  id workspace = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("NSWorkspace"),
+      sel_registerName("sharedWorkspace"));
+  return Val_bool(((bool (*)(id, SEL))objc_msgSend)(workspace,
+      sel_registerName("accessibilityDisplayShouldReduceMotion")));
+#else
+  return Val_false;
+#endif
+}

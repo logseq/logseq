@@ -649,3 +649,149 @@ let () =
      "Cold zero-scroll traversal exceeds 64 KiB", cold_allocated <= 65_536.;
      "Cached scroll reads exceed one byte per read", cached_allocated <= 1.] in
   check (String.concat "; " failures) (failures=[])
+
+
+let () =
+  let failures = ref [] in
+  let expect message value = if not value then failures := message :: !failures in
+  let ui = Lui_window.Ui.create () in
+  let host = Lui_host.create ~layout:(module Lui_layout)
+      ~hooks:Lui_paint.default_hooks
+      ~renderer:{name="motion-test";render=(fun _ -> Bytes.empty)}
+      ~width:800 ~height:600 ~scale:1. () in
+  let store = Lui_host.store host in
+  let apply ops = ignore (Lui_host.apply_batch host {generation=1;ops}) in
+  let step ?(reduced_motion=false) now =
+    Host_interaction.advance_frame ui host ~now ~reduced_motion;
+    Host_interaction.prepare_paint ui host;
+    ignore (Lui_host.repaint host);
+    Lui_window.Ui.frame_done ui in
+  let value () = Option.get (Lui_store.float_prop store 1 "value") in
+  let width () = (Option.get (Lui_host.layout_rect host 2)).Lui_scene.w in
+  apply [CreateNode (1,Split);CreateNode (2,Column);CreateNode (3,Column);
+    SetProp (1,Gap,IntValue 3);SetProp (1,ResizeDuration,IntValue 300);
+    SetProp (1,ResizeEasing,StringValue "standard");
+    SetProp (1,ProgressValue,FloatValue 0.0001);
+    InsertChild (1,2,0);InsertChild (1,3,1)];
+  step 0.;
+  let closed_width = width () in
+  (* Begin input after a long quiet interval, as the blocking app loop does. *)
+  Host_interaction.advance_frame ui host ~now:600. ~reduced_motion:false;
+  apply [SetProp (1,ProgressValue,FloatValue 0.25)];
+  step 600.;
+  expect "Opening a sidebar jumps to its target on the input frame" (Float.abs (value () -. 0.0001) < 1.e-9);
+  step 600.15;
+  let halfway = value () and halfway_width = width () in
+  expect "The app frame path does not advance sidebar interpolation"
+    (halfway>0.0001 && halfway<0.25 && halfway_width>closed_width);
+  apply [SetProp (1,ProgressValue,FloatValue 0.0001)];
+  expect "Reversing a sidebar jumps away from displayed geometry" (value ()=halfway);
+  step 600.46;
+  expect "Closing a sidebar fails to settle exactly" (value ()=0.0001 && width ()=closed_width);
+  expect "A completed sidebar transition keeps scheduling frames" (not (Lui_host.wants_repaint host));
+  apply [SetProp (1,ProgressValue,FloatValue 0.75)];
+  step 600.77;
+  Host_interaction.advance_frame ui host ~now:601. ~reduced_motion:false;
+  apply [SetProp (1,ProgressValue,FloatValue 1.)];
+  step 601.15;
+  expect "The right sidebar does not animate toward its collapsed endpoint" (value ()>0.75 && value ()<1.);
+  step 601.31;
+  expect "The right sidebar does not reach its collapsed endpoint" (value ()=1.);
+  (* Pointer resize mirrors the direct value before the application echoes it. *)
+  Lui_store.apply_op store (SetProp (1,ProgressValue,FloatValue 0.6));
+  apply [SetProp (1,ProgressValue,FloatValue 0.6)];
+  step 601.32;
+  expect "Direct split drag creates eased catch-up" (value ()=0.6 && not (Lui_host.wants_repaint host));
+  Host_interaction.advance_frame ui host ~now:602. ~reduced_motion:true;
+  apply [SetProp (1,ProgressValue,FloatValue 0.2)];
+  step ~reduced_motion:true 602.;
+  expect "The application ignores the reduced-motion preference" (value ()=0.2);
+  Host_interaction.advance_frame ui host ~now:603. ~reduced_motion:false;
+  apply [SetProp (1,ProgressValue,FloatValue 0.8)];
+  step 603.1;
+  step ~reduced_motion:true 603.11;
+  expect "Enabling reduced motion leaves an active transition" (value ()=0.8 && not (Lui_host.wants_repaint host));
+  apply [SetProp (1,ProgressValue,FloatValue 0.1);DropNode 1];
+  step ~reduced_motion:true 604.;
+  expect "Removing a split leaves scheduled motion" (not (Lui_host.wants_repaint host));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native frame-clock regression" (!failures=[]);
+  print_endline "native sidebar animation frame clock: OK"
+
+
+let () =
+  let ui=Lui_window.Ui.create () in
+  let host=Lui_host.create ~layout:(module Lui_layout) ~hooks:Lui_paint.default_hooks
+    ~renderer:{name="split-input-test";render=(fun _ -> Bytes.empty)}
+    ~width:800 ~height:600 ~scale:1. () in
+  let store=Lui_host.store host and rects=Lui_window.Rects.create () in
+  let apply ops=ignore (Lui_host.apply_batch host {generation=1;ops}) in
+  let step now =
+    Host_interaction.advance_frame ui host ~now ~reduced_motion:false;
+    Host_interaction.prepare_paint ui host;
+    ignore (Lui_host.repaint host);
+    List.iter (fun id -> Hashtbl.replace rects id (Option.get (Lui_host.layout_rect host id))) [1;2;3];
+    Lui_window.Ui.frame_done ui in
+  apply [CreateNode (1,Split);CreateNode (2,Column);CreateNode (3,Column);
+    SetProp (1,Gap,IntValue 3);SetProp (1,ResizeDuration,IntValue 300);
+    SetProp (1,ResizeEasing,StringValue "standard");SetProp (1,ProgressValue,FloatValue 0.25);
+    InsertChild (1,2,0);InsertChild (1,3,1)];
+  step 0.;
+  apply [SetProp (1,ProgressValue,FloatValue 0.5)];
+  step 0.1;
+  let before=Option.get (Lui_store.float_prop store 1 "value") in
+  let first=Option.get (Lui_host.layout_rect host 2) in
+  let x=first.Lui_scene.x+.first.w+.1.5 in
+  ignore (Lui_window.Ui.handle ui store rects
+    (Lui_window.Input.Button_down (x,100.,Lui_window.Input.Left,1,Lui_window.Input.mods_none)));
+  let actions=Lui_window.Ui.handle ui store rects (Lui_window.Input.Move (x+.40.,100.)) in
+  let fraction=List.find_map (function
+    | Lui_window.Dispatch (ValueChanged (1,value)) -> Some value
+    | _ -> None) actions in
+  check "Native split dragging emits no application resize feedback" (Option.is_some fraction);
+  let fraction=Option.get fraction in
+  check "Native split dragging does not mirror pointer geometry immediately"
+    (Float.abs (fraction-.before-.0.05)<1.e-6
+      && Lui_store.float_prop store 1 "value"=Some fraction);
+  apply [SetProp (1,ProgressValue,FloatValue fraction)];
+  step 0.11;
+  check "An interrupted sidebar animation continues fighting the pointer"
+    (Lui_store.float_prop store 1 "value"=Some fraction && not (Lui_host.wants_repaint host));
+  print_endline "native split drag interrupts sidebar motion: OK"
+
+
+let () =
+  let store=Lui_store.create () and rects=Lui_window.Rects.create () in
+  List.iter (Lui_store.apply_op store)
+    [CreateNode (1,Split);CreateNode (2,Column);CreateNode (3,Column);
+     CreateNode (4,Button);CreateNode (5,TextField);SetProp (1,ProgressValue,FloatValue 0.25);
+     InsertChild (1,2,0);InsertChild (1,3,1);InsertChild (2,4,0);InsertChild (3,5,0)];
+  List.iter (fun (id,r) -> Hashtbl.add rects id r)
+    [1,Lui_scene.rect 0. 0. 800. 600.;2,Lui_scene.rect 0. 0. 200. 600.;
+     3,Lui_scene.rect 203. 0. 597. 600.;4,Lui_scene.rect 40. 40. 40. 24.;
+     5,Lui_scene.rect 240. 40. 160. 24.];
+  let ui=Lui_window.Ui.create () in
+  let input ev=ignore (Lui_window.Ui.handle ui store rects ev) in
+  let cursor id=Host_interaction.pointer_cursor ui store rects id in
+  let failures=ref [] in
+  let expect message value=if not value then failures:=message::!failures in
+  input (Lui_window.Input.Move (201.,50.));
+  expect "A split divider has no horizontal resize cursor" (cursor 1="col-resize");
+  input (Lui_window.Input.Move (100.,50.));
+  expect "A pane inherits a resize cursor outside the divider" (cursor 2="default");
+  expect "A split ancestor hides a button cursor" (cursor 4="pointer");
+  expect "A split ancestor hides a text cursor" (cursor 5="text");
+  input (Lui_window.Input.Button_down (201.,50.,Lui_window.Input.Left,1,Lui_window.Input.mods_none));
+  input (Lui_window.Input.Move (300.,50.));
+  expect "Captured resize loses its cursor outside the divider" (cursor 5="col-resize");
+  input (Lui_window.Input.Button_up (300.,50.,Lui_window.Input.Left,Lui_window.Input.mods_none));
+  expect "Released resize retains its captured cursor" (cursor 5="text");
+  List.iter (Lui_store.apply_op store)
+    [CreateNode (6,Popover);CreateNode (7,Box);InsertChild (2,6,1);InsertChild (6,7,0)];
+  input (Lui_window.Input.Move (201.,50.));
+  expect "Popup content inherits a divider cursor from a background split" (cursor 7="default");
+  Lui_store.apply_op store (SetProp (5,Cursor,StringValue "pointer"));
+  expect "An explicit cursor property is ignored" (cursor 5="pointer");
+  List.iter prerr_endline (List.rev !failures);
+  check "Native split cursor regression" (!failures=[]);
+  print_endline "native split resize cursor: OK"

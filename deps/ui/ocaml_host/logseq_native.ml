@@ -1493,28 +1493,7 @@ let () =
        | Ok c -> Hashtbl.replace cursor_cache name c; Some c
        | Error _ -> None)
   in
-  let cursor_for node =
-    let rec up id depth =
-      if id <= 0 || depth > 64 then "default"
-      else
-        let kind = Lui_store.kind store id in
-        match Lui_store.string_prop store id "cursor" with
-        | Some c when c <> "" && c <> "auto" && c <> "inherit" -> c
-        | _ ->
-          if kind = "extension:logseq-editor" || kind = "text-field"
-             || kind = "textarea" || kind = "input"
-             || kind = "search-field" || kind = "secure-field"
-          then "text"
-          else if kind = "link" || kind = "button" || kind = "menu-item"
-                  || kind = "toggle" || kind = "checkbox"
-          then "pointer"
-          else
-            match Lui_store.parent store id with
-            | Some p -> up p (depth + 1)
-            | None -> "default"
-    in
-    up node 0
-  in
+  let cursor_for = Host_interaction.pointer_cursor ui store rects in
   let update_cursor node =
     let name = cursor_for node in
     if name <> !current_cursor then begin
@@ -2105,6 +2084,8 @@ let () =
   in
   Native_window.install !win (fun () ->
     let started = perf_s () in
+    Host_interaction.advance_frame ui host ~now:started
+      ~reduced_motion:(Native_window.reduced_motion ());
     let w,h = Sdl.get_window_size !win in
     if w <> !win_w || h <> !win_h then begin
       win_w := w; win_h := h;
@@ -2233,6 +2214,8 @@ let () =
       native_activate ();
       Daemon_client.boot_mark "raise end"
     end;
+    Host_interaction.advance_frame ui host ~now:(perf_s ())
+      ~reduced_motion:(Native_window.reduced_motion ());
     let events_before = metrics.event_count in
     let events_started = perf_s () in
     if drain_events () > 0 then last_busy := t0;
@@ -2358,7 +2341,6 @@ let () =
       Lui_host.invalidate_layout host;
       host_req_repaint := true
     end;
-    Ui.tick_scrollbars ui ~now_ms:(perf_s () *. 1000.);
     let can_present = Native_window.presentable (Sdl.get_window_id !win) in
     (* Exercise the real embedded app, its layout, and every viewport pixel
        while occluded. Visibility exports remain truthful; this diagnostic
