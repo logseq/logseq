@@ -1143,7 +1143,17 @@
     (contains? property-and-search-handlers handler) (handle-properties-and-search context)
     :else (http/not-found)))
 
-(defn handle [{:keys [^js self route ^js url] :as context}]
+(defn- validation-error-response
+  "The outliner rejects a write the graph does not allow (a page name with
+  \"/\", a change to a built-in node, a duplicate tag...) by throwing an error
+  meant to notify the user. Such a request is the client's mistake: 400 with
+  that message, not the 500 of a server error."
+  [error]
+  (let [data (ex-data error)]
+    (when (= :notification (:type data))
+      (http/bad-request (or (get-in data [:payload :message]) (ex-message error))))))
+
+(defn- handle* [{:keys [^js self route ^js url] :as context}]
   (let [conn (ensure-conn! self)
         handler (:handler route)
         db @conn
@@ -1161,3 +1171,9 @@
           (dispatch-handle context handler)
           result))
       (dispatch-handle context handler))))
+
+(defn handle [context]
+  (-> (p/do (handle* context))
+      (p/catch (fn [error]
+                 (or (validation-error-response error)
+                     (p/rejected error))))))
