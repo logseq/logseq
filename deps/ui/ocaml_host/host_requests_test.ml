@@ -1966,6 +1966,38 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native language menu viewport and scrolling: OK")
 
 let () =
+  let store = Lui_store.create () in
+  List.iteri
+    (fun i kind ->
+      let id = 810000 + i in
+      Lui_store.apply_op store (CreateNode (id, kind));
+      List.iter
+        (fun scale ->
+          let r = Lui_scene.rect 0. 0. 16. 16. in
+          let image = Host_icons.image_of store scale id r in
+          check "Native select must resolve its intrinsic chevron"
+            (Option.is_some image);
+          let image = Option.get image in
+          check "Native select chevron must rasterize at the backing scale"
+            (image.iw = int_of_float (16. *. scale)
+            && image.ih = int_of_float (16. *. scale));
+          check "Native select chevron must contain visible stroke pixels"
+            (let visible = ref false in
+             for p = 0 to (image.iw * image.ih) - 1 do
+               if Bytes.get image.ipix ((p * 4) + 3) <> '\000' then
+                 visible := true
+             done;
+             !visible);
+          check "Native select chevron must reuse its cached image"
+            (Option.get (Host_icons.image_of store scale id r) == image))
+        [ 1.; 2. ])
+    [ Select; Combobox ];
+  Lui_store.apply_op store (CreateNode (810002, Text));
+  check "Ordinary text must not acquire an intrinsic select icon"
+    (Host_icons.image_of store 1. 810002 (Lui_scene.rect 0. 0. 16. 16.) = None);
+  print_endline "native intrinsic select icons: OK"
+
+let () =
   let old_mode = !Theme_vars.mode in
   let errors = ref [] in
   Fun.protect
@@ -2189,8 +2221,42 @@ let () =
           expect "Global font checkbox label is not fourteen-point text"
             (Lui_text.size (Text_engine.font_of store global_label) = 14.);
           let font_name = find_class "ls-font-name" in
-          expect "Font preview captions differ from twelve-point reference text"
-            (Lui_text.size (Text_engine.font_of store font_name) = 12.);
+          expect
+            "Font preview captions differ from the measured eleven-point-two \
+             text"
+            (abs_float
+               (Lui_text.size (Text_engine.font_of store font_name) -. 11.2)
+            < 0.001);
+          List.iter2
+            (fun button families ->
+              let descendants = Lui_store.preorder ~root:button store in
+              let sample =
+                List.find (fun id -> has_class id "ls-font-sample") descendants
+              in
+              let caption =
+                List.find (fun id -> has_class id "ls-font-name") descendants
+              in
+              List.iter
+                (fun (id, size, weight) ->
+                  let actual = Text_engine.font_of store id in
+                  let expected = Lui_text.create ~families ~size ~weight () in
+                  expect "Font preview uses the wrong resolved font family"
+                    (Lui_text.family actual = Lui_text.family expected);
+                  expect
+                    "Font preview typography differs from its measured weight"
+                    (abs_float
+                       (fst (Lui_text.measure actual "Ag Default Serif Mono")
+                       -. fst
+                            (Lui_text.measure expected "Ag Default Serif Mono")
+                       )
+                    < 0.01))
+                [ (sample, 14., 700); (caption, 11.2, 500) ])
+            fonts
+            [
+              [ "Inter" ];
+              [ "Lyon-Text"; "Georgia"; "ui-serif"; "serif" ];
+              [ "iawriter-mono"; "Nitti"; "Menlo"; "Courier"; "monospace" ];
+            ];
           List.iter prerr_endline (List.rev !errors);
           check "Native Settings visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"

@@ -114,7 +114,7 @@ let theme_row ctx =
          ])
     ()
 
-let font_button ~key ~label ~active ~on_click =
+let font_button ~key ~label ~font_family ~active ~on_click =
   button ~key ~variant:`secondary ~selected:active
     ~label
     ~height:40 ~padding_horizontal:16 ~padding_vertical:0
@@ -124,28 +124,31 @@ let font_button ~key ~label ~active ~on_click =
       (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
      ^ if active then " ls-active" else "")
     ~on_press:(fun _ -> on_click ())
-    [ column ~key:(key ^ "-s") ~gap:0 ~cross:`stretch ~grow:1.
+    [ Ui_components.with_props [Ui_components.Prop.font_family font_family]
+        (column ~key:(key ^ "-s") ~gap:0 ~cross:`stretch ~grow:1.
         ~style_class:
           ("ls-font ls-font-" ^ String.lowercase_ascii label)
         [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample"
             ~font_size:"0.875rem" ~font_weight:700 ~line_height:"1.25rem" ~height:20
             ~text_alignment:`center ~value:"Ag" []
         ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name"
-            ~font_size:"0.75rem" ~line_height:"1rem" ~height:16
+            ~font_size:"0.7rem" ~font_weight:500 ~line_height:"1rem" ~height:16
             ~text_alignment:`center ~value:label []
-        ]
+        ])
     ]
 
 let editor_font_row () =
   let font = S.current_editor_font () in
-  let fb t label =
-    font_button ~key:("font-" ^ t) ~label ~active:(font.S.ftype = t)
+  let fb t label font_family =
+    font_button ~key:("font-" ^ t) ~label ~font_family ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
   C.it_row ~key:"font" ~label:T.editor_font
     ~value_cls:"ls-it-value-col" ~min_height:80
     [ row ~key:"font-btns" ~style_class:"ls-row-gap" ~gap:8
-        [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
+        [ fb "default" "Default" "var(--ls-font-family, Inter)"
+        ; fb "serif" "Serif" "Lyon-Text, Georgia, ui-serif, serif"
+        ; fb "mono" "Mono" "iawriter-mono, Nitti, Menlo, Courier, monospace" ]
     ; box ~key:"font-g" ~style_class:"ls-font-global" ~margin_top:12
         [ row ~key:"font-gl" ~cross:`center ~min_height:28
             ~style_class:"ls-check-row" ~gap:4

@@ -58,7 +58,11 @@ let count () = Hashtbl.length svgs
 let icon_name store id =
   match Lui_store.string_prop store id "name" with
   | Some _ as n -> n
-  | None -> Lui_store.string_prop store id "icon"
+  | None -> (match Lui_store.string_prop store id "icon" with
+    | Some _ as name -> name
+    | None -> (match Lui_store.kind store id with
+      | "select" | "combobox" -> Some "chevron-down"
+      | _ -> None))
 
 (* App-pushed SVGs win; then the builtin icon table (name-only icon
    kinds); then the in-process tabler-children table — the boot
@@ -96,7 +100,9 @@ let effective_fg_css store id =
       | Some p -> walk p
       | None -> None)
   in
-  match walk id with Some _ as c -> c | None -> Some "foreground"
+  match Lui_store.kind store id with
+  | "select" | "combobox" -> Some "muted-foreground"
+  | _ -> (match walk id with Some _ as c -> c | None -> Some "foreground")
 
 let index_sub s sub =
   let n = String.length s and m = String.length sub in
