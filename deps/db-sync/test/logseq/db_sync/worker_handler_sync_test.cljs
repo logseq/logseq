@@ -326,6 +326,13 @@
                                  nested (sync-handler/handle-http self (semantic-json-request "/semantic/capture?graph-id=graph-1" "POST" {:blocks [{:title "a" :children [{}]}]}))]
                            (is (= 400 (.-status number-title)) "a block title that is not a string")
                            (is (= 400 (.-status nested)) "a child block without a title"))))
+               (p/then (fn [_]
+                         (p/let [page (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Page A"}))
+                                 page-body (json-body page)
+                                 class-as-property (sync-handler/handle-http self (semantic-json-request (str "/semantic/blocks/" (:uuid page-body) "/properties/logseq.class%2FTask?graph-id=graph-1") "PUT" {:value "x"}))
+                                 class-as-property-body (json-body class-as-property)]
+                           (is (= 400 (.-status class-as-property)) "a class named as the property")
+                           (is (= "property not found" (:error class-as-property-body))))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))
