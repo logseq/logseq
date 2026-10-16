@@ -448,13 +448,22 @@
                (or (not= property-ident :block/tags) (entity-util/class? entity)))
       (:db/id entity))))
 
-(defn- prepare-property-value [db property-ident value]
+(defn- prepare-ref-property-value [db property-ident value e2ee?]
+  (let [property (d/entity db property-ident)]
+    (or (resolve-ref-entity db property-ident value)
+        (when (and (not e2ee?)
+                   (= :url (:logseq.property/type property))
+                   (empty? (:block/_closed-value-property property))
+                   (db-property-type/url? value))
+          value))))
+
+(defn- prepare-property-value [db property-ident value e2ee?]
   (let [property (d/entity db property-ident)]
     (if-not (= :db.type/ref (:db/valueType property))
       {:value value}
       (let [many-input? (or (sequential? value) (set? value))
             values (if many-input? value [value])
-            resolved (mapv #(resolve-ref-entity db property-ident %) values)]
+            resolved (mapv #(prepare-ref-property-value db property-ident % e2ee?) values)]
         (if (every? some? resolved)
           {:value (if many-input? resolved (first resolved))}
           {:error (if (= property-ident :block/tags)
@@ -643,14 +652,14 @@
           (broadcast-change! self)
           (http/json-response nil {:blocks inserted} 201))))))
 
-(defn- handle-block-properties [{:keys [^js self request conn db handler path-params]}]
+(defn- handle-block-properties [{:keys [^js self request conn db handler path-params e2ee?]}]
   (case handler
 
     :semantic/blocks-set-property
     (p/let [body (body-clj request)
             block (find-entity db (:block-id path-params))
             property-ident (resolve-property-ident db (:property-id path-params))
-            prepared (when property-ident (prepare-property-value db property-ident (:value body)))]
+            prepared (when property-ident (prepare-property-value db property-ident (:value body) e2ee?))]
       (cond
         (nil? block) (http/bad-request "block not found")
         (nil? property-ident) (http/bad-request "property not found")
@@ -679,7 +688,7 @@
                                {:block (find-entity db block-id)
                                 :property-ident property-ident
                                 :prepared (when property-ident
-                                            (prepare-property-value db property-ident value))})) entries)]
+                                            (prepare-property-value db property-ident value e2ee?))})) entries)]
       (if (or (not (seq entries))
               (some #(or (nil? (:block %)) (nil? (:property-ident %))
                          (:error (:prepared %))) resolved))

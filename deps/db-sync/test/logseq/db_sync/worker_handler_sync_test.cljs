@@ -3404,3 +3404,128 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(defn- with-url-property-test [cardinality run]
+  (with-memory-sql-async
+    (fn [sql]
+      (storage/init-schema! sql)
+      (let [conn (sqlite-export/create-conn)
+            page-id (random-uuid)
+            block-ids (vec (repeatedly 2 random-uuid))
+            property (outliner-property/upsert-property!
+                      conn nil {:logseq.property/type :url
+                                :db/cardinality cardinality}
+                      {:property-name "API URL"})
+            _ (d/transact! conn
+                           (into [{:block/uuid page-id :block/name "url-test" :block/title "URL test"
+                                   :block/tags :logseq.class/Page
+                                   :block/created-at 1 :block/updated-at 1}]
+                                 (map-indexed
+                                   (fn [index block-id]
+                                     {:block/uuid block-id :block/title (str "URL block " index)
+                                      :block/page [:block/uuid page-id]
+                                      :block/parent [:block/uuid page-id]
+                                      :block/order (str "a" index)
+                                      :block/created-at 1 :block/updated-at 1})
+                                   block-ids)))
+            self #js {:sql sql :conn conn :schema-ready true}
+            request (fn [method body encrypted?]
+                      (sync-handler/handle-http
+                        self
+                        (semantic-json-request
+                          (str (if (= method "PUT")
+                                 (str "/semantic/blocks/" (first block-ids) "/properties/" (:block/uuid property))
+                                 "/semantic/block-properties/batch-set")
+                               "?graph-id=graph-1" (when encrypted? "&graph-e2ee=true"))
+                          method body)))]
+        (run {:conn conn :property property :block-ids block-ids :request request})))))
+
+(defn- run-url-property-test! [done cardinality run]
+  (-> (with-url-property-test cardinality run)
+      (p/then (fn [] (done)))
+      (p/catch (fn [error] (is false (str error)) (done)))))
+
+(deftest semantic-url-property-accepts-values-and-reuses-native-identity-test
+  (async done
+    (run-url-property-test! done :db.cardinality/one
+      (fn [{:keys [conn property block-ids request]}]
+        (let [url "https://mapre.pages.dev/session/one"
+              block #(d/entity @conn [:block/uuid (first block-ids)])
+              value #(get (block) (:db/ident property))]
+          (p/let [first-response (request "PUT" {:value url} false)
+                  _ (is (= 200 (.-status first-response)))
+                  before (value)
+                  _ (is (= url (:block/title before)))
+                  _ (is (= (:db/id property) (:db/id (:logseq.property/created-from-property before))))
+                  repeat-response (request "PUT" {:value url} false)]
+            (is (= 200 (.-status repeat-response)))
+            (is (= (:block/uuid before) (:block/uuid (value))))))))))
+
+(deftest semantic-url-property-batch-appends-and-resets-values-test
+  (async done
+    (run-url-property-test! done :db.cardinality/many
+      (fn [{:keys [conn property block-ids request]}]
+        (let [urls ["https://mapre.pages.dev/one" "https://mapre.pages.dev/two"]
+              entry (fn [values] {:block-id (str (first block-ids))
+                                 :property-id (str (:block/uuid property)) :value values})
+              titles #(set (map :block/title (get (d/entity @conn [:block/uuid (first block-ids)]) (:db/ident property))))]
+          (p/let [first-response (request "POST" {:entries [(entry [(first urls)])]} false)
+                  _ (is (= 200 (.-status first-response)))
+                  append-response (request "POST" {:entries [(entry [(second urls)])]} false)
+                  _ (is (= 200 (.-status append-response)))
+                  _ (is (= (set urls) (titles)))
+                  reset-response (request "POST" {:entries [(entry [(second urls)])]
+                                                   :isResetExistingValues true} false)]
+            (is (= 200 (.-status reset-response)))
+            (is (= #{(second urls)} (titles)))))))))
+
+(deftest semantic-url-property-invalid-batch-does-not-mutate-any-target-test
+  (async done
+    (run-url-property-test! done :db.cardinality/one
+      (fn [{:keys [conn property block-ids request]}]
+        (let [entries (mapv (fn [id value] {:block-id (str id)
+                                           :property-id (str (:block/uuid property)) :value value})
+                           block-ids ["https://mapre.pages.dev/valid" "invalid URL"])]
+          (p/let [response (request "POST" {:entries entries} false)]
+            (is (= 400 (.-status response)))
+            (doseq [id block-ids]
+              (is (nil? (get (d/entity @conn [:block/uuid id]) (:db/ident property)))))))))))
+
+(deftest semantic-url-property-keeps-existing-ref-selectors-test
+  (async done
+    (run-url-property-test! done :db.cardinality/one
+      (fn [{:keys [conn property block-ids request]}]
+        (let [id (first block-ids)
+              url "https://mapre.pages.dev/existing"
+              _ (outliner-property/set-block-property! conn [:block/uuid id] (:db/ident property) url)
+              existing (get (d/entity @conn [:block/uuid id]) (:db/ident property))]
+          (p/let [response (request "PUT" {:value (str (:block/uuid existing))} false)]
+            (is (= 200 (.-status response)))
+            (is (= url (:block/title (get (d/entity @conn [:block/uuid id]) (:db/ident property)))))))))))
+
+(deftest semantic-url-property-encrypted-graphs-reject-new-plaintext-values-test
+  (async done
+    (run-url-property-test! done :db.cardinality/one
+      (fn [{:keys [conn property block-ids request]}]
+        (p/let [single (request "PUT" {:value "https://mapre.pages.dev/private"} true)
+                batch (request "POST" {:entries [{:block-id (str (first block-ids))
+                                                   :property-id (str (:block/uuid property))
+                                                   :value "https://mapre.pages.dev/private"}]} true)]
+          (is (= 400 (.-status single)))
+          (is (= 400 (.-status batch)))
+          (is (nil? (get (d/entity @conn [:block/uuid (first block-ids)]) (:db/ident property)))))))))
+
+(deftest semantic-url-property-retains-closed-choice-validation-test
+  (async done
+    (run-url-property-test! done :db.cardinality/one
+      (fn [{:keys [conn property block-ids request]}]
+        (let [choice-id (random-uuid)
+              url "https://mapre.pages.dev/allowed"
+              _ (d/transact! conn [{:block/uuid choice-id :block/title url
+                                   :block/closed-value-property (:db/id property)}])]
+          (p/let [accepted (request "PUT" {:value (str choice-id)} false)
+                  _ (is (= 200 (.-status accepted)))
+                  rejected (request "PUT" {:value "https://mapre.pages.dev/unlisted"} false)]
+            (is (= 400 (.-status rejected)))
+            (is (= choice-id (:block/uuid (get (d/entity @conn [:block/uuid (first block-ids)])
+                                               (:db/ident property)))))))))))
