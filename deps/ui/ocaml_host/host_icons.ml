@@ -177,8 +177,8 @@ let svg_image_of store scale id r : Lui_scene.image option =
           Hashtbl.replace cache key rendered;
           rendered)
 
-(* Decoded files belong to their mounted nodes. Prune on store changes so
-   closing a surface releases its pixels instead of retaining a path history. *)
+(* Mounted nodes retain their image. A separately bounded resource cache
+   avoids decoding small shared assets again when a surface remounts. *)
 let file_images : (int, string * Lui_scene.image) Hashtbl.t = Hashtbl.create 8
 let file_store = ref None
 let file_revision = ref (-1)
@@ -218,8 +218,7 @@ let asset_path path =
     in
     Filename.concat root path
 
-let read_png path =
-  let encoded = In_channel.with_open_bin path In_channel.input_all in
+let decode_png encoded =
   let decoded =
     ImageLib.PNG.parsefile (ImageUtil.chunk_reader_of_string encoded)
   in
@@ -240,6 +239,36 @@ let read_png path =
   done;
   Lui_scene.new_image ~w:decoded.width ~h:decoded.height pixels
 
+let file_resources : ((string * string) * Lui_scene.image) list ref = ref []
+let file_resource_budget = 1024 * 1024
+let file_resource_entries = 32
+
+let file_image path =
+  let encoded = In_channel.with_open_bin path In_channel.input_all in
+  let key = (path, Digest.string encoded) in
+  match List.assoc_opt key !file_resources with
+  | Some image -> image
+  | None ->
+      let image = decode_png encoded in
+      if Bytes.length image.Lui_scene.ipix <= file_resource_budget then begin
+        let rec retain budget entries = function
+          | [] -> []
+          | (_, resource_image) :: _
+            when entries = 0
+                 || Bytes.length resource_image.Lui_scene.ipix > budget ->
+              []
+          | ((_, resource_image) as resource) :: rest ->
+              resource
+              :: retain
+                   (budget - Bytes.length resource_image.Lui_scene.ipix)
+                   (entries - 1) rest
+        in
+        file_resources :=
+          retain file_resource_budget file_resource_entries
+            ((key, image) :: !file_resources)
+      end;
+      image
+
 let image_of store scale id r =
   prune_file_images store;
   if Lui_store.kind store id <> "file-image" then svg_image_of store scale id r
@@ -250,6 +279,6 @@ let image_of store scale id r =
         match Hashtbl.find_opt file_images id with
         | Some (cached, image) when cached = path -> Some image
         | _ ->
-            let image = read_png (asset_path path) in
+            let image = file_image (asset_path path) in
             Hashtbl.replace file_images id (path, image);
             Some image)

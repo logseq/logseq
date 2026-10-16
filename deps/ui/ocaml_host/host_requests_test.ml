@@ -3386,10 +3386,16 @@ let () =
 let () =
   let first = Filename.temp_file "native-image-" ".png"
   and second = Filename.temp_file "native-image-" ".png" in
+  let pressure =
+    List.init 5 (fun _ -> Filename.temp_file "native-image-pressure-" ".png")
+  in
+  let tiny =
+    List.init 33 (fun _ -> Filename.temp_file "native-image-tiny-" ".png")
+  in
+  let oversized = Filename.temp_file "native-image-oversized-" ".png" in
   Fun.protect
     ~finally:(fun () ->
-      Sys.remove first;
-      Sys.remove second)
+      List.iter Sys.remove ((first :: second :: oversized :: pressure) @ tiny))
     (fun () ->
       let source = Image.create_rgb ~alpha:true 2 2 in
       Image.write_rgba source 0 0 255 0 0 255;
@@ -3403,6 +3409,23 @@ let () =
           Out_channel.with_open_bin path (fun channel ->
               output_string channel (Buffer.contents buffer)))
         [ first; second ];
+      List.iter
+        (fun path ->
+          Out_channel.with_open_bin path (fun channel ->
+              output_string channel (Buffer.contents buffer)))
+        tiny;
+      let write_image width height paths =
+        let bitmap = Image.create_rgb ~alpha:true width height in
+        let encoded = Buffer.create 1024 in
+        ImageLib.PNG.write (ImageUtil.chunk_writer_of_buffer encoded) bitmap;
+        List.iter
+          (fun path ->
+            Out_channel.with_open_bin path (fun channel ->
+                output_string channel (Buffer.contents encoded)))
+          paths
+      in
+      write_image 256 256 pressure;
+      write_image 513 512 [ oversized ];
       let store = Lui_store.create () in
       List.iter (Lui_store.apply_op store)
         [
@@ -3439,9 +3462,56 @@ let () =
       ignore
         (Host_icons.image_of store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
       Gc.full_major ();
-      check "Native PNG cache retained disposed image pixels"
-        ((not (Weak.check original 0)) && not (Weak.check changed 0)));
-  print_endline "native PNG decoding and node ownership: OK"
+      let remount path =
+        List.iter (Lui_store.apply_op store)
+          [
+            CreateNode (830002, FileImage);
+            SetProp (830002, PathValue, StringValue path);
+          ];
+        let image =
+          Option.get
+            (Host_icons.image_of store 1. 830002
+               (Lui_scene.rect 0. 0. 100. 100.))
+        in
+        let weak = Weak.create 1 in
+        Weak.set weak 0 (Some image);
+        Lui_store.apply_op store (DropNode 830002);
+        ignore
+          (Host_icons.image_of store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
+        weak
+      in
+      let remounted = remount first in
+      check "Remounting a native PNG decodes the same resource again"
+        (match (Weak.get original 0, Weak.get remounted 0) with
+        | Some original_image, Some next -> original_image == next
+        | _ -> false);
+      List.iter (fun path -> ignore (remount path)) pressure;
+      Gc.full_major ();
+      check "Native PNG resource cache exceeds its pixel budget"
+        ((not (Weak.check original 0)) && not (Weak.check changed 0));
+      let large = remount oversized in
+      Gc.full_major ();
+      check "Oversized unmounted PNG remains in the resource cache"
+        (not (Weak.check large 0));
+      let oldest = remount (List.hd tiny) in
+      List.iter (fun path -> ignore (remount path)) (List.tl tiny);
+      Gc.full_major ();
+      check "Native PNG resource cache retains an unbounded path history"
+        (not (Weak.check oldest 0));
+      let previous = remount first in
+      Image.write_rgba source 0 0 64 0 0 255;
+      Buffer.clear buffer;
+      ImageLib.PNG.write (ImageUtil.chunk_writer_of_buffer buffer) source;
+      Out_channel.with_open_bin first (fun channel ->
+          output_string channel (Buffer.contents buffer));
+      let updated = remount first in
+      check "Remounting a modified PNG reuses stale pixels"
+        (match (Weak.get previous 0, Weak.get updated 0) with
+        | Some previous_image, Some updated_image ->
+            previous_image.iid <> updated_image.iid
+            && Bytes.get_uint8 updated_image.ipix 0 = 64
+        | _ -> false));
+  print_endline "native PNG decoding and bounded resource reuse: OK"
 
 let () =
   Option.iter
@@ -3466,6 +3536,24 @@ let () =
             mode (Bytes.length image.ipix)
             ((Unix.gettimeofday () -. before) *. 1000.))
         [ "light"; "dark"; "system" ];
+      let before = Unix.gettimeofday () in
+      for cycle = 0 to 19 do
+        List.iteri
+          (fun index mode ->
+            let id = 841000 + (cycle * 3) + index in
+            List.iter (Lui_store.apply_op store)
+              [
+                CreateNode (id, FileImage);
+                SetProp
+                  (id, PathValue, StringValue ("img/" ^ mode ^ "-theme.png"));
+              ];
+            ignore
+              (Host_icons.image_of store 2. id (Lui_scene.rect 0. 0. 184. 126.));
+            Lui_store.apply_op store (DropNode id))
+          [ "light"; "dark"; "system" ]
+      done;
+      Printf.printf "native theme PNG remount mean %.3f ms/three images\n%!"
+        ((Unix.gettimeofday () -. before) *. 1000. /. 20.);
       print_endline "native bundled theme PNGs: OK")
     (Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR")
 
