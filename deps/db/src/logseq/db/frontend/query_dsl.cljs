@@ -77,8 +77,10 @@
                                               value)))
                                      (string/join " ")
                                      (common-util/format "(between %s)"))))
-              ;; a string, escapes included, like the page-ref match above
-              (string/replace #"\"(?:\\.|[^\"\\])+\""
+              ;; a string, escapes included, like the page-ref match above.
+              ;; An empty "" is a string too, or the match pairs its closing
+              ;; quote with the next string's opening one.
+              (string/replace #"\"(?:\\.|[^\"\\])*\""
                               #(string/replace % "#" tag-placeholder))
               (string/replace " #" " #tag ")
               (string/replace #"^#" "#tag ")
