@@ -639,7 +639,7 @@ let () =
                  | None -> ops
                  | Some deco ->
                    let pad =
-                     (Lui_paint.text_placement_of store id).tp_pad_x
+                     (Lui_paint.text_placement_of store id).tp_pad_left
                      *. !scale_cell
                    in
                    let mw, mh =
@@ -714,7 +714,7 @@ let () =
                  match !host_cell with
                  | Some h ->
                    (Lui_paint.text_placement_of (Lui_host.store h) id)
-                     .tp_pad_x
+                     .tp_pad_left
                    *. !scale_cell
                  | None -> 0.
                in
@@ -863,12 +863,7 @@ let () =
         | Some r -> r
         | None ->
           let mw, mh = Text_engine.measure_text ~width:w text_engine id text in
-          let tp = Lui_paint.text_placement_of store' id in
-          let r =
-            Some
-              ( mw +. (2. *. tp.tp_pad_x *. scale_now)
-              , mh +. (2. *. tp.tp_pad_y *. scale_now) )
-          in
+          let r = Some (Text_engine.pad_size store' id ~scale:scale_now (mw,mh)) in
           Hashtbl.replace measure_memo key r;
           r)
       ~renderer:renderer_live ~width:dw ~height:dh ~scale ()
@@ -1220,7 +1215,7 @@ let () =
     else begin
       let s = !scale_cell in
       let pad =
-        (Lui_paint.text_placement_of store id).tp_pad_x *. s
+        (Lui_paint.text_placement_of store id).tp_pad_left *. s
       in
       let text = Ui.shadow ui in
       let prefix =

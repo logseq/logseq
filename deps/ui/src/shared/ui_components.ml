@@ -136,9 +136,8 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; owns
    the column children stack into (scroll children share a grid cell —
-   multiple children need a single column root). [bottom_pad] scrolls
-   the last row clear of the hints bar (a trailing spacer — scroll has
-   no bottom-only padding prop). *)
+   multiple children need a single column root). A trailing spacer
+   scrolls the last row clear of the hints bar. *)
 let cmdk_scroller ~key ~bottom_pad children =
   with_props
     [ Prop.min_height_viewport 0.65; Prop.max_height_viewport 0.65 ]
@@ -187,8 +186,7 @@ let cmdk_group_header ~key children =
           var(--muted-foreground)))"
        children)
 
-(* 2px left inset without a pad — the leading spacer keeps the count's
-   position pixel-identical (a left-only padding prop does not exist). *)
+(* A two-point leading spacer keeps the count's inset in row flow. *)
 let cmdk_group_title ~key ~value ~on_press : t =
   row ~key ~gap:0
     [ spacer ~key:"i" ~width:2 ~height:1 []
@@ -653,45 +651,35 @@ let form_desc ~key ~value : t =
        var(--muted-foreground)))"
     []
 
-(* Leading-icon search field — the `.search-ctls`/`.search-input-wrap`/
-   `.search-input` pattern: the row anchors an absolutely-positioned
-   icon; its unset top falls back to the flex static position
-   (`cross:`center` → vertically centered). `pad_left` clears the icon —
-   per-side padding has no prop, the documented channel is the
-   data-attrs style pair. `borderless` kills the `.lui-search-field`
-   border+ring (icon-picker's gray-03 input). *)
-let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
-    ?(pad_left = 28) ?background ?(borderless = false) ?(trailing = [])
-    ?autofocus ~placeholder ~text_signal:text ~on_text () : t =
-  (* TextChanged is decoded once here — callers take the string *)
+(* The field paints first; its hit-transparent leading icon paints above the
+   surface. Typed edge padding keeps text, caret, and pointer coordinates in
+   the same content box on every host. Trailing controls remain in row flow. *)
+let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
+    ?pad_right ?background ?(borderless = false) ?(trailing = []) ?autofocus
+    ~placeholder ~text_signal:text ~on_text () : t =
   let on_input ev =
-    match ev with
-    | P.TextChanged (_, q) -> on_text q
-    | _ -> ()
+    match ev with P.TextChanged (_, q) -> on_text q | _ -> ()
   in
-  with_props [ Prop.position `relative ]
-    (row ~key ~cross:`center ~gap:0
-       ~min_width:0
-       ([ with_props
-            [ Prop.position `absolute
-            ; Prop.inset_left (if pad_left >= 32 then 10. else 8.)
-            ; Prop.opacity 0.5
-            ; Prop.pointer_enabled false
-            ]
-            (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ])
-        ; with_props
-            ([ Prop.font_size font_size ]
+  with_props
+    [ Prop.position `relative ]
+    (row ~key ~cross:`center ~gap:0 ~min_width:0
+       ([
+          with_props
+            ([ Prop.font_size font_size; Prop.padding_left pad_left ]
+            @ Option.to_list (Option.map Prop.padding_right pad_right)
             @
-            if borderless then
-              [ Prop.border_width 0; Prop.focus_shadow "none" ]
+            if borderless then [ Prop.border_width 0; Prop.focus_shadow "none" ]
             else [])
-            (search_field ~key:"in" ~grow:1. ~min_width:0 ~height
-               ?background ~placeholder ?autofocus ~text_signal:text
-               ~data_attrs:
-                 [ ( "style"
-                   , "padding-left: " ^ string_of_int pad_left ^ "px" )
-                 ]
-               ~on_input [])
+            (search_field ~key:"in" ~grow:1. ~min_width:0 ~height ?background
+               ~placeholder ?autofocus ~text_signal:text ~on_input []);
+          with_props
+            [
+              Prop.position `absolute;
+              Prop.inset_left (if pad_left >= 32 then 10. else 8.);
+              Prop.opacity 0.5;
+              Prop.pointer_enabled false;
+            ]
+            (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ]);
         ]
        @ trailing))
 

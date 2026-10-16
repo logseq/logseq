@@ -396,7 +396,7 @@ let keymap_controls st =
         ~main:`space_between ~flex_wrap:`wrap ~gap:8
         [ box ~key:"km-sw-w" ~grow:1. ~min_width:0
             [ Ui_components.search_row ~key:"km-sw" ~height:26
-                ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
+                ~font_size:"0.875rem" ~pad_left:28 ~pad_right:28 ~autofocus:true
                 ~placeholder:T.keymap_search_placeholder
                 ~text_signal:(reactive (fun s -> s.km_query) (Signal.value st))
                 ~on_text:(fun query ->

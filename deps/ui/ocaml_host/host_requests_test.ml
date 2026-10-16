@@ -1656,9 +1656,7 @@ let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_REPLAY" with
       | Some result -> result
       | None ->
         let mw,mh = Text_engine.measure_text ~width:w engine id text in
-        let tp = Lui_paint.text_placement_of store id in
-        let result = Some (mw +. 2. *. tp.tp_pad_x *. scale,
-                           mh +. 2. *. tp.tp_pad_y *. scale) in
+        let result = Some (Text_engine.pad_size store id ~scale (mw,mh)) in
         Hashtbl.add memo key result;
         result in
     let allocation_samples = Hashtbl.create 128 in
@@ -1712,9 +1710,7 @@ let () = match Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_TRACE_REPLAY" with
       | Some result -> result
       | None ->
         let mw,mh = Text_engine.measure_text ~width engine id text in
-        let tp = Lui_paint.text_placement_of !current_store id in
-        let result = Some (mw +. 2. *. tp.tp_pad_x *. !scale_now,
-                           mh +. 2. *. tp.tp_pad_y *. !scale_now) in
+        let result = Some (Text_engine.pad_size !current_store id ~scale:!scale_now (mw,mh)) in
         Hashtbl.add memo key result;
         result in
     In_channel.with_open_bin path (fun channel ->
@@ -2147,6 +2143,279 @@ let () =
       List.iter prerr_endline (List.rev !errors);
       check "Native functional color alpha and modal backdrop" (!errors = []));
   print_endline "native color alpha and modal backdrop: OK"
+
+let () =
+  let property name =
+    match
+      List.find_opt
+        (fun p -> Lui_wire_schema.property_name p = name)
+        Lui_wire_schema.all_properties
+    with
+    | Some p -> p
+    | None -> failwith ("Missing typed property: " ^ name)
+  in
+  List.iter
+    (fun scale ->
+      let store = Lui_store.create () in
+      let scene =
+        Lui_scene.create
+          ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:128 ~h:128)
+          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:128 ~h:128)
+      in
+      let engine =
+        Text_engine.create
+          ~scene:(fun () -> scene)
+          ~scale:(fun () -> scale)
+          ~store:(fun () -> store)
+      in
+      let apply ops = List.iter (Lui_store.apply_op store) ops in
+      let left = property "padding-left"
+      and right = property "padding-right"
+      and top = property "padding-top"
+      and bottom = property "padding-bottom" in
+      apply
+        [
+          CreateNode (830001, SearchField);
+          SetProp (830001, FontSize, StringValue "14px");
+          SetProp (830001, LineHeight, StringValue "20px");
+          SetProp (830001, TextValue, StringValue "Undo");
+          SetProp (830001, PaddingValue, IntValue 5);
+          SetProp (830001, PaddingHorizontal, IntValue 10);
+          SetProp (830001, PaddingVertical, IntValue 6);
+        ];
+      let region =
+        Lui_scene.rect (100. *. scale) (200. *. scale) (200. *. scale)
+          (60. *. scale)
+      in
+      let expect l t r b =
+        let layout, x, y =
+          Text_engine.text_layout engine 830001 region "Undo"
+        in
+        check "Native search text ignores its left inset"
+          (x -. region.x = l *. scale);
+        check "Native search text ignores asymmetric vertical padding"
+          (abs_float
+             (y -. region.y
+             -. (region.h -. (layout.lay_height *. scale) +. ((t -. b) *. scale))
+                /. 2.)
+          < 0.01);
+        let w, h = Text_engine.measure store 830001 ~scale in
+        check "Native field measurement ignores horizontal edge padding"
+          (abs_float (w -. ((layout.lay_width +. l +. r) *. scale)) < 0.01);
+        check "Native field measurement ignores vertical edge padding"
+          (abs_float (h -. ((layout.lay_height +. t +. b) *. scale)) < 0.01)
+      in
+      expect 10. 6. 10. 6.;
+      apply
+        [
+          SetProp (830001, left, IntValue 28);
+          SetProp (830001, right, IntValue 8);
+          SetProp (830001, top, IntValue 3);
+          SetProp (830001, bottom, IntValue 9);
+        ];
+      expect 28. 3. 8. 9.;
+      apply
+        [
+          SetProp (830001, left, IntValue 0);
+          SetProp (830001, bottom, IntValue 0);
+        ];
+      expect 0. 3. 8. 0.;
+      apply
+        [
+          RemoveProp (830001, left);
+          RemoveProp (830001, right);
+          RemoveProp (830001, top);
+          RemoveProp (830001, bottom);
+        ];
+      expect 10. 6. 10. 6.)
+    [ 1.; 2. ];
+  print_endline "native text padding edges: OK"
+
+let () =
+  let errors = ref [] in
+  List.iter
+    (fun scale ->
+      List.iter
+        (fun width ->
+          List.iter
+            (fun (height, pad_left, borderless) ->
+              List.iter
+                (fun trailing ->
+                  let host_cell = ref None in
+                  let engine =
+                    lazy
+                      (Text_engine.create
+                         ~scene:(fun () ->
+                           Lui_host.scene (Option.get !host_cell))
+                         ~scale:(fun () -> scale)
+                         ~store:(fun () ->
+                           Lui_host.store (Option.get !host_cell)))
+                  in
+                  let host =
+                    Lui_host.create ~hooks:Lui_paint.default_hooks
+                      ~layout:(module Lui_layout)
+                      ~measure:(fun id _text _w _h ->
+                        Some
+                          (Text_engine.measure
+                             (Lui_host.store (Option.get !host_cell))
+                             id ~scale))
+                      ~renderer:
+                        {
+                          Lui_host.name = "search-row-test";
+                          render = (fun _ -> Bytes.empty);
+                        }
+                      ~width:(int_of_float (width *. scale))
+                      ~height:(int_of_float (80. *. scale))
+                      ~scale ()
+                  in
+                  host_cell := Some host;
+                  let app =
+                    Lui_app.create
+                      (Lui_host.backend host (profile MacOS GenericHost))
+                      ()
+                      (fun () () -> ())
+                      (fun context _ _ ->
+                        let value =
+                          Signal.state context.Lui_ui.ui_scheduler "Undo"
+                        in
+                        Lui_elements.column ~width:(int_of_float width)
+                          [
+                            Ui_components.search_row ~key:"shared-search"
+                              ~height ~pad_left ~borderless
+                              ~background:"#f0f0f0" ~placeholder:"Search"
+                              ~text_signal:(Signal.value value)
+                              ~on_text:(fun text ->
+                                Runtime.signal_set value text)
+                              ~trailing:
+                                (if trailing then
+                                   [
+                                     Lui_elements.button ~width:20 ~min_width:0
+                                       ~padding:0 ~text:"x" [];
+                                   ]
+                                 else [])
+                              ();
+                          ])
+                  in
+                  Fun.protect
+                    ~finally:(fun () -> ignore (Lui_app.dispose app))
+                    (fun () ->
+                      ignore (Lui_app.start app);
+                      ignore (Lui_app.flush app);
+                      ignore (Lui_host.repaint host);
+                      let store = Lui_host.store host in
+                      let field =
+                        List.find
+                          (fun id -> Lui_store.kind store id = "search-field")
+                          (Lui_store.preorder store)
+                      in
+                      let rect id = Option.get (Lui_host.layout_rect host id) in
+                      let field_rect = rect field in
+                      let label =
+                        Printf.sprintf
+                          "search-row scale=%.0f width=%.0f height=%d \
+                           trailing=%b"
+                          scale width height trailing
+                      in
+                      let expect text condition =
+                        if not condition then
+                          errors := (label ^ ": " ^ text) :: !errors
+                      in
+                      let paint () =
+                        let hooks =
+                          {
+                            Lui_paint.default_hooks with
+                            Lui_paint.layout =
+                              (fun id -> Lui_paint.placement_of_rect (rect id));
+                            text_ops = Text_engine.text_ops (Lazy.force engine);
+                            image_of =
+                              (fun id ->
+                                Host_icons.image_of store scale id (rect id));
+                            image_in =
+                              (fun id region ->
+                                Host_icons.image_of store scale id region);
+                          }
+                        in
+                        let scene = Lui_host.scene host in
+                        Lui_paint.paint hooks store scene
+                          ~width:(int_of_float (width *. scale))
+                          ~height:(int_of_float (80. *. scale))
+                          ~scale
+                          ~clear:(Lui_scene.color 255 255 255 255);
+                        scene
+                      in
+                      let scene = paint () in
+                      let images =
+                        List.filter_map
+                          (function
+                            | Lui_scene.Image image -> Some image.irect2
+                            | _ -> None)
+                          scene.ops
+                      in
+                      expect "missing or duplicate search image"
+                        (List.length images = 1);
+                      List.iter
+                        (fun (image : Lui_scene.rect) ->
+                          expect "image extends outside its field"
+                            (image.w > 0. && image.h > 0.
+                           && image.x >= field_rect.x && image.y >= field_rect.y
+                            && image.x +. image.w
+                               <= field_rect.x +. field_rect.w
+                            && image.y +. image.h
+                               <= field_rect.y +. field_rect.h);
+                          expect
+                            "search image is not vertically centered in its \
+                             field"
+                            (abs_float
+                               (image.y +. (image.h /. 2.) -. field_rect.y
+                              -. (field_rect.h /. 2.))
+                            <= 0.5);
+                          let seen = ref false in
+                          let covered =
+                            List.exists
+                              (function
+                                | Lui_scene.Image op when op.irect2 = image ->
+                                    seen := true;
+                                    false
+                                | Lui_scene.Fill op when !seen ->
+                                    op.fcolor.a = 255 && op.fopacity = 1.
+                                    && op.frect.x <= image.x
+                                    && op.frect.y <= image.y
+                                    && op.frect.x +. op.frect.w
+                                       >= image.x +. image.w
+                                    && op.frect.y +. op.frect.h
+                                       >= image.y +. image.h
+                                | _ -> false)
+                              scene.ops
+                          in
+                          expect "field background covers its search image"
+                            (not covered))
+                        images;
+                      let expect_origin text =
+                        let _, x, _ =
+                          Text_engine.text_layout (Lazy.force engine) field
+                            (rect field) text
+                        in
+                        expect "text does not clear the leading image"
+                          (x -. (rect field).x = float pad_left *. scale)
+                      in
+                      expect_origin "Undo";
+                      ignore
+                        (Lui_app.dispatch_event app
+                           (TextChanged (field, "Repeated typing")));
+                      ignore (Lui_app.flush app);
+                      ignore (Lui_host.repaint host);
+                      expect "typing is not delivered through the shared field"
+                        (Lui_store.string_prop store field "text"
+                        = Some "Repeated typing");
+                      expect_origin "Repeated typing"))
+                [ false; true ])
+            [ (26, 28, false); (28, 28, false); (32, 32, true) ])
+        [ 160.; 320. ])
+    [ 1.; 2. ];
+  List.iter prerr_endline (List.rev !errors);
+  check "Shared native search fields across caller sizes and backing scales"
+    (!errors = []);
+  print_endline "native shared search fields: OK"
 
 let () =
   Native_embed.with_entry_lock (fun () ->
@@ -2646,6 +2915,56 @@ let () =
           in
           expect "Search-by-keys paints a duplicate or missing keyboard icon"
             (List.length key_icons = 1);
+          let search_region = rect search in
+          let inside_search (region : Lui_scene.rect) =
+            region.w > 0. && region.h > 0.
+            && region.x >= search_region.x
+            && region.y >= search_region.y
+            && region.x +. region.w <= search_region.x +. search_region.w
+            && region.y +. region.h <= search_region.y +. search_region.h
+          in
+          let search_icons =
+            List.filter_map
+              (function
+                | Lui_scene.Image image when inside_search image.irect2 ->
+                    Some image.irect2
+                | _ -> None)
+              keymap_scene.ops
+          in
+          expect "Keymap search needs exactly one visible leading icon"
+            (List.length search_icons = 1);
+          List.iter
+            (fun icon ->
+              let seen = ref false in
+              let covered =
+                List.exists
+                  (function
+                    | Lui_scene.Image image when image.irect2 = icon ->
+                        seen := true;
+                        false
+                    | Lui_scene.Fill fill when !seen ->
+                        fill.fcolor.a = 255 && fill.fopacity = 1.
+                        && fill.frect.x <= icon.x && fill.frect.y <= icon.y
+                        && fill.frect.x +. fill.frect.w >= icon.x +. icon.w
+                        && fill.frect.y +. fill.frect.h >= icon.y +. icon.h
+                    | _ -> false)
+                  keymap_scene.ops
+              in
+              expect "The input surface must not cover its leading search icon"
+                (not covered))
+            search_icons;
+          let search_layout, search_text_x, _ =
+            Text_engine.text_layout keymap_engine search search_region "Undo"
+          in
+          expect "Keymap search text must clear the twenty-eight-point icon slot"
+            (search_text_x -. search_region.x = 56.);
+          let first_caret = Lui_text.caret_rect search_layout 0 in
+          expect "Keymap search caret must start after the leading icon slot"
+            (search_text_x +. first_caret.rx -. search_region.x = 56.);
+          expect "The search icon must not intercept its field's hit target"
+            (List.mem search
+               (W.hit_path store (A.rects surface) ~x:(search_region.x +. 24.)
+                  ~y:(search_region.y +. (search_region.h /. 2.))));
           List.iter prerr_endline (List.rev !errors);
           check "Native Keymap visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"

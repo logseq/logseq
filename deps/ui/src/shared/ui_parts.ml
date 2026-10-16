@@ -192,6 +192,10 @@ module Prop : sig
   val padding : int -> t
   val padding_horizontal : int -> t
   val padding_vertical : int -> t
+  val padding_top : int -> t
+  val padding_right : int -> t
+  val padding_bottom : int -> t
+  val padding_left : int -> t
   val margin : int -> t
   val margin_top : int -> t
   val margin_right : int -> t
@@ -294,6 +298,10 @@ end = struct
   let padding v = int PaddingValue v
   let padding_horizontal v = int PaddingHorizontal v
   let padding_vertical v = int PaddingVertical v
+  let padding_top v = int PaddingTop v
+  let padding_right v = int PaddingRight v
+  let padding_bottom v = int PaddingBottom v
+  let padding_left v = int PaddingLeft v
   let margin v = int MarginValue v
   let margin_top v = int MarginTop v
   let margin_right v = int MarginRight v

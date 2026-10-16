@@ -373,9 +373,9 @@ let text_layout t id (r : Lui_scene.rect) s =
   (* Horizontal placement: the shared placement table decides the kind's
      alignment and content inset; props win over it. *)
   let tp = Lui_paint.text_placement_of store id in
-  let pad = tp.tp_pad_x *. scale in
+  let pad = tp.tp_pad_left *. scale in
   let x0 = r.x +. pad in
-  let w' = Float.max 0. (r.w -. (2. *. pad)) in
+  let w' = Float.max 0. (r.w -. ((tp.tp_pad_left +. tp.tp_pad_right) *. scale)) in
   (* Flowing text wraps at its padded width so a long line never spills
      into the node's inset; labeled controls keep a single line. *)
   let wrap_w =
@@ -396,8 +396,8 @@ let text_layout t id (r : Lui_scene.rect) s =
   (* Vertical centering inside the node's rect, device pixels. *)
   let text_h = layout.lay_height *. scale in
   let y0 =
-    if tp.tp_top then r.y +. (tp.tp_pad_y *. scale)
-    else r.y +. Float.max 0. ((r.h -. text_h) /. 2.)
+    if tp.tp_top then r.y +. (tp.tp_pad_top *. scale)
+    else r.y +. Float.max 0. ((r.h -. text_h +. (tp.tp_pad_top -. tp.tp_pad_bottom) *. scale) /. 2.)
   in
   (layout, x0, y0)
 
@@ -407,7 +407,7 @@ let text_ops t id r fg s =
   let store = t.store () in
   let tp = Lui_paint.text_placement_of store id in
   let layout, x0, y0 = text_layout t id r s in
-  let w' = Float.max 0. (r.w -. (2. *. tp.tp_pad_x *. scale)) in
+  let w' = Float.max 0. (r.w -. ((tp.tp_pad_left +. tp.tp_pad_right) *. scale)) in
   let lines =
     if Lui_store.string_prop store id "text-overflow" = Some "ellipsis"
        && layout.lay_width *. scale > w' then
@@ -456,6 +456,11 @@ let textish = function
   | "select" | "combobox" | "checkbox" | "radio" | "switch" -> true
   | _ -> false
 
+let pad_size store id ~scale (width, height) =
+  let placement = Lui_paint.text_placement_of store id in
+  ( width +. ((placement.tp_pad_left +. placement.tp_pad_right) *. scale),
+    height +. ((placement.tp_pad_top +. placement.tp_pad_bottom) *. scale) )
+
 let measure store id ~scale =
   if not (textish (Lui_store.kind store id)) then (0., 0.)
   else
@@ -471,9 +476,7 @@ let measure store id ~scale =
     else
       let layout = Lui_text.layout ?line_height:(line_height_of store id) (font_of store id) text in
       let w,h=layout.lay_width,layout.lay_height in
-      let tp = Lui_paint.text_placement_of store id in
-      ((w +. (2. *. tp.tp_pad_x)) *. scale,
-       (h +. (2. *. tp.tp_pad_y)) *. scale)
+      pad_size store id ~scale (w *. scale, h *. scale)
 
 (* Device-pixel (w, h) of an arbitrary string in node [id]'s font —
    the caret offset and the composition overlay measure through this
