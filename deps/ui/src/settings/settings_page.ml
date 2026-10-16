@@ -88,7 +88,7 @@ let language_row ctx =
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  Ui_components.form_row ~key:"theme" ~min_height:96
+  Ui_components.form_row ~key:"theme" ~min_height:85
     ~label:
       (Ui_components.form_label ~key:"theme-l"
          ~text:""
@@ -117,7 +117,7 @@ let theme_row ctx =
 let font_button ~key ~label ~active ~on_click =
   button ~key ~variant:`secondary ~selected:active
     ~label
-    ~height:40 ~padding_horizontal:16
+    ~height:40 ~padding_horizontal:16 ~padding_vertical:0
     ~border_width:(if active then 2 else 0)
     ~border_color:"hsl(var(--primary))"
     ~style_class:
@@ -128,10 +128,10 @@ let font_button ~key ~label ~active ~on_click =
         ~style_class:
           ("ls-font ls-font-" ^ String.lowercase_ascii label)
         [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample"
-            ~font_size:"0.875rem" ~line_height:"1.25rem" ~height:20
+            ~font_size:"0.875rem" ~font_weight:700 ~line_height:"1.25rem" ~height:20
             ~text_alignment:`center ~value:"Ag" []
         ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name"
-            ~font_size:"0.6875rem" ~line_height:"1rem" ~height:16
+            ~font_size:"0.75rem" ~line_height:"1rem" ~height:16
             ~text_alignment:`center ~value:label []
         ]
     ]
@@ -143,16 +143,18 @@ let editor_font_row () =
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
   C.it_row ~key:"font" ~label:T.editor_font
-    ~value_cls:"ls-it-value-col" ~min_height:76
-    [ row ~key:"font-btns" ~style_class:"ls-row-gap"
+    ~value_cls:"ls-it-value-col" ~min_height:80
+    [ row ~key:"font-btns" ~style_class:"ls-row-gap" ~gap:8
         [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
-    ; box ~key:"font-g" ~style_class:"ls-font-global"
+    ; box ~key:"font-g" ~style_class:"ls-font-global" ~margin_top:12
         [ row ~key:"font-gl" ~cross:`center ~min_height:28
-            ~style_class:"ls-check-row"
+            ~style_class:"ls-check-row" ~gap:4
             [ C.checkbox_el ~key:"font-gc" ~on:font.S.fglobal
                 ~on_checked:(fun b -> S.set_editor_font_global b)
-            ; text ~key:"font-gt" ~style_class:"ls-check-label"
-                ~value:T.editor_font_global []
+            ; Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+                (text ~key:"font-gt" ~style_class:"ls-check-label"
+                   ~font_size:"0.875rem" ~line_height:"1.25rem"
+                   ~value:T.editor_font_global [])
             ]
         ]
     ]
@@ -244,7 +246,7 @@ let accent_row ~modal =
 
 let general_pane ~modal ctx =
   column ~key:"pane-general" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+    ~gap:16 ~padding:4 ~max_width:600
     [ version_row ()
     ; language_row ctx
     ; theme_row ctx
@@ -722,7 +724,7 @@ let article ~modal ctx =
            ~padding_vertical:8
            [ heading ~key:"art-ht" ~level:1
                ~style_class:"cp__settings-category-title"
-               ~font_size:"1.25rem"
+               ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
                ~value:
                  (reactive (fun (s : S.t) -> tab_title s.tab)
                     (S.signal ()))
@@ -752,7 +754,8 @@ let inner ~modal : t =
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
-          [ ( Ui_components.Prop.min_height_viewport 0.55 )
+          [ Ui_components.Prop.height_viewport 0.7
+          ; ( Ui_components.Prop.min_height_viewport 0.55 )
           ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
           (inner_box
              [ column ~key:"settings-aside"
@@ -774,7 +777,7 @@ let inner ~modal : t =
                          ~value:T.settings_title []
                      ]
                  ; list ~key:"aside-menu"
-                     ~style_class:"settings-menu" ~padding:0 ~gap:6
+                     ~style_class:"settings-menu" ~padding:0 ~gap:8
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)

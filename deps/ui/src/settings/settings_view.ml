@@ -169,7 +169,7 @@ let theme_item ~st mode label =
   C.class_signal (Signal.value st)
     (fun active -> if active = mode then "active" else "")
     (Ui_components.option_card ~key:("tm-" ^ mode) ~mode ~thumbnail ~label
-       ~min_height:83
+       ~min_height:85
        ~selected:(reactive (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
          use_mode mode;
@@ -179,7 +179,7 @@ let theme_item ~st mode label =
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =
   row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
-    ~cross:`center ~min_height:87
+    ~cross:`center ~min_height:85
     [ theme_item ~st "light" T.theme_light
     ; theme_item ~st "dark" T.theme_dark
     ; theme_item ~st "system" T.theme_system
@@ -196,14 +196,18 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~(height : int) ~st =
     Lui_elements.box ~key:(key ^ "-w")
       ~style_class:"ls-select-wrap" ~width:256 ~height
       ~max_width:320 ~corner_radius:6
-      [ Lui_elements.select ~key:(key ^ "-s")
+      [ Ui_components.with_props
+          [Ui_components.Prop.font_size "0.875rem"; Ui_components.Prop.line_height "1.25rem"]
+          (Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
           ~container_relative_frame:`horizontal
           ~width:256 ~height
+          ~background:"hsl(var(--background))"
+          ~border_width:1 ~border_color:"var(--lui-c-border)"
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())
-          []
+          [])
       ; reactive ~equal:( == ) (fun open_ ->
             if open_ then lang_menu ~key st mst
             else spacer ~key:(key ^ "-lm-x") [])

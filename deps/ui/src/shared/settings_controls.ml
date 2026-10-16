@@ -103,6 +103,8 @@ let switch_controls ~key ~on ~on_checked ?(extra = []) () =
    check svg child is dropped *)
 let checkbox_el ~key ~on ~on_checked =
   checkbox ~key ~style_class:"ui__checkbox" ~checked:on
+    ~width:16 ~height:16 ~min_width:16 ~min_height:16
+    ~border_width:1 ~border_color:"hsl(var(--foreground))"
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
@@ -139,7 +141,7 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
 (* cljs row-with-button-action *)
 let action_row ~key ~label ?description ~actions ?(desc = [])
     ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem")
-    ?(min_height = 36) () =
+    ?(min_height = 28) () =
   Ui_components.form_row ~key ~col_gap ~min_height
     ~label:
       (Ui_components.form_label ~key:(key ^ "-l") ~line_height:label_lh
@@ -162,7 +164,7 @@ let action_row ~key ~label ?description ~actions ?(desc = [])
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
 let it_row ~key ~label ?(value_cls = "ls-it-value")
-    ?(min_height = 36) children =
+    ?(min_height = 28) children =
   Ui_components.form_row ~key ~min_height
     ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
     ~control:
@@ -171,7 +173,7 @@ let it_row ~key ~label ?(value_cls = "ls-it-value")
     ()
 
 (* row: label | <a> solid button *)
-let edit_link_row ~key ~label ~button ~href ?(min_height = 36) () =
+let edit_link_row ~key ~label ~button ~href ?(min_height = 28) () =
   action_row ~key ~label ~min_height
     ~actions:
       [ Ui_components.with_props

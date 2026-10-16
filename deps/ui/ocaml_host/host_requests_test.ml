@@ -1964,3 +1964,233 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~x:(final.x+.final.w/.2.) ~y:(final.y+.final.h/.2.)));
   ignore (Lui_app.dispose app);
   print_endline "native language menu viewport and scrolling: OK")
+
+let () =
+  let old_mode = !Theme_vars.mode in
+  let errors = ref [] in
+  Fun.protect
+    ~finally:(fun () ->
+      Theme_vars.set_dark (old_mode = Lui_theme.Dark);
+      Hashtbl.remove Theme_vars.light_vars "--test-opacity-color")
+    (fun () ->
+      Theme_vars.set_dark false;
+      Hashtbl.replace Theme_vars.light_vars "--test-opacity-color" "#12345680";
+      List.iter
+        (fun (css, alpha) ->
+          let actual = Theme_vars.color_of css in
+          if actual <> Some (Lui_scene.color 18 52 86 alpha) then
+            errors :=
+              ("Resolved variable opacity is incorrect: " ^ css) :: !errors)
+        [
+          ("hsl(var(--test-opacity-color) / 0.5)", 64);
+          ("rgb(var(--test-opacity-color) / 0%)", 0);
+          ("hsl(var(--test-opacity-color) / 100%)", 128);
+          ("rgb(var(--test-opacity-color))", 128);
+        ];
+      List.iter
+        (fun dark ->
+          Theme_vars.set_dark dark;
+          let bg = Option.get (Theme_vars.color_of "background") in
+          let expected = { bg with Lui_scene.a = 230 } in
+          if Theme_vars.color_of "scrim" <> Some expected then
+            errors :=
+              "Native modal scrim does not use the active background at ninety \
+               percent" :: !errors)
+        [ false; true ];
+      List.iter prerr_endline (List.rev !errors);
+      check "Native functional color alpha and modal backdrop" (!errors = []));
+  print_endline "native color alpha and modal backdrop: OK"
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let module A = Lui_window.Assembly in
+      let module W = Lui_window in
+      let old_settings = !Settings_state.st and old_worker = !Runtime.worker in
+      Runtime.worker :=
+        Some
+          {
+            Worker_client.invoke_fn =
+              (fun name _ ->
+                match name with
+                | "thread-api/get-file-content" | "thread-api/pull" ->
+                    Js.Promise.resolve Wire.Nil
+                | _ -> failwith ("Unexpected settings fixture request: " ^ name));
+            on_message = (fun _ _ -> ());
+            dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ());
+          };
+      let old_width = Host.inner_width ()
+      and old_height = Host.inner_height () in
+      Settings_state.st := None;
+      Host.set_window_size 1440. 932.;
+      let surface =
+        A.create
+          ~layout:(module Lui_layout)
+          ~scale_cell:(ref 2.)
+          ~text:
+            {
+              measure = (fun _ value -> (float (String.length value * 14), 32.));
+              text_ops = (fun _ _ _ _ -> []);
+              hit_text = (fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+              caret_ops =
+                (fun _ _ ~lw:_ ~lh:_ ->
+                  {
+                    W.Ui.c_before = Fun.id;
+                    c_after = Fun.id;
+                    c_up = Fun.id;
+                    c_down = Fun.id;
+                    c_rect = (fun _ -> (0., 0., 32.));
+                  });
+            }
+          ~renderer:
+            { name = "settings-layout"; render = (fun _ -> Bytes.empty) }
+          ~width:2880 ~height:1864 ()
+      in
+      let host = A.host surface and store = A.store surface in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;
+      Logseq_codemirror.register registry;
+      let app =
+        Lui_app.create_with_extensions
+          (Lui_host.backend host (profile MacOS GenericHost))
+          registry Model.initial
+          (fun model _ -> model)
+          (fun _ model _ ->
+            Ui_components.with_props
+              [
+                Ui_components.Prop.font_size "1rem";
+                Ui_components.Prop.font_family "Inter";
+                Ui_components.Prop.line_height "1.5";
+              ]
+              (Lui_elements.column
+                 [ Dialogs_view.dialog_view "settings" model ]))
+      in
+      Fun.protect
+        ~finally:(fun () ->
+          ignore (Lui_app.dispose app);
+          Settings_state.st := old_settings;
+          Runtime.worker := old_worker;
+          Host.set_window_size old_width old_height)
+        (fun () ->
+          ignore (Lui_app.start app);
+          ignore (Lui_app.flush app);
+          ignore (A.store_changed surface);
+          ignore (A.repaint surface);
+          let nodes = Lui_store.preorder store in
+          let has_class id name =
+            match Lui_store.string_prop store id "style-class" with
+            | Some cls -> List.mem name (String.split_on_char ' ' cls)
+            | None -> false
+          in
+          let find_class name = List.find (fun id -> has_class id name) nodes in
+          let rect = W.Rects.get (A.rects surface) in
+          let errors = ref [] in
+          let expect message condition =
+            if not condition then errors := message :: !errors
+          in
+          let dialog =
+            List.find (fun id -> Lui_store.kind store id = "dialog") nodes
+          in
+          let inner = find_class "cp__settings-inner" in
+          Printf.printf "settings dialog %.2fx%.2f inner %.2fx%.2f\n%!"
+            (rect dialog).w (rect dialog).h (rect inner).w (rect inner).h;
+          (* Native layout snaps the viewport fraction to physical pixels. *)
+          expect
+            "Settings content must occupy 70 percent of the viewport height"
+            (abs_float ((rect inner).h -. 1304.8) <= 1.);
+          expect "Settings chrome must include its one-point border in layout"
+            ((rect inner).x = (rect dialog).x +. 2. && (rect inner).w = 2044.);
+          let pane = find_class "panel-wrap" in
+          expect "General settings content exceeds its six-hundred-point column"
+            ((rect pane).w <= 1200.);
+          let nav =
+            List.filter
+              (fun id ->
+                Lui_store.kind store id = "list-item"
+                && has_class id "settings-menu-item")
+              nodes
+          in
+          expect "Settings navigation does not keep forty-point row spacing"
+            ((rect (List.nth nav 1)).y -. (rect (List.hd nav)).y = 80.);
+          let title = find_class "cp__settings-category-title" in
+          let rendered_width =
+            fst (Lui_text.measure (Text_engine.font_of store title) "General")
+          in
+          let regular =
+            Lui_text.create ~families:[ "Inter" ] ~size:20. ~weight:400 ()
+          in
+          expect
+            "The category heading still renders with bold default typography"
+            (abs_float
+               (rendered_width -. fst (Lui_text.measure regular "General"))
+            < 0.01);
+          let checkbox =
+            List.find (fun id -> Lui_store.kind store id = "checkbox") nodes
+          in
+          expect "Settings checkbox has no visible sixteen-point hit target"
+            ((rect checkbox).w = 32. && (rect checkbox).h = 32.
+            && List.mem checkbox
+                 (W.hit_path store (A.rects surface)
+                    ~x:((rect checkbox).x +. 16.) ~y:((rect checkbox).y +. 16.))
+            );
+          let cards =
+            List.filter
+              (fun id ->
+                Lui_store.kind store id = "list-item"
+                && List.exists
+                     (fun child ->
+                       match
+                         Lui_store.string_prop store child "style-class"
+                       with
+                       | Some cls -> String.starts_with ~prefix:"mode-" cls
+                       | None -> false)
+                     (Lui_store.preorder ~root:id store))
+              nodes
+          in
+          let selected =
+            List.find (fun id -> W.bool_prop store id "selected") cards
+          in
+          expect "Theme selection paints the entire card as an accent block"
+            (not
+               (List.exists
+                  (function
+                    | Lui_scene.Fill f ->
+                        f.frect = rect selected && f.fcolor.a > 0
+                    | _ -> false)
+                  (Lui_host.scene host).ops));
+          let trigger =
+            List.find (fun id -> Lui_store.kind store id = "select") nodes
+          in
+          expect
+            "Language select lacks an explicit background and 14-point \
+             typography"
+            (Lui_store.string_prop store trigger "background"
+             = Some "hsl(var(--background))"
+            && Lui_text.size (Text_engine.font_of store trigger) = 14.);
+          let font_sample = find_class "ls-font-sample" in
+          let bold =
+            Lui_text.create ~families:[ "Inter" ] ~size:14. ~weight:700 ()
+          in
+          expect "Font preview lost its bold sample"
+            (abs_float
+               (fst
+                  (Lui_text.measure
+                     (Text_engine.font_of store font_sample)
+                     "Ag")
+               -. fst (Lui_text.measure bold "Ag"))
+            < 0.01);
+          let fonts =
+            List.filter (fun id -> has_class id "ls-font-btn") nodes
+          in
+          expect "Font choices have no eight-point gap"
+            ((rect (List.nth fonts 1)).x
+             -. ((rect (List.hd fonts)).x +. (rect (List.hd fonts)).w)
+            = 16.);
+          let global_label = find_class "ls-check-label" in
+          expect "Global font checkbox label is not fourteen-point text"
+            (Lui_text.size (Text_engine.font_of store global_label) = 14.);
+          let font_name = find_class "ls-font-name" in
+          expect "Font preview captions differ from twelve-point reference text"
+            (Lui_text.size (Text_engine.font_of store font_name) = 12.);
+          List.iter prerr_endline (List.rev !errors);
+          check "Native Settings visual geometry and typography" (!errors = [])));
+  print_endline "native settings visual geometry: OK"

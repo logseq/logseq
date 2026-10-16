@@ -129,10 +129,11 @@ let fn_var_ref (s : string) : (string * float option) option =
   | _ -> None
 
 let rec color_of (s : string) : Lui_scene.color option =
+  let spec = if s = "scrim" then "hsl(var(--background) / 0.9)" else s in
   let v =
-    match var_ref s with
-    | Some _ -> resolve_value s 0
-    | None -> Some s
+    match var_ref spec with
+    | Some _ -> resolve_value spec 0
+    | None -> Some spec
   in
   match v with
   | None -> None
@@ -158,8 +159,15 @@ let rec color_of (s : string) : Lui_scene.color option =
                         then String.sub name 2 (String.length name - 2)
                         else name
                       in
+                      let apply_alpha c =
+                        match alpha with
+                        | None -> c
+                        | Some a ->
+                          { c with Lui_scene.a =
+                              int_of_float (Float.round (a *. float c.Lui_scene.a)) }
+                      in
                       match color_of ("var(--" ^ tok ^ ")") with
-                      | Some _ as c -> c
+                      | Some c -> Some (apply_alpha c)
                       | None -> (
                           let tok =
                             (* --x-foreground slots alias onto the plain
@@ -173,14 +181,7 @@ let rec color_of (s : string) : Lui_scene.color option =
                           in
                           match Lui_theme.color_of !mode tok with
                           | Some c ->
-                            Some
-                              (match alpha with
-                               | None -> c
-                               | Some a ->
-                                 { c with Lui_scene.a =
-                                     int_of_float
-                                       (Float.round
-                                          (a *. float c.Lui_scene.a)) })
+                            Some (apply_alpha c)
                           | None -> None))))))
 
 let count_of_mode m = Hashtbl.length (vars_of_mode m)
