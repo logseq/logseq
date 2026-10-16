@@ -2184,13 +2184,12 @@
   ...}}` and `DONE {{embed ...}}` are embed blocks with a heading or a status."
   [title marker]
   (when (string? title)
-    (let [text (-> (string/replace title embed-macro-re "")
-                   string/trim
-                   (string/replace #"^#+(?:\s+|$)" ""))
-          text (if (and marker (string/starts-with? text marker))
-                 (string/trim (subs text (count marker)))
-                 text)]
-      (when-not (string/blank? text) text))))
+    (let [text (string/trim (string/replace title embed-macro-re ""))
+          body (string/replace text #"^#+(?:\s+|$)" "")
+          body (if (and marker (string/starts-with? body marker))
+                 (string/trim (subs body (count marker)))
+                 body)]
+      (when-not (string/blank? body) text))))
 
 (defn- handle-embeds
   "If a block contains page or block embeds, converts block to a :block/link based embed.
