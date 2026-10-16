@@ -143,13 +143,10 @@
                  (:full_text ast-content)
                  "Plain"
                  ast-content
-                 ;; `#x^^h^^{{x}}`: the parser takes the macro into the tag
+                 ;; Macro recovery can produce Macro nodes inside a tag.
                  "Macro"
                  (let [{:keys [name arguments]} ast-content]
-                   (str "{{" name (when (seq arguments) (str "(" (string/join "," arguments) ")")) "}}"))
-                 ;; any other inline the parser puts in a tag: dropped, not a
-                 ;; failed export of the whole page
-                 nil)))
+                   (str "{{" name (when (seq arguments) (str "(" (string/join "," arguments) ")")) "}}")))))
            inline-coll)))
 
 ;;; utils (ends)
