@@ -309,6 +309,23 @@
                           (is false (str "handle-http rejected: " error))
                           (done)))))))
 
+(deftest semantic-write-the-graph-does-not-allow-answers-400-test
+  (async done
+         (let [self #js {:conn (sqlite-export/create-conn) :sql (test-sql/make-sql) :schema-ready true :env #js {}}]
+           (-> (p/with-redefs [ws/broadcast! (fn [& _] nil)]
+                 (p/let [slash (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "a/b"}))
+                         slash-body (json-body slash)
+                         hash (sync-handler/handle-http self (semantic-json-request "/semantic/tags?graph-id=graph-1" "POST" {:title "#tag"}))
+                         hash-body (json-body hash)]
+                   (is (= 400 (.-status slash)))
+                   (is (= "Page name can't include \"/\"." (:error slash-body)))
+                   (is (= 400 (.-status hash)))
+                   (is (= "Page name can't include \"#\"." (:error hash-body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str "handle-http rejected: " error))
+                          (done)))))))
+
 (deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
   (async done
          (with-memory-sql-async
