@@ -586,6 +586,29 @@
                (string/trim all-content)))
         (done)))))
 
+(deftest export-block-embed-open-blocks-only
+  (testing "an embedded block's collapsed descendants are excluded when :open-blocks-only is enabled"
+    (let [parent-id #uuid "6b000000-0000-4000-8000-000000000001"
+          holder-id #uuid "6b000000-0000-4000-8000-000000000003"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks
+                  [{:block/title "Parent block" :block/uuid parent-id :build/keep-uuid? true
+                    :build/children
+                    [{:block/title "Collapsed child" :block/collapsed? true
+                      :build/children [{:block/title "Hidden grandchild"}]}]}
+                   {:block/title (str "{{embed ((" parent-id "))}}")
+                    :block/uuid holder-id :build/keep-uuid? true}]}]})
+          export! (fn [open-only?]
+                    (worker-export/export-blocks-as-format
+                     db holder-id :markdown
+                     {:remove-options [:property] :other-options {:open-blocks-only open-only?}}
+                     {}))]
+      (is (string/includes? (export! true) "Collapsed child"))
+      (is (not (string/includes? (export! true) "Hidden grandchild")))
+      (is (string/includes? (export! false) "Hidden grandchild")))))
+
 (deftest export-page-as-markdown-open-blocks-only
   (async done
     (testing "page export also excludes collapsed descendants when :open-blocks-only is enabled"
