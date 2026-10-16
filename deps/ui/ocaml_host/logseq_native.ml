@@ -297,7 +297,7 @@ let () =
   if memory_replay then Printf.eprintf "native memory replay policy=%s\n%!"
     (if continuous_replay then "continuous" else "changes");
   let raster_workers = match Sys.getenv_opt "LOGSEQ_NATIVE_RASTER_WORKERS" with
-    | None -> if use_cocoa then 1 else 4
+    | None -> 4
     | Some value -> int_of_string value in
   if raster_workers < 1 || raster_workers > 8 then
     invalid_arg "Native raster rendering requires between one and eight workers";
@@ -424,18 +424,27 @@ let () =
   let raster_background_domains () = match cocoa_tiles with
     | Some tiles -> Lui_raster.Tile_renderer.background_domains tiles
     | None -> 0 in
+  let metrics = Host_metrics.create ~now:(perf_s ()) in
   let cocoa_renderer tiles =
     let id = Sdl.get_window_id !win in
     { Lui_host.name = "lui_raster+iosurface";
       Lui_host.render = (fun scene ->
+        let started = perf_s () in
+        let upload_seconds = ref 0. in
         Native_window.software_begin id (scene.Lui_scene.width,scene.height,
           Lui_raster.Tile_renderer.band_height);
         Lui_raster.Tile_renderer.render ~workers:raster_workers tiles scene ~emit:(fun area image ->
+          let before_upload = perf_s () in
           Native_window.software_tile id (area.Lui_scene.y0,area.y1-area.y0,
-            image.Lui_raster.Image.stride,image.pix));
+            image.Lui_raster.Image.stride,image.pix);
+          upload_seconds := !upload_seconds +. (perf_s () -. before_upload));
+        let raster_done = perf_s () in
         Native_window.software_present id;
+        let presented = perf_s () in
+        Host_metrics.record_phase metrics Raster ((raster_done -. started -. !upload_seconds) *. 1000.);
+        Host_metrics.record_phase metrics Surface_upload (!upload_seconds *. 1000.);
+        Host_metrics.record_phase metrics Surface_present ((presented -. raster_done) *. 1000.);
         Bytes.empty) } in
-  let metrics = Host_metrics.create ~now:(perf_s ()) in
   metrics.panel_open <- Sys.getenv_opt "LOGSEQ_NATIVE_METRICS_PANEL" = Some "1";
   let presentation = Host_interaction.presentation () in
   let renderer, gl_live, blit =

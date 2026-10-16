@@ -1,10 +1,13 @@
 type phase = Events | Mailbox | Patch_apply | Requests | Layout | Scene_build
-  | Overlay | Gpu_submit | Gpu_execute | Geometry | Accessibility
+  | Overlay | Raster | Surface_upload | Surface_present
+  | Gpu_submit | Gpu_execute | Geometry | Accessibility
   | Active_frame | Loop_interval | Input_latency | Presentation_interval
 
 let phases = [Events, "events"; Mailbox, "mailbox"; Patch_apply, "patch_apply";
   Requests, "requests"; Layout, "layout"; Scene_build, "scene_build";
-  Overlay, "overlay"; Gpu_submit, "gpu_submit"; Gpu_execute, "gpu_execute";
+  Overlay, "overlay"; Raster, "raster"; Surface_upload, "surface_upload";
+  Surface_present, "surface_present";
+  Gpu_submit, "gpu_submit"; Gpu_execute, "gpu_execute";
   Geometry, "geometry_viewport"; Accessibility, "accessibility";
   Active_frame, "active_frame"; Loop_interval, "loop_interval"; Input_latency, "input_latency";
   Presentation_interval, "presentation_interval"]

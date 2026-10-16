@@ -426,6 +426,36 @@ let () = Native_embed.with_entry_lock (fun () ->
     [left_split,sidebar,-2000.;right_split,right_sidebar,3000.];
   Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue right_value));
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let shell_scene =
+    Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+  in
+  let retained = Lui_retained.create () in
+  ignore (Lui_retained.tick retained ~now:0.);
+  let paint_hooks =
+    { Lui_paint.default_hooks with layout = Lui_layout.layout_hook layout }
+  in
+  Lui_retained.paint_retained retained paint_hooks store shell_scene ~width:2880
+    ~height:1800 ~scale:2.
+    ~clear:(Lui_scene.color 255 255 255 255)
+    ();
+  let idle_motion = Lui_retained.animating retained in
+  ignore (Lui_retained.tick retained ~now:0.25);
+  Lui_retained.paint_retained retained paint_hooks store shell_scene ~width:2880
+    ~height:1800 ~scale:2.
+    ~clear:(Lui_scene.color 255 255 255 255)
+    ();
+  check "The idle overlay carrier casts a full-window popup shadow"
+    (not
+       (List.exists
+          (function
+            | Lui_scene.Shadow shadow ->
+                shadow.scast.w >= 2878. && shadow.scast.h >= 1798.
+            | _ -> false)
+          shell_scene.ops));
+  check "The permanent overlay carrier schedules popup animation while idle"
+    (not idle_motion);
   let icons = List.filter (fun id -> Lui_store.kind store id = "icon")
     (Lui_store.preorder store) in
   check "The shell must contain visible toolbar and navigation icons" (icons <> []);

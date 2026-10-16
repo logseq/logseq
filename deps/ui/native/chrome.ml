@@ -391,23 +391,15 @@ let detail_column (ms : Model.t Signal.signal) : t =
 let overlays (ms : Model.t Signal.signal) =
   (* .cp__overlays is an imperative handle — popups_state el_closest
      walks ancestors to it; the class anchor is unchanged.
-     Emitted as a cover popover (no ~at): the web positioner spans the
-     viewport and the native backends lift the children into a floating
-     window layer, so fixed-position chrome (dialogs, menus, toasts)
-     never renders in-flow at the document tail. viewport_cover pins
-     that span natively — without it the popover shrink-wraps its
-     children and mounted popups place against a zero-width strip.
-     data-overlay-layer marks it a permanent layer host, not a
-     presented popup: the native host's overlay rules then never
-     dispatch Dismiss to it (it stays mounted between overlays, so an
-     outside press or Escape would otherwise vanish into it). *)
+     A fixed cover overlay hosts the independently promoted popups.
+     The permanent carrier has no popup chrome or presentation motion;
+     viewport_cover gives its descendants the full window for placement.
+     data-overlay-layer also excludes the carrier from dismissal. *)
   Ui_parts.viewport_cover
     (Ui_parts.hit_transparent
-       (popover ~transition:Ui_components.popover_transition ~key:"overlays" ~style_class:"cp__overlays"
-    ~background:"#00000000"
+       (overlay ~key:"overlays" ~style_class:"cp__overlays"
     ~data_attrs:[ ("data-overlay-layer", "true") ]
-    [ (* popover takes only standard-kind children — the logseq-*
-         extension fragments some views emit mount inside a plain box *)
+    [ (* Extension fragments mount inside a standard container. *)
       box ~key:"overlays-wrap" ~grow:1.
         [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
     ; Popups_view.render ms
