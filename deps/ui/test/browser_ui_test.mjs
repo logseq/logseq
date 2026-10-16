@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test, {after} from 'node:test';
 import {measureKeymapRecording, assertKeymapRecording, measureRecordingBounds, assertRecordingBounds} from './keymap_record_checks.mjs';
-import {measureKeymapSearch, assertKeymapSearch} from './keymap_search_checks.mjs';
+import {measureKeymapSearch, assertKeymapSearch, measureKeymapCategories, assertKeymapCategories} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
 
@@ -461,6 +461,39 @@ test('keymap query ranks commands, updates counts and clears without replacing i
   assertKeymapSearch(measure(), {query: 'zzzz-no-shortcut', inputId});
   button('Clear search');
   assertKeymapSearch(measure(), {query: '', inputId, focused: true});
+  button('Close');
+});
+
+test('category toggle collapses mixed groups and preserves search and filter round trips', () => {
+  open();
+  openSettings();
+  button('Keymap');
+  const measure = () => evaluate(`(${measureKeymapCategories.toString()})(document.querySelector('[role="dialog"]'))`);
+  const {inputId, commands} = measure();
+  const verify = (count, grouped = true, tools = true) => assertKeymapCategories(measure(), {inputId, commands: count, grouped, tools});
+  verify(commands);
+  button('Basics');
+  assert.ok(measure().commands > 0 && measure().commands < commands);
+  button('Toggle categories pane');
+  verify(0);
+  browser('fill', `#${inputId}`, 'Undo');
+  verify(13, false, false);
+  button('Clear search');
+  verify(0);
+  button('Disabled · 4');
+  verify(4, false);
+  button('All · 115');
+  verify(0);
+  button('Basics');
+  assert.ok(measure().commands > 0 && measure().commands < commands);
+  button('Toggle categories pane');
+  verify(0);
+  button('Toggle categories pane');
+  verify(commands);
+  button('Close');
+  openSettings();
+  button('Keymap');
+  assertKeymapCategories(measure(), {inputId: measure().inputId, commands});
   button('Close');
 });
 

@@ -705,8 +705,13 @@ let keymap_controls st =
                 ~on_clear:S.focus_keymap_search
                 ~on_text:(fun query ->
                   Runtime.signal_set st
-                    { (Runtime.signal_get st) with km_query = query;
-                      km_keys = if String.trim query <> "" then [] else (Runtime.signal_get st).km_keys })
+                    {
+                      (Runtime.signal_get st) with
+                      km_query = query;
+                      km_keys =
+                        (if String.trim query <> "" then []
+                         else (Runtime.signal_get st).km_keys);
+                    })
                 ();
             ];
           keymap_key_control st;
@@ -725,23 +730,35 @@ let keymap_controls st =
               keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled
                 Keymap_data.Disabled;
             ];
-          row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
-            ~height:22 ~gap:8
-            [
-              button ~key:"km-fold" ~style_class:"icon-link" ~width:18
-                ~height:18 ~min_width:0 ~min_height:0 ~padding:0
-                ~label:T.keymap_toggle_categories ~icon:(`app "fold")
-                ~on_press:(fun _ ->
-                  let model = Runtime.signal_get st in
-                  let collapsed =
-                    if model.km_collapsed = [] then categories else []
-                  in
-                  Runtime.signal_set st { model with km_collapsed = collapsed })
-                [];
-              button ~key:"km-rf" ~style_class:"icon-link" ~width:18 ~height:18
-                ~min_width:0 ~min_height:0 ~padding:0
-                ~label:T.keymap_refresh_all ~icon:(`app "refresh") [];
-            ];
+          if_
+            ~test:
+              (reactive
+                 (fun model -> String.trim model.km_query = "")
+                 (Signal.value st))
+            (row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
+               ~height:22 ~gap:8
+               [
+                 button ~key:"km-fold" ~style_class:"icon-link" ~width:18
+                   ~height:18 ~min_width:0 ~min_height:0 ~padding:0
+                   ~label:T.keymap_toggle_categories ~icon:(`app "fold")
+                   ~on_press:(fun _ ->
+                     let model = Runtime.signal_get st in
+                     let collapsed =
+                       if
+                         List.for_all
+                           (fun category ->
+                             List.mem category model.km_collapsed)
+                           categories
+                       then []
+                       else categories
+                     in
+                     Runtime.signal_set st
+                       { model with km_collapsed = collapsed })
+                   [];
+                 button ~key:"km-rf" ~style_class:"icon-link" ~width:18
+                   ~height:18 ~min_width:0 ~min_height:0 ~padding:0
+                   ~label:T.keymap_refresh_all ~icon:(`app "refresh") [];
+               ]);
         ];
     ]
 

@@ -116,7 +116,7 @@ let query_items ~query ~label =
           rows query
     in
     match (category, rows) with
-    | Some category, _ :: _ ->
+    | Some category, _ when query = "" || rows <> [] ->
         List.rev_append
           (Category category :: List.map (fun row -> Shortcut row) rows)
           result

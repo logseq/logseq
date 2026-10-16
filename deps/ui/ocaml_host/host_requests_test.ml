@@ -3137,6 +3137,59 @@ let () =
                 List.length
                   (List.filter (fun id -> has_class id name) (Lui_store.preorder store))
               in
+              let categories =
+                List.filter_map
+                  (function Keymap_data.Category label -> Some label | _ -> None)
+                  Keymap_data.items
+              in
+              expect "Native Keymap must retain its empty category headings"
+                (count_class "th" = List.length categories);
+              let all_rows = count_class "shortcut-row" in
+              let category_toggle () =
+                List.find
+                  (fun id ->
+                    Lui_store.string_prop store id "accessibility-label"
+                    = Some I18n.keymap_toggle_categories)
+                  (Lui_store.preorder store)
+              in
+              let first_category () =
+                List.find (fun id -> has_class id "th") (Lui_store.preorder store)
+              in
+              let category_tools () =
+                List.filter
+                  (fun id ->
+                    let label = Lui_store.string_prop store id "accessibility-label" in
+                    label = Some I18n.keymap_toggle_categories
+                    || label = Some I18n.keymap_refresh_all)
+                  (Lui_store.preorder store)
+              in
+              expect "Native empty query must show category actions"
+                (List.length (category_tools ()) = 2);
+              dispatch (Press (first_category ()));
+              expect "Native individual collapse must retain other groups"
+                (count_class "shortcut-row" > 0 && count_class "shortcut-row" < all_rows);
+              dispatch (Press (category_toggle ()));
+              expect "Native global toggle must collapse a partly collapsed list"
+                (count_class "shortcut-row" = 0);
+              dispatch (TextChanged (search, "Undo"));
+              expect "Native search must ignore collapsed category state"
+                (count_class "shortcut-row" = 13 && count_class "th" = 0);
+              expect "Native query results must hide category actions"
+                (category_tools () = []);
+              dispatch (TextChanged (search, ""));
+              expect "Native clearing search must retain collapsed categories"
+                (count_class "shortcut-row" = 0);
+              expect "Native clearing search must restore category actions"
+                (List.length (category_tools ()) = 2);
+              dispatch (Press (first_category ()));
+              expect "Native individual expansion must open just one group"
+                (count_class "shortcut-row" > 0 && count_class "shortcut-row" < all_rows);
+              dispatch (Press (category_toggle ()));
+              expect "Native global toggle must collapse a partly expanded list"
+                (count_class "shortcut-row" = 0);
+              dispatch (Press (category_toggle ()));
+              expect "Native global toggle must expand all collapsed groups"
+                (count_class "shortcut-row" = all_rows);
               dispatch (TextChanged (search, "Undo"));
               expect "Native Keymap search does not retain categorized fuzzy matches"
                 (count_class "shortcut-row" = 13 && count_class "th" = 0);

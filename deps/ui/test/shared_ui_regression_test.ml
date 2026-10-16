@@ -157,6 +157,60 @@ let run_views ~registry ~profile ~finish =
         | None -> false)
       (keymap_nodes ())
   in
+  let category_toggle () =
+    List.find
+      (fun n ->
+        M.string_prop n "accessibility-label"
+        = Some I18n.keymap_toggle_categories)
+      (keymap_nodes ())
+  in
+  let category_tools () =
+    List.filter
+      (fun n ->
+        let label = M.string_prop n "accessibility-label" in
+        label = Some I18n.keymap_toggle_categories
+        || label = Some I18n.keymap_refresh_all)
+      (keymap_nodes ())
+  in
+  eqi "empty query shows category actions" 2 (List.length (category_tools ()));
+  let categories =
+    List.filter_map
+      (function Keymap_data.Category label -> Some label | _ -> None)
+      Keymap_data.items
+  in
+  eqi "unfiltered Keymap retains empty category headings"
+    (List.length categories)
+    (List.length (category_headers ()));
+  let all_rows = List.length (keymap_rows ()) in
+  let first_category () = List.hd (category_headers ()) in
+  S.press keymap (first_category ()).M.id;
+  check "individual category collapse leaves other commands visible"
+    (List.length (keymap_rows ()) > 0 && List.length (keymap_rows ()) < all_rows);
+  S.press keymap (category_toggle ()).M.id;
+  eqi "global category toggle collapses a partly collapsed list" 0
+    (List.length (keymap_rows ()));
+  S.text_changed keymap input.M.id "Undo";
+  eqi "search ignores category collapse" 13 (List.length (keymap_rows ()));
+  eqi "query results hide category actions" 0 (List.length (category_tools ()));
+  S.text_changed keymap input.M.id "";
+  eqi "clearing search retains category collapse" 0
+    (List.length (keymap_rows ()));
+  eqi "clearing search restores category actions" 2
+    (List.length (category_tools ()));
+  S.toggle keymap (pill "Disabled").M.id true;
+  check "status filter shows commands independently of category collapse"
+    (keymap_rows () <> [] && category_headers () = []);
+  S.toggle keymap (pill "All").M.id true;
+  eqi "restoring All retains category collapse" 0 (List.length (keymap_rows ()));
+  S.press keymap (first_category ()).M.id;
+  check "individual expansion opens just one group"
+    (List.length (keymap_rows ()) > 0 && List.length (keymap_rows ()) < all_rows);
+  S.press keymap (category_toggle ()).M.id;
+  eqi "global category toggle collapses a partly expanded list" 0
+    (List.length (keymap_rows ()));
+  S.press keymap (category_toggle ()).M.id;
+  eqi "global category toggle expands every collapsed group" all_rows
+    (List.length (keymap_rows ()));
   check "keymap initially hides query clear" (clear_buttons () = []);
   S.text_changed keymap input.M.id "Undo";
   check "keymap search uses fuzzy command identifiers and descriptions"
@@ -244,6 +298,12 @@ let run_views ~registry ~profile ~finish =
    | _ -> ());
   ignore (Lui_app.dispose keymap.S.app);
   check "recorder disposal releases keyboard capture" (not (Keyboard_capture.active ()));
+  let reopened_keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  eqi "remounting Keymap restores every command" all_rows
+    (List.length (List.filter (fun n -> class_has n "shortcut-row") (nodes reopened_keymap)));
+  eqi "remounting Keymap retains every empty heading" (List.length categories)
+    (List.length (List.filter (fun n -> class_has n "th") (nodes reopened_keymap)));
+  ignore (Lui_app.dispose reopened_keymap.S.app);
   let storage_key = "parity-server-url" in
   let previous_url = Ui_services.storage_get storage_key in
   Ui_services.storage_remove storage_key;

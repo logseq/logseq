@@ -43,3 +43,24 @@ export function assertKeymapSearch(state, {query, inputId, focused = false}) {
   }
   if (!query.trim()) assert.ok(state.categories > 0, 'Clearing restores grouped commands');
 }
+
+export function measureKeymapCategories(dialog) {
+  const pane = dialog.querySelector('.cp__shortcut-page-x');
+  return {
+    categories: Array.from(pane.querySelectorAll('.th')).map(node => node.textContent),
+    commands: pane.querySelectorAll('.shortcut-row').length,
+    inputId: pane.querySelector('input').id,
+    tools: pane.querySelectorAll('button[aria-label="Toggle categories pane"], button[aria-label="Refresh all"]').length,
+  };
+}
+
+export function assertKeymapCategories(state, {inputId, commands, grouped = true, tools = true}) {
+  assert.equal(state.inputId, inputId, 'Category transitions preserve the search field');
+  assert.equal(state.commands, commands);
+  assert.equal(state.tools, tools ? 2 : 0, 'Query results hide category actions');
+  assert.deepEqual(Array.from(state.categories), grouped ? [
+    'Basics', 'Navigation', 'Block editing general', 'Block command editing',
+    'Block selection (press Esc to quit selection)', 'Formatting', 'Toggle',
+    'Plugins', 'Others',
+  ] : [], 'Unfiltered groups include empty categories');
+}
