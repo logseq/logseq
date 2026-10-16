@@ -178,6 +178,20 @@ let () =
   let allocation_mutex = Mutex.create () in
   let allocation_live = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_LIVE" = Some "1" in
   let allocation_path = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_PROFILE" in
+  let census_path = match Sys.getenv_opt "LOGSEQ_NATIVE_HEAP_CENSUS", allocation_path with
+    | Some _, Some _ ->
+      invalid_arg "Configure either native heap census or allocation profiling"
+    | Some path, None -> Some path
+    | None, Some path -> Some (path ^ ".roots.json")
+    | None, None -> None in
+  let census_done = ref false in
+  let forced_major_collections = ref 0 in
+  let write_census () =
+    match census_path, !allocation_census with
+    | Some path, Some census when not !census_done ->
+      census_done := true;
+      Yojson.Safe.to_file path (census ())
+    | _ -> () in
   let allocation_trigger = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_TRIGGER" in
   let allocation_delay = match Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_DELAY" with
     | None -> 20. | Some value -> float_of_string value in
@@ -204,7 +218,10 @@ let () =
     match allocation_path,!allocation_profile with
     | Some path,Some profile when not !allocation_done ->
       allocation_done := true;
-      if allocation_live then begin Gc.full_major (); Gc.full_major () end;
+      if allocation_live then begin
+        Gc.full_major (); Gc.full_major ();
+        forced_major_collections := 2
+      end;
       Gc.Memprof.stop ();
       Gc.Memprof.discard profile;
       allocation_profile := None;
@@ -219,8 +236,7 @@ let () =
             (float count *. 80000.) (float live *. 80000.) stack)
           (List.sort (fun (a,al,_) (b,bl,_) ->
             if allocation_live then compare bl al else compare b a) rows));
-      Option.iter (fun census ->
-        Yojson.Safe.to_file (path ^ ".roots.json") (census ())) !allocation_census
+      write_census ()
     | _ -> () in
   let start_allocation now =
     capture_started := now;
@@ -233,7 +249,8 @@ let () =
   (match allocation_path,allocation_trigger with
    | Some _,None when allocation_delay = 0. -> start_allocation (perf_s ())
    | _ -> ());
-  at_exit finish_allocation;
+  let finish_diagnostics () = finish_allocation (); write_census () in
+  at_exit finish_diagnostics;
   Daemon_client.boot_mark "main enter";
   debug := (try Sys.getenv "LOGSEQ_NATIVE_DEBUG" <> "" with _ -> false);
   dump := (try Sys.getenv "LOGSEQ_NATIVE_DUMP" <> "" with _ -> false);
@@ -2126,7 +2143,7 @@ let () =
     if memory_replay || Native_window.presentable (Sdl.get_window_id !win) then paint_frame ()
     else host_req_repaint := true;
     Host_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.));
-  if Option.is_some allocation_path then allocation_census := Some (fun () ->
+  if Option.is_some census_path then allocation_census := Some (fun () ->
     let scene = Lui_host.scene host in
     let app = Option.get !(Native_embed.current_app) in
     let runtime = Lui_app.runtime app in
@@ -2155,13 +2172,43 @@ let () =
       ; "page_signals", Obj.repr
           (Subs_state.page_items,Subs_state.journal_items,Subs_state.journals_items)
       ] in
+    let base_roots = roots in
+    let roots = roots @
+      [ "property_areas", Obj.repr Properties_state.areas
+      ; "editor_state", Obj.repr
+          (Editor_state.st, Editor_state.field_sigs_opt,
+           Editor_state.active_frame, Editor_state.pending_focus_actions,
+           Editor_state.pending_edit_actions, Editor_state.optimistic_input_replay)
+      ; "split_actions", Obj.repr
+          (Editor_actions.split_commits, Editor_actions.split_restore)
+      ; "inline_caches", Obj.repr
+          (Render_inline.pull_caches, Render_inline.invalidated_gens,
+           Render_inline.minted_meta)
+      ; "platform_handlers", Obj.repr
+          (Platform.dom_handlers, Platform.window_listeners, Platform.capture_listeners)
+      ; "dom_overlays", Obj.repr
+          (Dom_ext.overlays, Dom_ext.live_fields, Dom_ext.reference_owners,
+           Dom_ext.rect_store, Dom_ext.ref_rect_store, Dom_ext.natural_store)
+      ; "search_state", Obj.repr
+          (Cmdk_state.latest_t, Cmdk_state.latest_st, Cmdk_state.latest_vs,
+           Cmdk_state.services_ref)
+      ; "worker_reads", Obj.repr Worker_client.inflight_reads
+      ; "timers", Mutex.protect Host.timers_lock (fun () ->
+          Obj.repr (Hashtbl.fold (fun _ timer acc -> timer :: acc) Host.timers []))
+      ] in
     let reachable root = Obj.reachable_words root * (Sys.word_size / 8) in
+    let reachable_roots roots =
+      reachable (Obj.repr (Array.of_list (List.map snd roots))) in
+    let stats = Gc.quick_stat () in
     (* Root graphs overlap. Their union is measured once rather than adding
        individual reachability; native allocations are reported separately. *)
     `Assoc
-      [ "gc_live_bytes", `Int ((Gc.quick_stat ()).live_words * (Sys.word_size / 8))
-      ; "combined_reachable_bytes", `Int
-          (reachable (Obj.repr (Array.of_list (List.map snd roots))))
+      [ "allocation_sampler_enabled", `Bool (Option.is_some allocation_path)
+      ; "forced_major_collections", `Int !forced_major_collections
+      ; "gc_live_bytes", `Int (stats.live_words * (Sys.word_size / 8))
+      ; "gc_heap_bytes", `Int (stats.heap_words * (Sys.word_size / 8))
+      ; "base_reachable_bytes", `Int (reachable_roots base_roots)
+      ; "combined_reachable_bytes", `Int (reachable_roots roots)
       ; "roots", `List (List.map (fun (name,root) ->
           `Assoc ["name",`String name; "reachable_bytes",`Int (reachable root)]) roots)
       ; "counts", `Assoc
@@ -2172,6 +2219,10 @@ let () =
           ; "editing_nodes",`Int (Hashtbl.length text_engine.editing_layouts)
           ; "page_signals",`Int (Hashtbl.length Subs_state.page_items)
           ; "journal_signals",`Int (Hashtbl.length Subs_state.journal_items)
+          ; "property_areas",`Int (Hashtbl.length Properties_state.areas)
+          ; "pending_split_actions",`Int (Queue.length Editor_actions.split_commits)
+          ; "pending_edit_actions",`Int (Queue.length Editor_state.pending_edit_actions)
+          ; "worker_reads",`Int (Hashtbl.length Worker_client.inflight_reads)
           ]
       ; "native_resources", `Assoc
           [ "software_backing_bytes", `Int
@@ -2180,7 +2231,7 @@ let () =
           ]
       ]);
   Daemon_client.boot_mark "loop";
-  Fun.protect ~finally:finish_allocation (fun () ->
+  Fun.protect ~finally:finish_diagnostics (fun () ->
   while not !quit do
     let t0 = perf_s () in
     let allocation_requested = match allocation_path,allocation_trigger with
