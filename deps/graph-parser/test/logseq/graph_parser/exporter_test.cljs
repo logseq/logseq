@@ -676,27 +676,32 @@ abc
         (is (= expected-tags (set (map :block/title (:block/tags block))))
             "All explicit tags are preserved")))))
 
-(deftest-async import-code-block-with-properties-after-its-fence
-  (let [code-uuid #uuid "11111111-1111-4111-8111-111111111112"]
-    (p/let [file (write-temp-graph-file
-                  "pages/C.md"
-                  (str "- ```clojure\n"
-                       "  (x 1)\n"
-                       "  ```\n"
-                       "  id:: " code-uuid "\n"
-                       "  rating:: 5\n"
-                       "- {{embed ((" code-uuid "))}}\n"))
-            conn (db-test/create-conn)
-            _ (db-pipeline/add-listener conn)
-            _ (import-files-to-db [file] conn {})
-            code (d/entity @conn [:block/uuid code-uuid])]
-      (is (= "(x 1)" (:block/title code))
-          "the property lines after the closing fence are not part of the code")
-      (is (= :code (:logseq.property.node/display-type code))
-          "the block is a code block")
-      (is (= "clojure" (:logseq.property.code/lang code)))
-      (is (some? (get code :user.property/rating))
-          "the property after the fence is the block's property"))))
+(deftest-async import-fenced-blocks-with-properties-after-their-fence
+  (p/doseq [[opening title closing display-type language]
+            [["```clojure" "(x 1)" "```" :code "clojure"]
+             ["TODO ```clojure" "(x 1)" "```" :code "clojure"]
+             ["$$" "E = mc^2" "$$" :math nil]
+             ["DONE $$" "E = mc^2" "$$" :math nil]]]
+    (let [block-uuid #uuid "11111111-1111-4111-8111-111111111112"]
+      (p/let [file (write-temp-graph-file
+                    "pages/C.md"
+                    (str "- " opening "\n"
+                         "  " title "\n"
+                         "  " closing "\n"
+                         "  id:: " block-uuid "\n"
+                         "  rating:: 5\n"
+                         "- {{embed ((" block-uuid "))}}\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              block (d/entity @conn [:block/uuid block-uuid])]
+        (testing opening
+          (is (= title (:block/title block))
+              "Property lines after the closing fence are not part of the title")
+          (is (= display-type (:logseq.property.node/display-type block)))
+          (is (= language (:logseq.property.code/lang block)))
+          (is (some? (get block :user.property/rating))
+              "The property after the fence is the block's property"))))))
 
 (deftest-async import-code-and-math-blocks-keep-task-and-tags
   (p/let [file (write-temp-graph-file
