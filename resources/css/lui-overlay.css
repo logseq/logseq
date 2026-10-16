@@ -1342,17 +1342,6 @@
 /* cljs common.css .heading-bg: 18px round swatch inside a 30px hit
    area; .remove is a bordered hollow circle holding a "-" glyph */
 /* shortcuts pane */
-/* cljs .cp__shortcut-page-x > header: px-4 pt-[22px] pb-2 wraps the
-   pane-controls — the 22px top band separates the pane title from the
-   search toolbar */
-.cp__shortcut-page-x-pane-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 1.375rem;
-  padding-bottom: 0.5rem;
-}
-
 /* cljs form-input focus ring: 2px surface halo + 2px accent band
    (ring-2 ring-offset-2, hsl(200 97% 37%)) */
 /* cljs shortcut.css .shortcut-keystroke-inactive — bordered "Search by

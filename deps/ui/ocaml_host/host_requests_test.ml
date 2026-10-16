@@ -2535,7 +2535,119 @@ let () =
                      | _ -> false)
                    scene.ops))
             (Sys.getenv_opt "LOGSEQ_NATIVE_SETTINGS_SCENE");
-          check "Native Settings visual geometry and typography" (!errors = [])));
+          check "Native Settings visual geometry and typography" (!errors = []);
+          Settings_state.set_tab "keymap";
+          ignore (Lui_app.flush app);
+          ignore (A.store_changed surface);
+          ignore (A.repaint surface);
+          let keymap_nodes = Lui_store.preorder store in
+          let keymap_find name = List.find (fun id -> has_class id name) keymap_nodes in
+          let keymap_header = keymap_find "cp__settings-header" in
+          let key_button = keymap_find "shortcut-keystroke-inactive" in
+          let search =
+            List.find (fun id -> Lui_store.kind store id = "search-field") keymap_nodes
+          in
+          let pills = keymap_find "shortcut-filter-pills" in
+          let category = keymap_find "th" in
+          let command_rows =
+            List.filter (fun id -> has_class id "shortcut-row") keymap_nodes
+          in
+          let command_label = keymap_find "ls-kbd-label" in
+          let list_scroller =
+            List.find
+              (fun id -> Lui_store.kind store id = "scroll")
+              (Lui_store.preorder ~root:(keymap_find "cp__shortcut-page-x") store)
+          in
+          expect "Keymap search button must use fourteen-point text"
+            (Lui_text.size (Text_engine.font_of store key_button) = 14.);
+          expect "Keymap search button must be thirty points high"
+            ((rect key_button).h = 60.);
+          expect "Keymap toolbar must keep its twenty-two-point title gap"
+            ((rect key_button).y -. ((rect keymap_header).y +. (rect keymap_header).h)
+            = 44.);
+          expect "Keymap search field must keep an eight-point button gap"
+            ((rect key_button).x -. ((rect search).x +. (rect search).w) = 16.);
+          expect "Keymap category bands must be thirty points high"
+            ((rect category).h = 60.);
+          let category_text =
+            List.find
+              (fun id -> Lui_store.kind store id = "text")
+              (Lui_store.preorder ~root:category store)
+          in
+          expect "Keymap category text must be fifteen points"
+            (Lui_text.size (Text_engine.font_of store category_text) = 15.);
+          let disclosure =
+            List.find
+              (fun id -> Lui_store.kind store id = "icon")
+              (Lui_store.preorder ~root:category store)
+          in
+          expect "Keymap category disclosure has no visible fourteen-point target"
+            ((rect disclosure).w = 28. && (rect disclosure).h = 28.);
+          expect "Keymap command text must be fourteen points"
+            (Lui_text.size (Text_engine.font_of store command_label) = 14.);
+          expect "Keymap commands must retain thirty-four-point row spacing"
+            ((rect (List.nth command_rows 1)).y -. (rect (List.hd command_rows)).y = 68.);
+          expect "Keymap rows must leave an eight-point label inset"
+            ((rect command_label).x -. (rect (List.hd command_rows)).x = 16.);
+          expect "Keymap needs a bounded internal scroll viewport"
+            ((rect list_scroller).h > 0.
+            && (rect list_scroller).y +. (rect list_scroller).h
+               <= (rect inner).y +. (rect inner).h
+            && W.Ui.scroll_cap (A.ui surface) list_scroller > 0.);
+          let keymap_scene =
+            Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512)
+          in
+          let keymap_engine =
+            Text_engine.create
+              ~scene:(fun () -> keymap_scene)
+              ~scale:(fun () -> 2.)
+              ~store:(fun () -> store)
+          in
+          let keymap_hooks =
+            {
+              Lui_paint.default_hooks with
+              Lui_paint.color_of = Theme_vars.color_of;
+              layout = (fun id -> Lui_paint.placement_of_rect (rect id));
+              text_ops = Text_engine.text_ops keymap_engine;
+              image_of = (fun id -> Host_icons.image_of store 2. id (rect id));
+              image_in = (fun id region -> Host_icons.image_of store 2. id region);
+            }
+          in
+          Lui_paint.paint keymap_hooks store keymap_scene ~width:2880 ~height:1864
+            ~scale:2.
+            ~clear:(Lui_scene.color 255 255 255 255);
+          let visible_face region =
+            List.exists
+              (function
+                | Lui_scene.Fill fill ->
+                    fill.frect = region
+                    && (fill.fcolor.a > 0
+                       || (fill.fborder <> (0., 0., 0., 0.) && fill.fborder_color.a > 0)
+                       )
+                | _ -> false)
+              keymap_scene.ops
+          in
+          expect "Keymap independent filter pills must not acquire a shared track"
+            (not (visible_face (rect pills)));
+          expect "Keymap category bands must paint their themed background"
+            (visible_face (rect category));
+          let key_icons =
+            List.filter
+              (function
+                | Lui_scene.Image image ->
+                    let region = image.irect2 and button = rect key_button in
+                    region.x >= button.x && region.y >= button.y
+                    && region.x +. region.w <= button.x +. button.w
+                    && region.y +. region.h <= button.y +. button.h
+                | _ -> false)
+              keymap_scene.ops
+          in
+          expect "Search-by-keys paints a duplicate or missing keyboard icon"
+            (List.length key_icons = 1);
+          List.iter prerr_endline (List.rev !errors);
+          check "Native Keymap visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"
 
 let () =

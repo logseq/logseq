@@ -391,8 +391,9 @@ let keymap_controls st =
       | Keymap_data.Category title -> Some title | _ -> None) Keymap_data.items in
   column ~key:"km-ctl"
     ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
+    ~margin_top:22 ~margin_bottom:8
     [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
-        ~main:`space_between ~flex_wrap:`wrap
+        ~main:`space_between ~flex_wrap:`wrap ~gap:8
         [ box ~key:"km-sw-w" ~grow:1. ~min_width:0
             [ Ui_components.search_row ~key:"km-sw" ~height:26
                 ~font_size:"0.875rem" ~pad_left:28 ~autofocus:true
@@ -407,12 +408,18 @@ let keymap_controls st =
                    hsl(var(--accent))))" ) ]
             (button ~key:"km-kb"
                ~style_class:"shortcut-keystroke-inactive"
+               ~height:30 ~min_height:0 ~min_width:144
+               ~padding_vertical:0 ~padding_horizontal:10 ~corner_radius:6
+               ~border_width:1
+               ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
+               ~background:"var(--lx-gray-02, hsl(var(--muted)))"
                ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys [])
         ]
     ; row ~key:"km-pills" ~style_class:"shortcut-pills-row"
         ~cross:`center ~main:`space_between ~gap:8 ~flex_wrap:`wrap
         [ toggle_group ~key:"km-fp"
-            ~gap:4 ~style_class:"shortcut-filter-pills"
+            ~gap:4 ~style_class:"shortcut-filter-pills" ~border_width:0
+            ~background:"transparent"
             [ keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All
             ; keymap_pill st ~key:"km-pc" ~title:T.keymap_custom Keymap_data.Custom
             ; keymap_pill st ~key:"km-pu" ~title:T.keymap_unset Keymap_data.Unset
@@ -498,18 +505,27 @@ let command_key_of (title : string) : string =
 
 let keymap_th ~key ~collapsed ~on_press label =
   list_item ~key ~style_class:"th" ~on_press
-    [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
-        ~font_weight:600
+    ~min_height:30 ~margin_bottom:8
+    ~padding_vertical:4 ~padding_horizontal:8 ~corner_radius:6
+    ~background:"var(--lx-gray-03, hsl(var(--muted)))"
+    [ row ~grow:1. ~min_width:0 ~main:`space_between ~cross:`center ~gap:8
+      [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
+        ~font_size:"0.9375rem" ~line_height:"1.25rem" ~font_weight:600
+        ~grow:1. ~min_width:0
         ~value:(I18n.t (keymap_category label)) []
-    ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~name:(if collapsed then `chevron_right else `chevron_down) []
+    ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~size:`sm
+        ~name:(if collapsed then `chevron_right else `chevron_down) []
+      ]
     ]
 
 let keymap_row ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
   list_item ~key ~style_class:"shortcut-row"
+    ~min_height:34 ~padding_vertical:7 ~padding_horizontal:8
     [ row ~key:(key ^ "r") ~cross:`center ~main:`space_between ~grow:1.
-        [ box ~key:(key ^ "l")
+        ~min_width:0 ~gap:12
+        [ box ~key:(key ^ "l") ~grow:1. ~min_width:0
             [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
                 ~value:(I18n.t (command_key_of r.title)) []
             ]
@@ -553,13 +569,19 @@ let keymap_pane () : t =
             keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row :: elements
         | _ -> category, visible, elements) ("", true, []) items in
     list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
-      ~margin:0 ~padding_vertical:12 (List.rev elements)
+      ~margin:0 ~padding:0 (List.rev elements)
   in
-  (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
+  (Ui_components.with_props
+     [ Ui_components.Prop.font_size "0.875rem"
+     ; Ui_components.Prop.line_height "1.25rem"
+     ]
+   (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
+      ~grow:1. ~min_height:0
      [ keymap_controls st
      ; scroll ~key:"km-art" ~orientation:`vertical ~grow:1.
+         ~min_height:0
          [ reactive rows (Signal.value st) ]
-     ]) context parent
+     ])) context parent
 
 (* ---- advanced pane ---- *)
 
