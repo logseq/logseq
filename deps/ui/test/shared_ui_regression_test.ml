@@ -260,6 +260,10 @@ let run_views ~registry ~profile ~finish =
     (row_ids () = grouped_row_ids);
   let recorders = List.filter (fun n -> class_has n "shortcut-filter-popover") (keymap_nodes ()) in
   eqi "key search opens exactly one recorder" 1 (List.length recorders);
+  check "recorder declares the shared 150 ms ease motion"
+    (List.for_all
+       (fun n -> M.string_prop n "transition" = Some "opacity 150ms ease, transform 150ms ease")
+       recorders);
   check "the recorder exclusively owns keyboard input" (Keyboard_capture.active ());
   Keyboard_capture.dispatch (key_event ~meta:true "k");
   S.flush keymap;

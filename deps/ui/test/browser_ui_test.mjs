@@ -5,6 +5,7 @@ import {measureKeymapRecording, assertKeymapRecording, measureRecordingBounds, a
 import {measureKeymapSearch, assertKeymapSearch, measureKeymapCategories, assertKeymapCategories} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
+import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -293,6 +294,22 @@ test('task priority has its icon and persists picker changes', () => {
   browser('find', 'text', 'Urgent', 'click', '--exact');
   browser('reload');
   browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} [data-name="app:priority-lvl-urgent"]') !== null`);
+});
+
+test('dialog and recorder motion retain their shared timing and center', () => {
+  open();
+  openSettings();
+  assertSurfaceMotion(evaluate(`(${measureSurfaceMotion.toString()})('.lui-dialog')`),
+    {duration: 0.2, easing: 'ease-out'});
+  button('Keymap');
+  button('Search by keys');
+  browser('wait', '--fn', "document.querySelector('.shortcut-filter-popover[data-open]') !== null");
+  assertSurfaceMotion(evaluate(`(${measureSurfaceMotion.toString()})('.shortcut-filter-popover')`),
+    {duration: 0.15, easing: 'ease'});
+  browser('press', 'Escape');
+  browser('wait', '--fn', "document.querySelector('.shortcut-filter-popover') === null");
+  button('Close');
+  browser('wait', '--fn', "document.querySelector('.lui-dialog') === null");
 });
 
 test('keymap search, filters and category disclosure respond to input', () => {

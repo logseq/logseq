@@ -68,10 +68,18 @@
   pointer-events: auto;
 }
 
+.lui-popover,
+.lui-dropdown-menu {
+  transform-origin: center;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
 .lui-popover[data-starting-style],
-.lui-popover[data-ending-style] {
+.lui-popover[data-ending-style],
+.lui-dropdown-menu[data-starting-style],
+.lui-dropdown-menu[data-ending-style] {
   opacity: 0;
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
 /* Dialog chrome supplies its own card zoom and scrim entrance. */
@@ -700,6 +708,13 @@
      (top-50% translate) — fit-content restores that for every named
      dialog (settings was filling 100dvh-2rem with dead space) */
   height: fit-content;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.lui-dialog[data-starting-style],
+.lui-dialog[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.95);
 }
 
 /* title-less dialogs still emit an empty .lui-dialog-title row and a

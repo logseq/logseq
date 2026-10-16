@@ -24,8 +24,7 @@ let bv v = P.BoolValue v
 (* cljs .lui-popover open/close motion (fade-in-0 zoom-in-95): every
    popover call site carries the same shorthand. *)
 let popover_transition =
-  "opacity 120ms cubic-bezier(0.2, 0, 0, 1), transform 120ms \
-   cubic-bezier(0.2, 0, 0, 1)"
+  "opacity 150ms ease, transform 150ms ease"
 
 (* cljs .ls-block motion: transform 0.3s on the base rule plus the
    background-color 0.2s cubic-bezier of .block-highlight /
