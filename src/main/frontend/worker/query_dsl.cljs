@@ -17,9 +17,12 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.query-dsl :as shared-query-dsl]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.db.frontend.rules :as rules]
+            [malli.core :as m]))
 
 ;; Query fields:
+;; parse checks a query against query-schema below, which lists every form and
+;; its arguments, before translating it.
 
 ;; Operators:
 ;; and
@@ -486,19 +489,6 @@
   {:query (list 'block-content '?b e)
    :rules [:block-content]})
 
-(defn- datalog-clause?
-  [e]
-  (and
-   (coll? e)
-   (or
-    (list? (first e))
-    (and (>= (count e) 2)
-         (or
-          ;; variable
-          (string/starts-with? (str (first e)) "?")
-          ;; function
-          (list? (first e)))))))
-
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
   equivalent. This fn is called recursively on sublists for boolean operators
@@ -512,15 +502,8 @@ Some bindings in this fn:
    (build-query e (assoc env :vars (atom {})) 0))
   ([e {:keys [form blocks? sample current-filter] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
-   (let [fe (first e)
-         fe (when fe
-              (cond
-                (list? fe)
-                fe
-                (or (symbol? fe) (keyword? fe))
-                (symbol (string/lower-case (name fe)))
-                :else
-                (string/lower-case (str fe))))
+   (let [fe (when (seq? e)
+              (symbol (string/lower-case (name (first e)))))
          page-ref? (page-ref/page-ref? e)]
      (when (or
             (contains? #{'between 'property 'private-property 'todo 'task 'priority 'page} fe)
@@ -529,10 +512,6 @@ Some bindings in this fn:
      (cond
        (nil? e)
        nil
-
-       (datalog-clause? e)
-       {:query [e]
-        :rules []}
 
        (and (= fe 'and) (every? page-ref/page-ref? (rest e)))
        (build-query (concat e [(cons 'or (rest e))]) env level)
@@ -575,6 +554,124 @@ Some bindings in this fn:
 
        :else
        nil))))
+
+;; grammar
+;; =======
+
+(def ^:private name-like [:or :string :symbol :keyword])
+
+(def ^:private page-name [:or [:string {:min 1}] :symbol :keyword :int])
+
+(def ^:private property-value [:or :string :symbol :keyword :int :double :boolean :uuid])
+
+(defn- named-as? [names x]
+  (and (or (string? x) (symbol? x) (keyword? x))
+       (contains? names (string/lower-case (name x)))))
+
+(defn- journal-ref?
+  "Mirrors the page-ref branch of ->journal-day-int and ->timestamp"
+  [s]
+  (and (page-ref/page-ref? s)
+       (let [title (-> (page-ref/get-page-name s)
+                       (string/replace ":" "")
+                       (string/capitalize))]
+         (and (valid-journal-title? title)
+              (some? (journal-title->int title))))))
+
+(defn- journal-date?
+  "Whether ->journal-day-int accepts x"
+  [x]
+  (and (or (string? x) (symbol? x) (keyword? x))
+       (let [s (string/lower-case (name x))]
+         (or (contains? #{"today" "yesterday" "tomorrow"} s)
+             (journal-ref? s)
+             (some? (re-matches #"[+-]?\d+[dwmy]" s))))))
+
+(defn- timestamp?
+  "Whether ->timestamp accepts x"
+  [x]
+  (and (or (string? x) (symbol? x) (keyword? x))
+       (let [s (string/lower-case (name x))]
+         (or (contains? #{"now" "today" "yesterday" "tomorrow"} s)
+             (journal-ref? s)
+             (some? (re-matches #"[+-]?\d+[nhdwmy]" s))))))
+
+(def ^:private query-operators
+  "Each operator's arguments, and the error naming them. A form's first element
+  is the operator, matched case-insensitively. `between` whose first argument is
+  created-at or updated-at dispatches to :between-timestamp."
+  (let [subqueries [:cat :any [:+ [:schema [:ref ::query]]]]
+        values (fn [value]
+                 [:or
+                  [:cat :any [:vector {:min 1} value]]
+                  [:cat :any [:+ value]]])
+        property [:cat :any name-like [:? property-value]]
+        one-page [:cat :any page-name]]
+    {:and [subqueries "and needs one or more queries"]
+     :or [subqueries "or needs one or more queries"]
+     :not [subqueries "not needs one or more queries"]
+     :task [(values name-like) "task needs one or more statuses"]
+     :todo [(values name-like) "todo needs one or more statuses"]
+     :priority [(values name-like) "priority needs one or more priorities"]
+     :tags [(values name-like) "tags needs one or more tags"]
+     :page-tags [(values name-like) "page-tags needs one or more tags"]
+     :all-page-tags [[:cat :any] "all-page-tags takes no arguments"]
+     :page [one-page "page needs one page name"]
+     :page-ref [one-page "page-ref needs one page name"]
+     :namespace [one-page "namespace needs one page name"]
+     :property [property "property needs a property name and an optional value"]
+     :private-property [property "private-property needs a property name and an optional value"]
+     :page-property [property "page-property needs a property name and an optional value"]
+     :between [[:cat :any [:fn journal-date?] [:fn journal-date?]]
+               "between needs two dates"]
+     :between-timestamp [[:cat :any :any [:fn timestamp?] [:? [:fn timestamp?]]]
+                         "between created-at or updated-at needs one or two dates"]
+     :sample [[:cat :any [:int {:min 1}]] "sample needs a positive integer"]
+     :sort-by [[:cat :any name-like [:? [:fn (partial named-as? #{"asc" "desc"})]]]
+               "sort-by needs a property name and an optional asc or desc"]
+     :full-text-search [[:cat :any :string] "full-text-search needs one string"]}))
+
+(defn- query-form-type
+  "A string is a [[page]] ref or a full-text search; a list is an operator form"
+  [form]
+  (cond
+    (string? form)
+    :string
+
+    (and (seq? form)
+         (or (symbol? (first form)) (keyword? (first form))))
+    (let [op (keyword (string/lower-case (name (first form))))]
+      (if (and (= :between op) (get-timestamp-property form))
+        :between-timestamp
+        op))))
+
+(def query-schema
+  "Malli schema of the simple query grammar"
+  [:schema
+   {:registry
+    {::query (into [:multi {:dispatch query-form-type}
+                    [:string :string]]
+                   (map (fn [[op [schema _message]]] [op schema]))
+                   query-operators)}}
+   ::query])
+
+(def ^:private explain-query (m/explainer query-schema))
+
+(defn- explanation->message
+  [{:keys [errors]}]
+  (let [{:keys [type path value]} (first errors)]
+    (if (= ::m/invalid-dispatch-value type)
+      (str (pr-str value) " is not a query form")
+      ;; the innermost operator whose arguments failed
+      (->> (rseq path)
+           (some #(second (get query-operators %)))))))
+
+(defn validate-query!
+  "Throws when form, a read simple query, is outside the query grammar"
+  [form]
+  (when-let [explanation (explain-query form)]
+    (throw (ex-info (str "Invalid query: " (explanation->message explanation))
+                    {:query (pr-str form)}))))
 
 ;; parse fns
 ;; =========
@@ -655,6 +752,7 @@ Some bindings in this fn:
             form (some->> s
                           (pre-transform)
                           (reader/read-string custom-readers))
+            _ (validate-query! form)
             sort-by (atom nil)
             blocks? (atom nil)
             sample (atom nil)
