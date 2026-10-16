@@ -160,6 +160,9 @@
       "(and \"for #clojure\" #foo)"
       "(and \"for #clojure\" #tag foo)"
 
+      "(and \"\" #foo \"#bar\")"
+      "(and \"\" #tag foo \"#bar\")"
+
       "(and [[outside]] (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"
       "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))")))
 
@@ -828,6 +831,38 @@
 
     (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
     (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))"))))))
+
+(deftest invalid-queries
+  (are [query message] (= message
+                          (try (dsl-query query)
+                               "no error"
+                               (catch :default e (ex-message e))))
+    "alpha"
+    "Invalid query: alpha is not a query form"
+
+    "TODO"
+    "Invalid query: TODO is not a query form"
+
+    "(and todo [[A]])"
+    "Invalid query: todo is not a query form"
+
+    "[(or)]"
+    "Invalid query: [(or)] is not a query form"
+
+    "(not [((page-tags #nope))])"
+    "Invalid query: [((page-tags \"[[nope]]\"))] is not a query form"
+
+    "(between [[A]] B)"
+    "Invalid query: between needs two dates"
+
+    "(and (and 3.14) \"x\")"
+    "Invalid query: 3.14 is not a query form"
+
+    "(or ((task)) \"x\")"
+    "Invalid query: ((task)) is not a query form"
+
+    "(between (page \"\") (sample (priority #nope \"alpha\")))"
+    "Invalid query: between needs two dates"))
 
 (deftest custom-query-test
   (load-test-files
