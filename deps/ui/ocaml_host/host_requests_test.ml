@@ -42,6 +42,25 @@ let () =
   Fun.protect ~finally:(fun () -> Hashtbl.remove Dom_ext.overlays node) (fun () ->
     let overlay = Dom_ext.overlay_get node in
     overlay.Dom_ext.o_class <- Some "replacement";
+    let unrelated = Js.Json.JObject
+      ["node-id",Js.Json.JNumber (float (node+1)); "class",shared] in
+    measure "class with active overlay" (fun () -> Dom_ext.class_string element);
+    measure "class beside active overlay" (fun () -> Dom_ext.class_string unrelated);
+    measure "missing attribute with active overlay"
+      (fun () -> Dom_ext.overlay_attr element "data-missing");
+    measure "attribute beside active overlay"
+      (fun () -> Dom_ext.overlay_attr unrelated "data-missing");
+    Hashtbl.replace overlay.o_attrs "data-state" (Some "changed");
+    expect "Attribute overlay lost its replacement"
+      (Dom_ext.overlay_attr element "data-state" = Some (Some "changed"));
+    Hashtbl.replace overlay.o_attrs "data-state" None;
+    expect "Attribute overlay lost its removal tombstone"
+      (Dom_ext.overlay_attr element "data-state" = Some None);
+    expect "An overlay without a node id affected unrelated snapshots"
+      (Dom_ext.overlay_attr (Js.Json.JObject []) "data-state" = None);
+    expect "An invalid overlay node id matched a real node"
+      (Dom_ext.overlay_attr (Js.Json.JObject ["node-id",Js.Json.JString "invalid"])
+         "data-state" = None);
     expect "A class lookup ignored an overlay replacement"
       (Dom_ext.has_class element "replacement" && not (Dom_ext.has_class element "row"));
     overlay.o_class <- Some "";

@@ -339,22 +339,24 @@ let overlay_set_attr (node : int) (k : string) (v : string) : unit =
 
 let overlay_attr_node (node : int) (name : string)
     : string option option =
-  match overlay_find node with
-  | Some o -> Hashtbl.find_opt o.o_attrs name
-  | None -> None
+  match Hashtbl.find overlays node with
+  | o -> Hashtbl.find_opt o.o_attrs name
+  | exception Not_found -> None
 
 let overlay_attr (el : element) (name : string) : string option option =
   if Hashtbl.length overlays=0 then None else
-  match node_id_of el with
-  | Some n -> overlay_attr_node n name
-  | None -> None
+  match prop "node-id" el with
+  | Js.Json.JNumber n -> overlay_attr_node (int_of_float n) name
+  | _ -> None
 
 let overlay_class_of (el : element) : string option =
   if Hashtbl.length overlays=0 then None else
-  match node_id_of el with
-  | Some n -> (
-      match overlay_find n with Some o -> o.o_class | None -> None)
-  | None -> None
+  match prop "node-id" el with
+  | Js.Json.JNumber n -> (
+      match Hashtbl.find overlays (int_of_float n) with
+      | o -> o.o_class
+      | exception Not_found -> None)
+  | _ -> None
 
 let () =
   overlay_attr_fn := overlay_attr;
