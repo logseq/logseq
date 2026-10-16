@@ -212,9 +212,13 @@ let emit_event name payload =
                                   id name (Printexc.to_string e))
                           dhs
                     | None -> ());
-                   match !dom_parent_of id with
-                   | Some parent -> bubble parent (depth + 1)
-                   | None -> ()
+                   (* Viewport notifications describe one measured node, not a
+                      DOM gesture. A child row must never mount, unmount, or
+                      paginate an enclosing virtual list. *)
+                   match name, !dom_parent_of id with
+                   | ("lazy-mount" | "lazy-unmount" | "virt-end"), _ -> ()
+                   | _, Some parent -> bubble parent (depth + 1)
+                   | _, None -> ()
                  end
                in
                bubble (int_of_float n) 0)

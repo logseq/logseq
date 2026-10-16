@@ -560,6 +560,102 @@ let () = Native_embed.with_entry_lock (fun () ->
   ignore (Lui_app.dispose app);
   print_endline "native navigation resize: OK")
 
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let store = Lui_store.create ()
+      and outer_end = ref 0
+      and inner_end = ref 0 in
+      let old_parent = !Platform.dom_parent_of in
+      let backend =
+        {
+          backend_profile = profile MacOS GenericHost;
+          apply_batch =
+            (fun batch ->
+              Lui_store.apply_batch store batch;
+              true);
+        }
+      in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;
+      Logseq_codemirror.register registry;
+      let app =
+        Lui_app.create_with_extensions backend registry Model.initial
+          (fun model _ -> model)
+          (fun _ _ _ ->
+            Virt_list.list ~initial_rows:1
+              ~estimate_size:(fun _ -> 800.)
+              ~on_end:(fun () -> incr outer_end)
+              ~key_of:Fun.id
+              ~render:(fun _ ->
+                Virt_list.list ~initial_rows:2
+                  ~estimate_size:(fun _ -> 40.)
+                  ~on_end:(fun () -> incr inner_end)
+                  ~key_of:Fun.id
+                  ~render:(fun name ->
+                    Lui_elements.column ~height:40
+                      [ Lui_elements.text ~value:name [] ])
+                  [| "first"; "second" |])
+              [| "day" |])
+      in
+      Fun.protect
+        ~finally:(fun () ->
+          ignore (Lui_app.dispose app);
+          Platform.dom_parent_of := old_parent)
+        (fun () ->
+          Platform.dom_parent_of := Lui_store.parent store;
+          ignore (Lui_app.start app);
+          ignore (Lui_app.flush app);
+          let marker key =
+            List.find
+              (fun id ->
+                Lui_store.string_prop store id "attrs"
+                = Some ("{\"data-lazy-mount\":\"" ^ key ^ "\"}"))
+              (Lui_store.preorder store)
+          in
+          let day = marker "day"
+          and first = marker "first"
+          and second = marker "second" in
+          let mounted id = Lui_store.children store id <> [] in
+          let emit name id =
+            Platform.emit_event name
+              (Js.Json.JObject
+                 [
+                   ("nodeId", Js.Json.JNumber (float id));
+                   ("height", Js.Json.JNumber 40.);
+                 ]);
+            ignore (Lui_app.flush app)
+          in
+          let errors = ref [] in
+          let expect message condition =
+            if not condition then errors := message :: !errors
+          in
+          emit "lazy-unmount" first;
+          expect
+            "A child row leaving the viewport disposed its entire journal day"
+            (mounted day && Lui_store.mem store second && mounted second);
+          expect "A child row overwrote its ancestor's measured height"
+            (Lui_store.string_prop store day "height" = Some "auto");
+          if mounted day then begin
+            expect "The offscreen child row remained mounted"
+              (not (mounted first));
+            emit "lazy-mount" first;
+            expect "The child row failed to remount independently"
+              (mounted first);
+            let inner_list = Option.get (Lui_store.parent store first) in
+            let rec list_container id =
+              match Lui_store.string_prop store id "events" with
+              | Some events when Platform.event_listed events "virt-end" -> id
+              | _ -> list_container (Option.get (Lui_store.parent store id))
+            in
+            emit "virt-end" (list_container inner_list);
+            expect "Nested pagination also loaded its parent list"
+              (!inner_end = 1 && !outer_end = 0)
+          end;
+          List.iter prerr_endline (List.rev !errors);
+          check "Native viewport notifications must target their owning row"
+            (!errors = [])));
+  print_endline "native nested viewport event ownership: OK"
+
 let lazy_row_extent mode = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () in
   let rendered = ref 0 and last_resource = ref None in
