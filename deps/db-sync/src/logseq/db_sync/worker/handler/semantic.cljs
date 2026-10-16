@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.handler.semantic
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -920,7 +921,8 @@
                                  (p/let [_ (.delete bucket key)]
                                    (throw error)))))))
               (p/catch (fn [error]
-                         (http/error-response (or (.-message error) "asset upload failed") 500)))))))
+                         (log/error :db-sync/semantic-asset-upload-failed {:error error})
+                         (http/error-response "asset upload failed" 500)))))))
 
     :semantic/assets-get
     (if-let [asset (find-visible-entity db (:asset-block-id path-params))]

@@ -22,6 +22,28 @@
          (seq expected)
          (= expected actual))))
 
+(defn- internal-sync-tail?
+  "Tails that exist only for DO-internal calls (`/semantic` internal routing,
+  `/internal/*` maintenance routes) and must never be reached through the
+  public `/sync/<graph-id>/...` surface."
+  [tail]
+  (or (= tail "/semantic")
+      (string/starts-with? tail "/semantic/")
+      (= tail "/internal")
+      (string/starts-with? tail "/internal/")))
+
+(defn <non-semantic-access-response
+  "Access check for the native sync surface (`/sync`, `/assets`). Tokens granted
+  to third-party OAuth clients are confined to the semantic API; they are
+  rejected here before any graph access lookup. The check reads the token's
+  claims without verification, which is safe because it only rejects: a
+  payload forged to hide its scope or client id fails the signature
+  verification inside `graph-access-response` anyway."
+  [request env graph-id]
+  (if (auth/third-party-oauth-token? (auth/unsafe-jwt-claims (auth/token-from-request request)) env)
+    (p/resolved (http/error-response "insufficient scope" 403))
+    (index-handler/graph-access-response request env graph-id)))
+
 (defn- forward-sync-request
   [request ^js env graph-id ^js new-url]
   (let [^js namespace (.-LOGSEQ_SYNC_DO env)
@@ -54,8 +76,9 @@
     (.set (.-searchParams target) "graph-id" graph-id)
     ;; The graph DB's :logseq.kv/graph-rtc-e2ee? is only set at RTC upload; the
     ;; index flag is authoritative, so pass it down for DO-side write gating.
-    (when e2ee?
-      (.set (.-searchParams target) "graph-e2ee" "true"))
+    ;; The flag is always explicit: the DO-side write gate must never fall back
+    ;; to a client-supplied `graph-e2ee` parameter.
+    (.set (.-searchParams target) "graph-e2ee" (if e2ee? "true" "false"))
     (forward-sync-request request env graph-id target)))
 
 (defn- rate-limit-response []
@@ -222,7 +245,7 @@
                (p/let [signed? (if (= method "GET") (asset-link/<valid-request? request env) false)]
                  (if signed?
                    (assets-handler/handle request env)
-                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                   (p/let [access-resp (<non-semantic-access-response request env graph-id)]
                      (if (.-ok access-resp)
                        (assets-handler/handle request env)
                        access-resp)))))
@@ -247,36 +270,34 @@
              (not (seq graph-id))
              (http/bad-request "missing graph id")
 
-             (or (= tail "/semantic")
-                 (string/starts-with? tail "/semantic/"))
-             (http/not-found)
-
              :else
              (if (= method "OPTIONS")
                (common/options-response)
-               (if (admin-token-valid? request env)
-                 (forward-sync-request request env graph-id new-url)
-                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                   (if (.-ok access-resp)
-                     (p/let [response (forward-sync-request request env graph-id new-url)
-                             _ (when (< (.-status response) 400)
-                                 (<safe-touch-activity! request env graph-id))]
-                       response)
-                     access-resp))))))
+               (cond
+                 (internal-sync-tail? tail)
+                 (http/not-found)
+
+                 ;; Graph storage reset is a DO-internal operation (graph
+                 ;; deletion); through the public path it exists only for the
+                 ;; admin token.
+                 (and (= tail "/admin/reset") (not (admin-token-valid? request env)))
+                 (http/not-found)
+
+                 :else
+                 (if (admin-token-valid? request env)
+                   (forward-sync-request request env graph-id new-url)
+                   (p/let [access-resp (<non-semantic-access-response request env graph-id)]
+                     (if (.-ok access-resp)
+                       (p/let [response (forward-sync-request request env graph-id new-url)
+                               _ (when (< (.-status response) 400)
+                                   (<safe-touch-activity! request env graph-id))]
+                         response)
+                       access-resp)))))))
 
          :else
          (http/not-found))))
    (p/catch (fn [error]
-              (let [err-type (str (type error))
-                    message (try (.-message error) (catch :default _ nil))
-                    data (try (ex-data error) (catch :default _ nil))
-                    stack (try (.-stack error) (catch :default _ nil))
-                    json-str (try (js/JSON.stringify error) (catch :default _ nil))]
-                (common/json-response
-                 {:error "dispatch error"
-                  :debug-type err-type
-                  :debug-message message
-                  :debug-data (when data (pr-str data))
-                  :debug-json json-str
-                  :debug-stack stack}
-                 500))))))
+              (log/error :db-sync/dispatch-error {:error error})
+              (common/json-response
+               {:error "dispatch error"}
+               500)))))

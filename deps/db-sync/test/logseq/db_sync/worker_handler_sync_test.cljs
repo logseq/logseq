@@ -77,13 +77,12 @@
 
 (deftest handle-http-answers-500-when-an-async-route-fails-test
   (async done
-         (let [request (js/Request. "http://localhost/sync/graph-1/tx/batch"
+         (let [request (js/Request. "http://localhost/tx/batch"
                                     #js {:method "POST" :body "not json"})]
            (-> (p/let [response (sync-handler/handle-http #js {} request)
                        body (json-body response)]
                  (is (= 500 (.-status response)))
-                 (is (= "server error" (:error body)))
-                 (is (string? (:debug-message body))))
+                 (is (= "server error" (:error body))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))
@@ -1586,7 +1585,7 @@
                          :conn conn
                          :schema-ready true
                          :sql sql}
-               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")
+               {:keys [request]} (request-url "/snapshot/stream?graph-id=graph-1")
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
            (aset js/globalThis
@@ -1632,7 +1631,7 @@
                          :conn conn
                          :schema-ready true
                          :sql sql}
-               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")]
+               {:keys [request]} (request-url "/snapshot/stream?graph-id=graph-1")]
            (-> (p/with-redefs [sync-handler/fetch-snapshot-kvs-rows (fn [_sql last-addr _limit]
                                                                       (if (neg? last-addr) rows []))
                                sync-handler/snapshot-row-count (fn [_sql] (count rows))]
