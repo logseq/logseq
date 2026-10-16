@@ -499,11 +499,16 @@ let pending_focus : (string * bool) list ref = ref []
    fresh sink for this block. *)
 let editor_focus_bid : string option ref = ref None
 
+(* The sink can focus before its parent has a measured rectangle. Reveal
+   that editor once after layout, then leave manual scrolling alone. *)
+let pending_focus_reveal : string option ref = ref None
+
 let try_set_input_focus (e : env) (bid : string) (focused : bool) : bool =
   match ed_ctx e bid with
   | None -> false
   | Some ctx ->
     editor_focus_bid := (if focused then Some bid else None);
+    pending_focus_reveal := (if focused then Some bid else None);
     (if focused then begin
        (* moving the text input onto the sink includes window focus —
           Ui.focused is what routes keydown dom-events to the editor *)
@@ -584,7 +589,20 @@ let flush_pending_focus () =
              pending_focus := (bid, focused) :: !pending_focus)
         (List.rev queued)
     end;
-    ensure_ed_focus_ e
+    ensure_ed_focus_ e;
+    (match !pending_focus_reveal with
+     | Some bid ->
+       (match ed_ctx e bid with
+        | Some ctx when Ui.focused e.ui = ctx.sink ->
+          let editor = Option.get (Lui_store.parent e.store ctx.sink) in
+          if not (Lui_scene.rect_empty (Rects.get e.rects editor)) then begin
+            pending_focus_reveal := None;
+            let epoch = Ui.scroll_epoch e.ui in
+            e.apply_actions (Ui.scroll_show e.ui e.store editor);
+            if Ui.scroll_epoch e.ui <> epoch then e.repaint ()
+          end
+        | _ -> ())
+     | None -> ())
 
 (* ---------- dom-op dispatch ---------- *)
 

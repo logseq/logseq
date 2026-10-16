@@ -2091,6 +2091,7 @@ let () =
     Host_metrics.record_phase metrics Accessibility ((perf_s () -. a11y_started) *. 1000.);
     if !gl_live_cell then Sdl.gl_swap_window !win;
     Ui.frame_done ui;
+    Host_requests.flush_pending_focus ();
     incr frame
   in
   Native_window.install !win (fun () ->

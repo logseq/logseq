@@ -300,6 +300,76 @@ let () =
    | None -> failwith "Editor context disappeared");
   print_endline "native editor wrapped geometry: OK"
 
+let () =
+  let store = Lui_store.create () and ui = Lui_window.Ui.create () in
+  let rects = Lui_window.Rects.create () in
+  List.iter (Lui_store.apply_op store)
+    [
+      CreateNode (1, Scroll);
+      CreateNode (2, Column);
+      CreateExtension (3, "logseq-editor", "focus-scroll");
+      InsertChild (1, 2, 0);
+      InsertChild (2, 3, 0);
+      SetExtensionProp (3, "block-id", StringValue "focus-scroll");
+    ];
+  Hashtbl.replace rects 1 (Lui_scene.rect 0. 0. 800. 600.);
+  Lui_window.Ui.set_content_rect ui (Lui_window.Rects.get rects);
+  Lui_window.Ui.set_scroll_cap ui 1 400.;
+  let env : Host_requests.env =
+    {
+      store;
+      ui;
+      rects;
+      rect_of = Lui_window.Rects.get rects;
+      scale = (fun () -> 1.);
+      measure = (fun _ _ -> (0., 0.));
+      text_layout = (fun _ _ -> failwith "Unexpected text layout");
+      apply_batch = (fun _ -> ());
+      apply_actions = (fun _ -> ());
+      set_ime_rect = (fun _ -> ());
+      focused_text_input = (fun _ -> ());
+      repaint = (fun () -> ());
+    }
+  in
+  let old_env = !Host_requests.env
+  and old_focus = !Host_requests.editor_focus_bid
+  and old_pending = !Host_requests.pending_focus
+  and old_reveal = !Host_requests.pending_focus_reveal in
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Host_requests.try_set_input_focus env "focus-scroll" false);
+      Host_requests.env := old_env;
+      Host_requests.editor_focus_bid := old_focus;
+      Host_requests.pending_focus := old_pending;
+      Host_requests.pending_focus_reveal := old_reveal)
+    (fun () ->
+      Host_requests.env := Some env;
+      Host_requests.editor_focus_bid := None;
+      Host_requests.pending_focus := [];
+      check "The mounted editor did not accept focus"
+        (Host_requests.try_set_input_focus env "focus-scroll" true);
+      Host_requests.flush_pending_focus ();
+      check "Focus scrolled using an unmeasured editor rectangle"
+        (Lui_window.Ui.scroll_offset ui 1 = 0.);
+      Hashtbl.replace rects 2 (Lui_scene.rect 0. 900. 800. 40.);
+      Lui_window.Ui.notify_layout ui;
+      Host_requests.flush_pending_focus ();
+      check
+        "A newly focused editor below the viewport was not revealed after \
+         layout"
+        (Lui_window.Ui.scroll_offset ui 1 = 340.);
+      ignore (Lui_window.Ui.scroll_to ui store 1 0.);
+      Host_requests.flush_pending_focus ();
+      check "Idle focus recovery undid a manual scroll"
+        (Lui_window.Ui.scroll_offset ui 1 = 0.);
+      ignore (Host_requests.try_set_input_focus env "focus-scroll" true);
+      ignore (Host_requests.try_set_input_focus env "focus-scroll" false);
+      Lui_store.apply_op store (DropNode 3);
+      Host_requests.flush_pending_focus ();
+      check "A blurred editor retained a pending scroll request"
+        (Lui_window.Ui.scroll_offset ui 1 = 0.));
+  print_endline "native deferred focus reveal: OK"
+
 let () = Native_embed.with_entry_lock (fun () ->
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
