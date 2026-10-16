@@ -853,7 +853,8 @@ let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
   with_props
     [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
-    ; Prop.font_size "0.875rem" ]
+    ; Prop.font_size "0.875rem"
+    ; Prop.overflow `auto ]
     (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
