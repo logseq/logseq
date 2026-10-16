@@ -726,6 +726,28 @@ abc
     (is (= #{:logseq.class/Task :logseq.class/Math-block} (tag-idents math))
         "a math block that is a task keeps its Task tag")))
 
+(deftest-async import-keeps-numeric-looking-text-a-number-would-change
+  (p/let [file (write-temp-graph-file
+                "pages/paper.md"
+                (str "arxiv:: 0000.00000\n"
+                     "version:: 2401.10000\n"
+                     "code:: 007\n"
+                     "price:: 3.14\n"
+                     "count:: 42\n\n"
+                     "- note\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          page (db-test/find-page-by-title @conn "paper")
+          value (fn [k] (some-> (get page (keyword "user.property" k)) db-property/property-value-content))]
+    (is (= "0000.00000" (value "arxiv")) "a value a number would turn into 0 stays text")
+    (is (= "2401.10000" (value "version")) "trailing zeros are kept")
+    (is (= "007" (str (value "code"))) "leading zeros are kept")
+    (is (= 3.14 (value "price")) "a float that prints the same is a number")
+    (is (= 42 (value "count")) "an integer is a number")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"

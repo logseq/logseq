@@ -75,8 +75,10 @@
     (= v "false")
     false
 
+    ;; only when the number keeps the text: `007` or a too long integer stays text
     (re-find #"^\d+$" v)
-    (parse-long v)))
+    (let [n (parse-long v)]
+      (when (= (str n) v) n))))
 
 (defn- get-ref-from-ast
   [[typ data]]
