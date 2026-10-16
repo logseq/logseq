@@ -1650,37 +1650,56 @@ let () = Native_embed.with_entry_lock (fun () ->
 let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in
+  let marker = ref 0 in
+  let marker_color = Lui_scene.color 219 17 71 255 in
+  let painted = ref [] in
   let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref 2.)
     ~text:{ measure=(fun _ text -> float (String.length text * 14),32.);
-      text_ops=(fun _ _ _ _ -> []); hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+      text_ops=(fun id rect _ _ ->
+        if id = !marker then Host_interaction.caret_ops ~scale:2. ~color:marker_color rect
+        else []); hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
       caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
         {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
          c_rect=(fun _ -> 0.,0.,32.)}) }
-    ~renderer:{name="menu-test";render=(fun _ -> Bytes.empty)}
+    ~renderer:{name="menu-test";render=(fun scene -> painted := scene.Lui_scene.ops; Bytes.empty)}
     ~width:1280 ~height:960 () in
   let host=A.host surface and store=A.store surface in
   let app=Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) ()
     (fun () () -> ()) (fun ctx _ _ ->
       let label=Signal.state ctx.Lui_ui.ui_scheduler "English" in
-      Lui_elements.column ~padding:16
-        [Lui_elements.spacer ~height:180 [];
-         Settings_view.lang_trigger ~ctx ~key:"menu-viewport" ~height:32 ~st:label]) in
+      Lui_elements.dialog ~width:560 ~height:400
+        [Lui_elements.scroll ~height:368
+          [Lui_elements.column ~padding:16
+            [Lui_elements.spacer ~height:180 [];
+             Settings_view.lang_trigger ~ctx ~key:"menu-viewport" ~height:32 ~st:label]]]) in
   ignore (Lui_app.start app); ignore (Lui_app.flush app);
   let trigger=List.find (fun id -> Lui_store.kind store id="select") (Lui_store.preorder store) in
   ignore (Lui_app.dispatch_event app (Press trigger)); ignore (Lui_app.flush app);
-  ignore (A.store_changed surface); ignore (A.repaint surface);
+  ignore (A.store_changed surface);
   let menu=List.find (fun id -> Lui_store.kind store id="dropdown-menu") (Lui_store.preorder store) in
   let items=Lui_store.children store menu in
   let last=Lui_store.node_id (List.hd (List.rev items)) in
+  marker := last;
+  ignore (A.repaint surface);
   let rect=W.Rects.get (A.rects surface) menu in
+  Printf.printf "native language menu initial rect=%.1f,%.1f %.1fx%.1f\n%!"
+    rect.x rect.y rect.w rect.h;
   check "Language menu must remain inside the viewport"
     (rect.x>=0. && rect.y>=0. && rect.x+.rect.w<=1280. && rect.y+.rect.h<=960.);
+  let shift = Host_interaction.scroll_shifts ~store:(fun () -> store)
+    ~scroll_epoch:(fun () -> W.Ui.scroll_epoch (A.ui surface))
+    ~scroll_x:(W.Ui.scroll_offset_x (A.ui surface))
+    ~scroll_y:(W.Ui.scroll_offset (A.ui surface)) in
+  ignore (shift last);
   let x=(rect.x+.rect.w/.2.)/.2. and y=(rect.y+.rect.h/.2.)/.2. in
   ignore (A.handle surface (W.Input.Move (x,y)));
   ignore (A.handle surface (W.Input.Wheel (0.,-2000.)));
   ignore (A.repaint surface);
   check "A tall language menu must scroll to its final option"
     (W.Ui.scroll_offset (A.ui surface) menu > 0.);
+  let _,shift_y = shift last in
+  check "Retained application paint callbacks must observe the current menu scroll offset"
+    (shift_y=W.Ui.scroll_offset (A.ui surface) menu);
   let final=W.Rects.get (A.rects surface) last in
   Printf.printf "native language menu rect=%.1f,%.1f %.1fx%.1f final=%.1f,%.1f %.1fx%.1f offset=%.1f hit=%b\n%!"
     rect.x rect.y rect.w rect.h final.x final.y final.w final.h
@@ -1691,5 +1710,17 @@ let () = Native_embed.with_entry_lock (fun () ->
     (final.h>0. && final.y>=rect.y && final.y+.final.h<=rect.y+.rect.h
      && List.mem last (W.hit_path store (A.rects surface)
        ~x:(final.x+.final.w/.2.) ~y:(final.y+.final.h/.2.)));
+  check "Scrolling must paint the final language option at its visible hit rectangle"
+    (List.exists (function
+      | Lui_scene.Fill fill -> fill.fcolor=marker_color && fill.frect.y=final.y
+      | _ -> false) !painted);
+  let main_rects=W.Rects.create () in
+  Host_interaction.refresh_rects ~store ~base:(A.engine_rect surface)
+    ~scroll_x:(W.Ui.scroll_offset_x (A.ui surface))
+    ~scroll_y:(W.Ui.scroll_offset (A.ui surface))
+    main_rects;
+  check "The main application hit mirror must preserve popup options outside the dialog scroll clip"
+    (List.mem last (W.hit_path store main_rects
+      ~x:(final.x+.final.w/.2.) ~y:(final.y+.final.h/.2.)));
   ignore (Lui_app.dispose app);
   print_endline "native language menu viewport and scrolling: OK")

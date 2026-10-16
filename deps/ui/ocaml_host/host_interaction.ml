@@ -80,23 +80,9 @@ let prop_has_attribute store id name prop =
 let node_has_attribute store id name =
   prop_has_attribute store id name "attrs" || prop_has_attribute store id name "data-attrs"
 
-let refresh_rects ~store ~base ~scroll_x ~scroll_y ~scrollable rects =
-  let intersect (a : Lui_scene.rect) (b : Lui_scene.rect) =
-    let left = if a.x>=b.x then a.x else b.x in
-    let top = if a.y>=b.y then a.y else b.y in
-    let ar = a.x+.a.w and br = b.x+.b.w in
-    let ab = a.y+.a.h and bb = b.y+.b.h in
-    let right = if ar<=br then ar else br in
-    let bottom = if ab<=bb then ab else bb in
-    let width = if right>=left then right-.left else 0. in
-    let height = if bottom>=top then bottom-.top else 0. in
-    if b.x=left && b.y=top && b.w=width && b.h=height then b
-    else if a.x=left && a.y=top && a.w=width && a.h=height then a
-    else Lui_scene.rect left top width height
-  in
+let refresh_rects ~store ~base ~scroll_x ~scroll_y rects =
   let transforms = Hashtbl.create (Lui_store.node_count store) in
-  let unbounded = Lui_scene.rect (-1.e9) (-1.e9) 2.e9 2.e9 in
-  let unshifted = 0.,0.,unbounded in
+  let unshifted = 0.,0. in
   Hashtbl.reset rects;
   Lui_store.iter_preorder store (fun id ->
     let inherited =
@@ -104,19 +90,19 @@ let refresh_rects ~store ~base ~scroll_x ~scroll_y ~scrollable rects =
       | None -> unshifted
       | Some parent -> Hashtbl.find transforms parent
     in
-    let offset_x,offset_y,clip = inherited in
+    let offset_x,offset_y = inherited in
     let r : Lui_scene.rect = base id in
     let shifted = if offset_x=0. && offset_y=0. then r
       else {r with x=r.x-.offset_x; y=r.y-.offset_y} in
-    let visible = intersect clip shifted in
-    Hashtbl.replace rects id visible;
+    (* The shared hit walk owns clipping and promoted-popup escape.
+       Baking ancestor clips into these boxes loses popup hit regions. *)
+    Hashtbl.replace rects id shifted;
     (* Resolve the children's transform once per parent. Ordinary wrappers
        share the inherited value rather than allocating identical tuples. *)
     if Lui_store.child_count store id>0 then begin
       let child_x = offset_x+.scroll_x id and child_y = offset_y+.scroll_y id in
-      let child_clip = if scrollable id then intersect clip visible else clip in
-      let children = if child_x=offset_x && child_y=offset_y && child_clip==clip then inherited
-        else child_x,child_y,child_clip in
+      let children = if child_x=offset_x && child_y=offset_y then inherited
+        else child_x,child_y in
       Hashtbl.replace transforms id children
     end)
 

@@ -1068,7 +1068,7 @@ let () =
       populate_revision := revision;
       Host_interaction.refresh_rects ~store ~base:engine_rect
         ~scroll_x:(Ui.scroll_offset_x ui) ~scroll_y:(Ui.scroll_offset ui)
-        ~scrollable:(Ui.scrollable store) rects;
+        rects;
       incr hit_epoch;
       sidebar_id_cell := -1;
       Lui_store.iter_preorder store (fun id ->
@@ -2245,6 +2245,13 @@ let () =
           ^ fprop "orientation" ^ fprop "flex-wrap"
           ^ fprop "name" ^ fprop "icon" ^ fprop "text" ^ fprop "font-size"
           ^ fprop "font-weight" ^ fprop "opacity" ^ fprop "margin-left"
+          ^ fprop "overflow"
+          ^ (if Ui.scrollable store id then
+               let raw = engine_rect id in
+               Printf.sprintf " scroll-offset=%.1f scroll-cap=%.1f layout=%.1f,%.1f %.1fx%.1f"
+                 (Ui.scroll_offset ui id) (Ui.scroll_cap ui id)
+                 raw.Lui_scene.x raw.y raw.w raw.h
+             else "")
           ^ (match Host_icons.resolved_name store id with
              | Some s -> " ires=" ^ s
              | None -> "")

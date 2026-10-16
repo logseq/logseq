@@ -124,19 +124,21 @@ let viewport_cold_scan_allocation () =
 let geometry_refresh () =
   let store = Lui_store.create () in
   for id = 1 to 100 do
-    Lui_store.apply_op store (CreateNode (id, Column));
+    Lui_store.apply_op store (CreateNode (id, if id=1 then Scroll else Column));
     if id > 1 then Lui_store.apply_op store (InsertChild (id - 1, id, 0))
   done;
   let reads = ref 0 in
   let base id = incr reads; Lui_scene.rect 0. (float (id * 10)) 100. 100. in
   let rects = Lui_window.Rects.create () in
   Host_interaction.refresh_rects ~store ~base ~scroll_x:(fun _ -> 0.)
-    ~scroll_y:(fun id -> if id=1 then 5. else 0.) ~scrollable:(fun id -> id=1) rects;
+    ~scroll_y:(fun id -> if id=1 then 5. else 0.) rects;
   check "Hit geometry refresh walks every ancestor repeatedly" (!reads <= 100);
   let child = Lui_window.Rects.get rects 2 in
   check "Scroll shifted hit geometry incorrectly" (child.y = 15.);
   let last = Lui_window.Rects.get rects 100 in
-  check "Offscreen descendants escaped their scroll clip" (last.h = 0.)
+  check "Hit geometry must retain full boxes for the shared clip walk" (last.h = 100.);
+  check "Offscreen descendants escaped their scroll clip"
+    (not (List.mem 20 (Lui_window.hit_path store rects ~x:50. ~y:200.)))
 
 let geometry_refresh_allocation () =
   let store = Lui_store.create () in
@@ -147,7 +149,7 @@ let geometry_refresh_allocation () =
   let rects = Lui_window.Rects.create () in
   let bounds = Lui_scene.rect 10. 20. 100. 40. in
   let refresh () = Host_interaction.refresh_rects ~store ~base:(fun _ -> bounds)
-    ~scroll_x:(fun _ -> 0.) ~scroll_y:(fun _ -> 0.) ~scrollable:(fun _ -> false) rects in
+    ~scroll_x:(fun _ -> 0.) ~scroll_y:(fun _ -> 0.) rects in
   refresh ();
   let before = Gc.allocated_bytes () in
   refresh ();
@@ -174,19 +176,20 @@ let nested_geometry_refresh () =
     ~scroll_x:(fun id ->
       check "Leaf offsets must not be queried for a nonexistent child transform" (id=1 || id=2);
       if id=1 && !root_scroll then 10. else if id=2 then 5. else 0.)
-    ~scroll_y:(fun id -> if id=1 && !root_scroll then 20. else if id=2 then 7. else 0.)
-    ~scrollable:(fun id -> id=1 || id=2) rects in
+    ~scroll_y:(fun id -> if id=1 && !root_scroll then 20. else if id=2 then 7. else 0.) rects in
   refresh ();
   check "A scroll container must inherit only its ancestors' offsets"
     (Lui_window.Rects.get rects 2=Lui_scene.rect 40. 30. 200. 150.);
-  check "Nested offsets and clips must apply to descendants together"
-    (Lui_window.Rects.get rects 3=Lui_scene.rect 55. 53. 185. 127.);
-  check "Clipped siblings must retain their shifted origin and empty extent"
-    (Lui_window.Rects.get rects 4=Lui_scene.rect 490. 480. 0. 0.);
+  check "Nested offsets must preserve full descendant bounds"
+    (Lui_window.Rects.get rects 3=Lui_scene.rect 55. 53. 400. 500.);
+  check "Offscreen siblings must retain full bounds for the hit walk"
+    (Lui_window.Rects.get rects 4=Lui_scene.rect 490. 480. 10. 10.);
+  check "The shared hit walk must reject content outside a nested scroll clip"
+    (not (List.mem 3 (Lui_window.hit_path store rects ~x:280. ~y:190.)));
   root_scroll := false;
   refresh ();
   check "A new scroll frame must replace the previous inherited transform"
-    (Lui_window.Rects.get rects 3=Lui_scene.rect 65. 73. 185. 127.)
+    (Lui_window.Rects.get rects 3=Lui_scene.rect 65. 73. 400. 500.)
 
 let overlay_glyphs () =
   let atlas = Lui_scene.Atlas.create ~bpp:1 ~w:16 ~h:16 in
