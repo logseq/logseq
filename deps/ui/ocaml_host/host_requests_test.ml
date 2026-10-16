@@ -773,7 +773,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     let snapshots=Native_embed.collect_subtree (Lui_app.root_node app) in
     let allocated=Gc.allocated_bytes () -. before in
     Printf.printf "native deep subtree snapshots allocated %.0f bytes\n%!" allocated;
-    check "Subtree snapshots repeat ancestor walks and property lists" (allocated <= 524288.);
+    check "Subtree snapshots allocate a redundant traversal list" (allocated <= 224000.);
     check "Subtree collection changed preorder"
       (List.map (fun el -> int_of_float (Option.get (Dom_ext.num_prop "node-id" el))) snapshots=ids);
     List.iter2 (fun id snapshot ->
@@ -819,7 +819,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     let snapshots=Native_embed.collect_subtree root in
     let bytes=Gc.allocated_bytes () -. before in
     Printf.printf "native one-row snapshot refresh allocated %.0f bytes\n%!" bytes;
-    check "Snapshot refresh copied unchanged node properties" (bytes <= 524288.);
+    check "Snapshot refresh allocates a redundant traversal list" (bytes <= 230000.);
     check "An unrelated row lost its cached immutable snapshot"
       (original==Native_embed.shallow_of rt sibling);
     check "A changed row returned its old snapshot text"

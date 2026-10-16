@@ -313,19 +313,18 @@ let collect_subtree (root : int) : Js.Json.t list =
        | Some els -> els
        | None ->
            let rec dfs node ancestors acc =
-             let acc = snapshot_with_ancestors rt node ancestors :: acc in
-             match Hashtbl.find_opt rt.Lui_runtime.runtime_children node
-             with
-             | Some kids when Lui_sequence.length kids > 0 ->
-                 (* Siblings share an immutable nearest-first ancestor array. *)
-                 let length = min 64 (Array.length ancestors + 1) in
-                 let child_ancestors = Array.make length (shallow_of rt node) in
-                 Array.blit ancestors 0 child_ancestors 1 (length - 1);
-                 Lui_sequence.fold_left (fun a k -> dfs k child_ancestors a) acc kids
-             | Some _ -> acc
-             | None -> acc
+             let descendants =
+               match Hashtbl.find_opt rt.Lui_runtime.runtime_children node with
+               | Some kids when Lui_sequence.length kids > 0 ->
+                   (* Siblings share an immutable nearest-first ancestor array. *)
+                   let length = min 64 (Array.length ancestors + 1) in
+                   let child_ancestors = Array.make length (shallow_of rt node) in
+                   Array.blit ancestors 0 child_ancestors 1 (length - 1);
+                   Lui_sequence.fold_right (fun k a -> dfs k child_ancestors a) kids acc
+               | Some _ | None -> acc in
+             snapshot_with_ancestors rt node ancestors :: descendants
            in
-           let els = List.rev (dfs root (snapshot_ancestors rt root) []) in
+           let els = dfs root (snapshot_ancestors rt root) [] in
            Hashtbl.replace subtree_cache root els;
            els)
 
