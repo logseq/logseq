@@ -106,6 +106,17 @@ let run_views ~registry ~profile ~finish =
   check "reopening settings starts with its language picker closed"
     (not (List.exists (fun n -> n.M.kind = "dropdown-menu") (nodes reopened)));
   ignore (Lui_app.dispose reopened.S.app);
+  let key_event ?(meta = false) ?(ctrl = false) ?(shift = false) ?(composing = false) key =
+    { Ui_services.x = 0.; y = 0.; shift; meta; ctrl;
+      alt = false; composing; key = Some key; key_char = None;
+      buttons = 0; button = 0;
+      repeat = false; movement_x = 0.; movement_y = 0.; default_prevented = false;
+      target = None; touches = []; detail = (fun _ -> None);
+      detail_json = (fun _ -> None); clipboard_get = (fun _ -> "");
+      clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+      files = []; has_files = false; prevent_default = (fun () -> ());
+      stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
+  in
   let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
   let keymap_nodes () = nodes keymap in
   let keymap_rows () =
@@ -172,7 +183,53 @@ let run_views ~registry ~profile ~finish =
   S.text_changed keymap input.M.id "  ";
   check "whitespace query restores categories and hides clear"
     (category_headers () <> [] && clear_buttons () = []);
+  let key_search = List.find (fun n ->
+      M.string_prop n "text" = Some I18n.keymap_search_by_keys) (keymap_nodes ()) in
+  S.press keymap key_search.M.id;
+  let recorders = List.filter (fun n -> class_has n "shortcut-filter-popover") (keymap_nodes ()) in
+  eqi "key search opens exactly one recorder" 1 (List.length recorders);
+  check "the recorder exclusively owns keyboard input" (Keyboard_capture.active ());
+  Keyboard_capture.dispatch (key_event ~meta:true "k");
+  S.flush keymap;
+  eqi "recording a shortcut filters commands" 1 (List.length (keymap_rows ()));
+  check "dynamic recorder buttons satisfy the accessible-name contract"
+    (List.for_all (fun n -> n.M.kind <> "button"
+        || P.node_properties_supported P.Button (button_properties n)) (keymap_nodes ()));
+  let module R = Keymap_record in
+  let update strokes committed event = R.update ~strokes ~committed event in
+  check "the plus key is distinct from the chord separator"
+    (update [] false (key_event ~shift:true "+") = R.Set (["shift+="], false)
+     && R.keycaps "shift+=" = ["⇧";"="]);
+  check "shifted punctuation uses the same names as command bindings"
+    (update [] false (key_event ~shift:true "?") = R.Set (["shift+/"], false));
+  check "folded native Shift is restored for recorded modifiers"
+    (update [] false (key_event ~meta:true "P") = R.Set (["meta+shift+p"], true));
+  check "named keycaps retain their standard labels" (R.keycaps "delete" = ["Delete"]);
+  check "modifier-only events do not alter recordings"
+    (update ["g"] false (key_event "Shift") = R.Ignore);
+  check "composition does not enter shortcut recordings"
+    (update [] false (key_event ~composing:true "a") = R.Ignore);
+  check "plain strokes append within a sequence"
+    (update ["g"] false (key_event "j") = R.Set (["g";"j"], false));
+  check "a committed sequence is replaced by the next stroke"
+    (update ["g";"j"] true (key_event "k") = R.Set (["k"], false));
+  check "modified strokes commit immediately"
+    (update ["g"] false (key_event ~meta:true "k") = R.Set (["meta+k"], true));
+  check "recordings stop at five strokes"
+    (update ["a";"b";"c";"d";"e"] false (key_event "f") = R.Ignore);
+  check "Backspace removes the last pending stroke"
+    (update ["g";"j"] false (key_event "Backspace") = R.Set (["g"], false));
+  check "Backspace clears committed strokes"
+    (update ["g";"j"] true (key_event "Backspace") = R.Set ([], false));
+  check "Escape dismisses recording without changing the filter"
+    (update ["meta+k"] true (key_event "Escape") = R.Close);
+  (match recorders with
+   | [recorder] -> S.dismiss keymap recorder.M.id;
+       check "recorder dismissal retains the settings pane"
+         (List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()))
+   | _ -> ());
   ignore (Lui_app.dispose keymap.S.app);
+  check "recorder disposal releases keyboard capture" (not (Keyboard_capture.active ()));
   let storage_key = "parity-server-url" in
   let previous_url = Ui_services.storage_get storage_key in
   Ui_services.storage_remove storage_key;
@@ -212,17 +269,6 @@ let run_views ~registry ~profile ~finish =
     (Hashtbl.find_opt persistent.M.props "duration" = Some (P.IntValue 0));
   ignore (Lui_app.dispose notifications.S.app);
   let key_handler = ref (fun (_ : Ui_services.ev) -> ()) in
-  let key_event key =
-    { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
-      alt = false; composing = false; key = Some key; key_char = None;
-      buttons = 0; button = 0;
-      repeat = false; movement_x = 0.; movement_y = 0.; default_prevented = false;
-      target = None; touches = []; detail = (fun _ -> None);
-      detail_json = (fun _ -> None); clipboard_get = (fun _ -> "");
-      clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
-      files = []; has_files = false; prevent_default = (fun () -> ());
-      stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
-  in
   let empty_menu = mount (fun _ -> Views_popup.menu_level ~pid:9001 ~cls:""
       ~register:(fun h -> key_handler := h) [ Views_popup.MSep ]) in
   check "empty view-action menu safely ignores navigation"

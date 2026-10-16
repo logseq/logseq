@@ -3120,6 +3120,61 @@ let () =
               expect "Native query clear must restore host text-input focus"
                 (W.Ui.focused (A.ui surface) = search && !focused_input = search);
               expect "Native query clear must restore category headings"
+                (count_class "th" > 0);
+              Keyboard_capture.install ();
+              dispatch (Press key_button);
+              expect "Native keystroke filter does not own keyboard recording"
+                (Keyboard_capture.active () && count_class "shortcut-filter-popover" = 1);
+              let key name meta =
+                Platform.emit_event "keydown"
+                  (Js.Json.JObject
+                     [
+                       ("key", Js.Json.JString name); ("metaKey", Js.Json.JBoolean meta);
+                     ])
+              in
+              ignore (A.store_changed surface);
+              ignore (A.repaint surface);
+              let recorder () = List.find (fun id -> has_class id "shortcut-filter-popover")
+                  (Lui_store.preorder store) in
+              let anchor_gap () = (rect (recorder ())).y -. ((rect key_button).y +. (rect key_button).h) in
+              let initial_anchor_gap = anchor_gap () in
+              key "k" true;
+              ignore (A.store_changed surface);
+              ignore (A.repaint surface);
+              expect "Native key-filter clear must not replace the popover anchor"
+                (abs_float (anchor_gap () -. initial_anchor_gap) < 0.01);
+              expect "Native keystroke recording does not filter matching commands"
+                (count_class "shortcut-row" = 1 && count_class "th" = 0);
+              key "c" true;
+              expect
+                "Native recorded prefixes must include multi-stroke command bindings"
+                (count_class "shortcut-row" = 4);
+              let timer_ids_before =
+                Hashtbl.fold (fun id _ ids -> id :: ids) Host.timers []
+              in
+              key "Tab" false;
+              expect "Native Tab is not captured as a shortcut stroke"
+                (Option.is_some
+                   (Ui_services.dom_query
+                      ".shortcut-filter-popover [data-shortcut-binding=\"tab\"]"));
+              key "Escape" false;
+              expect "Closing native recording must cancel its pending timer"
+                (Hashtbl.fold
+                   (fun id _ ok -> ok && List.mem id timer_ids_before)
+                   Host.timers true);
+              expect "Native Escape must dismiss only the recorder and release capture"
+                ((not (Keyboard_capture.active ()))
+                && count_class "shortcut-filter-popover" = 0
+                && List.mem search (Lui_store.preorder store));
+              let clear_keys =
+                List.find
+                  (fun id ->
+                    Lui_store.string_prop store id "accessibility-label"
+                    = Some (I18n.t "keymap/clear-keystroke-filter"))
+                  (Lui_store.preorder store)
+              in
+              dispatch (Press clear_keys);
+              expect "Native key-filter clear must restore grouped commands"
                 (count_class "th" > 0));
           List.iter prerr_endline (List.rev !errors);
           check "Native Keymap visual geometry and typography" (!errors = [])));

@@ -371,11 +371,73 @@ let editor_pane ctx =
 
 (* ---- keymap pane (components/shortcut.cljs page) ---- *)
 
-type keymap_model =
-  { km_query : string
-  ; km_filter : Keymap_data.filter
-  ; km_collapsed : string list
-  }
+let rec keymap_binding ~key (b : Keymap_data.binding) =
+  let open Keymap_data in
+  if b.kind = "chord" then
+    row ~key ~cross:`center ~gap:4
+      (String.split_on_char ' ' b.data
+      |> List.mapi (fun i stroke ->
+          row ~key:(string_of_int i) ~cross:`center ~gap:4
+            ((if i = 0 then []
+              else [ text ~value:(Ui_services.literal_text "->") [] ])
+            @ [
+                keymap_binding
+                  ~key:(key ^ string_of_int i)
+                  {
+                    kind = "combo";
+                    data = stroke;
+                    keys = Keymap_record.keycaps stroke;
+                  };
+              ])))
+  else
+    let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
+    (* ls-dc is display:contents — the box is transparent on web, so the
+     shortcut cells flow as direct children of the action wrap *)
+    box ~key ~style_class:"ls-dc" ~display:`contents
+      [
+        box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
+          ~display:`inline_flex
+          [
+            row ~key:(key ^ "d") ~style_class:cls ~cross:`center
+              ~data_attrs:[ ("data-shortcut-binding", b.data) ]
+              [
+                (let cells =
+                   List.concat
+                     (List.mapi
+                        (fun i k ->
+                          (if i > 0 && b.kind = "combo" then
+                             [
+                               Ui_components.keycap_separator
+                                 ~key:(key ^ "s" ^ string_of_int i);
+                             ]
+                           else [])
+                          @ [
+                              Ui_components.keycap
+                                ~key:(key ^ "k" ^ string_of_int i)
+                                ~boxed:(b.kind = "separate") ~glow:true
+                                ~min_slot:20
+                                ~value:(Ui_services.literal_text k);
+                            ])
+                        b.keys)
+                 in
+                 if b.kind = "combo" then
+                   Ui_components.shortcut_combo ~key:(key ^ "sc") ~glow:true
+                     cells
+                 else
+                   Ui_components.shortcut_separate ~key:(key ^ "sc") ~glow:false
+                     cells);
+              ];
+          ];
+      ]
+
+type keymap_model = {
+  km_query : string;
+  km_filter : Keymap_data.filter;
+  km_collapsed : string list;
+  km_keys : string list;
+  km_recording : bool;
+  km_committed : bool;
+}
 
 (* ":<id>#<handler>" -> the command.<id> dict key *)
 let command_key_of (title : string) : string =
@@ -385,9 +447,7 @@ let command_key_of (title : string) : string =
     else title
   in
   let s =
-    match String.index_opt s '#' with
-    | Some i -> String.sub s 0 i
-    | None -> s
+    match String.index_opt s '#' with Some i -> String.sub s 0 i | None -> s
   in
   "command." ^ s
 
@@ -416,6 +476,207 @@ let keymap_pill st ~key ~title filter =
         })
     ()
 
+let keymap_recorded_keys ?(pending = false) strokes =
+  row ~key:"recorded-keys" ~cross:`center ~gap:4
+    ~opacity:(if pending then 0.7 else 1.)
+    ~data_attrs:[ ("data-recording-pending", string_of_bool pending) ]
+    (List.mapi
+       (fun i stroke ->
+         keymap_binding
+           ~key:("stroke-" ^ string_of_int i)
+           {
+             Keymap_data.kind =
+               (if String.contains stroke '+' then "combo" else "separate");
+             data = stroke;
+             keys = Keymap_record.keycaps stroke;
+           })
+       strokes)
+
+let keymap_close_recorder st =
+  Runtime.signal_set st
+    { (Runtime.signal_get st) with km_recording = false; km_committed = true };
+  match Ui_services.dom_query ".shortcut-keystroke-trigger" with
+  | Some trigger -> trigger.Ui_services.focus ()
+  | None -> ()
+
+let keymap_recorder st : t =
+ fun ctx parent ->
+  let timer = ref None in
+  let cancel () =
+    Option.iter Ui_services.timers_clear_timeout !timer;
+    timer := None
+  in
+  Signal.on_dispose ctx.Lui_ui.ui_scope cancel;
+  let clear () =
+    cancel ();
+    Runtime.signal_set st
+      { (Runtime.signal_get st) with km_keys = []; km_committed = false }
+  in
+  let record ev =
+    let model = Runtime.signal_get st in
+    match
+      Keymap_record.update ~strokes:model.km_keys ~committed:model.km_committed
+        ev
+    with
+    | Keymap_record.Ignore -> ()
+    | Close ->
+        cancel ();
+        keymap_close_recorder st
+    | Set (keys, committed) ->
+        cancel ();
+        Runtime.signal_set st
+          { model with km_keys = keys; km_committed = committed };
+        if keys <> [] && not committed then
+          timer :=
+            Some
+              (Ui_services.timers_timeout
+                 (fun () ->
+                   timer := None;
+                   if Ui_effect.alive ctx.ui_scope then
+                     Runtime.signal_set st
+                       { (Runtime.signal_get st) with km_committed = true })
+                 400)
+  in
+  Keyboard_capture.acquire ~scope:ctx.ui_scope record;
+  popover ~key:"key-recorder" ~style_class:"shortcut-filter-popover"
+    ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4. ~width:288
+    ~min_width:0 ~padding:0 ~corner_radius:8 ~border_width:1
+    ~border_color:"hsl(var(--border))" ~background:"hsl(var(--background))"
+    ~transition:Ui_components.popover_transition
+    ~on_dismiss:(fun _ -> keymap_close_recorder st)
+    [
+      column ~gap:0 ~min_width:0
+        [
+          text ~font_size:"0.75rem" ~line_height:"16px" ~font_weight:500
+            ~padding_horizontal:16 ~padding_vertical:8
+            ~foreground:"var(--lx-gray-11)"
+            ~value:(I18n.t "keymap/keystroke-filter")
+            [];
+          row ~cross:`center ~gap:8 ~min_height:40 ~padding_horizontal:16
+            ~padding_vertical:8
+            [
+              button ~key:"record-target" ~variant:`ghost ~autofocus:true
+                ~min_width:0 ~min_height:0 ~height:24 ~padding:0
+                ~foreground:"var(--lx-gray-11)"
+                ~label:(I18n.t "keymap/press-keys-to-filter")
+                [
+                  reactive
+                    (fun model ->
+                      if model.km_keys = [] then
+                        text ~font_size:"0.875rem"
+                          ~value:(I18n.t "keymap/press-keys-to-filter")
+                          []
+                      else
+                        keymap_recorded_keys ~pending:(not model.km_committed)
+                          model.km_keys)
+                    (Signal.value st);
+                ];
+              if_
+                ~test:
+                  (reactive
+                     (fun model -> model.km_keys <> [])
+                     (Signal.value st))
+                (button ~key:"remove-key-filter" ~variant:`ghost ~width:16
+                   ~height:16 ~min_width:0 ~min_height:0 ~padding:0 ~icon:`x
+                   ~label:(I18n.t "keymap/remove-filter")
+                   ~on_press:(fun _ -> clear ())
+                   []);
+            ];
+          Ui_components.with_props
+            [ Ui_components.Prop.margin 0; Ui_components.Prop.height 1 ]
+            (separator []);
+          row ~cross:`center ~main:`space_between ~gap:12 ~height:28
+            ~padding_horizontal:16 ~padding_vertical:6
+            [
+              box ~grow:1.
+                [
+                  if_
+                    ~test:
+                      (reactive
+                         (fun model -> model.km_keys <> [])
+                         (Signal.value st))
+                    (button ~variant:`ghost ~min_height:0 ~height:16 ~padding:0
+                       ~label:(I18n.t "keymap/clear")
+                       ~on_press:(fun _ -> clear ())
+                       [
+                         row ~cross:`center ~gap:4
+                           [
+                             Icons.icon ~size:12. "refresh";
+                             text ~font_size:"0.75rem" ~line_height:"16px"
+                               ~value:(I18n.t "keymap/clear") [];
+                           ];
+                       ]);
+                ];
+              text ~font_size:"0.75rem" ~line_height:"16px"
+                ~foreground:"var(--lx-gray-11)"
+                ~value:(I18n.t "keymap/hint-close")
+                [];
+              text ~key:"escape" ~font_size:"0.75rem" ~line_height:"16px"
+                ~value:"Esc" [];
+            ];
+        ];
+    ]
+    ctx parent
+
+let keymap_key_control st =
+  let open_ _ =
+    let model = Runtime.signal_get st in
+    if model.km_recording then keymap_close_recorder st
+    else
+      Runtime.signal_set st
+        {
+          model with
+          km_query = "";
+          km_recording = true;
+          km_committed = model.km_keys <> [];
+        }
+  in
+  row ~key:"key-search" ~cross:`center ~gap:4
+    [
+      row ~key:"key-anchor" ~cross:`center ~gap:4
+        [
+          reactive
+            (fun model ->
+              button ~key:"key-trigger"
+                ~style_class:
+                  ("shortcut-keystroke-trigger "
+                  ^
+                  if model.km_keys = [] then "shortcut-keystroke-inactive"
+                  else "shortcut-keystroke-active")
+                ~height:30 ~min_height:0
+                ~min_width:(if model.km_keys = [] then 144 else 0)
+                ~padding_vertical:0 ~padding_horizontal:10 ~corner_radius:6
+                ~border_width:1
+                ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
+                ~background:"var(--lx-gray-02, hsl(var(--muted)))"
+                ~label:T.keymap_search_by_keys ~icon:(`app "keyboard")
+                ?text:
+                  (if model.km_keys = [] then Some T.keymap_search_by_keys
+                   else None)
+                ~on_press:open_
+                (if model.km_keys = [] then []
+                 else [ keymap_recorded_keys model.km_keys ]))
+            (Signal.value st);
+          if_
+            ~test:
+              (reactive (fun model -> model.km_keys <> []) (Signal.value st))
+            (button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
+               ~min_height:0 ~padding:4 ~icon:`x
+               ~label:(I18n.t "keymap/clear-keystroke-filter")
+               ~on_press:(fun _ ->
+                 Runtime.signal_set st
+                   {
+                     (Runtime.signal_get st) with
+                     km_keys = [];
+                     km_committed = false;
+                   })
+               []);
+        ];
+      if_
+        ~test:(reactive (fun model -> model.km_recording) (Signal.value st))
+        (keymap_recorder st);
+    ]
+
 let keymap_controls st =
   let categories =
     List.filter_map
@@ -438,21 +699,11 @@ let keymap_controls st =
                 ~on_clear:S.focus_keymap_search
                 ~on_text:(fun query ->
                   Runtime.signal_set st
-                    { (Runtime.signal_get st) with km_query = query })
+                    { (Runtime.signal_get st) with km_query = query;
+                      km_keys = if String.trim query <> "" then [] else (Runtime.signal_get st).km_keys })
                 ();
             ];
-          Ui_components.with_props
-            [
-              Ui_components.Prop.hover_background
-                "var(--lx-gray-04, var(--ls-quaternary-background-color, \
-                 hsl(var(--accent))))";
-            ]
-            (button ~key:"km-kb" ~style_class:"shortcut-keystroke-inactive"
-               ~height:30 ~min_height:0 ~min_width:144 ~padding_vertical:0
-               ~padding_horizontal:10 ~corner_radius:6 ~border_width:1
-               ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
-               ~background:"var(--lx-gray-02, hsl(var(--muted)))"
-               ~icon:(`app "keyboard") ~text:T.keymap_search_by_keys []);
+          keymap_key_control st;
         ];
       row ~key:"km-pills" ~style_class:"shortcut-pills-row" ~cross:`center
         ~main:`space_between ~gap:8 ~flex_wrap:`wrap
@@ -486,41 +737,6 @@ let keymap_controls st =
                 ~label:T.keymap_refresh_all ~icon:(`app "refresh") [];
             ];
         ];
-    ]
-
-let keymap_binding ~key (b : Keymap_data.binding) =
-  let open Keymap_data in
-  let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
-  (* ls-dc is display:contents — the box is transparent on web, so the
-     shortcut cells flow as direct children of the action wrap *)
-  box ~key ~style_class:"ls-dc" ~display:`contents
-    [ box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
-        ~display:`inline_flex
-        [ row ~key:(key ^ "d") ~style_class:cls ~cross:`center
-            ~accessibility_identifier:b.data
-            [ (let cells =
-                 List.concat
-                   (List.mapi
-                      (fun i k ->
-                        (if i > 0 && b.kind = "combo" then
-                           [ Ui_components.keycap_separator
-                               ~key:(key ^ "s" ^ string_of_int i) ]
-                         else [])
-                        @ [ Ui_components.keycap
-                              ~key:(key ^ "k" ^ string_of_int i)
-                              ~boxed:(b.kind = "separate") ~glow:true
-                              ~min_slot:20
-                              ~value:(Ui_services.literal_text k) ])
-                      b.keys)
-               in
-               if b.kind = "combo" then
-                 Ui_components.shortcut_combo ~key:(key ^ "sc")
-                   ~glow:true cells
-               else
-                 Ui_components.shortcut_separate ~key:(key ^ "sc")
-                   ~glow:false cells)
-            ]
-        ]
     ]
 
 (* Category literals in keymap_data.ml map to shortcut.category/* keys *)
@@ -582,11 +798,13 @@ let keymap_pane () : t =
  fun context parent ->
   let st =
     Signal.state context.Lui_ui.ui_scheduler
-      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [] }
+      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [];
+        km_keys=[]; km_recording=false; km_committed=false }
   in
   let rows model =
     let items =
-      Keymap_data.visible_items ~query:model.km_query ~filter:model.km_filter
+      Keymap_data.visible_items ~keystroke:(String.concat " " model.km_keys)
+        ~query:model.km_query ~filter:model.km_filter
         ~label:keymap_label
     in
     let _, _, elements =

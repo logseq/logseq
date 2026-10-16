@@ -1103,6 +1103,9 @@ let () =
   let on_component_input () = component_input := true in
   let handle_input input =
     match input with
+    | Input.Key_down _ when Keyboard_capture.active () -> []
+    | Input.Text_input _ when Keyboard_capture.active () ->
+        component_input := true; []
     | Input.Move _ | Input.Button_down _ | Input.Button_up _
     | Input.Wheel _ | Input.Wheel_mods _ ->
       Ui.handle ~spatial:(spatial_index ()) ~on_component_input ui store rects input
@@ -1673,6 +1676,7 @@ let () =
     | _ -> None
   in
   let on_dom_key ~down ~scancode ~keymod ~repeat =
+    let recording = Keyboard_capture.active () in
     let mods = mods_of_keymod keymod in
     let target =
       let menu = Ui.open_menu ui in
@@ -1715,7 +1719,7 @@ let () =
     in
     if dupe then ()
     else begin
-      if down && target <> 0
+      if down && not recording && target <> 0
          && Lui_store.kind store target = "extension:logseq-editor"
       then begin
         dbg "editor key %s" (dom_key scancode);
@@ -1739,7 +1743,7 @@ let () =
         if Host_platform.is_macos then mods.Input.meta && not mods.Input.ctrl
         else mods.Input.ctrl && not mods.Input.meta
       in
-      if down && (not repeat) && primary_shortcut
+      if down && not recording && (not repeat) && primary_shortcut
          && not (mods.Input.alt || mods.Input.shift)
       then
         (match dom_key scancode with
@@ -1902,7 +1906,7 @@ let () =
          | Some (Input.Button_up (_,_,Input.Left,_)) -> Native_window.hold_pointer text_input false
          | _ -> ());
         (match input with
-         | Some (Input.Key_down _ | Input.Text_input _) -> Host_requests.ensure_ed_focus ()
+         | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
          | _ -> ());
         (match input with
          | Some (Input.Button_down _ | Input.Button_up _ | Input.Key_down _
@@ -1945,7 +1949,7 @@ let () =
            in
            let epoch0 = Ui.scroll_epoch ui in
            apply_actions (handle_input input);
-           if page_dir <> 0. && not !component_input
+           if page_dir <> 0. && not !component_input && not (Keyboard_capture.active ())
               && Ui.scroll_epoch ui = epoch0 then begin
              let fid = Ui.focused ui in
              let editor_owns =
@@ -2352,7 +2356,7 @@ let () =
     apply_actions sync_acts;
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
-    Host_requests.ensure_ed_focus ();
+    if not (Keyboard_capture.active ()) then Host_requests.ensure_ed_focus ();
     (* Caret geometry is text-entry only, and only when the anchor
        moved. A non-editable focus must not run this every frame. *)
     let fid = Ui.focused ui in
