@@ -2176,20 +2176,49 @@
             (assoc :logseq.property.code/lang lang)))
         code-segs))
 
-(def ^:private embed-macro-re #"\s*\{\{embed\s+(.+?)\s*\}\}")
+(defn- embed-macro-spans
+  "Locate embed macros in UTF-8 source, excluding code blocks and code spans."
+  [title format]
+  (let [encoded (utf8/encode title)
+        config (js/JSON.stringify
+                (clj->js (assoc (gp-mldoc/default-config-map format) :inline_type_with_pos true)))
+        ast (common-util/json->clj (gp-mldoc/parse-json title config))]
+    (into []
+          (mapcat
+           (fn [[[kind] {:keys [start_pos end_pos]}]]
+             (when-not (contains? #{"Src" "Example"} kind)
+               (let [source (utf8/substring encoded start_pos end_pos)
+                     inlines (common-util/json->clj (gp-mldoc/inline-parse-json source config))]
+                 (keep (fn [[node positions]]
+                         (when (and (= "Macro" (first node))
+                                    (= "embed" (:name (second node))))
+                           {:node node
+                            :start (+ start_pos (:start_pos positions))
+                            :end (+ start_pos (:end_pos positions))}))
+                       inlines)))))
+          ast)))
 
 (defn- title-without-embed
-  "The block's text besides its embed macro, or nil when the block is only the
-  embed. A heading marker or the block's task marker is not text: `### {{embed
-  ...}}` and `DONE {{embed ...}}` are embed blocks with a heading or a status."
-  [title marker]
-  (when (string? title)
-    (let [text (string/trim (string/replace title embed-macro-re ""))
-          body (string/replace text #"^#+(?:\s+|$)" "")
-          body (if (and marker (string/starts-with? body marker))
-                 (string/trim (subs body (count marker)))
-                 body)]
-      (when-not (string/blank? body) text))))
+  "Remove embed source spans while leaving task and heading conversion to their handlers."
+  [title marker format]
+  (let [encoded (utf8/encode title)
+        {:keys [offset fragments]}
+        (reduce (fn [{:keys [offset fragments]} {:keys [start end]}]
+                  (let [fragment-end (if (and (> start offset)
+                                             (= 32 (aget encoded (dec start)))
+                                             (= 32 (aget encoded end)))
+                                       (dec start)
+                                       start)]
+                    {:offset end
+                     :fragments (conj fragments (utf8/substring encoded offset fragment-end))}))
+                {:offset 0 :fragments []}
+                (embed-macro-spans title format))
+        text (string/trim (apply str (conj fragments (utf8/substring encoded offset))))
+        body (string/replace text #"^#+(?:\s+|$)" "")
+        body-without-marker (if (and marker (string/starts-with? body marker))
+                              (string/trim (subs body (count marker)))
+                              body)]
+    (when-not (string/blank? body-without-marker) text)))
 
 (defn- handle-embeds
   "If a block contains page or block embeds, converts block to a :block/link based embed.
@@ -2216,7 +2245,7 @@
 
                         :else
                         (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node))))
-          text (title-without-embed (:block/title block) (:block/marker block))]
+          text (title-without-embed (:block/title block) (:block/marker block) (:block/format block))]
       (cond
         (not (uuid? target-uuid))
         block

@@ -779,6 +779,21 @@ abc
     (is (= "Alpha" (:block/title (:block/link done-embed))) "an embed with a status is an embed block")
     (is (= :logseq.property/status.done (:db/ident (:logseq.property/status done-embed))))))
 
+(deftest-async import-preserves-literal-embed-macros
+  (p/doseq [literal ["`{{embed [[Beta]]}}`"
+                    "``{{embed [[Beta]]}}``"
+                    "\n```text\n{{embed [[Beta]]}}\n```"]]
+    (p/let [source (write-temp-graph-file "pages/Literal.md"
+                                        (str "- " (string/replace (str "示例 " literal "\n{{embed [[Alpha]]}} after")
+                                                                  "\n" "\n  ") "\n"))
+            target (write-temp-graph-file "pages/Alpha.md" "- target\n")
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source target] conn {})
+            block (first (:block/_parent (db-test/find-page-by-title @conn "Literal")))]
+      (is (= (str "示例 " literal "\n after") (:block/title block)))
+      (is (= ["Alpha"] (mapv (comp :block/title :block/link) (ordered-children block)))))))
+
 (deftest-async import-thematic-break-block
   (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
           conn (db-test/create-conn)
