@@ -134,6 +134,20 @@
     (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
     (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
 
+(deftest closed-value-siblings-are-the-other-closed-values-of-its-property
+  (let [values [["a" (random-uuid)] ["b" (random-uuid)] ["c" (random-uuid)]]
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/choice
+                            {:logseq.property/type :default
+                             :build/closed-values (mapv (fn [[title u]] {:value title :uuid u}) values)}}})
+        [first-value middle-value last-value] (sort-by :block/order
+                                                       (map (fn [[_ u]] (d/entity @conn [:block/uuid u])) values))]
+    (is (= 3 (count (distinct (map :block/order [first-value middle-value last-value])))))
+    (is (= (:db/id last-value) (:db/id (ldb/get-right-sibling middle-value))))
+    (is (= (:db/id first-value) (:db/id (ldb/get-left-sibling middle-value))))
+    (is (nil? (ldb/get-right-sibling last-value)))
+    (is (nil? (ldb/get-left-sibling first-value)))))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties
