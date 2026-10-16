@@ -1618,15 +1618,18 @@ let hidden_entity_datom (db : db) (e : entity_id) : bool =
             | None -> true)
    | [] -> false)
 
-let get_all_blocks (db : db) : entity list =
+let get_all_block_ids (db : db) : entity_id list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
          | Uuid _ ->
              if hidden_entity_datom db d.e then None
-             else Ldb.ent_of_id db d.e
+             else Some d.e
          | _ -> None)
   |> List.of_seq
+
+let get_all_blocks (db : db) : entity list =
+  get_all_block_ids db |> List.filter_map (Ldb.ent_of_id db)
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map

@@ -10,6 +10,40 @@
 module E = Db_worker_effect
 
 let invoke_mu = Mutex.create ()
+let last_activity = ref (Time.monotonic_now ())
+let released_major_words = ref (Gc.quick_stat ()).major_words
+
+let finish_invocation () =
+  last_activity := Time.monotonic_now ();
+  Mutex.unlock invoke_mu
+
+(* OCaml 5 keeps swept pools mapped until compaction, even when the
+   live graph is small. Return that burst capacity after five idle
+   seconds and at least 32 MiB of major allocations since the last
+   release. Check inactivity under the invoke mutex, then release it
+   before compacting so signal handlers can still close the graph. *)
+let release_idle_heap () =
+  let candidate =
+    if Mutex.try_lock invoke_mu then
+      Fun.protect ~finally:(fun () -> Mutex.unlock invoke_mu) (fun () ->
+          let stats = Gc.quick_stat () in
+          if Time.diff_monotonic_ms !last_activity (Time.monotonic_now ()) >= 5000.
+             && stats.major_words -. !released_major_words >= 4_194_304.
+          then Some stats else None)
+    else None
+  in
+  match candidate with
+  | None -> ()
+  | Some stats ->
+      let started = Time.monotonic_now () in
+      Gc.compact ();
+      let after = Gc.quick_stat () in
+      released_major_words := stats.major_words;
+      Worker_log.debug "native/idle-heap-release"
+        [ "heap-words-before", string_of_int stats.heap_words
+        ; "heap-words-after", string_of_int after.heap_words
+        ; "duration-ms", string_of_float
+            (Time.diff_monotonic_ms started (Time.monotonic_now ())) ]
 
 let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
   fun arg ->
@@ -18,8 +52,8 @@ let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
       (try `Task (f arg) with exn -> `Err exn)
     with
     | `Task task ->
-        E.finally task (fun () -> Mutex.unlock invoke_mu; E.pure ())
-    | `Err exn -> Mutex.unlock invoke_mu; raise exn
+        E.finally task (fun () -> finish_invocation (); E.pure ())
+    | `Err exn -> finish_invocation (); raise exn
 
 let () =
   (* parse_argv expects JS argv ([runtime, script, ...args]); native
@@ -41,9 +75,8 @@ let () =
             Dispatcher.invoke m [ Wire.String r; Wire.Binary p ])
          (method_str, repo, payload));
   Db_worker_node.main ();
-  (* The JS daemon stays alive on the node event loop; keep the main
-     thread parked until [Node_process.exit] from a signal or
-     /v1/shutdown ends the process. *)
+  (* Keep the daemon alive and maintain its native heap while idle. *)
   while true do
-    Thread.delay 3600.0
+    Thread.delay 1.0;
+    release_idle_heap ()
   done

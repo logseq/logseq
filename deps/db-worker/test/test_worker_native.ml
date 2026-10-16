@@ -146,6 +146,144 @@ let graph_store_durability_tests () =
   Sqlite.close sql;
   Sys.remove path
 
+let search_normalization_memory_tests () =
+  List.iter
+    (fun (input, expected) ->
+       check "accent normalization preserves replacement order and Unicode"
+         (Search_fuzzy.remove_accents input = expected))
+    [ "", ""
+    ; "plain ASCII 123", "plain ASCII 123"
+    ; "Æ Œ Ǽ café", "AE OE AE cafe"
+    ; "A̋ a̧ Ř̩ й Ё", "A a R̩ и Е"
+    ; "中文 😀 é", "中文 😀 é"
+    ; "A̋A̧ǼŒ", "AAAEOE" ];
+  List.iter
+    (fun input ->
+       ignore (Search_fuzzy.remove_accents input);
+       let before = Gc.allocated_bytes () in
+       let normalized = Search_fuzzy.remove_accents input in
+       let allocated = Gc.allocated_bytes () -. before in
+       Printf.printf "accent normalization allocated %.0f bytes for %d input bytes\n%!"
+         allocated (String.length input);
+       check "accent normalization allocation stays proportional to text size"
+         (allocated < float_of_int (String.length input * 32 + 4096));
+       check "accent normalization consumes the complete input"
+         (String.length normalized > 0))
+    [ String.make 10000 'x'
+    ; String.concat "" (List.init 1000 (fun _ -> "A̋ café 中文 😀 ")) ]
+
+let search_build_memory_tests () =
+  let open Datascript in
+  List.iter (fun count ->
+    let repo = "search-memory-" ^ string_of_int count in
+    let conn = conn_from_db (empty_db ~schema:(Db_schema.schema ()) ()) in
+    ignore (transact_conn conn (List.init count (fun i ->
+      Entity { db_id = Some (Entity_id (i + 1)); attrs =
+        [ "block/uuid", One_value (Uuid (Printf.sprintf "00000000-0000-4000-8000-%012d" (i + 1)))
+        ; "block/title", One_value (String ("Search row " ^ string_of_int i)) ] })));
+    let sql = Sqlite.open_db ~path:":memory:" in
+    Search_index.create_tables_and_triggers sql;
+    let retained () = Gc.full_major (); (Gc.quick_stat ()).live_words * (Sys.word_size / 8) in
+    let before = retained () in
+    let build_peak = ref 0 in
+    let completed = ref false in
+    Broadcast.set_post_fn (fun ~kind ~payload ->
+      if kind = "thread-api/search-index-build-progress" then
+        match Transit_codec.of_string payload with
+        | Wire.Array [ _; Wire.Array [ _; progress ] ]
+          when Wire.get "status" progress = Some (Wire.Keyword "completed") ->
+            completed := true;
+            build_peak := retained () - before
+        | _ -> ());
+    Common_util.protect
+      ~finally:(fun () ->
+        Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ());
+        Endpoint_search.clear_search_index_builds repo;
+        Sqlite.close sql)
+      (fun () ->
+        let build_id = Endpoint_search.start_search_index_build repo in
+        await (Endpoint_search.lt_build_blocks_index repo sql conn build_id);
+        check "search build reports completion" !completed;
+        let rows = Sqlite.query sql ~sql:"SELECT count(*) FROM blocks" ~bind:[||] in
+        check "search build indexes every eligible block"
+          (rows = [[|Sqlite.Integer (Int64.of_int count)|]]);
+        Printf.printf "search build retained %d additional bytes at completion for %d blocks\n%!"
+          !build_peak count;
+        check "search build bounds temporary retained entities and results"
+          (!build_peak < 4 * 1024 * 1024)))
+    [ 0; 8000 ]
+
+let graph_store_memory_tests () =
+  let open Datascript in
+  let path = Filename.temp_file "graph_store_memory" ".sqlite" in
+  let sql = Sqlite.open_db ~path in
+  Graph_store.create_kvs_table sql;
+  let conn = Common_sqlite.get_storage_conn (Graph_store.storage sql) [] in
+  let edit i =
+    ignore (transact_conn conn
+      [ Add (Entity_id (1 + i mod 128), "probe/title",
+          String (string_of_int i ^ String.make 4096 'x')) ])
+  in
+  let retained_bytes () =
+    (* Allow cancelled WAL timers to finish before collecting their closures. *)
+    Unix.sleepf 0.1;
+    Gc.full_major ();
+    (Gc.stat ()).live_words * (Sys.word_size / 8)
+  in
+  for i = 0 to 1999 do edit i done;
+  let before = retained_bytes () in
+  for i = 2000 to 5999 do edit i done;
+  let after = retained_bytes () in
+  Printf.printf "storage repeated edits retained bytes: %d -> %d\n%!" before after;
+  check "fixed-size edits have bounded retained memory"
+    (after - before < 4 * 1024 * 1024);
+  let title db eid =
+    datoms db Eavt ~e:eid ~a:"probe/title" ()
+    |> Seq.map (fun d -> d.v) |> List.of_seq
+  in
+  let snapshot = db conn in
+  let snapshot_title = title snapshot 1 in
+  for i = 6000 to 7999 do edit i done;
+  check "older snapshot survives later edits and collection"
+    (title snapshot 1 = snapshot_title);
+  let expected = List.init 128 (fun i -> title (db conn) (i + 1)) in
+  Sqlite.close sql;
+  let sql = Sqlite.open_db ~path in
+  let reopened = Common_sqlite.get_storage_conn (Graph_store.storage sql) [] in
+  check "all edited values survive reopen after collection"
+    (List.init 128 (fun i -> title (db reopened) (i + 1)) = expected);
+  Sqlite.close sql;
+  Sys.remove path
+
+let graph_store_weak_indexes_test () =
+  let open Datascript in
+  let path = Filename.temp_file "graph_store_reference_policy" ".sqlite" in
+  let sql = Sqlite.open_db ~path in
+  Graph_store.create_kvs_table sql;
+  let storage = Graph_store.storage sql in
+  let conn = Common_sqlite.get_storage_conn storage [] in
+  ignore (transact_conn_string conn "[[:db/add 1 :probe/value 7]]");
+  (* Existing graphs can carry a strong cache policy in their snapshot. *)
+  let root = match Graph_store.restore sql "0" with
+    | Some (Storage_root root) -> root
+    | _ -> failwith "missing snapshot root"
+  in
+  storage.storage_store
+    [ "0", Storage_root { root with storage_ref_type = Persistent_sorted_set.Strong } ];
+  Sqlite.close sql;
+  let sql = Sqlite.open_db ~path in
+  let conn = Common_sqlite.get_storage_conn (Graph_store.storage sql) [] in
+  let restored = db conn in
+  List.iter (fun index ->
+    check "reopened worker index uses weak references"
+      ((Persistent_sorted_set.settings index).ref_type = Persistent_sorted_set.Weak))
+    [ restored.eavt_index; restored.aevt_index; restored.avet_index ];
+  check "cache policy does not change restored facts"
+    (datoms restored Eavt ~e:1 ~a:"probe/value" ()
+     |> Seq.exists (fun d -> d.v = Int64 7L));
+  Sqlite.close sql;
+  Sys.remove path
+
 let graph_close_recovery_tests () =
   List.iter
     (fun mode ->
@@ -403,7 +541,11 @@ let () =
   (* --- dispatcher --- *)
   Worker_core.init ();
   let _worker_db_dir = setup () in
+  search_normalization_memory_tests ();
+  search_build_memory_tests ();
   graph_store_durability_tests ();
+  graph_store_memory_tests ();
+  graph_store_weak_indexes_test ();
   graph_close_recovery_tests ();
   service_retry_tests ();
   check "registered q" (Dispatcher.registered "thread-api/q");

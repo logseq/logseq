@@ -501,8 +501,8 @@ let schedule_fts_rowid_migration repo search_db : unit =
 let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
   ensure_active_search_index_build repo build_id;
   let db = Datascript.db conn in
-  let blocks = Search_index.get_all_blocks db in
-  let total = List.length blocks in
+  let block_ids = Search_index.get_all_block_ids db in
+  let total = List.length block_ids in
   let vector_index = Worker_state.vector_index repo in
   let include_vector_title = Option.is_some vector_index in
   let progress_for_fts processed =
@@ -514,12 +514,12 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
       (progress_payload ~build_id ~status:"running" ~stage:"search-index"
          ~progress ~processed ~total)
   in
-  let rec loop remaining processed last_progress indexed_blocks : unit E.t =
+  let rec loop remaining processed last_progress indexed_blocks_rev : unit E.t =
     ensure_active_search_index_build repo build_id;
     match remaining with
     | [] -> begin
         ensure_active_search_index_build repo build_id;
-        schedule_vector_index_rebuild repo build_id indexed_blocks;
+        schedule_vector_index_rebuild repo build_id (List.rev indexed_blocks_rev);
         Sqlite.exec search_db
           ~sql:(Printf.sprintf "PRAGMA user_version = %d" search_db_version)
           ~bind:[||];
@@ -537,10 +537,17 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
         let processed' = processed + List.length batch in
         let indexed =
           List.filter_map
-            (Search_index.block_to_index ~include_vector_title)
-            (List.map Ev.of_entity batch)
+            (fun id ->
+               Option.bind (Ldb.ent_of_id db id) (fun block ->
+                   Search_index.block_to_index ~include_vector_title
+                     (Ev.of_entity block)))
+            batch
         in
-        let indexed_blocks' = indexed_blocks @ indexed in
+        let indexed_blocks_rev' =
+          if include_vector_title then
+            List.rev_append indexed indexed_blocks_rev
+          else indexed_blocks_rev
+        in
         let progress = progress_for_fts processed' in
         let should_report = progress > last_progress in
         E.bind
@@ -557,7 +564,7 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
                   E.bind (E.sleep 0.) (fun () ->
                       loop remaining' processed'
                         (if should_report then progress else last_progress)
-                        indexed_blocks')))
+                        indexed_blocks_rev')))
   in
   E.bind
     (report_search_index_progress repo
@@ -568,7 +575,7 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
            ensure_active_search_index_build repo build_id;
            Search_index.truncate_table search_db;
            Search_index.truncate_vector_index vector_index;
-           loop blocks 0 0 []))
+           loop block_ids 0 0 []))
 
 (* ---- option decoding (cljs :keys map) ---- *)
 
