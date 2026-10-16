@@ -31,7 +31,8 @@
          :env env
          :sql sql
          :conn nil
-         :schema-ready false}))
+         :schema-ready false
+         :graph-id graph-id}))
 
 (defn get-or-create-graph
   [registry deps graph-id]
