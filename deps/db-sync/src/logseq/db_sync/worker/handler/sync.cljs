@@ -914,7 +914,7 @@
 
 (defn handle-http [^js self request]
   (letfn [(with-cors-error [resp]
-            (if (instance? js/Promise resp)
+            (if (or (p/promise? resp) (instance? js/Promise resp))
               (.catch resp
                       (fn [e]
                         (log/error :db-sync/http-error {:error e})
