@@ -439,3 +439,30 @@
     (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
+
+(deftest migrate-65-35-removes-file-graph-attributes
+  (let [conn (d/create-conn db-schema/schema)
+        block-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        file-attrs {:block/scheduled 20240102
+                    :block/deadline 20240103
+                    :block/marker "NOW"
+                    :block/priority "B"
+                    :block/properties-text-values {:key "value"}
+                    :block/invalid-properties #{"@key"}}]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                       :kv/value {:major 65 :minor 34}}
+                      (merge {:block/uuid block-uuid
+                              :block/title "Task text"
+                              :logseq.property/heading 2}
+                             file-attrs)])
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 35})
+          block (d/entity @conn [:block/uuid block-uuid])]
+      (is (every? #(nil? (entities-with @conn %)) (keys file-attrs)))
+      (is (= {:block/title "Task text" :logseq.property/heading 2}
+             (select-keys block [:block/title :logseq.property/heading])))
+      (is (= {:major 65 :minor 35}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (is (= (set (keys file-attrs))
+             (set (get-in result [:upgrade-result-coll 0 :migrate-updates :delete-properties]))))
+      (is (nil? (db-migrate/migrate conn :target-version {:major 65 :minor 35}))))))

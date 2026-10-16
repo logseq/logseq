@@ -63,7 +63,9 @@ and handles unexpected failure."
                    heading (get-in block [:block/properties :heading])
                    heading (when (or (true? heading) (and (integer? heading) (<= 1 heading 6)))
                              heading)]
-               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
+               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order
+                               :block/scheduled :block/deadline :block/marker :block/priority
+                               :block/properties-text-values :block/invalid-properties)
                  heading
                  (assoc :logseq.property/heading heading))))
            blocks))
