@@ -142,7 +142,12 @@ CAMLprim value logseq_native_notify_event_loop(value unit_v) {
     SDL_Event event = {0};
     event.type = SDL_USEREVENT;
     event.user.code = 0x4c53574b;
-    if (SDL_PushEvent(&event) < 0) caml_failwith(SDL_GetError());
+    /* Event watches can enter OCaml while SDL holds its watcher mutex.
+       Never wait for that mutex while retaining the runtime lock. */
+    caml_release_runtime_system();
+    int result = SDL_PushEvent(&event);
+    caml_acquire_runtime_system();
+    if (result < 0) caml_failwith(SDL_GetError());
   }
   CAMLreturn(Val_unit);
 }
@@ -731,10 +736,10 @@ static Class logseq_material_class(void) {
    renderer can reuse its staging pixels as soon as the copy completes. */
 typedef struct {
   IOSurfaceRef images[2];
-  CGColorRef background;
+  CGColorRef backgrounds[3];
   id layers[5];
   int edges[6];
-  uint32_t pixel;
+  uint32_t pixels[3];
   bool ready, changed;
 } LogseqSoftwareBand;
 
@@ -788,9 +793,8 @@ static void logseq_software_drop_images(LogseqSoftwareSurface *surface, LogseqSo
     surface->owned_bytes -= IOSurfaceGetAllocSize(band->images[i]);
     CFRelease(band->images[i]);
   }
-  if (band->background) {
-    CGColorRelease(band->background);
-  }
+  for (int i=0; i<3; i++) if (band->backgrounds[i])
+    CGColorRelease(band->backgrounds[i]);
 }
 
 static void logseq_software_clear(LogseqSoftwareSurface *surface) {
@@ -891,7 +895,7 @@ static bool logseq_software_matches(LogseqSoftwareBand *band,
   for (int part=0; part<5; part+=2) {
     int left = band->edges[part], right = band->edges[part+1];
     for (int x=left; x<right; x++)
-      if (logseq_software_pixel(source + (size_t)x*4) != band->pixel) return false;
+      if (logseq_software_pixel(source + (size_t)x*4) != band->pixels[part/2]) return false;
     for (int y=1; y<h; y++)
       if (memcmp(source + stride*y + (size_t)left*4,
                  source + (size_t)left*4, (size_t)(right-left)*4)) return false;
@@ -952,44 +956,49 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   int y0 = Int_val(Field(band_v,0)), h = Int_val(Field(band_v,1));
   int stride = Int_val(Field(band_v,2));
-  value pixels = Field(band_v,3);
+  value payload = Field(band_v,3);
   if (y0 < 0 || y0 >= surface->h || y0 % surface->rows || h <= 0 ||
       h != (surface->h - y0 < surface->rows ? surface->h - y0 : surface->rows) ||
-      stride != surface->w * 4 || caml_string_length(pixels) < (size_t)stride * h)
+      stride != surface->w * 4 || caml_string_length(payload) < (size_t)stride * h)
     caml_invalid_argument("Invalid software image band");
-  const unsigned char *source = (const unsigned char *)Bytes_val(pixels);
+  const unsigned char *source = (const unsigned char *)Bytes_val(payload);
   LogseqSoftwareBand *band = &surface->bands[y0 / surface->rows];
   if (logseq_software_matches(band, source, stride, h)) CAMLreturn(Val_unit);
-  /* A row majority is a cheap background candidate. Any candidate is
-     lossless: the retained middle contains every pixel that differs. */
-  uint32_t pixel = 0;
-  int balance = 0;
-  for (int x=0; x<surface->w; x++) {
-    uint32_t current = logseq_software_pixel(source + (size_t)x*4);
-    if (!balance) { pixel = current; balance = 1; }
-    else balance += current == pixel ? 1 : -1;
-  }
-  int left = surface->w, right = 0;
-  for (int y=0; y<h && (left || right < surface->w); y++) {
-    const unsigned char *row = source + (size_t)stride*y;
-    int x = 0;
-    while (x < left && logseq_software_pixel(row + (size_t)x*4) == pixel) x++;
-    left = x;
-    x = surface->w;
-    while (x > right && logseq_software_pixel(row + (size_t)(x-1)*4) == pixel) x--;
-    right = x;
-  }
-  if (left == surface->w) right = left;
-  /* Split at the largest fully uniform internal gap only when the
-     extra image actually saves aligned surface storage. */
-  int gap_left = right, gap_right = right, start = left;
-  for (int x=left; x<right; x++) {
+  /* Each solid span has its own color. A modal's flat interior must not
+     become an image just because its surrounding backdrop is different. */
+  uint32_t pixels[3] = {logseq_software_pixel(source), 0,
+    logseq_software_pixel(source + (size_t)(surface->w-1)*4)};
+  int left = 0, right = surface->w;
+  while (left < right) {
     int y = 0;
+    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)left*4) == pixels[0]) y++;
+    if (y<h) break;
+    left++;
+  }
+  while (right > left) {
+    int y = 0;
+    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)(right-1)*4) == pixels[2]) y++;
+    if (y<h) break;
+    right--;
+  }
+  /* Retain two image spans around the largest internal solid-color run
+     only when splitting reduces aligned surface storage. */
+  int gap_left = right, gap_right = right, start = left;
+  uint32_t run_pixel = 0;
+  for (int x=left; x<right; x++) {
+    uint32_t pixel = logseq_software_pixel(source + (size_t)x*4);
+    int y = 1;
     while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)x*4) == pixel) y++;
-    if (y<h) {
-      if (x-start > gap_right-gap_left) { gap_left = start; gap_right = x; }
-      start = x+1;
+    if (y<h || (x>start && pixel!=run_pixel)) {
+      if (x-start > gap_right-gap_left) {
+        gap_left = start; gap_right = x; pixels[1] = run_pixel;
+      }
+      start = y<h ? x+1 : x;
     }
+    run_pixel = pixel;
+  }
+  if (right-start > gap_right-gap_left) {
+    gap_left = start; gap_right = right; pixels[1] = run_pixel;
   }
   size_t split_size = logseq_software_image_size(gap_left-left, h)
     + logseq_software_image_size(right-gap_right, h);
@@ -1000,18 +1009,18 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
     images[0] = logseq_software_image(gap_left-left, h, source + (size_t)left*4, stride);
   if (right > gap_right)
     images[1] = logseq_software_image(right-gap_right, h, source + (size_t)gap_right*4, stride);
-  CGColorRef background = NULL;
-  if (left || right < surface->w || gap_left < gap_right) {
-    if (band->background && band->pixel == pixel) {
-      background = band->background;
-      CFRetain(background);
-    } else background = logseq_software_color(pixel);
+  int edges[] = {0, left, gap_left, gap_right, right, surface->w};
+  CGColorRef backgrounds[3] = {NULL, NULL, NULL};
+  for (int i=0; i<3; i++) if (edges[i*2] < edges[i*2+1]) {
+    if (band->backgrounds[i] && band->pixels[i] == pixels[i]) {
+      backgrounds[i] = band->backgrounds[i];
+      CFRetain(backgrounds[i]);
+    } else backgrounds[i] = logseq_software_color(pixels[i]);
   }
   logseq_software_drop_images(surface, band);
-  band->background = background;
-  int edges[] = {0, left, gap_left, gap_right, right, surface->w};
+  memcpy(band->backgrounds, backgrounds, sizeof backgrounds);
   memcpy(band->edges, edges, sizeof edges);
-  band->pixel = pixel;
+  memcpy(band->pixels, pixels, sizeof pixels);
   band->ready = true; band->changed = true;
   for (int i=0; i<2; i++) {
     band->images[i] = images[i];
@@ -1051,7 +1060,7 @@ CAMLprim value logseq_native_software_present(value id_v) {
               (id)band->images[part/2]);
         else
           ((void (*)(id, SEL, CGColorRef))objc_msgSend)(layer, sel_registerName("setBackgroundColor:"),
-              band->background);
+              band->backgrounds[part/2]);
       }
     }
     band->changed = false;
@@ -1072,12 +1081,13 @@ CAMLprim value logseq_native_software_image_ids(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(ids);
   LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
-  ids = caml_alloc(surface->count * 3, 0);
+  ids = caml_alloc(surface->count * 5, 0);
   for (int i=0; i<surface->count; i++) {
     LogseqSoftwareBand *band = &surface->bands[i];
-    Store_field(ids, i*3, Val_long((intnat)band->background));
+    for (int part=0; part<3; part++)
+      Store_field(ids, i*5+part, Val_long((intnat)band->backgrounds[part]));
     for (int part=0; part<2; part++)
-      Store_field(ids, i*3+part+1, Val_long(band->images[part] ? IOSurfaceGetID(band->images[part]) : 0));
+      Store_field(ids, i*5+part+3, Val_long(band->images[part] ? IOSurfaceGetID(band->images[part]) : 0));
   }
   CAMLreturn(ids);
 }
@@ -1096,7 +1106,9 @@ CAMLprim value logseq_native_software_read(value id_v) {
     for (int y=0; y<height; y++) {
       unsigned char *row = (unsigned char *)Bytes_val(out)
         + ((size_t)index*surface->rows+y)*surface->w*4;
-      for (int x=0; x<surface->w; x++) memcpy(row+(size_t)x*4, &band->pixel, 4);
+      for (int part=0; part<5; part+=2)
+        for (int x=band->edges[part]; x<band->edges[part+1]; x++)
+          memcpy(row+(size_t)x*4, &band->pixels[part/2], 4);
     }
     for (int part=0; part<2; part++) if (band->images[part]) {
       IOSurfaceRef image = band->images[part];

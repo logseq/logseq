@@ -132,6 +132,41 @@ let software_band_compression_regression id =
     Printf.printf "Separated band snapshots [%d,%d] owned %d bytes\n%!" first last owned;
     budget "Separated content retains its empty horizontal gap" (owned <= limit)
   ) [0,width-20,131_072;100,width-120,147_456];
+  List.iter (fun (outside,inside,opposite) ->
+    List.iter (fun textured ->
+      let expected=fill outside in
+      for y=0 to height-1 do
+        for x=600 to width-601 do
+          pixel expected ((y*width+x)*4) inside
+        done;
+        for x=width-600 to width-1 do
+          pixel expected ((y*width+x)*4) opposite
+        done;
+        if textured then List.iter (fun left ->
+          for x=left to left+19 do
+            pixel expected ((y*width+x)*4)
+              (if y mod 3=0 then (0,0,0,0) else (7,y mod 97,19,128))
+          done) [600;width-620]
+      done;
+      upload expected;
+      let owned=Native_window.software_owned_bytes id in
+      Printf.printf "Multicolor band textured=%b owned %d bytes\n%!" textured owned;
+      budget "Different solid colors are retained as pixel images"
+        (owned <= if textured then 147_456 else 0);
+      let identities=software_image_ids id in
+      upload expected;
+      budget "Unchanged multicolor bands replace presentation resources"
+        (software_image_ids id=identities);
+      pixel expected ((65*width+width/2)*4) opposite;
+      upload expected
+    ) [false;true]
+  ) [(127,127,127,255),(255,255,255,255),(127,127,127,255);
+     (127,127,127,255),(255,255,255,255),(37,99,235,255);
+     (31,47,63,128),(7,19,31,64),(0,0,0,0)];
+  let stripes=Bytes.init (width*height*4) (fun i ->
+    let x=(i/4) mod width in
+    if i mod 4=3 then '\255' else Char.chr ((x*13+i mod 4*17) land 255)) in
+  upload stripes;
   let dense=Bytes.init (width*height*4) (fun i ->
     if i mod 4=3 then '\255' else Char.chr ((i*13+i/width) land 255)) in
   upload dense;
@@ -183,7 +218,7 @@ let software_band_reuse_regression id =
     check "Changed pixels retained every previous image identity" (changed<>before_update);
     Native_window.software_tile id (last_y,height-last_y,width*4,last);
     verify "A repeated pending update replaced its resources" (software_image_ids id=changed);
-    for i=0 to 5 do
+    for i=0 to 9 do
       verify "Updating the last band replaced an unrelated band" (changed.(i)=before_update.(i))
     done;
     Native_window.software_present id;
@@ -280,6 +315,49 @@ let software_scene_replay ~tiled path duration =
   Tsdl.Sdl.destroy_window window;
   Tsdl.Sdl.quit ()
 
+let expose_notification_child () =
+  let sdl_ok = function Ok value -> value | Error (`Msg message) -> failwith message in
+  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
+  let window=sdl_ok (Tsdl.Sdl.create_window "Native expose notification regression"
+    ~w:64 ~h:64 Tsdl.Sdl.Window.hidden) in
+  let ready=Atomic.make 0 in
+  Native_window.install window (fun () ->
+    Atomic.incr ready;
+    Thread.delay 0.002);
+  let notifier=Thread.create (fun () ->
+    for turn=1 to 20 do
+      while Atomic.get ready < turn do Thread.yield () done;
+      Bridge.notify_event_loop ()
+    done) () in
+  for _=1 to 20 do expose_unlocked (Tsdl.Sdl.get_window_id window) done;
+  Thread.join notifier;
+  check "Expose notifications lost a repaint" (Atomic.get ready=20);
+  Native_window.dispose window;
+  Tsdl.Sdl.destroy_window window;
+  Tsdl.Sdl.quit ()
+
+let expose_notification_regression () =
+  let child=Unix.create_process Sys.executable_name
+    [|Sys.executable_name;"--expose-notification"|] Unix.stdin Unix.stdout Unix.stderr in
+  let deadline=Unix.gettimeofday () +. 5. in
+  let rec wait () =
+    match Unix.waitpid [Unix.WNOHANG] child with
+    | 0,_ when Unix.gettimeofday () < deadline -> Unix.sleepf 0.01; wait ()
+    | 0,_ ->
+      Unix.kill child Sys.sigkill;
+      ignore (Unix.waitpid [] child);
+      failwith "Native expose and mailbox notification deadlocked"
+    | _,status -> check "Native expose notification child failed" (status=Unix.WEXITED 0)
+  in
+  wait ();
+  print_endline "native expose and mailbox lock ordering: OK"
+
+let () =
+  if Array.length Sys.argv=2 && Sys.argv.(1)="--expose-notification" then begin
+    expose_notification_child ();
+    exit 0
+  end
+
 let () =
   if Array.length Sys.argv = 4 &&
     (Sys.argv.(1) = "--software-replay" || Sys.argv.(1) = "--software-tile-replay") then begin
@@ -296,6 +374,7 @@ let () =
 
 let () =
   if Host_platform.is_macos then begin
+    expose_notification_regression ();
     let status = Unix.system (Filename.quote Sys.executable_name ^ " --software-memory") in
     check "Cold full-size software presentation memory regression"
       (status = Unix.WEXITED 0)
