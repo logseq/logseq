@@ -8,7 +8,7 @@
 
 ;; Fails if, in `schema-version->updates`, the `:fix` key is dropped, the `:properties` key is dropped, `:block/journal-day` becomes `:block/name`, `:logseq.property.view/sort-groups-by-property` becomes `:logseq.property.view/sort-groups-desc?`, `:logseq.property.view/sort-groups-desc?` becomes `:logseq.property.view/gallery-asset-property`, `:logseq.property.asset/width` becomes `:logseq.property.asset/align`, `:logseq.property.asset/height` becomes `:logseq.property.asset/width`, `:logseq.property.asset/external-src` becomes `:logseq.property.asset/height`, `:logseq.property.asset/external-file-name` becomes `:logseq.property.asset/external-src`, `:logseq.property/choice-classes` becomes `:logseq.property/choice-exclusions`, `:logseq.property/choice-exclusions` becomes `:logseq.property/deleted-at`, `:logseq.property.class/bidirectional-property-title` becomes `:logseq.property.class/enable-bidirectional?`, `:logseq.property.class/enable-bidirectional?` becomes `:logseq.property.class/extends`, `:logseq.property.reaction/emoji-id` becomes `:logseq.property.reaction/target`, `:logseq.property.reaction/target` becomes `:logseq.property.reaction/emoji-id`, `:logseq.property.asset/align` becomes `:logseq.property.asset/external-file-name`, `:logseq.property/deleted-at` becomes `:logseq.property/deleted-by-ref`, `:logseq.property/deleted-by-ref` becomes `:logseq.property/type`, `:logseq.property.recycle/original-parent` becomes `:logseq.property.recycle/original-order`, `:logseq.property.recycle/original-page` becomes `:logseq.property.recycle/original-parent`, `:logseq.property.recycle/original-order` becomes `:logseq.property.recycle/original-page`, the `:delete-properties` key is dropped, `:block/pre-block?` becomes `:block/tags`, `:logseq.property.embedding/hnsw-label` becomes `:logseq.property.embedding/hnsw-label-updated-at`, `:logseq.property.embedding/hnsw-label-updated-at` becomes `:logseq.property.embedding/hnsw-label`, the `:classes` key is dropped, `:logseq.class/Comments` becomes `:logseq.class/Journal`, `:logseq.property/assignee` becomes `:logseq.property/built-in?`, `:logseq.property.view/gallery-asset-property` becomes `:logseq.property.view/gallery-card-height`, `:logseq.property.view/gallery-display-properties` becomes `:logseq.property.view/sort-groups-by-property`, `:logseq.property.view/gallery-card-size` becomes `:logseq.property.view/gallery-card-width`, `:logseq.property.view/gallery-card-width` becomes `:logseq.property.view/gallery-display-properties` or `:logseq.property.view/gallery-card-height` becomes `:logseq.property.view/gallery-card-size`.
 (deftest schema-version->updates-table-test
-  (is (= [["65.7" {:fix @#'db-migrate/add-quick-add-page}]
+  (let [expected [["65.7" {:fix @#'db-migrate/add-quick-add-page}]
           ["65.8" {:fix @#'db-migrate/add-missing-page-name}]
           ["65.10" {:properties [:block/journal-day
                                  :logseq.property.view/sort-groups-by-property
@@ -52,7 +52,9 @@
                                  :logseq.property.view/gallery-card-width
                                  :logseq.property.view/gallery-card-height]}]
           ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]]
-         db-migrate/schema-version->updates)))
+        table (into {} db-migrate/schema-version->updates)]
+    ;; only the entries these mutants change: a migration added later must not break the test
+    (is (= (into {} expected) (select-keys table (map first expected))))))
 
 ;; Fails if, in `remove-block-path-refs`, the body becomes `nil` or `:block/path-refs` becomes `:block/pre-block?`.
 (deftest remove-block-path-refs-retracts-path-refs-test

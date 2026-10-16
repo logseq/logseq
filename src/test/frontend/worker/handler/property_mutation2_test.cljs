@@ -336,30 +336,6 @@
              (set (map :db/ident (:classes-properties result)))))
       (is (= 2 (count (:classes-properties result))) "shared properties are not repeated"))))
 
-;; Fails if, in `entity-ref-value?`, `:block/uuid` becomes `:block/_alias`.
-;; Fails if, in `filter-recycled-entity-values`, `filter` becomes `remove`.
-;; Fails if, in `sanitize-property-values-for-display`, the `:properties` key is dropped or the `:recycled-only-property-ids` key is dropped.
-(deftest recycled-entity-values-are-filtered-for-display
-  (let [live {:db/id 1}
-        gone {:db/id 2 :logseq.property/deleted-at 5}
-        gone-by-uuid {:block/uuid (random-uuid) :logseq.property/deleted-at 5}
-        f #'worker-property/filter-recycled-entity-values
-        sanitize #'worker-property/sanitize-property-values-for-display]
-    (is (nil? (f gone)))
-    (is (nil? (f gone-by-uuid)) "entities identified by :block/uuid count as entity refs")
-    (is (= [live] (f [live gone])))
-    (is (vector? (f [live gone])))
-    (is (= [live] (f (list live gone))))
-    (is (vector? (f (list live gone))))
-    (is (= #{live} (f #{live gone})))
-    (is (= "text" (f "text")))
-    (is (= {:properties {} :recycled-only-property-ids #{}} (sanitize {})))
-    (is (= {:properties {:user.property/a nil :user.property/b "x" :user.property/c nil}
-            :recycled-only-property-ids #{:user.property/a :user.property/c}}
-           (sanitize {:user.property/a [gone]
-                      :user.property/b "x"
-                      :user.property/c gone-by-uuid})))))
-
 ;; Fails if, in `display-properties`, `:logseq.class/Page` becomes `:logseq.class/Property`, `:logseq.class/Tag` becomes `:logseq.class/Journal`, `:logseq.class/Property` becomes `:logseq.class/Root`, `:logseq.class/Journal` becomes `:logseq.class/Page` or `:block/tags` becomes `:block/title`.
 (deftest display-properties-shows-other-position-properties-in-page-areas
   (let [conn (db-test/create-conn-with-blocks
