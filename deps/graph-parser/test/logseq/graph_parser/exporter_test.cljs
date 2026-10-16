@@ -664,13 +664,17 @@ abc
           "Imported graph validates"))))
 
 (deftest-async import-block-with-namespaced-tag-keeps-its-other-tags
-  (p/let [file (write-temp-graph-file "pages/N.md" "- 中文 #[[ns/child]] Beta #idea #research\n")
-          conn (db-test/create-conn)
-          _ (db-pipeline/add-listener conn)
-          _ (import-files-to-db [file] conn {:convert-all-tags? true})
-          block (db-test/find-block-by-content @conn #"Beta")]
-    (is (= #{"child" "idea" "research"} (set (map :block/title (:block/tags block))))
-        "the block keeps its other tags; only the namespace parent ns is not a tag of the block")))
+  (p/doseq [[content expected-tags]
+            [["- item #[[ns/child]] note #idea #research\n" #{"child" "idea" "research"}]
+             ["- item #[[ns/child]] note #ns #idea #research\n" #{"ns" "child" "idea" "research"}]]]
+    (p/let [file (write-temp-graph-file "pages/sample.md" content)
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [file] conn {:convert-all-tags? true})
+            block (db-test/find-block-by-content @conn #"item")]
+      (testing content
+        (is (= expected-tags (set (map :block/title (:block/tags block))))
+            "All explicit tags are preserved")))))
 
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
