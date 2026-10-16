@@ -13,6 +13,83 @@ let promise_of_task t =
   Js.Promise.make (fun ~resolve ~reject ->
       Db_worker_effect.on_any t (fun v -> resolve v [@u]) (fun e -> reject e [@u]))
 
+external browser_process : 'a Js.Undefined.t = "process" [@@mel.scope "globalThis"]
+external browser_global : 'a = "globalThis"
+external set_browser_process : 'a -> 'b Js.Undefined.t -> unit = "process" [@@mel.set]
+external browser_pfs : 'a Js.Undefined.t = "pfs" [@@mel.scope "globalThis"]
+external set_browser_pfs : 'a -> 'b Js.Undefined.t -> unit = "pfs" [@@mel.set]
+external browser_self : 'a Js.Undefined.t = "self" [@@mel.scope "globalThis"]
+external set_browser_self : 'a -> 'b Js.Undefined.t -> unit = "self" [@@mel.set]
+
+let () =
+  Fest.test "owner UI requests and error reports do not reach other tabs" (fun () ->
+    let previous_process = browser_process in
+    let previous_self = browser_self in
+    let owner_messages = ref [] in
+    let relayed = ref [] in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_self browser_global previous_self;
+      Broadcast.set_extra_poster None
+    in
+    let run () =
+        set_browser_process browser_global Js.Undefined.empty;
+        set_browser_self browser_global
+          (Js.Undefined.return
+             [%mel.obj { postMessage = (fun payload -> owner_messages := payload :: !owner_messages) }]);
+        Broadcast.set_extra_poster
+          (Some (fun ~kind ~transit_payload:_ -> relayed := kind :: !relayed));
+        !Sync_platform.post_message_fn "request";
+        Db_listener.capture_error "test" Wire.Nil Wire.Nil
+    in
+    (match run () with
+     | () -> restore ()
+     | exception error -> restore (); raise error);
+    Fest.equal (List.length !owner_messages) 2 Fest.expect;
+    Fest.equal !relayed [] Fest.expect);
+  Fest.Promise.test "binary asset files preserve every byte on disk" (fun () ->
+    let payload = String.init 33071 (fun i -> Char.chr (i mod 256)) in
+    let directory = mkdtemp (Filename.concat (tmpdir ()) "asset-binary-") in
+    let source = Filename.concat directory "source.png" in
+    let destination = Filename.concat directory "destination.png" in
+    Node.Fs.writeFileSync source payload `latin1;
+    promise_of_task
+      (Db_worker_effect.bind (File_sys.read_binary source) (fun actual ->
+         Fest.equal actual payload Fest.expect;
+         Db_worker_effect.map
+           (fun () ->
+             Fest.equal (Node.Fs.readFileSync destination `latin1) payload Fest.expect;
+             Node.Fs.unlinkSync source;
+             Node.Fs.unlinkSync destination;
+             Node.Fs.rmdirSync directory)
+           (File_sys.write_binary destination payload))));
+  Fest.Promise.test "browser asset ArrayBuffer survives encryption" (fun () ->
+    let payload = String.init 33071 (fun i -> Char.chr (i mod 256)) in
+    let previous_process = browser_process in
+    let previous_pfs = browser_pfs in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_pfs browser_global previous_pfs
+    in
+    set_browser_process browser_global Js.Undefined.empty;
+    set_browser_pfs browser_global
+      (Js.Undefined.return
+         [%mel.obj
+           { readFile = (fun _path -> Js.Promise.resolve (U8a.buffer (U8a.of_string payload))) }]);
+    let task = Asset_store.read_bytes ~repo:"logseq_db_binary" ~name:"image.png" in
+    restore ();
+    promise_of_task
+      (Db_worker_effect.bind task (fun actual ->
+           Fest.equal (String.length actual) (String.length payload) Fest.expect;
+           Fest.equal actual payload Fest.expect;
+           Db_worker_effect.bind (Crypto.Aes_gcm.generate ()) (fun key ->
+             Db_worker_effect.bind
+               (Sync_crypt.encrypt_uint8array_impl (Wire.Binary key) actual)
+               (fun encrypted ->
+                 Db_worker_effect.map
+                   (fun decoded -> Fest.equal decoded payload Fest.expect)
+                   (Sync_crypt.decrypt_uint8array_impl (Wire.Binary key) encrypted))))))
+
 let contains haystack needle =
   match Js.String.indexOf ~search:needle haystack with
   | -1 -> false

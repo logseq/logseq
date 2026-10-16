@@ -30,7 +30,6 @@ let ensure_user_rsa_key_pair_inflight
   : ((string * string * bool option * bool option), Wire.t t) Hashtbl.t =
   Hashtbl.create 7
 
-let node_default_auth_file = "~/logseq/auth.json"
 let e2ee_password_secret_key = "logseq-encrypted-password"
 let pbkdf2_version = "20251210"
 let encrypt_attr_set = [ "block/title"; "block/name" ]
@@ -424,13 +423,6 @@ let fetch_json_fn = ref fetch_json_impl
 
 (* ---------- small pieces ---------- *)
 
-let auth_file_path () = node_default_auth_file
-
-let parse_auth_file text =
-  match seq_ text with
-  | false -> `Empty
-  | true -> (try `Parsed (Json.parse (Option.get text)) with _ -> `Invalid)
-
 let e2ee_base_impl () : string option =
   match !db_sync_config_fn () with
   | Wire.Map _ as config ->
@@ -606,29 +598,9 @@ let upload_user_rsa_key_pair_fn : (string -> string -> string -> Wire.t t) ref =
 
 (* ---------- e2ee password storage ---------- *)
 
-let read_refresh_token_from_auth_file () : string option t =
-  bind
-    (catch (!read_text_fn (auth_file_path ())) (fun _ -> pure ""))
-    (fun text ->
-      (match parse_auth_file (Some text) with
-       | `Invalid ->
-           !fail_missing_e2ee_password_fn
-             [ ("reason", Wire.keyword "invalid-auth-file");
-               ("hint", str "Run logseq login first.") ]
-       | `Empty | `Parsed _ -> ());
-      let refresh_token =
-        match parse_auth_file (Some text) with
-        | `Parsed w ->
-            Wire.as_string (Option.value (Wire.get "refresh-token" w) ~default:Wire.Nil)
-        | _ -> None
-      in
-      ensure_refresh_token refresh_token;
-      pure refresh_token)
-
 let save_e2ee_password_impl (password : string) : unit t =
   bind
-    (if browser_runtime () then pure (refresh_token_from_state ())
-     else read_refresh_token_from_auth_file ())
+    (pure (refresh_token_from_state ()))
     (fun refresh_token ->
       ensure_refresh_token refresh_token;
       bind
@@ -1776,7 +1748,7 @@ let reset_hooks () =
   http_send_fn := Http.send;
   post_message_fn :=
     (fun payload ->
-      Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload);
+      Worker_message.post_to_owner ~kind:"db-worker/ui-request" ~transit_payload:payload);
   generate_rsa_key_pair_fn := generate_rsa_key_pair_impl;
   encrypt_private_key_fn := encrypt_private_key_impl;
   decrypt_private_key_crypt_fn := decrypt_private_key_crypt_impl;

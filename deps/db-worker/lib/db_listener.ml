@@ -347,7 +347,7 @@ let report_post_commit_error repo (tx_meta : tx_meta) stage exn =
     [ ("repo", repo); ("stage", stage); ("error", Printexc.to_string exn) ];
   (* cljs platform/post-message! :capture-error {:error :payload} *)
   (try
-     Broadcast.to_clients ~kind:"capture-error"
+     Worker_message.post_to_owner ~kind:"capture-error"
        ~transit_payload:
          (Transit_codec.to_string
             (Wire.Array
@@ -531,9 +531,9 @@ let () =
                { Markdown_mirror.default_opts with defer = true })))
 
 (* cljs platform/post-message! :capture-error {:error msg :payload data
-   :extra extra} — broadcast on the shared service channel. *)
+   :extra extra} — delivered to the owning client. *)
 let capture_error (api : string) (payload : Wire.t) (extra : Wire.t) : unit =
-  Broadcast.to_clients ~kind:"capture-error"
+  Worker_message.post_to_owner ~kind:"capture-error"
     ~transit_payload:
       (Transit_codec.to_string
          (Wire.Array

@@ -181,26 +181,13 @@ let ensure_active_search_index_build repo build_id =
 (* ---- report-search-index-progress! ---- *)
 
 let report_search_index_progress repo (payload : Wire.t) : unit E.t =
-  (* Non-browser runtimes (node + the native daemon) broadcast progress
-     to clients directly; Comlink.invoke_remote only exists in the
-     browser worker. *)
-  if Runtime_env.kind () <> Runtime_env.Browser_worker then begin
-    Broadcast.to_clients ~kind:"thread-api/search-index-build-progress"
-      ~transit_payload:
-        (Transit_codec.to_string
-           (Wire.Array
-              [ Wire.Keyword "thread-api/search-index-build-progress"
-              ; Wire.Array [ Wire.String repo; payload ] ]));
-    E.pure ()
-  end
-  else
-    E.map
-      (fun _ -> ())
-      (E.catch
-         (Comlink.invoke_remote "thread-api/search-index-build-progress"
-            (Transit_codec.to_string
-               (Wire.Array [ Wire.String repo; payload ])))
-         (fun _ -> E.pure ""))
+  Broadcast.to_clients ~kind:"thread-api/search-index-build-progress"
+    ~transit_payload:
+      (Transit_codec.to_string
+         (Wire.Array
+            [ Wire.Keyword "thread-api/search-index-build-progress"
+            ; Wire.Array [ Wire.String repo; payload ] ]));
+  E.pure ()
 
 let progress_payload ~build_id ~status ~stage ~progress ~processed ~total :
     Wire.t =

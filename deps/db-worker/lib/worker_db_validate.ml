@@ -783,7 +783,7 @@ let notify_invalid_data (report : tx_report) (errors : string list) : unit =
                       , Wire.keyword "storage/invalid-data-writing" ] ] ]));
     (* cljs platform/post-message! :capture-error — browser posts on self;
        node routes to the embedder's broadcast fn via to_clients *)
-    Broadcast.to_clients ~kind:"capture-error"
+    Worker_message.post_to_owner ~kind:"capture-error"
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array

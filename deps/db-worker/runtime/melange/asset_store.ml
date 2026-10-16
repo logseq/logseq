@@ -16,7 +16,7 @@ external pfs_stat
 
 external pfs_mkdir : pfs -> string -> unit Js.Promise.t = "mkdir" [@@mel.send]
 
-external pfs_read : pfs -> string -> Js.Typed_array.Uint8Array.t Js.Promise.t
+external pfs_read : pfs -> string -> Js.Typed_array.ArrayBuffer.t Js.Promise.t
   = "readFile" [@@mel.send]
 
 external pfs_write
@@ -152,7 +152,7 @@ let rec ensure_pfs_dir pfs dir =
 let read_bytes ~repo ~name =
   if is_browser () then
     Db_worker_effect.bind (browser_pfs ()) (fun pfs ->
-        Db_worker_effect.map U8a.to_string
+        Db_worker_effect.map (fun payload -> U8a.to_string (U8a.of_buffer payload))
           (task_of_promise (pfs_read pfs (browser_path ~repo ~name))))
   else File_sys.read_binary (path ~repo ~name)
 

@@ -906,6 +906,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
              admission := Some admission_rt;
              let root_dir = Graph_lifecycle.runtime_root admission_rt in
              let server_list_file_v = server_list_file_path root_dir in
+             Node_process.set_env "LOGSEQ_OWNER_SOURCE" owner_source;
              Node_process.set_env "LOGSEQ_WORKER_DB_DIR" storage.graphs_dir;
              Node_process.set_env "LOGSEQ_WORKER_KV_DIR" root_dir;
              let proxy_cell : proxy option ref = ref None in

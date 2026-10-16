@@ -135,7 +135,7 @@ let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
 (* cljs platform/post-message! — browser posts on self; node routes to the
    embedder's broadcast fn via Broadcast.to_clients *)
 let post_message_fn : (string -> unit) ref =
-  ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
+  ref (fun payload -> Worker_message.post_to_owner ~kind:"db-worker/ui-request" ~transit_payload:payload)
 
 (* ---------- idb item wrappers ---------- *)
 

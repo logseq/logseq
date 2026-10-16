@@ -5767,8 +5767,26 @@ let test_direct_outdent_with_extra_moved_blocks_keeps_semantic_ops () =
        [ wop "indent-outdent-blocks"
            [ warr [ Wire.Uuid (uuid_of child_2) ]; Wire.Bool true; io_opts ] ])
 
+let test_insert_asset_canonicalizes_vector_tags () =
+  let conn = create_conn_with_blocks ~classes:[ "Image", default_class ] () in
+  let db = db_of conn in
+  let asset_class = Option.get (Ldb.get_page db (String "Image")) in
+  let lookup = warr [ wkw "block/uuid"; Wire.Uuid (uuid_of asset_class) ] in
+  List.iter
+    (fun refs ->
+      let block =
+        Outliner_op_construct.sanitize_insert_block_payload db []
+          (wmap [ wkw "block/tags", refs ])
+      in
+      check "asset tags use stable references"
+        (wire_equal (wget "block/tags" block) (Wire.Set [ lookup ])))
+    [ warr [ Wire.Int asset_class.id ]; Wire.Set [ Wire.Int asset_class.id ] ];
+  check "a lookup reference remains a lookup reference"
+    (wire_equal (Outliner_op_construct.sanitize_ref_value db lookup) lookup)
+
 let op_construct_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse" `Quick test_derive_create_page_canonicalizes_and_builds_delete_inverse;
+  [ Alcotest.test_case "insert-asset-canonicalizes-vector-tags" `Quick test_insert_asset_canonicalizes_vector_tags;
+    Alcotest.test_case "derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse" `Quick test_derive_create_page_canonicalizes_and_builds_delete_inverse;
     Alcotest.test_case "derive-history-outliner-ops-handles-replace-empty-target-insert-inverse" `Quick test_derive_replace_empty_target_insert_inverse;
     Alcotest.test_case "derive-history-outliner-ops-builds-upsert-property-inverse-delete-page" `Quick test_derive_upsert_property_inverse_delete_page;
     Alcotest.test_case "derive-history-outliner-ops-upsert-property-update-builds-schema-restore-inverse" `Quick test_derive_upsert_property_update_schema_restore_inverse;

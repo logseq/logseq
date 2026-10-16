@@ -109,7 +109,7 @@ let read_text path =
 
 let read_binary path =
   if is_browser () then unsupported "read_binary"
-  else wrap (fun () -> Node.Buffer.toString (Fs_ext.readFileSync_buffer path))
+  else wrap (fun () -> Node.Buffer.toString ~encoding:`latin1 (Fs_ext.readFileSync_buffer path))
 
 let write_text path contents =
   if is_browser () then
@@ -133,7 +133,9 @@ let write_text path contents =
 let write_binary path contents =
   if is_browser () then unsupported "write_binary"
   else
-    wrap (fun () -> Fs_ext.writeFileSync_buffer path (Node.Buffer.fromString contents))
+    wrap (fun () ->
+        Fs_ext.writeFileSync_buffer path
+          (Node.Buffer.fromStringWithEncoding ~encoding:`latin1 contents))
 
 let exists path =
   if is_browser () then
