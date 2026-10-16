@@ -313,7 +313,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
                [ ( "style"
                  , "display:flex;justify-content:space-between;gap:4px;\
                     align-items:center;padding:0 4px 4px;\
-                    border-bottom:1px solid var(--lui-c-border)" ) ]
+                    border-bottom:1px solid hsl(var(--border))" ) ]
              [ Logseq_el.el ~tag:"label"
                  ~attrs:
                    [ ("for", "built-in")

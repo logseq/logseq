@@ -273,7 +273,7 @@ let open_rtc_details () =
   Wd.el_set_class menu "ui__dropdown-menu-content";
   Wd.el_set_attr menu "style"
     "z-index:50;min-width:8rem;border-radius:6px;border:1px solid \
-     var(--lui-c-border);background:hsl(var(--popover));padding:4px;\
+     hsl(var(--border));background:hsl(var(--popover));padding:4px;\
      color:hsl(var(--popover-foreground));box-shadow:0 4px 6px -1px \
      rgba(0,0,0,0.1),0 2px 4px -2px rgba(0,0,0,0.1)";
   Wd.el_set_attr menu "role" "menu";
@@ -1082,7 +1082,7 @@ let help_menu_popup : t =
             ~data_attrs:
               [ ( "style"
                 , "border:0;border-top:1px solid \
-                   var(--lui-c-border)" )
+                   hsl(var(--border))" )
               ]
             []
         ; help_item "hm-bug" (I18n.help_bug) "bug" close
@@ -1098,7 +1098,7 @@ let help_menu_popup : t =
             ~data_attrs:
               [ ( "style"
                 , "border:0;border-top:1px solid \
-                   var(--lui-c-border)" )
+                   hsl(var(--border))" )
               ]
             []
         ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
@@ -1109,7 +1109,7 @@ let help_menu_popup : t =
             ~data_attrs:
               [ ( "style"
                 , "border:0;border-top:1px solid \
-                   var(--lui-c-border)" )
+                   hsl(var(--border))" )
               ]
             []
         ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"

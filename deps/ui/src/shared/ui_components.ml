@@ -563,7 +563,7 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6 ~max_width:320
        ~corner_radius:6 ~border_width:1
-       ~border_color:"var(--lui-c-border)" ~background:"hsl(var(--popover))"
+       ~border_color:"hsl(var(--border))" ~background:"hsl(var(--popover))"
        ~foreground:"hsl(var(--popover-foreground))"
        ([ with_props
             [ Prop.font_size "0.75rem"; Prop.line_height "16px" ]
@@ -835,7 +835,7 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
                      [ thumbnail
                      ; with_props [Prop.pointer_enabled false]
                          (box ~key:"ring" ~width:92 ~height:63 ~corner_radius:4
-                            ~border_width:2 ~border_color:"var(--ls-link-text-color)"
+                            ~border_width:2 ~border_color:"hsl(var(--primary))"
                             ~background:"transparent"
                             ~opacity:(reactive (fun active -> if active then 1. else 0.) selected)
                             []) ]))
@@ -860,7 +860,7 @@ let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
-       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~border_color:"hsl(var(--border))" ~border_width:1
        ~corner_radius:6 ~style_class:cls ~data_attrs items)
 
 (* Same chrome on a popover surface — for anchored popups whose children
@@ -873,7 +873,7 @@ let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     (popover ~transition:popover_transition ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
-       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~border_color:"hsl(var(--border))" ~border_width:1
        ~corner_radius:6 ~style_class:cls children)
 
 (* Card shadows as with_props binds for ~at-anchored popups (point-
@@ -959,7 +959,7 @@ let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
     (button ~key ?size ~variant ~text ~autofocus
        ~style_class:"ui__button ls-btn"
        ~corner_radius:6 ~border_width:1
-       ~border_color:"var(--lui-c-border)"
+       ~border_color:"hsl(var(--border))"
        ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
        ~padding_vertical:8 ~padding_horizontal:16
        ~on_press:(fun _ -> on_press ()) [])
@@ -1004,7 +1004,7 @@ let alert_dialog_content ~key ~data_attrs children =
     ; ( Prop.shadow "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
             rgb(0 0 0 / 0.1)" ) ]
     (column ~key ~gap:16 ~padding:24 ~max_width:512 ~corner_radius:8
-       ~border_width:1 ~border_color:"var(--lui-c-border)"
+       ~border_width:1 ~border_color:"hsl(var(--border))"
        ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
        ~style_class:"ui__alert-dialog-content"
        ~data_attrs:

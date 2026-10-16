@@ -350,7 +350,7 @@ let installed_card (pl : Js.Json.t) =
                            ~style_class:"menu-list"
                            ~min_width:144 ~padding_vertical:4
                            ~corner_radius:6 ~border_width:1
-                           ~border_color:"var(--lui-c-border)"
+                           ~border_color:"hsl(var(--border))"
                            ~background:"hsl(var(--popover))"
                            ~data_attrs:
                              [ "style", "top: 100%; right: 0; margin: 0" ]

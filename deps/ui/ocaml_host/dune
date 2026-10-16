@@ -442,7 +442,7 @@
  (modules patch_decode host_requests theme_vars host_icons text_engine)
  (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform logseq_native_entry
    logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
-   lui.layout lui.text lui.svg lui.theme lui.ime yojson str unix))
+   lui.layout lui.text lui.svg lui.theme lui.ime imagelib yojson str unix))
 
 (test
  (name host_requests_test)

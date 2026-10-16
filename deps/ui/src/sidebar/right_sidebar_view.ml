@@ -119,7 +119,7 @@ let item_menu st (it : Sidebar_state.item) =
     box ~key ~opacity:0.5
       [ divider ~key:"d" ~style_class:"menu-separator" ~margin_vertical:4
           ~data_attrs:
-            [ ("style", "border-top:1px solid var(--lui-c-border)") ]
+            [ ("style", "border-top:1px solid hsl(var(--border))") ]
           [] ]
   in
   (* cljs popup-show!: element-anchored dropdown — centered on the

@@ -1545,7 +1545,7 @@ let ref_vlist inst ~paginate ~item_extent (rows : t list) : t =
       ~overscan:1
       ~data_attrs:
         (( "style"
-         , "border-top:1px solid var(--lui-c-border);padding-top:8px" )
+         , "border-top:1px solid hsl(var(--border));padding-top:8px" )
          ::
          (if paginate then
             [ ("data-virt-count", string_of_int (List.length rows)) ]
@@ -1650,7 +1650,7 @@ let render_list inst s : t =
          and would otherwise page through the whole result. *)
       let last = List.length gs - 1 in
       column ~gap:8
-        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
+        ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1668,7 +1668,7 @@ let render_list inst s : t =
          master's .border-t.pt-2.gap-2 above the partition list *)
       let last_i = List.length gs - 1 in
       column ~gap:8
-        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
+        ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.concat
            (List.mapi
               (fun i g ->
@@ -1765,7 +1765,7 @@ let render_table inst s : t =
          partition wrapper (no .group-list-view — that's list display) *)
       let last = List.length gs - 1 in
       column ~gap:8
-        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
+        ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1777,7 +1777,7 @@ let render_table inst s : t =
   | Wr.VGroupedList gs ->
       let last_i = List.length gs - 1 in
       column ~gap:8
-        ~data_attrs:[ ("style", "border-top:1px solid var(--lui-c-border);padding-top:8px") ]
+        ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.mapi
            (fun i g ->
              let last_j = List.length g.Wr.glparts - 1 in

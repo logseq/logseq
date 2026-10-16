@@ -739,7 +739,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
     "vchip-op-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int idx
   in
   row ~cross:`center ~style_class:"ls-vf-chip"
-      ~border_width:1 ~border_color:"var(--lui-c-border)"
+      ~border_width:1 ~border_color:"hsl(var(--border))"
       ~corner_radius:4 ~min_width:0
       ~data_attrs:[ ("style", "max-width:100%") ]
     [ (* per-side borders ride the data_attrs style channel *)
@@ -748,13 +748,13 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         ; Ui_components.Prop.disabled_opacity 0.8 ]
         (button ~text:prop_title ~disabled:true ~padding_horizontal:8
            ~data_attrs:
-             [ ("style", "border-right:1px solid var(--lui-c-border)") ]
+             [ ("style", "border-right:1px solid hsl(var(--border))") ]
            [])
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem" ]
         (button ~padding_horizontal:8
            ~data_attrs:
-             [ ("style", "border-right:1px solid var(--lui-c-border)") ]
+             [ ("style", "border-right:1px solid hsl(var(--border))") ]
            ~accessibility_identifier:op_btn_id
            ~text:(I.operator_text f.V.c_op)
            ~on_press:(fun _ ->
@@ -801,7 +801,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         ~data_attrs:
           [ ( "style"
             , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
-               white-space:nowrap;border-right:1px solid var(--lui-c-border)" ) ]
+               white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
         [ text ~value:(filter_value_label inst f) [] ]
     ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
         ~padding_horizontal:4
@@ -846,7 +846,7 @@ let filters_row inst : t =
                   (select ~style_class:"ls-vf-logic"
                      ~height:24 ~padding_horizontal:8
                      ~background:"transparent" ~border_width:1
-                     ~border_color:"var(--lui-c-border)"
+                     ~border_color:"hsl(var(--border))"
                      ~text:(if s.V.filters_or then I.match_any else I.match_all)
                      [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
                          ~on_press:(fun _ ->

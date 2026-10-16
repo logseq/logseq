@@ -23,7 +23,7 @@ let body (_ms : Model.t Signal.signal) : t =
           ~main:`space_between ~cross:`center ~gap:16
           ~data_attrs:
             [ ( "style"
-              , "border-bottom:1px solid var(--lui-c-border);\
+              , "border-bottom:1px solid hsl(var(--border));\
                  padding-bottom:1rem" ) ]
           [ text ~key:"qa-t" ~style_class:"ls-qa-title" ~font_weight:500
               ~value:(U.t "editor.quick-add/title") [] ]

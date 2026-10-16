@@ -3,7 +3,7 @@
 The SDL host has build targets for macOS and Linux. It uses LUI's CoreText/AppKit
 backends on macOS and Pango/Fontconfig plus `lui.shell_linux` on Linux.
 macOS rasterizes changed bands and presents immutable IOSurfaces through
-Core Animation, using one raster worker by default. `LUI_GPU=metal` explicitly
+Core Animation, using four raster workers by default. `LUI_GPU=metal` explicitly
 selects Metal. Linux uses OpenGL. In-app menus use AppKit on macOS and the
 shared LUI overlay on Linux.
 On Linux, `LUI_GPU=cpu` selects LUI's software rasterizer and SDL presentation
@@ -73,7 +73,15 @@ For a macOS Logseq bundle, copy [Info.plist](Info.plist) into
 `Contents/Info.plist` before signing. Install the host as
 `Contents/MacOS/LogseqNative`, the worker as
 `Contents/Resources/logseq-db-worker`, and fonts under
-`Contents/Resources/fonts`. Keep the native libraries from the tested build.
+`Contents/Resources/fonts`. Copy the existing `resources/img/{light,dark,system}-theme.png` files to
+`Contents/Resources/img/` for the Settings theme thumbnails. Keep the native
+libraries from the tested build.
+
+Relative native image paths resolve under `Contents/Resources`. For a direct
+development executable, set `LOGSEQ_NATIVE_ASSET_DIR` to the repository's
+absolute `resources` directory. The host decodes PNGs with `imagelib`, already
+included by the dependency installer. Decoded pixels belong to mounted image
+nodes and are released when those nodes disappear.
 The template enables `MallocSpaceEfficient=1` at process startup so the allocator
 can reclaim unused backing memory. The bundled worker inherits this policy.
 Direct executable launches require the same environment setting to reproduce

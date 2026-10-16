@@ -112,50 +112,10 @@ let lang_menu ~key st mst =
 (* cljs: .radix only when an accent color is stored — no CSS rules
    target it; dropped as dead. option_card carries the .mode-* thumbnail
    (as an <img> now, not a CSS background) + the active ring. *)
-(* Simplified stand-in for the mode-*-theme.png thumbnails on hosts
-   with no image painting — a mini app window: left sidebar strip plus
-   content lines, light/dark halves for "system". *)
+(* Native and web hosts use the same bundled theme thumbnails. *)
 let theme_thumb_native ~key mode =
-  match mode with
-  | "dark" ->
-    box ~key ~background:"hsl(224, 18%, 10%)"
-      [ row ~key:(key ^ "-r") ~gap:0
-          [ box ~key:(key ^ "-sb") ~width:14 ~height:63
-              ~background:"hsl(224, 18%, 7%)" []
-          ; column ~key:(key ^ "-c") ~gap:6 ~padding:10
-              [ box ~key:(key ^ "-l1") ~width:36 ~height:5
-                  ~corner_radius:2 ~background:"hsl(0, 0%, 32%)" []
-              ; box ~key:(key ^ "-l2") ~width:28 ~height:5
-                  ~corner_radius:2 ~background:"hsl(0, 0%, 26%)" []
-              ]
-          ]
-      ]
-  | "system" ->
-    row ~key ~gap:0
-      [ box ~key:(key ^ "-l") ~width:46 ~height:63
-          ~background:"hsl(0, 0%, 97%)"
-          [ box ~key:(key ^ "-lsb") ~width:10 ~height:63
-              ~background:"hsl(0, 0%, 90%)" []
-          ]
-      ; box ~key:(key ^ "-d") ~width:46 ~height:63
-          ~background:"hsl(224, 18%, 10%)"
-          [ box ~key:(key ^ "-dsb") ~width:10 ~height:63
-              ~background:"hsl(224, 18%, 7%)" []
-          ]
-      ]
-  | _ ->
-    box ~key ~background:"hsl(0, 0%, 97%)"
-      [ row ~key:(key ^ "-r") ~gap:0
-          [ box ~key:(key ^ "-sb") ~width:14 ~height:63
-              ~background:"hsl(0, 0%, 90%)" []
-          ; column ~key:(key ^ "-c") ~gap:6 ~padding:10
-              [ box ~key:(key ^ "-l1") ~width:36 ~height:5
-                  ~corner_radius:2 ~background:"hsl(0, 0%, 80%)" []
-              ; box ~key:(key ^ "-l2") ~width:28 ~height:5
-                  ~corner_radius:2 ~background:"hsl(0, 0%, 85%)" []
-              ]
-          ]
-      ]
+  file_image ~key ~path:("img/" ^ mode ^ "-theme.png")
+    ~fit:`fill ~width:92 ~height:63 ~corner_radius:4 []
 
 let theme_item ~st mode label =
   let thumbnail =
@@ -203,7 +163,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~(height : int) ~st =
           ~container_relative_frame:`horizontal
           ~width:256 ~height
           ~background:"hsl(var(--background))"
-          ~border_width:1 ~border_color:"var(--lui-c-border)"
+          ~border_width:1 ~border_color:"hsl(var(--border))"
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())

@@ -769,7 +769,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
   Ui_components.with_props [ Ui_components.sub_card_shadow ]
     (popover ~transition:Ui_components.popover_transition ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
        ~padding:4
-       ~border_color:"var(--lui-c-border)" ~border_width:1
+       ~border_color:"hsl(var(--border))" ~border_width:1
        ~corner_radius:6
        ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
        ~style_class:"ui__dropdown-menu-sub-content"
@@ -828,7 +828,7 @@ let cm_popover (st : S.t) : t =
              | Some m when m.S.tag <> None -> 240
              | _ -> 280)
            (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
-              ~border_color:"var(--lui-c-border)" ~border_width:1
+              ~border_color:"hsl(var(--border))" ~border_width:1
               ~corner_radius:6
               ~at_signal:
           (Logseq_el.own context
@@ -998,7 +998,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
   (Ui_components.with_props [ Ui_components.card_shadow ]
      (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
         ~padding:6
-        ~border_color:"var(--lui-c-border)" ~border_width:1
+        ~border_color:"hsl(var(--border))" ~border_width:1
         ~corner_radius:6
         ~available_height:
           (Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)

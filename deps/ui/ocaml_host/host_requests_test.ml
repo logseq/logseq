@@ -2,6 +2,9 @@ module Lui_text = Host_platform.Text
 
 open Lui_protocol
 
+external register_fixture_fonts : string -> unit = "logseq_native_register_fonts"
+let () = Option.iter register_fixture_fonts (Sys.getenv_opt "LOGSEQ_NATIVE_FONT_DIR")
+
 let check message condition = if not condition then failwith message
 
 let () =
@@ -2037,6 +2040,21 @@ let () =
   Native_embed.with_entry_lock (fun () ->
       let module A = Lui_window.Assembly in
       let module W = Lui_window in
+      let old_theme_mode = !Theme_vars.mode in
+      let old_light_vars = Hashtbl.copy Theme_vars.light_vars in
+      let snapshot = Ui_theme.snapshot Ui_theme.Light in
+      Theme_vars.install_snapshot
+        (Yojson.Safe.to_string
+           (`Assoc
+              [
+                ("mode", `String "light");
+                ( "vars",
+                  `Assoc
+                    (List.map
+                       (fun (key, value) -> (key, `String value))
+                       snapshot.vars) );
+              ]));
+      Theme_vars.set_dark false;
       let old_settings = !Settings_state.st and old_worker = !Runtime.worker in
       Runtime.worker :=
         Some
@@ -2113,6 +2131,19 @@ let () =
       Fun.protect
         ~finally:(fun () ->
           ignore (Lui_app.dispose app);
+          Theme_vars.install_snapshot
+            (Yojson.Safe.to_string
+               (`Assoc
+                  [
+                    ("mode", `String "light");
+                    ( "vars",
+                      `Assoc
+                        (Hashtbl.fold
+                           (fun key value entries ->
+                             (key, `String value) :: entries)
+                           old_light_vars []) );
+                  ]));
+          Theme_vars.set_dark (old_theme_mode = Lui_theme.Dark);
           Settings_state.st := old_settings;
           Runtime.worker := old_worker;
           Host.set_window_size old_width old_height)
@@ -2207,6 +2238,25 @@ let () =
                      (Lui_store.preorder ~root:id store))
               nodes
           in
+          expect
+            "Native theme choices still draw approximations instead of the \
+             bundled PNGs"
+            (List.length
+               (List.filter
+                  (fun id ->
+                    Lui_store.kind store id = "file-image"
+                    &&
+                    match Lui_store.string_prop store id "path" with
+                    | Some path ->
+                        List.mem path
+                          [
+                            "img/light-theme.png";
+                            "img/dark-theme.png";
+                            "img/system-theme.png";
+                          ]
+                    | None -> false)
+                  nodes)
+            = 3);
           let selected =
             List.find (fun id -> W.bool_prop store id "selected") cards
           in
@@ -2227,6 +2277,25 @@ let () =
             (Lui_store.string_prop store trigger "background"
              = Some "hsl(var(--background))"
             && Lui_text.size (Text_engine.font_of store trigger) = 14.);
+          let thumbnail_ring =
+            List.find
+              (fun id ->
+                Lui_store.kind store id = "box"
+                && Lui_store.int_prop store id "border-width" = Some 2)
+              (Lui_store.preorder ~root:selected store)
+          in
+          List.iter
+            (fun id ->
+              let css =
+                Option.get (Lui_store.string_prop store id "border-color")
+              in
+              expect
+                "A Settings surface border resolves to transparent in the \
+                 production theme"
+                (match Theme_vars.color_of css with
+                | Some color -> color.a > 0
+                | None -> false))
+            [ dialog; trigger; thumbnail_ring ];
           let font_sample = find_class "ls-font-sample" in
           let bold =
             Lui_text.create ~families:[ "Inter" ] ~size:14. ~weight:700 ()
@@ -2287,6 +2356,73 @@ let () =
               [ "iawriter-mono"; "Nitti"; "Menlo"; "Courier"; "monospace" ];
             ];
           List.iter prerr_endline (List.rev !errors);
+          Option.iter
+            (fun path ->
+              let snapshot = Ui_theme.snapshot Ui_theme.Light in
+              Theme_vars.install_snapshot
+                (Yojson.Safe.to_string
+                   (`Assoc
+                      [
+                        ("mode", `String "light");
+                        ( "vars",
+                          `Assoc
+                            (List.map
+                               (fun (key, value) -> (key, `String value))
+                               snapshot.vars) );
+                      ]));
+              let scene =
+                Lui_scene.create
+                  ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
+                  ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512)
+              in
+              let engine =
+                Text_engine.create
+                  ~scene:(fun () -> scene)
+                  ~scale:(fun () -> 2.)
+                  ~store:(fun () -> store)
+              in
+              let hooks =
+                {
+                  Lui_paint.default_hooks with
+                  Lui_paint.color_of = Theme_vars.color_of;
+                  layout = (fun id -> Lui_paint.placement_of_rect (rect id));
+                  text_ops = Text_engine.text_ops engine;
+                  image_of =
+                    (fun id -> Host_icons.image_of store 2. id (rect id));
+                  image_in =
+                    (fun id region -> Host_icons.image_of store 2. id region);
+                }
+              in
+              Lui_paint.paint hooks store scene ~width:2880 ~height:1864
+                ~scale:2.
+                ~clear:(Lui_scene.color 255 255 255 255);
+              Out_channel.with_open_bin path (fun channel ->
+                  Marshal.to_channel channel scene []);
+              let border_at region =
+                List.exists
+                  (function
+                    | Lui_scene.Fill fill ->
+                        fill.frect = region
+                        && fill.fborder <> (0., 0., 0., 0.)
+                        && fill.fborder_color.a > 0
+                    | _ -> false)
+                  scene.ops
+              in
+              check "Native Settings dialog border resolves to transparent"
+                (border_at (rect dialog));
+              check "Native language select border resolves to transparent"
+                (border_at (rect trigger));
+              check
+                "Native selected theme thumbnail has no visible selection ring"
+                (List.exists
+                   (function
+                     | Lui_scene.Fill fill ->
+                         fill.frect.w = 184. && fill.frect.h = 126.
+                         && fill.fborder = (4., 4., 4., 4.)
+                         && fill.fborder_color.a > 0
+                     | _ -> false)
+                   scene.ops))
+            (Sys.getenv_opt "LOGSEQ_NATIVE_SETTINGS_SCENE");
           check "Native Settings visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"
 
@@ -2394,3 +2530,89 @@ let () =
   check "Native styled line height across measure, paint, caret and hit testing"
     (!failures = []);
   print_endline "native styled line height: OK"
+
+let () =
+  let first = Filename.temp_file "native-image-" ".png"
+  and second = Filename.temp_file "native-image-" ".png" in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.remove first;
+      Sys.remove second)
+    (fun () ->
+      let source = Image.create_rgb ~alpha:true 2 2 in
+      Image.write_rgba source 0 0 255 0 0 255;
+      Image.write_rgba source 1 0 0 255 0 128;
+      Image.write_rgba source 0 1 0 0 255 255;
+      Image.write_rgba source 1 1 255 255 255 0;
+      let buffer = Buffer.create 128 in
+      ImageLib.PNG.write (ImageUtil.chunk_writer_of_buffer buffer) source;
+      List.iter
+        (fun path ->
+          Out_channel.with_open_bin path (fun channel ->
+              output_string channel (Buffer.contents buffer)))
+        [ first; second ];
+      let store = Lui_store.create () in
+      List.iter (Lui_store.apply_op store)
+        [
+          CreateNode (830000, FileImage);
+          SetProp (830000, PathValue, StringValue first);
+        ];
+      let load () =
+        Host_icons.image_of store 2. 830000 (Lui_scene.rect 0. 0. 100. 100.)
+      in
+      let original = Weak.create 1 and changed = Weak.create 1 in
+      let verify () =
+        let decoded = load () in
+        check "Native file-image never decodes its PNG source"
+          (Option.is_some decoded);
+        let image = Option.get decoded in
+        check "Native PNG decoding changed the source dimensions"
+          (image.iw = 2 && image.ih = 2);
+        check "Native PNG pixels lost orientation or premultiplied alpha"
+          (List.init 16 (fun i -> Bytes.get_uint8 image.ipix i)
+          = [ 255; 0; 0; 255; 0; 128; 0; 128; 0; 0; 255; 255; 0; 0; 0; 0 ]);
+        check "Repeated native PNG paint decodes another image"
+          (Option.get (load ()) == image);
+        Weak.set original 0 (Some image);
+        Lui_store.apply_op store
+          (SetProp (830000, PathValue, StringValue second));
+        let next = Option.get (load ()) in
+        check "Changing a native image path reused the previous resource"
+          (next.iid <> image.iid);
+        Weak.set changed 0 (Some next)
+      in
+      verify ();
+      Lui_store.apply_op store (DropNode 830000);
+      Lui_store.apply_op store (CreateNode (830001, Icon));
+      ignore
+        (Host_icons.image_of store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
+      Gc.full_major ();
+      check "Native PNG cache retained disposed image pixels"
+        ((not (Weak.check original 0)) && not (Weak.check changed 0)));
+  print_endline "native PNG decoding and node ownership: OK"
+
+let () =
+  Option.iter
+    (fun _ ->
+      let store = Lui_store.create () in
+      List.iteri
+        (fun index mode ->
+          let id = 840000 + index and path = "img/" ^ mode ^ "-theme.png" in
+          List.iter (Lui_store.apply_op store)
+            [
+              CreateNode (id, FileImage);
+              SetProp (id, PathValue, StringValue path);
+            ];
+          let before = Unix.gettimeofday () in
+          let image =
+            Option.get
+              (Host_icons.image_of store 2. id (Lui_scene.rect 0. 0. 184. 126.))
+          in
+          check "Bundled native theme PNG has unexpected dimensions"
+            (image.iw = 160 && image.ih = 92);
+          Printf.printf "native theme PNG %s decoded %d bytes in %.3f ms\n%!"
+            mode (Bytes.length image.ipix)
+            ((Unix.gettimeofday () -. before) *. 1000.))
+        [ "light"; "dark"; "system" ];
+      print_endline "native bundled theme PNGs: OK")
+    (Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR")

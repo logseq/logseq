@@ -168,7 +168,7 @@ let anchored_popover ~key ~id ~place ~cls ~card ~on_dismiss children : t =
          (map (fun (pl : placement) -> (pl.px, pl.py))
             (Signal.value (place)))
        ?background:(if card then Some "hsl(var(--popover))" else None)
-       ?border_color:(if card then Some "var(--lui-c-border)" else None)
+       ?border_color:(if card then Some "hsl(var(--border))" else None)
        ?border_width:(if card then Some 1 else None)
        ?corner_radius:(if card then Some 6 else None)
        ?min_width:(if card then Some 128 else None)
@@ -355,7 +355,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
                        ~anchor:`right ~anchor_alignment:`start
                        ~anchor_offset:(-4.) ~role:`menu ~min_width:128
                        ~padding:4 ~background:"hsl(var(--popover))"
-                       ~border_color:"var(--lui-c-border)" ~border_width:1
+                       ~border_color:"hsl(var(--border))" ~border_width:1
                        ~corner_radius:6
                        ~style_class:(cls ^ "ui__dropdown-menu-sub-content")
                        ~data_attrs:
@@ -539,7 +539,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                       (button ~key:("vpsel-a" ^ string_of_int id)
                          ~style_class:"ui__button ls-btn-outline" ~text:I.apply
                          ~corner_radius:6 ~border_width:1
-                         ~border_color:"var(--lui-c-border)"
+                         ~border_color:"hsl(var(--border))"
                          ~background:
                            "var(--ls-primary-background-color, \
                             var(--lui-c-background))"
@@ -611,7 +611,7 @@ let show_dialog ~headline ~body:(body : t list) ~on_confirm
                  (button ~key:"cancel" ~style_class:"ui__button ls-btn-outline"
                     ~text:I.cancel
                     ~corner_radius:6 ~border_width:1
-                    ~border_color:"var(--lui-c-border)"
+                    ~border_color:"hsl(var(--border))"
                     ~background:
                       "var(--ls-primary-background-color, \
                        var(--lui-c-background))"

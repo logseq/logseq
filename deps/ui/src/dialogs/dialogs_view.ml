@@ -98,7 +98,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
   let padding, chrome, binds = dialog_spec name in
   Ui_components.with_props binds
     (dialog ~key:("dlg-" ^ name) ~padding
-       ~border_width:1 ~border_color:"var(--lui-c-border)"
+       ~border_width:1 ~border_color:"hsl(var(--border))"
        ~style_class:("ls-dialog-" ^ name)
        ~data_attrs:
          ((if chrome = "" then [] else [ ("style", chrome) ])

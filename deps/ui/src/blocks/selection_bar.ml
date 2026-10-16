@@ -144,7 +144,7 @@ and node () : t =
                 ~style_class:"selection-action-bar"
                 ~data_attrs:[ ("data-keep-selection", "true") ]
                 [ Uc.action_bar_capsule ~key:"sbg"
-                    ~border_color:"var(--lui-c-border)" ~border_width:1
+                    ~border_color:"hsl(var(--border))" ~border_width:1
                     (row ~key:"sbr" ~gap:0 ~cross:`stretch
                        ((* cljs shui segmented bar: tags/comment/delete/
                            more are icon-only cells; copy and the

@@ -141,7 +141,7 @@ let resolved_name store id =
     | Some _ -> Some ("ok:" ^ name)
     | None -> Some ("miss:" ^ name))
 
-let image_of store scale id r : Lui_scene.image option =
+let svg_image_of store scale id r : Lui_scene.image option =
   match icon_name store id with
   | None -> None
   | Some name -> (
@@ -176,3 +176,80 @@ let image_of store scale id r : Lui_scene.image option =
           in
           Hashtbl.replace cache key rendered;
           rendered)
+
+(* Decoded files belong to their mounted nodes. Prune on store changes so
+   closing a surface releases its pixels instead of retaining a path history. *)
+let file_images : (int, string * Lui_scene.image) Hashtbl.t = Hashtbl.create 8
+let file_store = ref None
+let file_revision = ref (-1)
+
+let prune_file_images store =
+  let revision = Lui_store.revision store in
+  if
+    (match !file_store with Some owner -> owner == store | None -> false)
+    && revision = !file_revision
+  then ()
+  else begin
+    (match !file_store with
+    | Some owner when owner == store -> ()
+    | _ -> Hashtbl.clear file_images);
+    file_store := Some store;
+    file_revision := revision;
+    Hashtbl.filter_map_inplace
+      (fun id ((path, _) as entry) ->
+        if
+          Lui_store.mem store id
+          && Lui_store.kind store id = "file-image"
+          && Lui_store.string_prop store id "path" = Some path
+        then Some entry
+        else None)
+      file_images
+  end
+
+let asset_path path =
+  if not (Filename.is_relative path) then path
+  else
+    let root =
+      match Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR" with
+      | Some "" -> invalid_arg "LOGSEQ_NATIVE_ASSET_DIR must not be empty"
+      | Some path -> path
+      | None ->
+          Filename.concat (Filename.dirname Sys.executable_name) "../Resources"
+    in
+    Filename.concat root path
+
+let read_png path =
+  let encoded = In_channel.with_open_bin path In_channel.input_all in
+  let decoded =
+    ImageLib.PNG.parsefile (ImageUtil.chunk_reader_of_string encoded)
+  in
+  let pixels = Bytes.create (decoded.width * decoded.height * 4) in
+  let channel value =
+    ((value * 255) + (decoded.max_val / 2)) / decoded.max_val
+  in
+  for y = 0 to decoded.height - 1 do
+    for x = 0 to decoded.width - 1 do
+      Image.read_rgba decoded x y (fun r g b a ->
+          let a = channel a and at = ((y * decoded.width) + x) * 4 in
+          let premultiply value = ((channel value * a) + 127) / 255 in
+          Bytes.set_uint8 pixels at (premultiply r);
+          Bytes.set_uint8 pixels (at + 1) (premultiply g);
+          Bytes.set_uint8 pixels (at + 2) (premultiply b);
+          Bytes.set_uint8 pixels (at + 3) a)
+    done
+  done;
+  Lui_scene.new_image ~w:decoded.width ~h:decoded.height pixels
+
+let image_of store scale id r =
+  prune_file_images store;
+  if Lui_store.kind store id <> "file-image" then svg_image_of store scale id r
+  else
+    match Lui_store.string_prop store id "path" with
+    | None -> None
+    | Some path -> (
+        match Hashtbl.find_opt file_images id with
+        | Some (cached, image) when cached = path -> Some image
+        | _ ->
+            let image = read_png (asset_path path) in
+            Hashtbl.replace file_images id (path, image);
+            Some image)
