@@ -1,8 +1,3 @@
-(* cljs platform embedding capability. Configuration (endpoint /
-   model / dimension table) resolves the same on every runtime; the
-   HTTP call itself goes through Http, which errors on native today —
-   matching a platform where [:embedding :embed-texts] is absent. *)
-
 let default_embedding_model = "all-MiniLM-L6-v2"
 
 let embedding_model_dimensions =
@@ -10,10 +5,7 @@ let embedding_model_dimensions =
 
 let endpoint () = Runtime_env.env "LOGSEQ_EMBEDDINGS_URL"
 
-(* cljs vector-embedding-enabled? = macos-arm64? && endpoint seq.
-   The zvec/embedding backend only ships for macOS arm64; native OCaml
-   has no zvec binding, so the capability is absent. *)
-let macos_arm64 () = false
+external macos_arm64 : unit -> bool = "logseq_macos_arm64"
 
 let enabled () = macos_arm64 () && Option.is_some (endpoint ())
 
@@ -31,5 +23,43 @@ let dimension () =
            failwith
              (Printf.sprintf "Unsupported embedding model dimension {:model-id %s}" model))
 
-let embed_texts _ =
-  Db_worker_effect.error (Failure "platform embedding/embed-texts missing")
+let vectors_of_body body =
+  let open Yojson.Basic.Util in
+  body |> Yojson.Basic.from_string |> member "data" |> to_list
+  |> List.map (fun item ->
+    let index = item |> member "index" |> to_int in
+    let vector = item |> member "embedding" |> to_list
+      |> List.map (function `Int n -> float_of_int n | `Float n -> n
+        | _ -> failwith "Invalid embedding coordinate") |> Array.of_list in
+    if Array.exists (fun n -> not (Float.is_finite n)) vector then
+      failwith "Non-finite embedding coordinate";
+    index, vector)
+  |> List.sort (fun (left, _) (right, _) -> Int.compare left right)
+  |> List.mapi (fun expected (index, vector) ->
+    if index <> expected then failwith "Embedding response has missing or duplicate indexes";
+    vector)
+
+let embed_texts texts =
+  let open Db_worker_effect.Infix in
+  if texts = [] then Db_worker_effect.pure []
+  else match endpoint (), model_id () with
+  | Some url, Some model ->
+      let body = Yojson.Basic.to_string (`Assoc ["model", `String model;
+        "input", `List (List.map (fun text -> `String text) texts)]) in
+      let request = { Http.url; method_ = "POST";
+        headers = ["Content-Type", "application/json"]; body = Some body } in
+      let started = Time.monotonic_now () in
+      let rec fetch () =
+        Db_worker_effect.catch (Http.send request) (fun error ->
+          if Time.diff_monotonic_ms started (Time.monotonic_now ()) < 120000. then
+            Db_worker_effect.sleep 250. >>= fetch
+          else Db_worker_effect.error error) in
+      fetch () >>= fun response ->
+      if response.Http.status < 200 || response.status >= 300 then
+        Db_worker_effect.error (Failure (Printf.sprintf "Embedding request failed: HTTP %d" response.status))
+      else
+        let vectors = vectors_of_body response.body in
+        if List.length vectors <> List.length texts then
+          Db_worker_effect.error (Failure "Embedding response count differs from input count")
+        else Db_worker_effect.pure vectors
+  | _ -> Db_worker_effect.error (Failure "platform embedding/embed-texts missing")

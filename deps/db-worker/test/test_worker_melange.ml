@@ -20,8 +20,31 @@ external browser_pfs : 'a Js.Undefined.t = "pfs" [@@mel.scope "globalThis"]
 external set_browser_pfs : 'a -> 'b Js.Undefined.t -> unit = "pfs" [@@mel.set]
 external browser_self : 'a Js.Undefined.t = "self" [@@mel.scope "globalThis"]
 external set_browser_self : 'a -> 'b Js.Undefined.t -> unit = "self" [@@mel.set]
+external browser_location : 'a Js.Undefined.t = "location" [@@mel.scope "globalThis"]
+external set_browser_location : 'a -> 'b Js.Undefined.t -> unit = "location" [@@mel.set]
 
 let () =
+  Fest.test "browser runtime reads worker URL flags" (fun () ->
+    let previous_process = browser_process in
+    let previous_location = browser_location in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_location browser_global previous_location
+    in
+    let run () =
+      set_browser_process browser_global Js.Undefined.empty;
+      List.iter (fun (query, owner, publishing) ->
+        set_browser_location browser_global
+          (Js.Undefined.return [%mel.obj { search = query; href = "http://localhost/worker.js" ^ query }]);
+        Fest.equal (Runtime_env.owner_source ()) owner Fest.expect;
+        Fest.equal (Runtime_env.publishing ()) publishing Fest.expect)
+        [ "?electron=true", "electron", false
+        ; "?capacitor=true&publishing=true", "capacitor", true
+        ; "?electron=false&publishing=false", "browser", false ]
+    in
+    match run () with
+    | () -> restore ()
+    | exception error -> restore (); raise error);
   Fest.test "owner UI requests and error reports do not reach other tabs" (fun () ->
     let previous_process = browser_process in
     let previous_self = browser_self in

@@ -3,18 +3,23 @@
    Runs the OCaml worker directly instead of the node
    db-worker-node.js bundle. The cljs daemon is
    single-threaded; here request handlers run on connection threads,
-   so worker invocations are serialized on a global mutex held until
-   the returned E.t settles — preserving the JS "one invoke at a
-   time" semantics. *)
+   so worker invocations use a condition gate until the returned E.t
+   settles. Completion may run on another thread; no OS mutex stays
+   owned across that asynchronous boundary. *)
 
 module E = Db_worker_effect
 
 let invoke_mu = Mutex.create ()
+let invoke_available = Condition.create ()
+let invoke_busy = ref false
 let last_activity = ref (Time.monotonic_now ())
 let released_major_words = ref (Gc.quick_stat ()).major_words
 
 let finish_invocation () =
+  Mutex.lock invoke_mu;
   last_activity := Time.monotonic_now ();
+  invoke_busy := false;
+  Condition.signal invoke_available;
   Mutex.unlock invoke_mu
 
 (* OCaml 5 keeps swept pools mapped until compaction, even when the
@@ -27,7 +32,7 @@ let release_idle_heap () =
     if Mutex.try_lock invoke_mu then
       Fun.protect ~finally:(fun () -> Mutex.unlock invoke_mu) (fun () ->
           let stats = Gc.quick_stat () in
-          if Time.diff_monotonic_ms !last_activity (Time.monotonic_now ()) >= 5000.
+          if not !invoke_busy && Time.diff_monotonic_ms !last_activity (Time.monotonic_now ()) >= 5000.
              && stats.major_words -. !released_major_words >= 4_194_304.
           then Some stats else None)
     else None
@@ -48,6 +53,9 @@ let release_idle_heap () =
 let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
   fun arg ->
     Mutex.lock invoke_mu;
+    while !invoke_busy do Condition.wait invoke_available invoke_mu done;
+    invoke_busy := true;
+    Mutex.unlock invoke_mu;
     match
       (try `Task (f arg) with exn -> `Err exn)
     with

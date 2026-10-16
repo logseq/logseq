@@ -2,7 +2,10 @@
  (name logseq_db_worker_platform_native)
  (implements logseq_db_worker_platform_spec)
  (modes native byte)
- (foreign_stubs (language c) (names node_process_stubs))
+ (foreign_stubs
+  (language c)
+  (names node_process_stubs file_stat_stubs zvec_stubs)
+  (include_dirs zvec))
  (libraries
   mldoc
   angstrom
@@ -21,6 +24,7 @@
   yojson
   ptime
   digestif
+  decompress.gz
   mirage-crypto
   mirage-crypto-rng.unix
   mirage-crypto-pk

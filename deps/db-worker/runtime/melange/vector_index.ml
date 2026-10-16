@@ -103,6 +103,8 @@ external upsert_sync : zvec_collection -> doc_js array -> unit = "upsertSync"
 external delete_sync : zvec_collection -> string array -> unit = "deleteSync"
   [@@mel.send]
 
+external close_sync : zvec_collection -> unit = "closeSync" [@@mel.send]
+
 external destroy_sync : zvec_collection -> unit = "destroySync" [@@mel.send]
 
 (* querySync result doc fields *)
@@ -256,6 +258,8 @@ let upsert index docs =
   upsert_sync index.collection (Array.of_list (List.map zvec_doc docs))
 
 let delete index ids = delete_sync index.collection (Array.of_list ids)
+
+let close index = close_sync index.collection
 
 let truncate index =
   destroy_sync index.collection;

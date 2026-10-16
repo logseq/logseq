@@ -78,8 +78,6 @@ module Rsa = struct
         Db_worker_effect.error
           (Failure "Crypto.Rsa.decrypt: invalid pkcs8 private key")
 
-  let sign ~private_key:_ _ =
-    Db_worker_effect.error (Failure "Crypto.Rsa.sign: not implemented on native yet")
 
   (* JWK base64url decode — url-safe alphabet, optional padding. *)
   let decode_b64url s =

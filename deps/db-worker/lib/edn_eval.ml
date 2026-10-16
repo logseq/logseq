@@ -21,6 +21,69 @@ exception Throw_value of value
 
 let eval_error fmt = Printf.ksprintf (fun msg -> raise (Eval_error msg)) fmt
 
+let split_regex text pattern limit =
+  let trim parts =
+    let rec drop = function String "" :: rest -> drop rest | rest -> rest in
+    if limit = 0 && List.length parts > 1 then List.rev (drop (List.rev parts)) else parts in
+  if pattern = "" then begin
+    let units = Unicode.utf16_units text in
+    let count = Array.length units in
+    let chars length = List.init length (fun i -> String (Unicode.of_utf16_units [|units.(i)|])) in
+    let parts =
+      if limit <= 0 || limit >= count + 2 then String "" :: chars count @ [String ""]
+      else if limit = 1 then [String text]
+      else String "" :: chars (limit - 2) @ [String (Unicode.js_sub text (limit - 2) count)] in
+    trim parts
+  end else begin
+    let regex = Regexp.compile pattern in
+    if limit > 0 then
+      (* CLJS repeats re-find on the remaining substring, so anchors reset
+         after each separator when a positive limit is supplied. *)
+      let rec limited remaining slots pieces =
+        if slots = 1 then List.rev (String remaining :: pieces)
+        else match Regexp.exec regex remaining with
+          | None -> List.rev (String remaining :: pieces)
+          | Some found -> limited
+              (String.sub remaining found.last (String.length remaining - found.last))
+              (slots - 1) (String (String.sub remaining 0 found.offset) :: pieces) in
+      limited text limit []
+    else
+      let length = String.length text in
+      let finish start pieces =
+        trim (List.rev (String (String.sub text start (length - start)) :: pieces)) in
+      let advance position =
+        if position >= length then length + 1
+        else
+          let remaining = String.sub text position (length - position) in
+          let character = Unicode.js_sub remaining 0 1 in
+          let complete_character = if character = "" then Unicode.js_sub remaining 0 2 else character in
+          position + String.length complete_character in
+      let rec loop start position pieces =
+        if position > length then finish start pieces
+        else match Regexp.exec ~pos:position regex text with
+        | None -> finish start pieces
+        | Some found when found.offset = found.last && found.offset = start ->
+            loop start (advance found.last) pieces
+        | Some found when found.offset = found.last && found.last = length -> finish start pieces
+        | Some found ->
+            let pieces = String (String.sub text start (found.offset - start)) :: pieces in
+            let _, pieces = Array.fold_left (fun (index, acc) group ->
+              index + 1, if index = 0 then acc
+              else (match group with Some text -> String text | None -> Nil) :: acc)
+              (0, pieces) found.groups in
+            loop found.last (if found.last = found.offset then advance found.last else found.last) pieces in
+      loop 0 0 []
+  end
+
+let literal_pattern text =
+  if text = "" then "(?:)"
+  else
+    let output = Buffer.create (String.length text) in
+    String.iter (fun character ->
+      if String.contains "[]\\^$.|?*+(){}" character then Buffer.add_char output '\\';
+      Buffer.add_char output character) text;
+    Buffer.contents output
+
 (* Runtime values: plain EDN values plus closures and pooled entities
    (datascript/Entity cells decoded by the render-resource caller).
 
@@ -1700,12 +1763,11 @@ and build_core_fns () =
     ; ( [ "clojure.string/split"; "string/split" ]
       , fun args ->
           match args with
-          | [ V (String s); V (Regex r) ] | [ V (String s); V (String r) ] ->
-              let parts =
-                if String.length r = 1 then String.split_on_char r.[0] s
-                else String.split_on_char ',' s
-              in
-              V (Vector (List.map (fun p -> String p) parts))
+          | [ V (String s); V (Regex r) ] -> V (Vector (split_regex s r 0))
+          | [ V (String s); V (String separator) ] ->
+              V (Vector (split_regex s (literal_pattern separator) 0))
+          | [ V (String s); V (Regex r); V (Int64 limit) ] ->
+              V (Vector (split_regex s r (Int64.to_int limit)))
           | _ -> eval_error "split" )
     ];
   reg "ex-info" (fun args ->

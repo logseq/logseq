@@ -36,6 +36,7 @@ val query
 val upsert : index -> doc list -> unit
 val delete : index -> string list -> unit
 val truncate : index -> unit
+val close : index -> unit
 
 (* cljs platform/node.cljs vector-query-topks: a page-scoped query
    widens topk by [4 16 64] until enough results survive the page

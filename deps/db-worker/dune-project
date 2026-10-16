@@ -81,6 +81,7 @@
   re
   yojson
   digestif
+  decompress
   mirage-crypto
   mirage-crypto-rng
   mirage-crypto-pk

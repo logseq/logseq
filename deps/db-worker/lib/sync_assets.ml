@@ -489,7 +489,8 @@ let download_remote_asset_impl repo graph_id asset_uuid asset_type
            | _ ->
                raise
                  (err "rtc.exception/download-asset-failed"
-                    "download asset failed"))
+                    "download asset failed"
+                    ~data:[Wire.Keyword "cause", Wire.String (Printexc.to_string e)]))
   | _ ->
       Db_worker_effect.error
         (Sync_util.ex_info "missing asset download info"
@@ -507,7 +508,12 @@ let download_remote_asset repo graph_id asset_uuid asset_type =
 let log_request_asset_download_failed repo asset_uuid e =
   Worker_log.error "db-sync/request-asset-download-failed"
     [ ("repo", repo); ("asset-uuid", asset_uuid)
-    ; ("error", Printexc.to_string e) ]
+    ; ("error", Printexc.to_string e)
+    ; ("cause", match e with
+        | Dispatcher.Exn_info (_, fields) ->
+            (match Option.bind (Wire.get "data" (Wire.Map fields)) (Wire.get "cause") with
+             | Some (Wire.String cause) -> cause | _ -> "")
+        | _ -> "") ]
 
 (* request-asset-download! *)
 let request_asset_download repo asset_uuid ~current_client ~enqueue_asset_task

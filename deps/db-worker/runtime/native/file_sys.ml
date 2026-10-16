@@ -69,7 +69,16 @@ type file_stat = {
   birthtime_ms : Time.epoch_ms option;
 }
 
-let stat _path = Db_worker_effect.pure None
+external birthtime : string -> float option = "logseq_file_birthtime"
+
+let stat path =
+  wrap (fun () ->
+    try
+      let metadata = Unix.stat path in
+      let epoch seconds = Time.epoch_ms (Int64.of_float (seconds *. 1000.)) in
+      Some { mtime_ms = Some (epoch metadata.Unix.st_mtime)
+           ; birthtime_ms = Option.map epoch (birthtime path) }
+    with Unix.Unix_error ((Unix.ENOENT | Unix.ENOTDIR), _, _) -> None)
 
 let append_text path contents =
   wrap (fun () ->
