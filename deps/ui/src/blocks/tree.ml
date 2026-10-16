@@ -26,14 +26,7 @@ open Lui_elements
 module S = Editor_state
 
 
-let contains_sub s sub =
-  let n = String.length s and m = String.length sub in
-  let rec go i =
-    if i + m > n then false
-    else if String.sub s i m = sub then true
-    else go (i + 1)
-  in
-  go 0
+let contains_sub = Str_util.contains
 
 let block_key (b : Model.block) =
   match b.block_uuid with

@@ -70,6 +70,33 @@ let () =
   check "Native property lookup semantics and allocation" (!failures = []);
   print_endline "native property lookup allocation: OK"
 
+let () =
+  List.iter (fun (title,reference,expected) ->
+    check "Block reference search changed substring semantics"
+      (Tree.contains_sub title reference = expected))
+    ["","",true; "title","",true; "","[[ref]]",false;
+     "before [[ref]] after","[[ref]]",true; "((ref))","[[ref]]",false;
+     "[[ref]] suffix","[[ref]]",true; "prefix [[ref]]","[[ref]]",true;
+     "aaaaab","aaab",true; "aaa","aaaa",false;
+     "é [[引用]] text","[[引用]]",true;
+     "a\000b","\000b",true];
+  let title = String.make 32768 'x' in
+  let reference = "[[8fb00cfb-ec54-48e8-8523-323635577438]]" in
+  let with_reference = title ^ reference in
+  List.iter (fun (name,title,expected) ->
+    Gc.full_major ();
+    let before = Gc.allocated_bytes () in
+    for _ = 1 to 20 do
+      check "Long block reference search changed its result"
+        (Tree.contains_sub title reference = expected)
+    done;
+    let allocated = (Gc.allocated_bytes () -. before) /. 20. in
+    Printf.printf "native block reference %s allocated %.0f bytes/search\n%!" name allocated;
+    check "Block reference search copies text at each candidate position"
+      (allocated < 512.))
+    ["missing",title,false; "trailing",with_reference,true];
+  print_endline "native block reference search allocation: OK"
+
 let transport_batches () =
   let payload = "\n\t\"你好\"\\" ^ String.make 1024 'x' in
   let children = List.concat_map (fun i ->
