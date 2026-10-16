@@ -52,6 +52,15 @@
                      (update :expiry-queue conj {:token token
                                                  :cached-at cached-at}))))))))
 
+(defn- fetch-jwks
+  "Fetches the JWKS document; every fetch failure (network error, invalid URL,
+  non-OK response) rejects with (ex-info \"jwks\" {}), the one error that means
+  \"the keys could not be reached\" rather than \"this token is bad\"."
+  [url]
+  (-> (p/resolved nil)
+      (p/then (fn [_] (js/fetch url)))
+      (p/catch (fn [_] (throw (ex-info "jwks" {}))))))
+
 (defn- get-jwks-keys
   [url & {:keys [force?]}]
   (let [now (get-now-ms)
@@ -65,7 +74,7 @@
                     (< (- now fetched-at) jwks-ttl-ms))]
     (if fresh?
       (p/resolved jwks-keys)
-      (p/let [jwks-resp (js/fetch url)
+      (p/let [jwks-resp (fetch-jwks url)
               _ (when-not (.-ok jwks-resp) (throw (ex-info "jwks" {})))
               jwks (.json jwks-resp)
               jwks-keys (or (aget jwks "keys") #js [])]

@@ -46,6 +46,27 @@
       (delete-graph-fn graph-id)
       (<delete-graph-do! env url graph-id))))
 
+(defn- <close-member-sockets!
+  "Closes the removed member's still-open WebSockets on the graph's Durable
+  Object, so removal takes effect immediately instead of at reconnect."
+  [^js env ^js url graph-id member-id]
+  (let [^js namespace (.-LOGSEQ_SYNC_DO env)]
+    (when (and namespace (string? member-id))
+      (let [do-id (.idFromName namespace graph-id)
+            stub (.get namespace do-id)
+            close-url (str (.-origin url) "/internal/close-sockets?user-id=" (js/encodeURIComponent member-id))
+            headers #js {}
+            admin-token (aget env "DB_SYNC_ADMIN_TOKEN")]
+        (when (seq admin-token)
+          (aset headers "x-db-sync-admin-token" admin-token))
+        (-> (.fetch stub (js/Request. close-url #js {:method "POST" :headers headers}))
+            (p/catch (fn [error]
+                       (log/warn :db-sync/close-member-sockets-failed
+                                 {:graph-id graph-id
+                                  :member-id member-id
+                                  :error error})
+                       nil)))))))
+
 (defn- <delete-graph! [db ^js env ^js url graph-id]
   (p/do!
    (index/<graph-delete-metadata! db graph-id)
@@ -247,11 +268,13 @@
                                  (= "member" target-role))]
           (cond
             (and manager? (not= "manager" target-role))
-            (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+            (p/let [_ (index/<graph-member-delete! db graph-id member-id)
+                    _ (<close-member-sockets! env url graph-id member-id)]
               (http/json-response :graph-members/delete {:ok true}))
 
             self-leave?
-            (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+            (p/let [_ (index/<graph-member-delete! db graph-id member-id)
+                    _ (<close-member-sockets! env url graph-id member-id)]
               (http/json-response :graph-members/delete {:ok true}))
 
             :else
@@ -266,8 +289,10 @@
         (http/unauthorized)
 
         :else
-        (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
-          (if (not owns?)
+        ;; Deleting a graph destroys every member's server copy, so it takes a
+        ;; manager (the creator is one), not mere membership.
+        (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+          (if (not manager?)
             (http/forbidden)
             (p/let [_ (<delete-graph! db env url graph-id)]
               (http/json-response :graphs/delete {:graph-id graph-id :deleted true})))))
@@ -412,37 +437,45 @@
               (http/unauthorized))
 
             :else
-            (p/let [claims (auth/semantic-auth-claims request env)
-                    _ (when (and claims (nil? (aget claims "pat_id")))
-                        (index/<user-upsert! db claims))]
-              (if (nil? claims)
+            (p/let [claims (auth/semantic-auth-claims request env)]
+              (cond
+                (nil? claims)
                 (http/unauthorized)
-                (if (and (string? (aget claims "pat_graph_id"))
-                         ;; PAT claims may only fetch their graph's wrapped AES key (agent bootstrap)
-                         (not (and (= :e2ee/graph-aes-key-get (:handler route))
-                                   (= (aget claims "pat_graph_id")
-                                      (some-> route :path-params :graph-id))
-                                   (contains? (into #{} (string/split (or (aget claims "scope") "") #"\s+"))
-                                              "logseq/read"))))
-                  (http/forbidden)
-                  (p/let [user-id (aget claims "sub")
-                        _ (<safe-user-activity-touch! db user-id)
-                        response (handle {:db db
-                                          :env env
-                                          :request request
-                                          :url url
-                                          :claims claims
-                                          :route route})
-                        graph-id (some-> route :path-params :graph-id)
-                        _ (when (and (string? user-id)
-                                     (string? graph-id)
-                                     (< (.-status response) 400))
-                            (<safe-graph-activity-touch! db graph-id))]
-                    response)))))))
+
+                ;; Tokens granted to third-party OAuth clients are confined to
+                ;; the semantic API surface and never reach the index routes
+                ;; (and their users are not upserted).
+                (auth/third-party-oauth-token? claims env)
+                (http/error-response "insufficient scope" 403)
+
+                :else
+                (do (index/<user-upsert! db claims)
+                    (if (and (string? (aget claims "pat_graph_id"))
+                             ;; PAT claims may only fetch their graph's wrapped AES key (agent bootstrap)
+                             (not (and (= :e2ee/graph-aes-key-get (:handler route))
+                                       (= (aget claims "pat_graph_id")
+                                          (some-> route :path-params :graph-id))
+                                       (contains? (into #{} (string/split (or (aget claims "scope") "") #"\s+"))
+                                                  "logseq/read"))))
+                      (http/forbidden)
+                      (p/let [user-id (aget claims "sub")
+                              _ (<safe-user-activity-touch! db user-id)
+                              response (handle {:db db
+                                                :env env
+                                                :request request
+                                                :url url
+                                                :claims claims
+                                                :route route})
+                              graph-id (some-> route :path-params :graph-id)
+                              _ (when (and (string? user-id)
+                                           (string? graph-id)
+                                           (< (.-status response) 400))
+                                  (<safe-graph-activity-touch! db graph-id))]
+                        response))))))))
       (catch :default error
         (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)
-        (http/error-response (str "server error: " error) 500)))))
+        (http/error-response "server error" 500)))))
 
 (def ^:private graph-access-cache-ttl-ms 5000)
 (def ^:private graph-access-cache-capacity 256)
@@ -551,7 +584,7 @@
                                  :access-check-ms access-check-ms}})))))
              (p/catch (fn [error]
                         (log/error :db-sync/index-error error)
-                        (p/resolved {:response (http/error-response (str "server error: " error) 500)
+                        (p/resolved {:response (http/error-response "server error" 500)
                                      :timing {:access-ok? false
                                               :cache-hit? false}}))))))))))
 
