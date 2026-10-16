@@ -855,6 +855,7 @@ abc
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        missing-mixed-embed-uuid #uuid "66666666-6666-4666-8666-666666666666"
         target-uuid #uuid "22222222-2222-2222-2222-222222222222"
         empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
         empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
@@ -863,6 +864,9 @@ abc
                          (str "Plain pre-block\n"
                               "- Missing ref ((" missing-uuid "))\n"
                               "- {{embed ((" missing-embed-uuid "))}}\n"
+                              "- Missing mixed {{embed [[" missing-mixed-embed-uuid "]]}}\n"
+                              "  - Original child\n"
+                              "- Forward embed {{embed [[" target-uuid "]]}}\n"
                               "- Existing ref ((" target-uuid "))\n"
                               "- ((" empty-title-property-uuid "))\n"
                               "  heading:: true\n"
@@ -879,6 +883,8 @@ abc
             missing-block (db-test/find-block-by-content @conn #"Missing ref")
             existing-block (db-test/find-block-by-content @conn #"Existing ref")
             target-block (db-test/find-block-by-content @conn "Target block")
+            missing-mixed-block (db-test/find-block-by-content @conn "Missing mixed")
+            forward-embed-block (db-test/find-block-by-content @conn "Forward embed")
             empty-title-blocks (blocks-by-title @conn "")
             empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
             empty-title-parent-block (some #(when (some (fn [child]
@@ -895,6 +901,13 @@ abc
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid missing-mixed-embed-uuid]))
+          "Missing UUID embeds do not leave placeholder entities")
+      (is (= ["Original child"] (mapv :block/title (ordered-children missing-mixed-block)))
+          "Only generated children for missing embeds are removed")
+      (is (= [(:db/id target-block)]
+             (mapv (comp :db/id :block/link) (ordered-children forward-embed-block)))
+          "Embeds of targets imported later are retained")
       (is (nil? (d/entity @conn [:block/uuid missing-embed-uuid]))
           "Missing OG block embeds do not leave placeholder entities")
       (is (empty? (d/q '[:find ?b
@@ -906,7 +919,7 @@ abc
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 3 (count empty-title-blocks))
+      (is (= 3 (count (remove :block/link empty-title-blocks)))
           "Blocks whose titles become empty after cleanup are preserved")
       (is (true? (:logseq.property/heading empty-title-property-block))
           "Empty-title blocks keep imported heading properties")

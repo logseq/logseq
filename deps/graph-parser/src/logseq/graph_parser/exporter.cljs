@@ -2365,9 +2365,12 @@
                    (add-missing-timestamps options)
                    (dissoc :block/format :block.temp/ast-blocks))
         embed-links (:block.temp/embed-links block')
-        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-links) options)]
+        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-links) options)
+        embed-children (mapv #(build-embed-child-block final-block %) embed-links)]
+    (when (seq embed-children)
+      (swap! (:embed-child-uuids import-state) into (map :block/uuid embed-children)))
     (concat properties-tx asset-blocks-tx [final-block]
-            (map #(build-embed-child-block final-block %) embed-links)
+            embed-children
             code-children-tx)))
 
 (defn- import-progress!
@@ -2865,7 +2868,9 @@
    ;; Populated as files are imported and used to drop conflicting alias declarations.
    :alias-owners (atom {})
    ;; Block uuids referenced during import; used for targeted missing-ref cleanup.
-   :placeholder-ref-uuids (atom #{})})
+   :placeholder-ref-uuids (atom #{})
+   ;; Generated embed children can be removed when their targets remain unresolved.
+   :embed-child-uuids (atom #{})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
@@ -3131,7 +3136,8 @@
 (defn- track-placeholder-ref-uuids!
   [{:keys [placeholder-ref-uuids] :as _import-state} blocks-tx]
   (when-let [ref-uuids (seq (into #{}
-                                  (comp (mapcat :block/refs)
+                                  (comp (mapcat #(cond-> (vec (:block/refs %))
+                                                  (:block/link %) (conj (:block/link %))))
                                         (filter block-uuid-ref?)
                                         (map second))
                                   blocks-tx))]
