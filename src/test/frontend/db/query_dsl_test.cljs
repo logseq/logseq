@@ -853,7 +853,7 @@
     "Invalid query: [((page-tags \"[[nope]]\"))] is not a query form"
 
     "(between [[A]] B)"
-    "Invalid query: between needs two dates"
+    "Invalid query: between needs two dates, or created-at or updated-at and one or two dates"
 
     "(and (and 3.14) \"x\")"
     "Invalid query: 3.14 is not a query form"
@@ -862,7 +862,10 @@
     "Invalid query: ((task)) is not a query form"
 
     "(between (page \"\") (sample (priority #nope \"alpha\")))"
-    "Invalid query: between needs two dates"))
+    "Invalid query: between needs two dates, or created-at or updated-at and one or two dates"
+
+    "(sort-by created-at)"
+    "Invalid query: (sort-by created-at) is not a query form"))
 
 (deftest custom-query-test
   (load-test-files
