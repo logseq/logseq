@@ -1080,6 +1080,11 @@ let pv_dyn (st : S.t) : t =
    topmost visible menu, looping; Enter selects the highlighted item.
    Hover shares the same data-highlighted marker via cm_highlight. *)
 let menu_keydown (ev : Ui_services.ev) =
+  if not (match ev.Ui_services.key with
+    | Some ("ArrowDown" | "ArrowUp" | "Home" | "End" | "Enter") -> true
+    | _ -> false)
+  then false
+  else
   let menus = Ui_services.dom_query_all ".ui__dropdown-menu-content" in
   let menu =
     menus

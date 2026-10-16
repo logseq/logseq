@@ -127,3 +127,73 @@ let () =
   List.iter prerr_endline (List.rev !failures);
   check "Native timer cancellation and ownership" (!failures = []);
   print_endline "native timer cancellation and ownership: OK"
+
+
+(* Unsupported menu keys must not scan the document during text input. *)
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  let queries = ref 0 and menus = ref [] and scan_document = ref false in
+  let dom = { Ui_dom_native.ops with query_all = (fun selector ->
+    incr queries;
+    if !scan_document then Ui_dom_native.ops.query_all selector else !menus) } in
+  Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
+    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let event key = Ui_dom_native.ev_of (Js.Json.JObject
+    (match key with None -> [] | Some key -> ["key", Js.Json.JString key])) in
+  List.iter (fun key ->
+    queries := 0;
+    expect "Unsupported menu input was consumed" (not (Popups_view.menu_keydown (event key)));
+    expect "Unsupported menu input scanned the document" (!queries = 0))
+    [None; Some "a"; Some "你"; Some "Backspace"; Some "Escape";
+     Some "Tab"; Some "ArrowLeft"; Some "ArrowRight"; Some "Shift"; Some "Dead"];
+  List.iter (fun key ->
+    queries := 0;
+    expect "A missing menu consumed navigation" (not (Popups_view.menu_keydown (event (Some key))));
+    expect "Supported menu navigation did not query the menu" (!queries = 1))
+    ["ArrowDown"; "ArrowUp"; "Home"; "End"; "Enter"];
+  let focused = ref (-1) and clicked = ref 0 in
+  let item index =
+    let attrs = Hashtbl.create 4 in
+    let base = Ui_dom_native.el_of (Js.Json.JObject []) in
+    { base with Ui_services.attr = (Hashtbl.find_opt attrs);
+      set_attr = Hashtbl.replace attrs; rm_attr = Hashtbl.remove attrs;
+      focus = (fun () -> focused := index);
+      scroll_into_view_nearest = (fun () -> ());
+      click = (fun () -> incr clicked) } in
+  let items = [item 0; item 1] in
+  let base = Ui_dom_native.el_of (Js.Json.JObject []) in
+  let menu = {base with Ui_services.rect = (fun () -> 0.,0.,100.,80.);
+    query_all = (fun _ -> items)} in
+  menus := [menu];
+  List.iter (fun (key,index) ->
+    expect "Menu navigation was not consumed" (Popups_view.menu_keydown (event (Some key)));
+    expect "Menu navigation selected the wrong item" (!focused = index))
+    ["ArrowDown",0; "ArrowUp",1; "Home",0; "End",1];
+  expect "Enter did not activate the highlighted menu item"
+    (Popups_view.menu_keydown (event (Some "Enter")) && !clicked = 1);
+  menus := [{menu with Ui_services.rect = (fun () -> 0.,0.,0.,0.)}];
+  expect "A hidden menu consumed navigation"
+    (not (Popups_view.menu_keydown (event (Some "ArrowDown"))));
+  menus := [{menu with Ui_services.query_all = (fun _ -> [])}];
+  expect "An empty menu consumed navigation"
+    (not (Popups_view.menu_keydown (event (Some "ArrowDown"))));
+  Popups_view.cm_hi_el := None;
+  scan_document := true;
+  let nodes = List.init 2048 (fun _ -> Js.Json.JObject
+    ["className",Js.Json.JString "ls-block"]) in
+  Dom_ext.doc_elements_provider := (fun () -> nodes);
+  let ev = event (Some "a") in
+  ignore (Popups_view.menu_keydown ev);
+  queries := 0;
+  Gc.full_major ();
+  let before = Gc.allocated_bytes () in
+  for _ = 1 to 200 do ignore (Popups_view.menu_keydown ev) done;
+  let allocated = Gc.allocated_bytes () -. before in
+  Printf.printf "ordinary menu input: %.0f bytes for 200 keys, %d document queries\n%!"
+    allocated !queries;
+  expect "Ordinary typing allocates menu snapshots" (allocated < 65_536. && !queries = 0);
+  Dom_ext.doc_elements_provider := (fun () -> []);
+  List.iter prerr_endline (List.rev !failures);
+  check "Menu keyboard dispatch and allocation" (!failures = []);
+  print_endline "native menu keyboard dispatch: OK")
