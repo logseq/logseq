@@ -678,29 +678,6 @@
   flex-shrink: 0;
 }
 
-/* the LUI menu_item kind always emits a .lui-menu-item-icon slot; when no
-   named icon is set it stays invisible but still takes layout space,
-   shifting labels right of the cljs layout — collapse it entirely */
-.ui__dropdown-menu-content .lui-menu-item-icon:not([data-name]),
-
-/* same for the check slot: cljs menus have no trailing 16px box — the
-   invisible check would push the shortcut/chevron off the right edge */
-.ui__dropdown-menu-content .lui-menu-item-check,
-
-/* cljs items are flex rows with normal (0) gap; spacing between icon and
-   label comes from the icon's own margin (gap-1 = 4px) */
-.ui__dropdown-menu-content .lui-menu-item,
-
-/* cljs shui dialog title: text-lg font-semibold leading-none
-   tracking-tight — now typed on the heading emitters */
-
-/* master's untitled dialogs still mount a hidden h2.ui__dialog-title —
-   display:none removes it from the content grid so it contributes no
-   row gap before .ui__dialog-main-content */
-
-/* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
-   dialog open */
-
 /* dialog kind chrome: the kit .lui-dialog centers the card but owns no
    padding/gap/width — cljs ui__dialog-content was gap 1rem, padding
    1.5rem, w-full max-w-2xl lg:max-w-3xl */
@@ -2210,15 +2187,6 @@ select.form-select {
 .ls-vf-logic:hover {
   opacity: 1;
 }
-
-/* .page-inner is display:grid — a child with the default min-width:auto
-   expands the auto track to the objects table's max-content (~1250px),
-   so the whole tab panel overflowed the page column. min-width:0 lets
-   the chain shrink and the inner .ls-table-rows handle x-scrolling */
-.page-inner > .page-tabs,
-.page-tabs > .w-full,
-.ui__tabs-content,
-.ui__tabs-content > .ml-1,
 
 /* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
    kept in flow here so the rows list needs no top offset) —
