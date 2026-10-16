@@ -105,3 +105,45 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest third-party-oauth-token-predicate-test
+  (let [env #js {"COGNITO_CLIENT_ID" "app-client"
+                 "COGNITO_CLIENT_IDS" "chatgpt-client, other-client"}]
+    ;; a token carrying a logseq/* scope
+    (is (true? (auth/third-party-oauth-token? #js {"sub" "u1" "scope" "logseq/read"} env)))
+    (is (true? (auth/third-party-oauth-token? #js {"sub" "u1" "scope" "openid logseq/write"} env)))
+    ;; a token issued to an additional (third-party) client id
+    (is (true? (auth/third-party-oauth-token? #js {"sub" "u1" "client_id" "chatgpt-client"} env)))
+    (is (true? (auth/third-party-oauth-token? #js {"sub" "u1" "aud" "other-client"} env)))
+    ;; the app's own client and unscoped tokens stay on the native surface
+    (is (false? (auth/third-party-oauth-token? #js {"sub" "u1" "client_id" "app-client"} env)))
+    (is (false? (auth/third-party-oauth-token? #js {"sub" "u1" "scope" "openid profile"} env)))
+    (is (false? (auth/third-party-oauth-token? #js {"sub" "u1"} env)))
+    (is (false? (auth/third-party-oauth-token? nil env)))
+    ;; the primary client id listed again among the additional ids
+    (is (false? (auth/third-party-oauth-token?
+                 #js {"sub" "u1" "client_id" "app-client"}
+                 #js {"COGNITO_CLIENT_ID" "app-client"
+                      "COGNITO_CLIENT_IDS" "app-client, chatgpt-client"})))
+    ;; PAT claims carry a scope of their own and a pat_id
+    (is (false? (auth/third-party-oauth-token?
+                 #js {"sub" "u1" "scope" "logseq/read" "pat_id" "pat-1" "pat_graph_id" "graph-1"}
+                 env)))))
+
+(deftest auth-claims-falls-back-only-on-jwks-unavailability-test
+  (async done
+         (let [token "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1MSJ9.signature"
+               request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" (str "Bearer " token)}})
+               env #js {"DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" "true"}]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_token _env]
+                                 ;; a fetch TypeError, not the "jwks" ex-info
+                                 (p/rejected (js/Error. "Failed to parse URL")))]
+                 (p/let [claims (auth/auth-claims request env)]
+                   (is (nil? claims))
+                   (is (= "u1" (aget (auth/unsafe-jwt-claims token) "sub")))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
