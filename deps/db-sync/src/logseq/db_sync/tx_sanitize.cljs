@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.frontend.kv-entity :as kv-entity]))
+            [logseq.db.frontend.kv-entity :as kv-entity]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private retract-entity-ops
   #{:db/retractEntity :db.fn/retractEntity})
@@ -188,6 +189,267 @@
                                 [(second item) (nth item 2) (nth item 3)])))
               tx-data))))
 
+(defn- temp-entity-ref?
+  [entity-ref]
+  (or (and (integer? entity-ref) (neg? entity-ref))
+      (string? entity-ref)))
+
+(defn- lookup-uuid
+  [v]
+  (cond
+    (uuid? v)
+    v
+
+    (and (vector? v)
+         (= 2 (count v))
+         (= :block/uuid (first v))
+         (uuid? (second v)))
+    (second v)
+
+    :else
+    nil))
+
+(defn- entity-ref-forms
+  [entity-ref]
+  (when (some? entity-ref)
+    (let [block-uuid (lookup-uuid entity-ref)]
+      (cond-> #{entity-ref}
+        block-uuid (conj block-uuid [:block/uuid block-uuid] (str block-uuid))))))
+
+(defn- item-entity-ref
+  [item]
+  (cond
+    (and (map? item) (contains? item :db/id))
+    (:db/id item)
+
+    (retract-entity-op? item)
+    (second item)
+
+    (entity-op? item)
+    (second item)
+
+    :else
+    nil))
+
+(defn- user-or-plugin-property-ident?
+  [attr]
+  (and (qualified-keyword? attr)
+       (let [attr-ns (namespace attr)]
+         (and (some? attr-ns)
+              (not (contains? db-property/logseq-property-namespaces attr-ns))
+              (or (db-property/plugin-property? attr)
+                  (db-property/user-property-namespace? attr-ns))))))
+
+(defn- tx-created-idents
+  [tx-data]
+  (into #{}
+        (keep (fn [item]
+                (cond
+                  (and (map? item) (qualified-keyword? (:db/ident item)))
+                  (:db/ident item)
+
+                  (and (entity-op? item)
+                       (= :db/add (first item))
+                       (= :db/ident (nth item 2))
+                       (qualified-keyword? (nth item 3)))
+                  (nth item 3))))
+        tx-data))
+
+(defn- tx-created-block-uuids
+  [tx-data]
+  (into #{}
+        (keep (fn [item]
+                (cond
+                  (and (map? item) (uuid? (:block/uuid item)))
+                  (:block/uuid item)
+
+                  (and (entity-op? item)
+                       (= :db/add (first item))
+                       (= :block/uuid (nth item 2))
+                       (uuid? (nth item 3)))
+                  (nth item 3))))
+        tx-data))
+
+(defn- deleted-user-property-ident?
+  [db created-idents attr]
+  (and (user-or-plugin-property-ident? attr)
+       (not (contains? created-idents attr))
+       (nil? (d/entity db attr))))
+
+(defn- missing-property-attrs
+  [db created-idents tx-data]
+  (into #{}
+        (mapcat (fn [item]
+                  (cond
+                    (map? item)
+                    (filter #(deleted-user-property-ident? db created-idents %)
+                            (keys item))
+
+                    (entity-op? item)
+                    (let [attr (nth item 2)]
+                      (when (deleted-user-property-ident? db created-idents attr)
+                        [attr]))
+
+                    :else
+                    nil)))
+        tx-data))
+
+(defn- missing-property-target?
+  [db created-idents created-uuids v]
+  (let [ident (cond
+                (qualified-keyword? v) v
+                (and (map? v) (qualified-keyword? (:db/ident v))) (:db/ident v)
+                :else nil)
+        block-uuid (lookup-uuid v)]
+    (cond
+      (contains? created-idents ident)
+      false
+
+      (and block-uuid (contains? created-uuids block-uuid))
+      false
+
+      (temp-entity-ref? v)
+      false
+
+      ident
+      (deleted-user-property-ident? db created-idents ident)
+
+      :else
+      (nil? (entity-ref->eid db v)))))
+
+(defn- new-in-tx-entity-ref?
+  [created-uuids entity-ref]
+  (or (temp-entity-ref? entity-ref)
+      (let [block-uuid (lookup-uuid entity-ref)]
+        (boolean (and block-uuid (contains? created-uuids block-uuid))))))
+
+(defn- collect-orphan-value-block-refs
+  [db created-idents missing-attrs created-uuids tx-data]
+  (into #{}
+        (mapcat
+         (fn [item]
+           (cond
+             (and (map? item)
+                  (contains? item :logseq.property/created-from-property)
+                  (missing-property-target?
+                   db created-idents created-uuids
+                   (:logseq.property/created-from-property item)))
+             (mapcat entity-ref-forms [(:db/id item) (:block/uuid item)])
+
+             (and (entity-op? item)
+                  (= :db/add (first item))
+                  (= :logseq.property/created-from-property (nth item 2))
+                  (missing-property-target?
+                   db created-idents created-uuids (nth item 3)))
+             (entity-ref-forms (second item))
+
+             (and (entity-op? item)
+                  (= :db/add (first item))
+                  (contains? missing-attrs (nth item 2))
+                  (new-in-tx-entity-ref? created-uuids (nth item 3)))
+             (entity-ref-forms (nth item 3))
+
+             (map? item)
+             (mapcat (fn [attr]
+                       (when (and (contains? missing-attrs attr)
+                                  (new-in-tx-entity-ref? created-uuids (get item attr)))
+                         (entity-ref-forms (get item attr))))
+                     (keys item))
+
+             :else
+             nil)))
+        tx-data))
+
+(defn- item-entity-aliases
+  [item]
+  (let [e (item-entity-ref item)
+        block-uuid (cond
+                     (and (map? item) (uuid? (:block/uuid item)))
+                     (:block/uuid item)
+
+                     (and (entity-op? item)
+                          (= :db/add (first item))
+                          (= :block/uuid (nth item 2))
+                          (uuid? (nth item 3)))
+                     (nth item 3)
+
+                     :else
+                     nil)
+        ident (cond
+                (and (map? item) (qualified-keyword? (:db/ident item)))
+                (:db/ident item)
+
+                (and (entity-op? item)
+                     (= :db/add (first item))
+                     (= :db/ident (nth item 2))
+                     (qualified-keyword? (nth item 3)))
+                (nth item 3)
+
+                :else
+                nil)]
+    (cond-> (or (entity-ref-forms e) #{})
+      block-uuid (into (entity-ref-forms block-uuid))
+      ident (conj ident))))
+
+(defn- expand-orphan-refs
+  [tx-data orphan-refs]
+  (loop [refs orphan-refs]
+    (let [refs' (reduce
+                 (fn [acc item]
+                   (let [aliases (item-entity-aliases item)]
+                     (if (some acc aliases)
+                       (into acc aliases)
+                       acc)))
+                 refs
+                 tx-data)]
+      (if (= refs refs')
+        refs
+        (recur refs')))))
+
+(defn- orphan-item?
+  [orphan-refs item]
+  (boolean (some orphan-refs (item-entity-aliases item))))
+
+(defn- rewrite-or-drop-missing-property-item
+  [missing-attrs orphan-refs item]
+  (cond
+    (orphan-item? orphan-refs item)
+    nil
+
+    (and (entity-op? item)
+         (contains? missing-attrs (nth item 2)))
+    nil
+
+    (map? item)
+    (let [stripped (into {}
+                         (remove (fn [[k _]] (contains? missing-attrs k)))
+                         item)]
+      (when (seq (dissoc stripped :db/id))
+        stripped))
+
+    :else
+    item))
+
+(defn- drop-ops-for-missing-properties
+  "Delete wins: drop property-value ops (and value blocks created only for that
+  property) when the user/plugin property entity is gone on the server and is
+  not being created in this tx. Built-in properties and non-property attrs are
+  left alone."
+  [db tx-data]
+  (let [created-idents (tx-created-idents tx-data)
+        created-uuids (tx-created-block-uuids tx-data)
+        missing-attrs (missing-property-attrs db created-idents tx-data)
+        orphan-refs (expand-orphan-refs
+                     tx-data
+                     (collect-orphan-value-block-refs
+                      db created-idents missing-attrs created-uuids tx-data))]
+    (if (and (empty? missing-attrs) (empty? orphan-refs))
+      tx-data
+      (keep (fn [item]
+              (rewrite-or-drop-missing-property-item
+               missing-attrs orphan-refs item))
+            tx-data))))
+
 (defn- touched-entity-eid
   [db item]
   (cond
@@ -226,6 +488,7 @@
                     drop-ops-targeting-retracted-entities?
                     (drop-ops-targeting-retracted-entities db))
          tx-data* (drop-conflicted-encrypted-retracts tx-data*)
+         tx-data* (drop-ops-for-missing-properties db tx-data*)
          tx-data* (vec tx-data*)
          retract-eids (->> tx-data*
                            (keep (fn [item]
