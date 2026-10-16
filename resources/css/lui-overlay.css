@@ -2739,12 +2739,11 @@ html[data-theme=light] {
 }
 
 /* ---- select dropdown parity (cljs .ui__select-content) ------------- */
-/* cljs select menus grow to the radix available height; the kit's 18rem
-   cap clips ~8 items and draws a hard edge. The check sits first (left)
-   in cljs, selection shows only the check — no accent fill — and the
-   keyboard/pointer highlight uses muted, not accent. */
-.lui-popup-positioner > .lui-dropdown-menu.ls-select-content {
-  max-height: var(--lui-popup-available-height, calc(100vh - 1rem));
+/* Menu surfaces share the kit's scrollable height cap. Select checks sit
+   before the label, selection has no accent fill, and keyboard/pointer
+   highlighting uses muted rather than accent. */
+.lui-popup-positioner > .lui-popover[role="menu"] {
+  max-height: min(18rem, var(--lui-popup-available-height, calc(100vh - 1rem)));
 }
 .ls-select-content .lui-menu-item { min-height: 0; }
 .ls-select-content .lui-menu-item-check { order: -1; }
