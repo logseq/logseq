@@ -4,6 +4,53 @@ open Lui_protocol
 
 let check message condition = if not condition then failwith message
 
+let () =
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  let shared = Js.Json.JString "row item" in
+  let element = Js.Json.JObject
+    ["tag",Js.Json.JString "div"; "class",shared; "class",Js.Json.JString "later"] in
+  expect "Property lookup changed duplicate-key precedence"
+    (Dom_ext.prop "class" element == shared);
+  expect "Property lookup changed missing fields" (Dom_ext.prop "missing" element = Js.Json.JNull);
+  List.iter (fun value ->
+    expect "Property lookup accepts a nonobject as an object"
+      (Dom_ext.prop "class" value = Js.Json.JNull))
+    [Js.Json.JNull; Js.Json.JString "text"; Js.Json.JBoolean true; Js.Json.JArray [||]];
+  let measure name f =
+    Gc.full_major ();
+    let before = Gc.allocated_bytes () in
+    for _ = 1 to 10000 do ignore (Sys.opaque_identity (f ())) done;
+    let per_read = (Gc.allocated_bytes () -. before) /. 10000. in
+    Printf.printf "native %s allocated %.3f bytes/read\n%!" name per_read;
+    expect (name ^ " allocates temporary property wrappers") (per_read < 1.) in
+  measure "raw property" (fun () -> Dom_ext.prop "class" element);
+  measure "plain class" (fun () -> Dom_ext.class_string element);
+  expect "Class matching lost token boundaries"
+    (Dom_ext.has_class element "row" && Dom_ext.has_class element "item"
+     && not (Dom_ext.has_class element "row item") && not (Dom_ext.has_class element "ow"));
+  List.iter (fun class_value ->
+    let element = Js.Json.JObject
+      ["class",class_value; "attrs",Js.Json.JObject ["class",Js.Json.JString "from-attrs"]] in
+    expect "Class lookup lost attributes when its direct value is empty or invalid"
+      (Dom_ext.class_string element = "from-attrs"))
+    [Js.Json.JNull; Js.Json.JNumber 2.; Js.Json.JString ""];
+  expect "Class lookup changed missing class semantics"
+    (Dom_ext.class_string (Js.Json.JObject []) = "");
+  let node = 987654 in
+  let element = Js.Json.JObject ["node-id",Js.Json.JNumber (float node); "class",shared] in
+  Fun.protect ~finally:(fun () -> Hashtbl.remove Dom_ext.overlays node) (fun () ->
+    let overlay = Dom_ext.overlay_get node in
+    overlay.Dom_ext.o_class <- Some "replacement";
+    expect "A class lookup ignored an overlay replacement"
+      (Dom_ext.has_class element "replacement" && not (Dom_ext.has_class element "row"));
+    overlay.o_class <- Some "";
+    expect "An empty class overlay exposed the snapshot class"
+      (Dom_ext.class_string element = ""));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native property lookup semantics and allocation" (!failures = []);
+  print_endline "native property lookup allocation: OK"
+
 let transport_batches () =
   let payload = "\n\t\"你好\"\\" ^ String.make 1024 'x' in
   let children = List.concat_map (fun i ->

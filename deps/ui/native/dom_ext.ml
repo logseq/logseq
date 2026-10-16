@@ -9,12 +9,13 @@ type element = Js.Json.t
 type event = Js.Json.t
 type rect = Js.Json.t
 
+let rec find_prop name = function
+  | [] -> Js.Json.JNull
+  | (key,value) :: rest -> if key = name then value else find_prop name rest
+
 let prop name (j : Js.Json.t) : Js.Json.t =
   match j with
-  | Js.Json.JObject kvs -> (
-      match List.assoc_opt name kvs with
-      | Some v -> v
-      | None -> Js.Json.JNull)
+  | Js.Json.JObject kvs -> find_prop name kvs
   | _ -> Js.Json.JNull
 
 let str_prop name j = Js.Json.decodeString (prop name j)
@@ -87,8 +88,8 @@ let class_string (el : element) =
     match !overlay_class_fn el with
     | Some c -> c
     | None -> (
-        match str_prop "class" el with
-        | Some s when s <> "" -> s
+        match prop "class" el with
+        | Js.Json.JString s when s <> "" -> s
         | _ -> (
             match el_attr el "class" with
             | Some s -> s
