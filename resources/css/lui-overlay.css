@@ -2707,8 +2707,6 @@ html[data-theme=light] {
 .lui-popup-positioner > .lui-popover[role="menu"] {
   max-height: min(18rem, var(--lui-popup-available-height, calc(100vh - 1rem)));
 }
-.ls-select-content .lui-menu-item { min-height: 0; }
-.ls-select-content .lui-menu-item-check { order: -1; }
 .ls-select-content .lui-menu-item[data-selected] {
   background: transparent;
   color: inherit;
@@ -2841,21 +2839,13 @@ html[data-theme=light] {
   flex: 0 1 auto !important;
 }
 
-/* menu_item always mounts icon/check slots (18px each) even when the
+/* menu_item always mounts icon/check slots even when the
    item has no icon and is unchecked — cljs dropdown-menu-item renders
    only label+children, so hide the empty slots or they squeeze the
    label into ellipsis (e.g. tag menu "Go to #…" items) */
 .lui-menu-item > .lui-menu-item-icon:empty:not([data-name]),
-.lui-menu-item > .lui-menu-item-check:empty {
+.lui-menu-item:not([data-selection-placement]) > .lui-menu-item-check:empty {
   display: none;
-}
-
-/* ...except select menus, where cljs keeps a check/indicator column on
-   every item for alignment (radix Select.ItemIndicator, before the
-   label — below the kit's -3/-2 icon/label order values) */
-.ls-select-content .lui-menu-item > .lui-menu-item-check {
-  display: flex;
-  order: -4;
 }
 
 /* cljs datepicker renders light chrome even under dark theme (the

@@ -1,7 +1,5 @@
-(* Shared ui__dropdown-menu-item markup — the cljs shui dropdown-menu-item
-   DOM. The visuals live in lui-overlay.css (styled on the ui__* classes
-   and the [role]/[data-*] hooks); the emit side carries only the
-   semantic class names. *)
+(* Shared dropdown-menu rows use typed layout and typography on every host.
+   Semantic classes retain application-specific decoration. *)
 
 open Lui_elements
 
@@ -29,9 +27,13 @@ let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ?(after = []) ?(data_attrs = []) ?icon ~label ~on_click () =
   ignore attrs;
-  menu_item ~key ~style_class:cls ~data_attrs ~text:label ?icon
-    ~on_press:(fun _ -> on_click ())
-    (before @ after)
+  Ui_components.with_props
+    [ Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.line_height "1.25rem" ]
+    (menu_item ~key ~style_class:cls ~data_attrs ~text:label ?icon
+       ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
+       ~on_press:(fun _ -> on_click ())
+       (before @ after))
 
 (* retained-tree separator — the old lui-core rule carried height:1px,
    margin:0.25rem -0.25rem, background:hsl(var(--muted)); ls-property-

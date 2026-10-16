@@ -457,7 +457,7 @@ let textish = function
   | _ -> false
 
 let pad_size store id ~scale (width, height) =
-  let placement = Lui_paint.text_placement_of store id in
+  let placement = Lui_paint.text_measure_placement_of store id in
   ( width +. ((placement.tp_pad_left +. placement.tp_pad_right) *. scale),
     height +. ((placement.tp_pad_top +. placement.tp_pad_bottom) *. scale) )
 

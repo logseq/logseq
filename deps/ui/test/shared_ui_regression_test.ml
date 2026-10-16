@@ -91,6 +91,14 @@ let run_views ~registry ~profile ~finish =
   eqi "enabled menu action is invoked once" 1 !actions;
   check "enabled menu action closes its menu" (menu_nodes () = []);
   ignore (Lui_app.dispose menu.S.app);
+  let standard_item = mount (fun _ ->
+      Menu_item.el ~key:"parity-menu-item" ~icon:(Icons.name_ref "search")
+        ~label:"Action" ~on_click:(fun () -> ()) ()) in
+  let standard_row = List.find (fun n -> n.M.kind = "menu-item") (nodes standard_item) in
+  check "shared menu rows carry typed icon spacing"
+    (Hashtbl.find_opt standard_row.M.props "gap" = Some (P.IntValue 4)
+     && Hashtbl.find_opt standard_row.M.props "padding-horizontal" = Some (P.IntValue 8));
+  ignore (Lui_app.dispose standard_item.S.app);
   let language_view _ ctx parent =
     let label = Signal.state ctx.Lui_ui.ui_scheduler "English" in
     Settings_view.lang_trigger ~ctx ~key:"parity-language" ~height:40
@@ -101,6 +109,12 @@ let run_views ~registry ~profile ~finish =
   S.press language trigger.M.id;
   check "settings language picker opens"
     (List.exists (fun n -> n.M.kind = "dropdown-menu") (nodes language));
+  let options = List.filter (fun n -> n.M.kind = "menu-item") (nodes language) in
+  check "language options reserve a leading selection slot on every host"
+    (options <> [] && List.for_all (fun n ->
+         M.string_prop n "selection-placement" = Some "leading"
+         && Hashtbl.find_opt n.M.props "padding-horizontal" = Some (P.IntValue 8)
+         && Hashtbl.find_opt n.M.props "gap" = Some (P.IntValue 8)) options);
   ignore (Lui_app.dispose language.S.app);
   let reopened = mount language_view in
   check "reopening settings starts with its language picker closed"

@@ -87,23 +87,25 @@ let lang_menu ~key st mst =
     ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
-    (* radix select popper anchors the menu ~2px right of the kit's
-       base anchor (measured: cljs content x 586.33 vs kit 584.33) *)
-    ~data_attrs:[ "style", "margin-left: 2px" ]
     (List.mapi
        (fun i (code, label) ->
          let label = Ui_services.literal_text label in
-         Lui_elements.menu_item
-           ~key:(Printf.sprintf "lmi-%s-%d" key i)
-           ~text:label
-           ~selected:(code = current_lang ())
-           ~checked:(code = current_lang ())
-           ~min_height:32
-           ~on_press:(fun _ev ->
-             set_language code;
-             Signal.set st label;
-             lang_menu_close mst)
-           [])
+         Ui_components.with_props
+           [ Ui_components.Prop.font_size "0.875rem"
+           ; Ui_components.Prop.line_height "1.25rem"
+           ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
+           (Lui_elements.menu_item
+              ~key:(Printf.sprintf "lmi-%s-%d" key i)
+              ~text:label ~selection_placement:`leading
+              ~selected:(code = current_lang ())
+              ~gap:8 ~padding_horizontal:8 ~padding_vertical:6
+              ~corner_radius:4 ~min_height:32
+              ~foreground:"hsl(var(--popover-foreground))"
+              ~on_press:(fun _ev ->
+                set_language code;
+                Signal.set st label;
+                lang_menu_close mst)
+              []))
        languages)
 
 (* li > i(mode swatch) + strong — list_item ~on_press; the .active
@@ -161,7 +163,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~(height : int) ~st =
           (Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
           ~container_relative_frame:`horizontal
-          ~width:256 ~height
+          ~width:256 ~height ~corner_radius:6
           ~background:"hsl(var(--background))"
           ~border_width:1 ~border_color:"hsl(var(--border))"
           ~on_press:(fun _ev ->

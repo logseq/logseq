@@ -2271,7 +2271,7 @@ let () =
         Lui_scene.rect (100. *. scale) (200. *. scale) (200. *. scale)
           (60. *. scale)
       in
-      let expect l t r b =
+      let expect ~measured:(ml, mt, mr, mb) l t r b =
         let layout, x, y =
           Text_engine.text_layout engine 830001 region "Undo"
         in
@@ -2284,12 +2284,12 @@ let () =
                 /. 2.)
           < 0.01);
         let w, h = Text_engine.measure store 830001 ~scale in
-        check "Native field measurement ignores horizontal edge padding"
-          (abs_float (w -. ((layout.lay_width +. l +. r) *. scale)) < 0.01);
-        check "Native field measurement ignores vertical edge padding"
-          (abs_float (h -. ((layout.lay_height +. t +. b) *. scale)) < 0.01)
+        check "Native field content measurement duplicates horizontal layout padding"
+          (abs_float (w -. ((layout.lay_width +. ml +. mr) *. scale)) < 0.01);
+        check "Native field content measurement duplicates vertical layout padding"
+          (abs_float (h -. ((layout.lay_height +. mt +. mb) *. scale)) < 0.01)
       in
-      expect 10. 6. 10. 6.;
+      expect ~measured:(0., 0., 0., 0.) 10. 6. 10. 6.;
       apply
         [
           SetProp (830001, left, IntValue 28);
@@ -2297,13 +2297,13 @@ let () =
           SetProp (830001, top, IntValue 3);
           SetProp (830001, bottom, IntValue 9);
         ];
-      expect 28. 3. 8. 9.;
+      expect ~measured:(0., 0., 0., 0.) 28. 3. 8. 9.;
       apply
         [
           SetProp (830001, left, IntValue 0);
           SetProp (830001, bottom, IntValue 0);
         ];
-      expect 0. 3. 8. 0.;
+      expect ~measured:(0., 0., 0., 0.) 0. 3. 8. 0.;
       apply
         [
           RemoveProp (830001, left);
@@ -2311,7 +2311,11 @@ let () =
           RemoveProp (830001, top);
           RemoveProp (830001, bottom);
         ];
-      expect 10. 6. 10. 6.)
+      expect ~measured:(0., 0., 0., 0.) 10. 6. 10. 6.;
+      apply [RemoveProp (830001, PaddingValue);
+             RemoveProp (830001, PaddingHorizontal);
+             RemoveProp (830001, PaddingVertical)];
+      expect ~measured:(10., 6., 10., 6.) 10. 6. 10. 6.)
     [ 1.; 2. ];
   print_endline "native text padding edges: OK"
 
@@ -3464,3 +3468,32 @@ let () =
         [ "light"; "dark"; "system" ];
       print_endline "native bundled theme PNGs: OK")
     (Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR")
+
+let () =
+  List.iter (fun scale ->
+      let store = Lui_store.create () in
+      List.iter (Lui_store.apply_op store)
+        [CreateNode (850000, Column); CreateNode (850001, MenuItem);
+         SetProp (850001, TextValue, StringValue "English");
+         SetProp (850001, FontSize, StringValue "14px");
+         SetProp (850001, LineHeight, StringValue "20px");
+         SetProp (850001, PaddingHorizontal, IntValue 8);
+         SetProp (850001, PaddingVertical, IntValue 6);
+         InsertChild (850000, 850001, 0)];
+      let scene = Lui_scene.create
+        ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64) in
+      let engine = Text_engine.create ~scene:(fun () -> scene)
+        ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      let layout = Lui_layout.create () in
+      Lui_layout.sync ~scale ~width:800. ~height:600. layout store
+        ~measure:(fun id text width _ ->
+          Some (Text_engine.pad_size store id ~scale
+            (Text_engine.measure_text ~width:(Host_interaction.measure_width width) engine id text)));
+      let row = Option.get (Lui_layout.rect layout 850001) in
+      Printf.printf "native menu row scale=%.0f height=%.1f expected=%.1f\n%!"
+        scale row.Lui_scene.h (32. *. scale);
+      check "Menu row counts typed vertical padding twice"
+        (abs_float (row.Lui_scene.h -. 32. *. scale) < 0.01))
+    [1.; 2.];
+  print_endline "native menu intrinsic padding: OK"
