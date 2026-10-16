@@ -11,6 +11,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
@@ -724,3 +725,13 @@
 
      [["pages/page2.md" "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4\n"]]
      [{:path "pages/page2.md" :content "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4\n" :names ["page2"] :format :markdown}])))
+
+(deftest export-html-quote
+  (testing "a quote holding a paragraph"
+    (is (= [:ul [:li "a" [:blockquote [:p "q" [:br]]]]]
+           (export-html/export-hiccup "- a\n  > q" :markdown {}))))
+  (testing "a quote holding a list does not fail the export"
+    (are [content] (= [:ul [:li "a" [:blockquote [:ul [:li [:p "x"]] [:li [:p "y"]]]]]]
+                      (export-html/export-hiccup content :markdown {}))
+      "- a\n  > * x\n  > * y"
+      "- a\n  #+BEGIN_QUOTE\n  * x\n  * y\n  #+END_QUOTE")))
