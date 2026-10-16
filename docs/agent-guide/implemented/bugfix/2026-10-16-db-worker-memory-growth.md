@@ -255,6 +255,57 @@ by closing Electron and reopening the same disposable graph with a new worker
 process. The edited title survived and the UUID count stayed 25,548; evidence is
 in `footprint-reopen-clean/reopen-result.json`.
 
+### Comparison with master CLJS
+
+Three controlled Electron pairs compared master `4cf26891c1` (CLJS worker) with
+native worker code at `db04e523c5`. Both used Electron 42.3.0 on the same Mac,
+development builds, a fresh backup of the same graph, fresh search databases,
+and the same existing page UUID. The controlled page differs from the journal
+view used above, so these memory values should be compared within this table.
+Run order was CLJS/native, native/CLJS, then CLJS/native. Builds and tests were
+finished before measurements; neither runtime received diagnostic GC requests.
+
+The driver waited for visible blocks, the search-build request, and the indexing
+indicator to disappear. It then sampled memory, waited 15 seconds without probe
+requests, checked the UUID count, warmed 100 point pulls, measured 2,000 pulls,
+and submitted 3,000 raw title transactions over a fixed set of 128 entities with
+2 KiB titles. A second 15-second idle period preceded the final memory sample.
+These are worker HTTP RPC timings, not keyboard-edit latency. Every run returned
+25,548 UUID entities, persisted 17,902 search rows, and returned the last written
+title. All six runs had no renderer exceptions; development React warnings were
+present in both versions.
+
+Median results:
+
+| Measurement | Master CLJS | Fixed native | Native change |
+| --- | ---: | ---: | ---: |
+| Startup/index peak footprint | 313.5 MiB | 45.5 MiB | -85.5% |
+| Footprint after indexing and idle | 312.9 MiB | 28.5 MiB | -90.9% |
+| Footprint after transactions and idle | 192.5 MiB | 64.1 MiB | -66.7% |
+| Peak RSS over the whole run | 351.5 MiB | 81.5 MiB | -76.8% |
+| Page blocks visible | 4.46 s | 5.57 s | +24.7% |
+| First index build completed | 16.53 s | 18.85 s | +14.0% |
+| Worker CPU time through index completion | 12.06 s | 14.18 s | +17.6% |
+| Mean point pull | 0.216 ms | 0.237 ms | +9.9% |
+| Point-pull p95 | 0.324 ms | 0.337 ms | +4.0% |
+| 3,000 title transactions | 5.885 s | 1.761 s | -70.1% |
+
+Post-index idle footprint ranged from 311.4–313.9 MiB for CLJS and 25.8–29.2 MiB
+for native. Post-transaction idle footprint ranged from 186.0–278.4 MiB and
+48.5–70.1 MiB, respectively: natural GC timing and allocator capacity affect
+those samples. These development-profile results do not establish release-build
+performance. They show lower native memory and transaction time alongside a
+slower first index build and a small point-pull cost in this workload.
+
+Evidence is in `compare-master-summary.json`, `compare-master-{cljs,native}-{7,8,9}`,
+and `compare-master-final-controlled.log` under `tmp/db-worker-memory/`.
+`compare-master.cjs`, `compare-desktop.cjs`, and `summarize-master.py` contain the
+local driver and validation. Master was built in an isolated checkout with
+`clojure -J-Xmx4096m -J-XX:ActiveProcessorCount=4 -M:cljs compile app db-worker
+db-worker-node electron` and a development webpack app bundle; the native
+executable was the normal `dune build bin/main.exe` output. Original graphs and
+the PR's worker source were unchanged by this comparison.
+
 ## Risks
 
 - Collection trades decoded-memory retention for additional SQLite reads.
