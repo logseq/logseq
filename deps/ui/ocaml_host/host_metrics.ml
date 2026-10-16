@@ -60,6 +60,10 @@ type t = {
 }
 let target_fps = 120.
 let frame_budget_ms = 1000. /. target_fps
+(* Diagnostic text follows the statistics cadence, independently of input frames. *)
+let panel_period_s = 1.
+let panel_generation ~now = int_of_float (floor (now /. panel_period_s))
+let panel_due t ~now ~last_render = t.panel_open && now -. last_render >= panel_period_s
 let next_deadline ~previous ~now = max now (previous +. 1. /. target_fps)
 let idle_timeout ~dirty ~now ~last_busy =
   if not dirty && now -. last_busy >= 2. then Some 1000 else None

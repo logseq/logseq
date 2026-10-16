@@ -497,7 +497,7 @@ let () =
   let overlay_fps () = int_of_float (Float.round metrics.fps) in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
-    if metrics.panel_open then int_of_float (floor (perf_s () *. 4.)) else 0 in
+    if metrics.panel_open then Host_metrics.panel_generation ~now:(perf_s ()) else 0 in
   let renderer_live =
     { Lui_host.name = "lui";
       Lui_host.render =
@@ -2408,7 +2408,7 @@ let () =
     else if Host_interaction.can_render ~replay:replay_mode ~visible:can_present
         ~backing:use_cocoa && (Host_interaction.presentation_due presentation
              || overlay_fps () <> !painted_fps
-             || (metrics.panel_open && perf_s () -. !last_render >= 0.25))
+             || Host_metrics.panel_due metrics ~now:(perf_s ()) ~last_render:!last_render)
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
       last_render := perf_s ();
       ignore (renderer_live.Lui_host.render (Lui_host.scene host));

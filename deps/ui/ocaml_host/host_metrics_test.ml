@@ -6,6 +6,34 @@ let contains text fragment =
   in
   search 0
 let () =
+  let metrics = Host_metrics.create ~now:0. in
+  metrics.panel_open <- true;
+  let last_render = ref 0. and refreshes = ref 0 and generations = ref 0 in
+  let previous = ref (Host_metrics.panel_generation ~now:0.) in
+  for tick = 1 to 1200 do
+    let now = float tick /. Host_metrics.target_fps in
+    if Host_metrics.panel_due metrics ~now ~last_render:!last_render then begin
+      incr refreshes;
+      last_render := now
+    end;
+    let generation = Host_metrics.panel_generation ~now in
+    if generation <> !previous then begin incr generations; previous := generation end
+  done;
+  Printf.printf "Quiet panel over 10 seconds: %d refreshes, %d samples\n%!"
+    !refreshes !generations;
+  check "Diagnostic repaint runs more often than its one-second sampling interval"
+    (!refreshes = 10 && !generations = 10);
+  check "Panel sampling skips the next deadline"
+    (Host_metrics.panel_due metrics ~now:11. ~last_render:10.);
+  check "Panel sampling redraws before the next deadline"
+    (not (Host_metrics.panel_due metrics ~now:10.999 ~last_render:10.));
+  check "Panel sampling queues missed diagnostic frames"
+    (Host_metrics.panel_due metrics ~now:50. ~last_render:2.
+     && not (Host_metrics.panel_due metrics ~now:50. ~last_render:50.));
+  metrics.panel_open <- false;
+  check "A closed panel schedules diagnostic redraws"
+    (not (Host_metrics.panel_due metrics ~now:100. ~last_render:0.))
+let () =
   let deadline = Host_metrics.next_deadline ~previous:1. ~now:1.001 in
   check "Scheduler accumulates sleep overshoot every frame"
     (abs_float (deadline -. (1. +. 1. /. 120.)) < 0.000001);
