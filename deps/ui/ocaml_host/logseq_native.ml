@@ -173,6 +173,7 @@ let () =
   Gc.set { (Gc.get ()) with space_overhead = 30 };
   let allocation_profile = ref None in
   let allocation_done = ref false in
+  let allocation_census = ref None in
   let allocation_samples = Hashtbl.create 32 in
   let allocation_mutex = Mutex.create () in
   let allocation_live = Sys.getenv_opt "LOGSEQ_NATIVE_ALLOC_LIVE" = Some "1" in
@@ -217,7 +218,9 @@ let () =
           Printf.fprintf channel "Estimated %.0f bytes; alive %.0f bytes\n%s\n"
             (float count *. 80000.) (float live *. 80000.) stack)
           (List.sort (fun (a,al,_) (b,bl,_) ->
-            if allocation_live then compare bl al else compare b a) rows))
+            if allocation_live then compare bl al else compare b a) rows));
+      Option.iter (fun census ->
+        Yojson.Safe.to_file (path ^ ".roots.json") (census ())) !allocation_census
     | _ -> () in
   let start_allocation now =
     capture_started := now;
@@ -2123,6 +2126,59 @@ let () =
     if memory_replay || Native_window.presentable (Sdl.get_window_id !win) then paint_frame ()
     else host_req_repaint := true;
     Host_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.));
+  if Option.is_some allocation_path then allocation_census := Some (fun () ->
+    let scene = Lui_host.scene host in
+    let app = Option.get !(Native_embed.current_app) in
+    let runtime = Lui_app.runtime app in
+    let roots =
+      [ "host", Obj.repr host
+      ; "store", Obj.repr store
+      ; "scene", Obj.repr scene
+      ; "scene_atlases", Obj.repr (scene.mask_atlas,scene.color_atlas)
+      ; "model", Obj.repr (Lui_app.model app)
+      ; "runtime", Obj.repr runtime
+      ; "runtime_properties", Obj.repr
+          (runtime.runtime_properties,runtime.runtime_extension_properties)
+      ; "runtime_handlers", Obj.repr runtime.event_handlers
+      ; "shallow_snapshots", Obj.repr Native_embed.shallow_cache
+      ; "subtree_snapshots", Obj.repr Native_embed.subtree_cache
+      ; "parsed_attributes", Obj.repr Native_embed.attrs_parse_cache
+      ; "pending_batches", Obj.repr Native_embed.pending_batches
+      ; "caption_layouts", Obj.repr text_engine.Text_engine.layouts
+      ; "editing_layouts", Obj.repr text_engine.editing_layouts
+      ; "glyph_slots", Obj.repr text_engine.slots
+      ; "metric_layouts", Obj.repr metrics_text_engine.layouts
+      ; "icon_sources", Obj.repr Host_icons.svgs
+      ; "icon_images", Obj.repr Host_icons.cache
+      ; "page_payloads", Obj.repr
+          (!(Subs_state.current_page),!(Subs_state.current_journals))
+      ; "page_signals", Obj.repr
+          (Subs_state.page_items,Subs_state.journal_items,Subs_state.journals_items)
+      ] in
+    let reachable root = Obj.reachable_words root * (Sys.word_size / 8) in
+    (* Root graphs overlap. Their union is measured once rather than adding
+       individual reachability; native allocations are reported separately. *)
+    `Assoc
+      [ "gc_live_bytes", `Int ((Gc.quick_stat ()).live_words * (Sys.word_size / 8))
+      ; "combined_reachable_bytes", `Int
+          (reachable (Obj.repr (Array.of_list (List.map snd roots))))
+      ; "roots", `List (List.map (fun (name,root) ->
+          `Assoc ["name",`String name; "reachable_bytes",`Int (reachable root)]) roots)
+      ; "counts", `Assoc
+          [ "store_nodes",`Int (Lui_store.node_count store)
+          ; "shallow_snapshots",`Int (Hashtbl.length Native_embed.shallow_cache)
+          ; "subtree_snapshots",`Int (Hashtbl.length Native_embed.subtree_cache)
+          ; "caption_layouts",`Int (Host_platform.Text.Cache.length text_engine.layouts)
+          ; "editing_nodes",`Int (Hashtbl.length text_engine.editing_layouts)
+          ; "page_signals",`Int (Hashtbl.length Subs_state.page_items)
+          ; "journal_signals",`Int (Hashtbl.length Subs_state.journal_items)
+          ]
+      ; "native_resources", `Assoc
+          [ "software_backing_bytes", `Int
+              (if use_cocoa then Native_window.software_owned_bytes (Sdl.get_window_id !win) else 0)
+          ; "atlas_bytes",`Int (Bytes.length scene.mask_atlas.pix + Bytes.length scene.color_atlas.pix)
+          ]
+      ]);
   Daemon_client.boot_mark "loop";
   Fun.protect ~finally:finish_allocation (fun () ->
   while not !quit do
