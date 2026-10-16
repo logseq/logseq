@@ -794,6 +794,20 @@ abc
       (is (= (str "示例 " literal "\n after") (:block/title block)))
       (is (= ["Alpha"] (mapv (comp :block/title :block/link) (ordered-children block)))))))
 
+(deftest-async import-preserves-multiple-embeds
+  (p/let [source (write-temp-graph-file "pages/Embeds.md"
+                                      (str "- before {{embed [[Alpha]]}} middle {{embed [[Beta]]}} after\n"
+                                           "- {{embed [[Alpha]]}} {{embed [[Beta]]}}\n"))
+          alpha (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          beta (write-temp-graph-file "pages/Beta.md" "- beta\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source alpha beta] conn {})
+          blocks (ordered-children (db-test/find-page-by-title @conn "Embeds"))]
+    (is (= ["before middle after" ""] (mapv :block/title blocks)))
+    (is (= [["Alpha" "Beta"] ["Alpha" "Beta"]]
+           (mapv #(mapv (comp :block/title :block/link) (ordered-children %)) blocks)))))
+
 (deftest-async import-thematic-break-block
   (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
           conn (db-test/create-conn)

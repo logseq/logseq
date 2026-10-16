@@ -2200,7 +2200,7 @@
 
 (defn- title-without-embed
   "Remove embed source spans while leaving task and heading conversion to their handlers."
-  [title marker format]
+  [title marker spans]
   (let [encoded (utf8/encode title)
         {:keys [offset fragments]}
         (reduce (fn [{:keys [offset fragments]} {:keys [start end]}]
@@ -2212,7 +2212,7 @@
                     {:offset end
                      :fragments (conj fragments (utf8/substring encoded offset fragment-end))}))
                 {:offset 0 :fragments []}
-                (embed-macro-spans title format))
+                spans)
         text (string/trim (apply str (conj fragments (utf8/substring encoded offset))))
         body (string/replace text #"^#+(?:\s+|$)" "")
         body-without-marker (if (and marker (string/starts-with? body marker))
@@ -2220,45 +2220,48 @@
                               body)]
     (when-not (string/blank? body-without-marker) text)))
 
+(defn- embed-target-uuid
+  [block page-names-to-uuids embed-node log-fn]
+  (let [arg (str (first (:arguments (second embed-node))))]
+    (cond
+      (page-ref/page-ref? arg)
+      (let [page-name (text/get-page-name arg)]
+        (if (common-util/uuid-string? page-name)
+          (uuid page-name)
+          (or (try
+                (get-page-uuid page-names-to-uuids
+                               (common-util/page-name-sanity-lc page-name)
+                               {:block block})
+                (catch :default _ nil))
+              (log-fn :missing-embed-page "Ignore embed of a page that is not found" :page-name page-name))))
+
+      (block-ref/block-ref? arg)
+      (uuid (block-ref/get-block-ref-id arg))
+
+      :else
+      (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments"
+              :args (:arguments (second embed-node))))))
+
 (defn- handle-embeds
-  "If a block contains page or block embeds, converts block to a :block/link based embed.
-  A DB block is either text or an embed, so a block with text besides the embed
-  keeps its text and gets the embed as a child block (built in complete-block-tx-data)."
+  "Convert a single standalone embed to a link; keep other embeds as ordered child blocks."
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
-  (if-let [embed-node (first embeds)]
-    (let [arg (str (first (:arguments (second embed-node))))
-          target-uuid (cond
-                        (page-ref/page-ref? arg)
-                        (let [page-name (text/get-page-name arg)]
-                          ;; a [[uuid]] embed is the DB form of a block embed
-                          (if (common-util/uuid-string? page-name)
-                            (uuid page-name)
-                            (or (try
-                                  (get-page-uuid page-names-to-uuids
-                                                 (some-> page-name common-util/page-name-sanity-lc)
-                                                 {:block block})
-                                  (catch :default _ nil))
-                                (log-fn :missing-embed-page "Ignore embed of a page that is not found" :page-name page-name))))
-
-                        (block-ref/block-ref? arg)
-                        (uuid (block-ref/get-block-ref-id arg))
-
-                        :else
-                        (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node))))
-          text (title-without-embed (:block/title block) (:block/marker block) (:block/format block))]
+  (if (seq embeds)
+    (let [spans (into []
+                      (keep (fn [{:keys [node] :as span}]
+                              (let [target (embed-target-uuid block page-names-to-uuids node log-fn)]
+                                (when (uuid? target)
+                                  (assoc span :link [:block/uuid target])))))
+                      (embed-macro-spans (:block/title block) (:block/format block)))
+          text (title-without-embed (:block/title block) (:block/marker block) spans)]
       (cond
-        (not (uuid? target-uuid))
+        (empty? spans)
         block
 
-        text
-        (assoc block
-               :block/title text
-               :block.temp/embed-link [:block/uuid target-uuid])
+        (and (nil? text) (= 1 (count spans)))
+        (assoc block :block/title "" :block/link (:link (first spans)))
 
         :else
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid target-uuid]})))
+        (assoc block :block/title (or text "") :block.temp/embed-links (mapv :link spans))))
     block))
 
 (defn- build-embed-child-block
@@ -2361,10 +2364,10 @@
                    (update-block-heading)
                    (add-missing-timestamps options)
                    (dissoc :block/format :block.temp/ast-blocks))
-        embed-link (:block.temp/embed-link block')
-        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-link) options)]
+        embed-links (:block.temp/embed-links block')
+        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-links) options)]
     (concat properties-tx asset-blocks-tx [final-block]
-            (when embed-link [(build-embed-child-block final-block embed-link)])
+            (map #(build-embed-child-block final-block %) embed-links)
             code-children-tx)))
 
 (defn- import-progress!
