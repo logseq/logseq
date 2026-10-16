@@ -65,10 +65,11 @@ def validate_idle(rows):
     allocated = last["gc"]["allocated_bytes"] - first["gc"]["allocated_bytes"]
     host_allocated = last["gc"]["host_allocated_bytes"] - first["gc"]["host_allocated_bytes"]
     minor = last["gc"]["minor_collections"] - first["gc"]["minor_collections"]
-    renders = last["gpu_submitted"] - first["gpu_submitted"]
+    submissions = last["gpu_submitted"] - first["gpu_submitted"]
+    renders = last["phases"]["overlay"]["total"] - first["phases"]["overlay"]["total"]
     layouts = last["layout_count"] - first["layout_count"]
     events = last["event_count"] - first["event_count"]
-    if min(allocated, host_allocated, minor, renders, layouts, events) < 0:
+    if min(allocated, host_allocated, minor, submissions, renders, layouts, events) < 0:
         raise ValueError("Idle metrics counters moved backwards")
     errors = []
     if allocated / duration > 256 * 1024:

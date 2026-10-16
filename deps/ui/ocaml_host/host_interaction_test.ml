@@ -584,3 +584,68 @@ let () =
     with Invalid_argument _ -> true in
   check "An overlay draw discarded the scene body without failing" rejected;
   print_endline "native sampled overlay allocation: OK"
+
+let () =
+  let store = Lui_store.create () in
+  List.iter (Lui_store.apply_op store) [CreateNode (1,Column);
+    CreateNode (2,Text); CreateNode (3,Column); CreateNode (4,Text);
+    CreateNode (5,Text); CreateNode (6,Column);
+    InsertChild (1,2,0); InsertChild (1,3,1); InsertChild (3,4,0)];
+  let negative = Lui_scene.rect (-10.) (-5.) 4. 10.
+  and positive = Lui_scene.rect 20. 10. 30. 5.
+  and empty = Lui_scene.rect 0.5 1. 0. 0.
+  and outside = Lui_scene.rect 9999. 9999. 9999. 9999. in
+  let rect_of = function 2 -> negative | 3 -> positive | 4 -> empty | _ -> outside in
+  check "Content bounds include the root or an unrelated tree"
+    (Host_interaction.content_bounds ~store ~rect_of 1 = (-10.,-5.,50.,15.));
+  let l,t,r,b = Host_interaction.content_bounds ~store ~rect_of 6 in
+  check "An empty content region changed its sentinel bounds"
+    (l=Float.max_float && t=Float.max_float && r = -.Float.max_float && b = -.Float.max_float);
+  let large = Lui_store.create () in
+  Lui_store.apply_op large (CreateNode (1,Column));
+  for id=2 to 1001 do
+    Lui_store.apply_op large (CreateNode (id,Text));
+    Lui_store.apply_op large (InsertChild (1,id,id-2))
+  done;
+  let rect_of _ = positive in
+  ignore (Host_interaction.content_bounds ~store:large ~rect_of 1);
+  let before = Gc.allocated_bytes () in
+  for _=1 to 50 do ignore (Host_interaction.content_bounds ~store:large ~rect_of 1) done;
+  let bounds_allocated = (Gc.allocated_bytes () -. before) /. 50. in
+  let epoch = ref 0 in
+  let offsets = Hashtbl.create 4 in
+  let scroll_x id = match Hashtbl.find_opt offsets id with Some (x,_) -> x | None -> 0.
+  and scroll_y id = match Hashtbl.find_opt offsets id with Some (_,y) -> y | None -> 0. in
+  let shift = Host_interaction.scroll_shifts ~store:(fun () -> large)
+    ~scroll_epoch:(fun () -> !epoch) ~scroll_x ~scroll_y in
+  let before = Gc.allocated_bytes () in
+  for id=2 to 1001 do ignore (shift id) done;
+  let cold_allocated = Gc.allocated_bytes () -. before in
+  let before = Gc.allocated_bytes () in
+  for _=1 to 10 do for id=2 to 1001 do ignore (shift id) done done;
+  let cached_allocated = (Gc.allocated_bytes () -. before) /. 10_000. in
+  Hashtbl.add offsets 1 (10.,20.); incr epoch;
+  check "Scroll cache ignores a changed scroll epoch" (shift 2 = (10.,20.));
+  check "A node's own scroll offset shifts its border box" (shift 1 = (0.,0.));
+  Hashtbl.add offsets 2 (3.,4.); incr epoch;
+  List.iter (Lui_store.apply_op large) [CreateNode (1002,Text); InsertChild (2,1002,0)];
+  check "Nested scroll offsets do not accumulate" (shift 1002 = (13.,24.));
+  List.iter (Lui_store.apply_op large) [CreateNode (2000,Column); MoveChild (2000,1002,0)];
+  check "A reparented node retains the prior ancestor offsets" (shift 1002 = (0.,0.));
+  Lui_store.apply_op large (CreateNode (3000,Column));
+  for id=3001 to 3064 do
+    Lui_store.apply_op large (CreateNode (id,Column));
+    Lui_store.apply_op large (InsertChild (id-1,id,0))
+  done;
+  Hashtbl.add offsets 3000 (2.,3.);
+  Hashtbl.add offsets 3032 (-5.,7.);
+  Hashtbl.add offsets 3064 (900.,900.); incr epoch;
+  check "A deep scroll chain loses or includes the wrong offsets" (shift 3064 = (-3.,10.));
+  check "An intermediate scroll viewport includes its own offset" (shift 3032 = (2.,3.));
+  Printf.printf "Content bounds allocated %.0f bytes/read; cold scroll %.0f bytes/1000 nodes; cached scroll %.3f bytes/read\n%!"
+    bounds_allocated cold_allocated cached_allocated;
+  let failures = List.filter_map (fun (message,passed) -> if passed then None else Some message)
+    ["Content bounds exceed 2 KiB per read", bounds_allocated <= 2048.;
+     "Cold zero-scroll traversal exceeds 64 KiB", cold_allocated <= 65_536.;
+     "Cached scroll reads exceed one byte per read", cached_allocated <= 1.] in
+  check (String.concat "; " failures) (failures=[])

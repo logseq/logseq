@@ -117,6 +117,51 @@ let refresh_rects ~store ~base ~scroll_x ~scroll_y ~scrollable rects =
 
 let seal_overlay (scene : Lui_scene.t) = scene.glyphs <- List.rev scene.glyphs
 
+let scroll_shifts ~store ~scroll_epoch ~scroll_x ~scroll_y =
+  let shifts = Hashtbl.create 256 in
+  let revision = ref (-1) and epoch = ref (-1) in
+  let rec read id =
+    let current_store = store () in
+    let current_revision = Lui_store.revision current_store and current_epoch = scroll_epoch () in
+    if !revision <> current_revision || !epoch <> current_epoch then begin
+      Hashtbl.reset shifts; revision := current_revision; epoch := current_epoch
+    end;
+    match Hashtbl.find shifts id with
+    | shift -> shift
+    | exception Not_found ->
+      let shift = match Lui_store.parent current_store id with
+        | None -> 0.,0.
+        | Some parent ->
+          let inherited = read parent in
+          let dx = scroll_x parent and dy = scroll_y parent in
+          if dx=0. && dy=0. then inherited
+          else let x,y = inherited in x +. dx, y +. dy
+      in
+      Hashtbl.replace shifts id shift;
+      shift
+  in
+  read
+
+type content_edges = {
+  mutable left : float;
+  mutable top : float;
+  mutable right : float;
+  mutable bottom : float;
+}
+
+let content_bounds ~store ~rect_of id =
+  let bounds = {left=Float.max_float; top=Float.max_float;
+    right = -.Float.max_float; bottom = -.Float.max_float} in
+  Lui_store.iter_preorder ~root:id store (fun child ->
+    if child<>id then begin
+      let r = rect_of child in
+      bounds.left <- Float.min bounds.left r.Lui_scene.x;
+      bounds.top <- Float.min bounds.top r.Lui_scene.y;
+      bounds.right <- Float.max bounds.right (r.Lui_scene.x +. r.Lui_scene.w);
+      bounds.bottom <- Float.max bounds.bottom (r.Lui_scene.y +. r.Lui_scene.h)
+    end);
+  bounds.left,bounds.top,bounds.right,bounds.bottom
+
 let measure_width width = if Float.is_finite width && width > 0. then width else 0.
 
 let scroll_extent (viewport : Lui_scene.rect) ~right ~bottom =

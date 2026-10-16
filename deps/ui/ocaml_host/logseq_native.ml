@@ -561,25 +561,9 @@ let () =
       Option.value ~default:Rects.zero (Lui_host.layout_rect h id)
     | None -> Rects.zero
   in
-  let shifts = Hashtbl.create 256 in
-  let shift_revision = ref (-1, -1) in
-  let rec scroll_shift_of id =
-    let store = store_of () in
-    let revision = Lui_store.revision store, Ui.scroll_epoch ui in
-    if !shift_revision <> revision then begin
-      Hashtbl.reset shifts; shift_revision := revision
-    end;
-    match Hashtbl.find_opt shifts id with
-    | Some shift -> shift
-    | None ->
-      let shift = match Lui_store.parent store id with
-        | None -> 0., 0.
-        | Some parent ->
-          let x, y = scroll_shift_of parent in
-          x +. Ui.scroll_offset_x ui parent, y +. Ui.scroll_offset ui parent
-      in
-      Hashtbl.replace shifts id shift; shift
-  in
+  let scroll_shift_of = Host_interaction.scroll_shifts ~store:store_of
+    ~scroll_epoch:(fun () -> Ui.scroll_epoch ui)
+    ~scroll_x:(Ui.scroll_offset_x ui) ~scroll_y:(Ui.scroll_offset ui) in
   let shifted_rect id =
     let r = engine_rect id in
     let sx, sy = scroll_shift_of id in
@@ -598,21 +582,7 @@ let () =
     match Hashtbl.find_opt content_bounds id with
     | Some bounds -> bounds
     | None ->
-    let bounds = List.fold_left
-      (fun (l, t, rgt, b) d ->
-         if d = id then (l, t, rgt, b)
-         else
-           let r = engine_rect d in
-           ( Float.min l r.Lui_scene.x
-           , Float.min t r.Lui_scene.y
-           , Float.max rgt (r.Lui_scene.x +. r.Lui_scene.w)
-           , Float.max b (r.Lui_scene.y +. r.Lui_scene.h) ))
-      ( Float.max_float
-      , Float.max_float
-      , -.Float.max_float
-      , -.Float.max_float )
-      (Lui_store.preorder ~root:id (store_of ()))
-    in
+    let bounds = Host_interaction.content_bounds ~store:(store_of ()) ~rect_of:engine_rect id in
     Hashtbl.replace content_bounds id bounds; bounds
   in
   let hooks =

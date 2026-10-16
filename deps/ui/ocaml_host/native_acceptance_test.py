@@ -13,6 +13,7 @@ class NativeAcceptanceTest(unittest.TestCase):
                   "rss_bytes": 120_000_000, "window_visible": True,
                   "width": 1440, "height": 900, "pixel_width": 2880, "pixel_height": 1800}
         return [{"time_s": time, "process_memory": dict(memory), "gpu_submitted": 1,
+                 "phases": {"overlay": {"total": 1}},
                  "layout_count": 1, "event_count": 0,
                  "gc": {"allocated_bytes": 1000, "host_allocated_bytes": 1000,
                         "minor_collections": 1}}
@@ -102,15 +103,47 @@ class NativeAcceptanceTest(unittest.TestCase):
         self.assertIn("Invalid process memory", result.stderr)
 
     def test_idle_requires_ten_minutes(self):
-        first = {"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+        first = {"time_s": 0, "gpu_submitted": 10, "phases": {"overlay": {"total": 10}}, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}}
         last = {**first, "time_s": 24}
         self.assertTrue(any("600 seconds" in error for error in validate_idle([first, last])))
 
+    def test_idle_rejects_cocoa_redraws_without_metal_submissions(self):
+        rows = self.memory_rows()
+        for row in rows:
+            row["gpu_submitted"] = 0
+            row["phases"]["overlay"]["total"] = row["time_s"] * 4
+        self.assertTrue(any("render" in error for error in validate_idle(rows)))
+
+    def test_idle_uses_cumulative_render_count_after_history_wraps(self):
+        rows = self.memory_rows()
+        for row in rows:
+            row["gpu_submitted"] = 0
+            row["phases"]["overlay"].update(total=1000 + row["time_s"], count=240)
+        self.assertEqual([], validate_idle(rows))
+
+    def test_idle_rejects_backwards_renderer_count(self):
+        rows = self.memory_rows()
+        rows[-1]["phases"]["overlay"]["total"] = 0
+        with self.assertRaisesRegex(ValueError, "backwards"):
+            validate_idle(rows)
+
+    def test_idle_requires_renderer_count(self):
+        rows = self.memory_rows()
+        del rows[-1]["phases"]["overlay"]["total"]
+        with self.assertRaises(KeyError):
+            validate_idle(rows)
+
+    def test_idle_preserves_metal_counter_validation(self):
+        rows = self.memory_rows()
+        rows[-1]["gpu_submitted"] = 0
+        with self.assertRaisesRegex(ValueError, "backwards"):
+            validate_idle(rows)
+
     def test_idle_rejects_rendering_and_gc_churn(self):
-        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+        rows = [{"time_s": 0, "gpu_submitted": 10, "phases": {"overlay": {"total": 10}}, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 600, "gpu_submitted": 1210, "layout_count": 5, "event_count": 0,
+                {"time_s": 600, "gpu_submitted": 1210, "phases": {"overlay": {"total": 1210}}, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 600100000, "host_allocated_bytes": 600100000, "minor_collections": 1002}}]
         errors = validate_idle(rows)
         self.assertTrue(any("allocation" in error for error in errors))
@@ -118,21 +151,22 @@ class NativeAcceptanceTest(unittest.TestCase):
         self.assertTrue(any("render" in error for error in errors))
         rows[-1].update(gpu_submitted=20, gc={"allocated_bytes": 1100000, "host_allocated_bytes": 1100000,
                                             "minor_collections": 3})
+        rows[-1]["phases"]["overlay"]["total"] = 20
         self.assertEqual([], validate_idle(rows))
         rows[-1]["layout_count"] = 6
         self.assertTrue(any("layout" in error for error in validate_idle(rows)))
 
     def test_idle_rejects_uncollected_host_allocation(self):
-        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 0,
+        rows = [{"time_s": 0, "gpu_submitted": 10, "phases": {"overlay": {"total": 10}}, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 600, "gpu_submitted": 20, "layout_count": 5, "event_count": 0,
+                {"time_s": 600, "gpu_submitted": 20, "phases": {"overlay": {"total": 20}}, "layout_count": 5, "event_count": 0,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 600100000, "minor_collections": 2}}]
         self.assertTrue(any("host allocation" in error for error in validate_idle(rows)))
 
     def test_idle_rejects_user_input(self):
-        rows = [{"time_s": 0, "gpu_submitted": 10, "layout_count": 5, "event_count": 1,
+        rows = [{"time_s": 0, "gpu_submitted": 10, "phases": {"overlay": {"total": 10}}, "layout_count": 5, "event_count": 1,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}},
-                {"time_s": 600, "gpu_submitted": 20, "layout_count": 5, "event_count": 2,
+                {"time_s": 600, "gpu_submitted": 20, "phases": {"overlay": {"total": 20}}, "layout_count": 5, "event_count": 2,
                  "gc": {"allocated_bytes": 100000, "host_allocated_bytes": 100000, "minor_collections": 2}}]
         self.assertTrue(any("event" in error for error in validate_idle(rows)))
 
