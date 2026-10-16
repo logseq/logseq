@@ -968,32 +968,42 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
      become an image just because its surrounding backdrop is different. */
   uint32_t pixels[3] = {logseq_software_pixel(source), 0,
     logseq_software_pixel(source + (size_t)(surface->w-1)*4)};
+  /* Compare contiguous rows once. A zero difference identifies a solid
+     column without repeatedly walking the image at a full-row stride. */
+  const int width = surface->w;
+  uint32_t differences[width];
+  memset(differences, 0, sizeof differences);
+  for (int y=1; y<h; y++) {
+    const unsigned char *row = source + (size_t)stride*y;
+    for (int x=0; x<width; x++)
+      differences[x] |= logseq_software_pixel(row + (size_t)x*4)
+        ^ logseq_software_pixel(source + (size_t)x*4);
+    if (y == 1) {
+      int x = 0;
+      while (x<width && differences[x] != 0) x++;
+      /* Further rows cannot make a varying column solid again. */
+      if (x == width) break;
+    }
+  }
   int left = 0, right = surface->w;
-  while (left < right) {
-    int y = 0;
-    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)left*4) == pixels[0]) y++;
-    if (y<h) break;
+  while (left < right && differences[left] == 0
+         && logseq_software_pixel(source + (size_t)left*4) == pixels[0])
     left++;
-  }
-  while (right > left) {
-    int y = 0;
-    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)(right-1)*4) == pixels[2]) y++;
-    if (y<h) break;
+  while (right > left && differences[right-1] == 0
+         && logseq_software_pixel(source + (size_t)(right-1)*4) == pixels[2])
     right--;
-  }
   /* Retain two image spans around the largest internal solid-color run
      only when splitting reduces aligned surface storage. */
   int gap_left = right, gap_right = right, start = left;
   uint32_t run_pixel = 0;
   for (int x=left; x<right; x++) {
     uint32_t pixel = logseq_software_pixel(source + (size_t)x*4);
-    int y = 1;
-    while (y<h && logseq_software_pixel(source + (size_t)stride*y + (size_t)x*4) == pixel) y++;
-    if (y<h || (x>start && pixel!=run_pixel)) {
+    bool solid = differences[x] == 0;
+    if (!solid || (x>start && pixel!=run_pixel)) {
       if (x-start > gap_right-gap_left) {
         gap_left = start; gap_right = x; pixels[1] = run_pixel;
       }
-      start = y<h ? x+1 : x;
+      start = solid ? x : x+1;
     }
     run_pixel = pixel;
   }

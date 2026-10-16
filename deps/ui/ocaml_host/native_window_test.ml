@@ -177,6 +177,91 @@ let software_band_compression_regression id =
   List.iter prerr_endline (List.rev !budget_errors);
   check "Software band memory regression" (!budget_errors = [])
 
+let software_upload_budget () =
+  let sdl_ok = function
+    | Ok value -> value
+    | Error (`Msg message) -> failwith message
+  in
+  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
+  let window =
+    sdl_ok
+      (Tsdl.Sdl.create_window "Native software upload budget" ~w:1440 ~h:932
+         Tsdl.Sdl.Window.hidden)
+  in
+  Fun.protect
+    ~finally:(fun () ->
+      Tsdl.Sdl.destroy_window window;
+      Tsdl.Sdl.quit ())
+    (fun () ->
+      let id = Tsdl.Sdl.get_window_id window in
+      let width = 2880 and height = 1864 and rows = 64 in
+      Native_window.software_begin id (width, height, rows);
+      Fun.protect
+        ~finally:(fun () -> Native_window.software_dispose id)
+        (fun () ->
+          let within_budget = ref true in
+          let measure label ~dense ~flat budget_ms =
+            let tiles =
+              Array.init 2 (fun frame ->
+                  Bytes.init
+                    (width * rows * 4)
+                    (fun offset ->
+                      let channel = offset mod 4 in
+                      let x = offset / 4 mod width
+                      and y = offset / (width * 4) in
+                      let ink =
+                        dense
+                        || (not flat)
+                           && ((x >= 200 && x < 224) || (x >= 2656 && x < 2680))
+                      in
+                      Char.chr
+                        (if channel = 3 then 255
+                         else if ink then
+                           ((y * 13) + (channel * 17) + frame) land 127
+                         else if x >= 224 && x < 2656 then 254 - frame
+                         else 126 + frame)))
+            in
+            let samples = Array.make 40 0. in
+            for frame = 0 to 43 do
+              let tile = tiles.(frame mod 2) in
+              let before = Unix.gettimeofday () in
+              for band = 0 to ((height + rows - 1) / rows) - 1 do
+                let y = band * rows in
+                Native_window.software_tile id
+                  (y, min rows (height - y), width * 4, tile)
+              done;
+              let elapsed = (Unix.gettimeofday () -. before) *. 1000. in
+              Native_window.software_present id;
+              if frame >= 4 then samples.(frame - 4) <- elapsed
+            done;
+            let pixels = Native_window.software_read id in
+            check "Upload budget fixture changed the retained image size"
+              (Bytes.length pixels = width * height * 4);
+            for band = 0 to ((height + rows - 1) / rows) - 1 do
+              let y = band * rows
+              and count = min rows (height - (band * rows)) in
+              check "Upload budget fixture changed retained pixels"
+                (Bytes.sub pixels (y * width * 4) (count * width * 4)
+                = Bytes.sub tiles.(1) 0 (count * width * 4))
+            done;
+            Array.sort Float.compare samples;
+            let p95 = samples.(37) in
+            Printf.printf
+              "Native full-window %s upload p50=%.3f p95=%.3f ms (budget %.1f)\n\
+               %!"
+              label samples.(19) p95 budget_ms;
+            within_budget := !within_budget && p95 <= budget_ms
+          in
+          (* Upload budgets reserve the rest of the 8.33 ms frame for rendering.
+             Dense pixels also require immutable full-width surface copies. *)
+          measure "sparse" ~dense:false ~flat:false 2.;
+          measure "dense" ~dense:true ~flat:false 3.;
+          measure "flat" ~dense:false ~flat:true 1.;
+          check "Native band upload exceeds its frame-budget share"
+            !within_budget;
+          check "Native upload fixture exceeded the physical-memory guard"
+            (physical_footprint () <= 200_000_000)))
+
 let software_band_reuse_regression id =
   let width=2048 and height=131 and rows=64 in
   let errors=ref [] in
@@ -363,6 +448,12 @@ let () =
     (Sys.argv.(1) = "--software-replay" || Sys.argv.(1) = "--software-tile-replay") then begin
     software_scene_replay ~tiled:(Sys.argv.(1) = "--software-tile-replay")
       Sys.argv.(2) (float_of_string Sys.argv.(3));
+    exit 0
+  end
+
+let () =
+  if Array.length Sys.argv = 2 && Sys.argv.(1) = "--software-upload-budget" then begin
+    software_upload_budget ();
     exit 0
   end
 
