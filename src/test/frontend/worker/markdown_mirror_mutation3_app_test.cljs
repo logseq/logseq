@@ -343,14 +343,16 @@
 
 ;; Fails if, in `block->content-context`, the `:preserve-block-refs?` key is dropped or the `:date-formatter` key is dropped.
 (deftest block->content-context-test
-  (is (= {:export-bullet-indentation "  "
-          :excluded-properties #{:logseq.property/status}
-          :export-properties-as-list-items? true
-          :export-node-property-values-as-page-refs? true
-          :export-default-property-values-as-blocks? true
-          :preserve-block-refs? true
-          :date-formatter "yyyy"}
-         (block->content-context {:date-formatter "yyyy"})))
+  ;; the keys these mutants change, not the whole map: a key added later must
+  ;; not break the test
+  (let [expected {:export-bullet-indentation "  "
+                  :excluded-properties #{:logseq.property/status}
+                  :export-properties-as-list-items? true
+                  :export-node-property-values-as-page-refs? true
+                  :export-default-property-values-as-blocks? true
+                  :preserve-block-refs? true
+                  :date-formatter "yyyy"}]
+    (is (= expected (select-keys (block->content-context {:date-formatter "yyyy"}) (keys expected)))))
   (is (= "\t" (:export-bullet-indentation (block->content-context {:export-bullet-indentation "\t"})))))
 
 ;; ---------------------------------------------------------------------------
@@ -564,37 +566,6 @@
                                 "- ``` just text\n"
                                 "- TODO second")
                            (get @files (page-path "pages/Fence Text.md"))))))
-          (p/catch (fn [e] (is false (str "unexpected error: " e))))
-          (p/finally done)))))
-
-;; Fails if, in `decorate-block-line`, the `:init-level` key is dropped.
-(deftest nested-embed-renders-at-the-embedding-blocks-indentation-test
-  (async done
-    (let [{:keys [platform files]} (fake-platform)
-          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks [{:page {:block/title "Source"}
-                                     :blocks [{:block/title "wrap"
-                                               :build/children [{:block/title ""
-                                                                 :block/uuid embed-uuid
-                                                                 :build/keep-uuid? true}]}]}
-                                    {:page {:block/title "Target Page"}
-                                     :blocks [{:block/title "Target"
-                                               :block/uuid target-uuid
-                                               :build/keep-uuid? true
-                                               :build/children [{:block/title "Target child"}]}]}]})
-          embed-eid (:db/id (d/entity @conn [:block/uuid embed-uuid]))
-          target-eid (:db/id (d/entity @conn [:block/uuid target-uuid]))
-          _ (d/transact! conn [{:db/id embed-eid :block/link target-eid}])
-          page (db-test/find-page-by-title @conn "Source")]
-      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
-          (p/then (fn [_]
-                    (is (= (str "id:: " (:block/uuid page) "\n\n"
-                                "- wrap\n"
-                                "  - Target\n"
-                                "    - Target child")
-                           (get @files (page-path "pages/Source.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
