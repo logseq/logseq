@@ -253,7 +253,11 @@ let run_views ~registry ~profile ~finish =
     (category_headers () <> [] && clear_buttons () = []);
   let key_search = List.find (fun n ->
       M.string_prop n "text" = Some I18n.keymap_search_by_keys) (keymap_nodes ()) in
+  let row_ids () = List.map (fun n -> n.M.id) (keymap_rows ()) |> List.sort Int.compare in
+  let grouped_row_ids = row_ids () in
   S.press keymap key_search.M.id;
+  check "opening the recorder preserves command row identity"
+    (row_ids () = grouped_row_ids);
   let recorders = List.filter (fun n -> class_has n "shortcut-filter-popover") (keymap_nodes ()) in
   eqi "key search opens exactly one recorder" 1 (List.length recorders);
   check "the recorder exclusively owns keyboard input" (Keyboard_capture.active ());
@@ -291,8 +295,11 @@ let run_views ~registry ~profile ~finish =
     (update ["g";"j"] true (key_event "Backspace") = R.Set ([], false));
   check "Escape dismisses recording without changing the filter"
     (update ["meta+k"] true (key_event "Escape") = R.Close);
+  let filtered_row_ids = row_ids () in
   (match recorders with
    | [recorder] -> S.dismiss keymap recorder.M.id;
+       check "dismissing the recorder preserves filtered command row identity"
+         (row_ids () = filtered_row_ids);
        check "recorder dismissal retains the settings pane"
          (List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()))
    | _ -> ());

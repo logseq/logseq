@@ -879,7 +879,15 @@ let keymap_pane () : t =
         [
           keymap_controls st;
           scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0
-            [ reactive rows (Signal.value st) ];
+            [
+              reactive
+                ~equal:(fun previous current ->
+                  previous.km_query = current.km_query
+                  && previous.km_filter = current.km_filter
+                  && previous.km_collapsed = current.km_collapsed
+                  && previous.km_keys = current.km_keys)
+                rows (Signal.value st);
+            ];
         ]))
     context parent
 

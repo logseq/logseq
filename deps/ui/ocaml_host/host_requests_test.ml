@@ -3209,7 +3209,19 @@ let () =
                 (W.Ui.focused (A.ui surface) = search && !focused_input = search);
               expect "Native query clear must restore category headings"
                 (count_class "th" > 0);
+              let row_ids () =
+                List.filter (fun id -> has_class id "shortcut-row")
+                  (Lui_store.preorder store)
+              in
+              let grouped_row_ids = row_ids () in
+              let before_recording = Gc.allocated_bytes () in
               dispatch (Press key_button);
+              let recording_bytes = Gc.allocated_bytes () -. before_recording in
+              Printf.eprintf "native recorder open allocation: %.0f bytes\n" recording_bytes;
+              expect "Opening native recording must allocate less than 2 MB"
+                (recording_bytes < 2_000_000.);
+              expect "Opening native recording must preserve command rows"
+                (row_ids () = grouped_row_ids);
               expect "Native keystroke filter does not own keyboard recording"
                 (Keyboard_capture.active () && count_class "shortcut-filter-popover" = 1);
               let key name meta =
@@ -3219,6 +3231,18 @@ let () =
                        ("key", Js.Json.JString name); ("metaKey", Js.Json.JBoolean meta);
                      ])
               in
+              let before_empty_dismissal = Gc.allocated_bytes () in
+              key "Escape" false;
+              let empty_dismissal_bytes =
+                Gc.allocated_bytes () -. before_empty_dismissal
+              in
+              Printf.eprintf "native empty recorder close allocation: %.0f bytes\n"
+                empty_dismissal_bytes;
+              expect "Closing empty native recording must allocate less than 4 MB"
+                (empty_dismissal_bytes < 4_000_000.);
+              expect "Closing empty native recording must preserve command rows"
+                (row_ids () = grouped_row_ids);
+              dispatch (Press key_button);
               ignore (A.store_changed surface);
               ignore (A.repaint surface);
               let recorder () = List.find (fun id -> has_class id "shortcut-filter-popover")
@@ -3308,7 +3332,15 @@ let () =
               expect "Native recording clear must restore popup focus"
                 (W.Ui.focused (A.ui surface) = recorder ());
               key "Tab" false;
+              let filtered_row_ids = row_ids () in
+              let before_dismissal = Gc.allocated_bytes () in
               key "Escape" false;
+              let dismissal_bytes = Gc.allocated_bytes () -. before_dismissal in
+              Printf.eprintf "native recorder close allocation: %.0f bytes\n" dismissal_bytes;
+              expect "Closing native recording must allocate less than 2 MB"
+                (dismissal_bytes < 2_000_000.);
+              expect "Closing native recording must preserve filtered command rows"
+                (row_ids () = filtered_row_ids);
               expect "Closing native recording must cancel its pending timer"
                 (Hashtbl.fold
                    (fun id _ ok -> ok && List.mem id timer_ids_before)
