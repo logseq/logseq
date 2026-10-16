@@ -377,6 +377,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Keyboard_capture.install ();
   let before = Gc.allocated_bytes () in
   let icons = Icons.app_icon_svgs () in
   let payload = Yojson.Safe.to_string (`Assoc
@@ -1296,6 +1297,36 @@ let () = Native_embed.with_entry_lock (fun () ->
     Platform.emit_event "mousemove" payload;
     check "Stopped capture still reached element handlers" (!order = ["capture"]));
   print_endline "native pointer event serialization: OK")
+
+let () =
+  let name = "listener-order-regression" in
+  let order = ref [] in
+  Fun.protect ~finally:(fun () ->
+      Hashtbl.remove Platform.capture_listeners name;
+      Hashtbl.remove Platform.window_listeners name) (fun () ->
+      Platform.add_event_listener ~capture:true name (fun _ ->
+          order := !order @ ["recorder"]; Platform.request_stop ());
+      Platform.add_event_listener ~capture:true name (fun _ ->
+          order := !order @ ["global-shortcut"]);
+      Platform.add_event_listener name (fun _ ->
+          order := !order @ ["window"]);
+      Platform.emit_event name (Js.Json.JObject []);
+      check "Earlier keyboard capture must suppress later global shortcuts"
+        (!order = ["recorder"]));
+  let name = "listener-order-unhandled" in
+  order := [];
+  Fun.protect ~finally:(fun () ->
+      Hashtbl.remove Platform.capture_listeners name;
+      Hashtbl.remove Platform.window_listeners name) (fun () ->
+      List.iter (fun (capture, label) ->
+          Platform.add_event_listener ~capture name (fun _ ->
+              order := !order @ [label]))
+        [true,"capture-first"; true,"capture-second";
+         false,"window-first"; false,"window-second"];
+      Platform.emit_event name (Js.Json.JObject []);
+      check "Native listeners must retain registration order in each phase"
+        (!order = ["capture-first";"capture-second";"window-first";"window-second"]));
+  print_endline "native listener registration order: OK"
 
 let () =
   let received = ref 0 and store = Lui_store.create () in
@@ -3121,7 +3152,6 @@ let () =
                 (W.Ui.focused (A.ui surface) = search && !focused_input = search);
               expect "Native query clear must restore category headings"
                 (count_class "th" > 0);
-              Keyboard_capture.install ();
               dispatch (Press key_button);
               expect "Native keystroke filter does not own keyboard recording"
                 (Keyboard_capture.active () && count_class "shortcut-filter-popover" = 1);
@@ -3136,6 +3166,10 @@ let () =
               ignore (A.repaint surface);
               let recorder () = List.find (fun id -> has_class id "shortcut-filter-popover")
                   (Lui_store.preorder store) in
+              if Lui_store.bool_prop store (recorder ()) "appear-enabled"
+              then dispatch (Appear (recorder ()));
+              expect "Native recorder appearance must focus its content"
+                (W.Ui.focused (A.ui surface) = recorder ());
               let anchor_gap () = (rect (recorder ())).y -. ((rect key_button).y +. (rect key_button).h) in
               let initial_anchor_gap = anchor_gap () in
               key "k" true;
@@ -3145,6 +3179,22 @@ let () =
                 (abs_float (anchor_gap () -. initial_anchor_gap) < 0.01);
               expect "Native keystroke recording does not filter matching commands"
                 (count_class "shortcut-row" = 1 && count_class "th" = 0);
+              let active_trigger = List.find (fun id ->
+                  has_class id "shortcut-keystroke-active") (Lui_store.preorder store) in
+              let rec trigger_contains id =
+                id = active_trigger || match Lui_store.parent store id with
+                  | Some parent -> trigger_contains parent
+                  | None -> false in
+              let trigger_rect = rect active_trigger in
+              List.iter (fun id ->
+                  let child = rect id in
+                  if child.w > 0. && child.h > 0. then
+                  expect (Printf.sprintf
+                    "Native shortcut trigger must contain %s #%d (x=%.2f w=%.2f, button x=%.2f w=%.2f)"
+                    (Lui_store.kind store id) id child.x child.w trigger_rect.x trigger_rect.w)
+                    (child.x >= trigger_rect.x
+                     && child.x +. child.w <= trigger_rect.x +. trigger_rect.w))
+                (List.filter trigger_contains (Lui_store.preorder store));
               key "c" true;
               expect
                 "Native recorded prefixes must include multi-stroke command bindings"
@@ -3157,6 +3207,50 @@ let () =
                 (Option.is_some
                    (Ui_services.dom_query
                       ".shortcut-filter-popover [data-shortcut-binding=\"tab\"]"));
+              key "Backspace" false;
+              for _ = 1 to 5 do key "PageDown" false done;
+              ignore (A.store_changed surface);
+              ignore (A.repaint surface);
+              let popup = recorder () in
+              let rec in_popup id =
+                id = popup || match Lui_store.parent store id with
+                  | Some parent -> in_popup parent
+                  | None -> false
+              in
+              let popup_nodes = List.filter in_popup (Lui_store.preorder store) in
+              let recorded_keys = List.filter (fun id ->
+                  match Lui_store.string_prop store id "data-attrs" with
+                  | Some raw -> List.mem ("data-shortcut-binding", "pagedown")
+                      (Lui_protocol.data_attrs_decode raw)
+                  | None -> false) popup_nodes in
+              let remove = List.find (fun id ->
+                  Lui_store.string_prop store id "accessibility-label"
+                    = Some (I18n.t "keymap/remove-filter")) popup_nodes in
+              let shell = rect popup and action = rect remove in
+              let contained (r : Lui_scene.rect) = r.x >= shell.x +. 31.9
+                  && r.x +. r.w <= shell.x +. shell.w -. 31.9
+                  && r.y >= shell.y && r.y +. r.h <= shell.y +. shell.h in
+              expect "Native recorder must retain all five named strokes"
+                (List.length recorded_keys = 5);
+              List.iter (fun id ->
+                  let region = rect id in
+                  expect "Native recorded keys must stay inside the popup content"
+                    (contained region);
+                  expect "Native recorded keys must not overlap their remove action"
+                    (region.x +. region.w <= action.x
+                     || region.x >= action.x +. action.w
+                     || region.y +. region.h <= action.y
+                     || region.y >= action.y +. action.h)) recorded_keys;
+              expect "Native recording must preserve its remove target"
+                (contained action && action.w >= 32. && action.h >= 32.
+                 && List.mem remove (W.hit_path store (A.rects surface)
+                   ~x:(action.x +. action.w /. 2.)
+                   ~y:(action.y +. action.h /. 2.)));
+              W.Ui.set_focused (A.ui surface) store remove;
+              dispatch (Press remove);
+              expect "Native recording clear must restore popup focus"
+                (W.Ui.focused (A.ui surface) = recorder ());
+              key "Tab" false;
               key "Escape" false;
               expect "Closing native recording must cancel its pending timer"
                 (Hashtbl.fold

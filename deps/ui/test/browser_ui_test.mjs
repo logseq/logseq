@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test, {after} from 'node:test';
-import {measureKeymapRecording, assertKeymapRecording} from './keymap_record_checks.mjs';
+import {measureKeymapRecording, assertKeymapRecording, measureRecordingBounds, assertRecordingBounds} from './keymap_record_checks.mjs';
 import {measureKeymapSearch, assertKeymapSearch} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
@@ -497,6 +497,10 @@ test('key search records keys without running shortcuts and retains its filter o
   button('Clear keystroke filter');
   assert.ok(evaluate("document.querySelectorAll('.shortcut-row').length") > 100);
   button('Search by keys');
+  for (let i = 0; i < 5; i += 1) browser('press', 'PageDown');
+  browser('wait', '--fn', "document.querySelectorAll('.shortcut-filter-popover [data-shortcut-binding]').length === 5");
+  assertRecordingBounds(evaluate(`(${measureRecordingBounds.toString()})()`));
+  button('Remove filter');
   browser('press', 'g');
   browser('press', 'j');
   assert.ok(evaluate("document.querySelector('.shortcut-filter-popover').textContent").includes('J'));

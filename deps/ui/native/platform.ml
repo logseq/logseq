@@ -65,7 +65,9 @@ let capture_listeners : (string, (Js.Json.t -> unit) list) Hashtbl.t =
 let add_event_listener ?(capture = false) name f =
   let tbl = if capture then capture_listeners else window_listeners in
   let cur = Option.value (Hashtbl.find_opt tbl name) ~default:[] in
-  Hashtbl.replace tbl name (f :: cur)
+  (* DOM listeners run in registration order. Keyboard capture is installed
+     before application shortcuts so it can consume a recorded key first. *)
+  Hashtbl.replace tbl name (cur @ [f])
 
 let add_document_listener ?(capture = false) name f =
   add_event_listener ~capture name f

@@ -476,8 +476,11 @@ let keymap_pill st ~key ~title filter =
         })
     ()
 
-let keymap_recorded_keys ?(pending = false) strokes =
-  row ~key:"recorded-keys" ~cross:`center ~gap:4
+let keymap_recorded_keys ?(pending = false) ?(wrap = false) ?(trailing = [])
+    strokes =
+  row ~key:"recorded-keys" ~cross:`center ~main:`start ~gap:4 ~min_width:0
+    ?grow:(if wrap then Some 1. else None)
+    ~flex_wrap:(if wrap then `wrap else `nowrap)
     ~opacity:(if pending then 0.7 else 1.)
     ~data_attrs:[ ("data-recording-pending", string_of_bool pending) ]
     (List.mapi
@@ -490,13 +493,19 @@ let keymap_recorded_keys ?(pending = false) strokes =
              data = stroke;
              keys = Keymap_record.keycaps stroke;
            })
-       strokes)
+       strokes
+    @ trailing)
 
 let keymap_close_recorder st =
   Runtime.signal_set st
     { (Runtime.signal_get st) with km_recording = false; km_committed = true };
   match Ui_services.dom_query ".shortcut-keystroke-trigger" with
   | Some trigger -> trigger.Ui_services.focus ()
+  | None -> ()
+
+let keymap_focus_recorder () =
+  match Ui_services.dom_query ".shortcut-filter-popover" with
+  | Some popup -> popup.Ui_services.focus ()
   | None -> ()
 
 let keymap_recorder st : t =
@@ -510,7 +519,8 @@ let keymap_recorder st : t =
   let clear () =
     cancel ();
     Runtime.signal_set st
-      { (Runtime.signal_get st) with km_keys = []; km_committed = false }
+      { (Runtime.signal_get st) with km_keys = []; km_committed = false };
+    keymap_focus_recorder ()
   in
   let record ev =
     let model = Runtime.signal_get st in
@@ -543,6 +553,7 @@ let keymap_recorder st : t =
     ~min_width:0 ~padding:0 ~corner_radius:8 ~border_width:1
     ~border_color:"hsl(var(--border))" ~background:"hsl(var(--background))"
     ~transition:Ui_components.popover_transition
+    ~on_appear:(fun _ -> keymap_focus_recorder ())
     ~on_dismiss:(fun _ -> keymap_close_recorder st)
     [
       column ~gap:0 ~min_width:0
@@ -555,32 +566,27 @@ let keymap_recorder st : t =
           row ~cross:`center ~gap:8 ~min_height:40 ~padding_horizontal:16
             ~padding_vertical:8
             [
-              button ~key:"record-target" ~variant:`ghost ~autofocus:true
-                ~min_width:0 ~min_height:0 ~height:24 ~padding:0
-                ~foreground:"var(--lx-gray-11)"
-                ~label:(I18n.t "keymap/press-keys-to-filter")
-                [
-                  reactive
-                    (fun model ->
-                      if model.km_keys = [] then
-                        text ~font_size:"0.875rem"
-                          ~value:(I18n.t "keymap/press-keys-to-filter")
-                          []
-                      else
-                        keymap_recorded_keys ~pending:(not model.km_committed)
-                          model.km_keys)
-                    (Signal.value st);
-                ];
-              if_
-                ~test:
-                  (reactive
-                     (fun model -> model.km_keys <> [])
-                     (Signal.value st))
-                (button ~key:"remove-key-filter" ~variant:`ghost ~width:16
-                   ~height:16 ~min_width:0 ~min_height:0 ~padding:0 ~icon:`x
-                   ~label:(I18n.t "keymap/remove-filter")
-                   ~on_press:(fun _ -> clear ())
-                   []);
+              reactive
+                (fun model ->
+                  if model.km_keys = [] then
+                    text ~font_size:"0.875rem" ~min_height:24
+                      ~foreground:"var(--lx-gray-11)"
+                      ~value:(I18n.t "keymap/press-keys-to-filter")
+                      []
+                  else
+                    keymap_recorded_keys ~wrap:true
+                      ~pending:(not model.km_committed)
+                      ~trailing:
+                        [
+                          button ~key:"remove-key-filter" ~variant:`ghost
+                            ~width:16 ~height:16 ~min_width:16 ~min_height:16
+                            ~padding:0 ~icon:`x
+                            ~label:(I18n.t "keymap/remove-filter")
+                            ~on_press:(fun _ -> clear ())
+                            [];
+                        ]
+                      model.km_keys)
+                (Signal.value st);
             ];
           Ui_components.with_props
             [ Ui_components.Prop.margin 0; Ui_components.Prop.height 1 ]
