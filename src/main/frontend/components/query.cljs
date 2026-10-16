@@ -146,7 +146,13 @@
         result (query-result/use-query-result config q)
         ;; Args for displaying query header and results
         view-fn (if (keyword? view) (get-in repo-config [:query/views view]) view)
-        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
+        view-f (when view-fn
+                 (try
+                   (sci/eval-string (pr-str view-fn))
+                   (catch :default error
+                     (log/error :query-view-eval-failed {:error error :view view})
+                     (throw (ex-info (or (ex-message error) "Query view failed")
+                                     {:view view})))))
         opts {:current-block current-block
               :table? table?
               :view-f view-f

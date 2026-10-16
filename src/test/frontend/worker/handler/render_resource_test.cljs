@@ -2532,6 +2532,80 @@
            (-> response ldb/write-transit-str ldb/read-transit-str))
         "Query error payloads must stay transit-encodable.")))
 
+(defn- assert-isolated-query-failure
+  [conn failing-query]
+  (let [journals-key [:journals]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A query failure must not fail sibling resources.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-query] :value :error :message]))
+        (str "Expected a per-resource query error for " (pr-str failing-query)))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (true? (get-in response [:slots [:resource failing-query] :watch :all?])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Isolated query errors must stay transit-encodable.")
+    response))
+
+(deftest render-snapshots-isolates-query-resource-failures-test
+  (let [{:keys [conn view-row]} (render-resource-fixture)]
+    (doseq [[label failing-query]
+            [["legacy simple-query list"
+              [:query {:kind :datalog
+                       :query '(task WAIT WAITING)
+                       :current-block-uuid view-row}]]
+             ["non-vector datalog"
+              [:query {:kind :datalog
+                       :query "not datalog"
+                       :current-block-uuid view-row}]]
+             ["empty datalog"
+              [:query {:kind :datalog :query []}]]
+             ["datalog without :find"
+              [:query {:kind :datalog
+                       :query [:where '[?e :block/title]]}]]
+             ["missing query"
+              [:query {:kind :dsl}]]
+             ["unknown kind"
+              [:query {:kind :unknown :query "(task TODO)"}]]
+             ["wrong cards? type"
+              [:query {:kind :dsl :query "(task TODO)" :cards? "false"}]]
+             ["non-string result-transform"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :result-transform-edn '(fn [rows] rows)}]]
+             ["invalid today-day"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :today-day 1}]]
+             ["non-uuid current-block"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :current-block-uuid "not-a-uuid"}]]
+             ["incomplete dsl"
+              [:query {:kind :dsl :query "((and)"}]]
+             ["invalid regex evaluation"
+              [:query {:kind :datalog
+                       :query '[:find ?regex
+                                :in $ ?matcher
+                                :where [(re-pattern ?matcher) ?regex]]
+                       :inputs ["("]}]]
+             ["result-transform not a function"
+              [:query {:kind :dsl
+                       :query "(task TODO)"
+                       :result-transform-edn "not-a-fn"}]]
+             ["full-text without repo"
+              [:query {:kind :dsl :query "\"needle\""}]]
+             ["wrong query key shape"
+              [:query]]]]
+      (testing label
+        (assert-isolated-query-failure conn failing-query)))))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}
@@ -2752,27 +2826,18 @@
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
               (str "Expected invalid view resource: " (pr-str resource-key)))))
-      (testing "query specs contain no closures, entities, or untyped options"
+      (testing "query keys with functions or entities stay fail-fast"
         (doseq [resource-key
-                [[:query {:kind :dsl :query "(task TODO)" :cards? "false"}]
-                 [:query {:kind :dsl
+                [[:query {:kind :dsl
                           :query "(task TODO)"
                           :query-fn identity}]
                  [:query {:kind :datalog
                           :query '[:find ?e :where [?e :block/title]]
-                          :inputs [row-entity]}]
-                 [:query {:kind :datalog :query "not datalog"}]
-                 [:query {:kind :datalog
-                          :query '[:find ?e :where [?e :block/title]]
-                          :result-transform-edn '(fn [rows] rows)}]]]
+                          :inputs [row-entity]}]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected invalid query resource: " (pr-str resource-key)))))
-      (testing "full-text has one worker-search path and requires repo context"
-        (is (thrown? js/Error
-                     (call-resource-raw api conn
-                                        [:query {:kind :dsl
-                                                 :query "\"needle\""}])))))))
+              (str "Expected non-serializable query key to fail-fast: "
+                   (pr-str resource-key))))))))
 
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
   (when-let [api (render-resource-api)]
@@ -2812,8 +2877,7 @@
                               [:page-membership page :property]
                               [:page-membership quick-add-page :quick-add nil]
                               [:page-membership quick-add-page :unknown]
-                              [:view-data (random-uuid)]
-                              [:query {:kind :dsl}]]]
+                              [:view-data (random-uuid)]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
               (str "Expected fail-fast for " (pr-str resource-key))))))))
