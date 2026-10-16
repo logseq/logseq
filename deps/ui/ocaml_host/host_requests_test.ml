@@ -2054,14 +2054,27 @@ let () =
       and old_height = Host.inner_height () in
       Settings_state.st := None;
       Host.set_window_size 1440. 932.;
+      let surface_cell = ref None in
+      let engine =
+        lazy
+          (Text_engine.create
+             ~scene:(fun () ->
+               Lui_host.scene (A.host (Option.get !surface_cell)))
+             ~scale:(fun () -> 2.)
+             ~store:(fun () -> A.store (Option.get !surface_cell)))
+      in
       let surface =
         A.create
           ~layout:(module Lui_layout)
           ~scale_cell:(ref 2.)
           ~text:
             {
-              measure = (fun _ value -> (float (String.length value * 14), 32.));
-              text_ops = (fun _ _ _ _ -> []);
+              measure =
+                (fun id value ->
+                  Text_engine.measure_text (Lazy.force engine) id value);
+              text_ops =
+                (fun id rect color value ->
+                  Text_engine.text_ops (Lazy.force engine) id rect color value);
               hit_text = (fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
               caret_ops =
                 (fun _ _ ~lw:_ ~lh:_ ->
@@ -2077,6 +2090,7 @@ let () =
             { name = "settings-layout"; render = (fun _ -> Bytes.empty) }
           ~width:2880 ~height:1864 ()
       in
+      surface_cell := Some surface;
       let host = A.host surface and store = A.store surface in
       let registry = Lui_extension.registry () in
       Logseq_el.register_all registry;
@@ -2143,6 +2157,21 @@ let () =
           in
           expect "Settings navigation does not keep forty-point row spacing"
             ((rect (List.nth nav 1)).y -. (rect (List.hd nav)).y = 80.);
+          let modal_title = find_class "cp__settings-modal-title" in
+          let text_engine =
+            Text_engine.create
+              ~scene:(fun () -> Lui_host.scene host)
+              ~scale:(fun () -> 2.)
+              ~store:(fun () -> store)
+          in
+          expect
+            "Settings modal title does not use its measured thirty-two-point \
+             line box"
+            (abs_float
+               (snd
+                  (Text_engine.measure_text text_engine modal_title "Settings")
+               -. 64.)
+            < 0.001);
           let title = find_class "cp__settings-category-title" in
           let rendered_width =
             fst (Lui_text.measure (Text_engine.font_of store title) "General")
@@ -2260,3 +2289,108 @@ let () =
           List.iter prerr_endline (List.rev !errors);
           check "Native Settings visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"
+
+let () =
+  let failures = ref [] in
+  let expect message condition =
+    if not condition then failures := message :: !failures
+  in
+  List.iter
+    (fun scale ->
+      let store = Lui_store.create () in
+      let scene =
+        Lui_scene.create
+          ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:128 ~h:128)
+          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:128 ~h:128)
+      in
+      let engine =
+        Text_engine.create
+          ~scene:(fun () -> scene)
+          ~scale:(fun () -> scale)
+          ~store:(fun () -> store)
+      in
+      List.iter (Lui_store.apply_op store)
+        [
+          CreateNode (820000, Column);
+          CreateNode (820001, Paragraph);
+          InsertChild (820000, 820001, 0);
+          SetProp (820000, FontSize, StringValue "14px");
+          SetProp (820001, FontSize, StringValue "20px");
+        ];
+      let text = "a\na" in
+      let verify value pitch =
+        Lui_store.apply_op store (SetProp (820000, LineHeight, value));
+        let rect =
+          Lui_scene.rect 0. 0. (200. *. scale) (2. *. pitch *. scale)
+        in
+        let layout, _, y = Text_engine.text_layout engine 820001 rect text in
+        expect "Native text layout ignores the declared line pitch"
+          (abs_float (layout.lay_height -. (2. *. pitch)) < 0.001);
+        expect "Native measured height differs from its text layout"
+          (abs_float
+             (snd (Text_engine.measure_text engine 820001 text)
+             -. (2. *. pitch *. scale))
+          < 0.001);
+        let caret = Lui_text.caret_rect layout 2 in
+        expect "Native caret does not follow the styled line box"
+          (abs_float (caret.ry -. pitch) < 0.001
+          && abs_float (caret.rh -. pitch) < 0.001);
+        expect "Native hit testing chooses a line from the natural font pitch"
+          (Lui_text.hit_test layout (0., pitch *. 1.5) = 2);
+        scene.glyphs <- [];
+        ignore
+          (Text_engine.text_ops engine 820001 rect
+             (Lui_scene.color 0 0 0 255)
+             text);
+        (match scene.glyphs with
+        | [ second; first ] ->
+            expect "Native painted line pitch differs from layout and caret"
+              (abs_float (second.gy -. first.gy -. (pitch *. scale)) <= 1.)
+        | _ ->
+            failures :=
+              "Expected two native glyphs for line-height verification"
+              :: !failures);
+        expect
+          "Native line boxes unexpectedly shift vertically inside their exact \
+           height"
+          (abs_float y < 0.001);
+        let repeated, _, _ = Text_engine.text_layout engine 820001 rect text in
+        expect "Repeated line-height layout does not reuse the bounded cache"
+          (repeated == layout)
+      in
+      List.iter
+        (fun (value, pitch) -> verify value pitch)
+        [
+          (StringValue "1.5", 30.);
+          (StringValue "28px", 28.);
+          (StringValue "1.75rem", 28.);
+          (StringValue "2em", 28.);
+          (StringValue "150%", 21.);
+          (FloatValue 24., 24.);
+          (StringValue "10px", 10.);
+          (StringValue "40px", 40.);
+        ];
+      Lui_store.apply_op store
+        (SetProp (820001, LineHeight, StringValue "16px"));
+      let layout, _, _ =
+        Text_engine.text_layout engine 820001
+          (Lui_scene.rect 0. 0. 400. 64.)
+          text
+      in
+      expect "A child's explicit line height does not override its ancestor"
+        (abs_float (layout.lay_height -. 32.) < 0.001);
+      Lui_store.apply_op store
+        (SetProp (820001, LineHeight, StringValue "normal"));
+      let layout, _, _ =
+        Text_engine.text_layout engine 820001
+          (Lui_scene.rect 0. 0. 400. 200.)
+          text
+      in
+      let natural = Lui_text.layout (Text_engine.font_of store 820001) text in
+      expect "Normal line height no longer uses font metrics"
+        (layout.lay_height = natural.lay_height))
+    [ 1.; 2. ];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native styled line height across measure, paint, caret and hit testing"
+    (!failures = []);
+  print_endline "native styled line height: OK"

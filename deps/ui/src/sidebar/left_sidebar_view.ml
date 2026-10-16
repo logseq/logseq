@@ -924,9 +924,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                       ; text ~key:"gsel-n"
                           ~white_space:"nowrap" ~text_overflow:"ellipsis"
                           ~font_weight:500 ~font_size:"var(--text-sm)"
-                          ~line_height:
-                            "var(--tw-leading, \
-                             var(--text-sm--line-height))"
+                          ~line_height:"1.25rem"
                           ~margin_left:4
                           ~data_attrs:
                             [ ( "style"

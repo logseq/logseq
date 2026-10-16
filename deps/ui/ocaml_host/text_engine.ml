@@ -237,6 +237,46 @@ let font_of store id =
    | _ -> ());
   f
 
+(* Unitless CSS line heights inherit as multipliers; lengths and percentages
+   inherit the value computed at the declaring node. Numeric wire values are
+   already resolved point lengths. *)
+let line_height_of store id =
+  let rec owner node =
+    match Lui_store.prop store node "line-height" with
+    | Some value -> Some (node, value)
+    | None -> Option.bind (Lui_store.parent store node) owner
+  in
+  let points owner spec =
+    let s = String.trim spec in
+    let length suffix factor =
+      let raw =
+        String.sub s 0 (String.length s - String.length suffix) |> String.trim
+      in
+      match float_of_string_opt raw with
+      | Some value -> Some (factor *. value)
+      | None -> invalid_arg ("Invalid native line height: " ^ s)
+    in
+    if s = "normal" then None
+    else
+      match float_of_string_opt s with
+      | Some ratio -> Some (ratio *. Lui_text.size (font_of store id))
+      | None ->
+          if String.ends_with ~suffix:"rem" s then length "rem" 16.
+          else if String.ends_with ~suffix:"em" s then
+            length "em" (Lui_text.size (font_of store owner))
+          else if String.ends_with ~suffix:"px" s then length "px" 1.
+          else if String.ends_with ~suffix:"%" s then
+            length "%" (Lui_text.size (font_of store owner) /. 100.)
+          else invalid_arg ("Unsupported native line height: " ^ s)
+  in
+  match owner id with
+  | None -> None
+  | Some (_, Lui_protocol.FloatValue value) -> Some value
+  | Some (_, IntValue value) -> Some (float value)
+  | Some (node, StringValue value) ->
+      Option.bind (Theme_vars.resolve_value value 0) (points node)
+  | Some _ -> invalid_arg "Invalid native line-height property"
+
 (* ---- atlas upload ---- *)
 
 (* Quantized ink luminance the engine thickens dark-on-light stems
@@ -351,7 +391,8 @@ let text_layout t id (r : Lui_scene.rect) s =
       (w' +. 1.) /. scale
     | _ -> 0.
   in
-  let layout = Lui_text.Cache.layout (layout_cache t id) font s ~width:wrap_w in
+  let layout = Lui_text.Cache.layout (layout_cache t id) font s ~width:wrap_w
+    ?line_height:(line_height_of store id) in
   (* Vertical centering inside the node's rect, device pixels. *)
   let text_h = layout.lay_height *. scale in
   let y0 =
@@ -371,15 +412,14 @@ let text_ops t id r fg s =
     if Lui_store.string_prop store id "text-overflow" = Some "ellipsis"
        && layout.lay_width *. scale > w' then
       match Lui_text.truncate ~width:(w' /. scale) layout.lay_base s with
-      | Some line -> [|line|]
+      | Some line -> [|line,layout.lay_lines.(0).ll_baseline|]
       | None -> [||]
-    else Array.map (fun (l : Lui_text.line_layout) -> l.ll_line) layout.lay_lines
+    else Array.map (fun (l : Lui_text.line_layout) -> l.ll_line,l.ll_baseline) layout.lay_lines
   in
   let gstart = List.length scene.glyphs in
-  let line_y = ref 0. in
   Array.iter
-    (fun (l : Lui_text.line) ->
-       let baseline = Lui_text.baseline (y0 +. !line_y +. l.ascent *. scale) in
+    (fun ((l : Lui_text.line),line_baseline) ->
+       let baseline = Lui_text.baseline (y0 +. line_baseline *. scale) in
        let lx =
          match tp.tp_align with
          | Lui_paint.Ta_start -> x0
@@ -395,9 +435,7 @@ let text_ops t id r fg s =
                       ~pen:(lx +. g.x *. scale)
                       ~baseline ~font:run.font ~gid:g.id ~g_y:g.y ~fg))
               run.glyphs)
-         l.runs;
-       line_y :=
-         !line_y +. (l.ascent +. l.descent +. l.leading) *. scale)
+         l.runs)
     lines;
   let gend = List.length scene.glyphs in
   if gend = gstart then []
@@ -431,7 +469,8 @@ let measure store id ~scale =
     in
     if text = "" then (0., 0.)
     else
-      let w, h = Lui_text.measure (font_of store id) text in
+      let layout = Lui_text.layout ?line_height:(line_height_of store id) (font_of store id) text in
+      let w,h=layout.lay_width,layout.lay_height in
       let tp = Lui_paint.text_placement_of store id in
       ((w +. (2. *. tp.tp_pad_x)) *. scale,
        (h +. (2. *. tp.tp_pad_y)) *. scale)
@@ -449,5 +488,7 @@ let measure_text ?(width = 0.) t id s =
       if Lui_store.string_prop (t.store ()) id "white-space" = Some "nowrap" then 0.
       else if Float.is_finite width && width > 0. then width /. scale else 0.
     in
-    let w, h = Lui_text.Cache.measure (layout_cache t id) ~width (font_of (t.store ()) id) s in
+    let store=t.store () in
+    let w, h = Lui_text.Cache.measure (layout_cache t id) ~width
+      ?line_height:(line_height_of store id) (font_of store id) s in
     (w *. scale, h *. scale)

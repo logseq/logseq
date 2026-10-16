@@ -774,7 +774,7 @@ let inner ~modal : t =
                      ~padding:8
                      [ heading ~key:"aside-ht" ~level:1
                          ~style_class:"cp__settings-modal-title"
-                         ~font_size:"1.5rem" ~font_weight:600
+                         ~font_size:"1.5rem" ~font_weight:600 ~line_height:"2rem"
                          ~data_attrs:
                            [ "style", "text-transform: lowercase" ]
                          ~value:T.settings_title []
