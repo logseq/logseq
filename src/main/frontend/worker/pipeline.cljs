@@ -376,7 +376,7 @@
                query-property
                (not (rtc-tx-or-download-graph? tx-meta))
                (not (:undo? tx-meta))
-               (not (:redo? tx-meta)))
+               (not (:db-sync/replayed-tx-data? tx-meta)))
       (let [tagged-block-ids (->> tx-data
                                   (filter (fn [d] (and (= :block/tags (:a d)) (:added d))))
                                   (map :e)
