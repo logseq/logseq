@@ -6,10 +6,12 @@
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
+            [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
+            [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.semantic :as semantic-handler]
             [logseq.db-sync.worker.asset-link :as asset-link]
@@ -190,6 +192,76 @@
         (is (some? (ws/coerce-ws-server-message response)))
         (is (= [{:t 1 :tx (protocol/tx->transit []) :outliner-op :delete-blocks :tx-id tx-id}]
                (:txs (sync-handler/pull-response self 0))))))))
+
+(deftest pull-http-json-serializes-tx-id-as-string-and-round-trips-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (let [conn (storage/open-conn sql)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   tx-id (random-uuid)
+                   entry {:tx-id tx-id :outliner-op :save-block
+                          :tx (protocol/tx->transit [{:block/uuid (random-uuid)
+                                                      :block/title "user content"}])}
+                   request (js/Request. "http://localhost/sync/graph-1/pull?graph-id=graph-1&since=0"
+                                        #js {:method "GET"})
+                   url (js/URL. (.-url request))]
+               (-> (p/with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (p/let [_ (sync-handler/handle-tx-batch! self nil [entry] 0)
+                             resp (sync-handler/handle {:self self
+                                                        :request request
+                                                        :url url
+                                                        :route {:handler :sync/pull}})
+                             text (.text resp)
+                             parsed (js/JSON.parse text)
+                             raw-tx (aget parsed "txs" 0)
+                             raw-tx-id (aget raw-tx "tx-id")
+                             body (js->clj parsed :keywordize-keys true)
+                             coerced ((get db-sync-schema/http-response-coercers :sync/pull) body)]
+                       (is (= 200 (.-status resp)))
+                       (is (string? raw-tx-id)
+                           (str "serialized /pull txs[].tx-id must be a UUID string, got "
+                                (js/JSON.stringify raw-tx-id)))
+                       (is (= (str tx-id) raw-tx-id))
+                       (is (= "save-block" (aget raw-tx "outliner-op")))
+                       (is (uuid? (get-in coerced [:txs 0 :tx-id])))
+                       (is (= tx-id (get-in coerced [:txs 0 :tx-id])))
+                       (is (= :save-block (get-in coerced [:txs 0 :outliner-op])))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest tx-batch-http-json-serializes-reject-uuids-as-strings-test
+  (async done
+         (let [success-tx-id (random-uuid)
+               failed-tx-id (random-uuid)
+               missing-uuid (random-uuid)
+               resp (http/json-response :sync/tx-batch
+                                        {:type "tx/reject"
+                                         :reason "db transact failed"
+                                         :t 3
+                                         :success-tx-ids [success-tx-id]
+                                         :failed-tx-id failed-tx-id
+                                         :missing-block-uuids [missing-uuid]})]
+           (-> (p/let [text (.text resp)
+                       parsed (js/JSON.parse text)
+                       body (js->clj parsed :keywordize-keys true)
+                       coerced ((get db-sync-schema/http-response-coercers :sync/tx-batch) body)]
+                 (is (= 200 (.-status resp)))
+                 (is (string? (aget (aget parsed "success-tx-ids") 0)))
+                 (is (= (str success-tx-id) (aget (aget parsed "success-tx-ids") 0)))
+                 (is (string? (aget parsed "failed-tx-id")))
+                 (is (= (str failed-tx-id) (aget parsed "failed-tx-id")))
+                 (is (string? (aget (aget parsed "missing-block-uuids") 0)))
+                 (is (= (str missing-uuid) (aget (aget parsed "missing-block-uuids") 0)))
+                 (is (= [success-tx-id] (:success-tx-ids coerced)))
+                 (is (= failed-tx-id (:failed-tx-id coerced)))
+                 (is (= [missing-uuid] (:missing-block-uuids coerced))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest failed-journal-migration-does-not-mark-schema-ready-test
   (with-memory-sql
