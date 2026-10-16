@@ -468,27 +468,39 @@ let accent_map = [
   ("Ё", "Е");
 ]
 
-(* cljs search-fuzzy remove-accents — npm remove-accents@0.5.0 builds
-   one regex from the characterMap keys in map order and replaces
-   leftmost-first; scanning the table in order at each position is
-   equivalent. *)
+(* Preserve the map's leftmost-first replacement order within each
+   first-character bucket, including keys made of multiple codepoints. *)
+let accent_candidates =
+  let buckets = Hashtbl.create 32 in
+  List.iter
+    (fun (key, replacement) ->
+       let first = key.[0] in
+       let candidates = Option.value (Hashtbl.find_opt buckets first) ~default:[] in
+       Hashtbl.replace buckets first ((key, replacement) :: candidates))
+    (List.rev accent_map);
+  buckets
+
+let rec accent_key_matches s offset key j =
+  j = String.length key
+  || (s.[offset + j] = key.[j] && accent_key_matches s offset key (j + 1))
+
+let rec accent_at s offset = function
+  | [] -> None
+  | (key, replacement) :: rest ->
+      let length = String.length key in
+      if offset + length <= String.length s && accent_key_matches s offset key 0 then
+        Some (length, replacement)
+      else accent_at s offset rest
+
 let remove_accents (s : string) : string =
   let len = String.length s in
   let buf = Buffer.create len in
   let rec scan i =
     if i < len then begin
-      let matches_at (k : string) =
-        let klen = String.length k in
-        let rec eq j = j = klen || (s.[i + j] = k.[j] && eq (j + 1)) in
-        i + klen <= len && eq 0
+      let candidates =
+        Option.value (Hashtbl.find_opt accent_candidates s.[i]) ~default:[]
       in
-      let rec try_keys = function
-        | [] -> None
-        | (k, rep) :: rest ->
-            if matches_at k then Some (String.length k, rep)
-            else try_keys rest
-      in
-      match try_keys accent_map with
+      match accent_at s i candidates with
       | Some (klen, rep) ->
           Buffer.add_string buf rep;
           scan (i + klen)
