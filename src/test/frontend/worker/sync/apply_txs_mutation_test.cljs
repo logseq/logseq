@@ -461,7 +461,10 @@
 
 (defn- local-tx-report
   []
-  (let [db-before (d/empty-db {:block/uuid {:db/unique :db.unique/identity}})
+  ;; a graph that syncs (the remote flag): only such a graph gets an upload
+  ;; row and a flush for its local transactions
+  (let [db-before (d/db-with (d/empty-db {:block/uuid {:db/unique :db.unique/identity}})
+                             [{:db/ident :logseq.kv/graph-remote? :kv/value true}])
         {:keys [db-after tx-data]} (d/with db-before [{:db/id 1 :block/uuid (random-uuid) :block/title "x"}])]
     {:db-before db-before :db-after db-after :tx-data tx-data :tx-meta {}}))
 
