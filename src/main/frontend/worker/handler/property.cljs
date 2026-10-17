@@ -378,11 +378,7 @@
                                  (:block/name property))]
                (cond-> display-property
                  raw-title
-                 (assoc :block/raw-title raw-title)
-
-                 (:logseq.property/deleted-at property)
-                 (assoc :logseq.property/deleted-at
-                        (:logseq.property/deleted-at property)))))))))
+                 (assoc :block/raw-title raw-title))))))))
 
 (def-thread-api :thread-api/get-all-properties
   [repo opts]
@@ -594,28 +590,30 @@
        (or (contains? value :db/id)
            (contains? value :block/uuid))))
 
+(defn- recycled-entity-value?
+  "A stored block's values are summaries without :logseq.property/deleted-at,
+  so a value with a :db/id is checked on its entity."
+  [db value]
+  (and (entity-ref-value? value)
+       (ldb/recycled? (or (some->> (:db/id value) (d/entity db)) value))))
+
 (defn- contains-recycled-entity-value?
-  [value]
+  [db value]
   (cond
     (entity-ref-value? value)
-    (ldb/recycled? value)
+    (recycled-entity-value? db value)
 
     (and (coll? value) (not (map? value)))
-    (some (fn [item]
-            (and (entity-ref-value? item)
-                 (ldb/recycled? item)))
-          value)
+    (some #(recycled-entity-value? db %) value)
 
     :else
     false))
 
 (defn- filter-recycled-entity-values
-  [value]
-  (let [active-entity-value? (fn [item]
-                               (or (not (entity-ref-value? item))
-                                   (not (ldb/recycled? item))))]
+  [db value]
+  (let [active-entity-value? #(not (recycled-entity-value? db %))]
     (cond
-      (and (entity-ref-value? value) (ldb/recycled? value))
+      (recycled-entity-value? db value)
       nil
 
       (set? value)
@@ -634,12 +632,12 @@
       value)))
 
 (defn- sanitize-property-values-for-display
-  [properties]
+  [db properties]
   (reduce-kv
    (fn [{:keys [properties recycled-only-property-ids] :as result} property-id property-value]
-     (let [property-value' (filter-recycled-entity-values property-value)]
+     (let [property-value' (filter-recycled-entity-values db property-value)]
        (if (and (nil? property-value')
-                (contains-recycled-entity-value? property-value))
+                (contains-recycled-entity-value? db property-value))
          (assoc result
                 :properties (assoc properties property-id nil)
                 :recycled-only-property-ids (conj recycled-only-property-ids property-id))
@@ -680,7 +678,7 @@
                                        (entity-tagged-with? db block-entity :logseq.class/Journal)))
         properties* (display-properties-for-block db block-entity)
         {:keys [properties recycled-only-property-ids]}
-        (sanitize-property-values-for-display properties*)
+        (sanitize-property-values-for-display db properties*)
         remove-built-in-or-other-position-properties
         (fn [property-pairs show-in-hidden-properties?]
           (remove (fn [property]
@@ -819,12 +817,9 @@
 (defn- render-bottom-position-property?
   [db property]
   (let [property-id (:db/ident property)
-        property-type (:logseq.property/type property)
-        node-many? (and (= :node property-type)
-                        (= :db.cardinality/many (:db/cardinality property)))]
+        property-type (:logseq.property/type property)]
     (and (not (contains? #{:url :asset} property-type))
-         (or node-many?
-             (not= :default property-type)
+         (or (not= :default property-type)
              (property-has-closed-values? db property))
          (not (render-schema-or-tag-related-property? property-id)))))
 

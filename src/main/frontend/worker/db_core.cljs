@@ -41,7 +41,6 @@
    [frontend.worker.thread-atom]
    [frontend.worker.ui-request :as ui-request]
    [frontend.worker.undo-redo :as worker-undo-redo]
-   [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
    [logseq.common.graph-dir :as graph-dir]
    [logseq.common.util :as common-util]
@@ -747,7 +746,6 @@
         (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
         (search/create-tables-and-triggers! search-db)
         (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-        (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
         (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
               _ (db-fix/check-and-fix-schema! conn)
               _ (when datoms

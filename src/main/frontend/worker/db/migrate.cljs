@@ -181,8 +181,7 @@
 (defn ensure-built-in-data-exists!
   "Return tx-data"
   [conn]
-  (let [*uuids (atom {})
-        initial-data (sqlite-create-graph/build-db-initial-data "")
+  (let [initial-data (sqlite-create-graph/build-db-initial-data "")
         data (->> initial-data
                   (keep (fn [data]
                           (cond
@@ -204,9 +203,7 @@
 
                             (:block/uuid data)
                             (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
-                              (do
-                                (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
-                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                              (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
                                   (reduce
                                    (fn [data [k existing-value]]
                                      (update data k
@@ -231,22 +228,17 @@
                                                      :else
                                                      v))))))
                                    data
-                                   existing-data)))
+                                   existing-data))
                               data)
 
                             :else
                             data)))
                   common-util/fast-remove-nils)
-        ;; using existing page's uuid
         data' (->>
                (walk/prewalk
                 (fn [f]
-                  (cond
-                    (and (de/entity? f) (:block/uuid f))
+                  (if (and (de/entity? f) (:block/uuid f))
                     (or (:db/ident f) [:block/uuid (:block/uuid f)])
-                    (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
-                    [:block/uuid (@*uuids (second f))]
-                    :else
                     f))
                 data)
                (map (fn [m] (dissoc m :db/id))))

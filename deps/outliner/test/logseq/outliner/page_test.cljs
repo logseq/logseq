@@ -26,6 +26,19 @@
     (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
     (is (not= movie-class Movie-class) "The two classes are not the same")))
 
+(deftest create-tag-does-not-return-a-namespaced-tag-of-that-name
+  ;; db-test #1345: after "#Foo/Baz", creating the tag "Baz" returned Foo's Baz
+  (let [conn (db-test/create-conn)
+        [_ child-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true :class? true})
+        [_ baz-uuid] (outliner-page/create! conn "Baz" {:class? true})
+        baz (d/entity @conn [:block/uuid baz-uuid])
+        [_ again-uuid] (outliner-page/create! conn "Baz" {:class? true})]
+    (is (not= child-uuid baz-uuid) "a new top-level tag Baz")
+    (is (ldb/class? baz))
+    (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends baz))))
+    (is (= baz-uuid again-uuid) "creating Baz again returns the top-level tag")
+    (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/property1 {:logseq.property/type :default}}
@@ -344,6 +357,45 @@
         "Journal title is not split into a month namespace page")
     (is (nil? (ldb/get-page @conn "18"))
         "Journal title is not split into a day namespace page")))
+
+(defn- refused?
+  [db title entity]
+  (try (outliner-validate/validate-block-title db title entity)
+       false
+       (catch :default _ true)))
+
+(deftest rename-is-checked-among-top-level-pages
+  ;; db-test #1346: a page with no parent and a namespace root (parent: the
+  ;; Library) are both top-level, and a name must be unique among them, but
+  ;; not against a namespace child
+  (testing "a top-level page may take the name of a namespace child"
+    (let [conn (db-test/create-conn)
+          [_ baz-uuid] (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          baz (d/entity @conn [:block/uuid baz-uuid])]
+      (is (not (refused? @conn "Qux" baz)))
+      (d/transact! conn [{:db/id (:db/id baz) :block/title "Qux" :block/name "qux"}])
+      (is (not (refused? @conn "Baz" (d/entity @conn [:block/uuid baz-uuid])))
+          "renaming it back is accepted")))
+  (testing "a namespace root may not take the name of a top-level page"
+    (let [conn (db-test/create-conn)
+          _ (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          foo (ldb/get-page @conn "Foo")]
+      (is (refused? @conn "Baz" foo))))
+  (testing "a top-level page may not take the name of a namespace root"
+    (let [conn (db-test/create-conn)
+          [_ qux-uuid] (outliner-page/create! conn "Qux" {})
+          _ (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})]
+      (is (refused? @conn "Foo" (d/entity @conn [:block/uuid qux-uuid])))))
+  (testing "siblings in a namespace"
+    (let [conn (db-test/create-conn)
+          [_ b-uuid] (outliner-page/create! conn "Foo/B" {:split-namespace? true})
+          _ (outliner-page/create! conn "Foo/C" {:split-namespace? true})
+          _ (outliner-page/create! conn "Bar/D" {:split-namespace? true})
+          b (d/entity @conn [:block/uuid b-uuid])]
+      (is (refused? @conn "C" b))
+      (is (not (refused? @conn "D" b))))))
 
 (deftest rename-page-rejects-case-variant-of-existing-page
   (let [conn (db-test/create-conn)

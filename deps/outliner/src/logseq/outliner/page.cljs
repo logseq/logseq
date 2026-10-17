@@ -405,7 +405,17 @@
                     (set (keep #(resolved-tag-ident db %) resolved-tags))
                     :else
                     #{:logseq.class/Page})
-        existing-names-page (ldb/page-exists? db title types)
+        ;; A tag inside a namespace (extending a tag other than Root Tag) is
+        ;; not the tag asked for by a create without a namespace: after
+        ;; "#Foo/Baz", creating "#Baz" returned Foo's Baz (db-test #1345)
+        namespaced-tag? (fn [id]
+                          (let [e (d/entity db id)]
+                            (and (ldb/class? e)
+                                 (some #(not= :logseq.class/Root (:db/ident %))
+                                       (:logseq.property.class/extends e)))))
+        existing-names-page (cond->> (ldb/page-exists? db title types)
+                              (and class? (not (ns-util/namespace-page? title)))
+                              (remove namespaced-tag?))
         journal-page-uuid (some-> (gp-block/page-name->map title db false date-formatter
                                                            {:class? class?
                                                             :skip-existing-page-check? true})
@@ -426,39 +436,19 @@
              (or (:block/journal-day existing-page)
                  (not (:block/parent existing-page))
                  (ldb/recycled? existing-page)))
-      (let [tx-meta {:persist-op? persist-op?
-                     :outliner-op :save-block}]
-        (cond
-          (and class?
-               (not (ldb/class? existing-page))
-               (ldb/internal-page? existing-page))
-          ;; Convert existing page to class
-          (let [tx-data [(merge (db-class/build-new-class db
-                                                          (select-keys existing-page [:block/title :block/uuid :block/created-at])
-                                                          (when class-ident-namespace?
-                                                            {:ident-namespace class-ident-namespace}))
-                                (select-keys existing-page [:db/ident]))
-                         [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
-            {:tx-meta tx-meta
-             :tx-data tx-data
-             :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})
-
-          (ldb/recycled? existing-page)
-          (let [options' (assoc options :uuid (:block/uuid existing-page))
-                tx-meta' (outliner-tx-meta/ensure-outliner-ops
-                          {:persist-op? persist-op?
-                           :outliner-op :create-page}
-                          [:create-page [title options']])]
-            {:tx-meta tx-meta'
-             :tx-data (outliner-recycle/restore-tx-data db existing-page)
-             :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})
-
-          ;; Just return existing page info
-          :else
-          {:page-uuid (:block/uuid existing-page)
-           :title (:block/title existing-page)}))
+      (if (ldb/recycled? existing-page)
+        (let [options' (assoc options :uuid (:block/uuid existing-page))
+              tx-meta' (outliner-tx-meta/ensure-outliner-ops
+                        {:persist-op? persist-op?
+                         :outliner-op :create-page}
+                        [:create-page [title options']])]
+          {:tx-meta tx-meta'
+           :tx-data (outliner-recycle/restore-tx-data db existing-page)
+           :page-uuid (:block/uuid existing-page)
+           :title (:block/title existing-page)})
+        ;; Just return existing page info
+        {:page-uuid (:block/uuid existing-page)
+         :title (:block/title existing-page)})
       (let [page (cond-> (gp-block/page-name->map title db true date-formatter
                                                 {:class? class?
                                                  :page-uuid (when (uuid? uuid') uuid')

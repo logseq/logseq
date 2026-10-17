@@ -31,13 +31,6 @@
       (fn? iter-fn) (vec (js/Array.from result))
       (array? (.-results result)) (.-results result)
       (array? (.-rows result)) (.-rows result)
-      (array? result) (if (empty? result)
-                        []
-                        (let [first-row (first result)]
-                          (cond
-                            (array? (.-results first-row)) (.-results first-row)
-                            (array? (.-rows first-row)) (.-rows first-row)
-                            :else result)))
       :else [])))
 
 (defn sql-exec
