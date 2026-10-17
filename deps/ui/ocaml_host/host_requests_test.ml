@@ -4432,6 +4432,30 @@ let () = Native_embed.with_entry_lock (fun () ->
   check "Native table selection geometry, visibility and input" (!failures=[]);
   print_endline "native table selection geometry, visibility and input: OK")
 
+let () =
+  List.iter (fun (mode, name, secondary, link) ->
+    let snapshot = Ui_theme.snapshot mode in
+    let install vars = Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String name;"vars",`Assoc (List.map (fun (k,v) -> k,`String v) vars)])) in
+    install snapshot.vars;
+    Theme_vars.set_dark (mode=Ui_theme.Dark);
+    List.iter (fun stem -> check ("Native palette leaves a stylesheet color unresolved: "^name^"/"^stem)
+      (Option.is_some (Theme_vars.color_of ("var(--ls-"^stem^")")))) Ui_theme.accent_bound;
+    check ("Native secondary foreground differs from classic stylesheet: "^name)
+      (Theme_vars.color_of "var(--ls-secondary-text-color)"=Some secondary);
+    check ("Native link color differs from classic stylesheet: "^name)
+      (Theme_vars.color_of "var(--ls-link-text-color)"=Some link);
+    install (snapshot.vars @ ["--ls-secondary-text-color","#010203"]);
+    check "Explicit theme snapshot colors must override the classic palette"
+      (Theme_vars.color_of "var(--ls-secondary-text-color)"=Some (Lui_scene.color 1 2 3 255)))
+    [Ui_theme.Light,"light",Lui_scene.color 22 30 46 255,Lui_scene.color 16 107 163 255;
+     Ui_theme.Dark,"dark",Lui_scene.color 223 223 223 255,Lui_scene.color 138 187 187 255];
+  let snapshot = Ui_theme.snapshot Ui_theme.Light in
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode",`String "light";"vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+  Theme_vars.set_dark false;
+  print_endline "native complete classic palette: OK"
+
 let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in
@@ -4499,6 +4523,38 @@ let () = Native_embed.with_entry_lock (fun () ->
         expect "Bulk property selection must open an anchored popover" (Option.is_some popup);
         Option.iter (fun popup ->
           let field = List.find (fun id -> Lui_store.kind store id="text-field") (ids ()) in
+          let row = List.find (fun id -> Lui_store.kind store id="list-item") (ids ()) in
+          let title = List.find (fun id -> Lui_store.kind store id="text"
+            && Lui_store.string_prop store id "text"=Some "Property 00") (ids ()) in
+          let colors = ref [] in
+          let paint_scene = Lui_scene.create
+            ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+            ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+          Lui_paint.paint {Lui_paint.default_hooks with
+            layout=(fun id -> Lui_paint.placement_of_rect (rect id));
+            color_of=Theme_vars.color_of;shadow_of=Lui_paint.parse_shadows Theme_vars.color_of;
+            state_of=(fun id -> if id=field then {Lui_paint.state_neutral with focused=true}
+              else W.Ui.state_of (A.ui surface) store id);
+            text_ops=(fun id _ color _ -> colors:=(id,color)::!colors;[])}
+            store paint_scene ~width:(int_of_float (1440.*.scale))
+            ~height:(int_of_float (932.*.scale)) ~scale ~clear:(Lui_scene.color 0 0 0 0);
+          expect "Property selection paints an accent instead of the neutral reference fill"
+            (List.exists (function Lui_scene.Fill f -> f.frect=rect row
+              && Some f.fcolor=Theme_vars.color_of "var(--lx-gray-04)" | _ -> false) paint_scene.ops);
+          expect "Property titles do not use the reference secondary foreground"
+            (List.exists (fun (id,color) -> id=title
+              && Some color=Theme_vars.color_of "var(--ls-secondary-text-color)") !colors);
+          let input = rect field in
+          let focus_rect = Lui_scene.rect (input.x-.3.*.scale) (input.y-.3.*.scale)
+            (input.w+.6.*.scale) (input.h+.6.*.scale) in
+          expect "The compact property input paints an unwanted focus ring"
+            (not (List.exists (function Lui_scene.Fill f -> f.frect=focus_rect | _ -> false) paint_scene.ops));
+          expect "The property popup lacks its rounded, bordered background"
+            (List.exists (function Lui_scene.Fill f ->
+              f.frect=rect popup && f.fborder=(scale,scale,scale,scale)
+              && Some f.fcolor=Theme_vars.color_of "hsl(var(--popover))"
+              && let a,b,c,d=f.fradii in List.for_all (fun r -> abs_float (abs_float r-.6.*.scale)<0.1) [a;b;c;d]
+              | _ -> false) paint_scene.ops);
           List.iter (fun (width,height) ->
             Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
               ~height:(int_of_float (height*.scale)) ~scale;refresh ();

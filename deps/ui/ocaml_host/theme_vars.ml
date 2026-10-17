@@ -45,6 +45,8 @@ let install_snapshot (payload : string) =
           (if mode_name = "dark" then Lui_theme.Dark else Lui_theme.Light)
       in
       Hashtbl.reset table;
+      List.iter (fun (name, value) -> Hashtbl.replace table name value)
+        (Ui_theme.classic_vars (Ui_theme.mode_of_string mode_name));
       incr generation;
       match j |> member "vars" with
       | `Assoc kvs ->

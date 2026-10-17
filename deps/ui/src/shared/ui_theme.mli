@@ -140,6 +140,10 @@ val accent_bound : string list
     Native snapshots retain its CSS channel value for color substitution. *)
 val stylesheet_owned_var : string -> bool
 
+(** Classic accent declarations for hosts without the Web stylesheet cascade.
+    Explicit snapshot declarations take precedence over this palette. *)
+val classic_vars : mode -> (string * string) list
+
 val snapshot : mode -> snapshot
 
 val mode_of_string : string -> mode

@@ -134,13 +134,17 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
                  let on_press _ = it.on_choose () in
                  if compact then
-                   list_item ~key:(if it.it_new then "__new__" else it.it_title)
-                     ~height:32 ~padding_horizontal:8 ~padding_vertical:4
+                   Ui_components.with_props
+                     [Ui_components.Prop.selected_background "var(--lx-gray-04)";
+                      Ui_components.Prop.hover_background "var(--lx-gray-04)"]
+                   (list_item ~key:(if it.it_new then "__new__" else it.it_title)
+                     ~height:32 ~min_height:32 ~padding_horizontal:8 ~padding_vertical:4
+                     ~foreground:"var(--ls-secondary-text-color)"
                      ~corner_radius:4 ~selected:(index = 0) ~on_press
                      [ row ~gap:4 ~cross:`center ~grow:1.0
                          ((if it.it_icon = "" then [] else [ Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon ])
                           @ [ text ~value:title ~grow:1.0 [] ]
-                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ]
+                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ])
                  else
                    list_item
                      ~key:(if it.it_new then "__new__" else it.it_title)
@@ -154,7 +158,12 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
      (if compact then [Ui_components.Prop.font_size "14px";Ui_components.Prop.line_height "20px"] else [])
    (column ~gap:(if compact then 0 else 2)
      ~style_class:(if compact then "ls-property-select-compact" else "")
-     [ text_field ~placeholder ~autofocus:true
+     [ Ui_components.with_props
+         (if compact then [Ui_components.Prop.background "transparent";
+           Ui_components.Prop.border_width 0; Ui_components.Prop.corner_radius 0;
+           Ui_components.Prop.foreground "hsl(var(--foreground))";
+           Ui_components.Prop.focus_shadow "none"] else [])
+       (text_field ~placeholder ~autofocus:true
          ?height:(if compact then Some 32 else None)
          ?padding:(if compact then Some 6 else None)
          ?style_class:(if compact then Some "ls-property-select-input" else None)
@@ -177,7 +186,7 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                 | None -> Runtime.signal_set st { q; searched = None })
            | _ -> ())
          ~on_submit:(fun _ -> pick ())
-         []
+         [])
      ; list_view
      ]))
     context parent

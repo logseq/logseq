@@ -7,6 +7,7 @@ import {measureSettingsNavigation, assertSettingsNavigation} from './settings_na
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
 import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
 import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
+import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -26,6 +27,24 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('table property pickers retain shared paint and full-sized rows while filtering', () => {
+  open();
+  browser('click', '.all-pages-nav .item');
+  browser('wait', '--fn', "document.querySelector('[aria-label=\"Select row\"]') !== null");
+  browser('click', '[aria-label="Select row"]:first-of-type');
+  button('Set property');
+  browser('wait', '--fn', "document.querySelector('.ls-property-dialog .lui-list-item') !== null");
+  assertPropertyPicker(evaluate(`(${measurePropertyPicker.toString()})()`));
+  browser('fill', '.ls-property-dialog input', 'Priority');
+  browser('wait', '--fn', "document.querySelector('.ls-property-dialog .lui-list-item')?.textContent === 'Priority'");
+  assertPropertyPicker(evaluate(`(${measurePropertyPicker.toString()})()`));
+  browser('press', 'Enter');
+  browser('wait', '--fn', "document.querySelector('.ls-property-dialog')?.textContent.includes('Urgent') === true");
+  browser('press', 'Escape');
+  browser('wait', '--fn', "document.querySelector('.ls-property-dialog') === null");
+  browser('click', '[aria-label="Select all"]');
+});
 
 test('empty overlay chrome passes pointers through after popup and modal dismissal', () => {
   open();

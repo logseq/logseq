@@ -634,9 +634,12 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
      ; reactive ~equal:(==)
          (fun current -> match current with
            | Some d when d.d_placement = Trigger key ->
-               Ui_components.with_props [Ui_components.Prop.overflow `auto]
+               Ui_components.with_props
+                 [Ui_components.Prop.overflow `auto; Ui_components.card_shadow]
                  (popover ~anchor:`below ~anchor_offset:0. ~width:226
                     ~padding:0 ~max_height:288 ~border_width:1
+                    ~corner_radius:6 ~background:"hsl(var(--popover))"
+                    ~foreground:"hsl(var(--popover-foreground))"
                     ~border_color:"hsl(var(--border))"
                     ~style_class:"ui__popover-content ls-property-dialog"
                     ~data_attrs:["role","dialog"]

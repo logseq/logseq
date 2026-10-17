@@ -2611,26 +2611,7 @@ html[data-theme=light] {
 /* Icon-only property controls retain their accessible labels. */
 .pv-closed-value .lui-button-label:empty { display: none; }
 
-.ls-property-select-compact { font-size: 14px; line-height: 20px; }
-.ls-property-select-input,
-.ls-property-select-input:focus {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ls-secondary-text-color);
-  box-shadow: none;
-  outline: none;
-  font-size: 14px;
-}
-.ls-property-select-compact .lui-list-item { font-size: 14px; line-height: 20px; }
-
 .ls-property-select-popup { color: hsl(var(--popover-foreground) / 0.75); }
-
-.ls-property-select-compact .lui-list-item[data-selected],
-.ls-property-select-compact .lui-list-item:hover {
-  background: var(--lx-gray-04);
-  color: inherit;
-}
 
 .ls-property-select-input::placeholder {
   color: hsl(var(--muted-foreground));

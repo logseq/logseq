@@ -260,6 +260,69 @@ let colors mode =
     ; overlay = "#00000088"
     }
 
+(* Native has no stylesheet cascade. Declare the classic palette owned by
+   vars-classic.css there, using the same shared colors and variable chains.
+   Web continues to let its accent selectors own these --ls-* names. *)
+let classic_vars mode =
+  let c = colors mode in
+  let choose light dark = match mode with Light -> light | Dark -> dark in
+  List.map
+    (fun (stem, value) -> ("--ls-" ^ stem, value))
+    [
+      ("primary-background-color", c.background);
+      ("secondary-background-color", c.background_raised);
+      ("tertiary-background-color", c.background_sunken);
+      ("quaternary-background-color", c.background_selected);
+      ( "table-tr-even-background-color",
+        choose "var(--ls-secondary-background-color)" "#03333f" );
+      ( "block-properties-background-color",
+        choose "var(--ls-secondary-background-color)" "#06323e" );
+      ( "page-properties-background-color",
+        choose "var(--ls-secondary-background-color)" "#06323e" );
+      ("block-ref-link-text-color", choose "var(--ls-link-text-color)" "#377f91");
+      ("border-color", c.border);
+      ("secondary-border-color", c.border_soft);
+      ( "menu-hover-color",
+        choose "var(--ls-a-chosen-bg)" "var(--ls-secondary-background-color)" );
+      ("primary-text-color", c.foreground);
+      ("secondary-text-color", c.foreground_strong);
+      ("link-text-color", c.accent);
+      ( "link-text-hover-color",
+        choose c.accent_hover "var(--ls-active-secondary-color)" );
+      ("link-ref-text-color", "var(--ls-link-text-color)");
+      ("link-ref-text-hover-color", "var(--ls-link-text-hover-color)");
+      ( "tag-text-color",
+        choose "var(--ls-link-ref-text-color)" "var(--ls-link-text-color)" );
+      ( "tag-text-hover-color",
+        choose "var(--ls-link-ref-text-hover-color)"
+          "var(--ls-link-text-hover-color)" );
+      ( "slide-background-color",
+        choose "#fff" "var(--ls-primary-background-color)" );
+      ("block-highlight-color", choose "#c0e6fd" "#0a3d4b");
+      ("selection-background-color", c.selection);
+      ("selection-text-color", choose "var(--ls-secondary-text-color)" "#fff");
+      ("page-checkbox-color", choose "#9dbbd8" "#6093a0");
+      ( "page-checkbox-border-color",
+        choose "var(--ls-page-checkbox-color)"
+          "var(--ls-primary-background-color)" );
+      ("page-blockquote-color", "var(--ls-primary-text-color)");
+      ( "page-blockquote-bg-color",
+        choose "var(--lx-gray-03, #fbfaf8)"
+          "var(--ls-secondary-background-color)" );
+      ( "page-blockquote-border-color",
+        choose "var(--lx-gray-08, #799bbc)" "var(--ls-border-color)" );
+      ( "page-inline-code-bg-color",
+        choose "var(--ls-secondary-background-color)" "#01222a" );
+      ("page-inline-code-color", "var(--ls-primary-text-color)");
+      ("cloze-text-color", choose "#0000cd" "#8fbc8f");
+      ("icon-color", choose "#646464" "var(--ls-link-text-color)");
+      ("search-icon-color", "var(--ls-primary-text-color)");
+      ("search-icon-hover-color", "var(--ls-secondary-text-color)");
+      ("a-chosen-bg", "var(--ls-quaternary-background-color)");
+      ("focus-ring-color", c.focus_ring);
+      ("left-sidebar-text-color", choose "var(--lx-gray-12)" "var(--lx-gray-11)");
+    ]
+
 (* --color-level-1..6: raised-surface ladder. Light resolves the radix
    gray steps; dark keeps the vars-classic var(--ls-<name>) chains so accent
    themes can re-theme them. *)
