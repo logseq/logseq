@@ -87,8 +87,10 @@
 (defn- block-display-properties
   [db resource-key _runtime]
   (let [[_ block-uuid context] resource-key
-        block (common/entity-by-uuid! db :block-uuid block-uuid)
+        ;; the request is checked before the block is looked up, so a bad
+        ;; context fails whether or not the block still exists
         context (require-display-context! context)
+        block (common/entity-by-uuid! db :block-uuid block-uuid)
         show-empty-and-hidden-properties?
         (:show-empty-and-hidden-properties? context)
         result (property-handler/display-properties

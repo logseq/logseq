@@ -185,18 +185,20 @@
 (defn- block-reactions
   [db resource-key _runtime]
   (let [[_ target-uuid current-user-uuid] resource-key
-        target (common/entity-by-uuid! db :target-uuid target-uuid)]
-    (when-not (or (nil? current-user-uuid) (uuid? current-user-uuid))
-      (common/fail! "Invalid reaction user UUID" {:current-user-uuid current-user-uuid}))
-    (let [reactions (block-handler/block-reactions db (:db/id target))
-          watch-keys (into #{[:reactions target-uuid]}
-                           (keep (fn [item]
-                                   (when-let [creator-uuid
-                                              (get-in item [:logseq.property/created-by-ref
-                                                            :block/uuid])]
-                                     [:entity creator-uuid])))
-                           reactions)]
-      [watch-keys (reaction/summarize reactions current-user-uuid)])))
+        ;; the arguments are checked before the target lookup: a missing
+        ;; target is caught as a deleted owner, a bad argument is not
+        _ (when-not (or (nil? current-user-uuid) (uuid? current-user-uuid))
+            (common/fail! "Invalid reaction user UUID" {:current-user-uuid current-user-uuid}))
+        target (common/entity-by-uuid! db :target-uuid target-uuid)
+        reactions (block-handler/block-reactions db (:db/id target))
+        watch-keys (into #{[:reactions target-uuid]}
+                         (keep (fn [item]
+                                 (when-let [creator-uuid
+                                            (get-in item [:logseq.property/created-by-ref
+                                                          :block/uuid])]
+                                   [:entity creator-uuid])))
+                         reactions)]
+    [watch-keys (reaction/summarize reactions current-user-uuid)]))
 
 (defn- block-ref-count
   [db resource-key _runtime]
@@ -341,25 +343,31 @@
 (defn- page-membership
   [db resource-key _runtime]
   (let [[_ page-uuid membership-kind current-user-uuid] resource-key
+        ;; the arguments are checked before the page lookup: a missing page
+        ;; is caught as a deleted owner, a bad argument is not
+        _ (case membership-kind
+            (:class :property) (common/require-shape! resource-key :page-membership 3)
+            :quick-add (do (common/require-shape! resource-key :page-membership 4)
+                           (common/require-uuid! :current-user-uuid current-user-uuid))
+            (common/fail! "Unsupported page membership kind"
+                          {:membership-kind membership-kind
+                           :resource-key resource-key}))
         page (common/entity-by-uuid! db :page-uuid page-uuid)
         children (direct-child-entities db page-uuid)]
     (case membership-kind
       :class
-      (do
-        (common/require-shape! resource-key :page-membership 3)
-        [#{[:entity page-uuid]
-           [:children page-uuid]
-           [:class-membership page-uuid]}
-         (->> children
-              ;; A class membership resource can remain subscribed for the
-              ;; transaction that converts its class to a page.
-              (remove #(and (ldb/class? page)
-                            (tagged-with-page? % (:db/id page))))
-              (mapv :block/uuid))])
+      [#{[:entity page-uuid]
+         [:children page-uuid]
+         [:class-membership page-uuid]}
+       (->> children
+            ;; A class membership resource can remain subscribed for the
+            ;; transaction that converts its class to a page.
+            (remove #(and (ldb/class? page)
+                          (tagged-with-page? % (:db/id page))))
+            (mapv :block/uuid))]
 
       :property
       (do
-        (common/require-shape! resource-key :page-membership 3)
         (when-not (ldb/property? page)
           (common/fail! "Page membership target is not a property"
                  {:page-uuid page-uuid}))
@@ -374,7 +382,6 @@
 
       :quick-add
       (do
-        (common/require-shape! resource-key :page-membership 4)
         (when-not (= common-config/quick-add-page-name (:block/title page))
           (common/fail! "Page membership target is not quick add"
                  {:page-uuid page-uuid}))
@@ -391,11 +398,7 @@
                                  db child :logseq.property/created-by-ref)]
                             (or (nil? creator-id)
                                 (= current-user-id creator-id)))))
-                (mapv :block/uuid))]))
-
-      (common/fail! "Unsupported page membership kind"
-             {:membership-kind membership-kind
-              :resource-key resource-key}))))
+                (mapv :block/uuid))])))))
 
 (def resource-renderers
   {:favorites (common/renderer 1 favorites)
