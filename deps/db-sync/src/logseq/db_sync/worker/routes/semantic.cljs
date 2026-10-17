@@ -346,7 +346,9 @@
    :components
    {:schemas (ordered-map
               :BlockTree {:type "object" :required ["title"]
-                          :properties {:title {:type "string"}
+                          :properties {:uuid {:type "string" :format "uuid"
+                                              :description "Optional stable identity for retry-safe insertion. An existing block under the same parent is reused without changing its title or order; duplicate IDs and other-parent collisions are rejected."}
+                                       :title {:type "string"}
                                        :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
               :BlockResponse {:type "object" :required ["uuid" "kind" "title"]
                               :properties {:uuid {:type "string"}

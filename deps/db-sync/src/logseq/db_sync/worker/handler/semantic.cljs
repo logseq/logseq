@@ -347,23 +347,49 @@
       {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
        :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)})))
 
+(defn- valid-tree-identities? [db target nodes]
+  (let [seen (atom #{})
+        valid-id? (fn [id]
+                    (and (string? id)
+                         (re-matches #"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" id)))]
+    (letfn [(valid-node? [parent-id node]
+              (let [id (:uuid node)
+                    parsed (when (and id (valid-id? id)) (uuid (string/lower-case id)))
+                    existing (when parsed (d/entity db [:block/uuid parsed]))]
+                (and (non-blank-string? (:title node))
+                     (or (not (contains? node :uuid))
+                         (and parsed (not (contains? @seen parsed))
+                              (do (swap! seen conj parsed) true)))
+                     (or (nil? existing)
+                         (and (= "block" (block-kind existing))
+                              (= parent-id (get-in existing [:block/parent :block/uuid]))))
+                     (or (not (contains? node :children))
+                         (and (sequential? (:children node))
+                              (every? #(valid-node? parsed %) (:children node)))))))]
+      (and (sequential? nodes) (seq nodes)
+           (every? #(valid-node? (:block/uuid target) %) nodes)))))
+
 (defn- tree-block [conn e2ee? node]
-  (assoc (prepare-block-title! conn e2ee? (:title node)) :block/uuid (random-uuid)))
+  (let [id (if-let [value (:uuid node)] (uuid (string/lower-case value)) (random-uuid))]
+    (if (d/entity @conn [:block/uuid id])
+      {:block/uuid id}
+      (assoc (prepare-block-title! conn e2ee? (:title node)) :block/uuid id))))
 
 (defn- insert-tree! [conn target nodes position e2ee?]
   (let [nodes (vec nodes)
-        blocks (mapv #(tree-block conn e2ee? %) nodes)]
-    (when (seq blocks)
-      (outliner-core/insert-blocks! conn blocks target
-                                    {:sibling? false :top? (= position "prepend")
-                                     :bottom? (not= position "prepend") :keep-uuid? true})
-      (mapv (fn [node block]
-              (let [children (when (seq (:children node))
-                               (insert-tree! conn (d/entity @conn [:block/uuid (:block/uuid block)])
-                                             (:children node) "append" e2ee?))]
-                (cond-> {:uuid (str (:block/uuid block)) :title (:title node)}
-                  (seq children) (assoc :children children))))
-            nodes blocks))))
+        blocks (mapv #(tree-block conn e2ee? %) nodes)
+        fresh (filterv #(nil? (d/entity @conn [:block/uuid (:block/uuid %)])) blocks)]
+    (when (seq fresh)
+      (outliner-core/insert-blocks! conn fresh target
+                                   {:sibling? false :top? (= position "prepend")
+                                     :bottom? (not= position "prepend") :keep-uuid? true}))
+    (mapv (fn [node block]
+            (let [existing (d/entity @conn [:block/uuid (:block/uuid block)])
+                  children (when (seq (:children node))
+                             (insert-tree! conn existing (:children node) "append" e2ee?))]
+              (cond-> {:uuid (str (:block/uuid existing)) :title (:block/title existing)}
+                (seq children) (assoc :children children))))
+          nodes blocks)))
 
 (defn- today-journal-day []
   (let [now (js/Date.)]
@@ -637,7 +663,7 @@
     (p/let [body (body-clj request)
             target (find-entity db (:block-id path-params))]
       (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
-              (not (sequential? (:blocks body))) (empty? (:blocks body)))
+              (not (valid-tree-identities? db target (:blocks body))))
         (http/bad-request "invalid target, position, or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (:position body) e2ee?)]
           (broadcast-change! self)
@@ -646,7 +672,7 @@
     :semantic/blocks-insert-tree
     (p/let [body (body-clj request)
             target (find-entity db (:target-id body))]
-      (if (or (nil? target) (not (sequential? (:blocks body))) (empty? (:blocks body)))
+      (if (or (nil? target) (not (valid-tree-identities? db target (:blocks body))))
         (http/bad-request "invalid target or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append") e2ee?)]
           (broadcast-change! self)
@@ -726,10 +752,12 @@
     (p/let [body (body-clj request)]
       (if (or (not (sequential? (:blocks body))) (empty? (:blocks body)))
         (http/bad-request "missing blocks")
-        (let [today (ensure-today-page! conn)
-              inserted (insert-tree! conn today (:blocks body) "append" e2ee?)]
-          (broadcast-change! self)
-          (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
+        (let [today (ensure-today-page! conn)]
+          (if-not (valid-tree-identities? @conn today (:blocks body))
+            (http/bad-request "invalid capture block identities")
+            (let [inserted (insert-tree! conn today (:blocks body) "append" e2ee?)]
+              (broadcast-change! self)
+              (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))))
 
     :semantic/tags-list
     (paginated-response url :tags (entities-by-avet db :block/tags :logseq.class/Tag) tag-response)

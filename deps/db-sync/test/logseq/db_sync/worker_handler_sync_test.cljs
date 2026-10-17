@@ -3529,3 +3529,65 @@
             (is (= 400 (.-status rejected)))
             (is (= choice-id (:block/uuid (get (d/entity @conn [:block/uuid (first block-ids)])
                                                (:db/ident property)))))))))))
+
+(defn- with-tree-identity-test [done run]
+  (-> (with-memory-sql-async
+        (fn [sql]
+          (storage/init-schema! sql)
+          (let [conn (sqlite-export/create-conn)
+                page-id (random-uuid)
+                _ (d/transact! conn [{:block/uuid page-id :block/name "tree-identity"
+                                     :block/title "Tree identity" :block/tags :logseq.class/Page
+                                     :block/created-at 1 :block/updated-at 1}])
+                self #js {:sql sql :conn conn :schema-ready true}
+                request (fn [body]
+                          (sync-handler/handle-http
+                            self (semantic-json-request "/semantic/block-trees?graph-id=graph-1"
+                                                        "POST" body)))]
+            (run {:conn conn :page-id page-id :request request}))))
+      (p/catch #(is false (str %)))
+      (p/finally done)))
+
+(deftest semantic-block-tree-client-identity-replays-without-overwriting-test
+  (async done
+    (with-tree-identity-test done
+      (fn [{:keys [conn page-id request]}]
+        (let [parent-id (random-uuid)
+              child-id (random-uuid)
+              body {:target-id (str page-id) :position "append"
+                    :blocks [{:uuid (str parent-id) :title "Parent"
+                              :children [{:uuid (str child-id) :title "Child"}]}]}]
+          (p/let [first-response (request body)
+                  first-body (.json first-response)
+                  _ (is (= 201 (.-status first-response)))
+                  _ (is (= (str parent-id) (aget first-body "blocks" 0 "uuid")))
+                  _ (d/transact! conn [{:block/uuid parent-id :block/title "Human title"}])
+                  replay (request (assoc-in body [:blocks 0 :title] "[[Unexpected replay page]]"))
+                  replay-body (.json replay)]
+            (is (= 201 (.-status replay)))
+            (is (= (str child-id) (aget replay-body "blocks" 0 "children" 0 "uuid")))
+            (is (= "Human title" (:block/title (d/entity @conn [:block/uuid parent-id]))))
+            (is (empty? (d/datoms @conn :avet :block/name "unexpected replay page")))
+            (is (= parent-id (get-in (d/entity @conn [:block/uuid child-id]) [:block/parent :block/uuid])))
+            (is (= 2 (count (d/q '[:find [?b ...] :in $ ?p :where [?b :block/page ?p]] @conn (:db/id (d/entity @conn [:block/uuid page-id]))))))))))))
+
+(deftest semantic-block-tree-rejects-invalid-or-conflicting-identities-before-mutation-test
+  (async done
+    (with-tree-identity-test done
+      (fn [{:keys [conn page-id request]}]
+        (let [id (random-uuid)
+              other (random-uuid)]
+          (p/let [created (request {:target-id (str page-id) :blocks [{:uuid (str id) :title "First"}]})
+                  _ (is (= 201 (.-status created)))]
+            (p/loop [cases [[{:uuid "bad" :title "Invalid"}]
+                            [{:uuid (str other) :title "Duplicate"}
+                             {:uuid (str other) :title "Duplicate"}]
+                            [{:uuid (str other) :title "New parent"
+                              :children [{:uuid (str id) :title "Wrong parent"}]}]
+                            [{:uuid (str page-id) :title "Page collision"}]]]
+              (when-let [nodes (first cases)]
+                (p/let [response (request {:target-id (str page-id) :blocks nodes})]
+                  (is (= 400 (.-status response)))
+                  (is (nil? (d/entity @conn [:block/uuid other])))
+                  (is (= "First" (:block/title (d/entity @conn [:block/uuid id]))))
+                  (p/recur (next cases)))))))))))
