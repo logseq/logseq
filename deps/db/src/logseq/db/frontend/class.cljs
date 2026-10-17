@@ -160,7 +160,8 @@
   "Built-in classes that are hidden when choosing extends"
   (set/union
    private-tags
-   block-kind-tags))
+   block-kind-tags
+   #{:logseq.class/Root}))
 
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
