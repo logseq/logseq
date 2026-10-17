@@ -505,6 +505,37 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
       ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
   in
+  let sidebar_surface mode override =
+    let snapshot = Ui_theme.snapshot mode in
+    let vars = match override with
+      | None -> snapshot.Ui_theme.vars
+      | Some value -> ("--left-sidebar-bg-color", value)
+          :: List.remove_assoc "--left-sidebar-bg-color" snapshot.vars
+    in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode", `String (if mode = Ui_theme.Dark then "dark" else "light");
+       "vars", `Assoc (List.map (fun (key, value) -> key, `String value) vars)]));
+    Theme_vars.set_dark (mode = Ui_theme.Dark);
+    Lui_paint.paint
+      { Lui_paint.default_hooks with
+        layout = Lui_layout.layout_hook layout; color_of = Theme_vars.color_of }
+      store shell_scene ~width:2880 ~height:1800 ~scale:2.
+      ~clear:(Lui_scene.color 255 255 255 255);
+    let expected = Option.get (Theme_vars.color_of "var(--left-sidebar-bg-color)") in
+    let region = Option.get (Lui_layout.rect layout inner) in
+    check "Native sidebar must paint the same semantic surface as the Web theme"
+      (List.exists (function
+        | Lui_scene.Fill fill -> fill.frect = region && fill.fcolor = expected
+        | _ -> false) shell_scene.ops)
+  in
+  sidebar_surface Ui_theme.Light None;
+  sidebar_surface Ui_theme.Dark None;
+  sidebar_surface Ui_theme.Light (Some "#e3f1e9");
+  let snapshot = Ui_theme.snapshot Ui_theme.Light in
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode", `String "light";
+     "vars", `Assoc (List.map (fun (key, value) -> key, `String value) snapshot.vars)]));
+  Theme_vars.set_dark false;
   let retained = Lui_retained.create () in
   ignore (Lui_retained.tick retained ~now:0.);
   let paint_hooks =

@@ -1018,20 +1018,19 @@ let () =
   (* macOS sidebar vibrancy: the left sidebar column is the node
      classed cp__sidebar-left-layout; populate_rects records its id so
      the render hook below can keep an NSVisualEffectView under the
-     content view glued to its rect and punch a transparent Hole over
-     it in the display list. *)
+     content view glued to its titlebar. The body retains its theme paint. *)
   let sidebar_id_cell = ref (-1) in
   let class_has cls tok =
     List.exists (fun t -> t = tok) (String.split_on_char ' ' cls)
   in
-  (* Splice a Hole covering [r] into the display list, right after the
+  (* Splice a Hole covering [material] into the display list, right after the
      last fill that backdrops the column (a fill inside [r] covering
      most of it). The hole batch writes alpha 0 through everything
      painted earlier, exposing the effect view below the content view;
      ops after it — the sidebar's own content — repaint opaque on top.
      With no backdrop found the hole goes first, which at least clears
      the window background under the column. *)
-  let sidebar_hole (r : Lui_scene.rect) ops =
+  let sidebar_hole (r : Lui_scene.rect) material ops =
     let covers (f : Lui_scene.fill_op) =
       let a = f.Lui_scene.frect in
       a.Lui_scene.x >= r.Lui_scene.x -. 2.
@@ -1045,7 +1044,7 @@ let () =
     in
     let hole =
       Lui_scene.Hole
-        { hrect = r;
+        { hrect = material;
           hradii = (0., 0., 0., 0.);
           hcontinuous = false;
           hopacity = 1. }
@@ -1112,7 +1111,7 @@ let () =
     | _ -> Ui.handle ~on_component_input ui store rects input
   in
   (* Keep the macOS sidebar NSVisualEffectView frame
-     glued to the sidebar column and splice the hole into the display
+     glued to its titlebar and splice the hole into the display
      list each render. engine_rect reads the layout just computed by
      the repaint this render belongs to, so the frame never lags. *)
   let () =
@@ -1137,14 +1136,15 @@ let () =
              id >= 0 && class_has cls "is-open"
              && r.Lui_scene.w >= 4. && r.Lui_scene.h >= 4.
            then begin
-             s.Lui_scene.ops <- sidebar_hole r s.Lui_scene.ops;
              let sc = !scale_cell in
+             let material = { r with h = min r.h (48. *. sc) } in
+             s.Lui_scene.ops <- sidebar_hole r material s.Lui_scene.ops;
              sidebar_theme (!Theme_vars.mode = Lui_theme.Dark);
              sidebar_vibrancy
                (r.Lui_scene.x /. sc)
-               (float !win_h -. (r.Lui_scene.y +. r.Lui_scene.h) /. sc)
-               (r.Lui_scene.w /. sc)
-               (r.Lui_scene.h /. sc)
+               (float !win_h -. (material.y +. material.h) /. sc)
+               (material.w /. sc)
+               (material.h /. sc)
                true
            end
            else sidebar_vibrancy 0. 0. 0. 0. false))

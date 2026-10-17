@@ -250,7 +250,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
    is an overlay layer; on the native host it is the docked split's
    first pane —
    the subtree stays mounted while closed (the split track owns the
-   width), surface background via the `muted` token. The shade-mask is
+   width), with the same semantic surface token as the web. The shade-mask is
    an overlay-mode affordance and doesn't exist in a docked layout. *)
 let left_sidebar (ms : Model.t Signal.signal) =
   let st = Sidebar_state.ensure ms in
@@ -272,11 +272,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
                       ms (Signal.value st.Sidebar_state.left_fraction)
                       (Signal.value st.Sidebar_state.right_fraction)
                       (Signal.value st.Sidebar_state.viewport_w))
-                    (* web: --left-sidebar-bg-color = --lx-gray-02 (the
-                       near-white mauve-02 tone, one step above the page);
-                       the native `muted` slot is the matching
-                       surface tone. *)
-                    ~background:"muted"
+                    ~background:"var(--left-sidebar-bg-color)"
                     ~style_class:"left-sidebar-inner as-container"
                [ (* The sidebar's titlebar strip shares the system traffic
                     lights. Closing the dock moves these controls into the
