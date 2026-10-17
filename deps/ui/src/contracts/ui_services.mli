@@ -4,19 +4,11 @@ type storage = {
   remove : string -> unit;
 }
 
-(* Wire form of a shared theme snapshot ([Ui_theme] fills it; platforms
-   consume it). [mode] is the effective mode the shared layer resolved
-   ("light" | "dark") — the shared layer owns dark-mode state; web
-   [.dark]/[data-theme] toggles and the native ui-state theme flag are
-   emissions derived from it, never independent sources of truth.
-   [vars] is the resolved CSS custom-property table for that mode:
-   canonical [--lx-*] names plus [--ls-*] legacy aliases and [--lui-*]
-   semantic names. [kit] maps native theme slot names to literal
-   color values for the native host; web ignores it. *)
+(* Application tokens delivered to the body scope on both hosts.
+   Global mode/accent declarations are owned by the shared CSS palette. *)
 type theme_snapshot = {
   mode : string;
   vars : (string * string) list;
-  kit : (string * string) list;
 }
 
 (* Semantic theme service. Preference persistence keeps the existing raw

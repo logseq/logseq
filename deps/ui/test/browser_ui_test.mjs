@@ -4,7 +4,7 @@ import test, {after} from 'node:test';
 import {measureKeymapRecording, assertKeymapRecording, measureRecordingBounds, assertRecordingBounds} from './keymap_record_checks.mjs';
 import {measureKeymapSearch, assertKeymapSearch, measureKeymapCategories, assertKeymapCategories} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
-import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint, measureAccentControls, assertAccentControls} from './theme_surface_checks.mjs';
+import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint, measureAccentControls, assertAccentControls, measureThemeAliases, assertThemeAliases} from './theme_surface_checks.mjs';
 import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
 import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
@@ -534,6 +534,7 @@ for (const surface of ['settings', 'appearance']) {
       controls.forEach((control, index) => {
         button(control.label);
         assert.equal(evaluate("document.documentElement.getAttribute('data-color')"), choices[index]);
+        assertThemeAliases(evaluate(`(${measureThemeAliases.toString()})(document.body)`));
       });
     }
     button('Logseq classic color');

@@ -1,11 +1,5 @@
-(* Ui_theme snapshot completeness contract — every token name that
-   still-live CSS (resources/css/theme/vars-classic.css) or the native
-   kit
-   theme slots rely on must exist in the shared snapshot, for BOTH
-   variants, with literal values or explicit var(--ls-<name>) references.
-   Runs under byte/native (task_native_test) and melange
-   (task_web_test); Ui_services_scenarios must run first (it installs
-   the fake services [apply] delivers through). *)
+(* Shared CSS ownership and application-token delivery contracts.
+   Runs in byte/native and Melange after Ui_services_scenarios. *)
 
 let check label condition = if not condition then failwith label
 
@@ -14,10 +8,8 @@ let eqs label a b =
 
 let find name vars = List.assoc_opt name vars
 
-(* accent-invariant --ls-* names the snapshot emits with literal values
-   under both modes — the subset of vars-classic.css that colors.css
-   accent themes never rebind. *)
-let required_ls_literals =
+(* Shared source declarations required by application chrome. *)
+let required_ls_names =
   [ "--ls-tag-text-opacity"
   ; "--ls-tag-text-hover-opacity"
   ; "--ls-page-text-size"
@@ -130,109 +122,22 @@ let required_canonical =
   ; "--color-level-6"
   ]
 
-(* native theme slot keys the snapshot must fill
-   vocabulary — was the hardcoded LOGSEQ_THEME palette) *)
-let required_kit_slots =
-  [ "background"
-  ; "foreground"
-  ; "caret"
-  ; "border"
-  ; "input.border"
-  ; "ring"
-  ; "overlay"
-  ; "window.border"
-  ; "accent.background"
-  ; "accent.foreground"
-  ; "muted.background"
-  ; "muted.foreground"
-  ; "popover.background"
-  ; "popover.foreground"
-  ; "primary.background"
-  ; "primary.active.background"
-  ; "primary.foreground"
-  ; "primary.hover.background"
-  ; "secondary.background"
-  ; "secondary.active.background"
-  ; "secondary.foreground"
-  ; "secondary.hover.background"
-  ; "selection.background"
-  ; "sidebar.background"
-  ; "sidebar.border"
-  ; "sidebar.foreground"
-  ; "sidebar.accent.background"
-  ; "sidebar.accent.foreground"
-  ; "sidebar.primary.background"
-  ; "sidebar.primary.foreground"
-  ; "list.background"
-  ; "list.hover.background"
-  ; "list.active.background"
-  ; "list.active.border"
-  ; "list.even.background"
-  ; "list.head.background"
-  ; "title_bar.background"
-  ; "title_bar.border"
-  ; "status_bar.background"
-  ; "status_bar.border"
-  ; "tab.background"
-  ; "tab.foreground"
-  ; "tab.active.background"
-  ; "tab.active.foreground"
-  ; "tab_bar.background"
-  ; "table.even.background"
-  ; "table.head.background"
-  ; "table.hover.background"
-  ; "table.row.border"
-  ; "scrollbar.background"
-  ; "scrollbar.thumb.background"
-  ; "scrollbar.thumb.hover.background"
-  ; "skeleton.background"
-  ; "slider.background"
-  ; "slider.thumb.background"
-  ; "switch.background"
-  ; "switch.thumb.background"
-  ; "link"
-  ; "link.hover"
-  ; "link.active"
-  ; "progress.bar.background"
-  ; "base.blue"
-  ; "base.blue.light"
-  ; "base.cyan"
-  ; "base.cyan.light"
-  ; "base.green"
-  ; "base.green.light"
-  ; "base.magenta"
-  ; "base.magenta.light"
-  ; "base.red"
-  ; "base.red.light"
-  ; "base.yellow"
-  ; "base.yellow.light"
-  ]
-
 let is_var_ref v =
   String.length v > 4
   && String.sub v 0 4 = "var("
   && String.get v (String.length v - 1) = ')'
 
 let check_variant (snap : Ui_theme.snapshot) =
-  (* every accent-invariant --ls-* literal present, literal valued *)
-  List.iter
-    (fun name ->
-      match find name snap.vars with
-      | Some v -> check ("literal value for " ^ name) (v <> "" && not (is_var_ref v))
-      | None -> failwith ("missing " ^ name ^ " in vars"))
-    required_ls_literals;
-  (* every emitted --ls-* has a canonical --lx-* twin carrying the same
-     value *)
-  List.iter
-    (fun name ->
-      let canonical =
-        "--lx-" ^ String.sub name 5 (String.length name - 5)
-      in
-      match find name snap.vars, find canonical snap.vars with
-      | Some v, Some c -> eqs ("--lx twin of " ^ name) c v
-      | _, None -> failwith ("missing canonical twin " ^ canonical)
-      | None, _ -> ())
-    required_ls_literals;
+  let palette = Ui_theme.css_palette snap.mode ~accent:"logseq" in
+  let stylesheet = palette.body @ palette.root in
+  List.iter (fun name ->
+      check ("stylesheet source for " ^ name)
+        (match find name stylesheet with Some value -> value <> "" | None -> false);
+      check ("stylesheet owns " ^ name) (find name snap.vars = None);
+      let canonical = "--lx-" ^ String.sub name 5 (String.length name - 5) in
+      check ("canonical source reference for " ^ name)
+        (find canonical snap.vars = Some ("var(" ^ name ^ ")")))
+    required_ls_names;
   (* accent-bound names: no --ls-* literal; canonical --lx-* ref only *)
   List.iter
     (fun name ->
@@ -245,15 +150,8 @@ let check_variant (snap : Ui_theme.snapshot) =
     bound_ls;
   List.iter
     (fun name ->
-      check ("canonical present " ^ name) (find name snap.vars <> None))
+      check ("canonical present " ^ name) (find name snap.vars <> None || find name stylesheet <> None))
     required_canonical;
-  (* kit slots all present and literal *)
-  List.iter
-    (fun slot ->
-      match find slot snap.kit with
-      | Some v -> check ("literal kit " ^ slot) (v <> "" && not (is_var_ref v))
-      | None -> failwith ("missing kit slot " ^ slot))
-    required_kit_slots;
   (* six levels, all set *)
   check "six color levels" (Array.length snap.levels = 6);
   Array.iter (fun v -> check "level nonempty" (v <> "")) snap.levels;
@@ -287,9 +185,9 @@ let run () =
   List.iter
     (fun (snapshot, background, border) ->
       check "background retains CSS HSL channels"
-        (find "--background" snapshot.Ui_theme.vars = Some background);
+        (find "--background" ((Ui_theme.css_palette snapshot.Ui_theme.mode ~accent:"logseq").root) = Some background);
       check "border retains CSS HSL channels"
-        (find "--border" snapshot.Ui_theme.vars = Some border))
+        (find "--border" ((Ui_theme.css_palette snapshot.Ui_theme.mode ~accent:"logseq").root) = Some border))
     [ (light, "0 0% 100%", "300 1% 92%");
       (dark, "192 100% 11%", "192 100% 14%") ];
   (* both variants emit the same var name set — mode flips can never
@@ -307,8 +205,7 @@ let run () =
   (match !Ui_services_scenarios.last_theme_snapshot with
    | Some (snap : Ui_services.theme_snapshot) ->
        eqs "delivered mode" snap.mode "dark";
-       check "delivered vars" (snap.vars <> []);
-       check "delivered kit" (snap.kit <> [])
+       check "delivered vars" (snap.vars <> [])
    | None -> failwith "apply did not deliver a snapshot");
   Ui_theme.apply "light";
   (match !Ui_services_scenarios.last_theme_snapshot with

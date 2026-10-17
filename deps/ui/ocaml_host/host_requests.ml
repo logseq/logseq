@@ -743,8 +743,7 @@ let dom_op (e : env) (op : string) (body : string) =
        then begin
          (* CSS custom property — app-level var write; lands in the
             active mode's table so color_of sees it next repaint. *)
-         Hashtbl.replace
-           (Theme_vars.vars_of_mode !Theme_vars.mode) name value;
+         Theme_vars.set_var name value;
          e.repaint ()
        end
        else
@@ -907,35 +906,13 @@ let handle (envelope : string) =
             in
             ignore (Lui_shell.open_url url)
           | "ui-state" ->
-            (match J.from_string payload with
-             | `Assoc _ as j ->
-               let dark =
-                 match
-                   (match jget "data" j with
-                    | Some (`Assoc d) -> jstr_opt "theme" (`Assoc d)
-                    | _ -> None)
-                 with
-                 | Some "dark" -> Some true
-                 | Some _ -> Some false
-                 | None -> (
-                     match jstr_opt "body-classes" j with
-                     | Some classes ->
-                       Some
-                         (let pat = "dark-theme" in
-                          let rec find i =
-                            i + String.length pat <= String.length classes
-                            && (String.sub classes i (String.length pat) = pat
-                                || find (i + 1))
-                          in
-                          find 0)
-                     | None -> None)
-               in
-               (match dark with
-                | Some d ->
-                  Theme_vars.set_dark d;
-                  e.repaint ()
-                | None -> ())
-             | _ -> ())
+            let data = J.from_string payload |> J.Util.member "data" in
+            (match jstr_opt "theme" data with
+             | None -> ()
+             | Some name ->
+               Theme_vars.set_dark (Ui_theme.mode_of_string name = Ui_theme.Dark));
+            Option.iter Theme_vars.set_accent (jstr_opt "color" data);
+            e.repaint ()
           | "theme-snapshot" ->
             Theme_vars.install_snapshot payload;
             filelog "theme-snapshot installed: light=%d dark=%d"

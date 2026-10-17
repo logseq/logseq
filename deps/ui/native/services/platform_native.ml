@@ -350,7 +350,7 @@ let theme_apply_dataset effective = document_set_data "theme" effective
 
 (* Theme snapshot delivery — serialized through the same host-request
    channel as ui-state/app-icons; FIFO ordering means the host installs
-   the kit slots + vars before the ui-state mode flip that follows
+   the application tokens before the ui-state mode flip that follows
    apply_dataset/apply_classes. *)
 let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
   let assoc kvs = `Assoc (List.map (fun (k, v) -> k, `String v) kvs) in
@@ -359,7 +359,6 @@ let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
        (`Assoc
          [ "mode", `String snap.mode
          ; "vars", assoc snap.vars
-         ; "kit", assoc snap.kit
          ]))
 
 let theme_apply_classes effective =

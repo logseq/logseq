@@ -4,16 +4,11 @@ type storage = {
   remove : string -> unit;
 }
 
-(* Wire form of a shared theme snapshot. [vars] is the resolved CSS
-   custom-property table for the effective mode — canonical [--lx-*]
-   names, [--ls-*] legacy aliases, and [--lui-*] semantic names, all
-   literal values or var() references (never unresolved names). [kit]
-   maps native theme slot names to literal color values for the
-   native host; web ignores it. *)
+(* Application tokens delivered to the body scope on both hosts.
+   Global mode/accent declarations are owned by the shared CSS palette. *)
 type theme_snapshot = {
   mode : string;
   vars : (string * string) list;
-  kit : (string * string) list;
 }
 
 (* Semantic theme service. Preference persistence keeps the existing raw
@@ -38,8 +33,8 @@ type theme = {
   apply_snapshot : theme_snapshot -> unit;
   (* Deliver the resolved theme snapshot for the effective mode: the
      shared layer owns the token values ([Ui_theme.snapshot]); the
-     platform applies them to its root theme surface (CSS custom
-     properties on web, kit theme slots + host vars on native). *)
+     platform applies them to the body token scope on Web and native.
+     Global mode/accent variables come from the shared CSS palette. *)
 }
 
 (* Semantic navigation service — one hash route plus history and quiet

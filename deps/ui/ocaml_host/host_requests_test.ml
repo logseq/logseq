@@ -10,6 +10,55 @@ let check message condition = if not condition then failwith message
 let icon_hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of}
 
 let () =
+  Gc.full_major ();
+  let before = Gc.allocated_bytes () in
+  for _ = 1 to 10000 do ignore (Sys.opaque_identity (Theme_vars.resolve_value "foreground")) done;
+  let allocated = (Gc.allocated_bytes () -. before) /. 10000. in
+  Printf.printf "native literal theme resolution allocated %.1f bytes/read\n%!" allocated;
+  check "Literal theme lookups must not allocate parsing buffers" (allocated <= 64.)
+
+let () =
+  let empty = Hashtbl.create 0 in
+  let root = Theme_vars.compute ~parent:empty
+      ["--base", "#010203"; "--saved", "var(--base)"] in
+  let child = Theme_vars.compute ~parent:root ["--base", "#040506"] in
+  check "Inherited variables retain the parent's computed value"
+    (Hashtbl.find_opt child "--saved" = Some "#010203");
+  let child = Theme_vars.compute ~parent:root ["--base", "var(--saved)"] in
+  check "References across computed scopes do not create cycles"
+    (Hashtbl.find_opt child "--base" = Some "#010203");
+  let cycle = Theme_vars.compute ~parent:empty
+      ["--one", "var(--two, #111111)"; "--two", "var(--one, #222222)";
+       "--safe", "var(--one, #333333)"; "--present", "#444444";
+       "--unused-cycle", "var(--present, var(--unused-cycle))"] in
+  check "Cycles remain invalid even when their references provide fallbacks"
+    (not (Hashtbl.mem cycle "--one") && not (Hashtbl.mem cycle "--two"));
+  check "Fallback references participate in dependency cycles"
+    (not (Hashtbl.mem cycle "--unused-cycle"));
+  check "An external reference can fall back from a cyclic property"
+    (Hashtbl.find_opt cycle "--safe" = Some "#333333");
+  let chain = List.init 32 (fun index ->
+      "--chain-" ^ string_of_int index, if index = 31 then "#010203"
+      else "var(--chain-" ^ string_of_int (index + 1) ^ ")") in
+  check "Valid dependency chains have no arbitrary depth cutoff"
+    (Hashtbl.find_opt (Theme_vars.compute ~parent:empty chain) "--chain-0" = Some "#010203");
+  let child = Theme_vars.compute ~parent:root
+      ["--base", "var(--absent)"; "--empty", ""; "--empty-alias", "var(--empty, #ffffff)"] in
+  check "An invalid declaration shadows the inherited property"
+    (not (Hashtbl.mem child "--base"));
+  check "An empty custom property remains distinct from an invalid property"
+    (Hashtbl.find_opt child "--empty-alias" = Some "");
+  print_endline "native CSS variable inheritance and dependency cycles: OK"
+
+let () =
+  Theme_vars.set_var "--test-unbound-color" "var(--test-missing-color)";
+  check "A guaranteed-invalid custom property must use the caller fallback"
+    (Theme_vars.color_of "var(--test-unbound-color, #010203)"
+     = Some (Lui_scene.color 1 2 3 255));
+  Hashtbl.remove Theme_vars.light_overrides "--test-unbound-color";
+  Theme_vars.rebuild Lui_theme.Light
+
+let () =
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
   let host = Lui_host.create ~hooks:Lui_paint.default_hooks
@@ -54,7 +103,7 @@ let () =
         text_ops=(fun id _ color _ -> if id=item then ink:=Some color; [])}
         store scene ~width:1440 ~height:932 ~scale:1.
         ~clear:(Lui_scene.color 255 255 255 255);
-      let expected = Option.get (Theme_vars.color_of "var(--lx-gray-05)") in
+      let expected = Option.get (Theme_vars.color_of "var(--lx-gray-05, hsl(var(--muted)))") in
       expect ("Menu " ^ name ^ " does not use the application's neutral highlight")
         (List.exists (function Lui_scene.Fill f -> f.frect=item_rect && f.fcolor=expected
            | _ -> false) scene.ops);
@@ -2612,7 +2661,9 @@ let () =
 let () =
   let old_mode = !Theme_vars.mode in
   let old_light = Hashtbl.copy Theme_vars.light_vars
-  and old_dark = Hashtbl.copy Theme_vars.dark_vars in
+  and old_dark = Hashtbl.copy Theme_vars.dark_vars
+  and old_light_overrides = Hashtbl.copy Theme_vars.light_overrides
+  and old_dark_overrides = Hashtbl.copy Theme_vars.dark_overrides in
   let restore table saved =
     Hashtbl.reset table;
     Hashtbl.iter (Hashtbl.replace table) saved
@@ -2621,11 +2672,13 @@ let () =
     ~finally:(fun () ->
       restore Theme_vars.light_vars old_light;
       restore Theme_vars.dark_vars old_dark;
+      restore Theme_vars.light_overrides old_light_overrides;
+      restore Theme_vars.dark_overrides old_dark_overrides;
       Theme_vars.set_dark (old_mode = Lui_theme.Dark))
     (fun () ->
       Theme_vars.set_dark false;
       List.iter
-        (fun (name, value) -> Hashtbl.replace Theme_vars.light_vars name value)
+        (fun (name, value) -> Theme_vars.set_var name value)
         [
           ("--test-rgb", "18 52 86");
           ("--test-hsl", "0 0% 100%");
@@ -2682,7 +2735,8 @@ let () =
           Theme_vars.set_dark (mode = Ui_theme.Dark);
           let channels = List.filter (fun (key, _) ->
               String.starts_with ~prefix:"--rx-" key
-              && String.ends_with ~suffix:"-hsl" key) snapshot.vars in
+              && String.ends_with ~suffix:"-hsl" key)
+              (Ui_theme.css_palette mode ~accent:"logseq").root in
           check "Native palette contains the complete generated channel table"
             (List.length channels >= 300);
           List.iter (fun (key, _) ->
@@ -4710,8 +4764,12 @@ let () =
       ["mode",`String name;"vars",`Assoc (List.map (fun (k,v) -> k,`String v) vars)])) in
     install snapshot.vars;
     Theme_vars.set_dark (mode=Ui_theme.Dark);
-    List.iter (fun stem -> check ("Native palette leaves a stylesheet color unresolved: "^name^"/"^stem)
-      (Option.is_some (Theme_vars.color_of ("var(--ls-"^stem^")")))) Ui_theme.accent_bound;
+    let palette = Ui_theme.css_palette mode ~accent:"logseq" in
+    List.iter (fun (key, _) ->
+      if String.starts_with ~prefix:"--ls-" key && String.ends_with ~suffix:"-color" key then
+        check ("Native palette must honor CSS fallback substitution: " ^ name ^ "/" ^ key)
+          (Option.is_some (Theme_vars.color_of ("var(" ^ key ^ ", #010203)"))))
+      (palette.root @ palette.body);
     check ("Native secondary foreground differs from classic stylesheet: "^name)
       (Theme_vars.color_of "var(--ls-secondary-text-color)"=Some secondary);
     check ("Native link color differs from classic stylesheet: "^name)
@@ -5044,3 +5102,81 @@ let () = Native_embed.with_entry_lock (fun () ->
          "Unicode accent",[{js|Café|js};"Cafe menu"],"cafe",[{js|Café|js};"__new__";"Cafe menu"],{js|Café|js};
          "Unicode sparse match",[{js|中文|js};{js|中间文字|js}],{js|中文|js},[{js|中文|js};{js|中间文字|js}],{js|中文|js}]) [1.;2.]);
   print_endline "native property ranking and submission: OK")
+
+let () =
+  let previous_env = !Host_requests.env in
+  let rects = Lui_window.Rects.create () in
+  let repaint_count = ref 0 in
+  let env : Host_requests.env = {
+    store = Lui_store.create (); ui = Lui_window.Ui.create (); rects;
+    rect_of = Lui_window.Rects.get rects; scale = (fun () -> 1.);
+    measure = (fun _ _ -> failwith "Unexpected theme measurement");
+    text_layout = (fun _ _ -> failwith "Unexpected theme text layout");
+    apply_batch = (fun _ -> failwith "Unexpected theme batch");
+    apply_actions = (fun _ -> failwith "Unexpected theme input");
+    set_ime_rect = (fun _ -> failwith "Unexpected theme IME update");
+    focused_text_input = (fun _ -> failwith "Unexpected theme focus");
+    repaint = (fun () -> incr repaint_count);
+  } in
+  let state mode accent = Host_requests.handle ("ui-state\n" ^
+    Yojson.Safe.to_string (`Assoc ["data", `Assoc
+      ["theme", `String mode; "color", `String accent]])) in
+  Fun.protect ~finally:(fun () ->
+      state "light" "logseq"; Host_requests.env := previous_env) (fun () ->
+    Host_requests.env := Some env;
+    List.iter (fun (mode, name) ->
+      let snapshot = Ui_theme.snapshot mode in
+      Host_requests.handle ("theme-snapshot\n" ^ Yojson.Safe.to_string (`Assoc
+        ["mode", `String name; "vars", `Assoc
+          (List.map (fun (key,value) -> key,`String value) snapshot.vars)]));
+      state name "orange";
+      check ("Native appearance must deliver the orange accent in " ^ name)
+        (Theme_vars.color_of "hsl(var(--primary))"
+         = Lui_window.Theme.color_of "hsl(24, 94%, 50%)");
+      if mode = Ui_theme.Light then
+        check "Inherited bullet color must resolve before body overrides its gray family"
+          (Theme_vars.color_of "var(--ls-block-bullet-color)"
+           = Some (Lui_scene.color 199 199 199 255));
+      let orange = Theme_vars.color_of "var(--ls-primary-text-color)" in
+      state name "blue";
+      check ("Native appearance must update primary channels in " ^ name)
+        (Theme_vars.color_of "hsl(var(--primary))"
+         = Lui_window.Theme.color_of "hsl(206, 100%, 50%)");
+      check ("Native appearance must change the neutral family in " ^ name)
+        (Theme_vars.color_of "var(--ls-primary-text-color)" <> orange);
+      check "Native appearance requests must repaint" (!repaint_count > 0))
+      [Ui_theme.Light,"light";Ui_theme.Dark,"dark"];
+    let previous_repaints = !repaint_count in
+    Host_requests.handle ("ui-state\n" ^ Yojson.Safe.to_string (`Assoc
+      ["data", `Assoc ["theme", `String "dark"; "color", `String "blue";
+                        "font", `String "mono"]]));
+    check "Non-palette document state still schedules native redraw"
+      (!repaint_count > previous_repaints));
+  print_endline "native dataset mode and accent delivery: OK"
+
+let () = Option.iter (fun reference_file ->
+  let open Yojson.Safe.Util in
+  let cases = Yojson.Safe.from_file reference_file |> to_list in
+  let failures = ref [] and count = ref 0 in
+  List.iter (fun case ->
+      let mode_name = case |> member "mode" |> to_string in
+      let mode = Ui_theme.mode_of_string mode_name in
+      let accent = case |> member "accent" |> to_string in
+      let snapshot = Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+        ["mode", `String mode_name; "vars", `Assoc
+          (List.map (fun (name, value) -> name, `String value) snapshot.vars)]));
+      Theme_vars.set_accent accent;
+      Theme_vars.set_dark (mode = Ui_theme.Dark);
+      case |> member "checks" |> to_list |> List.iter (fun item ->
+        incr count;
+        let expression = item |> member "expression" |> to_string in
+        let expected = match item |> member "css" with
+          | `Null -> None
+          | value -> Lui_window.Theme.color_of (to_string value) in
+        if Theme_vars.color_of expression <> expected then
+          failures := (mode_name ^ "/" ^ accent ^ ": " ^ expression) :: !failures)) cases;
+  List.iter prerr_endline (List.rev !failures);
+  check "Native CSS variables must match the actual reference stylesheet" (!failures = []);
+  Printf.printf "native reference palette: %d colors across %d variants: OK\n%!"
+    !count (List.length cases)) (Sys.getenv_opt "LOGSEQ_NATIVE_THEME_REFERENCE")

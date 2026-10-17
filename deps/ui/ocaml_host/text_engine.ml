@@ -133,7 +133,7 @@ let num_prop store id name =
   | Some (Lui_protocol.FloatValue f) -> Some f
   | Some (IntValue i) -> Some (float i)
   | Some (StringValue s) ->
-      Option.bind (Theme_vars.resolve_value s 0) parse_len
+      Option.bind (Theme_vars.resolve_value s) parse_len
   | _ -> None
 
 (* A selected top-strip tab — the bare kind or a direct button child
@@ -174,7 +174,7 @@ let inherited_int store id name =
   walk id
 
 (* Font family tokens use the same theme snapshot as colors and sizes. *)
-let var_fallback s = Theme_vars.resolve_value s 0
+let var_fallback s = Theme_vars.resolve_value s
 
 let inherited_str store id name =
   let rec walk id =
@@ -274,7 +274,7 @@ let line_height_of store id =
   | Some (_, Lui_protocol.FloatValue value) -> Some value
   | Some (_, IntValue value) -> Some (float value)
   | Some (node, StringValue value) ->
-      Option.bind (Theme_vars.resolve_value value 0) (points node)
+      Option.bind (Theme_vars.resolve_value value) (points node)
   | Some _ -> invalid_arg "Invalid native line-height property"
 
 (* ---- atlas upload ---- *)

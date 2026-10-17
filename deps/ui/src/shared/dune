@@ -36,3 +36,13 @@
    sh
    -c
    "node \"$DUNE_SOURCEROOT/../../scripts/generate-ui-radix.mjs\" \"$DUNE_SOURCEROOT/../../resources/css/theme/radix.css\" %{target}")))
+
+; Native resolves mode/accent variables from the same global CSS scopes as Web.
+(rule
+ (target ui_theme_css.ml)
+ (deps (universe))
+ (action
+  (run
+   sh
+   -c
+   "node \"$DUNE_SOURCEROOT/../../scripts/generate-ui-theme.mjs\" \"$DUNE_SOURCEROOT/../../resources/css\" %{target}")))

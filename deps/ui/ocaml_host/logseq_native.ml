@@ -688,7 +688,7 @@ let () =
                resolve to its spec string before parsing — the
                per-token color resolver can't unwrap the whole layer. *)
             let name =
-              match Theme_vars.resolve_value name 0 with
+              match Theme_vars.resolve_value name with
               | Some s -> s
               | None -> name
             in

@@ -1,146 +1,226 @@
-(* Host-side theme resolution for the paint color_of hook.
-
-   The app pushes one "theme-snapshot" envelope per mode
-   ({mode, vars, kit}); `vars` is the CSS custom-property
-   table — the same map the host installs through
-   style::set_css_var. A later "ui-state" (or the appearance channel)
-   picks the active mode. color_of resolves:
-
-     var(--x)            -> active mode's vars table
-     var(--x, fallback)  -> vars table, else fallback (recursively)
-     bare token names    -> Lui_theme tokens for the active mode
-     anything else       -> Lui_window.Theme's built-in palette *)
+(* Resolve the shared CSS palette and application tokens for native paint.
+   Custom properties compute before inheritance, as on Web:
+   https://www.w3.org/TR/css-variables-1/#cycles *)
 
 module J = Yojson.Safe
 
 let light_vars : (string, string) Hashtbl.t = Hashtbl.create 256
 let dark_vars : (string, string) Hashtbl.t = Hashtbl.create 256
+let light_overrides : (string, string) Hashtbl.t = Hashtbl.create 256
+let dark_overrides : (string, string) Hashtbl.t = Hashtbl.create 256
 let mode : Lui_theme.mode ref = ref Lui_theme.Light
-
-(* Bumped whenever resolution can change (mode flip, new snapshot):
-   the paint cache holds resolved colors, so the host drops it on a
-   bump — otherwise a theme toggle only repainted the window clear and
-   left sidebars/text in the previous theme's colors. *)
+let accent = ref "logseq"
 let generation = ref 0
-
-let set_dark is_dark =
-  let m = if is_dark then Lui_theme.Dark else Lui_theme.Light in
-  if m <> !mode then incr generation;
-  mode := m
 
 let vars_of_mode = function
   | Lui_theme.Dark -> dark_vars
   | Lui_theme.Light -> light_vars
 
-let install_snapshot (payload : string) =
-  match J.from_string payload with
-  | `Assoc _ as j -> (
-      let open J.Util in
-      let mode_name =
-        j |> member "mode" |> to_string_option |> Option.value
-          ~default:"light"
-      in
-      let table =
-        vars_of_mode
-          (if mode_name = "dark" then Lui_theme.Dark else Lui_theme.Light)
-      in
-      Hashtbl.reset table;
-      List.iter (fun (name, value) -> Hashtbl.replace table name value)
-        (Ui_theme.classic_vars (Ui_theme.mode_of_string mode_name));
-      incr generation;
-      match j |> member "vars" with
-      | `Assoc kvs ->
-        List.iter
-          (fun (name, v) ->
-             match v with
-             | `String s -> Hashtbl.replace table name s
-             | _ -> ())
-          kvs
-      | _ -> ())
-  | _ -> ()
+let overrides_of_mode = function
+  | Lui_theme.Dark -> dark_overrides
+  | Lui_theme.Light -> light_overrides
 
-(* "var(--x)" / "var(--x, <fallback>)" → (name, fallback option). *)
-let var_ref (s : string) : (string * string option) option =
+let var_ref s =
   let len = String.length s in
-  if len > 5 && String.sub s 0 4 = "var(" && s.[len - 1] = ')' then begin
+  if len <= 5 || String.sub s 0 4 <> "var(" || s.[len - 1] <> ')' then None
+  else
     let inner = String.sub s 4 (len - 5) in
-    (* split on the first top-level comma — the fallback itself may be
-       a nested var(--b, #hex), so scan with paren depth. *)
-    let depth = ref 0 in
-    let cut = ref None in
+    let depth = ref 0 and cut = ref None in
     String.iteri
       (fun i c ->
-         if c = '(' then incr depth
-         else if c = ')' then decr depth
-         else if c = ',' && !depth = 0 && !cut = None then cut := Some i)
+        if c = '(' then incr depth
+        else if c = ')' then decr depth
+        else if c = ',' && !depth = 0 && !cut = None then cut := Some i)
       inner;
-    match !cut with
-    | Some i ->
-      Some
-        ( String.trim (String.sub inner 0 i)
-        , Some
-            (String.trim
-               (String.sub inner (i + 1) (String.length inner - i - 1))) )
-    | None -> Some (String.trim inner, None)
-  end
-  else None
-
-let rec resolve_value (s : string) (depth : int) : string option =
-  if depth > 8 then None
-  else
-    let len = String.length s in
-    let rec find_var start =
-      match String.index_from_opt s start 'v' with
-      | Some i when i + 4 <= len ->
-          if String.sub s i 4 = "var(" then Some i else find_var (i + 1)
-      | _ -> None
+    let name, fallback =
+      match !cut with
+      | None -> (String.trim inner, None)
+      | Some i ->
+          ( String.trim (String.sub inner 0 i),
+            Some
+              (String.trim
+                 (String.sub inner (i + 1) (String.length inner - i - 1))) )
     in
-    match find_var 0 with
-    | None -> Some s
-    | Some first ->
-        let output = Buffer.create len in
-        let rec closing i nesting =
-          if i = len then None
-          else
-            match s.[i] with
-            | '(' -> closing (i + 1) (nesting + 1)
-            | ')' when nesting = 1 -> Some i
-            | ')' -> closing (i + 1) (nesting - 1)
-            | _ -> closing (i + 1) nesting
-        in
-        let rec expand cursor start =
-          match closing (start + 4) 1 with
-          | None -> None
-          | Some stop -> (
-              let expression = String.sub s start (stop - start + 1) in
-              match var_ref expression with
-              | None -> None
-              | Some (name, fallback) -> (
-                  let value =
-                    match Hashtbl.find_opt (vars_of_mode !mode) name with
-                    | Some value -> Some value
-                    | None -> fallback
-                  in
-                  match
-                    Option.bind value (fun value ->
-                        resolve_value value (depth + 1))
-                  with
-                  | None -> None
-                  | Some value -> (
-                      Buffer.add_substring output s cursor (start - cursor);
-                      Buffer.add_string output value;
-                      let cursor = stop + 1 in
-                      match find_var cursor with
-                      | Some next -> expand cursor next
-                      | None ->
-                          Buffer.add_substring output s cursor (len - cursor);
-                          Some (Buffer.contents output))))
-        in
-        expand 0 first
+    if String.length name > 2 && String.starts_with ~prefix:"--" name then
+      Some (name, fallback)
+    else None
 
-let color_of (s : string) : Lui_scene.color option =
+let scan_var s cursor =
+  let len = String.length s in
+  let rec find i =
+    if i + 4 > len then Ok None
+    else if
+      s.[i] <> 'v' || s.[i + 1] <> 'a' || s.[i + 2] <> 'r' || s.[i + 3] <> '('
+    then find (i + 1)
+    else
+      let rec closing j depth =
+        if j = len then Error ()
+        else
+          match s.[j] with
+          | '(' -> closing (j + 1) (depth + 1)
+          | ')' when depth = 1 -> (
+              match var_ref (String.sub s i (j - i + 1)) with
+              | None -> Error ()
+              | Some (name, fallback) -> Ok (Some (i, j + 1, name, fallback)))
+          | ')' -> closing (j + 1) (depth - 1)
+          | _ -> closing (j + 1) depth
+      in
+      closing (i + 4) 1
+  in
+  find cursor
+
+let rec substitute lookup s =
+  match scan_var s 0 with
+  | Error () -> None
+  | Ok None -> Some s
+  | first ->
+      let output = Buffer.create (String.length s) in
+      let rec expand cursor = function
+        | Error () -> None
+        | Ok None ->
+            Buffer.add_substring output s cursor (String.length s - cursor);
+            Some (Buffer.contents output)
+        | Ok (Some (start, stop, name, fallback)) -> (
+            let value =
+              match lookup name with
+              | Some _ as value -> value
+              | None -> Option.bind fallback (substitute lookup)
+            in
+            match value with
+            | None -> None
+            | Some value ->
+                Buffer.add_substring output s cursor (start - cursor);
+                Buffer.add_string output value;
+                expand stop (scan_var s stop))
+      in
+      expand 0 first
+
+(* Dependencies include references in unused fallbacks, as required for cycles. *)
+let references s =
+  let rec collect cursor names =
+    match scan_var s cursor with
+    | Error () | Ok None -> names
+    | Ok (Some (start, _, name, _)) -> collect (start + 4) (name :: names)
+  in
+  collect 0 []
+
+type resolution = Visiting | Resolved of string option
+
+let compute ~parent declarations =
+  let raw = Hashtbl.create (List.length declarations) in
+  List.iter (fun (name, value) -> Hashtbl.replace raw name value) declarations;
+  let states = Hashtbl.create (Hashtbl.length raw)
+  and cyclic = Hashtbl.create 8
+  and stack = ref [] in
+  let rec lookup name =
+    match Hashtbl.find_opt raw name with
+    | None -> Hashtbl.find_opt parent name
+    | Some value -> (
+        match Hashtbl.find_opt states name with
+        | Some (Resolved result) -> result
+        | Some Visiting ->
+            let rec mark = function
+              | [] -> ()
+              | node :: rest ->
+                  Hashtbl.replace cyclic node ();
+                  if node <> name then mark rest
+            in
+            mark !stack;
+            None
+        | None ->
+            Hashtbl.replace states name Visiting;
+            stack := name :: !stack;
+            List.iter
+              (fun dependency -> ignore (lookup dependency))
+              (references value);
+            let result =
+              if Hashtbl.mem cyclic name then None
+              else
+                match substitute lookup value with
+                | None -> None
+                | Some value -> (
+                    match String.lowercase_ascii (String.trim value) with
+                    | "initial" -> None
+                    | "inherit" | "unset" -> Hashtbl.find_opt parent name
+                    | _ -> Some value)
+            in
+            stack := List.tl !stack;
+            Hashtbl.replace states name (Resolved result);
+            result)
+  in
+  let result = Hashtbl.copy parent in
+  Hashtbl.iter
+    (fun name _ ->
+      match lookup name with
+      | None -> Hashtbl.remove result name
+      | Some value -> Hashtbl.replace result name value)
+    raw;
+  result
+
+let rebuild mode =
+  let palette =
+    Ui_theme.css_palette
+      (match mode with
+      | Lui_theme.Light -> Ui_theme.Light
+      | Dark -> Ui_theme.Dark)
+      ~accent:!accent
+  in
+  let root = compute ~parent:(Hashtbl.create 0) palette.root in
+  let body =
+    compute ~parent:root
+      (palette.body
+      @ Hashtbl.fold
+          (fun name value values -> (name, value) :: values)
+          (overrides_of_mode mode) [])
+  in
+  let table = vars_of_mode mode in
+  Hashtbl.reset table;
+  Hashtbl.iter (Hashtbl.replace table) body
+
+let set_dark is_dark =
+  let next = if is_dark then Lui_theme.Dark else Lui_theme.Light in
+  if next <> !mode then incr generation;
+  mode := next
+
+let set_accent value =
+  if not (List.mem value Ui_theme_css.accents) then
+    invalid_arg ("Unknown theme accent: " ^ value);
+  if value <> !accent then begin
+    accent := value;
+    rebuild Lui_theme.Light;
+    rebuild Lui_theme.Dark;
+    incr generation
+  end
+
+let set_var name value =
+  if Hashtbl.find_opt (overrides_of_mode !mode) name <> Some value then begin
+    Hashtbl.replace (overrides_of_mode !mode) name value;
+    rebuild !mode;
+    incr generation
+  end
+
+let install_snapshot payload =
+  let open J.Util in
+  let snapshot = J.from_string payload in
+  let mode =
+    match Ui_theme.mode_of_string (snapshot |> member "mode" |> to_string) with
+    | Ui_theme.Light -> Lui_theme.Light
+    | Ui_theme.Dark -> Lui_theme.Dark
+  in
+  let overrides = overrides_of_mode mode in
+  Hashtbl.reset overrides;
+  snapshot |> member "vars" |> to_assoc
+  |> List.iter (fun (name, value) ->
+      Hashtbl.replace overrides name (to_string value));
+  rebuild mode;
+  incr generation
+
+let current_value name = Hashtbl.find_opt (vars_of_mode !mode) name
+let resolve_value value = substitute current_value value
+
+let color_of s =
   let spec = if s = "scrim" then "hsl(var(--background) / 0.9)" else s in
-  Option.bind (resolve_value spec 0) (fun value ->
+  Option.bind (resolve_value spec) (fun value ->
       match Lui_window.Theme.color_of_hex value with
       | Some _ as color -> color
       | None -> (

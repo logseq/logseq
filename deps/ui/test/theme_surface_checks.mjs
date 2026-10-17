@@ -82,3 +82,20 @@ export function assertAccentControls(controls) {
       `${controls[i].label}: eight choices per row with an eight-point gap`);
   }
 }
+
+export function measureThemeAliases(element) {
+  const style = getComputedStyle(element);
+  return ['primary-background-color', 'secondary-background-color',
+    'primary-text-color', 'secondary-text-color', 'link-text-color', 'border-color',
+    'highlight-color-gray', 'font-family'].map(name => ({
+    name, source: style.getPropertyValue(`--ls-${name}`).trim(),
+    alias: style.getPropertyValue(`--lx-${name}`).trim(),
+  }));
+}
+
+export function assertThemeAliases(bindings) {
+  for (const binding of bindings) {
+    assert.equal(binding.alias, binding.source,
+      `${binding.name}: derived tokens must see the current body palette`);
+  }
+}

@@ -1,25 +1,14 @@
 (** Shared visual-design tokens — the single owner of Logseq's theme
     values across web and native renderers.
 
-    A [snapshot] is the fully resolved theme for one mode.
-    [colors]/[components]/[typography]/[levels] are the typed semantic
-    values that shared views and adapters consume; [vars] and [kit] are
-    the derived delivery tables:
+    CSS owns global mode and accent declarations. Web consumes those
+    stylesheets directly; native consumes [css_palette], generated from
+    the same declarations and evaluated in HTML/body inheritance order.
 
-    - [vars] is the CSS custom-property table delivered to both hosts.
-      The web adapter leaves {!stylesheet_owned_var} entries to the
-      stylesheet cascade and applies the remaining entries to
-      [document.documentElement.style]. Canonical [--lx-*]
-      names carry the token; every emitted [--ls-*] name is a legacy
-      alias for un-migrated CSS (only accent-invariant names are emitted
-      as literals — see {!accent_bound}; accent-bound tokens ship as
-      canonical [--lx-*] names holding a [var(--ls-<name>)] reference so the
-      stylesheet's per-accent bindings keep resolving). [--lui-*]
-      entries feed LUI's semantic color names.
-    - [kit] maps native theme slot names (the host's theme-slot keys
-      such as ["muted.background"] or ["list.active.background"]) to
-      literal values. The native host installs them as the mode's theme
-      — never as unparsed CSS-var strings.
+    A [snapshot] carries additional application tokens. Derived names
+    resolve on body so they can see the selected accent's declarations.
+    [colors]/[components]/[typography]/[levels] describe the classic
+    application metadata. They do not replace the CSS palette.
 
     Dark-mode ownership: the shared layer owns the effective mode —
     [apply] resolves it and stamps it on the delivered
@@ -48,7 +37,7 @@ type colors = {
   foreground_strong : string;
   (* Secondary text (higher contrast than primary on classic). *)
   foreground_muted : string;
-  (* De-emphasized text (kit muted.foreground). *)
+  (* De-emphasized text. *)
   foreground_faint : string;
   (* Titles / tertiary text. *)
   border : string;
@@ -123,26 +112,18 @@ type snapshot = {
   levels : string array;
   (* Six color levels (--color-level-1..6) — raised surface ladder. *)
   vars : (string * string) list;
-  (* Resolved CSS custom-property table (see module doc). *)
-  kit : (string * string) list;
-  (* native theme slot -> literal color. *)
+  (* Derived application custom properties (see module doc). *)
 }
 
-(** The built-in classic Logseq theme (the only palette today).
-    [accent_bound] lists the [--ls-*] names [vars] deliberately does not
-    emit as literals: colors.css rebinds them per [data-color] accent
-    theme, so inline literals would break every accent but logseq. They
-    appear only as canonical [--lx-*] names holding [var(--ls-<name>)]
-    references. *)
-val accent_bound : string list
-
-(** Whether a variable is owned by Web's mode/accent stylesheet cascade.
-    Native snapshots retain its CSS channel value for color substitution. *)
+(** Whether a variable belongs to the shared stylesheet cascade.
+    Native resolves it through [css_palette]; Web keeps its CSS declaration. *)
 val stylesheet_owned_var : string -> bool
 
-(** Classic accent declarations for hosts without the Web stylesheet cascade.
-    Explicit snapshot declarations take precedence over this palette. *)
-val classic_vars : mode -> (string * string) list
+(** Global CSS palette declarations for a mode and built-in accent.
+    Generated from the same stylesheets consumed by Web. *)
+type css_palette = { root : (string * string) list; body : (string * string) list }
+
+val css_palette : mode -> accent:string -> css_palette
 
 val snapshot : mode -> snapshot
 
