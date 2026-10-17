@@ -243,9 +243,21 @@ let accent_row ~modal =
         ~value:T.accent_color_alert []
     ]
 
+(* The reference keeps desktop panels at 600 points and scrolls the
+   article when that content exceeds the viewport. *)
+let panel ~key ?(style_class="panel-wrap") ?margin_bottom children : t =
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  let children=match children with
+    | first::rest -> Ui_components.with_props [Ui_components.Prop.padding_top 14] first :: rest
+    | [] -> [] in
+  Ui_parts.int_prop Lui_protocol.MinWidth
+    ~value:(reactive (fun viewport -> if viewport>=640. then 600 else 0) viewport)
+    (column ~key ~style_class ~gap:16 ~padding:4 ~max_width:600 ?margin_bottom children) ctx parent
+
 let general_pane ~modal ctx =
-  column ~key:"pane-general" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4 ~max_width:600
+  panel ~key:"pane-general"
     [ version_row ()
     ; language_row ctx
     ; theme_row ctx
@@ -330,8 +342,7 @@ let date_format_row ctx =
     ()
 
 let editor_pane ctx =
-  column ~key:"pane-editor" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+  panel ~key:"pane-editor"
     [ date_format_row ctx
     ; brackets_row ~key:"brackets"
     ; wide_mode_row ~key:"wide"
@@ -916,8 +927,7 @@ let storage_url key default =
   | None -> default
 
 let advanced_pane () =
-  column ~key:"pane-advanced" ~style_class:"panel-wrap"
-    ~gap:16 ~padding:4
+  panel ~key:"pane-advanced"
     [ C.toggle_row ~key:"usage"
         ~label:T.usage_diagnostics
         ~detail:
@@ -996,8 +1006,7 @@ let switch_action_row ~key ~label ~on ~on_checked () =
     ()
 
 let features_pane ctx =
-  column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
-    ~gap:16 ~padding:4 ~margin_bottom:32 ~min_width:560
+  panel ~key:"pane-features" ~style_class:"panel-wrap ls-mb" ~margin_bottom:32
     [ home_page_row ctx
     ; C.action_row ~key:"plugs"
         ~label:T.plugins_label
@@ -1031,14 +1040,21 @@ let tab_title tab =
   | None -> T.settings_general
 
 let nav_item ~key (id, label, icn) =
-  C.class_signal (S.signal ())
+  let content = C.class_signal (S.signal ())
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
-       ~on_press:(fun _ -> S.set_tab id) ())
+       ~on_press:(fun _ -> S.set_tab id) ()) in
+  if id<>"keymap" then content
+  else fun ctx parent ->
+    let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+      ~scope:ctx.Lui_ui.ui_scope in
+    Ui_parts.string_prop Lui_protocol.DisplayValue
+      ~value:(reactive (fun viewport -> if viewport>=640. then "inline-flex" else "none") viewport)
+      content ctx parent
 
 let pane_of ~modal ctx tab =
   match tab with
@@ -1049,11 +1065,10 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  (* overflow-y stays on the data_attrs style channel — axis-specific
-     overflow has no typed-prop form *)
-  column ~key:"settings-article" ~style_class:"settings-article"
-    ~padding:16 ~grow:1. ~min_height:192
-    ~data_attrs:[ "style", "overflow-y: auto" ]
+  Ui_components.with_props [Ui_components.Prop.overflow `auto]
+    (column ~key:"settings-article" ~style_class:"settings-article"
+    ~data_attrs:["role", "article"]
+    ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
        [ row ~key:"art-h" ~style_class:"cp__settings-header"
            ~cross:`center ~main:`start ~gap:8 ~height:40
            ~padding_vertical:8
@@ -1067,39 +1082,38 @@ let article ~modal ctx =
            ]
        ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
            (S.signal ())
-       ]
+       ])
 
 let inner ~modal : t =
  fun ctx parent ->
   S.ensure ctx;
   S.activate ();
-  (* cljs .cp__settings-inner is flex-col under md and md:flex-row at
-     >=768px: the aside nav column sits left of the article on wide
-     screens. Native has no media queries — read the viewport once at
-     mount. *)
-  let wide = Ui_services.dom_viewport_width () >= 768. in
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
   let inner_box children =
-    if wide then
-      row ~key:"settings-inner" ~style_class:"cp__settings-inner"
-        ~cross:`stretch children
-    else
-      column ~key:"settings-inner" ~style_class:"cp__settings-inner"
-        children
+    Ui_parts.float_prop Lui_protocol.HeightViewport
+      ~value:(reactive (fun viewport -> if viewport>=768. then 0.7 else 0.75) viewport)
+      (row ~key:"settings-inner" ~style_class:"cp__settings-inner" ~min_width:0
+        ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
+        ~cross:`stretch children)
   in
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
-          [ Ui_components.Prop.height_viewport 0.7
-          ; ( Ui_components.Prop.min_height_viewport 0.55 )
+          [ Ui_components.Prop.min_height_viewport 0.55
           ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
           (inner_box
-             [ column ~key:"settings-aside"
+             [ Ui_parts.int_prop Lui_protocol.MinWidth
+                 ~value:(reactive (fun viewport -> if viewport>=768. then 256 else 160) viewport)
+                 (Ui_parts.int_prop Lui_protocol.MaxWidth
+                   ~value:(reactive (fun viewport -> if viewport>=768. then 256 else int_of_float viewport) viewport)
+                 (column ~key:"settings-aside"
                  ~style_class:"settings-aside"
+                 ~data_attrs:["role", "complementary"]
                  ~background:
                    "var(--lx-gray-03-alpha, var(--rx-gray-03-alpha))"
                  ~padding:16
-                 ?width:(if wide then Some 256 else None)
-                 ~min_width:160 ~gap:16
+                 ~gap:16
                  [ row ~key:"aside-h"
                      ~style_class:"cp__settings-header"
                      ~cross:`center ~main:`start ~gap:8 ~height:40
@@ -1112,12 +1126,12 @@ let inner ~modal : t =
                          ~value:T.settings_title []
                      ]
                  ; list ~key:"aside-menu"
-                     ~style_class:"settings-menu" ~padding:0 ~gap:8
+                     ~style_class:"settings-menu" ~padding:0 ~gap:8 ~margin_bottom:8
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)
                         nav_items)
-                 ]
+                 ]))
              ; article ~modal ctx
              ])
       ]

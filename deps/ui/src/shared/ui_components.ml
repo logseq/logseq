@@ -700,45 +700,32 @@ let ls_tooltip_keys ~key children : t =
 
 (* -- settings & properties recipes (task 5) ----------------------------- *)
 
-(* `.it` form row — the deleted `sm:grid-cols-3` rules become flex
-   growth: label cell 1/3, control cell 2/3 (the `>:nth-child(2):last-child`
-   span-2 when no side slot); each `side` slot is its own third. Every
-   cljs `.it` carries `sm:items-start`, so cells top-align. The <640px
-   stacked variant is a documented leftover (no breakpoint channel). *)
+(* Form labels use one grid column; controls span two when no side slot
+   is present. Responsive properties preserve mounted controls across resize. *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     ?(col_gap = 24) ?(min_height = 28) ~control () : t =
-  (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
-     columns — flex-grow with auto bases drifts with content width, so
-     the cells carry explicit zero-basis flex ratios. .its nested inside
-     another wrapper keep sm:gap-4 (16px) — e.g. the accent row *)
-  let third =
-    Printf.sprintf "calc((100%% - %dpx) / 3)" (2 * col_gap)
-  in
-  row ~key ~style_class:"it" ~gap:col_gap ~min_width:0 ~cross:`start
-    ~min_height
-    ([ column ~key:(key ^ "-lc") ~min_width:180 ~cross:`stretch
-         ~gap:0
-         ~data_attrs:
-           [ "style"
-           , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
-         ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
-              (label :: label_extra) ]
-          @ match desc with Some d -> [ d ] | None -> [])
-     ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16 ~grow:1.
-         ~data_attrs:
-           [ "style"
-           , Printf.sprintf "flex: %s; min-width: 0"
-               (if side = [] then "1 1 0"
-                else "0 0 " ^ third) ]
-         [ control ] ]
-    @ List.mapi
-        (fun i s ->
-          box ~key:(key ^ "-s" ^ string_of_int i) ~min_width:0
-            ~data_attrs:
-              [ "style"
-              , Printf.sprintf "flex: 0 0 %s; min-width: 0" third ]
-            [ s ])
-        side)
+ fun ctx parent ->
+  let viewport = Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  let control =
+    Ui_parts.int_prop P.GridColumnSpan
+      ~value:(reactive (fun viewport -> if viewport>=640. && side=[] then 2 else 1) viewport)
+      (Ui_parts.int_prop P.MarginTop
+        ~value:(reactive (fun viewport -> if viewport<640. then 4 else 0) viewport)
+      (row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
+        [control])) in
+  Ui_parts.int_prop P.GridColumns
+    ~value:(reactive (fun viewport -> if viewport>=640. then 3 else 1) viewport)
+    (Ui_parts.int_prop P.Gap
+      ~value:(reactive (fun viewport -> if viewport>=640. then col_gap else 0) viewport)
+    (grid ~key ~style_class:"it" ~min_width:0 ~cross:`start ~min_height
+      ([column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch ~gap:0
+          ([row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
+              (label :: label_extra)]
+           @ match desc with Some d -> [d] | None -> []);
+        control]
+       @ List.mapi (fun i content ->
+         box ~key:(key ^ "-s" ^ string_of_int i) ~min_width:0 [content]) side))) ctx parent
 
 (* `.ls-label`/`.it-label` — 14px medium, 28px line, 70% opacity.
    Inside a flex-col label cell cljs uses leading-5 (20px). *)

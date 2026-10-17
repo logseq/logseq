@@ -5476,3 +5476,147 @@ let () = Native_embed.with_entry_lock (fun () ->
         (listener_count ()=before))
       ["new-graph",Some 500.;"parity-short-content",None]) [1.;2.]);
   print_endline "native shared short-content dialog resize and disposal: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let previous_width=Host.inner_width () and previous_height=Host.inner_height ()
+  and previous_flush= !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Host.set_window_size previous_width previous_height;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun scale ->
+      Host.set_window_size 1280. 720.;
+      let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
+          hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="settings-scroll-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1280.*.scale)) ~height:(int_of_float (720.*.scale)) () in
+      let previous_worker= !Runtime.worker and previous_settings= !Settings_state.st in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ -> match name with
+        | "thread-api/get-file-content" | "thread-api/pull" -> Js.Promise.resolve Wire.Nil
+        | _ -> failwith ("Unexpected settings fixture request: " ^ name));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      Settings_state.st:=None;
+      let opened=ref None in
+      let app = Lui_app.create (A.backend surface (profile MacOS GenericHost))
+        Model.initial (fun m () -> m) (fun ctx ms _ ->
+          let state=Signal.state ctx.Lui_ui.ui_scheduler false in
+          opened:=Some state;
+          Lui_elements.column [Lui_elements.if_ ~test:(Signal.value state)
+            (Dialogs_view.dialog_view "settings" ms)]) in
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);
+        Runtime.worker:=previous_worker;Settings_state.st:=previous_settings) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        ignore (A.store_changed surface);ignore (A.repaint surface);
+        Signal.set (Option.get !opened) true;
+        ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
+        let store=A.store surface in
+        let find key=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some key) (Lui_store.preorder store) in
+        let aside=find "settings-aside" and article=find "settings-article" in
+        List.iter (fun form ->
+          let bounds=W.Rects.get (A.rects surface) form in
+          let cells=Lui_store.child_ids store form in
+          let label=W.Rects.get (A.rects surface) (List.nth cells 0)
+          and control=W.Rects.get (A.rects surface) (List.nth cells 1) in
+          let gap=match Lui_store.prop store form "gap" with
+            | Some (IntValue value) -> float_of_int value
+            | _ -> failwith "Settings form is missing its typed gap" in
+          let expected=(bounds.w/.scale-.2.*.gap)/.3. in
+          check (Printf.sprintf "Nested settings label %d: %.3f rather than %.3f in %.3f-point grid"
+            form (label.w/.scale) expected (bounds.w/.scale))
+            (abs_float (label.w/.scale-.expected)<=1./.scale);
+          check "Nested settings controls must start at the shared second column"
+            (abs_float ((control.x-.bounds.x)/.scale-.expected-.gap)<=1./.scale))
+          (List.filter (fun id -> Lui_store.string_prop store id "style-class"=Some "it")
+            (Lui_store.preorder store));
+        let rect=W.Rects.get (A.rects surface) article in
+        ignore (A.handle surface (W.Input.Move ((rect.x+.rect.w/.2.)/.scale,(rect.y+.80.*.scale)/.scale)));
+        ignore (A.handle surface (W.Input.Wheel (0.,-2000.)));ignore (A.repaint surface);
+        let offset=W.Ui.scroll_offset (A.ui surface) in
+        check "Settings wheel input must scroll the article rather than its outer dialog" (offset article>0.);
+        let rec stationary id =
+          check "Settings navigation must remain stationary while the article scrolls" (offset id=0.);
+          Option.iter stationary (Lui_store.parent store id) in
+        stationary aside;
+        let keymap=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some "keymap") (Lui_store.preorder store) in
+        List.iter (fun width ->
+          Host.set_window_size width 720.;Platform.emit_event "resize" (Js.Json.JObject []);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
+            ~height:(int_of_float (720.*.scale)) ~scale;
+          ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
+          let nav=W.Rects.get (A.rects surface) aside and body=W.Rects.get (A.rects surface) article in
+          if width<768. then (
+            check (Printf.sprintf "Narrow settings navigation compressed from its 248-point content to %.2f" (nav.h/.scale))
+              (abs_float (nav.h/.scale-.248.)<0.1);
+            check "Narrow Settings must stack the article below its navigation"
+              (body.y>=nav.y+.nav.h-.0.1 && abs_float (body.x-.nav.x)<0.1);
+            check "Narrow Settings must hide Keymap navigation like the reference"
+              ((W.Rects.get (A.rects surface) keymap).h=0.))
+          else (
+            check "Wide Settings must restore its fixed navigation width"
+              (abs_float (nav.w/.scale-.256.)<0.1);
+            check "Wide Settings must place the article beside its navigation"
+              (abs_float (body.x-.nav.x-.nav.w)<0.1);
+            check "Wide Settings must restore Keymap navigation"
+              ((W.Rects.get (A.rects surface) keymap).h>0.))) [500.;1280.;500.;1280.])) [1.;2.]);
+  print_endline "native Settings article owns scrolling independently of navigation: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let previous_width=Host.inner_width () and previous_height=Host.inner_height ()
+  and previous_flush= !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Host.set_window_size previous_width previous_height;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun scale ->
+      Host.set_window_size 1280. 720.;
+      let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
+          hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="responsive-form-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (600.*.scale)) ~height:(int_of_float (300.*.scale)) () in
+      let app = Lui_app.create (A.backend surface (profile MacOS GenericHost))
+        () (fun m () -> m) (fun ctx _ _ ->
+          let value=Signal.state ctx.Lui_ui.ui_scheduler "" in
+          Ui_components.form_row ~key:"form"
+            ~label:(Lui_elements.text ~value:"Field" [])
+            ~control:(Lui_elements.input ~accessibility_identifier:"responsive-input" ~height:32
+              ~text_signal:(Signal.value value)
+              ~on_input:(function TextChanged (_,next) -> Signal.set value next | _ -> ()) []) ()) in
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let store=A.store surface in
+        let form=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "it") (Lui_store.preorder store) in
+        let cells=Lui_store.child_ids store form in
+        let input=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some "responsive-input") (Lui_store.preorder store) in
+        ignore (Lui_app.dispatch_event app (TextChanged (input,"Retained café 中文 😀")));
+        List.iter (fun viewport ->
+          let width=if viewport<640. then viewport-.32. else 600. in
+          Host.set_window_size viewport 720.;Platform.emit_event "resize" (Js.Json.JObject []);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
+            ~height:(int_of_float (300.*.scale)) ~scale;
+          ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
+          let label=W.Rects.get (A.rects surface) (List.nth cells 0)
+          and control=W.Rects.get (A.rects surface) (List.nth cells 1) in
+          let expected=if viewport<640. then width else (width-.48.)/.3. in
+          check (Printf.sprintf "Shared form label at viewport %.0f scale %.0f: %.3f rather than %.3f"
+            viewport scale (label.w/.scale) expected) (abs_float (label.w/.scale-.expected)<0.1);
+          if viewport<640. then
+            check "Narrow form controls must stack after their labels"
+              (abs_float (control.x-.label.x)<0.1 && control.y>=label.y+.label.h)
+          else check "Wide form controls must span the remaining two columns"
+            (abs_float (control.x-.label.x-.label.w-.24.*.scale)<0.1
+             && abs_float (control.w/.scale-.(width-.expected-.24.))<0.1);
+          check "Responsive form resize must retain input identity and text"
+            (Lui_store.child_ids store form=cells
+             && Lui_store.string_prop store input "text"=Some "Retained café 中文 😀"))
+          [1280.;500.;900.;500.;1280.])) [1.;2.]);
+  print_endline "native shared responsive form columns and retained input: OK")

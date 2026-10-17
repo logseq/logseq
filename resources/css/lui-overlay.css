@@ -1140,38 +1140,9 @@
 
 /* ---- settings modal ----------------------------------------------------- */
 
-@media (min-width: 768px) {
-  .cp__settings-inner {
-    flex-direction: row;
-  }
-}
-
-@media (min-width: 768px) {
-  .cp__settings-inner > .settings-aside,
-  .cp__settings-inner > aside {
-    width: 16rem;
-  }
-}
-
-@media (min-width: 768px) {
-  .cp__settings-inner > .settings-article,
-  .cp__settings-inner > article {
-    /* article flex-fills the inner row beside the 16rem aside — a fixed
-       width overflows the dialog card (observed: 896px inside a 1024px
-       frame pushes the scroll edge past the rounded border) */
-    flex: 1 1 0;
-    max-width: calc(100vw - 24rem);
-    height: 70vh;
-  }
-}
-
 .cp__settings-modal-title::first-letter,
 .cp__settings-category-title::first-letter {
   text-transform: uppercase;
-}
-
-.settings-menu-item[data-id="keymap"] {
-  display: none;
 }
 
 /* cljs .settings-menu-link icon slot is 18px; the kit's list-item icon
@@ -1201,37 +1172,9 @@
   pointer-events: none;
 }
 
-/* the item is the button itself in the LUI tree (cljs wraps a
-   .settings-menu-link button in li.settings-menu-item): same padding
-   and horizontal layout as the cljs link, no list-item default slots */
-@media (min-width: 640px) {
-  .settings-menu-item.lui-list-item[data-id="keymap"] {
-    display: flex;
-  }
-}
-
 /* list-item's data-selected accent background is unused here — .active
    carries the highlight, matching cljs li.active */
 
-@media (min-width: 640px) {
-  .panel-wrap {
-    width: 600px;
-    max-width: calc(100vw - 20rem);
-  }
-}
-
-/* direct child like cljs .panel-wrap>.it:first-of-type — the accent
-   row's .it is nested in a wrapper div and must not get this padding */
-.panel-wrap > .it:first-of-type {
-  padding-top: 14px;
-}
-
-/* cljs .it is grid-cols-3: the control column spans 2 only when the
-   row has two children (label + control); three-child rows (e.g.
-   label | switch | shortcut kbd) keep one column each */
-/* the control column's col-span-2 is on the element in cljs markup —
-   it applies in the appearance popup too (only the label/control
-   min-heights are panel-wrap scoped) */
 .panel-wrap .form-select,
 .panel-wrap .form-input {
   width: 100%;

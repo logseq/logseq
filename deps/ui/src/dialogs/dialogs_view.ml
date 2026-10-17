@@ -83,18 +83,17 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
                   [ ("style", "letter-spacing:-0.01em;margin:0") ]
                 ~style_class:"ui__dialog-title" ~value:title
                 ~accessibility_identifier:("ls-dialog-title-" ^ name) [] ])
-        @ [ (* scroll kind so native backends map it to their scroll
-               view; ui__dialog-main-content stays as the e2e/imperative
-               hook the per-dialog rules scope onto (overflow is native
-               on the scroll kind) *)
-            scroll ~key:("dlg-s-" ^ name)
+        @ [ (* Settings owns a bounded article scroller beside stationary
+               navigation. Other dialog bodies use the shared scroll kind. *)
+            (if name="settings" then body_of name ms
+             else scroll ~key:("dlg-s-" ^ name)
               ~style_class:"ui__dialog-main-content" ~orientation:`vertical
               ~grow:1. ~min_height:0
               ~data_attrs:
                 (if name = "login"
                  then [ ("style", "padding:0;position:relative") ]
                  else [])
-              [ body_of name ms ]
+              [ body_of name ms ])
           ] )
        ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
        ])
