@@ -117,6 +117,16 @@
           (is (= [cached-ref-uuid]
                  (map :block/uuid (:block/refs result)))))))))
 
+(deftest wrap-parse-block-date-hashtag-is-not-a-journal-class-test
+  (doseq [title ["#2024-01-01" "#[[2024-01-01]]" "#x[[Jan 1st, 2024]]"]]
+    (let [result (db-editor-handler/wrap-parse-block {:block/title title})]
+      (is (seq (:block/tags result)) (str "Parses a tag from " title))
+      (doseq [tag (:block/tags result)]
+        (is (nil? (:block/journal-day tag))
+            (str title " tag must not have journal-day"))
+        (is (nil? (:block.temp/original-page-name tag)))
+        (is (not= "journal" (:block/type tag)))))))
+
 (deftest wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test
   (let [block-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         cached-ref-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
