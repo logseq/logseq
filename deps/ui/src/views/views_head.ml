@@ -90,8 +90,8 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   (* cljs view-tab-button is text-sm (14px), not the LUI button
      size-sm default 16px; .ls-dim (opacity-75 when not current) is the
      opacity signal *)
-  Ui_parts.float_prop_signal Lui_protocol.Opacity current_sig
-    (fun cur -> if cur then 1. else 0.75)
+  Ui_parts.float_prop Lui_protocol.Opacity
+    ~value:(reactive (fun cur -> if cur then 1. else 0.75) current_sig)
     (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
     (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~style_class:"ls-view-tab"
@@ -199,7 +199,7 @@ let tabs_el inst ~op : t =
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
         ~mount:(view_tab inst)
-    ; Ui_parts.float_prop_signal Lui_protocol.Opacity op Fun.id
+    ; Ui_parts.float_prop Lui_protocol.Opacity ~value_signal:op
         (button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
            ~style_class:"ls-add-view"
            ~transition:"opacity 300ms ease-in"

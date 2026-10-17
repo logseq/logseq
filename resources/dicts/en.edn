@@ -2032,6 +2032,7 @@
  :view.table/select-order "Select order"
  :view.table/select-row "Select row"
  :view.table/selected-count "Selected: {1}"
+ :view.table/selection-actions-label "Selection actions"
  :view.table/sort-ascending "Sort ascending"
  :view.table/sort-descending "Sort descending"
  :view.table/sort-groups-by "Sort groups by"

@@ -339,20 +339,23 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
-(* declarative checkbox: `shown` derives the checked bit from the
-   vstate. The label-hover reveal (mouseover/mouseout) is DOM-only and
-   gone — the box is always visible now *)
+(* The selection target is 32 points; its centered 16-point chrome
+   appears while hovered or checked. *)
 let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
- fun ctx parent ->
-  checkbox ~accessibility_identifier:id ~label:aria_label
-    ~transition:"opacity 150ms"
-    ~style_class:(if jtrigger then "jtrigger" else "")
-    ~checked_signal:(Logseq_el.own ctx (Signal.map shown (sig_of inst)))
-    ~on_toggle:(fun ev ->
-      match ev with
-      | L.ToggleChanged (_, on) -> on_toggle on
-      | _ -> ())
-    [] ctx parent
+  Ui_parts.float_prop L.Opacity
+    ~value:(reactive (fun s -> if shown s then 1. else 0.) (sig_of inst))
+    (Ui_components.with_props [Ui_components.Prop.hover_opacity 1.]
+      (checkbox ~accessibility_identifier:id ~label:aria_label
+        ~width:32 ~height:32 ~main:`center ~cross:`center
+        ~border_color:"hsl(var(--primary))"
+        ~transition:"opacity 150ms"
+        ~style_class:(if jtrigger then "jtrigger" else "")
+        ~checked:(reactive shown (sig_of inst))
+        ~on_toggle:(fun ev ->
+          match ev with
+          | L.ToggleChanged (_, on) -> on_toggle on
+          | _ -> ())
+        []))
 
 (* cljs row-checkbox: label.jtrigger > shui checkbox *)
 let select_cell inst ~row_uuid ~blk : t =
@@ -566,8 +569,6 @@ let sortable c =
     (List.mem c.V.c_id
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
-(* cljs header-checkbox: the hover reveal is DOM-only — always
-   visible now *)
 let header_select_cell inst : t =
   let shown (s : V.vstate) = not (V.Sset.is_empty s.V.selected) in
   row ~cross:`center ~main:`center ~width:32 ~height:32
@@ -801,11 +802,16 @@ let delete_selected inst () =
         (P.show_dialog
            ~headline:I.batch_delete_title
            ~body:
-             [ D.el ~tag:"ol" ~attrs:[ ("style", "padding:16px 8px 8px") ]
-                 (List.map (fun n -> D.el ~tag:"li" ~text:n []) names)
-             ; D.el ~tag:"p" ~attrs:[ ("style", "padding:0 8px;opacity:0.5") ]
-                 [ D.el ~tag:"small" ~text:(I.total (List.length names)) [] ]
-             ]
+             [ Ui_components.with_props [Ui_components.Prop.padding_top 16]
+                 (scroll ~orientation:`vertical ~max_height:320
+                    [ column ~padding:8 ~gap:4
+                        (List.mapi (fun index name ->
+                          row ~gap:4 [text ~font_size:"14px" ~line_height:"20px"
+                            ~value:(string_of_int (index+1) ^ ".") [];
+                            text ~font_size:"14px" ~line_height:"20px" ~value:name []]) names) ])
+             ; text ~padding_horizontal:8 ~font_size:"12px" ~line_height:"20px"
+                 ~foreground:"hsl(var(--muted-foreground))"
+                 ~value:(I.total (List.length names)) [] ]
            ~confirm_label:I.yes ~on_confirm:do_delete ())
     else do_delete ()
   end
@@ -849,47 +855,56 @@ let set_tags_dlg inst =
       Properties_dialog.open_for_block_with_property ~uuids:us u
         ~ident:"block/tags"
 
-(* cljs selection/action-group on the view table: Set tags, Copy,
-   Set property, Unset property, then trash — hidden when view-parent
-   is the Page class (all-pages rows are deleted via the row menu) *)
+(* Keep the selection column available while bulk actions cover the header. *)
 let action_bar inst : t =
   let isig = sig_of inst in
-  if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
-    ((* the selected-count text isn't a toolbar_item — it sits as
-        leading content next to the kit toolbar inside the capsule *)
-     Ui_components.action_bar_capsule ~key:"tac"
-       ~cls:"table-action-bar"
-       (row ~gap:4 ~cross:`center
-          [ text ~padding_horizontal:8
-              ~value_signal:
-                (Signal.map
-                   (fun (s : V.vstate) ->
-                     I.selected_count (V.Sset.cardinal s.V.selected))
-                   isig)
-              []
-          ; Lui_element_combine.action_toolbar
-              ~items:
-                ([ Lui_element_combine.toolbar_item
-                     ~label:(I.t "property/set-tags") ~icon:(`app "hash")
-                     ~on_press:(fun _ -> set_tags_dlg inst) ()
-                 ; Lui_element_combine.toolbar_item ~label:(I.t "ui/copy")
-                     ~on_press:(fun _ -> copy_selected inst ()) ()
-                 ; Lui_element_combine.toolbar_item
-                     ~label:(I.t "property/set-property")
-                     ~on_press:(fun _ -> open_prop_dlg inst ~remove:false)
-                     ()
-                 ; Lui_element_combine.toolbar_item
-                     ~label:(I.t "property/unset-property")
-                     ~on_press:(fun _ -> open_prop_dlg inst ~remove:true)
-                     ()
-                 ]
-                 @ (if inst.V.feature = "all-pages" then []
-                    else
-                      [ Lui_element_combine.toolbar_item ~icon:`trash
-                          ~label:(I.t "editor/delete-selection")
-                          ~on_press:(fun _ -> delete_selected inst ())
-                          () ]))
-              () ]))
+  let action ?icon ?text ?width ?(margin_left = -1) ?(corner_radius = 0) ~label
+      on_press =
+    Ui_components.with_props
+      [
+        Ui_components.Prop.font_size "12px";
+        Ui_components.Prop.line_height "16px";
+      ]
+      (button ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
+         ~padding_horizontal:8 ~margin_left ~corner_radius
+         ~background:"hsl(var(--background))" ~border_width:1
+         ~border_color:"hsl(var(--border))"
+         ~on_press:(fun _ -> on_press ())
+         [])
+  in
+  if_
+    ~test:(reactive (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+    (box ~key:"tac" ~margin_left:32 ~margin_top:1
+       [
+         toolbar ~style_class:"table-action-bar" ~orientation:`horizontal
+           ~label:(I.t "view.table/selection-actions-label")
+           ~gap:0 ~height:32 ~padding:0 ~background:"var(--lx-gray-01)"
+           ~border_width:0 ~corner_radius:0
+           [
+             text ~padding_horizontal:8 ~margin_right:4 ~font_size:"14px"
+               ~line_height:"20px"
+               ~value:
+                 (reactive
+                    (fun (s : V.vstate) ->
+                      I.selected_count (V.Sset.cardinal s.V.selected))
+                    isig)
+               [];
+             action ~label:(I.t "property/set-tags") ~icon:(`app "hash")
+               ~width:31 ~margin_left:0 ~corner_radius:6 (fun () ->
+                 set_tags_dlg inst);
+             action ~label:(I.t "ui/copy") ~text:(I.t "ui/copy")
+               (copy_selected inst);
+             action ~label:(I.t "property/set-property")
+               ~text:(I.t "property/set-property") (fun () ->
+                 open_prop_dlg inst ~remove:false);
+             action ~label:(I.t "property/unset-property")
+               ~text:(I.t "property/unset-property") (fun () ->
+                 open_prop_dlg inst ~remove:true);
+             action
+               ~label:(I.t "ui/delete")
+               ~icon:`trash ~width:31 ~corner_radius:6 (delete_selected inst);
+           ];
+       ])
 
 (* ---------- table ---------- *)
 

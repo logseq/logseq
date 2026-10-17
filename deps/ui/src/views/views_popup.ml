@@ -570,71 +570,64 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
 
 (* ---------- confirm dialog ---------- *)
 
-let show_dialog ~headline ~body:(body : t list) ~on_confirm
-    ?(confirm_label = I.yes) () =
+let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
+    () =
   let id = !next_id + 1 in
   let view context parent =
-    (* the dialog kind renders the blocking backdrop itself; clicks on
-       it do not dismiss (matches the old overlay semantics) *)
-    dialog ~key:(Printf.sprintf "vp-dlg-%d" id)
+    let compact =
+      Ui_components.with_props
+        [
+          Ui_components.Prop.height 28;
+          Ui_components.Prop.padding_vertical 4;
+          Ui_components.Prop.padding_horizontal 12;
+        ]
+    in
+    dialog
+      ~key:(Printf.sprintf "vp-dlg-%d" id)
       ~accessibility_identifier:(Printf.sprintf "vp-dlg-%d" id)
-      ~style_class:"ls-dialog-generic"
+      ~style_class:"ls-dialog-generic" ~max_width:768 ~padding:24
       ~data_attrs:[ ("role", "dialog"); ("aria-modal", "true") ]
       ~on_dismiss:(fun _ -> close_entry id)
-      ([ row ~key:"head" ~style_class:"ls-dialog-head" ~cross:`center
-           [ row ~style_class:"ls-dialog-head-icon" ~cross:`center
-               ~main:`center ~width:40 ~height:40 ~corner_radius:9999
-               ~background:"var(--lx-red-03, rgb(220 60 70 / 0.15))"
-               ~data_attrs:[ ("style", "flex-shrink:0") ]
-               [ Ui_components.with_props
-                   [ Ui_components.Prop.font_size "1.25rem" ]
-                   (box ~style_class:"ls-dialog-error"
-                      ~foreground:
-                        "var(--lx-red-10, \
-                         hsl(var(--destructive, #d64545)))"
-                      [ icon ~key:"ic" ~name:(`app "alert-triangle") [] ]) ]
-           ; box ~style_class:"ls-dialog-head-text" ~margin_left:16
-               [ Logseq_el.el ~tag:"h3" ~id:"modal-headline"
-                   ~attrs:[ ("class", "ls-dialog-headline") ]
-                   ~text:headline [] ]
+      [
+        column ~gap:0
+          ([
+             row ~key:"head" ~style_class:"ls-dialog-head" ~cross:`center
+               ~gap:16
+               [
+                 row ~style_class:"ls-dialog-head-icon" ~cross:`center
+                   ~main:`center ~width:40 ~height:40 ~corner_radius:9999
+                   ~background:"var(--lx-red-03, rgb(220 60 70 / 0.15))"
+                   [
+                     icon ~key:"ic" ~name:(`app "alert-triangle") ~point_size:18
+                       ~foreground:"var(--lx-red-10, hsl(var(--destructive)))"
+                       [];
+                   ];
+                 heading ~level:3 ~accessibility_identifier:"modal-headline"
+                   ~style_class:"ls-dialog-headline" ~grow:1. ~min_width:0
+                   ~font_size:"18px" ~font_weight:500 ~line_height:"24px"
+                   ~white_space:"normal" ~value:headline [];
+               ];
            ]
-       ]
-       @ body
-       @ [ row ~key:"footer" ~style_class:"ls-dialog-footer" ~main:`end_
-             ~gap:16
-             ~data_attrs:[ ("style", "padding-top:1.5rem") ]
-             [ Ui_components.with_props
-                 [ Ui_components.Prop.font_size "0.875rem"
-                 ; Ui_components.Prop.font_weight 500
-                 ; Ui_components.Prop.cursor `pointer
-                 ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                 (button ~key:"cancel" ~style_class:"ui__button ls-btn-outline"
-                    ~text:I.cancel
-                    ~corner_radius:6 ~border_width:1
-                    ~border_color:"hsl(var(--border))"
-                    ~background:
-                      "var(--ls-primary-background-color, \
-                       var(--lui-c-background))"
-                    ~foreground:"inherit"
-                    ~padding_vertical:8 ~padding_horizontal:16
-                    ~on_press:(fun _ -> close_entry id) [])
-             ; Ui_components.with_props
-                 [ Ui_components.Prop.font_size "0.875rem"
-                 ; Ui_components.Prop.font_weight 500
-                 ; Ui_components.Prop.cursor `pointer
-                 ; Ui_components.Prop.hover_opacity 0.9 ]
-                 (button ~key:"confirm" ~style_class:"ui__button ls-btn-primary"
-                    ~text:confirm_label
-                    ~corner_radius:6 ~border_width:0
-                    ~background:
-                      "var(--lx-accent-09, hsl(var(--primary, \
-                       var(--ls-link-text-color, #0f7b6c))))"
-                    ~foreground:"#fff" ~height:40 ~padding_horizontal:16
-                    ~on_press:(fun _ ->
-                      close_entry id;
-                      on_confirm ())
-                    []) ]
-         ])
+          @ body
+          @ [
+              row ~key:"footer" ~style_class:"ls-dialog-footer" ~main:`end_
+                ~gap:16 ~margin_top:24
+                [
+                  compact
+                    (Ui_components.dialog_btn_neutral ~key:"cancel" ~size:`sm
+                       ~variant:`outline ~text:I.cancel ~on_press:(fun () ->
+                         close_entry id));
+                  compact
+                    (Ui_components.dialog_btn_primary ~key:"confirm" ~size:`sm
+                       ~variant:`primary ~text:confirm_label
+                       ~on_press:(fun () ->
+                         close_entry id;
+                         on_confirm ()));
+                ];
+            ]);
+        Ui_components.dialog_close ~key:"close" ~label:I.close
+          ~on_press:(fun _ -> close_entry id);
+      ]
       context parent
   in
   push view

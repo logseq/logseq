@@ -567,9 +567,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             [ (* the link kind renders a real <a> so a.hash-symbol css
                  keeps matching; href="#" is the cljs decorative-anchor
                  convention *)
-              Ui_parts.float_prop_signal Lui_protocol.Opacity
-                (Signal.value hov)
-                (fun h -> if h then 0. else 0.7)
+              Ui_parts.float_prop Lui_protocol.Opacity
+                ~value:(reactive (fun h -> if h then 0. else 0.7) (Signal.value hov))
                 (Ui_components.with_props
                    [ Ui_components.Prop.font_size "0.875rem"
                    ; Ui_components.Prop.font_weight 400
@@ -595,9 +594,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                                 [ Wire.Uuid owner_uuid
                                 ; Wire.Keyword "block/tags"
                                 ; Wire.Int dbid ] ]))
-                   (Ui_parts.float_prop_signal Lui_protocol.Opacity
-                      (Signal.value hov)
-                      (fun h -> if h then 0.7 else 0.)
+                   (Ui_parts.float_prop Lui_protocol.Opacity
+                      ~value:(reactive (fun h -> if h then 0.7 else 0.) (Signal.value hov))
                       (Ui_components.with_props
                          [ Ui_components.Prop.user_select `none
                          ; Ui_components.Prop.cursor `pointer ]

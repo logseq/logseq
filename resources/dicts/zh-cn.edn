@@ -2027,6 +2027,7 @@
  :view.table/select-order "选择排序"
  :view.table/select-row "选择行"
  :view.table/selected-count "已选中：{1}"
+ :view.table/selection-actions-label "选择操作"
  :view.table/sort-ascending "升序排列"
  :view.table/sort-descending "降序排列"
  :view.table/sort-groups-by "分组排序依据"

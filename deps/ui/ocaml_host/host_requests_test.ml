@@ -4291,3 +4291,143 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native nested table horizontal scrolling" (!failures=[]);
   print_endline "native nested table horizontal scrolling: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_popups = !Views_popup.open_popups
+  and previous_stack = !Views_popup.stack_st and previous_open = !Views_popup.open_st in
+  List.iter (fun scale ->
+    Views_popup.open_popups:=[];Views_popup.stack_st:=None;Views_popup.open_st:=None;
+    let surface_cell = ref None and painted = ref [] and drawn_text = ref [] and inst_cell = ref None in
+    let surface () = Option.get !surface_cell in
+    let engine = lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (A.host (surface ())))
+      ~scale:(fun () -> scale) ~store:(fun () -> A.store (surface ()))) in
+    let module Measured_layout = struct
+      include Lui_layout
+      let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor ?vport ~width ~height layout store =
+        let measure id text offered_width _ =
+          let measured = Text_engine.measure_text ~width:(Host_interaction.measure_width offered_width)
+            (Lazy.force engine) id text in
+          Some (Text_engine.pad_size store id ~scale measured) in
+        Lui_layout.sync ?scale:layout_scale ~measure ?hidden ?ctx_anchor ?vport ~width ~height layout store
+    end in
+    let surface = A.create ~layout:(module Measured_layout) ~scale_cell:(ref scale)
+      ~text:{measure=(fun id text -> Text_engine.measure_text (Lazy.force engine) id text);
+        text_ops=(fun id r color text -> drawn_text:=(id,text)::!drawn_text;
+          Text_engine.text_ops (Lazy.force engine) id r color text);
+        hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+        caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+          {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+           c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+      ~renderer:{Lui_host.name="table-selection-test";render=(fun scene -> painted:=scene.Lui_scene.ops;Bytes.empty)}
+      ~width:(int_of_float (600.*.scale)) ~height:(int_of_float (600.*.scale)) () in
+    surface_cell:=Some surface;Lui_host.set_reduced_motion (A.host surface) true;
+    let registry = Lui_extension.registry () in
+    Logseq_el.register_all registry;Logseq_codemirror.register registry;
+    let app = Lui_app.create_with_extensions (A.backend surface (profile MacOS GenericHost))
+      registry () (fun () () -> ()) (fun context _ _ ->
+        let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+        let blocks = Hashtbl.create 2 in
+        List.iter (fun uuid -> Hashtbl.add blocks uuid (Wire.Map
+          [Wire.Keyword "block/uuid",Wire.Uuid uuid;
+           Wire.Keyword "block/name",Wire.String uuid;Wire.Keyword "block/title",Wire.String uuid]))
+          ["row-a";"row-b"];
+        let view = {(Views_state.empty_vstate ()) with
+          Views_state.columns=[Views_table.select_column;Views_table.page_title_column];blocks;loading=false;
+          data=Views_wire.VFlat {rows=["row-a";"row-b"];count=2;previews=Hashtbl.create 0;qprops=[]}} in
+        let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler view} in
+        inst_cell:=Some inst;
+        Lui_elements.column ~grow:1. ~min_width:0 [Views_table.table_el inst view;Views_popup.layer]) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (A.store_changed surface);
+      ignore (A.repaint surface);
+      let store = A.store surface and inst = Option.get !inst_cell in
+      let find key = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some key)
+        (Lui_store.preorder store) in
+      let header = find "header-checkbox" and first = find "row-a-checkbox" and second = find "row-b-checkbox" in
+      let rect id = W.Rects.get (A.rects surface) id in
+      let visible id =
+        let r = rect id in
+        let square = Lui_scene.rect (r.x+.(r.w-.16.*.scale)/.2.)
+          (r.y+.(r.h-.16.*.scale)/.2.) (16.*.scale) (16.*.scale) in
+        List.exists (function Lui_scene.Fill f -> f.frect=square && f.fopacity>0.9 | _ -> false) !painted in
+      let selected () = (Views_state.get inst).Views_state.selected in
+      let apply actions =
+        List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;
+        ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+      let click id =
+        let r = rect id in
+        let x = r.x/.scale+.2. and y = r.y/.scale+.2. in
+        apply (A.handle surface (W.Input.Move (x,y)));
+        apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+        let actions = A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+        let toggles = List.filter (function W.Dispatch (ToggleChanged (target,_)) -> target=id | _ -> false) actions in
+        expect "A selection-region click must emit exactly one toggle" (List.length toggles=1);
+        apply actions in
+      List.iter (fun id ->
+        let r = rect id in
+        expect "Table checkboxes must expose the full 32-point selection region"
+          (r.w=32.*.scale && r.h=32.*.scale)) [header;first;second];
+      expect "Unselected table checkboxes must be hidden at rest"
+        (not (visible header || visible first || visible second));
+      let r = rect first in
+      apply (A.handle surface (W.Input.Move (r.x/.scale+.2.,r.y/.scale+.2.)));
+      expect "Hovering the selection-region edge must reveal its centered checkbox" (visible first);
+      expect "Hovering one selection region reveals unrelated checkboxes" (not (visible header || visible second));
+      click first;
+      expect "Clicking the selection-region edge does not select the row"
+        (Views_state.Sset.elements (selected ())=["row-a"]);
+      let bar = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "table-action-bar")
+        (Lui_store.preorder store) in
+      let bar_rect = rect bar and header_rect = rect header in
+      expect "The selection toolbar overlaps its select-all control or data rows"
+        (abs_float (bar_rect.x-.header_rect.x-.32.*.scale)<0.1
+         && abs_float (bar_rect.y-.header_rect.y)<0.1
+         && abs_float (bar_rect.h-.32.*.scale)<0.1);
+      let actions = Lui_store.preorder store |> List.filter (fun id -> Lui_store.kind store id="button"
+        && let rec inside id = match Lui_store.parent store id with
+          | None -> false | Some parent -> parent=bar || inside parent in inside id) in
+      expect "The page selection toolbar must expose all five bulk actions" (List.length actions=5);
+      Views_table.delete_selected inst ();
+      drawn_text:=[]; apply [];
+      let confirmation = List.find (fun id -> Lui_store.kind store id="dialog") (Lui_store.preorder store) in
+      let rec in_confirmation id = match Lui_store.parent store id with
+        | None -> false | Some parent -> parent=confirmation || in_confirmation parent in
+      let dialog_rect=rect confirmation and headline=find "modal-headline" in
+      expect "A page deletion dialog exceeds its narrow viewport"
+        (dialog_rect.x>=16.*.scale && dialog_rect.x+.dialog_rect.w<=584.*.scale+.0.1);
+      expect "A page deletion headline must wrap within its available width" ((rect headline).h>=48.*.scale);
+      List.iter (fun value ->
+        expect ("Page deletion confirmation must paint " ^ value)
+          (List.exists (fun (id,text) -> in_confirmation id && text=value) !drawn_text))
+        [I18n.batch_delete_title;"row-a";I18n.total 1];
+      let cancel = List.find (fun id -> Lui_store.kind store id="button"
+        && Lui_store.string_prop store id "text"=Some I18n.cancel && in_confirmation id)
+        (Lui_store.preorder store) in
+      apply [W.Dispatch (Press cancel)];
+      expect "Cancelling page deletion changes the selected rows"
+        (Views_state.Sset.elements (selected ())=["row-a"]);
+      apply (A.handle surface (W.Input.Move (580.,180.)));
+      expect "A selected row loses its checkbox after the pointer leaves" (visible first);
+      expect "An unselected row reveals its checkbox after another row is selected" (not (visible second));
+      click header;
+      expect "The select-all region does not clear the selection" (Views_state.Sset.is_empty (selected ()));
+      click header;
+      expect "The select-all region does not select every row"
+        (Views_state.Sset.elements (selected ())=["row-a";"row-b"]);
+      apply (A.handle surface (W.Input.Move (580.,180.)));
+      expect "Select-all does not reveal both selected checkboxes" (visible first && visible second);
+      apply (A.handle surface (W.Input.Key_down (W.Input.Tab,W.Input.mods_none,false)));
+      expect "Tab must focus the select-all checkbox" (W.Ui.focused (A.ui surface)=header);
+      apply (A.handle surface (W.Input.Key_down (W.Input.Space,W.Input.mods_none,false)));
+      expect "Keyboard activation does not clear the select-all checkbox" (Views_state.Sset.is_empty (selected ()));
+      expect "Selection updates replace checkbox identities" (find "header-checkbox"=header && find "row-a-checkbox"=first))
+    ) [1.;2.];
+  Views_popup.open_popups:=previous_popups;Views_popup.stack_st:=previous_stack;Views_popup.open_st:=previous_open;
+  List.iter prerr_endline (List.rev !failures);
+  check "Native table selection geometry, visibility and input" (!failures=[]);
+  print_endline "native table selection geometry, visibility and input: OK")

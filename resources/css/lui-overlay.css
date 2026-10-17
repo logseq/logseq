@@ -336,16 +336,6 @@
   min-width: 0;
 }
 
-/* confirm dialog head/footer (views_popup show_dialog) — the head row,
-   icon slot, error chip and footer now ride typed props on the
-   emitters; the h3 headline is a Logseq_el node (no prop channel) */
-.ls-dialog-headline {
-  font-size: 1.125rem;
-  font-weight: 500;
-  line-height: 1.5rem;
-  margin: 0;
-}
-
 /* ---- menu links (cljs common.css) ------------------------------------ */
 
 .menu-link {
@@ -2282,21 +2272,6 @@ select.form-select {
   height: 100%;
   min-width: 0;
   overflow: hidden;
-}
-
-/* cljs views.cljs: select checkboxes stay in the DOM and reveal only
-   while the 32px select label is hovered or the box is checked
-   (opacity-0 -> opacity-100) */
-.ls-table-row [data-table-row-select] .lui-checkbox,
-.ls-table-header-cell .lui-checkbox {
-  opacity: 0;
-}
-
-.ls-table-row [data-table-row-select]:hover .lui-checkbox,
-.ls-table-row [data-table-row-select] .lui-checkbox:has(input:checked),
-.ls-table-header-cell:hover .lui-checkbox,
-.ls-table-header-cell .lui-checkbox:has(input:checked) {
-  opacity: 1;
 }
 
 /* cljs table-block-title: the open/open-in-sidebar ghost buttons are
