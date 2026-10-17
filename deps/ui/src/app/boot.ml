@@ -9,6 +9,7 @@ let demo_graph = "Demo"
    Theme/accent/font/wide-mode mirror cljs theme.cljs container effects;
    storage keys use cljs `(name key)` semantics (namespace stripped). *)
 let apply_storage_env () =
+  Keymap_data.reload_shortcuts ();
   let lang = Ui_services.doc_preferred_lang () in
   Ui_services.doc_set_lang lang;
   let theme =

@@ -3358,7 +3358,37 @@ let () =
               in
               dispatch (Press clear_keys);
               expect "Native key-filter clear must restore grouped commands"
-                (count_class "th" > 0));
+                (count_class "th" > 0);
+              let saved_shortcuts = Ui_services.storage_get "ls-shortcuts" in
+              let refresh () =
+                let target = List.find (fun id ->
+                    Lui_store.string_prop store id "accessibility-label"
+                    = Some I18n.keymap_refresh_all) (Lui_store.preorder store) in
+                dispatch (Press target)
+              in
+              let displays value = List.exists (fun id ->
+                  Lui_store.string_prop store id "text" = Some value)
+                  (Lui_store.preorder store) in
+              Ui_services.storage_set "ls-shortcuts"
+                "{:ui/toggle-left-sidebar [\"f8\"]}";
+              refresh ();
+              expect "Native Refresh must load the persisted shortcut"
+                (displays "F8");
+              expect "Native Custom count must include the persisted shortcut"
+                (Keymap_data.count Keymap_data.Custom = 1);
+              let command = List.find (fun (c : Cmdk_services.cmd) ->
+                  c.id = "ui/toggle-left-sidebar") ((Cmdk_host.services ()).commands ()) in
+              expect "Native command palette must read the same shortcut"
+                (command.sc = "f8");
+              Ui_services.storage_set "ls-shortcuts"
+                "{:ui/toggle-left-sidebar [\"f9\"]}";
+              refresh ();
+              expect "Native Refresh must replace stale shortcut keycaps"
+                (displays "F9" && not (displays "F8"));
+              (match saved_shortcuts with
+               | Some value -> Ui_services.storage_set "ls-shortcuts" value
+               | None -> Ui_services.storage_remove "ls-shortcuts");
+              refresh ());
           List.iter prerr_endline (List.rev !errors);
           check "Native Keymap visual geometry and typography" (!errors = [])));
   print_endline "native settings visual geometry: OK"

@@ -538,9 +538,8 @@ let canonical_binding b =
   | [] -> b
 
 (* (binding stroke sequence, command id) — one row per binding *)
-let chord_table : (string list * string) list Lazy.t =
-  lazy
-    (List.concat_map
+let chord_table () =
+    List.concat_map
        (fun (c : Commands_data.cmd) ->
           match c.Commands_data.sc with
           | Commands_data.Binds bs ->
@@ -550,7 +549,18 @@ let chord_table : (string list * string) list Lazy.t =
                    , c.Commands_data.id ))
                 bs
           | _ -> [])
-       Commands_data.table)
+       (Commands_data.current_table ())
+
+let cached_chords = ref (-1, [])
+
+let current_chords () =
+  let revision, table = !cached_chords in
+  if revision = Keymap_data.revision () then (table, false)
+  else begin
+    let table = chord_table () in
+    cached_chords := (Keymap_data.revision (), table);
+    (table, true)
+  end
 
 (* cljs :global-non-editing-only ids — never fire while the target is an
    editable element *)
@@ -647,12 +657,13 @@ let on_global_key ev =
     | Some stroke ->
         if not (List.exists (fun o -> canonical_binding o = stroke) owned_strokes)
         then begin
+          let tbl, changed = current_chords () in
+          if changed then chord_seq := [];
           let now = Ui_services.time_now () in
           let seq =
             if now -. !chord_ms > chord_window_ms then [] else !chord_seq
           in
           let cand = seq @ [ stroke ] in
-          let tbl = Lazy.force chord_table in
           let editing =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None

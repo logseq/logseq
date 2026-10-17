@@ -206,7 +206,7 @@ let services : unit -> Svs.t =
                 [ "message", Js.Json.string msg; "type", Js.Json.string cls ])))
   ; fuzzy_search = Fuzzy.fuzzy_search
   ; fuzzy_search_multi = Fuzzy.fuzzy_search_multi
-  ; commands = (fun () -> List.map cmd_of Commands_data.table)
+  ; commands = (fun () -> List.map cmd_of (Commands_data.current_table ()))
   ; plugin_commands =
       (fun () -> List.map cmd_of (Plugin_host.palette_commands ()))
   ; exec_palette_command = Plugin_host.exec_palette_command

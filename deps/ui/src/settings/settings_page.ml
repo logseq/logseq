@@ -437,6 +437,7 @@ type keymap_model = {
   km_keys : string list;
   km_recording : bool;
   km_committed : bool;
+  km_revision : int;
 }
 
 (* ":<id>#<handler>" -> the command.<id> dict key *)
@@ -757,7 +758,12 @@ let keymap_controls st =
                    [];
                  button ~key:"km-rf" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
-                   ~label:T.keymap_refresh_all ~icon:(`app "refresh") [];
+                   ~label:T.keymap_refresh_all ~icon:(`app "refresh")
+                   ~on_press:(fun _ ->
+                     Keymap_data.reload_shortcuts ();
+                     Runtime.signal_set st
+                       { (Runtime.signal_get st) with km_revision = Keymap_data.revision () })
+                   [];
                ]);
         ];
     ]
@@ -819,10 +825,12 @@ let keymap_row ~key (r : Keymap_data.row) =
 
 let keymap_pane () : t =
  fun context parent ->
+  Keymap_data.reload_shortcuts ();
   let st =
     Signal.state context.Lui_ui.ui_scheduler
       { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [];
-        km_keys=[]; km_recording=false; km_committed=false }
+        km_keys=[]; km_recording=false; km_committed=false;
+        km_revision=Keymap_data.revision () }
   in
   let rows model =
     let items =
@@ -885,7 +893,8 @@ let keymap_pane () : t =
                   previous.km_query = current.km_query
                   && previous.km_filter = current.km_filter
                   && previous.km_collapsed = current.km_collapsed
-                  && previous.km_keys = current.km_keys)
+                  && previous.km_keys = current.km_keys
+                  && previous.km_revision = current.km_revision)
                 rows (Signal.value st);
             ];
         ]))

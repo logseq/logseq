@@ -315,6 +315,54 @@ let run_views ~registry ~profile ~finish =
   eqi "remounting Keymap retains every empty heading" (List.length categories)
     (List.length (List.filter (fun n -> class_has n "th") (nodes reopened_keymap)));
   ignore (Lui_app.dispose reopened_keymap.S.app);
+  let previous_shortcuts = Ui_services.storage_get "ls-shortcuts" in
+  Ui_services.storage_set "ls-shortcuts"
+    "{:ui/toggle-left-sidebar [\"f8\"]}";
+  let configured_keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  let configured_nodes () = nodes configured_keymap in
+  let configured_binding () =
+    List.find_opt (fun n -> M.string_prop n "text" = Some "F8")
+      (configured_nodes ())
+  in
+  check "stored custom shortcut is shown by the real Keymap view"
+    (configured_binding () <> None);
+  let custom_label = I18n.keymap_custom ^ Ui_services.literal_text " · 1" in
+  let custom_pill () = List.find (fun n ->
+      M.string_prop n "text" = Some custom_label)
+      (configured_nodes ()) in
+  check "stored custom shortcut contributes to the Custom count"
+    (List.exists (fun n -> M.string_prop n "text"
+       = Some custom_label) (configured_nodes ()));
+  (match List.find_opt (fun n -> M.string_prop n "text"
+       = Some custom_label) (configured_nodes ()) with
+   | Some _ ->
+       S.toggle configured_keymap (custom_pill ()).M.id true;
+       eqi "Custom filter contains the stored command" 1
+         (List.length (List.filter (fun n -> class_has n "shortcut-row")
+           (configured_nodes ())))
+   | None -> ());
+  let command_binding () =
+    let command = List.find (fun (c : Cmdk_services.cmd) ->
+        c.id = "ui/toggle-left-sidebar") ((Cmdk_host.services ()).commands ()) in
+    command.sc
+  in
+  eqs "the command palette reads the same configured binding" "f8"
+    (command_binding ());
+  Ui_services.storage_set "ls-shortcuts"
+    "{:ui/toggle-left-sidebar [\"f9\"]}";
+  let refresh = List.find (fun n ->
+      M.string_prop n "accessibility-label" = Some I18n.keymap_refresh_all)
+      (configured_nodes ()) in
+  S.press configured_keymap refresh.M.id;
+  check "Refresh all re-reads stored bindings without resetting them"
+    (List.exists (fun n -> M.string_prop n "text" = Some "F9")
+       (configured_nodes ()) && configured_binding () = None);
+  eqs "Refresh all updates the command palette binding" "f9"
+    (command_binding ());
+  ignore (Lui_app.dispose configured_keymap.S.app);
+  restore_storage "ls-shortcuts" previous_shortcuts;
+  let restored_keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  ignore (Lui_app.dispose restored_keymap.S.app);
   let storage_key = "parity-server-url" in
   let previous_url = Ui_services.storage_get storage_key in
   Ui_services.storage_remove storage_key;
@@ -377,14 +425,71 @@ let run_views ~registry ~profile ~finish =
      !Cmdk_state.services_ref)
   in
   let handlers : Cmdk_services.handlers option ref = ref None in
+  let shortcut_actions = ref 0 in
   let services =
     { (Cmdk_host.services ()) with
       repo = (fun () -> None)
     ; focus_input_init = (fun _ -> ())
     ; install_listeners = (fun h -> handlers := Some h)
+    ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
+  let stroke key = Editor_keys.on_global_key (key_event key) in
+  stroke "t"; stroke "l";
+  eqi "default global sequence dispatches once" 1 !shortcut_actions;
+  let previous_shortcuts = Ui_services.storage_get "ls-shortcuts" in
+  Ui_services.storage_set "ls-shortcuts"
+    "{:ui/toggle-left-sidebar [\"f8\"]}";
+  let binding_settings = mount (fun _ -> Settings_page.keymap_pane ()) in
+  let refresh_bindings () =
+    let refresh = List.find (fun n ->
+      M.string_prop n "accessibility-label" = Some I18n.keymap_refresh_all)
+      (nodes binding_settings) in
+    S.press binding_settings refresh.M.id
+  in
+  let before_replaced = !shortcut_actions in
+  stroke "t"; stroke "l";
+  eqi "replacing a global sequence removes its previous execution" before_replaced
+    !shortcut_actions;
+  let before_configured = !shortcut_actions in
+  stroke "F8";
+  eqi "the configured stroke dispatches the existing command action" (before_configured + 1)
+    !shortcut_actions;
+  Ui_services.storage_set "ls-shortcuts" "{:ui/toggle-left-sidebar false}";
+  refresh_bindings ();
+  let before_disabled = !shortcut_actions in
+  stroke "F8"; stroke "t"; stroke "l";
+  eqi "disabling a global shortcut removes both custom and default execution" before_disabled
+    !shortcut_actions;
+  check "a disabled override counts as custom rather than unset"
+    (Keymap_data.count Keymap_data.Custom = 1
+     && Keymap_data.count Keymap_data.Disabled = 5
+     && Keymap_data.count Keymap_data.Unset = 9);
+  Ui_services.storage_remove "ls-shortcuts";
+  refresh_bindings ();
+  let before_reset = !shortcut_actions in
+  stroke "t"; stroke "l";
+  eqi "removing an override restores the default sequence" (before_reset + 1)
+    !shortcut_actions;
+  Ui_services.storage_set "ls-shortcuts"
+    "{:ui/toggle-left-sidebar [\"t x\"]}";
+  refresh_bindings ();
+  stroke "t";
+  Ui_services.storage_set "ls-shortcuts"
+    "{:ui/toggle-left-sidebar [\"t l\"]}";
+  refresh_bindings ();
+  let before_stale_prefix = !shortcut_actions in
+  stroke "l";
+  eqi "a binding reload discards a sequence started under the old bindings"
+    before_stale_prefix !shortcut_actions;
+  stroke "t"; stroke "l";
+  eqi "the replacement sequence works after a fresh prefix"
+    (before_stale_prefix + 1) !shortcut_actions;
+  ignore (Lui_app.dispose binding_settings.S.app);
+  restore_storage "ls-shortcuts" previous_shortcuts;
+  let restored_bindings = mount (fun _ -> Settings_page.keymap_pane ()) in
+  ignore (Lui_app.dispose restored_bindings.S.app);
   let toggle_search () =
     ignore ((Option.get !handlers).Cmdk_services.key
       { key = "k"; meta = true; ctrl = false; shift = false; alt = false });

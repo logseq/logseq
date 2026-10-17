@@ -8,15 +8,13 @@
 
    Kept as an embedded JSON literal decoded once at init — same
    cons-skeleton reason as keymap_data. Wire shape:
-     [ ["k", id, null | "x" | [bindings]] | ["d", id, "(Dev) label"] ]
-   macOS bindings only; non-mac branches are dropped (same as the
-   reference app, which only needs its own platform's set).
+     [ ["k", id] | ["d", id, "(Dev) label"] ]
 
-   `sc` holds the raw cljs :binding values; `display` applies
+   Keymap_data owns default and configured bindings. `display` applies
    shortcut-utils/decorate-binding (macOS/non-macOS branches) + the
    trailing "meta" -> "cmd" rename from binding-for-display. *)
 
-type shortcut =
+type shortcut = Keymap_data.shortcut =
   | Unbound
   | Disabled
   | Binds of string list
@@ -30,7 +28,7 @@ type cmd =
   }
 
 let table_json = {|
-[["k","graph/export-as-html",null],["k","graph/open",["alt+shift+g"]],["k","graph/remove",null],["k","graph/add",null],["k","graph/db-add","x"],["k","editor/cycle-todo",["mod+enter"]],["k","editor/up",["up","ctrl+p"]],["k","editor/down",["down","ctrl+n"]],["k","editor/left",["left"]],["k","editor/right",["right"]],["k","editor/select-up",["shift+up"]],["k","editor/select-down",["shift+down"]],["k","editor/move-block-up",["mod+shift+up"]],["k","editor/move-block-down",["mod+shift+down"]],["k","editor/move-blocks",["mod+shift+m"]],["k","editor/open-edit",["enter"]],["k","editor/open-selected-blocks-in-sidebar",["shift+enter"]],["k","editor/select-block-up",["alt+up"]],["k","editor/select-block-down",["alt+down"]],["k","editor/select-parent",["mod+a"]],["k","editor/delete-selection",["backspace","delete"]],["k","editor/expand-block-children",["mod+down"]],["k","editor/collapse-block-children",["mod+up"]],["k","editor/toggle-block-children",["mod+;"]],["k","editor/indent",["tab"]],["k","editor/outdent",["shift+tab"]],["k","editor/copy",["mod+c"]],["k","editor/copy-text",["mod+shift+c"]],["k","editor/cut",["mod+x"]],["k","page/toggle-favorite",["mod+shift+f"]],["k","editor/jump",["mod+j"]],["k","editor/insert-link",["mod+l"]],["k","editor/select-all-blocks",["mod+shift+a"]],["k","editor/toggle-number-list",["t n"]],["k","editor/undo",["mod+z"]],["k","editor/redo",["mod+shift+z","mod+y"]],["k","editor/quick-add",["mod+e"]],["k","ui/toggle-brackets",["t b"]],["k","go/search-in-page",["mod+shift+k"]],["k","go/search",["mod+k"]],["k","go/search-themes",["mod+shift+i"]],["k","go/backward",["mod+open-square-bracket"]],["k","go/forward",["mod+close-square-bracket"]],["k","search/re-index",["mod+c mod+s"]],["k","sidebar/open-today-page",["mod+shift+j"]],["k","sidebar/clear",["mod+c mod+c"]],["k","publish/open-dialog",["mod+m"]],["k","command-palette/toggle",["mod+shift+p"]],["k","editor/add-property",["mod+p"]],["k","go/home",["g h"]],["k","go/journals",["g j"]],["k","go/all-pages",["g a"]],["k","go/flashcards",["g f","t c"]],["k","go/all-graphs",["g shift+g"]],["k","go/keyboard-shortcuts",["g s"]],["k","go/tomorrow",["g t"]],["k","go/next-journal",["g n"]],["k","go/prev-journal",["g p"]],["k","ui/toggle-document-mode",["t d"]],["k","ui/highlight-recent-blocks",["mod+c mod+r"]],["k","ui/toggle-settings",["t s","mod+,"]],["k","ui/toggle-right-sidebar",["t r"]],["k","ui/toggle-left-sidebar",["t l"]],["k","ui/toggle-help",["shift+/"]],["k","ui/toggle-theme",["t t"]],["k","ui/toggle-contents",["alt+shift+c"]],["k","editor/set-tags",["p t"]],["k","editor/add-property-deadline",["p d"]],["k","editor/add-property-status",["p s"]],["k","editor/add-property-priority",["p p"]],["k","editor/add-property-icon",["p i"]],["k","editor/add-reaction",["p r"]],["k","editor/add-comment",["ctrl+space"]],["k","editor/toggle-display-hidden-properties",["p a"]],["k","ui/toggle-wide-mode",["t w"]],["k","ui/select-theme-color",["t i"]],["k","ui/goto-plugins",["t p"]],["k","editor/toggle-open-blocks",["t o"]],["k","ui/clear-all-notifications",null],["k","sidebar/close-top",["c t"]],["k","misc/export-block-data",null],["k","misc/export-page-data",null],["k","misc/export-graph-ontology-data",null],["k","misc/import-edn-data",null],["k","ui/customize-appearance",["c c"]],["d","dev/show-block-data","(Dev) Show block data"],["d","dev/show-block-ast","(Dev) Show block AST"],["d","dev/show-page-data","(Dev) Show page data"],["d","dev/validate-db","(Dev) Validate current graph"],["d","dev/recompute-checksum","(Dev) Recompute graph checksum"],["d","dev/export-client-ops-sqlite","(Dev) Export client ops sqlite"],["d","dev/gc-graph","(Dev) Garbage collect graph (remove unused data in SQLite)"],["d","dev/rtc-stop","(Dev) RTC Stop"],["d","dev/rtc-start","(Dev) RTC Start"]]
+[["k","graph/export-as-html"],["k","graph/open"],["k","graph/remove"],["k","graph/add"],["k","graph/db-add"],["k","editor/cycle-todo"],["k","editor/up"],["k","editor/down"],["k","editor/left"],["k","editor/right"],["k","editor/select-up"],["k","editor/select-down"],["k","editor/move-block-up"],["k","editor/move-block-down"],["k","editor/move-blocks"],["k","editor/open-edit"],["k","editor/open-selected-blocks-in-sidebar"],["k","editor/select-block-up"],["k","editor/select-block-down"],["k","editor/select-parent"],["k","editor/delete-selection"],["k","editor/expand-block-children"],["k","editor/collapse-block-children"],["k","editor/toggle-block-children"],["k","editor/indent"],["k","editor/outdent"],["k","editor/copy"],["k","editor/copy-text"],["k","editor/cut"],["k","page/toggle-favorite"],["k","editor/jump"],["k","editor/insert-link"],["k","editor/select-all-blocks"],["k","editor/toggle-number-list"],["k","editor/undo"],["k","editor/redo"],["k","editor/quick-add"],["k","ui/toggle-brackets"],["k","go/search-in-page"],["k","go/search"],["k","go/search-themes"],["k","go/backward"],["k","go/forward"],["k","search/re-index"],["k","sidebar/open-today-page"],["k","sidebar/clear"],["k","publish/open-dialog"],["k","command-palette/toggle"],["k","editor/add-property"],["k","go/home"],["k","go/journals"],["k","go/all-pages"],["k","go/flashcards"],["k","go/all-graphs"],["k","go/keyboard-shortcuts"],["k","go/tomorrow"],["k","go/next-journal"],["k","go/prev-journal"],["k","ui/toggle-document-mode"],["k","ui/highlight-recent-blocks"],["k","ui/toggle-settings"],["k","ui/toggle-right-sidebar"],["k","ui/toggle-left-sidebar"],["k","ui/toggle-help"],["k","ui/toggle-theme"],["k","ui/toggle-contents"],["k","editor/set-tags"],["k","editor/add-property-deadline"],["k","editor/add-property-status"],["k","editor/add-property-priority"],["k","editor/add-property-icon"],["k","editor/add-reaction"],["k","editor/add-comment"],["k","editor/toggle-display-hidden-properties"],["k","ui/toggle-wide-mode"],["k","ui/select-theme-color"],["k","ui/goto-plugins"],["k","editor/toggle-open-blocks"],["k","ui/clear-all-notifications"],["k","sidebar/close-top"],["k","misc/export-block-data"],["k","misc/export-page-data"],["k","misc/export-graph-ontology-data"],["k","misc/import-edn-data"],["k","ui/customize-appearance"],["d","dev/show-block-data","(Dev) Show block data"],["d","dev/show-block-ast","(Dev) Show block AST"],["d","dev/show-page-data","(Dev) Show page data"],["d","dev/validate-db","(Dev) Validate current graph"],["d","dev/recompute-checksum","(Dev) Recompute graph checksum"],["d","dev/export-client-ops-sqlite","(Dev) Export client ops sqlite"],["d","dev/gc-graph","(Dev) Garbage collect graph (remove unused data in SQLite)"],["d","dev/rtc-stop","(Dev) RTC Stop"],["d","dev/rtc-start","(Dev) RTC Start"]]
 |}
 
 let jstr j =
@@ -43,26 +41,17 @@ let jarr j =
   | Some a -> a
   | None -> failwith "commands_data: bad json"
 
-let decode_sc j =
-  match Js.Json.decodeString j with
-  | Some "x" -> Disabled
-  | Some _ -> failwith "commands_data: sc"
-  | None -> (
-      match Js.Json.decodeNull j with
-      | Some _ -> Unbound
-      | None -> Binds (Array.to_list (Array.map jstr (jarr j))))
-
 let decode_cmd j =
   match jarr j with
+  | [| tag; id |] when jstr tag = "k" ->
+      { id = jstr id
+      ; label = "command." ^ jstr id
+      ; i18n = true
+      ; dev = false
+      ; sc = Keymap_data.default_shortcut (jstr id)
+      }
   | [| tag; id; rest |] -> (
       match jstr tag with
-      | "k" ->
-          { id = jstr id
-          ; label = "command." ^ jstr id
-          ; i18n = true
-          ; dev = false
-          ; sc = decode_sc rest
-          }
       | "d" ->
           { id = jstr id; label = jstr rest; i18n = false; dev = true; sc = Unbound }
       | _ -> failwith "commands_data: cmd")
@@ -71,6 +60,10 @@ let decode_cmd j =
 let table : cmd list =
   Array.to_list
     (Array.map decode_cmd (jarr (Js.Json.parseExn table_json)))
+
+let current_table () =
+  List.map (fun command ->
+      { command with sc = Keymap_data.effective_shortcut command.id }) table
 
 (* cljs shortcut-utils/decorate-binding (literal replace order matters:
    "shift+/" -> "?" before "shift" -> shift glyph); glyph literals go
