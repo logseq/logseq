@@ -238,6 +238,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+          ~inert:(reactive (fun (m : Model.t) -> not m.right_sidebar_open) ms)
        ~min_width:240 ~min_height:0
        ~style_class:"cp__right-sidebar closed"
           [ Ui_components.with_props
@@ -261,6 +262,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+          ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
           ~min_width:240 ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
              [ (column ~key:"ls-inner" ~grow:1. ~min_height:0

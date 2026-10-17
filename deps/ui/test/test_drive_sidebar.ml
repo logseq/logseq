@@ -40,4 +40,18 @@ let host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
   ; set_language = (fun m -> Settings_view.set_language m)
   }
 
-let run () = Shared_scenarios_sidebar.all (host ())
+let run () =
+  Shared_scenarios_sidebar.all (host ());
+  let was_open = (Runtime.model ()).Model.left_sidebar_open in
+  let toggle () = Runtime.send Action.Toggle_left_sidebar; Runtime.flush () in
+  if not was_open then toggle ();
+  let st = Option.get (Sidebar_state.current ()) in
+  Sidebar_state.toggle_menu st "nav-edit";
+  Runtime.flush ();
+  toggle ();
+  check "closing a dock dismisses its owned menu"
+    (Runtime.signal_get st.open_menu = "");
+  toggle ();
+  check "reopening a dock does not resurrect its old menu"
+    (Runtime.signal_get st.open_menu = "");
+  if not was_open then toggle ()

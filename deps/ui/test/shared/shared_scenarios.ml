@@ -51,12 +51,19 @@ let has_attr n key value =
   | None -> false
 
 let sidebar h =
+  let dock = by_identifier h "left-sidebar" in
+  let inert value =
+    Hashtbl.find_opt (by_identifier h "left-sidebar").M.props "inert"
+    = Some (Lui_protocol.BoolValue value) in
+  h.check "closed sidebar suspends subtree interaction" (inert true);
   h.check "left sidebar starts closed"
     (not (has_class (by_identifier h "left-sidebar") "is-open"));
   h.toggle_sidebar ();
   h.flush ();
   h.check "sidebar opens through its host action"
     (has_class (by_identifier h "left-sidebar") "is-open");
+  h.check "opened sidebar restores interaction without remounting"
+    (inert false && (by_identifier h "left-sidebar").M.id = dock.M.id);
   h.check "main follows sidebar state"
     (has_class (by_identifier h "main-container") "is-left-sidebar-open");
   h.check "sidebar preference persists"
@@ -65,6 +72,8 @@ let sidebar h =
   h.flush ();
   h.check "sidebar closes through its host action"
     (not (has_class (by_identifier h "left-sidebar") "is-open"));
+  h.check "reclosed sidebar suspends the same retained subtree"
+    (inert true && (by_identifier h "left-sidebar").M.id = dock.M.id);
   h.check "closed sidebar preference persists"
     (h.storage_get "ls-left-sidebar-open?" = Some "false")
 

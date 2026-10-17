@@ -772,6 +772,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
        ; Ui_components.Prop.user_select `none
        ; Ui_components.Prop.overflow `hidden ]
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+          ~inert:(reactive (fun (m : Model.t) -> not m.right_sidebar_open) ms)
           ~style_class:"cp__right-sidebar closed"
           ~data_attrs:[ ("style", "container-type:inline-size;min-width:0") ]
           [ Right_sidebar_view.render ms ]))
@@ -810,6 +811,7 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
       "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+          ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
        ~style_class:"cp__sidebar-left-layout"
        [ left_inner_min_width st ms
            (column ~key:"ls-inner" ~grow:1. ~min_height:0

@@ -587,6 +587,11 @@ let () = Native_embed.with_entry_lock (fun () ->
   ignore (Lui_app.send app {initial with left_sidebar_open=false});
   ignore (Lui_app.flush app);
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  check "Closed native sidebar must suspend retained subtree interaction"
+    (Lui_store.bool_prop store sidebar "inert");
+  check "Closed native sidebar controls must leave the focus sequence"
+    (List.for_all (fun id -> not (Lui_query.is_desc store id sidebar))
+       (Lui_focus.focusables store ~scope:None));
   let menu_ids = List.filter (fun id ->
     Lui_store.string_prop store id "accessibility-identifier" = Some "left-menu")
     (Lui_store.preorder store) in

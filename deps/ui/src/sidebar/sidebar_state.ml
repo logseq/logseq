@@ -1035,6 +1035,11 @@ let on_model st (m : Model.t) =
                load_recents repo st)
          | _ -> ())
    | _ -> ());
+  let menu = Runtime.signal_get st.open_menu in
+  let owner_open =
+    if String.starts_with ~prefix:"item-" menu then m.right_sidebar_open
+    else m.left_sidebar_open in
+  if menu <> "" && not owner_open then Runtime.signal_set st.open_menu "";
   (* right-dock open/close: rescale the left split so its px width
      stays put *)
   if m.Model.right_sidebar_open <> !prev_right_open then (
