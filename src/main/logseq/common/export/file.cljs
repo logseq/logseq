@@ -59,6 +59,29 @@
        (map #(property-value->string db property % context))
        (string/join ", ")))
 
+(defn- block-node?
+  [entity]
+  (and (:block/uuid entity) (not (ldb/page? entity))))
+
+(defn- block-ref
+  [block-uuid]
+  (str "((" block-uuid "))"))
+
+(def ^:private uuid-page-ref-re
+  #"\[\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\]")
+
+(defn- uuid-refs->block-refs
+  "`[[uuid]]` of a block (not a page) as `((uuid))`: the block ref syntax a
+  Markdown reader resolves through the target's `id::` line."
+  [db content]
+  (if (string? content)
+    (string/replace content uuid-page-ref-re
+                    (fn [[whole id]]
+                      (if (block-node? (d/entity db [:block/uuid (uuid id)]))
+                        (block-ref id)
+                        whole)))
+    content))
+
 (defn- property-value->string
   [db property v context]
   (letfn [(entity-map [x]
@@ -75,8 +98,17 @@
                      (string? content)
                      (not (string/blank? content)))
               (page-ref/->page-ref content)
-              content))]
+              content))
+          (block-node-ref [x]
+            (when (and (:export-block-refs-as-uuid-refs? context)
+                       (= :node (:logseq.property/type property)))
+              (let [entity (some->> (:db/id (entity-map x)) (d/entity db))]
+                (when (block-node? entity)
+                  (block-ref (:block/uuid entity))))))]
     (cond
+      (block-node-ref v)
+      (block-node-ref v)
+
       (some? (entity-content v))
       (str (node-ref-content (entity-content v)))
 
@@ -110,10 +142,11 @@
               (map? x) x
               (de/entity? x) (into {} x)))]
     (if-let [id (:db/id (entity-map v))]
-      (db-content/recur-replace-uuid-in-block-title
-       (d/entity db id)
-       10
-       {:replace-block-refs? (not (:preserve-block-refs? context))})
+      (cond->> (db-content/recur-replace-uuid-in-block-title
+                (d/entity db id)
+                10
+                {:replace-block-refs? (not (:preserve-block-refs? context))})
+        (:export-block-refs-as-uuid-refs? context) (uuid-refs->block-refs db))
       (property-value->string db property v context))))
 
 (defn- property-value-children-content
@@ -220,10 +253,11 @@
 (defn- block-title-content
   [db b context]
   (or (property-value-block-content db b context)
-      (db-content/recur-replace-uuid-in-block-title
-       (d/entity db (:db/id b))
-       10
-       {:replace-block-refs? (not (:preserve-block-refs? context))})))
+      (cond->> (db-content/recur-replace-uuid-in-block-title
+                (d/entity db (:db/id b))
+                10
+                {:replace-block-refs? (not (:preserve-block-refs? context))})
+        (:export-block-refs-as-uuid-refs? context) (uuid-refs->block-refs db))))
 
 (defn- bounded-heading-level
   [heading level]
@@ -330,6 +364,25 @@
       (str content "\n" properties-content)
       content)))
 
+(def ^:private ^:dynamic *embedding-ids*
+  "Ids of the blocks whose embeds are being exported, to stop an embed cycle."
+  #{})
+
+(defn- embed-content
+  "Content of a block that embeds another block (:block/link): the embedded
+  block and its children, as the embed shows them, with the export's tree
+  options; nil for an embed cycle (the block is then written as itself). Only when the context asks for inlined
+  embeds (the text export); the Markdown mirror writes one line per block."
+  [db f level tree-opts context]
+  (when (:inline-block-embeds? context)
+    (when-let [linked (some->> (:block/link f) :db/id (d/entity db))]
+      (when-not (contains? *embedding-ids* (:db/id linked))
+        (binding [*embedding-ids* (conj *embedding-ids* (:db/id f) (:db/id linked))]
+          (block->content db (:block/uuid linked)
+                          (assoc (select-keys tree-opts [:open-blocks-only? :include-properties?])
+                                 :init-level level)
+                          context))))))
+
 (defn- tree->file-content-aux
   [db tree {:keys [init-level link] :as opts} context]
   (let [block-contents (transient [])]
@@ -337,7 +390,11 @@
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
+              embed (when-not page? (embed-content db f level opts context))
               content (cond
+                        embed
+                        embed
+
                         (and page? (not link) (:include-page-properties? opts))
                         (block-properties-content db f "" context)
 
@@ -347,8 +404,10 @@
                         :else
                         (transform-content db f level opts context))
               new-content
-              (if-let [children (seq (:block/children f))]
-                (cons content (tree->file-content-aux db children {:init-level (inc level)} context))
+              (if-let [children (and (not embed) (seq (:block/children f)))]
+                (cons content (tree->file-content-aux db children (assoc (select-keys opts [:open-blocks-only?])
+                                                                          :init-level (inc level))
+                                                     context))
                 [content])]
           (conj! block-contents new-content)
           (recur r level))))))
@@ -386,8 +445,8 @@
         tree (otree/blocks->vec-tree db blocks (str root-block-uuid))
         tree (if (:open-blocks-only? tree->file-opts)
                (remove-collapsed-descendants tree)
-               tree)
-        tree->file-opts (dissoc tree->file-opts :open-blocks-only?)]
+               tree)]
+    ;; :open-blocks-only? stays in the options for block embeds inside the tree
     (tree->file-content db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))

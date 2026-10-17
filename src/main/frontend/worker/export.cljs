@@ -55,6 +55,8 @@
     (common-file/tree->file-content db tree
                                     {:init-level init-level
                                      :include-properties? include-properties?
+                                     ;; for block embeds inside the tree
+                                     :open-blocks-only? open-blocks-only?
                                      :link link}
                                     content-config)))
 
