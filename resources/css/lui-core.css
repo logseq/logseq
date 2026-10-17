@@ -1151,12 +1151,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   }
 }
 
-.cp__right-sidebar-settings-btn {
-  display: block;
-  white-space: nowrap;
-  background-color: var(--ls-secondary-background-color);
-}
-
 
 /* cljs container.css dark block — right-sidebar card + shade-mask */
 html[data-theme='dark'] {

@@ -641,7 +641,7 @@ let keymap_key_control st =
         [
           reactive
             (fun model ->
-              Ui_components.button ~key:"key-trigger"
+              Ui_components.button ~variant:`outline ~key:"key-trigger"
                 ~style_class:
                   ("shortcut-keystroke-trigger "
                   ^
@@ -736,7 +736,7 @@ let keymap_controls st =
             (row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
                ~height:22 ~gap:8
                [
-                 Ui_components.button ~key:"km-fold" ~style_class:"icon-link" ~width:18
+                 Ui_components.button ~variant:`ghost ~key:"km-fold" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:T.keymap_toggle_categories ~icon:(`app "fold")
                    ~on_press:(fun _ ->
@@ -753,7 +753,7 @@ let keymap_controls st =
                      Runtime.signal_set st
                        { model with km_collapsed = collapsed })
                    [];
-                 Ui_components.button ~key:"km-rf" ~style_class:"icon-link" ~width:18
+                 Ui_components.button ~variant:`ghost ~key:"km-rf" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:T.keymap_refresh_all ~icon:(`app "refresh")
                    ~on_press:(fun _ ->

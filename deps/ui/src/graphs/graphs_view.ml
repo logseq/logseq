@@ -188,7 +188,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
         [ heading ~key:"rh" ~level:2
             ~value:T.remote_graphs []
-        ; Ui_components.button ~key:"refresh" ~text:T.refresh
+        ; Ui_components.button ~variant:`outline ~key:"refresh" ~text:T.refresh
             ~disabled_signal:(Signal.value refreshing)
             ~on_press:(fun _ ->
               Runtime.signal_set refreshing true;

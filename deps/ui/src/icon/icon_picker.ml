@@ -482,7 +482,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  [ Ui_components.with_props
                      [ Ui_components.Prop.position `relative
                      ; Ui_components.Prop.overflow `hidden ]
-                     (Ui_components.button ~style_class:(btn_outline_sm ^ " color-picker")
+                     (Ui_components.button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
                         ~height:28 ~width:24 ~padding_vertical:4
                         ~padding_horizontal:12 ~corner_radius:4
                         ~label:(I.t "icon/select-color") ~icon:(`app "palette")
@@ -501,7 +501,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ]) ]
           @
           (if del then
-             [ Ui_components.button ~key:"del" ~style_class:btn_outline_sm ~height:28
+             [ Ui_components.button ~variant:`outline ~key:"del" ~style_class:btn_outline_sm ~height:28
                  ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
                  ~data_attrs:[ ("data-action", "del") ]
                  ~tooltip:(I.t "ui/delete")

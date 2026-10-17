@@ -126,7 +126,7 @@ let open_hl_lightbox ?clicked_id () =
 (* cljs asset-action-bar button inside .hl-area — ~label: carries the
    tip (aria-label feeds the app tooltip like the cljs title attr did) *)
 let area_btn ~key ~title ~icon ~onclick : t =
-  Ui_components.button ~key
+  Ui_components.button ~variant:`ghost ~key
     ~label:title
     ~data_attrs:[ ("tabindex", "-1") ]
     ~icon:(`app icon)

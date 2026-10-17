@@ -725,13 +725,13 @@ let filter_chip inst idx (f : V.filter_clause) : t =
       Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.disabled_opacity 0.8 ]
-        (Ui_components.button ~text:prop_title ~disabled:true ~padding_horizontal:8
+        (Ui_components.button ~variant:`ghost ~text:prop_title ~disabled:true ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            [])
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem" ]
-        (Ui_components.button ~padding_horizontal:8
+        (Ui_components.button ~variant:`ghost ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            ~accessibility_identifier:op_btn_id

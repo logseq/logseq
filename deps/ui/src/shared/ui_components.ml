@@ -54,10 +54,9 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
     ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
-    ?text_signal ?variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
+    ?text_signal ~variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
     ?selected ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : t =
-  let variant = Option.value variant ~default:`default in
   let size = Option.value size ~default:`default in
   let base, ink, hover, hover_ink, pressed = match variant with
     | `default | `primary ->
@@ -549,9 +548,8 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
     ; Prop.hover_opacity 0.8
     ; Prop.cursor `pointer
     ]
-    (button ~key ~label ~on_press ~height:28 ~min_height:28 ~padding:0
-       ~style_class:"cp__cmdk-hint" ~background:"transparent"
-       ~border_width:0
+    (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28 ~padding:0
+       ~style_class:"cp__cmdk-hint"
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
           hsl(var(--muted-foreground))))"
@@ -583,9 +581,8 @@ let cmdk_search_only_name ~key ~value : t =
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
   with_props [ Prop.cursor `pointer ]
-    (button ~key ~icon:`x ~size:`icon ~label ~on_press
-       ~background:"transparent"
-       ~border_width:0 ~padding:4 [])
+    (button ~variant:`ghost ~key ~icon:`x ~size:`icon ~label ~on_press
+       ~padding:4 [])
 
 let cmdk_empty ~key children : t =
   box ~key ~padding:16 ~opacity:0.5

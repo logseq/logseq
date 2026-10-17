@@ -7,6 +7,8 @@ let () = Option.iter register_fixture_fonts (Sys.getenv_opt "LOGSEQ_NATIVE_FONT_
 
 let check message condition = if not condition then failwith message
 
+let icon_hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of}
+
 let () =
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
@@ -679,7 +681,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter (fun id ->
     match Lui_layout.rect layout id with
     | Some rect when rect.w > 0. && rect.h > 0. ->
-        (match Host_icons.image_of store 1. id rect with
+        (match Host_icons.image_of ~hooks:icon_hooks store 1. id rect with
          | Some image ->
              let opaque = ref false in
              for i = 3 to Bytes.length image.Lui_scene.ipix - 1 do
@@ -740,15 +742,79 @@ let () = Native_embed.with_entry_lock (fun () ->
       ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
        "vars",`Assoc (List.map (fun (key,value) -> key,`String value) vars)]));
     Theme_vars.set_dark (mode=Ui_theme.Dark);
-    let inherited = Option.get (Host_icons.image_of store 1. icon rect) in
+    let inherited = Option.get (Host_icons.image_of ~hooks:icon_hooks store 1. icon rect) in
     Lui_store.apply_op store (SetProp (icon,ForegroundValue,StringValue foreground));
-    let explicit = Option.get (Host_icons.image_of store 1. icon rect) in
+    let explicit = Option.get (Host_icons.image_of ~hooks:icon_hooks store 1. icon rect) in
     check "Native icons stop inheriting the theme color at a shared ghost button"
       (inherited.Lui_scene.ipix=explicit.Lui_scene.ipix);
+    Lui_store.apply_op store (RemoveProp (icon,ForegroundValue));
+    let button=Option.get (Lui_store.parent store icon) in
+    Lui_store.apply_op store (SetProp (button,HoverForeground,StringValue "#abcdef"));
+    let hover_hooks={icon_hooks with state_of=(fun id ->
+      if id=button then {Lui_paint.state_neutral with hovered=true} else Lui_paint.state_neutral)} in
+    let hovered=Option.get (Host_icons.image_of ~hooks:hover_hooks store 1. icon rect) in
+    Lui_store.apply_op store (SetProp (icon,ForegroundValue,StringValue "#abcdef"));
+    let explicit_hover=Option.get (Host_icons.image_of ~hooks:icon_hooks store 1. icon rect) in
+    check "Native SVG currentColor must inherit its hovered control's foreground"
+      (hovered.Lui_scene.ipix=explicit_hover.Lui_scene.ipix);
     Lui_store.apply_op store (RemoveProp (icon,ForegroundValue)))
     [Ui_theme.Light,"#123456";Ui_theme.Dark,"#eeeeee";Ui_theme.Dark,"#8acbab"];
   ignore (Lui_app.dispose app);
   print_endline "native icon inherited theme color: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let host = Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+    ~measure:(fun _ _ _ _ -> Some (80.,20.))
+    ~renderer:{Lui_host.name="neutral-button-theme-test";render=(fun _ -> Bytes.empty)}
+    ~width:1440 ~height:900 ~scale:1. () in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+  let app = Lui_app.create_with_extensions
+    (Lui_host.backend host (profile MacOS GenericHost)) registry () (fun () () -> ())
+    (fun context _ _ ->
+      let sched=context.Lui_ui.ui_scheduler in
+      let keymap=Signal.state sched
+        {Settings_page.km_query="";km_filter=Keymap_data.All;km_collapsed=[];
+         km_keys=[];km_recording=false;km_committed=false;km_revision=0} in
+      let created=Views_state.make ~sched ~kind:Views_state.KAllPages ~feature:"neutral-theme" ~owner:Wire.Nil in
+      let state={ (Views_state.empty_vstate ()) with Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+      let table={created with Views_state.st=Signal.state sched state} in
+      Lui_elements.column ~foreground:"foreground"
+        [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") ignore;
+         Settings_page.keymap_controls keymap;Views_table.action_bar table]) in
+  ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint host);
+  let store=Lui_host.store host in
+  let buttons=List.filter (fun id -> Lui_store.kind store id="button") (Lui_store.preorder store) in
+  let labelled=List.filter (fun id -> Option.value (Lui_store.string_prop store id "text") ~default:""<>"") buttons in
+  check "Native neutral fixture lost its actual sidebar, keymap or table text controls" (List.length labelled>=5);
+  List.iter (fun (mode,override) ->
+    let snapshot=Ui_theme.snapshot mode in
+    let vars=match override with None -> snapshot.vars | Some ink -> ("--foreground",ink)::List.remove_assoc "--foreground" snapshot.vars in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+       "vars",`Assoc (List.map (fun (key,value) -> key,`String value) vars)]));
+    Theme_vars.set_dark (mode=Ui_theme.Dark);
+    List.iter (fun hovered ->
+      let inks=Hashtbl.create 16 in
+      let scene=Lui_host.scene host in
+      let expected id =
+        let token = if not hovered then "foreground"
+          else if Lui_store.string_prop store id "variant"=Some "outline"
+          then "hsl(var(--accent-foreground))" else "hsl(var(--secondary-foreground))" in
+        Option.get (Theme_vars.color_of token) in
+      Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+        layout=(fun id -> Lui_paint.placement_of_rect (Option.get (Lui_host.layout_rect host id)));
+        state_of=(fun id -> if List.mem id buttons then {Lui_paint.state_neutral with hovered} else Lui_paint.state_neutral);
+        text_ops=(fun id _ ink _ -> Hashtbl.replace inks id ink;[])}
+        store scene ~width:1440 ~height:900 ~scale:1. ~clear:(Lui_scene.color 255 255 255 255);
+      let color_text color = Printf.sprintf "%d,%d,%d,%d" color.Lui_scene.r color.g color.b color.a in
+      List.iter (fun id -> check (Printf.sprintf "Neutral button %s hover=%b expected %s, received %s"
+        (Option.get (Lui_store.string_prop store id "text")) hovered (color_text (expected id))
+        (match Hashtbl.find_opt inks id with None -> "unpainted" | Some color -> color_text color))
+        (Hashtbl.find_opt inks id=Some (expected id))) labelled)
+      [false;true]) [Ui_theme.Light,None;Ui_theme.Dark,None;Ui_theme.Light,Some "210 50% 25%"];
+  ignore (Lui_app.dispose app);Theme_vars.set_dark false;
+  print_endline "native neutral control themes and hover: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
@@ -2520,7 +2586,7 @@ let () =
       List.iter
         (fun scale ->
           let r = Lui_scene.rect 0. 0. 16. 16. in
-          let image = Host_icons.image_of store scale id r in
+          let image = Host_icons.image_of ~hooks:icon_hooks store scale id r in
           check "Native select must resolve its intrinsic chevron"
             (Option.is_some image);
           let image = Option.get image in
@@ -2535,12 +2601,12 @@ let () =
              done;
              !visible);
           check "Native select chevron must reuse its cached image"
-            (Option.get (Host_icons.image_of store scale id r) == image))
+            (Option.get (Host_icons.image_of ~hooks:icon_hooks store scale id r) == image))
         [ 1.; 2. ])
     [ Select; Combobox ];
   Lui_store.apply_op store (CreateNode (810002, Text));
   check "Ordinary text must not acquire an intrinsic select icon"
-    (Host_icons.image_of store 1. 810002 (Lui_scene.rect 0. 0. 16. 16.) = None);
+    (Host_icons.image_of ~hooks:icon_hooks store 1. 810002 (Lui_scene.rect 0. 0. 16. 16.) = None);
   print_endline "native intrinsic select icons: OK"
 
 let () =
@@ -2821,10 +2887,10 @@ let () =
                             text_ops = Text_engine.text_ops (Lazy.force engine);
                             image_of =
                               (fun id ->
-                                Host_icons.image_of store scale id (rect id));
+                                Host_icons.image_of ~hooks:icon_hooks store scale id (rect id));
                             image_in =
                               (fun id region ->
-                                Host_icons.image_of store scale id region);
+                                Host_icons.image_of ~hooks:icon_hooks store scale id region);
                           }
                         in
                         let scene = Lui_host.scene host in
@@ -3312,9 +3378,9 @@ let () =
                   layout = (fun id -> Lui_paint.placement_of_rect (rect id));
                   text_ops = Text_engine.text_ops engine;
                   image_of =
-                    (fun id -> Host_icons.image_of store 2. id (rect id));
+                    (fun id -> Host_icons.image_of ~hooks:icon_hooks store 2. id (rect id));
                   image_in =
-                    (fun id region -> Host_icons.image_of store 2. id region);
+                    (fun id region -> Host_icons.image_of ~hooks:icon_hooks store 2. id region);
                 }
               in
               Lui_paint.paint hooks store scene ~width:2880 ~height:1864
@@ -3423,8 +3489,8 @@ let () =
               Lui_paint.color_of = Theme_vars.color_of;
               layout = (fun id -> Lui_paint.placement_of_rect (rect id));
               text_ops = Text_engine.text_ops keymap_engine;
-              image_of = (fun id -> Host_icons.image_of store 2. id (rect id));
-              image_in = (fun id region -> Host_icons.image_of store 2. id region);
+              image_of = (fun id -> Host_icons.image_of ~hooks:icon_hooks store 2. id (rect id));
+              image_in = (fun id region -> Host_icons.image_of ~hooks:icon_hooks store 2. id region);
             }
           in
           Lui_paint.paint keymap_hooks store keymap_scene ~width:2880 ~height:1864
@@ -3969,7 +4035,7 @@ let () =
           SetProp (830000, PathValue, StringValue first);
         ];
       let load () =
-        Host_icons.image_of store 2. 830000 (Lui_scene.rect 0. 0. 100. 100.)
+        Host_icons.image_of ~hooks:icon_hooks store 2. 830000 (Lui_scene.rect 0. 0. 100. 100.)
       in
       let original = Weak.create 1 and changed = Weak.create 1 in
       let verify () =
@@ -3996,7 +4062,7 @@ let () =
       Lui_store.apply_op store (DropNode 830000);
       Lui_store.apply_op store (CreateNode (830001, Icon));
       ignore
-        (Host_icons.image_of store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
+        (Host_icons.image_of ~hooks:icon_hooks store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
       Gc.full_major ();
       let remount path =
         List.iter (Lui_store.apply_op store)
@@ -4006,14 +4072,14 @@ let () =
           ];
         let image =
           Option.get
-            (Host_icons.image_of store 1. 830002
+            (Host_icons.image_of ~hooks:icon_hooks store 1. 830002
                (Lui_scene.rect 0. 0. 100. 100.))
         in
         let weak = Weak.create 1 in
         Weak.set weak 0 (Some image);
         Lui_store.apply_op store (DropNode 830002);
         ignore
-          (Host_icons.image_of store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
+          (Host_icons.image_of ~hooks:icon_hooks store 1. 830001 (Lui_scene.rect 0. 0. 16. 16.));
         weak
       in
       let remounted = remount first in
@@ -4064,7 +4130,7 @@ let () =
           let before = Unix.gettimeofday () in
           let image =
             Option.get
-              (Host_icons.image_of store 2. id (Lui_scene.rect 0. 0. 184. 126.))
+              (Host_icons.image_of ~hooks:icon_hooks store 2. id (Lui_scene.rect 0. 0. 184. 126.))
           in
           check "Bundled native theme PNG has unexpected dimensions"
             (image.iw = 160 && image.ih = 92);
@@ -4084,7 +4150,7 @@ let () =
                   (id, PathValue, StringValue ("img/" ^ mode ^ "-theme.png"));
               ];
             ignore
-              (Host_icons.image_of store 2. id (Lui_scene.rect 0. 0. 184. 126.));
+              (Host_icons.image_of ~hooks:icon_hooks store 2. id (Lui_scene.rect 0. 0. 184. 126.));
             Lui_store.apply_op store (DropNode id))
           [ "light"; "dark"; "system" ]
       done;

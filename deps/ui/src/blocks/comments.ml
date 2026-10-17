@@ -110,7 +110,7 @@ let title_cell uuid (b : Model.block) : t =
       else
         (* data-area-uuid dropped — the direct on_press below covers the
            action; the delegated editor_keys lookup now no-ops *)
-        Ui_components.button ~key:("clab-" ^ uuid)
+        Ui_components.button ~variant:`ghost ~key:("clab-" ^ uuid)
           ~style_class:"ls-comments-label"
           ~label:(U.t "editor/click-to-edit")
           ~text:(S.title_for uuid b.Model.block_title)

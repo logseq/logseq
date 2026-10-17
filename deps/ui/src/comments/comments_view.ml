@@ -138,7 +138,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map
            (fun (emoji_id, count) ->
-             Ui_components.button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~label:emoji_id
+             Ui_components.button ~variant:`ghost ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~label:emoji_id
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
                [ Logseq_emoji.el
                    ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)

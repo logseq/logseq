@@ -87,23 +87,12 @@ let svg_of name =
       Option.iter (fun svg -> Hashtbl.add svgs name svg) resolved;
       resolved
 
-(* Effective icon color — web SVGs paint currentColor from the
-   inherited CSS color property; here the node (or its nearest
-   ancestor's) `foreground` prop plays that role, with the theme
-   foreground token as fallback. *)
-let effective_fg store id =
-  let rec walk id =
-    let color = Option.bind (Lui_store.string_prop store id "foreground") Theme_vars.color_of in
-    match color with
-    | Some _ as c -> c
-    | None -> (
-      match Lui_store.parent store id with
-      | Some p -> walk p
-      | None -> None)
-  in
+(* SVG currentColor shares the painter's declared foreground resolution. *)
+let effective_fg hooks store id =
   match Lui_store.kind store id with
   | "select" | "combobox" -> Theme_vars.color_of "muted-foreground"
-  | _ -> (match walk id with Some _ as c -> c | None -> Theme_vars.color_of "foreground")
+  | _ -> (match Lui_paint.declared_foreground hooks store id with
+      | Some _ as ink -> ink | None -> Theme_vars.color_of "foreground")
 
 let index_sub s sub =
   let n = String.length s and m = String.length sub in
@@ -142,14 +131,14 @@ let resolved_name store id =
     | Some _ -> Some ("ok:" ^ name)
     | None -> Some ("miss:" ^ name))
 
-let svg_image_of store scale id r : Lui_scene.image option =
+let svg_image_of ~hooks store scale id r : Lui_scene.image option =
   match icon_name store id with
   | None -> None
   | Some name -> (
       match svg_of name with
       | None -> None
       | Some src0 ->
-        let color = effective_fg store id in
+        let color = effective_fg hooks store id in
         let src =
           match color with
           | Some { Lui_scene.r; g; b; _ } ->
@@ -265,9 +254,9 @@ let file_image path =
       end;
       image
 
-let image_of store scale id r =
+let image_of ~hooks store scale id r =
   prune_file_images store;
-  if Lui_store.kind store id <> "file-image" then svg_image_of store scale id r
+  if Lui_store.kind store id <> "file-image" then svg_image_of ~hooks store scale id r
   else
     match Lui_store.string_prop store id "path" with
     | None -> None

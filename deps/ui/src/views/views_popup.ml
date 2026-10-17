@@ -536,14 +536,8 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                       ; Ui_components.Prop.font_weight 500
                       ; Ui_components.Prop.cursor `pointer
                       ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                      (Ui_components.button ~key:("vpsel-a" ^ string_of_int id)
+                      (Ui_components.button ~variant:`outline ~key:("vpsel-a" ^ string_of_int id)
                          ~style_class:"ui__button ls-btn-outline" ~text:I.apply
-                         ~corner_radius:6 ~border_width:1
-                         ~border_color:"hsl(var(--border))"
-                         ~background:
-                           "var(--ls-primary-background-color, \
-                            var(--lui-c-background))"
-                         ~foreground:"inherit"
                          ~padding_vertical:8 ~padding_horizontal:16
                          ~on_press:(fun _ ->
                            close_all ();

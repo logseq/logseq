@@ -219,7 +219,7 @@ let market_card ~stats ~search_st pkg =
                          ]
                        else []))
              ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
-                 [ Ui_components.button ~key:"btn"
+                 [ Ui_components.button ~variant:`primary ~key:"btn"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
                      (* cljs CSS gives a.btn.disabled pointer-events:none;
@@ -276,13 +276,13 @@ let updates_btn ~pid ~plj ~web_pkg =
   box ~key:"upd" 
     (match Plugin_host.update_version pid with
      | Some v ->
-         [ Ui_components.button ~key:"b" ~style_class:"btn"
+         [ Ui_components.button ~variant:`primary ~key:"b" ~style_class:"btn"
              ~text:(t "plugin/update" ^ {js| 👉 |js} ^ v)
              ~on_press:(fun _ ->
                Plugin_host.check_or_update pid repo false)
              [] ]
      | None ->
-         [ Ui_components.button ~key:"b" ~style_class:"btn"
+         [ Ui_components.button ~variant:`primary ~key:"b" ~style_class:"btn"
              ~text:(t "plugin/check-update")
              ~on_press:(fun _ ->
                Plugin_host.check_or_update pid repo true)
@@ -723,7 +723,7 @@ let item_button pid key s =
     ~control:
       (box ~key:"fc"
          ( html_desc key (Plugin_host.jstr s "description")
-         @ [ Ui_components.button ~key:"btn" ~style_class:"ui__button is-small"
+         @ [ Ui_components.button ~variant:`primary ~key:"btn" ~style_class:"ui__button is-small"
                ~text:(Plugin_host.jstr s "buttonText")
                ~on_press:(fun _ ->
                  Plugin_host.call_button_action pid action key)
@@ -750,7 +750,7 @@ let code_mode_wrap owner pid code_mode =
             ~text:(t "ui/reset")
             ~on_press:(fun _ -> Plugin_host.bump ())
             []
-        ; Ui_components.button ~key:"save" ~style_class:"ui__button is-small"
+        ; Ui_components.button ~variant:`primary ~key:"save" ~style_class:"ui__button is-small"
             ~text:(t "ui/save")
             ~on_press:(fun _ ->
               match set_json_exn (Runtime.signal_get code_txt) with

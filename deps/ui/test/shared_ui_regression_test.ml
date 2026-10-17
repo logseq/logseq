@@ -32,6 +32,31 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let neutral_controls = mount (fun _ context parent ->
+    let sched = context.Lui_ui.ui_scheduler in
+    let keymap = Signal.state sched
+      {Settings_page.km_query="";km_filter=Keymap_data.All;km_collapsed=[];
+       km_keys=[];km_recording=false;km_committed=false;km_revision=0} in
+    let created = Views_state.make ~sched ~kind:Views_state.KAllPages
+      ~feature:"neutral-button-parity" ~owner:Wire.Nil in
+    let selected = { (Views_state.empty_vstate ()) with
+      Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+    let table = {created with Views_state.st=Signal.state sched selected} in
+    Lui_elements.column
+      [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") (fun () -> ());
+       Settings_page.keymap_controls keymap;Views_table.action_bar table] context parent) in
+  let neutral_buttons = List.filter (fun n -> n.M.kind="button") (nodes neutral_controls) in
+  check "neutral control fixture renders sidebar, keymap and selection actions"
+    (List.length neutral_buttons>=9);
+  List.iter (fun n ->
+    let label = Option.value (M.string_prop n "accessibility-label")
+      ~default:(Option.value (M.string_prop n "text") ~default:"button") in
+    check (label ^ " declares a neutral semantic button appearance")
+      (match M.string_prop n "variant" with
+       | Some ("ghost" | "outline" | "secondary") -> true | _ -> false);
+    check (label ^ " does not inherit the primary action foreground")
+      (M.string_prop n "foreground"<>Some "hsl(var(--primary-foreground))")) neutral_buttons;
+  ignore (Lui_app.dispose neutral_controls.S.app);
   let navigate selector input event =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event

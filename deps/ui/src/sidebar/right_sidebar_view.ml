@@ -34,16 +34,8 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
 (* ---------- topbar ---------- *)
 
 let topbar_btn key label on_click =
-  Ui_components.button ~key:("tb-" ^ key) ~text:label
-    ~style_class:"button cp__right-sidebar-settings-btn"
-    ~background:"var(--ls-secondary-background-color)"
-    ~height:32 ~padding_horizontal:10 ~padding_vertical:4
-    ~corner_radius:6
-    ~data_attrs:
-      [ ( "style"
-        , "white-space:nowrap;display:block;opacity:1;\
-           -webkit-app-region:no-drag" )
-      ]
+  Ui_components.button ~variant:`ghost ~key:("tb-" ^ key) ~text:label
+    ~height:32 ~padding_horizontal:10 ~padding_vertical:4 ~corner_radius:6
     ~on_press:(fun _ -> on_click ()) []
 
 let topbar st =

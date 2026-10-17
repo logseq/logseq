@@ -328,7 +328,7 @@ let widget (ms : Model.t Signal.signal) : t =
          (box ~key:"collab-off" ~display:`none [])
      ; if_ ~test:vis_sig
          (row ~key:"collab" ~gap:4 ~cross:`center
-            [ Ui_components.button ~key:"collab-btn" ~size:`icon
+            [ Ui_components.button ~variant:`ghost ~key:"collab-btn" ~size:`icon
                 ~style_class:"ui__button as-ghost"
                 ~icon:(`app "user-plus")
                 ~label:"rtc collaborators"

@@ -510,7 +510,7 @@ let () =
     let bounds = Host_interaction.content_bounds ~store:(store_of ()) ~rect_of:engine_rect id in
     Hashtbl.replace content_bounds id bounds; bounds
   in
-  let hooks =
+  let rec hooks =
     Lui_paint.
       { color_of = Theme_vars.color_of;
         hidden = (fun _ -> false);
@@ -672,13 +672,13 @@ let () =
                    { r with Lui_scene.w = slot; Lui_scene.h = slot }
                  | None -> r
                in
-               Host_icons.image_of (Lui_host.store h) !scale_cell id r
+               Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
              | None -> None);
         image_in =
           (fun id r ->
              match !host_cell with
              | Some h ->
-               Host_icons.image_of (Lui_host.store h) !scale_cell id r
+               Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
              | None -> None);
         shadow_of =
           (fun name ->

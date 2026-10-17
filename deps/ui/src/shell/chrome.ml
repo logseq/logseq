@@ -22,7 +22,7 @@ module P = Lui_protocol
 
 
 let skip_to_main =
-  Ui_components.button ~key:"skip" ~accessibility_identifier:"skip-to-main"
+  Ui_components.button ~variant:`primary ~key:"skip" ~accessibility_identifier:"skip-to-main"
     ~transition:"top 0.3s"
     ~text:(I18n.t "nav/skip-to-main-content") []
 

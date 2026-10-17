@@ -167,7 +167,7 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
           | _ -> ())
         []
     ; row ~main:`end_
-        [ Ui_components.button ~text:(I18n.t "ui/save")
+        [ Ui_components.button ~variant:`primary ~text:(I18n.t "ui/save")
             ~on_press:(fun _ ->
               on_save (Runtime.signal_get title_st)
                 (Runtime.signal_get desc_st))

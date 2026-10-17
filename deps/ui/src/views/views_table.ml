@@ -863,10 +863,8 @@ let action_bar inst : t =
         Ui_components.Prop.font_size "12px";
         Ui_components.Prop.line_height "16px";
       ]
-      (Ui_components.button ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
+      (Ui_components.button ~variant:`outline ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
          ~padding_horizontal:8 ~margin_left ~corner_radius
-         ~background:"hsl(var(--background))" ~border_width:1
-         ~border_color:"hsl(var(--border))"
          ~on_press:(fun _ -> on_press ())
          [])
   in
