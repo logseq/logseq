@@ -4,9 +4,8 @@
    item list (same input-on-top / results-below structure as web
    master's .cp__select).
 
-   Keyboard: Enter picks the current first match (native backends give
-   menu items their own arrow navigation); Escape bubbles to the global
-   property keydown handler which dismisses the owning popup. *)
+   Keyboard: unmodified Up/Down move selection while input focus stays
+   in place; Enter picks that result. Escape is owned by the popup. *)
 
 open Promise_ext
 open Lui_elements
@@ -82,10 +81,12 @@ let visible_items ~items ~filter ~searched ~new_option =
         ]
   | _ -> base
 
-(* select view state: filter text + async search results *)
+(* Selection changes retain rows; queries replace their contents. *)
 type sel_state =
   { q : string
   ; searched : item list option
+  ; active : int
+  ; scroll_token : int
   }
 
 (* Builds the select as a [t]: text_field over a scrollable list of
@@ -95,7 +96,8 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
-  let st = Signal.state sched { q = ""; searched = None } in
+  let st = Signal.state sched { q = ""; searched = None; active = 0; scroll_token = 0 } in
+  let request = Ui_effect.request () in
   let visible () =
     let s = Runtime.signal_get st in
     visible_items ~items ~filter:s.q ~searched:s.searched ~new_option
@@ -107,10 +109,22 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
       | Some f, t when t <> "" -> f t
       | _ -> ())
     else
-      match vis with
-      | first :: _ -> first.on_choose ()
-      | [] -> ()
+      (List.nth vis (Runtime.signal_get st).active).on_choose ()
   in
+  let select index =
+    let s = Runtime.signal_get st in
+    if s.active <> index then Runtime.signal_set st { s with active = index }
+  in
+  let navigate direction =
+    let count = List.length (visible ()) in
+    if count > 0 then begin
+      let s = Runtime.signal_get st in
+      Runtime.signal_set st
+        { s with active = (s.active + direction + count) mod count;
+          scroll_token = s.scroll_token + 1 }
+    end
+  in
+  let item_key it = if it.it_new then "__new__" else it.it_title in
   let list_view =
     reactive ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
       (fun s ->
@@ -128,7 +142,14 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                    ~value:(I18n.t "search/no-result")
                    [] ]
              else [])
-            @ [ list ~height:(if vis = [] then 0 else if compact then min 250 (32 * List.length vis) else 280)
+            @ [ list
+               ~scroll_target:(reactive (fun state ->
+                 match List.nth_opt vis state.active with
+                 | Some item -> item_key item
+                 | None -> "") (Signal.value st))
+               ~scroll_token:(reactive (fun state -> state.scroll_token) (Signal.value st))
+               ~scroll_anchor:`nearest
+               ~height:(if vis = [] then 0 else if compact then min 250 (32 * List.length vis) else 280)
                (List.mapi
               (fun index it ->
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
@@ -137,18 +158,22 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                    Ui_components.with_props
                      [Ui_components.Prop.selected_background "var(--lx-gray-04)";
                       Ui_components.Prop.hover_background "var(--lx-gray-04)"]
-                   (list_item ~key:(if it.it_new then "__new__" else it.it_title)
+                   (list_item ~key:(item_key it)
                      ~height:32 ~min_height:32 ~padding_horizontal:8 ~padding_vertical:4
                      ~foreground:"var(--ls-secondary-text-color)"
-                     ~corner_radius:4 ~selected:(index = 0) ~on_press
+                     ~corner_radius:4
+                     ~selected:(reactive (fun state -> state.active = index) (Signal.value st))
+                     ~on_pointer_enter:(fun _ -> select index) ~on_press
                      [ row ~gap:4 ~cross:`center ~grow:1.0
                          ((if it.it_icon = "" then [] else [ Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon ])
                           @ [ text ~value:title ~grow:1.0 [] ]
                           @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ])
                  else
                    list_item
-                     ~key:(if it.it_new then "__new__" else it.it_title)
+                     ~key:(item_key it)
                      ~text:title
+                     ~selected:(reactive (fun state -> state.active = index) (Signal.value st))
+                     ~on_pointer_enter:(fun _ -> select index)
                      ?icon:(if it.it_icon = "" then None else Some (Icons.name_ref it.it_icon))
                      ~on_press [])
               vis) ]))
@@ -170,20 +195,23 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
          ~on_input:(fun ev ->
            match ev with
            | Lui_protocol.TextChanged (_, q) ->
+               let ticket = Ui_effect.issue request in
+               let state = Runtime.signal_get st in
+               Runtime.signal_set st { state with q; searched = None; active = 0 };
                (match on_search with
                 | Some search ->
-                    (* update the filter synchronously so the client-side
-                       new-option row shows even while the async search is
-                       in flight (or rejects) *)
-                    Runtime.signal_set st { q; searched = None };
                     ignore
                       (let* found = search q in
-                       (* stale guard — a later keystroke owns the list *)
-                       if (Runtime.signal_get st).q = q then
+                       if Ui_effect.alive context.Lui_ui.ui_scope
+                          && Ui_effect.is_current request ticket then
                          Runtime.signal_set st
-                           { q; searched = Some found };
+                           { (Runtime.signal_get st) with searched = Some found; active = 0 };
                        Js.Promise.resolve ())
-                | None -> Runtime.signal_set st { q; searched = None })
+                | None -> ())
+           | _ -> ())
+         ~on_navigate:(function
+           | Lui_protocol.NavigatePrevious _ -> navigate (-1)
+           | Lui_protocol.NavigateNext _ -> navigate 1
            | _ -> ())
          ~on_submit:(fun _ -> pick ())
          [])

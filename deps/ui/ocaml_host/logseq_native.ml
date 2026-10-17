@@ -1164,6 +1164,8 @@ let () =
         | LongPress _ -> "LongPress"
         | TextChanged _ -> "TextChanged"
         | Submit _ -> "Submit"
+        | NavigatePrevious _ -> "NavigatePrevious"
+        | NavigateNext _ -> "NavigateNext"
         | ToggleChanged _ -> "ToggleChanged"
         | Change _ -> "Change"
         | ValueChanged _ -> "ValueChanged"

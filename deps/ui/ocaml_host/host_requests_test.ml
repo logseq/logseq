@@ -4572,6 +4572,25 @@ let () = Native_embed.with_entry_lock (fun () ->
               && Some f.fcolor=Theme_vars.color_of "hsl(var(--popover))"
               && let a,b,c,d=f.fradii in List.for_all (fun r -> abs_float (abs_float r-.6.*.scale)<0.1) [a;b;c;d]
               | _ -> false) paint_scene.ops);
+          let row_ids () = List.filter (fun id -> Lui_store.kind store id="list-item") (ids ()) in
+          let original_rows = row_ids () in
+          let selected_keys () = row_ids () |> List.filter (fun id -> Lui_store.bool_prop store id "selected")
+            |> List.filter_map (fun id -> Lui_store.string_prop store id "key") in
+          let key key mods = apply (A.handle surface (W.Input.Key_down (key,mods,false))) in
+          key W.Input.Arrow_up W.Input.mods_none;
+          expect "Previous does not wrap to the final property" (selected_keys ()=["Property 29"]);
+          expect "Property navigation moves focus out of the input" (W.Ui.focused (A.ui surface)=field);
+          let results = List.find (fun id -> Lui_store.kind store id="list") (ids ()) in
+          let final_row = List.hd (List.rev (row_ids ())) in
+          let viewport = rect results and selected_row = rect final_row in
+          expect "Keyboard selection remains clipped below the property viewport"
+            (selected_row.y>=viewport.y && selected_row.y+.selected_row.h<=viewport.y+.viewport.h+.0.1);
+          key W.Input.Arrow_down W.Input.mods_none;
+          expect "Next does not wrap to the first property" (selected_keys ()=["Property 00"]);
+          key W.Input.Arrow_down {W.Input.mods_none with shift=true};
+          expect "Modified arrows unexpectedly change property selection" (selected_keys ()=["Property 00"]);
+          expect "Property navigation remounts the input or its rows"
+            (row_ids ()=original_rows && List.mem field (ids ()));
           List.iter (fun (width,height) ->
             Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
               ~height:(int_of_float (height*.scale)) ~scale;refresh ();
@@ -4627,6 +4646,14 @@ let () = Native_embed.with_entry_lock (fun () ->
              | None -> false);
           apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
           expect "Escape does not dismiss the unset picker" (not (Properties_dialog.is_open ()));
+          click trigger;
+          apply (A.handle surface (W.Input.Key_down (W.Input.Arrow_down,W.Input.mods_none,false)));
+          apply (A.handle surface (W.Input.Key_down (W.Input.Return,W.Input.mods_none,false)));
+          expect "Enter ignores the property selected with the keyboard"
+            (match (Option.get !Properties_dialog.current).Properties_dialog.d_phase with
+             | Properties_dialog.Value_edit prop -> Properties_dialog.ident_of prop="test/property-1"
+             | _ -> false);
+          apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
           click trigger;
           Views_state.update (Option.get !inst_cell)
             (fun state -> {state with Views_state.selected=Views_state.Sset.empty});refresh ();

@@ -32,6 +32,106 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let navigate selector input event =
+    if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
+    then S.dispatch selector event
+  in
+  List.iter (fun compact ->
+    let chosen = ref [] in
+    let selector = mount (fun _ -> Properties_select.view ~placeholder:"Select fixture"
+      ~compact [Properties_select.item "Alpha" (fun () -> chosen:="Alpha"::!chosen);
+                Properties_select.item "Beta" (fun () -> chosen:="Beta"::!chosen);
+                Properties_select.item "Gamma" (fun () -> chosen:="Gamma"::!chosen)]) in
+    let rows () = nodes selector |> List.filter (fun n -> n.M.kind="list-item")
+      |> List.sort (fun a b -> Int.compare a.M.id b.M.id) in
+    let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+    let original_rows = List.map (fun n -> n.M.id) (rows ()) in
+    let selected () = rows () |> List.filter (fun n -> Hashtbl.find_opt n.M.props "selected"=Some (P.BoolValue true))
+      |> List.map (fun n -> M.string_prop n "key") in
+    check "property selector starts on the first result" (selected ()=[Some "Alpha"]);
+    check "property selector opts into input navigation"
+      (Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true));
+    navigate selector input (P.NavigatePrevious input.M.id);
+    check "property selector previous wraps to the last result" (selected ()=[Some "Gamma"]);
+    navigate selector input (P.NavigateNext input.M.id);
+    check "property selector next wraps to the first result" (selected ()=[Some "Alpha"]);
+    navigate selector input (P.NavigateNext input.M.id);
+    check "property selector next selects the second result" (selected ()=[Some "Beta"]);
+    let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+    check "property selector requests minimal reveal for keyboard selection"
+      (M.string_prop list "scroll-anchor"=Some "nearest"
+       && M.string_prop list "scroll-target"=Some "Beta");
+    S.submit selector input.M.id;
+    check "property selector Enter chooses the keyboard result" (!chosen=["Beta"]);
+    chosen:=[];
+    S.dispatch selector (P.PointerEnter (List.nth (rows ()) 2).M.id);
+    S.dispatch selector (P.PointerEnter (List.nth (rows ()) 1).M.id);
+    check "property selector hover moves selection" (selected ()=[Some "Beta"]);
+    S.submit selector input.M.id;
+    check "property selector Enter chooses the hovered result" (!chosen=["Beta"]);
+    check "property selector retains input and row identities while selecting"
+      (List.exists (fun n -> n.M.id=input.M.id) (nodes selector)
+       && List.map (fun n -> n.M.id) (rows ())=original_rows);
+    S.text_changed selector input.M.id "Gamma";
+    check "property selector filtering resets selection" (selected ()=[Some "Gamma"]);
+    S.submit selector input.M.id;
+    check "property selector submits its filtered result" (!chosen=["Gamma";"Beta"]);
+    S.text_changed selector input.M.id "missing";
+    navigate selector input (P.NavigatePrevious input.M.id);
+    navigate selector input (P.NavigateNext input.M.id);
+    S.submit selector input.M.id;
+    check "property selector empty results do not choose a stale item" (!chosen=["Gamma";"Beta"]);
+    ignore (Lui_app.dispose selector.S.app)) [false;true];
+  let entered = ref [] in
+  let raw = mount (fun _ -> Properties_select.view ~placeholder:"Raw fixture"
+    ~on_enter_text:(Some (fun value -> entered:=value::!entered)) []) in
+  let field = List.find (fun n -> n.M.kind="text-field") (nodes raw) in
+  S.submit raw field.M.id;
+  S.text_changed raw field.M.id "  free text  ";
+  navigate raw field (P.NavigateNext field.M.id);
+  S.submit raw field.M.id;
+  check "property selector raw entry trims text and ignores blank submits" (!entered=["free text"]);
+  ignore (Lui_app.dispose raw.S.app);
+  let fresh = mount (fun _ -> Properties_select.view ~placeholder:"New fixture"
+    ~new_option:(fun value -> entered:=value::!entered)
+    [Properties_select.item "Alpha" (fun () -> entered:="existing"::!entered)]) in
+  let field = List.find (fun n -> n.M.kind="text-field") (nodes fresh) in
+  S.text_changed fresh field.M.id "Alpha";S.submit fresh field.M.id;
+  S.text_changed fresh field.M.id "  Delta  ";S.submit fresh field.M.id;
+  check "property selector retains existing and new-option submission" (!entered=["Delta";"existing";"free text"]);
+  ignore (Lui_app.dispose fresh.S.app);
+  let async_selection_check done_ =
+    let pending = ref [] in
+    let search q = Js.Promise.make (fun ~resolve ~reject:_ ->
+      pending:= !pending @ [q,resolve]) in
+    let selector = mount (fun _ -> Properties_select.view ~placeholder:"Async fixture"
+      ~on_search:(Some search) [Properties_select.item "Alpha" (fun () -> ())]) in
+    let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+    let titles () = nodes selector |> List.filter (fun n -> n.M.kind="list-item")
+      |> List.filter_map (fun n -> M.string_prop n "key") |> List.sort String.compare in
+    List.iter (S.text_changed selector input.M.id) ["A";"B";"A"];
+    let resolve index title =
+      let callback = snd (List.nth !pending index) in
+      callback [Properties_select.item title (fun () -> ())] [@u] in
+    resolve 0 "Stale A";resolve 1 "Stale B";
+    ignore (Js.Promise.then_ (fun () ->
+      S.flush selector;
+      check "property selector rejects stale results after A-B-A input" (titles ()=["Alpha"]);
+      resolve 2 "Fresh";
+      Js.Promise.then_ (fun () ->
+        S.flush selector;
+        check "property selector accepts the latest async result" (titles ()=["Fresh"]);
+        let row = List.find (fun n -> n.M.kind="list-item") (nodes selector) in
+        check "property selector async results start selected"
+          (Hashtbl.find_opt row.M.props "selected"=Some (P.BoolValue true));
+        S.text_changed selector input.M.id "B";
+        ignore (Lui_app.dispose selector.S.app);
+        resolve 3 "Disposed";
+        Js.Promise.then_ (fun () ->
+          check "property selector ignores async completion after disposal" (nodes selector=[]);
+          done_ ();Js.Promise.resolve ()) (Js.Promise.resolve ())) (Js.Promise.resolve ()))
+      (Js.Promise.resolve ()))
+  in
   let previous_sidebar = !Sidebar_state.st_ref
   and previous_sidebar_model = !Sidebar_state.model_signal
   and previous_model = !Runtime.read_model
@@ -888,8 +988,7 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
-      Runtime.app_flush := previous_flush;
-      finish ();
+      async_selection_check (fun () -> Runtime.app_flush := previous_flush;finish ());
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

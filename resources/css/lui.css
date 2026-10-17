@@ -153,7 +153,7 @@ body {
   }
 
   .lui-list {
-    @apply flex flex-col;
+    @apply flex flex-col overflow-y-auto;
   }
 
   .lui-list-item {
