@@ -1,7 +1,5 @@
 (ns electron.server
-  (:require ["@fastify/cors" :as FastifyCORS]
-            ["electron" :refer [ipcMain]]
-            ["fastify" :as Fastify]
+  (:require ["electron" :refer [ipcMain]]
             ["fs-extra" :as fs-extra]
             ["path" :as node-path]
             [camel-snake-kebab.core :as csk]
@@ -157,6 +155,10 @@
   []
   (-> (p/let [_     (close!)
               _     (set-status! :starting)
+              ;; loaded here, when the server starts (it is off by default):
+              ;; at main process start fastify took about 65 ms of every open
+              Fastify (js/require "fastify")
+              FastifyCORS (js/require "@fastify/cors")
               ^js s (Fastify. #js {:logger                (not utils/win32?)
                                    :requestTimeout        (* 1000 42)
                                    :forceCloseConnections true})
