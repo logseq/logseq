@@ -665,7 +665,10 @@ let platform_event payload =
               | None -> 0.)
           | _ -> 0.
         in
-        Host.set_window_size (f "width") (f "height"))
+        let width = f "width" and height = f "height" in
+        Host.enqueue (fun () ->
+          Host.set_window_size width height;
+          Platform.emit_event "resize" json))
       else if name = "appearance" then (
         match json with
         | Js.Json.JObject kvs -> (

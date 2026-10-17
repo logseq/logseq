@@ -197,3 +197,86 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Menu keyboard dispatch and allocation" (!failures = []);
   print_endline "native menu keyboard dispatch: OK")
+
+(* Window notifications must reach the shared sidebar observer on the UI entry. *)
+let () =
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  let previous_app = !Native_embed.current_app
+  and previous_flush = !Runtime.app_flush
+  and previous_read = !Runtime.read_model
+  and previous_sidebar = !Sidebar_state.st_ref
+  and previous_model = !Sidebar_state.model_signal
+  and previous_width = Host.inner_width ()
+  and previous_height = Host.inner_height () in
+  let listeners = Hashtbl.copy Platform.window_listeners in
+  let mounted = ref None in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.with_entry_lock (fun () ->
+      Option.iter (fun app -> ignore (Lui_app.dispose app)) !mounted;
+      Native_embed.current_app := previous_app;
+      Runtime.app_flush := previous_flush;
+      Runtime.read_model := previous_read;
+      Sidebar_state.st_ref := previous_sidebar;
+      Sidebar_state.model_signal := previous_model;
+      Host.set_window_size previous_width previous_height;
+      Hashtbl.clear Platform.window_listeners;
+      Hashtbl.iter (Hashtbl.replace Platform.window_listeners) listeners)) (fun () ->
+    let sidebar = ref None and observed = ref [] in
+    Native_embed.with_entry_lock (fun () ->
+      Host.drain ();
+      Host.set_window_size 1440. 900.;
+      Sidebar_state.st_ref := None;
+      Sidebar_state.model_signal := None;
+      let backend = Lui_protocol.{backend_profile=generic_profile (); apply_batch=(fun _ -> true)} in
+      let app = Lui_app.create backend Model.initial Update.apply
+        (fun _ ms _ ->
+          sidebar := Some (Sidebar_state.ensure ms);
+          Lui_elements.column []) in
+      mounted := Some app;
+      Native_embed.current_app := Some app;
+      Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+      Runtime.read_model := (fun () -> Lui_app.model app);
+      ignore (Lui_app.start app);
+      ignore (Lui_app.flush app);
+      Ui_services.dom_on_window_event "resize" (fun _ ->
+        Native_embed.assert_entry_owner ();
+        observed := (Ui_services.dom_viewport_width (), Ui_services.dom_viewport_height ()) :: !observed));
+    let st = Option.get !sidebar in
+    let resize width height =
+      Native_embed.platform_event
+        (Printf.sprintf "window-size\n{\"width\":%g,\"height\":%g}" width height) in
+    let pump () = ignore (Native_embed.pump ()) in
+    List.iter (fun right_open ->
+      let app = Option.get !mounted in
+      Native_embed.with_entry_lock (fun () ->
+        if (Lui_app.model app).Model.right_sidebar_open <> right_open then
+          ignore (Lui_app.send app Action.Toggle_right_sidebar);
+        Runtime.signal_set st.right_fraction 0.3;
+        Runtime.signal_set st.left_fraction 0.2);
+      let content_ratio = if right_open then 0.7 else 1. in
+      let initial = Signal.get (Signal.value st.left_fraction) *. Host.inner_width () *. content_ratio in
+      List.iter (fun (width,height) ->
+        let count = List.length !observed in
+        resize width height;
+        expect "Native resize ran an observer outside the application pump"
+          (List.length !observed = count);
+        pump ();
+        expect "Native resize did not deliver the updated viewport to observers"
+          (List.length !observed = count + 1 && List.hd !observed = (width,height));
+        expect "Native resize left the shared sidebar viewport stale"
+          (Signal.get (Signal.value st.viewport_w) = width);
+        expect "Native window resizing changed the left sidebar pixel width"
+          (abs_float (Signal.get (Signal.value st.left_fraction) *. width *. content_ratio -. initial) < 0.0001))
+        [1000.,700.; 1600.,1000.; 1600.,800.; 1600.,800.; 1440.,900.])
+      [false;true];
+    observed := [];
+    List.iter (fun (w,h) -> resize w h) [1200.,800.; 1000.,700.; 1440.,900.];
+    pump ();
+    expect "Queued native resizes lost their viewport ordering"
+      (List.rev !observed = [1200.,800.; 1000.,700.; 1440.,900.]);
+    expect "A native resize burst drifted the sidebar width"
+      (abs_float (Signal.get (Signal.value st.left_fraction) -. 0.2) < 0.0001));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native window resize delivery and shared sidebar geometry" (!failures = []);
+  print_endline "native window resize delivery and shared sidebar geometry: OK"
