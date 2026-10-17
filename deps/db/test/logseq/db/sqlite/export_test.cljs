@@ -167,7 +167,53 @@
           {:pages-and-blocks
            [{:page {:build/journal 20250220}}
             {:page {:build/journal 20250221}}]}))
-      "In :pages-and-blocks, identical journals and their :blocks are merged"))
+      "In :pages-and-blocks, identical journals and their :blocks are merged")
+
+  (let [alpha-uuid (random-uuid)]
+    (is (= {:pages-and-blocks
+            [{:page {:block/title "page1"}
+              :blocks [{:block/title "order alpha"
+                        :block/uuid alpha-uuid
+                        :build/keep-uuid? true}
+                       {:block/title "order beta"}
+                       {:block/title "order gamma control"}]}]}
+           (#'sqlite-export/merge-export-maps
+            {:pages-and-blocks
+             [{:page {:block/title "page1"}
+               :blocks [{:block/title "order alpha"
+                         :block/uuid alpha-uuid
+                         :build/keep-uuid? true}
+                        {:block/title "order beta"}
+                        {:block/title "order gamma control"}]}]}
+            {:pages-and-blocks
+             [{:page {:block/title "page1"}
+               :blocks [{:block/title "order alpha"
+                         :block/uuid alpha-uuid
+                         :build/keep-uuid? true}]}]}))
+        "Later same-UUID blocks are dropped so first/document order is kept"))
+
+  (let [child-uuid (random-uuid)]
+    (is (= {:pages-and-blocks
+            [{:page {:block/title "page1"}
+              :blocks [{:block/title "order parent"
+                        :build/children [{:block/title "order child"
+                                          :block/uuid child-uuid
+                                          :build/keep-uuid? true}]}
+                       {:block/title "order sibling"}]}]}
+           (#'sqlite-export/merge-export-maps
+            {:pages-and-blocks
+             [{:page {:block/title "page1"}
+               :blocks [{:block/title "order parent"
+                         :build/children [{:block/title "order child"
+                                           :block/uuid child-uuid
+                                           :build/keep-uuid? true}]}
+                        {:block/title "order sibling"}]}]}
+            {:pages-and-blocks
+             [{:page {:block/title "page1"}
+               :blocks [{:block/title "order child"
+                         :block/uuid child-uuid
+                         :build/keep-uuid? true}]}]}))
+        "Later shallow root copies of a nested child UUID are dropped")))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -907,6 +953,151 @@
            (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(defn- page-child-titles
+  [db page-title]
+  (->> (db-test/find-page-by-title db page-title)
+       ldb/get-children
+       (remove :logseq.property/created-from-property)
+       (mapv :block/title)))
+
+(defn- normalize-qa-edn-order-title
+  [title]
+  (cond
+    (= "order alpha" title) "order alpha"
+    (= "order gamma control" title) "order gamma control"
+    (re-find #"order beta" title) "order beta"
+    :else title))
+
+(deftest import-selected-nodes-preserves-sibling-order-with-internal-block-ref
+  ;; Selected-block EDN must keep document order when one selected sibling
+  ;; references another. Content-ref / uuid-block export used to append the
+  ;; target again; import then assigned it a later :block/order.
+  (let [alpha-uuid (random-uuid)
+        original-data
+        {:pages-and-blocks
+         [{:page {:block/title "QA-EDN-Order"}
+           :blocks [{:block/title "order alpha"
+                     :block/uuid alpha-uuid
+                     :build/keep-uuid? true}
+                    {:block/title (str "order beta " (page-ref/->page-ref alpha-uuid))}
+                    {:block/title "order gamma control"}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        node-ids (->> [(db-test/find-block-by-content @conn "order alpha")
+                       (db-test/find-block-by-content @conn #"order beta")
+                       (db-test/find-block-by-content @conn "order gamma control")]
+                      (mapv #(vector :block/uuid (:block/uuid %))))
+        export (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids})
+        exported-blocks (:blocks (first (:pages-and-blocks export)))
+        exported-titles (mapv :block/title exported-blocks)
+        exported-uuids (keep :block/uuid exported-blocks)
+        conn2 (db-test/create-conn-with-import-map export)
+        _ (validate-db @conn2)
+        imported-alpha (db-test/find-block-by-content @conn2 "order alpha")
+        imported-beta (db-test/find-block-by-content @conn2 #"order beta")]
+    (is (= ["order alpha" "order beta" "order gamma control"]
+           (mapv normalize-qa-edn-order-title exported-titles))
+        "Selected-node export keeps sibling document order")
+    (is (= 1 (count (filter #(= "order alpha" %) exported-titles)))
+        "Referenced selected target is not appended again")
+    (is (= [alpha-uuid] (vec exported-uuids))
+        "Export keeps the selected target UUID once")
+    (is (= ["order alpha" "order beta" "order gamma control"]
+           (mapv normalize-qa-edn-order-title (page-child-titles @conn2 "QA-EDN-Order")))
+        "Imported sibling order matches the selected source")
+    (is (= 1 (count (d/datoms @conn2 :avet :block/title "order alpha")))
+        "Import creates a single alpha block")
+    (is (= alpha-uuid (:block/uuid imported-alpha))
+        "Imported target keeps its UUID")
+    (is (re-find (re-pattern (str alpha-uuid)) (:block/title imported-beta))
+        "Imported block ref still resolves to the target")))
+
+(deftest import-selected-nodes-keeps-referenced-child-under-parent
+  ;; Selecting a parent plus a sibling that refs the parent's child must not
+  ;; promote that child to a page-level block on import.
+  (let [child-uuid (random-uuid)
+        original-data
+        {:pages-and-blocks
+         [{:page {:block/title "QA-EDN-Nested"}
+           :blocks [{:block/title "order parent"
+                     :build/children [{:block/title "order child"
+                                       :block/uuid child-uuid
+                                       :build/keep-uuid? true}]}
+                    {:block/title (str "order sibling " (page-ref/->page-ref child-uuid))}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        node-ids (->> [(db-test/find-block-by-content @conn "order parent")
+                       (db-test/find-block-by-content @conn #"order sibling")]
+                      (mapv #(vector :block/uuid (:block/uuid %))))
+        export (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids})
+        exported-blocks (:blocks (first (:pages-and-blocks export)))
+        conn2 (db-test/create-conn-with-import-map export)
+        imported-parent (db-test/find-block-by-content @conn2 "order parent")
+        imported-child (db-test/find-block-by-content @conn2 "order child")]
+    (validate-db @conn2)
+    (is (= ["order parent" "order sibling"]
+           (->> exported-blocks (mapv :block/title) (mapv #(if (re-find #"order sibling" %) "order sibling" %))))
+        "Export does not append the nested child as a selected root")
+    (is (= [child-uuid]
+           (mapv :block/uuid (mapcat :build/children exported-blocks)))
+        "Child stays nested under the selected parent in the export")
+    (is (= ["order parent" "order sibling"]
+           (->> (page-child-titles @conn2 "QA-EDN-Nested")
+                (mapv #(if (re-find #"order sibling" %) "order sibling" %))))
+        "Imported child is not promoted to a page-level sibling")
+    (is (= child-uuid (:block/uuid imported-child)))
+    (is (= (:block/uuid imported-parent)
+           (:block/uuid (:block/parent imported-child)))
+        "Imported child remains under the selected parent")))
+
+(deftest import-block-that-references-its-destination
+  ;; Pasting a block that refs the destination must still replace the
+  ;; destination. build-block-import-options appends that replacement after the
+  ;; destination's shallow content-ref export.
+  (let [dest-uuid (random-uuid)
+        original-data
+        {:pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title (str "source " (page-ref/->page-ref dest-uuid))}
+                    {:block/title "destination"
+                     :block/uuid dest-uuid
+                     :build/keep-uuid? true}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        imported (export-block-and-import-to-another-block conn conn #"source" "destination")
+        dest (d/entity @conn [:block/uuid dest-uuid])]
+    (is (re-find #"source" (get-in imported [::sqlite-export/block :block/title]))
+        "Re-exported destination has the pasted source title")
+    (is (re-find #"source" (:block/title dest))
+        "Destination block content is replaced")
+    (is (re-find (re-pattern (str dest-uuid)) (:block/title dest))
+        "Pasted source still references the destination UUID")))
+
+(deftest import-selected-nodes-edn-with-duplicate-keep-uuid-target
+  ;; Exact selected-block export shape from logseq/db-test#1389: alpha appears
+  ;; in document order and is appended again with the same UUID.
+  (let [alpha-uuid #uuid "6abed62b-0dcd-4ff6-9919-91c064e27dcb"
+        export {:pages-and-blocks
+                [{:page {:block/title "QA-EDN-Order"}
+                  :blocks [{:block/title "order alpha"
+                            :block/uuid alpha-uuid
+                            :build/keep-uuid? true}
+                           {:block/title (str "order beta " (page-ref/->page-ref alpha-uuid))}
+                           {:block/title "order gamma control"}
+                           {:block/title "order alpha"
+                            :block/uuid alpha-uuid
+                            :build/keep-uuid? true}]}]
+                ::sqlite-export/export-type :selected-nodes}
+        conn (db-test/create-conn-with-import-map export)
+        imported-alpha (db-test/find-block-by-content @conn "order alpha")
+        imported-beta (db-test/find-block-by-content @conn #"order beta")]
+    (validate-db @conn)
+    (is (= ["order alpha" "order beta" "order gamma control"]
+           (mapv normalize-qa-edn-order-title (page-child-titles @conn "QA-EDN-Order")))
+        "Import keeps first/document order when the export repeats a keep-uuid target")
+    (is (= 1 (count (d/datoms @conn :avet :block/title "order alpha")))
+        "Duplicate keep-uuid target does not create a second visible alpha")
+    (is (= alpha-uuid (:block/uuid imported-alpha)))
+    (is (re-find (re-pattern (str alpha-uuid)) (:block/title imported-beta))
+        "Imported block ref still resolves to the target")))
 
 (deftest export-selected-nodes-with-missing-node
   (let [conn (db-test/create-conn-with-blocks
