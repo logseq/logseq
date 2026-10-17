@@ -54,6 +54,30 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest index-routes-wait-for-the-user-upsert-test
+  (async done
+         (let [events (atom [])
+               request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" "Bearer token-upsert-order"}})]
+           (-> (p/with-redefs [auth/semantic-auth-claims (fn [_request _env]
+                                                           (p/resolved #js {"sub" "user-3"}))
+                               auth/third-party-oauth-token? (constantly false)
+                               index/<user-upsert! (fn [_db _claims]
+                                                     (p/then (p/delay 20) (fn [_] (swap! events conj :upsert))))
+                               index/<user-activity-touch! (fn [_db _user-id] (p/resolved nil))
+                               index-handler/handle (fn [_ctx]
+                                                      (swap! events conj :handle)
+                                                      (js/Response. "{}" #js {:status 200}))]
+                 (p/let [resp (index-handler/handle-fetch #js {:d1 #js {} :env #js {}} request)]
+                   (is (= 200 (.-status resp)))
+                   (is (= [:upsert :handle] @events)
+                       "a new user is in the index before the route runs")))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest graphs-create-defaults-ready-for-use-true-test
   (async done
          (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
@@ -320,7 +344,9 @@
                          do-url (js/URL. (.-url do-request))]
                      (is (= "POST" (.-method do-request)))
                      (is (= "/internal/close-sockets" (.-pathname do-url)))
-                     (is (= "bob" (.get (.-searchParams do-url) "user-id"))))))
+                     (is (= "bob" (.get (.-searchParams do-url) "user-id")))
+                     (is (= "graph-1" (.get (.-searchParams do-url) "graph-id"))
+                         "the node server's Durable Object stand-in finds the graph by graph-id"))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]
