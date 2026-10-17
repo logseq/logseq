@@ -120,10 +120,11 @@
   "Durable Object namespace stand-in that forwards to the local graph context."
   [registry deps]
   #js {:idFromName (fn [graph-id] graph-id)
-       :get (fn [_do-id]
+       :get (fn [do-id]
               #js {:fetch (fn [request]
                             (let [url (platform/request-url request)
-                                  graph-id (.get (.-searchParams url) "graph-id")]
+                                  ;; the id is the graph id (idFromName above)
+                                  graph-id (or (.get (.-searchParams url) "graph-id") do-id)]
                               (sync-handler/handle-http
                                (graph/get-or-create-graph registry deps graph-id)
                                request)))})})
