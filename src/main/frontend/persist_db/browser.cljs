@@ -292,10 +292,16 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<open-and-fetch-schema [_this repo opts]
-    (-> (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
-                _ (<sync-markdown-mirror-setting! repo)]
-          result)
-        (p/catch sqlite-error-handler)))
+    (p/let [result (-> (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+                       (p/catch (fn [error]
+                                  ;; Report the failure, then reject. Resolving
+                                  ;; nil makes restore throw "No valid schema
+                                  ;; found when reloading db" on top of the
+                                  ;; worker error.
+                                  (sqlite-error-handler error)
+                                  (throw error))))
+            _ (<sync-markdown-mirror-setting! repo)]
+      result))
 
   (<export-db [_this repo opts]
     (-> (if (util/electron?)
