@@ -523,6 +523,42 @@
     (is (<= (:entity-calls window) 3)
         "Custom property sort must stay on the id-only path.")))
 
+(deftest get-view-data-class-objects-checkbox-sort-treats-false-as-a-value-test
+  ;; Unchecked is stored as false. if-let treated that as missing, so asc and
+  ;; desc both put the unchecked row last instead of reversing.
+  (let [conn (topic-conn
+              [{:page {:block/title "checked" :build/tags [:Topic]
+                       :build/properties {:user.property/done true}}}
+               {:page {:block/title "unchecked" :build/tags [:Topic]
+                       :build/properties {:user.property/done false}}}
+               {:page {:block/title "missing" :build/tags [:Topic]}}]
+              :properties {:user.property/done {:logseq.property/type :checkbox}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        unchecked-id (:db/id (db-test/find-page-by-title @conn "unchecked"))
+        missing-id (:db/id (db-test/find-page-by-title @conn "missing"))
+        checked-id (:db/id (db-test/find-page-by-title @conn "checked"))
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? false}]))
+        query-asc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                       :query-entity-ids [checked-id unchecked-id]
+                                                       :sorting [{:id :user.property/done :asc? true}]})
+        query-desc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                        :query-entity-ids [checked-id unchecked-id]
+                                                        :sorting [{:id :user.property/done :asc? false}]})]
+    (is (false? (:user.property/done (d/entity @conn unchecked-id)))
+        "Unchecked is stored as false, not a missing property.")
+    (is (nil? (:user.property/done (d/entity @conn missing-id))))
+    (is (= ["unchecked" "checked" "missing"] (result-titles conn asc))
+        "Ascending: false, true, then missing last.")
+    (is (= ["checked" "unchecked" "missing"] (result-titles conn desc))
+        "Descending reverses false/true; missing stays last.")
+    (is (= ["unchecked" "checked"] (result-titles conn query-asc))
+        "Query table ascending matches the tag table on the same valued rows.")
+    (is (= ["checked" "unchecked"] (result-titles conn query-desc)))))
+
 (deftest get-view-data-class-objects-number-sort-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Topic " idx)
@@ -602,6 +638,57 @@
     (is (= ["Alpha" "Alpine"] (result-titles conn (:result contains))))
     (is (<= (:entity-calls input) 3))
     (is (= ["Beta"] (result-titles conn (:result input))))))
+
+(defn- note-topic-conn
+  []
+  (topic-conn
+   [{:page {:block/title "Page"}
+     :blocks [{:block/title "Apple block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Apple"}}
+              {:block/title "Orange block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Orange"}}]}]
+   :properties {:user.property/note {:logseq.property/type :default}}))
+
+(defn- title-id
+  [conn title]
+  (d/q '[:find ?e .
+         :in $ ?title
+         :where [?e :block/title ?title]]
+       @conn
+       title))
+
+(defn- note-filter
+  [operator]
+  {:or? false
+   :filters [[:user.property/note operator "apple"]]})
+
+(deftest get-view-data-class-objects-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "does not contain must ignore case the same way contains does")))
+
+(deftest get-view-data-query-result-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(title-id conn "Apple block")
+                                   (title-id conn "Orange block")]
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "Query tables must apply the same case-insensitive does-not-contain match")))
 
 (deftest get-view-data-class-objects-number-filter-and-sort-test
   (let [conn (topic-conn

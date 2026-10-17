@@ -1,0 +1,48 @@
+zvec
+Copyright 2025-present the zvec project
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE
+file). It includes third-party software components that are distributed under
+their own licenses, as listed below.
+
+================================================================================
+Third-Party Components
+================================================================================
+
+--------------------------------------------------------------------------------
+pyglass
+--------------------------------------------------------------------------------
+Project: pyglass — Graph Library for Approximate Similarity Search
+Homepage: https://github.com/zilliztech/pyglass
+License:  MIT License
+Used in:  src/core/utility/linear_pool.h
+
+The LinearPool implementation (and the accompanying Neighbor / Bitset helpers)
+in src/core/utility/linear_pool.h is adapted from pyglass, with modifications
+(a BlockHeap-compatible reset()/push_block() interface and the use of
+MemoryHelper for huge-page-backed allocation). The related BlockHeap design in
+src/core/utility/block_heap.{h,cc} is also derived from pyglass.
+
+Original license text:
+
+    MIT License
+
+    Copyright (c) 2023 zh Wang
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.

@@ -37,7 +37,6 @@ module Rsa : sig
 
   (* Returns [Error Operation_error] on OAEP failure. *)
   val decrypt : private_key:string -> string -> string Db_worker_effect.t
-  val sign : private_key:string -> string -> string Db_worker_effect.t
 
   (* RSASSA-PKCS1-v1_5 (RS256) signature verification against a JWK given
      as its JSON text ({"kty":"RSA","n":...,"e":...}). [signature] and

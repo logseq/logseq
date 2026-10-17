@@ -67,9 +67,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -93,10 +93,17 @@ jobs:
 
       - name: Fetch OCaml deps
         working-directory: deps/db-worker
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
+
+      - name: Fetch ui OCaml deps
+        working-directory: deps/ui
         run: |
           sh scripts/install-opam-deps.sh
           pnpm install
-          cd ../ui && sh scripts/install-opam-deps.sh && pnpm install
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -236,6 +243,7 @@ jobs:
         with:
           name: e2e-logs-${{ matrix.shard }}
           path: ocaml-e2e/.parallel-logs/
+          include-hidden-files: true
           retention-days: 1
 
   success:

@@ -159,11 +159,11 @@ let () =
       eq (graph_e2ee "logseq_db_demo") (Some (Datascript.Bool false));
       reset_hooks ());
 
-  let save_secret_test ~runtime ~owner_source ~refresh_from_state ~expect_auth_read () =
+  let save_secret_test ~runtime ~owner_source () =
     let secret_calls = ref [] in
     let auth_read_calls = ref [] in
     let encrypt_calls = ref [] in
-    stub_state ~refresh_token:refresh_from_state ~id_token:None
+    stub_state ~refresh_token:(Some "refresh-from-state") ~id_token:None
       ~access_token:None ();
     platform_env_fn := (fun () -> env runtime owner_source);
     encrypt_text_by_text_password_fn :=
@@ -180,14 +180,8 @@ let () =
         pure ());
     promise_of_task (!save_e2ee_password_fn "password")
     |> Js.Promise.then_ (fun _ ->
-           eq (List.length !auth_read_calls)
-             (if expect_auth_read then 1 else 0);
-           (if expect_auth_read then
-              str_eq (List.hd !auth_read_calls) "~/logseq/auth.json");
-           eq !encrypt_calls
-             [ ((if refresh_from_state = None then "refresh-from-auth-file"
-                 else Option.get refresh_from_state),
-                "password") ];
+           eq !auth_read_calls [];
+           eq !encrypt_calls [ ("refresh-from-state", "password") ];
            eq (List.length !secret_calls) 1;
            eq (fst (List.hd !secret_calls)) "logseq-encrypted-password";
            Fest.expect |> Fest.ok (String.length (snd (List.hd !secret_calls)) > 0);
@@ -196,8 +190,7 @@ let () =
   in
 
   Fest.Promise.test "save-e2ee-password-uses-secret-storage-in-browser-runtime-test"
-    (save_secret_test ~runtime:"browser" ~owner_source:""
-       ~refresh_from_state:(Some "refresh-from-state") ~expect_auth_read:false);
+    (save_secret_test ~runtime:"browser" ~owner_source:"");
 
   Fest.Promise.test "save-e2ee-password-uses-native-storage-in-capacitor-runtime-test"
     (fun () ->
@@ -236,17 +229,16 @@ let () =
              Js.Promise.resolve ()));
 
   Fest.Promise.test "save-e2ee-password-uses-secret-storage-in-node-runtime-test"
-    (save_secret_test ~runtime:"node" ~owner_source:"cli" ~refresh_from_state:None
-       ~expect_auth_read:true);
+    (save_secret_test ~runtime:"node" ~owner_source:"cli");
 
   Fest.Promise.test "save-e2ee-password-uses-secret-storage-in-electron-runtime-test"
-    (save_secret_test ~runtime:"node" ~owner_source:"electron"
-       ~refresh_from_state:None ~expect_auth_read:true);
+    (save_secret_test ~runtime:"node" ~owner_source:"electron");
 
-  Fest.Promise.test "save-e2ee-password-missing-refresh-token-in-auth-file-test" (fun () ->
+  Fest.Promise.test "save-e2ee-password-missing-refresh-token-in-state-test" (fun () ->
       let encrypt_calls = ref 0 in
+      stub_state ~refresh_token:None ~id_token:None ~access_token:None ();
       platform_env_fn := (fun () -> env "node" "cli");
-      read_text_fn := (fun _path -> pure "{\"refresh-token\":\"\"}");
+      read_text_fn := (fun _path -> pure "{\"refresh-token\":\"other-profile\"}");
       encrypt_text_by_text_password_fn :=
         (fun _refresh_token _password ->
           incr encrypt_calls;
@@ -372,6 +364,8 @@ let () =
   Fest.Promise.test "verify-and-save-e2ee-password-verifies-before-write-test" (fun () ->
       let save_calls = ref [] in
       let decrypt_calls = ref [] in
+      stub_state ~refresh_token:(Some "refresh-token") ~id_token:None
+        ~access_token:None ();
       platform_env_fn := (fun () -> env "node" "cli");
       transit_read_fn :=
         (fun value ->
@@ -382,7 +376,6 @@ let () =
         (fun password encrypted_private_key ->
           decrypt_calls := !decrypt_calls @ [ (password, encrypted_private_key) ];
           pure (Wire.Keyword "private-key"));
-      read_text_fn := (fun _path -> pure "{\"refresh-token\":\"refresh-token\"}");
       encrypt_text_by_text_password_fn :=
         (fun _refresh_token _password ->
           pure (kwm [ ("cipher", Wire.String "password-payload") ]));

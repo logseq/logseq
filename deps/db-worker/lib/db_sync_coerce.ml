@@ -130,10 +130,8 @@ let pull_ok v =
   Wire.Map (norm_field kvs "txs" (fun _ -> Wire.Array txs))
 
 let tx_batch_ok v =
-  let kvs = map_kv v in
-  let m = Wire.Map kvs in
-  ignore (req m "t" as_int);
-  ignore (opt m "checksum" as_str);
+  let m = pull_ok v in
+  ignore (req m "t-before" as_int);
   m
 
 let tx_reject_reasons =

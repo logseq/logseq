@@ -56,6 +56,9 @@ let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
         let consumed = R.read t read_buffer ~off:!pending_off ~len:!pending_len in
         pending_off := !pending_off + consumed;
         pending_len := !pending_len - consumed;
+        (* Response consumers run on fibers in the same loop. Let them
+           drain delivered body data before observing socket EOF. *)
+        Fiber.yield ();
         read_loop ()
     | `Read ->
         (match flow.read (Cstruct.of_bigarray read_buffer) with
@@ -68,6 +71,7 @@ let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
                    in
                    pending_off := !pending_off + consumed;
                    pending_len := !pending_len - consumed;
+                   Fiber.yield ();
                    drain_eof ()
                | `Yield ->
                    let p, u = Promise.create () in

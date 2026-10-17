@@ -199,8 +199,6 @@ module Rsa = struct
       (task_of_promise
          (decrypt subtle [%mel.obj { name = "RSA-OAEP" }] key (u8a_of_string data)))
 
-  let sign ~private_key:_ _ =
-    Db_worker_effect.error (Failure "Crypto.Rsa.sign: not implemented yet")
 
   (* cljs authorization/import-rsa-key + subtle.verify — RSASSA-PKCS1-v1_5
      w/ SHA-256 against a JWK. *)

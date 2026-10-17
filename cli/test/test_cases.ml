@@ -3393,6 +3393,56 @@ let () =
       set_timeout (fun () -> res_destroy res) 20)
     (fun _stdout -> ());
 
+  test_promise "sync start verifies the password for an encrypted graph"
+    (fun () ->
+      let root = temp_dir "logseq-cli-sync-start-password-" in
+      let verified = ref false in
+      let output = ref None in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              (* Match Datascript: only the symbol dot makes a scalar find. *)
+              if Js.String.includes ~search:"~$." body then "true"
+              else "[\"~#set\",[[true]]]"
+            else if
+              Js.String.includes
+                ~search:"thread-api/verify-and-save-e2ee-password" body
+            then (
+              verified := true;
+              "null")
+            else if Js.String.includes ~search:"thread-api/db-sync-status" body
+            then "{\"~:ws-state\":\"~:open\",\"~:last-error\":null}"
+            else "null")
+      in
+      let* () =
+        with_server server (fun base_url ->
+            write_file
+              (Node.Path.join [| root; "cli.edn" |])
+              "{:refresh-token \"refresh-token\" :id-token \"id-token\"}\n";
+            let* result =
+              run_cli_p
+                ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                [|
+                  "--root-dir";
+                  root;
+                  "--graph";
+                  "alpha";
+                  "--output";
+                  "json";
+                  "sync";
+                  "start";
+                  "--e2ee-password";
+                  "pw";
+                |]
+            in
+            output := Some result;
+            Js.Promise.resolve ())
+      in
+      remove_tree root;
+      ignore (expect_cli_exit_zero "sync start password" (Option.get !output));
+      if !verified then Js.Promise.resolve pass
+      else fail_promise "encrypted graph password verification was skipped");
+
   test_promise
     "sync upload without password does not require stored e2ee password"
     (fun () ->

@@ -584,7 +584,7 @@ let close_db_aux repo =
    | None -> ());
   List.iter
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
-  Worker_state.drop_vector_index repo;
+  attempt (fun () -> Worker_state.drop_vector_index repo);
   attempt (fun () -> Worker_state.drop_datascript_conn repo);
   attempt (fun () -> Sync_state.drop_server_conn repo);
   Worker_state.drop_pending_local_tx_count repo;

@@ -265,8 +265,8 @@ let stable_block_ref_with_tx_data = stable_entity_ref_with_tx_data
 (* op-construct/sanitize-ref-value *)
 let sanitize_ref_value db ?(tx_data : Wire.t list = []) (v : Wire.t) : Wire.t =
   match v with
-  | Wire.Array _ -> stable_entity_ref_with_tx_data db tx_data v
-  | Wire.Set xs | Wire.List xs ->
+  | Wire.Array [ Wire.Keyword _; _ ] -> stable_entity_ref_with_tx_data db tx_data v
+  | Wire.Array xs | Wire.Set xs | Wire.List xs ->
       Wire.Set
         (distinct (List.map (stable_entity_ref_with_tx_data db tx_data) xs))
   | _ -> stable_entity_ref_with_tx_data db tx_data v

@@ -1247,7 +1247,17 @@ let transact_remote_txs
            ingest would have dropped the item or its target journaled
            earlier — so strict transact resolution surfaces a broken
            prefix instead of silently patching it *)
-        let tx_data = List.map (resolve_temp_id db) raw_tx_data in
+        (* Match master's post-decryption collision handling: different
+           ciphertext facts can become the same plaintext fact. Keep its
+           assertion even if the journal lists the retract after the add.
+           This normalization does not depend on the client's db state. *)
+        let tx_data =
+          raw_tx_data
+          |> List.map (resolve_temp_id db)
+          |> List.map Ds_wire.value_of_transit
+          |> Db_sync_tx_sanitize.drop_conflicted_encrypted_retracts
+          |> List.map Ds_wire.transit_of_value
+        in
         (if tx_data = [] && raw_tx_data <> [] then
            Worker_log.warn "sync/remote-tx-emptied"
              [ "outliner-op", remote_op
@@ -1289,8 +1299,6 @@ let transact_remote_txs
         loop rest results'
   in
   loop remote_txs []
-
-(* ---- pending replay / display rebuild ---- *)
 
 (* ---- pending replay / display rebuild ---- *)
 
@@ -1337,7 +1345,7 @@ let pending_tx_unresolvable db ~created (items : Wire.t list) : bool =
     items
 
 let replay_pending_entry repo (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) : unit =
+    (local_tx : Sync_client_op.pending_tx_row) : unit =
   let db = Conn.db conn in
   match normalize_tx_data_for_rebase local_tx.tx with
   | _ :: _ as tx_data ->
@@ -1368,7 +1376,9 @@ let replay_pending_entry repo (conn : conn)
    upload-time rebase pass decides whether its ops still produce a tx.
    Nothing here marks entries failed, so a single pass suffices. *)
 let replay_pending_txs repo (conn : conn) : unit =
-  let pending = pending_txs repo () in
+  let pending = pending_tx_rows repo () in
+  Sync_state.replayed_pending_count :=
+    !Sync_state.replayed_pending_count + List.length pending;
   if pending <> [] then begin
     (* replayed txs must not re-enter the client-ops queue — the flag
        suppresses enqueue for this pass *)
@@ -1376,7 +1386,7 @@ let replay_pending_txs repo (conn : conn) : unit =
     Sync_state.pending_replay := true;
     (try
        List.iter
-         (fun (local_tx : Sync_client_op.local_tx_entry) ->
+         (fun (local_tx : Sync_client_op.pending_tx_row) ->
             try replay_pending_entry repo conn local_tx
             with e ->
               Worker_log.warn "db-sync/pending-replay-deferred"
@@ -1500,55 +1510,102 @@ let display_db_rebind_floor (rebound : db) ~(floor : int) : db =
 let display_conn_from_server (server_db : db) : conn =
   Datascript.conn_from_db (display_db_from_server server_db)
 
-(* Rebinds the display projection onto the server conn's confirmed state
-   and replays pending ops forward. jump_tx_data carries the datoms the
-   server conn just committed (remote apply / confirm batch) so the UI
-   gets one delta for the jump; replayed ops emit their own deltas. *)
-let rebuild_display repo ~(jump_tx_data : datom list) : unit =
-  match
-    (Sync_state.server_conn repo, Worker_state.datascript_conn repo)
-  with
+(* Compare only entities touched by the journal or pending overlay. Stable
+   identities let an unchanged projection retain its display eids and revision.
+   The delta also covers overlays discarded by an empty/sanitized journal. *)
+let projection_changes (display : db) (projection : db)
+    (items : Wire.t list) : bool * datom list =
+  let refs = Hashtbl.create 64 in
+  let known = ref true in
+  List.iter
+    (fun item ->
+       let e = tx_item_entity item in
+       let identity =
+         match e with
+         | Wire.Keyword _ -> Some e
+         | _ ->
+             Option.map
+               (fun u -> Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid u ])
+               (tx_item_block_uuid display e)
+       in
+       match identity with
+       | Some r -> Hashtbl.replace refs (Db_normalize.item_key r) r
+       | None -> known := false)
+    items;
+  let facts db r =
+    match Datascript.entid_ref db (Ds_wire.entity_ref_of_transit r) with
+    | None -> []
+    | Some e -> Datascript.datoms db Eavt ~e () |> List.of_seq
+  in
+  let display_memo = Db_normalize.create_memo () in
+  let projection_memo = Db_normalize.create_memo () in
+  let keyed memo db ds =
+    let keys = Hashtbl.create (List.length ds) in
+    List.iter
+      (fun (d : datom) ->
+         if d.a <> "block/tx-id" then begin
+           let wire = Db_normalize.wire_of_datom d in
+           let item = match Db_normalize.normalize_datom ~memo db db wire with
+             | Some item -> item
+             | None -> known := false; wire
+           in
+           Hashtbl.replace keys
+             (Db_normalize.item_key (Db_normalize.take_wire item 4)) d
+         end)
+      ds;
+    keys
+  in
+  let changes = Hashtbl.fold
+      (fun _ r acc ->
+         let before = keyed display_memo display (facts display r) in
+         let after_facts = facts projection r in
+         let after = keyed projection_memo projection after_facts in
+         let removed = Hashtbl.fold
+             (fun key d ds ->
+                if Hashtbl.mem after key then ds
+                else { d with added = false } :: ds) before [] in
+         let added = Hashtbl.fold
+             (fun key d ds ->
+                if Hashtbl.mem before key then ds else d :: ds) after [] in
+         if removed = [] && added = [] then acc
+         else
+           List.rev_append removed
+             (List.rev_append added
+                (List.rev_append
+                   (List.filter (fun (d : datom) -> d.a = "block/tx-id") after_facts)
+                   acc)))
+      refs [] in
+  (!known && changes = [], changes)
+
+(* Build the confirmed base plus pending overlay off-screen. Journal echoes
+   that already match the display must not rebind eids or publish stale titles. *)
+let rebuild_display ?changed_items repo ~(jump_tx_data : datom list) : unit =
+  match Sync_state.server_conn repo, Worker_state.datascript_conn repo with
   | Some server_conn, Some display_conn ->
       let db_before = Conn.db display_conn in
-      Conn.update_db display_conn (fun _ ->
-          display_db_rebind_floor
-            (display_db_from_server (Conn.db server_conn))
-            ~floor:db_before.max_tx);
+      let projection = display_conn_from_server (Conn.db server_conn) in
       let replay_reports = ref [] in
-      let lid =
-        Datascript.listen display_conn "pending-replay-collect"
-          (fun r -> replay_reports := r :: !replay_reports)
+      let lid = Datascript.listen projection "pending-replay-collect"
+          (fun r -> replay_reports := r :: !replay_reports) in
+      Db_tx.with_temp_conn_cleanup projection lid
+        (fun () -> replay_pending_txs repo projection);
+      let db_after = Conn.db projection in
+      let unchanged, projection_delta = match changed_items with
+        | Some items -> projection_changes db_before db_after items
+        | None -> false, []
       in
-      (try
-         (* verbatim overlay: each pending row contributes its stored
-            .tx; entries that can't land whole defer to the upload-time
-            rebase — nothing marks failed here, so one pass suffices *)
-         replay_pending_txs repo display_conn
-       with e ->
-         Datascript.unlisten display_conn lid;
-         raise e);
-      Datascript.unlisten display_conn lid;
-      let replayed =
-        List.concat_map
-          (fun (r : tx_report) -> r.tx_data)
-          (List.rev !replay_reports)
-      in
-      let tx_data = jump_tx_data @ replayed in
-      if tx_data <> [] then begin
-        let report =
-          { db_before
-          ; db_after = Conn.db display_conn
-          ; tx_data
-          (* cljs remote-tx reports carry :db/current-tx->txid in :tempids,
-             but nothing reads it on this path: the sync-db-changes payload
-             to the main thread has no tempids field and no deferred
-             listener inspects report.tempids *)
-          ; tempids = []
-          ; tx_meta = [ "rtc-tx?", Bool true ] }
-        in
-        Db_listener.commit_synthesized_report repo display_conn report;
-        fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
-      end
+      if not unchanged then begin
+        Conn.update_db display_conn (fun _ ->
+            display_db_rebind_floor db_after ~floor:db_before.max_tx);
+        let replayed = List.concat_map
+            (fun (r : tx_report) -> r.tx_data) (List.rev !replay_reports) in
+        let tx_data = jump_tx_data @ replayed @ projection_delta in
+        if tx_data <> [] then
+          Db_listener.commit_synthesized_report repo display_conn
+            { db_before; db_after = Conn.db display_conn; tx_data
+            ; tempids = []; tx_meta = [ "rtc-tx?", Bool true ] }
+      end;
+      fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
   | _ -> ()
 
 let () =
@@ -2336,10 +2393,174 @@ let finish_apply_remote_txs repo (client : Sync_state.client)
   >>= fun () ->
   download_missing_remote_assets_for_owner repo client remote_asset_tx_data
 
+(* A journal batch whose rows are all own echoes carrying exactly the
+   stored pending facts leaves the display projection already equal to
+   server-state ⊕ pending-overlay — the replay would emit an empty delta
+   anyway. Detecting that upfront turns an O(pending) replay+rebind per
+   echo into an item-key comparison, which is what made rapid typing
+   bursts stall the worker: each keystroke's echo replayed every pending
+   entry. *)
+
+(* fact key for one normalized tx item: sign + asserted (subject, attr,
+   value) key. Items outside add/retract/cas fact shape (retractEntity,
+   map forms, …) can't be proven identical to their stored counterpart —
+   None fails the gate and keeps the full rebuild. *)
+let echo_item_fact_key (db : db) (item : Wire.t) : string option =
+  match item with
+  | Wire.Array (op :: e :: Wire.Keyword a :: v :: _)
+  | Wire.List (op :: e :: Wire.Keyword a :: v :: _)
+    when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" ->
+      Some
+        ((if tx_item_add item then "A" else "R")
+         ^ asserted_key_of_item db e a v)
+  | Wire.Array (op :: e :: Wire.Keyword a :: _ :: nv :: _)
+  | Wire.List (op :: e :: Wire.Keyword a :: _ :: nv :: _)
+    when op = Wire.keyword "db/cas" ->
+      Some ("A" ^ asserted_key_of_item db e a nv)
+  | _ -> (
+      match item with
+      | Wire.Tagged ("datascript/Datom", rep)
+      | Wire.Array [ Wire.Symbol "datascript/Datom"; rep ]
+      | Wire.List [ Wire.Symbol "datascript/Datom"; rep ] -> (
+          match rep with
+          | Wire.Array [ e; Wire.Keyword a; v; Wire.Int tx ]
+          | Wire.List [ e; Wire.Keyword a; v; Wire.Int tx ] ->
+              Some
+                ((if tx > 0 then "A" else "R")
+                 ^ asserted_key_of_item db e a v)
+          | _ -> None)
+      | _ -> None)
+
+let fact_key_set (db : db) (items : Wire.t list) : Sync_state.SSet.t option =
+  List.fold_left
+    (fun acc item ->
+      match acc, echo_item_fact_key db item with
+      | Some s, Some k -> Some (Sync_state.SSet.add k s)
+      | _ -> None)
+    (Some Sync_state.SSet.empty) items
+
+(* resolve a tx-item subject to a display eid: bare uuid strings and
+   [:block/uuid u] lookup-refs seek :block/uuid; int eids pass through *)
+let subject_eid_of_item (db : db) (e : Wire.t) : int option =
+  match e with
+  | Wire.Int i when i > 0 -> Some i
+  | Wire.Int64 i -> Some (Datascript.Util.int64_to_int_exn "eid" i)
+  | _ -> Option.bind (entity_pos_uuid e) (Db_view.uuid_to_eid db)
+
+(* the journaled facts must already sit on the display: a pending entry
+   deferred during an earlier replay stays queued while its facts are
+   absent, so row-shape equality alone can't prove the overlay is up.
+   adds must be present, retracts absent — key-equality on the subject's
+   bounded eavt slice keeps this cheap *)
+let fact_reflected_on_display (display_db : db) (item : Wire.t) : bool =
+  match item with
+  | ( Wire.Array (op :: e :: Wire.Keyword a :: v :: _)
+    | Wire.List (op :: e :: Wire.Keyword a :: v :: _) )
+    when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" -> (
+      match subject_eid_of_item display_db e with
+      | Some eid ->
+          let datoms =
+            Seq.filter
+              (fun (d : datom) -> d.a = a)
+              (Datascript.datoms display_db Eavt ~e:eid ())
+            |> List.of_seq
+          in
+          let key = asserted_key_of_item display_db e a v in
+          let exact =
+            List.exists
+              (fun (d : datom) ->
+                 asserted_key_of_datom display_db d = Some key)
+              datoms
+          in
+          if tx_item_add item then
+            (* card-one slots a later pending tx overwrote still count —
+               the pending overlay re-asserts its value on every replay *)
+            exact || (not (Ldb.many_attr display_db a)) && datoms <> []
+          else not exact
+      | None -> not (tx_item_add item))
+  | _ -> false
+
+(* true when every journaled row in remote_txs is an own echo whose items
+   are fact-identical to the stored pending entry, and every overlay
+   dropped since the last rebuild was verified by such an echo. Stored
+   items key against the display db (their int eids live there),
+   journaled items against the server db.
+
+   A tx-id is only confirmable while its overlay still sits on the
+   display: pending entries and ack-discarded overlays qualify; anything
+   else — foreign txs, failed entries whose overlay was already dropped,
+   retransmitted echoes of long-confirmed txs — forces the rebuild path. *)
+let verbatim_confirm_batch repo ~(server_db : db) ~(display_db : db)
+    ~(local_txs : Sync_client_op.pending_tx_row list)
+    ~(pending_ids : Sync_state.SSet.t) ~(discarded_ids : string list)
+    ~(removed_ids : Sync_state.SSet.t)
+    (remote_txs : Wire.t list) : bool =
+  let discarded = Sync_state.SSet.of_list discarded_ids in
+  let confirmable id =
+    Sync_state.SSet.mem id pending_ids || Sync_state.SSet.mem id discarded
+  in
+  let journaled : (string, Wire.t list) Hashtbl.t = Hashtbl.create 8 in
+  let foreign =
+    List.exists
+      (fun tx ->
+        match Wire.get "tx-id" tx with
+        | Some (Wire.Uuid id | Wire.String id) when confirmable id ->
+            let items =
+              tx_items_of
+                (Option.value (Wire.get "tx-data" tx)
+                   ~default:(Wire.Array []))
+            in
+            Hashtbl.replace journaled id
+              (items
+               @ Option.value (Hashtbl.find_opt journaled id) ~default:[]);
+            false
+        | _ -> true)
+      remote_txs
+  in
+  if foreign then false
+  else
+    let stored_items tx_id =
+      match
+        List.find_opt
+          (fun (r : Sync_client_op.pending_tx_row) -> r.tx_id = tx_id)
+          local_txs
+      with
+      | Some r -> Some (tx_items_of r.tx)
+      | None -> (
+          match Sync_client_op.get_local_tx_entry repo tx_id with
+          | Some e -> Some (tx_items_of e.tx)
+          | None -> None)
+    in
+    (* every overlay removed since the last rebuild must have its echo
+       verified in this batch — an unverified drop means the projection
+       may still carry state the server never confirmed *)
+    let removed_verified =
+      Sync_state.SSet.fold
+        (fun id acc -> acc && Hashtbl.mem journaled id)
+        removed_ids true
+    in
+    removed_verified
+    && Hashtbl.fold
+         (fun id items acc ->
+           acc
+           && List.for_all (fact_reflected_on_display display_db) items
+           &&
+           match stored_items id with
+           | Some stored -> (
+               match
+                 ( fact_key_set display_db
+                     (normalize_tx_data_for_rebase (Wire.Array stored))
+                 , fact_key_set server_db items )
+               with
+               | Some a, Some b -> Sync_state.SSet.equal a b
+               | _ -> false)
+           | None -> false)
+         journaled true
+
 (* Remote txs land on the server conn only; the display projection is
    then rebuilt from confirmed state with the pending queue replayed
    forward. No reverse step — nothing local ever enters the base. *)
-let apply_remote_txs_once repo (_client : Sync_state.client)
+let apply_remote_txs_once repo (client : Sync_state.client)
     (remote_txs : Wire.t list)
     : (Wire.t list * tx_report option) list =
   match Worker_state.datascript_conn repo with
@@ -2451,11 +2672,51 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
         (* A journal echo is durable confirmation even when the upload
            response was lost. Remove its overlay before replaying the tail. *)
         ignore (Sync_apply.mark_pending_txs_false ~rebuild:false repo confirmed_ids);
-        rebuild_display repo
-          ~jump_tx_data:
-            (match tx_report with
-             | Some r -> r.tx_data
-             | None -> []);
+        (* Include overlays removed by ACK/reject as well as surviving
+           pending rows: an empty/sanitized journal can omit their entities. *)
+        let removed_ids = List.fold_left
+            (fun acc tx ->
+               match Wire.get "tx-id" tx with
+               | Some (Wire.Uuid id | Wire.String id) -> id :: acc
+               | _ -> acc)
+            !(client.discarded_overlay_tx_ids) remote_txs
+          |> Sync_state.SSet.of_list in
+        let jump_tx_data =
+          match tx_report with
+          | Some r -> r.tx_data
+          | None -> []
+        in
+        (match Sync_state.server_conn repo with
+         | Some server_conn
+           when verbatim_confirm_batch repo ~server_db:(Conn.db server_conn)
+                  ~display_db:(Conn.db display_conn) ~local_txs ~pending_ids
+                  ~discarded_ids:!(client.discarded_overlay_tx_ids)
+                  ~removed_ids remote_txs ->
+             (* every journaled row is a verbatim own echo: the display
+                already holds server-state ⊕ pending-overlay — rebuilding
+                would emit an empty delta after an O(pending) replay per
+                echo (quadratic under typing bursts). Skip the replay;
+                the dup-order fix pass still runs on the display conn. *)
+             client.discarded_overlay_tx_ids := [];
+             fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
+         | _ ->
+             let removed_items = Sync_state.SSet.fold
+                 (fun id acc ->
+                    match Sync_client_op.get_local_tx_entry repo id with
+                    | Some row -> List.rev_append (tx_items_of row.tx) acc
+                    | None -> acc)
+                 removed_ids [] in
+             let changed_items =
+               List.fold_left
+                 (fun acc tx -> List.rev_append
+                     (tx_items_of (Option.value (Wire.get "tx-data" tx) ~default:(Wire.Array []))) acc)
+                 removed_items remote_txs
+             |> fun items -> List.fold_left
+                 (fun acc (row : Sync_client_op.pending_tx_row) ->
+                    List.rev_append (tx_items_of row.tx) acc) items local_txs
+             in
+             rebuild_display ~changed_items repo ~jump_tx_data;
+             client.discarded_overlay_tx_ids := []);
         !remote_tx_results
       with e ->
         Worker_log.error "db-sync/apply-remote-txs-inner-error"

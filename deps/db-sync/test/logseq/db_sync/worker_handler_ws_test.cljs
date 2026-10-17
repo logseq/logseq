@@ -121,6 +121,21 @@
       (is (= [(str success-tx-id)] (:success-tx-ids message)))
       (is (= (str failed-tx-id) (:failed-tx-id message))))))
 
+(deftest ws-send-serializes-pull-ok-tx-id-as-string-test
+  (let [raw* (atom nil)
+        ws #js {:readyState 1
+                :send (fn [raw] (reset! raw* raw))}
+        tx-id (random-uuid)]
+    (ws/send! ws {:type "pull/ok"
+                  :t 1
+                  :txs [{:t 1 :tx "canonical Transit" :outliner-op :save-block :tx-id tx-id}]})
+    (let [parsed (js/JSON.parse @raw*)
+          raw-tx-id (aget parsed "txs" 0 "tx-id")
+          coerced (ws/coerce-ws-server-message (js->clj parsed :keywordize-keys true))]
+      (is (string? raw-tx-id))
+      (is (= (str tx-id) raw-tx-id))
+      (is (= tx-id (get-in coerced [:txs 0 :tx-id]))))))
+
 (deftest online-users-broadcast-restored-attachment-user-test
   (let [attachment* (atom nil)
         ws #js {:readyState 1

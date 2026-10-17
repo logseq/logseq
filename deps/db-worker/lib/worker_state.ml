@@ -87,7 +87,10 @@ let close_other_sqlite_conns keep_repo =
 let vector_indexes : (string, Vector_index.index) Hashtbl.t = Hashtbl.create 7
 let vector_index repo = Hashtbl.find_opt vector_indexes repo
 let set_vector_index repo idx = Hashtbl.replace vector_indexes repo idx
-let drop_vector_index repo = Hashtbl.remove vector_indexes repo
+let drop_vector_index repo =
+  let index = Hashtbl.find_opt vector_indexes repo in
+  Hashtbl.remove vector_indexes repo;
+  Option.iter Vector_index.close index
 
 (* cljs worker-state/*search-index-build-ids* /
    *vector-index-rebuild-ids* — repo -> build id *)

@@ -1,8 +1,8 @@
-name: Deploy DB Test Version to Cloud
+name: Deploy Test Version to Cloud
 
 on:
   push:
-    branches: ["test/db"]
+    branches: ["dev"]
 
 env:
   NODE_VERSION: '24'
@@ -54,19 +54,24 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
       - name: Fetch OCaml deps
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          cd ../../deps/ui && sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
+
+      - name: Fetch ui OCaml deps
+        working-directory: deps/ui
+        run: sh scripts/install-opam-deps.sh
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -106,4 +111,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy public --project-name logseq-db-test --branch main
+          command: pages deploy public --project-name logseq-db-test --branch dev

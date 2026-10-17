@@ -36,16 +36,14 @@ external get_param : search_params -> string -> string Js.Nullable.t = "get"
 
 (* globalThis.location — dedicated workers have self.location but
    no window object; the main thread never loads this bundle. *)
-external location_search : unit -> string = "location.search"
-  [@@mel.scope "globalThis"]
+external location_search : string = "search"
+  [@@mel.scope "globalThis.location"]
 
 let search_param_true name =
-  try
-    let params = new_url_search_params (location_search ()) in
-    match Js.Nullable.toOption (get_param params name) with
-    | Some ("true" | "1") -> true
-    | _ -> false
-  with _ -> false
+  let params = new_url_search_params location_search in
+  match Js.Nullable.toOption (get_param params name) with
+  | Some ("true" | "1") -> true
+  | _ -> false
 
 let owner_source () =
   match kind () with
@@ -60,12 +58,7 @@ let owner_source () =
 
 let electron_owner () = String.equal (owner_source ()) "electron"
 
-external location_href : unit -> string = "location.href"
-  [@@mel.scope "globalThis"]
-
 let publishing () =
   match kind () with
-  | Browser_worker ->
-      (try Graph_dir.contains_substring (location_href ()) "publishing=true"
-       with _ -> false)
+  | Browser_worker -> search_param_true "publishing"
   | Node | Native -> false

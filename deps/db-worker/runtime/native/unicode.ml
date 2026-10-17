@@ -116,6 +116,30 @@ let js_length (s : string) : int =
     (fun acc cp -> acc + (if cp > 0xFFFF then 2 else 1))
     0 (decode_utf8 s)
 
+let utf16_units s =
+  decode_utf8 s
+  |> List.concat_map (fun cp ->
+         if cp <= 0xFFFF then [ cp ]
+         else
+           let cp = cp - 0x10000 in
+           [ 0xD800 lor (cp lsr 10); 0xDC00 lor (cp land 0x3FF) ])
+  |> Array.of_list
+
+let of_utf16_units units =
+  let n = Array.length units in
+  let rec decode i acc =
+    if i >= n then encode_utf8 (List.rev acc)
+    else
+      let u = units.(i) in
+      if u >= 0xD800 && u <= 0xDBFF && i + 1 < n
+         && units.(i + 1) >= 0xDC00 && units.(i + 1) <= 0xDFFF then
+        let cp = 0x10000 + ((u - 0xD800) lsl 10) + (units.(i + 1) - 0xDC00) in
+        decode (i + 2) (cp :: acc)
+      else
+        decode (i + 1) ((if u >= 0xD800 && u <= 0xDFFF then 0xFFFD else u) :: acc)
+  in
+  decode 0 []
+
 (* subs on UTF-16 units — a boundary inside an astral char keeps/drops
    the whole char (a lone surrogate is not encodable). *)
 let js_sub (s : string) (start : int) (end_ : int) : string =

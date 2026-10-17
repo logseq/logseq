@@ -70,7 +70,7 @@
     "db-worker-node:bundle": "node ./scripts/build-db-worker-node-bundle.mjs",
     "db-worker-node:release:bundle": "run-s db-worker:build db-worker-node:bundle",
     "db-worker-node:compile:bundle": "run-s db-worker:build db-worker-node:bundle",
-    "db-worker-node:native": "cd deps/db-worker && opam exec -- dune build bin/main.exe",
+    "db-worker-node:native": "sh deps/db-worker/scripts/build-native.sh",
     "db-worker:build": "opam exec -- pnpm --dir deps/db-worker build",
     "cli:release": "pnpm --dir cli bundle && node ./scripts/stage-cli-runtime.mjs",
     "desktop:prepare-runtime-js": "node ./scripts/prepare-desktop-runtime-js.mjs",

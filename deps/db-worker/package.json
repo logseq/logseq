@@ -11,6 +11,6 @@
   "scripts": {
     "test:browser-vector": "node --test scripts/browser-vector-regression.mjs",
     "check:schema-version": "node scripts/check-schema-version.cjs",
-    "build": "node scripts/check-schema-version.cjs && dune build js_api bin/main.exe && vite build --mode node && vite build --mode browser"
+    "build": "node scripts/check-schema-version.cjs && dune build js_api && sh scripts/build-native.sh && vite build --mode node && vite build --mode browser"
   }
 }

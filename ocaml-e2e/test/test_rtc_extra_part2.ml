@@ -818,17 +818,29 @@ let () =
       @ List.concat (List.init 5 (fun _ -> one))
       @ [ "sync-trigger" ]
     in
+    (* let both clients reach full cloud-idle before reading contents —
+       remote echo can still be applying tail datoms right after the
+       remote-tx watermark is reached, and a settled-but-not-converged
+       read can catch a transient empty block *)
+    let* () =
+      Env.with_page env p1 (fun () ->
+          Graph.wait_rtc_idle env ~timeout_ms:120000.)
+    in
+    let* () =
+      Env.with_page env p2 (fun () ->
+          Graph.wait_rtc_idle env ~timeout_ms:120000.)
+    in
     let* () =
       Env.with_page env p1 (fun () ->
           let* () = Util.exit_edit env in
-          let* contents = Util.settled_page_blocks_contents env in
+          let* contents = Util.wait_page_blocks_contents env expected in
           Fest.deep_equal (Array.to_list contents) expected Fest.expect;
           Js.Promise.resolve ())
     in
     let* () =
       Env.with_page env p2 (fun () ->
           let* () = Util.exit_edit env in
-          let* contents = Util.settled_page_blocks_contents env in
+          let* contents = Util.wait_page_blocks_contents env expected in
           Fest.deep_equal (Array.to_list contents) expected Fest.expect;
           Js.Promise.resolve ())
     in

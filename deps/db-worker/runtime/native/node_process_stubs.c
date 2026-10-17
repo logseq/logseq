@@ -18,3 +18,12 @@ CAMLprim value caml_logseq_process_id(value unit)
   return Val_int((intnat)getpid());
 #endif
 }
+
+CAMLprim value logseq_macos_arm64(value unit)
+{
+#if defined(__APPLE__) && defined(__aarch64__)
+  return Val_true;
+#else
+  return Val_false;
+#endif
+}

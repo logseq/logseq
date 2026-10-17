@@ -2128,12 +2128,23 @@ let () =
         in
         Fest.deep_equal (go 0) true Fest.expect;
         let* () = Util.exit_edit env in
-        let* () =
-          Pw.click_l
-            (Loc.filter env ".page-reference .page-ref"
-               ~has_text:"autocomplete existing page")
+        (* the title element stays mounted across navigations and updates
+           async — a single read right after the click can still show the
+           source page, and a dropped click never lands at all *)
+        let ref_loc =
+          Loc.filter env ".page-reference .page-ref"
+            ~has_text:"autocomplete existing page"
         in
-        let* name = Page.get_page_name env in
+        let rec click_until_landed n =
+          let* () = Pw.click_l ref_loc in
+          let* name = Page.wait_page_name env "autocomplete existing page" in
+          if
+            String.lowercase_ascii name = "autocomplete existing page"
+            || n <= 1
+          then Js.Promise.resolve name
+          else click_until_landed (n - 1)
+        in
+        let* name = click_until_landed 3 in
         Fest.deep_equal name "autocomplete existing page" Fest.expect;
         let* () = Page.goto_page env "autocomplete host" in
         let* () = B.new_block env "" in

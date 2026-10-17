@@ -750,19 +750,75 @@ let input_command env command =
             (fun () -> Pw.click env ".ls-block:visible >> nth=-1")
       | _ -> Js.Promise.resolve ()
     in
+    (* settle briefly so an in-flight remote-apply remount finishes before
+       we type "/" — a keydown delivered mid-remount is lost entirely *)
+    let* () = wait_timeout env 350. in
     let* () = Keyboard.type_in_editor env ~delay:20. "/" in
     Pw.catch_timeout
       (Pw.wait_for ~timeout:10000. env ".ui__popover-content")
       (fun () ->
          if tries > 1 then open_palette (tries - 1)
-         else Pw.wait_for ~timeout:60000. env ".ui__popover-content")
+         else Pw.wait_for ~timeout:90000. env ".ui__popover-content")
   in
-  let* () = open_palette 3 in
-  let* () = Keyboard.type_in_editor env ~delay:20. command in
   let command_item = Pw.q env "a.menu-link.chosen" in
-  (* the filtered item lags behind the palette under remote-apply churn *)
-  let* _ = E2e_assert.is_visible_l ~timeout:15000. command_item in
-  Pw.click_l command_item
+  let popover = Pw.q env ".ui__popover-content" in
+  let visible_or q =
+    Pw.catch_timeout
+      (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+         (E2e_assert.is_visible_l ~timeout:1200. q))
+      (fun () -> Js.Promise.resolve false)
+  in
+  (* the filtered item lags behind the palette under remote-apply churn:
+     keystrokes can be eaten mid-typing so the filter never matches, and
+     a remote-apply remount can tear the popover down entirely — in that
+     case re-typing the command into the block never reopens it, so the
+     whole open+type must retry *)
+  let rec attempt tries =
+    let* () = open_palette 5 in
+    let* () = Keyboard.type_in_editor env ~delay:20. command in
+    let deadline = Js.Date.now () +. 15000. in
+    let rec poll () =
+      let* chosen = visible_or command_item in
+      if chosen then Js.Promise.resolve `ok
+      else if Js.Date.now () > deadline then Js.Promise.resolve `timeout
+      else
+        let* open_ = visible_or popover in
+        if open_ then
+          let* () = wait_timeout env 250. in
+          poll ()
+        else Js.Promise.resolve `closed
+    in
+    let* r = poll () in
+    match r with
+    | `ok -> Pw.click_l command_item
+    | `closed when tries > 1 ->
+        (* popover torn down by a remount — the "/" was already consumed,
+           so clear the block and start over *)
+        let* () =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve ())
+            (let* () = Keyboard.press_in_editor env "ControlOrMeta+a" in
+             Keyboard.press_in_editor env "Backspace")
+        in
+        let* () = wait_timeout env 200. in
+        attempt (tries - 1)
+    | `timeout when tries > 1 ->
+        (* typed but never matched — likely eaten keystrokes leaving a
+           partial filter; clear and retry *)
+        let* () =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve ())
+            (let* () = Keyboard.press_in_editor env "ControlOrMeta+a" in
+             Keyboard.press_in_editor env "Backspace")
+        in
+        let* () = wait_timeout env 200. in
+        attempt (tries - 1)
+    | _ ->
+        (* last try: give the slow case one long window *)
+        let* _ = E2e_assert.is_visible_l ~timeout:45000. command_item in
+        Pw.click_l command_item
+  in
+  attempt 5
 
 let set_tag ?(hidden = false) env tag =
   let* () = press_seq env ~delay:20. " #" in

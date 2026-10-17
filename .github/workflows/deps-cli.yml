@@ -104,9 +104,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Disable opam sandboxing
         run: |
@@ -120,9 +120,11 @@ jobs:
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -142,9 +144,11 @@ jobs:
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Build logseq CLI
         run: |
@@ -203,9 +207,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
           restore-keys: |
-            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ github.job }}-
 
       - name: Disable opam sandboxing
         run: |
@@ -219,9 +223,11 @@ jobs:
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -238,9 +244,11 @@ jobs:
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
-        run: |
-          sh scripts/install-opam-deps.sh
-          pnpm install
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Fetch db-worker pnpm deps
+        working-directory: deps/db-worker
+        run: pnpm install
 
       - name: Build logseq CLI
         run: |

@@ -643,6 +643,18 @@ let () =
            true;
       stop_daemon_opt daemon);
 
+  Fest.Promise.test "db-worker-node-configures-runtime-owner" (fun () ->
+      let previous = Runtime_env.env "LOGSEQ_OWNER_SOURCE" in
+      set_env "LOGSEQ_OWNER_SOURCE" "electron";
+      let data_dir = create_tmp_dir "db-worker-owner" in
+      let repo = "logseq_db_owner_" ^ random_suffix () in
+      let* daemon = start_daemon ~root_dir:data_dir ~repo ~owner_source:"cli" () in
+      let actual = Runtime_env.owner_source () in
+      let* () = stop_daemon daemon in
+      set_env "LOGSEQ_OWNER_SOURCE" (Option.value previous ~default:"");
+      Fest.expect |> Fest.equal actual "cli";
+      Js.Promise.resolve ());
+
   (* ---- db-worker-node-logs-println-output ---- *)
   Fest.Promise.test "db-worker-node-logs-println-output" (fun () ->
       let daemon = ref None in

@@ -141,6 +141,12 @@ const prepareElectronMaker = async () => {
     fs.copyFileSync(
       path.join(__dirname, 'deps/db-worker/_build/default/bin/main.exe'),
       path.join(binDir, 'main.exe'))
+    if (process.platform === 'darwin' && process.arch === 'arm64') {
+      for (const filename of ['libzvec_c_api.dylib', 'ZVEC-LICENSE', 'ZVEC-NOTICE']) {
+        fs.copyFileSync(path.join(__dirname, 'deps/db-worker/_build/default/bin', filename),
+          path.join(binDir, filename))
+      }
+    }
   } else {
     fs.mkdirSync(path.join(outputPath, 'db-worker-bin'), { recursive: true })
   }

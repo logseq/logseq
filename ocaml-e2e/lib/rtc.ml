@@ -195,16 +195,85 @@ let wait_tx_update_to env new_tx =
 let rtc_start env = Util.search_and_click env "(Dev) RTC Start"
 let rtc_stop env = Util.search_and_click env "(Dev) RTC Stop"
 
+(* uuid -> [title, parent-uuid, order, page-name] for every block on the
+   frontend datascript state — lets a summary divergence be classified
+   (missing entity vs '' title vs wrong parent/page) from the CI log. *)
+let block_map_env env =
+  Pw.eval_js env
+    "(async () => { const q = globalThis.logseq && logseq.api && \
+     logseq.api.datascript_query; if (!q) return {err:'no-q'}; \
+     const rows = await q('[:find ?u ?t ?pe ?o ?pg :where \
+     [?b :block/uuid ?u] [(get-else $ ?b :block/title \"\") ?t] \
+     [(get-else $ ?b :block/parent -1) ?pe] \
+     [(get-else $ ?b :block/order \"\") ?o] \
+     [(get-else $ ?b :block/page -1) ?pg]]'); \
+     const eids = await q('[:find ?e ?u :where [?e :block/uuid ?u]]'); \
+     const names = await q('[:find ?e ?n :where [?e :block/name ?n]]'); \
+     const e2u = new Map(eids.map(r => [r[0], r[1]])); \
+     const e2n = new Map(names.map(r => [r[0], r[1]])); \
+     const m = {}; for (const [u,t,pe,o,pg] of rows) \
+     m[u] = [t, e2u.get(pe) ?? String(pe), String(o), \
+     e2n.get(pg) ?? e2u.get(pg) ?? String(pg)]; return m; })()"
+
+let block_map env p = Env.with_page env p (fun () -> block_map_env env)
+
+let log_block_map_diff tag m1 m2 =
+  let diffs =
+    match Js.Json.decodeObject m1, Js.Json.decodeObject m2 with
+    | Some d1, Some d2 ->
+        Array.to_list (Js.Dict.keys d1) @ Array.to_list (Js.Dict.keys d2)
+        |> List.sort_uniq String.compare
+        |> List.filter_map (fun u ->
+               let j u' = Option.map Js.Json.stringify u' in
+               match Js.Dict.get d1 u, Js.Dict.get d2 u with
+               | Some v1, Some v2
+                 when Js.Json.stringify v1 = Js.Json.stringify v2 ->
+                   None
+               | v1, v2 ->
+                   Some
+                     (Printf.sprintf "  %s p1=%s p2=%s" u
+                        (Option.value ~default:"MISSING" (j v1))
+                        (Option.value ~default:"MISSING" (j v2))))
+    | _ -> [ "block-map undecodable" ]
+  in
+  Js.log
+    (Printf.sprintf "[validate-dbg] %s: %d block diffs\n%s" tag
+       (List.length diffs)
+       (String.concat "\n" (List.filteri (fun i _ -> i < 15) diffs)))
+
+let summaries_equal s1 s2 =
+  try
+    E2e_assert.graph_summary_equal s1 s2;
+    true
+  with _ -> false
+
 let validate_graphs_in_2_pages env page1 page2 =
+  (* settle both clients fully before comparing — a local pending op is a
+     legitimate one-sided difference until its echo lands, and a pull that
+     is still draining leaves mid-window '' blocks on display *)
+  let* () = Env.with_page env page1 (fun () -> Graph.wait_rtc_idle env ~timeout_ms:120000.) in
+  let* () = Env.with_page env page2 (fun () -> Graph.wait_rtc_idle env ~timeout_ms:120000.) in
   let* s1 = Env.with_page env page1 (fun () -> Graph.validate_graph env) in
   let* s2 = Env.with_page env page2 (fun () -> Graph.validate_graph env) in
-  E2e_assert.graph_summary_equal s1 s2;
-  Js.Promise.resolve ()
+  if summaries_equal s1 s2 then Js.Promise.resolve ()
+  else
+    let* m1 = block_map env page1 in
+    let* m2 = block_map env page2 in
+    log_block_map_diff "2-pages" m1 m2;
+    E2e_assert.graph_summary_equal s1 s2;
+    Js.Promise.resolve ()
 
 (** For two separate app instances — each env keeps its own console queue,
     so a failure dump shows the right instance's worker logs. *)
 let validate_graphs_in_2_envs env1 env2 =
+  let* () = Graph.wait_rtc_idle env1 ~timeout_ms:120000. in
+  let* () = Graph.wait_rtc_idle env2 ~timeout_ms:120000. in
   let* s1 = Graph.validate_graph env1 in
   let* s2 = Graph.validate_graph env2 in
-  E2e_assert.graph_summary_equal s1 s2;
-  Js.Promise.resolve ()
+  if summaries_equal s1 s2 then Js.Promise.resolve ()
+  else
+    let* m1 = block_map_env env1 in
+    let* m2 = block_map_env env2 in
+    log_block_map_diff "2-envs" m1 m2;
+    E2e_assert.graph_summary_equal s1 s2;
+    Js.Promise.resolve ()

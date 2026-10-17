@@ -98,7 +98,13 @@ let restore db addr =
                   | None -> payload)
              | other -> other
            in
-           Some payload)
+           (* Reference strength is a worker memory policy, not graph data.
+              Older snapshots may have persisted a strong cache setting. *)
+           Some
+             (match payload with
+              | Storage_root root ->
+                  Storage_root { root with storage_ref_type = Persistent_sorted_set.Weak }
+              | payload -> payload))
 
 let list_addresses db =
   let rows = Sqlite.query db ~sql:"select addr from kvs" ~bind:[||] in
@@ -135,12 +141,12 @@ let storage db =
     else if !committing then
       failwith "Graph storage commit in progress"
   in
-  (* node addresses are sequential and payloads immutable once written,
-     so rows can live in a read-through cache; root/tail rows are
-     refreshed on every flush. The datascript store path re-reads branch
-     nodes to compute index depth, and lazy indexes restore a node per
-     lookup — without the cache each read is a sqlite roundtrip. *)
-  let cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
+  (* PSS owns the weak index-node cache. A second strong payload cache here
+     would keep scanned nodes and obsolete transaction values alive even
+     after PSS releases them. Only uncommitted writes need strong retention. *)
+  (* The current root contains schema and index addresses, not index nodes.
+     Worker_state reads it on every connection lookup to check the fence. *)
+  let root_cache = ref None in
   (* cljs schedule-wal-checkpoint!: debounced 2s idle WAL checkpoint.
      Without it the WAL grows across every commit until close-db, and
      commit writes slow progressively over a long session. *)
@@ -172,7 +178,7 @@ let storage db =
         committing := false;
         pending := [];
         Hashtbl.clear pending_cache;
-        Hashtbl.clear cache;
+        root_cache := None;
         (match !checkpoint_timer with
          | Some t -> Timers.clear t; checkpoint_timer := None
          | None -> ());
@@ -184,7 +190,8 @@ let storage db =
       let entries = List.rev !pending in
       persist (fun () ->
           store db entries;
-          List.iter (fun (addr, p) -> Hashtbl.replace cache addr p) entries;
+          if List.exists (fun (addr, _) -> addr = "0") entries then
+            root_cache := None;
           pending := [];
           Hashtbl.clear pending_cache);
       schedule_checkpoint ()
@@ -209,15 +216,14 @@ let storage db =
         check_available ();
         match Hashtbl.find_opt pending_cache addr with
         | Some payload -> Some payload
-        | None -> (
-            match Hashtbl.find_opt cache addr with
-            | Some payload -> Some payload
-            | None -> (
-                match restore db addr with
-                | Some payload as some ->
-                    Hashtbl.replace cache addr payload;
-                    some
-                | None -> None)));
+        | None ->
+            if addr <> "0" then restore db addr
+            else match !root_cache with
+              | Some _ as root -> root
+              | None ->
+                  let root = restore db addr in
+                  root_cache := root;
+                  root);
     storage_list_addresses =
       (fun () ->
         flush ();
@@ -227,5 +233,5 @@ let storage db =
         flush ();
         persist (fun () ->
             delete db addrs;
-            List.iter (fun a -> Hashtbl.remove cache a) addrs));
+            if List.mem "0" addrs then root_cache := None));
   }

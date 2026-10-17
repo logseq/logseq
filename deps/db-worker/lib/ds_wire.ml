@@ -63,20 +63,13 @@ let edn_float f =
   then s
   else s ^ ".0"
 
-let edn_num64 n =
-  let s = Int64.to_string n in
-  if Int64.abs n <= Int64.of_int max_int then s else s ^ ".0"
-
 let rec edn_of_transit (t : Wire.t) =
   match t with
   | Wire.Nil -> "nil"
   | Wire.Bool b -> if b then "true" else "false"
   | Wire.String s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Int n -> string_of_int n
-  (* numeric literals: digits that fit `int`, a trailing ".0" forces the
-     EDN reader to Float for wider values — matching value_of_transit's
-     numeric rep instead of fabricating an #inst *)
-  | Wire.Int64 n -> edn_num64 n
+  | Wire.Int64 n -> Int64.to_string n
   | Wire.Float f -> edn_float f
   | Wire.Binary s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Keyword s -> ":" ^ s

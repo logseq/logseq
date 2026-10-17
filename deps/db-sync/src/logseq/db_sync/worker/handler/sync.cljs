@@ -690,7 +690,9 @@
                ;; Broadcast once per processed batch after tx-log/checksum settle.
                (ws/broadcast! self sender {:type "changed" :t t}))
              (cond-> {:type "tx/batch/ok"
-                      :t t}
+                      :t-before t-before
+                      :t t
+                      :txs (storage/fetch-tx-since (.-sql self) t-before)}
                (string? checksum) (assoc :checksum checksum)))
            (catch :default e
              (let [new-t (t-now self)

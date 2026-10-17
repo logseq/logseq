@@ -57,12 +57,16 @@ let remove_level_spaces (text : string) (format : string) (block_pattern : strin
   else if format = "markdown" && Common_util.str_starts_with text "---" then text
   else remove_level_spaces_aux text block_pattern space trim_left
 
-(* text/parse-non-string-property-value *)
+(* text/parse-non-string-property-value
+   Digit strings are int64. Melange int is 32-bit, so int_of_string
+   raises on epoch-ms values and aborts the page extract. *)
 let parse_non_string_property_value (v : string) : value option =
   if v = "true" then Some (Bool true)
   else if v = "false" then Some (Bool false)
   else if Regexp.test (Regexp.compile "^\\d+$") v then
-    Some (Int64 (Int64.of_int (int_of_string v)))
+    match Int64.of_string_opt v with
+    | Some n -> Some (Int64 n)
+    | None -> None
   else None
 
 (* text/get-ref-from-ast *)

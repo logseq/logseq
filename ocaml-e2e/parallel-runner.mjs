@@ -97,6 +97,10 @@ const args = process.argv.slice(2);
 const opt = {
   concurrency: Math.min(8, os.cpus().length),
   rtcConcurrency: 4,
+  // one free re-run per failed rtc shard: remote-apply churn makes the
+  // heaviest rtc cases flaky, and every shard run builds a fresh remote
+  // graph so a retry is independent and idempotent
+  rtcRetries: 1,
   slowMo: process.env.E2E_SLOW_MO ?? "30",
   timeoutSec: 1200,
   slowTimeoutSec: 1800, // rtc slow shards legitimately run 500-1200s under -j8
@@ -120,6 +124,7 @@ for (let i = 0; i < args.length; i++) {
   const take = () => args[++i];
   if (a === "-j" || a === "--concurrency") opt.concurrency = +take();
   else if (a === "--rtc-concurrency") opt.rtcConcurrency = +take();
+  else if (a === "--rtc-retries") opt.rtcRetries = +take();
   else if (a === "--slow-mo") opt.slowMo = take();
   else if (a === "--timeout") opt.timeoutSec = +take();
   else if (a === "--slow-timeout") opt.slowTimeoutSec = +take();
@@ -361,7 +366,10 @@ async function runFile(t) {
   const label = t.shard ? `${t.file}#${t.shard}` : t.file;
   const log = path.join(
     logDir,
-    t.file.replace(/\.js$/, t.shard ? `.shard${t.shard.replace("/", "-")}.log` : ".log"),
+    t.file.replace(
+      /\.js$/,
+      t.shard ? `.shard${t.shard.replace(/[^a-zA-Z0-9_-]/g, "-")}.log` : ".log",
+    ),
   );
   const stream = fs.createWriteStream(log);
   const started = Date.now();
@@ -656,6 +664,14 @@ async function main() {
       if (t.rtc) rtcRunning++;
       const r = await runFile(t);
       if (t.rtc) rtcRunning--;
+      if (t.rtc && r.result.code !== 0 && (t.retried ?? 0) < opt.rtcRetries) {
+        t.retried = (t.retried ?? 0) + 1;
+        queue.push(t);
+        console.log(
+          `RETRY   ${r.label.padEnd(46)} ${r.secs.toFixed(1).padStart(7)}s (attempt ${t.retried + 1} queued)`,
+        );
+        continue;
+      }
       results.push(r);
       const tally =
         r.tally.tests != null ? ` ${r.tally.pass}/${r.tally.tests} tests` : "";

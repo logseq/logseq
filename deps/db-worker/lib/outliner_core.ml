@@ -3088,28 +3088,89 @@ let transact_move_blocks (conn : conn) (blocks : entity list)
         blocks)
   |> ignore
 
-(* cljs sort-non-consecutive-blocks: group-by :block/page, then
-   sort-page-random-blocks per group. Groups keep first-occurrence order;
-   a nil-page group yields [] in cljs (every order-path is nil). *)
-let sort_non_consecutive_blocks (db : db) (blocks : entity list) : entity list =
-  let rec add (groups : (entity_id option * entity list) list) (b : entity)
-      : (entity_id option * entity list) list =
-    let key =
-      match Ldb.ref_ent b "block/page" with
-      | Some p -> Some p.id
-      | None -> None
-    in
-    match groups with
-    | [] -> [ (key, [ b ]) ]
-    | (k, bs) :: rest when k = key -> (k, bs @ [ b ]) :: rest
-    | g :: rest -> g :: add rest b
+(* outliner-core/outline-order-path — the :block/order keys from a root
+   ancestor down to [block], root-first. Anchored at the root rather than
+   a :block/page, so entities without :block/page (e.g. nested pages)
+   sort alongside ordinary blocks in outline position. None for
+   property-created blocks. *)
+let outline_order_path (block : entity) : string option list option =
+  let rec aux (b : entity option) (path : string option list) =
+    match b with
+    | None -> Some (List.rev path)
+    | Some b ->
+        if
+          Option.is_some (Ldb.value b "logseq.property/created-from-property")
+          || Option.is_some (Ldb.value b "block/closed-value-property")
+        then None
+        else
+          aux
+            (Ldb.ref_ent b "block/parent")
+            (Ldb.string_value b "block/order" :: path)
   in
+  aux (Some block) []
+
+let sort_non_consecutive_blocks (_db : db) (blocks : entity list) : entity list =
   blocks
-  |> List.fold_left add []
-  |> List.concat_map (fun (page_id, bs) ->
-      match page_id with
-      | Some _ -> Ldb.sort_page_random_blocks db bs
-      | None -> [])
+  |> List.filter_map (fun (b : entity) ->
+      Option.map (fun path -> (path, b)) (outline_order_path b))
+  |> List.stable_sort (fun (p1, _) (p2, _) -> Ldb.compare_order_paths p1 p2)
+  |> List.map snd
+  |> fun sorted ->
+  (* cljs (distinct) *)
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun (b : entity) ->
+       if Hashtbl.mem seen b.id then false
+       else begin
+         Hashtbl.replace seen b.id ();
+         true
+       end)
+    sorted
+
+(* outliner-core/page-order-top-level-blocks — the selection's top-level
+   blocks in page order, whatever order they were clicked in (Ctrl+click
+   c, then b: the selection reads c, b): a move up or down takes its
+   target from the first block (up) or the last (down). *)
+let page_order_top_level_blocks (db : db) (blocks : Block_map.t list)
+    : entity list =
+  let top_level = filter_top_level_blocks db blocks in
+  match top_level with
+  | [] | [ _ ] -> top_level
+  | _ ->
+      let page_id (b : entity) =
+        Option.map (fun (p : entity) -> p.id) (Ldb.ref_ent b "block/page")
+      in
+      let parent_id (b : entity) =
+        Option.map (fun (p : entity) -> p.id) (Ldb.ref_ent b "block/parent")
+      in
+      let all_same ids =
+        match ids with
+        | [] -> true
+        | x :: rest -> List.for_all (fun i -> i = x) rest
+      in
+      if
+        (* blocks of 1 page, none a property value: page order (the sort
+           leaves out blocks it cannot place, so only blocks it can place
+           go in) *)
+        List.for_all
+          (fun b -> Option.is_some (Ldb.ref_ent b "block/page"))
+          top_level
+        && all_same (List.map page_id top_level)
+        && not
+             (List.exists
+                (fun b ->
+                   Option.is_some
+                     (Ldb.value b "logseq.property/created-from-property")
+                   || Option.is_some
+                        (Ldb.value b "block/closed-value-property"))
+                top_level)
+      then Ldb.sort_page_random_blocks db top_level
+      else if
+        (* siblings, e.g. nested pages (no :block/page) or a nested page
+           and a block beside it *)
+        all_same (List.map parent_id top_level)
+      then Ldb.sort_by_order top_level
+      else top_level
 
 (* cljs move-blocks callers pass a literal opts map like
    {:outliner-op o :sibling? s :up? u :indent? i} which is recorded in
@@ -3193,7 +3254,7 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
     : tx_result option =
   let db = Conn.db conn in
   let top_level =
-    filter_top_level_blocks db (List.map Block_map.of_entity blocks)
+    page_order_top_level_blocks db (List.map Block_map.of_entity blocks)
   in
   let opts = { default_insert_opts with outliner_op = Some "move-blocks-up-down" } in
   if up then
@@ -3269,11 +3330,7 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
                  && Ldb.get_right_sibling last_top = None)
             then
               let opts' = { opts with sibling = sibling_; up = false } in
-              move_blocks conn
-                (List.filter_map
-                   (fun (b : entity) -> Ldb.ent_of_id db b.id)
-                   blocks)
-                r opts' (move_opts_map opts')
+              move_blocks conn top_level r opts' (move_opts_map opts')
             else None
         | None -> None)
     | [] -> None

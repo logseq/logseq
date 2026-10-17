@@ -126,7 +126,10 @@ let broadcast_data_types =
   ; "log"
   ; "add-repo"
   ; "rtc-log"
-  ; "rtc-sync-state" ]
+  ; "rtc-sync-state"
+  ; "thread-api/search-index-build-progress"
+  ; "rtc-asset-upload-download-progress"
+  ; "asset-file-write-finish" ]
 
 let edn_of_opt = function
   | Some w -> Ds_wire.edn_of_transit w

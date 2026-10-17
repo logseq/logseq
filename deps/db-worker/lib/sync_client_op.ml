@@ -475,22 +475,21 @@ type pending_tx_row =
   ; forward_outliner_ops : Wire.t list Lazy.t
   ; tx : Wire.t }
 
-let row_to_pending_tx_row (r : Sqlite.row) : pending_tx_row option =
+let row_to_pending_tx_row (r : Sqlite.row) : pending_tx_row =
   match col_text_opt r 0 with
   | Some tx_id ->
-      Some
-        { tx_id
-        ; outliner_op = col_text_opt r 1
-        ; tx =
-            (match col_text_opt r 2 with
-             | Some s -> read_transit s
-             | None -> Wire.Array [])
-        ; forward_outliner_ops =
-            lazy
-              (match col_text_opt r 3 with
-               | Some s -> normalize_op_entries (read_transit s)
-               | None -> []) }
-  | None -> None
+      { tx_id
+      ; outliner_op = col_text_opt r 1
+      ; tx =
+          (match col_text_opt r 2 with
+           | Some s -> read_transit s
+           | None -> Wire.Array [])
+      ; forward_outliner_ops =
+          lazy
+            (match col_text_opt r 3 with
+             | Some s -> normalize_op_entries (read_transit s)
+             | None -> []) }
+  | None -> invalid_arg "client_ops tx row missing tx_id"
 
 let pending_tx_row_select =
   "select tx_id, outliner_op, normalized_tx_data, forward_outliner_ops from client_ops where kind = 'tx'"
@@ -503,7 +502,7 @@ let get_pending_tx_rows repo ?(limit : int option) () : pending_tx_row list =
   in
   let params = match limit with Some n -> [ int n ] | None -> [] in
   rows (store repo) sql params
-  |> List.filter_map row_to_pending_tx_row
+  |> List.map row_to_pending_tx_row
 
 (* lean counterpart of get_pending_local_txs_in *)
 let get_pending_tx_rows_in repo (tx_ids : string list) : pending_tx_row list =
@@ -530,7 +529,7 @@ let get_pending_tx_rows_in repo (tx_ids : string list) : pending_tx_row list =
               ^ " and pending = 1 and tx_id in (" ^ ph
               ^ ") order by created_at asc, id asc")
              (List.map text ids)
-           |> List.filter_map row_to_pending_tx_row)
+           |> List.map row_to_pending_tx_row)
     (chunks [] tx_ids)
 
 (* ---- sync_conflicts ---- *)

@@ -24,6 +24,7 @@ val new_graph :
   Env.t ->
   string -> enable_sync:bool -> ?graph_e2ee:bool -> unit -> unit Js.Promise.t
 val wait_for_remote_graph : Env.t -> string -> unit Js.Promise.t
+val wait_rtc_idle : Env.t -> timeout_ms:float -> unit Js.Promise.t
 val remove_graph : Env.t -> menu_item:string -> string -> unit Js.Promise.t
 val remove_local_graph : Env.t -> string -> unit Js.Promise.t
 val remove_remote_graph : Env.t -> string -> unit Js.Promise.t

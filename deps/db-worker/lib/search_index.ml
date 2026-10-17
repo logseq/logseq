@@ -4,7 +4,7 @@
    String ops that cljs runs on JS strings (count/subs/indexOf/charAt/
    lastIndexOf/includes/endsWith) are UTF-16 code-unit operations — the
    snippet engine below works on int arrays of code units via U16 and
-   re-encodes to UTF-8 when slicing results back out. *)
+   uses the platform Unicode codec when slicing results back out. *)
 
 open Datascript
 module Ev = Entity_view
@@ -16,48 +16,8 @@ module Bb = Block_breadcrumb
 module U16 = struct
   type t = int array
 
-  let of_string = Fz.utf16_units
-
-  (* encode code units back to utf-8; lone surrogates -> U+FFFD like JS
-     string -> utf8 encoders. *)
-  let to_string (u : t) : string =
-    let buf = Buffer.create (Array.length u) in
-    let emit cp =
-      if cp < 0x80 then Buffer.add_char buf (Char.chr cp)
-      else if cp < 0x800 then begin
-        Buffer.add_char buf (Char.chr (0xC0 lor (cp lsr 6)));
-        Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
-      end else if cp < 0x10000 then begin
-        Buffer.add_char buf (Char.chr (0xE0 lor (cp lsr 12)));
-        Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 6) land 0x3F)));
-        Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
-      end else begin
-        Buffer.add_char buf (Char.chr (0xF0 lor (cp lsr 18)));
-        Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 12) land 0x3F)));
-        Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 6) land 0x3F)));
-        Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
-      end
-    in
-    let n = Array.length u in
-    let rec loop i =
-      if i < n then begin
-        let w = u.(i) in
-        if w >= 0xD800 && w <= 0xDBFF && i + 1 < n
-           && u.(i + 1) >= 0xDC00 && u.(i + 1) <= 0xDFFF
-        then begin
-          emit (0x10000 + ((w - 0xD800) lsl 10) + (u.(i + 1) - 0xDC00));
-          loop (i + 2)
-        end else if w >= 0xD800 && w <= 0xDFFF then begin
-          emit 0xFFFD;
-          loop (i + 1)
-        end else begin
-          emit w;
-          loop (i + 1)
-        end
-      end
-    in
-    loop 0;
-    Buffer.contents buf
+  let of_string = Unicode.utf16_units
+  let to_string = Unicode.of_utf16_units
 
   let length = Array.length
   let sub_u (u : t) start len =
@@ -352,7 +312,8 @@ let snippet_prefix_length = 50
 let snippet_merge_distance = 200
 let snippet_highlight_start = "$pfts_2lqh>$"
 let snippet_highlight_end = "$<pfts_2lqh$"
-let snippet_ellipsis = "\xc2\xa0\xc2\xa0\xc2\xa0...\xc2\xa0\xc2\xa0\xc2\xa0" (* NBSP...NBSP *)
+let snippet_ellipsis =
+  Unicode.of_utf16_units [| 0xA0; 0xA0; 0xA0; 0x2E; 0x2E; 0x2E; 0xA0; 0xA0; 0xA0 |]
 
 let hl_start_u = U16.of_string snippet_highlight_start
 let hl_end_u = U16.of_string snippet_highlight_end
@@ -1657,15 +1618,18 @@ let hidden_entity_datom (db : db) (e : entity_id) : bool =
             | None -> true)
    | [] -> false)
 
-let get_all_blocks (db : db) : entity list =
+let get_all_block_ids (db : db) : entity_id list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
          | Uuid _ ->
              if hidden_entity_datom db d.e then None
-             else Ldb.ent_of_id db d.e
+             else Some d.e
          | _ -> None)
   |> List.of_seq
+
+let get_all_blocks (db : db) : entity list =
+  get_all_block_ids db |> List.filter_map (Ldb.ent_of_id db)
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map

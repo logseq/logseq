@@ -79,6 +79,7 @@ type client =
   ; asset_queue : unit Db_worker_effect.t ref
   ; pending_pull_since : int option ref
   ; inflight : string list ref
+  ; discarded_overlay_tx_ids : string list ref (* partial rejects awaiting projection rebuild *)
   ; upload_request : upload_request option ref
   ; last_sync_error : Wire.t option ref
   ; reconnect : reconnect_state ref
@@ -100,6 +101,7 @@ let new_client repo : client =
   ; asset_queue = ref (Db_worker_effect.pure ())
   ; pending_pull_since = ref None
   ; inflight = ref []
+  ; discarded_overlay_tx_ids = ref []
   ; upload_request = ref None
   ; last_sync_error = ref None
   ; reconnect = ref { attempt = 0; timer = None }
@@ -272,6 +274,10 @@ let outliner_perf_logging : bool ref = ref false
    checksum updates: replayed reports must neither re-queue nor advance the
    stored checksum past confirmed state. *)
 let pending_replay : bool ref = ref false
+
+(* pending entries replayed onto the display projection since the last
+   reset — sim tests assert verbatim own echoes never trigger a replay *)
+let replayed_pending_count : int ref = ref 0
 
 (* RTC graph server conn: storage-backed, confirmed state only. The
    registered Worker_state.datascript_conn on a remote graph is the

@@ -1,6 +1,5 @@
-(* frontend.worker.sync.temp-sqlite — temp sqlite db + conn for
-   graph uploads. The cljs platform pool machinery collapses to a file
-   under the worker db dir. *)
+(* Temporary snapshot databases use an OPFS pool in browsers and a
+   file under the worker db directory in filesystem runtimes. *)
 
 open Db_worker_effect.Infix
 
@@ -12,10 +11,12 @@ let upload_temp_path () =
 
 (* <create-temp-sqlite-db! *)
 let create_temp_sqlite_db () : Sqlite.db Db_worker_effect.t =
-  File_sys.mkdir_p (upload_temp_dir ()) >>= fun () ->
   let path = upload_temp_path () in
-  File_sys.exists path >>= fun exists ->
-  (if exists then File_sys.remove path else Db_worker_effect.pure ())
+  (if Sqlite.pooled_runtime () then Sqlite.remove_vfs ~repo:"upload-temp"
+   else
+     File_sys.mkdir_p (upload_temp_dir ()) >>= fun () ->
+     File_sys.exists path >>= fun exists ->
+     if exists then File_sys.remove path else Db_worker_effect.pure ())
   >>= fun () ->
   Sqlite.prepare_pool ~name:(Graph_dir.pool_name "upload-temp")
   >>= fun () ->
@@ -37,6 +38,8 @@ let create_temp_sqlite_conn (schema : Datascript.schema)
 
 let cleanup_temp_sqlite db : unit Db_worker_effect.t =
   Sqlite.close db;
-  let path = upload_temp_path () in
-  File_sys.exists path >>= fun exists ->
-  if exists then File_sys.remove path else Db_worker_effect.pure ()
+  if Sqlite.pooled_runtime () then Sqlite.remove_vfs ~repo:"upload-temp"
+  else
+    let path = upload_temp_path () in
+    File_sys.exists path >>= fun exists ->
+    if exists then File_sys.remove path else Db_worker_effect.pure ()

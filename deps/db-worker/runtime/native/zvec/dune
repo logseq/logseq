@@ -1,0 +1,5 @@
+(rule
+ (targets libzvec_c_api.dylib zvec_c_api.h ZVEC-LICENSE ZVEC-NOTICE)
+ (enabled_if (and (= %{system} macosx) (= %{architecture} arm64)))
+ (deps ../../../scripts/prepare-zvec.sh ../ZVEC-LICENSE ../ZVEC-NOTICE)
+ (action (run sh %{dep:../../../scripts/prepare-zvec.sh} .)))

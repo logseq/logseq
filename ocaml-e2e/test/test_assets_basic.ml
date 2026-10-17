@@ -14,6 +14,68 @@ let asset_path_abs rel = path_absolute (asset_path rel)
 let img_q = ".ls-page-blocks .asset-container img"
 
 let () =
+  Fest.Promise.test "worker-events-reach-secondary-tab-test" (fun () ->
+    let* context, _browser = Fixtures.shared_new_context () in
+    let* primary = Fixtures.context_open_page context in
+    let primary_env = Env.make primary in
+    let graph_name = Printf.sprintf "asset-events-%.0f" (Js.Date.now ()) in
+    let* () = Graph.new_graph primary_env graph_name ~enable_sync:false () in
+    let* secondary = Fixtures.context_open_page context in
+    let run () =
+      let* _ =
+        Playwright.evaluate primary
+          {|(() => {
+            const repo = logseq.api.get_current_graph().url;
+            const channel = new BroadcastChannel('shared-service-common-channel-' + repo);
+            const id = '00000000-0000-4000-8000-000000000123';
+            for (const [direction, loaded] of [['upload', 0], ['upload', 68], ['download', 68]]) {
+              channel.postMessage({type: 'rtc-asset-upload-download-progress', data:
+                JSON.stringify(['~:rtc-asset-upload-download-progress',
+                  ['^ ', '~:repo', repo, '~:asset-id', id, '~:progress',
+                    ['^ ', '~:direction', '~:' + direction, '~:loaded', loaded, '~:total', 68]]])});
+            }
+            channel.postMessage({type: 'asset-file-write-finish', data:
+              JSON.stringify(['~:asset-file-write-finish',
+                ['^ ', '~:repo', repo, '~:asset-id', id, '~:ts', 12345]])});
+            channel.close();
+          })()|}
+      in
+      let* _ =
+        Playwright.wait_for_function secondary
+          {|(() => {
+            const repo = logseq.api.get_current_graph().url;
+            const id = '00000000-0000-4000-8000-000000000123';
+            const progress = logseq.api.get_state_from_store('rtc/asset-upload-download-progress')?.[repo]?.[id];
+            const written = logseq.api.get_state_from_store('assets/asset-file-write-finish')?.[repo]?.[id];
+            return progress?.direction === 'download' && progress.loaded === 68 && progress.total === 68 && written === 12345;
+          })()|}
+      in
+      let* _ =
+        Playwright.evaluate secondary
+          {|(async () => {
+            frontend.state.set_state_BANG_(cljs.core.keyword('search/index-build'), null);
+            const repo = logseq.api.get_current_graph().url;
+            await frontend.state._LT_invoke_db_worker(
+              cljs.core.keyword('thread-api/search-build-blocks-indice-in-worker'), repo, true);
+          })()|}
+      in
+      let* _ =
+        Playwright.wait_for_function secondary
+          {|(() => {
+            const state = logseq.api.get_state_from_store('search/index-build');
+            return state?.repo === logseq.api.get_current_graph().url &&
+              state.status === 'completed' && state.progress === 100 && !state['running?'];
+          })()|}
+      in
+      Js.Promise.resolve ()
+    in
+    run ()
+    |> Js.Promise.then_ (fun () -> Playwright.page_close secondary)
+    |> Js.Promise.catch (fun error ->
+        let* () = Playwright.page_close secondary in
+        Playwright.throw_error error))
+
+let () =
   Fest.Promise.test "image-upload-lightbox-and-resize-test" (fun () ->
     let* env = env in
     let* () = Fixtures.new_logseq_page env in

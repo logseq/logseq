@@ -13,6 +13,109 @@ let promise_of_task t =
   Js.Promise.make (fun ~resolve ~reject ->
       Db_worker_effect.on_any t (fun v -> resolve v [@u]) (fun e -> reject e [@u]))
 
+external promise_finally : 'a Js.Promise.t -> (unit -> unit [@u]) -> 'a Js.Promise.t
+  = "finally" [@@mel.send]
+
+external browser_process : 'a Js.Undefined.t = "process" [@@mel.scope "globalThis"]
+external browser_global : 'a = "globalThis"
+external set_browser_process : 'a -> 'b Js.Undefined.t -> unit = "process" [@@mel.set]
+external browser_pfs : 'a Js.Undefined.t = "pfs" [@@mel.scope "globalThis"]
+external set_browser_pfs : 'a -> 'b Js.Undefined.t -> unit = "pfs" [@@mel.set]
+external browser_self : 'a Js.Undefined.t = "self" [@@mel.scope "globalThis"]
+external set_browser_self : 'a -> 'b Js.Undefined.t -> unit = "self" [@@mel.set]
+external browser_location : 'a Js.Undefined.t = "location" [@@mel.scope "globalThis"]
+external set_browser_location : 'a -> 'b Js.Undefined.t -> unit = "location" [@@mel.set]
+
+let () =
+  Fest.test "browser runtime reads worker URL flags" (fun () ->
+    let previous_process = browser_process in
+    let previous_location = browser_location in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_location browser_global previous_location
+    in
+    let run () =
+      set_browser_process browser_global Js.Undefined.empty;
+      List.iter (fun (query, owner, publishing) ->
+        set_browser_location browser_global
+          (Js.Undefined.return [%mel.obj { search = query; href = "http://localhost/worker.js" ^ query }]);
+        Fest.equal (Runtime_env.owner_source ()) owner Fest.expect;
+        Fest.equal (Runtime_env.publishing ()) publishing Fest.expect)
+        [ "?electron=true", "electron", false
+        ; "?capacitor=true&publishing=true", "capacitor", true
+        ; "?electron=false&publishing=false", "browser", false ]
+    in
+    match run () with
+    | () -> restore ()
+    | exception error -> restore (); raise error);
+  Fest.test "owner UI requests and error reports do not reach other tabs" (fun () ->
+    let previous_process = browser_process in
+    let previous_self = browser_self in
+    let owner_messages = ref [] in
+    let relayed = ref [] in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_self browser_global previous_self;
+      Broadcast.set_extra_poster None
+    in
+    let run () =
+        set_browser_process browser_global Js.Undefined.empty;
+        set_browser_self browser_global
+          (Js.Undefined.return
+             [%mel.obj { postMessage = (fun payload -> owner_messages := payload :: !owner_messages) }]);
+        Broadcast.set_extra_poster
+          (Some (fun ~kind ~transit_payload:_ -> relayed := kind :: !relayed));
+        !Sync_platform.post_message_fn "request";
+        Db_listener.capture_error "test" Wire.Nil Wire.Nil
+    in
+    (match run () with
+     | () -> restore ()
+     | exception error -> restore (); raise error);
+    Fest.equal (List.length !owner_messages) 2 Fest.expect;
+    Fest.equal !relayed [] Fest.expect);
+  Fest.Promise.test "binary asset files preserve every byte on disk" (fun () ->
+    let payload = String.init 33071 (fun i -> Char.chr (i mod 256)) in
+    let directory = mkdtemp (Filename.concat (tmpdir ()) "asset-binary-") in
+    let source = Filename.concat directory "source.png" in
+    let destination = Filename.concat directory "destination.png" in
+    Node.Fs.writeFileSync source payload `latin1;
+    promise_of_task
+      (Db_worker_effect.bind (File_sys.read_binary source) (fun actual ->
+         Fest.equal actual payload Fest.expect;
+         Db_worker_effect.map
+           (fun () ->
+             Fest.equal (Node.Fs.readFileSync destination `latin1) payload Fest.expect;
+             Node.Fs.unlinkSync source;
+             Node.Fs.unlinkSync destination;
+             Node.Fs.rmdirSync directory)
+           (File_sys.write_binary destination payload))));
+  Fest.Promise.test "browser asset ArrayBuffer survives encryption" (fun () ->
+    let payload = String.init 33071 (fun i -> Char.chr (i mod 256)) in
+    let previous_process = browser_process in
+    let previous_pfs = browser_pfs in
+    let restore () =
+      set_browser_process browser_global previous_process;
+      set_browser_pfs browser_global previous_pfs
+    in
+    set_browser_process browser_global Js.Undefined.empty;
+    set_browser_pfs browser_global
+      (Js.Undefined.return
+         [%mel.obj
+           { readFile = (fun _path -> Js.Promise.resolve (U8a.buffer (U8a.of_string payload))) }]);
+    let task = Asset_store.read_bytes ~repo:"logseq_db_binary" ~name:"image.png" in
+    restore ();
+    promise_of_task
+      (Db_worker_effect.bind task (fun actual ->
+           Fest.equal (String.length actual) (String.length payload) Fest.expect;
+           Fest.equal actual payload Fest.expect;
+           Db_worker_effect.bind (Crypto.Aes_gcm.generate ()) (fun key ->
+             Db_worker_effect.bind
+               (Sync_crypt.encrypt_uint8array_impl (Wire.Binary key) actual)
+               (fun encrypted ->
+                 Db_worker_effect.map
+                   (fun decoded -> Fest.equal decoded payload Fest.expect)
+                   (Sync_crypt.decrypt_uint8array_impl (Wire.Binary key) encrypted))))))
+
 let contains haystack needle =
   match Js.String.indexOf ~search:needle haystack with
   | -1 -> false
@@ -187,6 +290,40 @@ let () =
       Worker_core.init ();
       Fest.expect |> Fest.equal (Dispatcher.registered "thread-api/q") true;
       Fest.expect |> Fest.equal (Dispatcher.registered "thread-api/nope") false);
+
+  Fest.test "integer transaction retractions preserve large scalar values" (fun () ->
+      List.iter
+        (fun timestamp ->
+           let conn = Datascript.conn_from_db (Datascript.empty_db ()) in
+           Common_util.protect
+             ~finally:(fun () -> Db_tx.release_flags conn)
+             (fun () ->
+                ignore
+                  (Db_transact.transact conn
+                     [ Wire.kw_map
+                         [ "db/id", Wire.Int 1
+                         ; "block/title", Wire.String "undo"
+                         ; "block/created-at", Wire.Int64 timestamp ] ]
+                     []);
+                Fest.expect |> Fest.equal
+                  (List.exists
+                     (fun (d : Datascript.datom) ->
+                        d.a = "block/created-at" && d.v = Datascript.Int64 timestamp)
+                     (List.of_seq (Datascript.datoms (Datascript.db conn) Datascript.Eavt ~e:1 ())))
+                  true;
+                ignore
+                  (Db_transact.transact conn
+                     [ Wire.Array
+                         [ Wire.Keyword "db/retract"; Wire.Int 1
+                         ; Wire.Keyword "block/created-at"; Wire.Int64 timestamp ]
+                     ; Wire.Array
+                         [ Wire.Keyword "db/retract"; Wire.Int 1
+                         ; Wire.Keyword "block/title"; Wire.String "undo" ] ]
+                     []);
+                Fest.expect |> Fest.equal
+                  (List.of_seq (Datascript.datoms (Datascript.db conn) Datascript.Eavt ~e:1 ()) = [])
+                  true))
+        [ 1791792912141L; 9007199254740993L ]);
 
   Fest.Promise.test "end-to-end worker lifecycle" (fun () ->
       let dir = mkdtemp (Filename.concat (tmpdir ()) "dbw-") in
@@ -460,3 +597,152 @@ let () =
     [ "db-tx", (fun conn f -> ignore (Db_tx.batch_transact_with_temp_conn conn f))
     ; "db-transact", (fun conn f -> ignore (Db_transact.batch_transact_with_temp_conn conn [] f))
     ; "sync-apply", (fun conn f -> ignore (Sync_replay.batch_transact_with_temp_conn_impl conn [] f ())) ]
+
+let () =
+  let marked s = Search_index.snippet_highlight_start ^ s ^ Search_index.snippet_highlight_end in
+  List.iter
+    (fun (name, title, query, expected) ->
+       Fest.test ("search snippet preserves Unicode: " ^ name) (fun () ->
+           Fest.expect |> Fest.equal
+             (Search_index.ensure_highlighted_snippet None (Some title) query)
+             (Some expected)))
+    [ "mixed Chinese and English",
+      {js|Repro · 列边界拖拽热区过窄，难以命中，光标反馈弱|js}, "repro",
+      marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js}
+    ; "Chinese query", {js|今天学习中文|js}, {js|中文|js}, {js|今天学习|js} ^ marked {js|中文|js}
+    ; "accented text and emoji", {js|Repro · café 😀 中文|js}, "repro",
+      marked "Repro" ^ {js| · café 😀 中文|js}
+    ; "astral query", {js|中文 😀 search|js}, {js|😀|js}, {js|中文 |js} ^ marked {js|😀|js} ^ " search" ];
+  Fest.test "search snippets preserve Chinese in a distant match window" (fun () ->
+      let title = String.concat "" (List.init 300 (fun _ -> {js|中|js})) ^ {js| target 中文内容|js} in
+      let actual = Option.get (Search_index.ensure_highlighted_snippet None (Some title) "target") in
+      Fest.expect |> Fest.equal (contains actual (marked "target" ^ {js| 中文内容|js})) true;
+      Fest.expect |> Fest.equal (contains actual {js|中|js}) true;
+      Fest.expect |> Fest.equal (contains actual {js|ï|js}) false);
+  Fest.test "fuzzy search distinguishes Chinese text and counts astral characters" (fun () ->
+      Fest.expect |> Fest.equal (Search_fuzzy.utf16_length {js|中文😀|js}) 4;
+      Fest.expect |> Fest.equal
+        (Search_fuzzy.score {js|中文|js} {js|中文|js} > Search_fuzzy.score {js|中文|js} {js|另一段文字|js}) true);
+  Fest.test "indexed search returns the original Chinese block text" (fun () ->
+      let open Datascript in
+      let page_uuid = "00000000-0000-4000-8000-000000000101" in
+      let block_uuid = "00000000-0000-4000-8000-000000000102" in
+      let title = {js|Repro · 列边界拖拽热区过窄，难以命中，光标反馈弱|js} in
+      let conn = Datascript.conn_from_db (Datascript.empty_db ~schema:(Db_schema.schema ()) ()) in
+      let scalar a v = a, One_value v in
+      ignore (Datascript.transact_conn conn
+        [ Entity { db_id = Some (Entity_id 1); attrs =
+            [ scalar "block/uuid" (Uuid page_uuid); scalar "block/name" (String "search")
+            ; scalar "block/title" (String "Search") ] }
+        ; Entity { db_id = Some (Entity_id 2); attrs =
+            [ scalar "block/uuid" (Uuid block_uuid); scalar "block/title" (String title)
+            ; scalar "block/page" (Ref 1); scalar "block/parent" (Ref 1)
+            ; scalar "block/order" (String "a0") ] } ]);
+      let db = Sqlite.open_db ~path:":memory:" in
+      Common_util.protect ~finally:(fun () -> Sqlite.close db) (fun () ->
+          Search_index.create_tables_and_triggers db;
+          Search_index.upsert_blocks db
+            [ Search_index.mk_index_item ~id:block_uuid ~page:page_uuid ~title () ];
+          let result = Search_index.search_blocks ~conn ~search_db:(Some db)
+              ~vector_index:None ~q0:"repro" ~opts:Search_index.default_opts in
+          let rows = match result with
+            | Search_index.Rows rows | Search_index.Rows_with_count (rows, _) -> rows in
+          Fest.expect |> Fest.equal
+            (List.map (fun row -> List.assoc_opt "block/title" row) rows
+             = [ Some (String (marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js})) ]) true));
+
+  (* Chinese graph create POSTs JSON. Http.send must emit UTF-8 for every
+     script; snapshot/asset byte bodies stay one byte per char. *)
+  Fest.Promise.test "graph-create JSON is UTF-8 and byte bodies stay bytes" (fun () ->
+      let module Probe = struct
+        type server
+        type req
+        type res
+
+        external create_server : (req -> res -> unit [@u]) -> server
+          = "createServer" [@@mel.module "http"]
+
+        external listen : server -> int -> string -> (unit -> unit [@u]) -> unit
+          = "listen" [@@mel.send]
+
+        external address : server -> < port : int > Js.t = "address" [@@mel.send]
+        external close : server -> (unit -> unit [@u]) -> unit = "close" [@@mel.send]
+        external req_on : req -> string -> ('a -> unit [@u]) -> unit = "on" [@@mel.send]
+        external res_end : res -> string -> unit = "end" [@@mel.send]
+        external as_buffer : 'a -> Node.Buffer.t = "%identity"
+        external buf_concat : Node.Buffer.t array -> Node.Buffer.t = "concat"
+          [@@mel.scope "Buffer"]
+        external buf_from : string -> string -> Node.Buffer.t = "from"
+          [@@mel.scope "Buffer"]
+        external buf_to_string : Node.Buffer.t -> string -> string = "toString"
+          [@@mel.send]
+      end in
+      let hex_of chunks =
+        let buf = Probe.buf_concat (Array.of_list (List.rev chunks)) in
+        Probe.buf_to_string buf "hex"
+      in
+      let utf8_hex s = Probe.buf_to_string (Probe.buf_from s "utf8") "hex" in
+      let received = ref "" in
+      let server =
+        Probe.create_server (fun [@u] req res ->
+            let chunks = ref [] in
+            Probe.req_on req "data" (fun [@u] c ->
+                chunks := Probe.as_buffer c :: !chunks);
+            Probe.req_on req "end" (fun [@u] (_ : Js.Json.t) ->
+                received := hex_of !chunks;
+                Probe.res_end res "{\"ok\":true}"))
+      in
+      let name = {js|中文明文 café مرحبا 😀|js} in
+      let json_body =
+        Json_codec.encode
+          (Wire.Map
+             [ Wire.Keyword "graph-name", Wire.String name
+             ; Wire.Keyword "schema-version", Wire.String "4b5"
+             ; Wire.Keyword "graph-e2ee?", Wire.Bool false ])
+      in
+      let byte_body = String.make 1 (Char.chr 0xff) ^ String.make 1 (Char.chr 0x0e) ^ "AB" in
+      let prev_fetch = !Sync_deps.fetch_json in
+      let prev_auth = !Sync_util.auth_token_fn in
+      Sync_deps.fetch_json := Some Sync_util.fetch_json_default;
+      Sync_util.auth_token_fn := (fun () -> Some "token");
+      let restore () =
+        Sync_deps.fetch_json := prev_fetch;
+        Sync_util.auth_token_fn := prev_auth;
+        Probe.close server (fun [@u] () -> ())
+      in
+      let finish p = promise_finally p (fun [@u] () -> restore ()) in
+      let listen_port () =
+        Js.Promise.make (fun ~resolve ~reject:_ ->
+            Probe.listen server 0 "127.0.0.1" (fun [@u] () ->
+                resolve (Probe.address server)##port [@u]))
+      in
+      let post_json port =
+        let url = Printf.sprintf "http://127.0.0.1:%d/graphs" port in
+        promise_of_task
+          (Sync_util.fetch_json url ~meth:"POST"
+             ~headers:[ ("content-type", "application/json") ]
+             ~body:json_body ())
+      in
+      let post_bytes port =
+        promise_of_task
+          (Sync_util.fetch_json
+             (Printf.sprintf "http://127.0.0.1:%d/snapshot" port)
+             ~meth:"POST"
+             ~headers:
+               [ ("content-type", "application/transit+json")
+               ; ("content-encoding", "gzip") ]
+             ~body:byte_body ())
+      in
+      finish
+        (listen_port ()
+         |> Js.Promise.then_ (fun port ->
+                post_json port
+                |> Js.Promise.then_ (fun _parsed ->
+                       Fest.expect |> Fest.equal !received (utf8_hex json_body);
+                       Fest.expect |> Fest.equal (contains !received "e6988e") true;
+                       Fest.expect |> Fest.equal (contains !received "f09f9880") true;
+                       received := "";
+                       post_bytes port)
+         |> Js.Promise.then_ (fun _parsed ->
+                Fest.expect |> Fest.equal !received "ff0e4142";
+                Js.Promise.resolve ()))))

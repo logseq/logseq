@@ -55,6 +55,15 @@
     %{test_desktop_js})))
 
 (executable
+ (name test_platform_native)
+ (modes native)
+ (libraries logseq_db_worker logseq_db_worker_platform_native unix))
+
+(rule
+ (alias runtest)
+ (action (run ./test_platform_native.exe)))
+
+(executable
  (name test_worker_native)
  (modes native)
  (libraries
@@ -99,3 +108,14 @@
    (run %{test_query_bin})
    (run %{test_sync_bin})
    (run %{test_render_bin}))))
+
+(executable
+ (name test_vector_native)
+ (modes native)
+ (libraries logseq_db_worker logseq_db_worker_platform_native unix))
+
+(rule
+ (alias runtest)
+ (enabled_if (= %{env:LOGSEQ_TEST_NATIVE_VECTORS=0} 1))
+ (deps test_vector_interop.mjs)
+ (action (run node %{dep:test_vector_interop.mjs} %{exe:test_vector_native.exe})))

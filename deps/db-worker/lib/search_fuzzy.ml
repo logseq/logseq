@@ -468,27 +468,39 @@ let accent_map = [
   ("Ё", "Е");
 ]
 
-(* cljs search-fuzzy remove-accents — npm remove-accents@0.5.0 builds
-   one regex from the characterMap keys in map order and replaces
-   leftmost-first; scanning the table in order at each position is
-   equivalent. *)
+(* Preserve the map's leftmost-first replacement order within each
+   first-character bucket, including keys made of multiple codepoints. *)
+let accent_candidates =
+  let buckets = Hashtbl.create 32 in
+  List.iter
+    (fun (key, replacement) ->
+       let first = key.[0] in
+       let candidates = Option.value (Hashtbl.find_opt buckets first) ~default:[] in
+       Hashtbl.replace buckets first ((key, replacement) :: candidates))
+    (List.rev accent_map);
+  buckets
+
+let rec accent_key_matches s offset key j =
+  j = String.length key
+  || (s.[offset + j] = key.[j] && accent_key_matches s offset key (j + 1))
+
+let rec accent_at s offset = function
+  | [] -> None
+  | (key, replacement) :: rest ->
+      let length = String.length key in
+      if offset + length <= String.length s && accent_key_matches s offset key 0 then
+        Some (length, replacement)
+      else accent_at s offset rest
+
 let remove_accents (s : string) : string =
   let len = String.length s in
   let buf = Buffer.create len in
   let rec scan i =
     if i < len then begin
-      let matches_at (k : string) =
-        let klen = String.length k in
-        let rec eq j = j = klen || (s.[i + j] = k.[j] && eq (j + 1)) in
-        i + klen <= len && eq 0
+      let candidates =
+        Option.value (Hashtbl.find_opt accent_candidates s.[i]) ~default:[]
       in
-      let rec try_keys = function
-        | [] -> None
-        | (k, rep) :: rest ->
-            if matches_at k then Some (String.length k, rep)
-            else try_keys rest
-      in
-      match try_keys accent_map with
+      match accent_at s i candidates with
       | Some (klen, rep) ->
           Buffer.add_string buf rep;
           scan (i + klen)
@@ -506,44 +518,8 @@ let remove_accents (s : string) : string =
 
 let max_string_length = 1000.0
 
-let utf8_decode (s : string) : int list =
-  let len = String.length s in
-  let byte i = Char.code s.[i] in
-  let rec loop i acc =
-    if i >= len then List.rev acc
-    else
-      let b0 = byte i in
-      if b0 < 0x80 then loop (i + 1) (b0 :: acc)
-      else if b0 < 0xC0 then loop (i + 1) (0xFFFD :: acc)
-      else if b0 < 0xE0 && i + 1 < len then
-        loop (i + 2) (((b0 land 0x1F) lsl 6 lor (byte (i + 1) land 0x3F)) :: acc)
-      else if b0 < 0xF0 && i + 2 < len then
-        loop (i + 3)
-          (((b0 land 0x0F) lsl 12 lor ((byte (i + 1) land 0x3F) lsl 6)
-            lor (byte (i + 2) land 0x3F))
-          :: acc)
-      else if i + 3 < len then
-        loop (i + 4)
-          (((b0 land 0x07) lsl 18 lor ((byte (i + 1) land 0x3F) lsl 12)
-            lor ((byte (i + 2) land 0x3F) lsl 6)
-            lor (byte (i + 3) land 0x3F))
-          :: acc)
-      else List.rev acc
-  in
-  loop 0 []
-
-let utf16_units (s : string) : int array =
-  s |> utf8_decode
-  |> List.concat_map (fun cp ->
-         if cp <= 0xFFFF then [ cp ]
-         else
-           let cp' = cp - 0x10000 in
-           [ 0xD800 lor (cp' lsr 10); 0xDC00 lor (cp' land 0x3FF) ])
-  |> Array.of_list
-
-let utf16_length (s : string) : int =
-  utf8_decode s
-  |> List.fold_left (fun n cp -> if cp <= 0xFFFF then n + 1 else n + 2) 0
+let utf16_units = Unicode.utf16_units
+let utf16_length = Unicode.js_length
 
 (* cljs search-fuzzy/clean-str: lower-case, strip [ \ / _ ] ( ) chars,
    lower-case again. *)
