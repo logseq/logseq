@@ -1,7 +1,9 @@
 (ns frontend.context.i18n-test
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [frontend.context.i18n :as i18n]
-            [frontend.state :as state]))
+            [frontend.dicts :as dicts]
+            [frontend.state :as state]
+            [tongue.core :as tongue]))
 
 (defn- set-language!
   [language]
@@ -50,6 +52,23 @@
       (i18n/start)
       (is (= :en
              (i18n/preferred-locale))))))
+
+(defn- outcome
+  [f]
+  (try (f) (catch :default e [:error (ex-message e)])))
+
+(deftest per-locale-translators-match-one-over-every-locale-test
+  (testing "every key of every locale, with and without the English fallback, translates as one translator built over every locale's dict does"
+    (let [full (tongue/build-translate (assoc dicts/dicts :tongue/fallback :en))
+          strict (tongue/build-translate dicts/dicts)
+          ks (into #{} (mapcat keys) (vals dicts/dicts))
+          mismatches (for [locale (conj (keys dicts/dicts) :xx-YY)
+                           k ks
+                           :let [a [(outcome #(full locale k)) (outcome #(strict locale k))]
+                                 b [(outcome #(i18n/translate locale k)) (outcome #(@#'i18n/translate-strict locale k))]]
+                           :when (not= a b)]
+                       [locale k a b])]
+      (is (empty? (take 5 mismatches))))))
 
 (deftest t-test
   (testing "t translates the current locale"
