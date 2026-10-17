@@ -6,6 +6,7 @@ import {measureKeymapSearch, assertKeymapSearch, measureKeymapCategories, assert
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
 import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
 import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
+import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -25,6 +26,43 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('empty overlay chrome passes pointers through after popup and modal dismissal', () => {
+  open();
+  browser('errors', '--clear');
+  if (evaluate("document.querySelector('#left-sidebar').getBoundingClientRect().width") === 0) {
+    button('Toggle left sidebar');
+  }
+  browser('click', '.all-pages-nav .item');
+  browser('wait', '--fn', "document.querySelector('[id^=vsort-]') !== null");
+  const verify = selector => assertControlHits(evaluate(
+    `(${measureControlHits.toString()})(${JSON.stringify(selector)})`,
+  ));
+  const main = '.view-actions button, .ls-view-tab';
+  for (let cycle = 0; cycle < 2; cycle += 1) {
+    verify(main);
+    button('Sort groups by');
+    browser('wait', '--fn', "document.querySelector('.ls-sort-order') !== null");
+    verify('.ls-sort-order, .ls-sort-x, .ls-sort-delete');
+    browser('click', '.ls-sort-order');
+    browser('wait', '--fn', "document.querySelectorAll('.ls-sort-option').length === 2");
+    verify('.ls-sort-option');
+    browser('press', 'Escape');
+    browser('wait', '--fn', "document.querySelector('.ls-sort-option') === null");
+    browser('press', 'Escape');
+    browser('wait', '--fn', "document.querySelector('.ls-sort-order') === null");
+    verify(main);
+    openSettings();
+    browser('wait', '--fn', "document.querySelector('[role=dialog] button') !== null");
+    verify('[role=dialog] button[aria-label=Close]');
+    assert.ok(evaluate(`(${measureControlHits.toString()})(${JSON.stringify(main)})`)
+      .every(control => !control.receivesPointer), 'The modal must still block background controls');
+    button('Close');
+    browser('wait', '--fn', "document.querySelector('[role=dialog]') === null");
+    verify(main);
+  }
+  assert.equal(browser('errors'), '');
+});
 
 const appendBlock = text => {
   evaluate("document.querySelector('.block-add-button').scrollIntoView({block:'center'})");

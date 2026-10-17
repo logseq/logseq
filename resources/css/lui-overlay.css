@@ -28,6 +28,12 @@
 
 /* ---- shared -------------------------------------------------------- */
 
+/* Empty shared chrome must not cover the editor or view toolbar. Floating
+   surfaces own their interactive hit regions through the renderer. */
+.cp__overlays {
+  pointer-events: none;
+}
+
 /* Shared search controls provide their own accessible clear action. */
 .ls-search-with-clear::-webkit-search-cancel-button {
   -webkit-appearance: none;
