@@ -67,6 +67,40 @@
       (is (not= journal-uuid class-uuid))
       (assert-valid-date-class conn class "Jan 1st, 2024"))))
 
+(deftest create-class-from-slash-date-does-not-split-namespace
+  (doseq [title ["2026/05/18" "05/18/2026"]]
+    (let [conn (db-test/create-conn)
+          [_ uuid'] (outliner-page/create! conn title {:class? true :split-namespace? true})
+          class (d/entity @conn [:block/uuid uuid'])]
+      (is (ldb/class? class) (str title " is a class"))
+      (is (= title (:block/title class)))
+      (is (nil? (:block/journal-day class)))
+      (is (not (ldb/journal? class)))
+      (is (not= (common-uuid/gen-uuid :journal-page-uuid 20260518) (:block/uuid class)))
+      (is (= "user.class" (namespace (:db/ident class))))
+      (is (= [:logseq.class/Root]
+             (get (db-test/readable-properties class) :logseq.property.class/extends)))
+      (is (nil? (ldb/get-page @conn "2026"))
+          (str title " is not split into a year namespace"))
+      (is (nil? (ldb/get-page @conn "05"))
+          (str title " is not split into a month namespace"))
+      (is (nil? (ldb/get-page @conn "18"))
+          (str title " is not split into a day namespace"))
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+  (testing "an existing year page does not block or become a parent of a slash-date class"
+    (let [conn (db-test/create-conn)
+          [_ year-uuid] (outliner-page/create! conn "2026" {})
+          [_ class-uuid] (outliner-page/create! conn "2026/05/18" {:class? true :split-namespace? true})
+          year (d/entity @conn [:block/uuid year-uuid])
+          class (d/entity @conn [:block/uuid class-uuid])]
+      (is (ldb/internal-page? year))
+      (is (not (ldb/class? year)))
+      (is (ldb/class? class))
+      (is (= "2026/05/18" (:block/title class)))
+      (is (nil? (:block/journal-day class)))
+      (is (not= year-uuid class-uuid))
+      (is (nil? (:errors (db-validate/validate-db @conn)))))))
+
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/property1 {:logseq.property/type :default}}
