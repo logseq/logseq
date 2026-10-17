@@ -167,7 +167,7 @@ let view (x, _atop, y, with_app_items) (p : Model.page option) =
   in
   (* the retained popover kind owns point placement + dismiss on
      native; the div[role=menu] shell inside keeps the e2e markup *)
-  Lui_elements.popover ~transition:Ui_components.popover_transition
+  Ui_components.menu_surface (Lui_elements.popover ~transition:Ui_components.popover_transition
     ~key:"page-menu" ~at:(at_x, y) ~role:`menu ~min_width:w ~max_width:w
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
@@ -179,7 +179,7 @@ let view (x, _atop, y, with_app_items) (p : Model.page option) =
          | Some p, true ->
              page_items p @ [ separator "pg-app" ] @ global_items ()
          | Some p, false -> page_items p
-         | None, _ -> global_items ()) ]
+         | None, _ -> global_items ()) ])
 
 let btn key label variant act =
   Lui_elements.button ~key ~variant ~size:`sm

@@ -279,7 +279,7 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
   let y = if flip then atop else abot in
   (* popover ~at is the same point placement the inline left/top carried;
      --available-height = viewport space below y *)
-  popover ~key:"page-menu" ~at:(x, y)
+  Ui_components.menu_surface (popover ~key:"page-menu" ~at:(x, y)
     ~available_height:
       (if flip then atop -. 5. else inner_height -. y -. 5.)
     ~role:`menu ~width:(if with_app_items then 256 else 280)
@@ -297,7 +297,7 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
      | Some p, true ->
          page_items p @ [ separator "pg-app" ] @ global_items ()
      | Some p, false -> page_items p
-     | None, _ -> global_items ())
+     | None, _ -> global_items ()))
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
 let confirm_view (c : Model.confirm) =

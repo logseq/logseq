@@ -10,6 +10,81 @@ let check message condition = if not condition then failwith message
 let () =
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
+  let host = Lui_host.create ~hooks:Lui_paint.default_hooks
+    ~layout:(module Lui_layout) ~measure:(fun _ _ _ _ -> Some (80.,20.))
+    ~renderer:{Lui_host.name="menu-chrome-test"; render=(fun _ -> Bytes.empty)}
+    ~width:1440 ~height:932 ~scale:1. () in
+  let app = Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) ()
+    (fun () () -> ()) (fun _ _ _ ->
+      Lui_elements.column
+        [Lui_elements.button ~height:32 ~text:"Menu" [];
+         Ui_components.menu_card ~key:"chrome-menu" ~anchor:`below
+           ~anchor_alignment:`end_ ~on_dismiss:(fun _ -> ())
+           (List.init 11 (fun i -> Menu_item.el ~key:(string_of_int i)
+              ~label:(string_of_int i) ~on_click:ignore ()));
+         Ui_components.menu_surface
+           (Lui_elements.popover ~key:"point-menu" ~at:(100.,40.) ~role:`menu
+              ~width:256
+              [Menu_item.el ~key:"point-item" ~label:"Action" ~on_click:ignore ()])]) in
+  ignore (Lui_app.start app); ignore (Lui_app.flush app);
+  let store = Lui_host.store host in
+  let menu = List.find (fun id -> Lui_store.kind store id="dropdown-menu")
+    (Lui_store.preorder store) in
+  let item = List.find (fun id -> Lui_store.kind store id="menu-item")
+    (Lui_store.preorder store) in
+  List.iter (fun mode ->
+    let snapshot = Ui_theme.snapshot mode in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+       "vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+    Theme_vars.set_dark (mode=Ui_theme.Dark);
+    List.iter (fun (name,state) ->
+      let ink = ref None in
+      let scene = Lui_scene.create
+        ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let item_rect = Lui_scene.rect 0. 0. 200. 32. in
+      Lui_paint.paint {Lui_paint.default_hooks with
+        color_of=Theme_vars.color_of;
+        layout=(fun id -> Lui_paint.placement_of_rect
+          (if id=item then item_rect else Lui_scene.rect 0. 0. 240. 400.));
+        state_of=(fun id -> if id=item then state else Lui_paint.state_neutral);
+        text_ops=(fun id _ color _ -> if id=item then ink:=Some color; [])}
+        store scene ~width:1440 ~height:932 ~scale:1.
+        ~clear:(Lui_scene.color 255 255 255 255);
+      let expected = Option.get (Theme_vars.color_of "var(--lx-gray-05)") in
+      expect ("Menu " ^ name ^ " does not use the application's neutral highlight")
+        (List.exists (function Lui_scene.Fill f -> f.frect=item_rect && f.fcolor=expected
+           | _ -> false) scene.ops);
+      expect ("Menu " ^ name ^ " inverts its foreground on a neutral highlight")
+        (!ink=Theme_vars.color_of "foreground"))
+      ["pointer",{Lui_paint.state_neutral with hovered=true};
+       "keyboard",{Lui_paint.state_neutral with hovered=true;focused=true;selected=true}])
+    [Ui_theme.Light;Ui_theme.Dark];
+  ignore (Lui_host.repaint host);
+  let point_menu = List.find (fun id -> Lui_store.kind store id="popover")
+    (Lui_store.preorder store) in
+  let point_item = List.hd (Lui_store.child_ids store point_menu) in
+  let point_box = Option.get (Lui_host.layout_rect host point_menu)
+  and point_row = Option.get (Lui_host.layout_rect host point_item) in
+  expect "A point menu loses the shared card's five-point content inset"
+    (abs_float (point_row.x -. point_box.x -. 5.) < 0.1
+     && abs_float (point_row.y -. point_box.y -. 5.) < 0.1);
+  let full = Option.get (Lui_host.layout_rect host menu) in
+  expect "An ordinary menu truncates entries despite available window height" (full.h >= 360.);
+  Lui_host.resize host ~width:1440 ~height:200 ~scale:1.;
+  ignore (Lui_host.repaint host);
+  let small = Option.get (Lui_host.layout_rect host menu) in
+  expect "A menu exceeds its resized window" (small.h <= 184.);
+  ignore (Lui_app.dispose app);
+  Theme_vars.set_dark false;
+  List.iter prerr_endline (List.rev !failures);
+  check "Shared menu highlight and available-height parity" (!failures=[]);
+  print_endline "native shared menu chrome: OK"
+
+let () =
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
   let shared = Js.Json.JString "row item" in
   let element = Js.Json.JObject
     ["tag",Js.Json.JString "div"; "class",shared; "class",Js.Json.JString "later"] in

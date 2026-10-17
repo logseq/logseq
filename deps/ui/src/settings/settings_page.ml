@@ -289,7 +289,7 @@ let dfmt_menu_state ctx =
       s
 
 let dfmt_menu ~key mst options current =
-  Ui_components.menu_card ~key:("dfmt-m-" ^ key)
+  Ui_components.menu_card ~key:("dfmt-m-" ^ key) ~max_height:288
     ~anchor:`below ~anchor_alignment:`start
     ~cls:"ls-select-content"
     ~on_dismiss:(fun _ -> V.lang_menu_close mst)

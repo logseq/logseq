@@ -19,6 +19,14 @@ let separator_cls = "ui__dropdown-menu-separator"
    their own divs *)
 let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
+let chrome element =
+  Ui_components.with_props
+    [ Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.line_height "1.25rem"
+    ; Ui_components.Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))"
+    ; Ui_components.Prop.selected_background "var(--lx-gray-05, hsl(var(--muted)))" ]
+    element
+
 (* retained-tree item: the menu_item kind renders a role=option button
    with icon/label/check spans; [attrs] is accepted for call-site
    compatibility but ignored — role/tabindex are carried by the kind.
@@ -27,9 +35,7 @@ let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ?(after = []) ?(data_attrs = []) ?icon ~label ~on_click () =
   ignore attrs;
-  Ui_components.with_props
-    [ Ui_components.Prop.font_size "0.875rem"
-    ; Ui_components.Prop.line_height "1.25rem" ]
+  chrome
     (menu_item ~key ~style_class:cls ~data_attrs ~text:label ?icon
        ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
        ~on_press:(fun _ -> on_click ())
@@ -52,13 +58,13 @@ let dots_menu ~key ?(menu_cls = "") items : t =
   let open_ = Signal.state ctx.Lui_ui.ui_scheduler false in
   let close () = Runtime.signal_set open_ false in
   let item i (cls, label, disabled, on_click) =
-    menu_item ~key:(Printf.sprintf "%s-mi-%d" key i)
+    chrome (menu_item ~key:(Printf.sprintf "%s-mi-%d" key i)
       ?style_class:(if cls = "" then None else Some cls)
       ~text:label ~disabled
       ~on_press:(fun _ ->
         close ();
         on_click ())
-      []
+      [])
   in
   row ~key
     [ button ~key:(key ^ "-btn") ~variant:`ghost ~size:`icon

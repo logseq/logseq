@@ -57,10 +57,10 @@ let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) ?transition name =
    press / Escape also closes via ~on_dismiss (close_menu is idempotent
    with Sidebar_state's document handler) *)
 let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
-  popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
+  Ui_components.menu_surface (popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
     ~transition:Ui_components.popover_transition
     ~style_class:("ui__dropdown-menu-content" ^ extra_cls)
-    children
+    children)
 
 (* combo shortcut inside a menu item (ui/dropdown-shortcut):
    .shui-shortcut-combo.shui-shortcut-glow > kbd*, pushed to the row end
@@ -95,7 +95,7 @@ let nav_edit_menu st =
      aria-checked ride data_attrs so the e2e
      `[role='menuitemcheckbox'][aria-checked]` hook sees them *)
   let mk (nav, label) =
-    menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
+    Menu_item.chrome (menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
       ~text:(t label)
       ~data_attrs:
         (reactive
@@ -113,7 +113,7 @@ let nav_edit_menu st =
           (not
              (List.mem nav
                 (Runtime.signal_get st.Sidebar_state.nav_checked))))
-      []
+      [])
   in
   box ~key:"nav-edit-menu"
     [ menu_box ~key:"menu-box" ~extra_cls:"" ~at:(16., 96.)

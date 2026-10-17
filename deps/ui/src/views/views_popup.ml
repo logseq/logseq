@@ -296,7 +296,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
     Ui_parts.class_signal msig
       (fun (st : menu_state) ->
         cls ^ base ^ if st.mf = fidx then " chosen" else "")
-      elem
+      (Menu_item.chrome elem)
   in
   let view_of ((it, fidx) : menu_item * int) : t =
     match it with

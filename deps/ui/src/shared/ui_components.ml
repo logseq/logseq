@@ -856,18 +856,27 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
 (* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card
    spec as props — migrated dropdown/select popups carry this chrome so
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
-let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
-    ?(data_attrs = []) items : t =
+let menu_surface ?max_height element =
   with_props
     [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ; Prop.font_size "0.875rem"
+    ; (match max_height with
+       | Some height -> Prop.max_height height
+       | None -> Prop.max_height_viewport 1.)
+    ; Prop.padding 4
+    ; Prop.background "hsl(var(--popover))"
+    ; Prop.border_color "hsl(var(--border))"
+    ; Prop.border_width 1
+    ; Prop.corner_radius 6
     ; Prop.overflow `auto ]
+    element
+
+let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
+    ?max_height ?(data_attrs = []) items : t =
+  menu_surface ?max_height
     (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
-       ~min_width:128 ~padding:4
-       ~background:"hsl(var(--popover))"
-       ~border_color:"hsl(var(--border))" ~border_width:1
-       ~corner_radius:6 ~style_class:cls ~data_attrs items)
+       ~min_width:128 ~style_class:cls ~data_attrs items)
 
 (* Same chrome on a popover surface — for anchored popups whose children
    are not menu rows (dropdown_menu rejects non-menu children). *)

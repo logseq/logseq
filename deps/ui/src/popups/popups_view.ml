@@ -710,7 +710,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
              doubles as click-to-open and, just as importantly, marks
              the row interactive so hit-testing reaches it — without
              it the row is hit-transparent and hover can never fire *)
-          menu_item ~key:"sub"
+          Menu_item.chrome (menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:
@@ -735,15 +735,15 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
               row ~key:"chev-wrap" ~main:`end_ ~cross:`center ~grow:1.
                 ~margin_right:8
                 [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
-                    ~style_class:"ls-menu-chevron" [] ] ]
+                    ~style_class:"ls-menu-chevron" [] ] ])
       | S.Ci_item (label, scut, cmd) ->
-          menu_item ~key:"item" ~style_class:cm_item_cls
+          Menu_item.chrome (menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]
             ~on_press:(fun _ -> run_cm_item st cmd)
             ~text:label
             (match scut with
              | Some s -> [ cm_shortcut_el s ]
-             | None -> []))
+             | None -> [])))
         (Logseq_el.own context (Signal.map snd entry_sig)) ]
     context parent
 ;;
@@ -751,13 +751,13 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
 let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
-      menu_item ~key:"sub-item" ~style_class:cm_item_cls
+      Menu_item.chrome (menu_item ~key:"sub-item" ~style_class:cm_item_cls
         ~data_attrs:[ ("role", "menuitem") ]
         ~on_press:(fun _ -> run_cm_item st cmd)
         ~text:label
         (match scut with
          | Some s -> [ cm_shortcut_el s ]
-         | None -> [])
+         | None -> []))
   | _ -> spacer ~key:"x" []
 ;;
 
