@@ -419,8 +419,8 @@ let () =
      installed further down is its only user. *)
   let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let cached_overlay = ref None in
-  let painted_fps = ref (-1) in
-  let overlay_fps () = int_of_float (Float.round metrics.fps) in
+  let painted_fps = ref None in
+  let overlay_fps () = metrics.fps in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
     if metrics.panel_open then Host_metrics.panel_generation ~now:(perf_s ()) else 0 in
@@ -431,43 +431,42 @@ let () =
            let retained_ops = s.Lui_scene.ops and retained_glyphs = s.Lui_scene.glyphs in
            let retained_width = s.Lui_scene.width in
            let render_started = perf_s () in
-           let submitted_before = metrics.gpu_submitted in
            Fun.protect ~finally:(fun () ->
              s.Lui_scene.ops <- retained_ops;
              s.Lui_scene.glyphs <- retained_glyphs;
              s.Lui_scene.width <- retained_width;
-             metrics.render_ms <- (perf_s () -. render_started) *. 1000.;
-             let gpu_submit_ms = if metrics.gpu_submitted > submitted_before then metrics.gpu_submit_ms else 0. in
-             Host_metrics.record_phase metrics Overlay (max 0. (metrics.render_ms -. gpu_submit_ms)))
+             metrics.render_ms <- (perf_s () -. render_started) *. 1000.)
              (fun () ->
-                let color =
-                  Option.get (Theme_vars.color_of
-                    "var(--ls-caret-color, var(--ls-primary-text-color, foreground))")
-                in
-                let caret = Host_requests.editor_caret_ops ~color in
-                let key =
-                  (s.Lui_scene.width, s.Lui_scene.height, !overlay_viewport (),
-                   Printf.sprintf "%.0f FPS" metrics.fps, metrics.panel_open, overlay_generation (),
-                   !Theme_vars.generation, caret)
-                in
-                painted_fps := overlay_fps ();
-                (match !cached_overlay with
-                 | Some (body_ops, body_glyphs, previous, ops, glyphs, width)
-                   when body_ops == retained_ops && body_glyphs == retained_glyphs
-                        && previous = key ->
-                     s.Lui_scene.ops <- ops;
-                     s.Lui_scene.glyphs <- glyphs;
-                     s.Lui_scene.width <- width
-                 | _ ->
-                     !pre_render s;
-                     s.Lui_scene.glyphs <- List.rev retained_glyphs;
-                     s.Lui_scene.ops <- s.Lui_scene.ops @ caret @ !paint_metrics s;
-                     Host_interaction.seal_overlay s;
-                     Lui_scene.touch s;
-                     cached_overlay := Some
-                       (retained_ops, retained_glyphs, key, s.Lui_scene.ops,
-                        s.Lui_scene.glyphs, s.Lui_scene.width));
-                (!renderer_cell).Lui_host.render s)) }
+                Host_metrics.render_overlay metrics ~now:perf_s
+                  ~prepare:(fun () ->
+                    let color =
+                      Option.get (Theme_vars.color_of
+                        "var(--ls-caret-color, var(--ls-primary-text-color, foreground))")
+                    in
+                    let caret = Host_requests.editor_caret_ops ~color in
+                    let key =
+                      (s.Lui_scene.width, s.Lui_scene.height, !overlay_viewport (),
+                       overlay_fps (), metrics.panel_open, overlay_generation (),
+                       !Theme_vars.generation, caret)
+                    in
+                    painted_fps := overlay_fps ();
+                    (match !cached_overlay with
+                     | Some (body_ops, body_glyphs, previous, ops, glyphs, width)
+                       when body_ops == retained_ops && body_glyphs == retained_glyphs
+                            && previous = key ->
+                         s.Lui_scene.ops <- ops;
+                         s.Lui_scene.glyphs <- glyphs;
+                         s.Lui_scene.width <- width
+                     | _ ->
+                         !pre_render s;
+                         s.Lui_scene.glyphs <- List.rev retained_glyphs;
+                         s.Lui_scene.ops <- s.Lui_scene.ops @ caret @ !paint_metrics s;
+                         Host_interaction.seal_overlay s;
+                         Lui_scene.touch s;
+                         cached_overlay := Some
+                           (retained_ops, retained_glyphs, key, s.Lui_scene.ops,
+                            s.Lui_scene.glyphs, s.Lui_scene.width)))
+                  (fun () -> (!renderer_cell).Lui_host.render s))) }
   in
   let host_cell = ref None in
   let rects = Rects.create () in
@@ -886,7 +885,7 @@ let () =
     let ops =
       box (button.x -. 115.) 7. 108. 32. bg
       :: box button.x button.y button.w button.h accent
-      :: label 0 (button.x -. 108.) 9. 100. (Printf.sprintf "%.0f FPS" metrics.fps)
+      :: label 0 (button.x -. 108.) 9. 100. (Host_metrics.fps_label metrics)
       @ label 1 (button.x +. 12.) 9. 70. "dialog"
     in
     if not metrics.panel_open then ops
@@ -896,11 +895,13 @@ let () =
       let lines = Host_metrics.sample_panel metrics ~generation:(overlay_generation ()) (fun () ->
         let gc = Gc.quick_stat () in
         [ "Native performance (Dev)"
-        ; Printf.sprintf "FPS: %.1f / %.0f" metrics.fps Host_metrics.target_fps
+        ; Printf.sprintf "FPS: %s / %.0f"
+            (match metrics.fps with None -> "unavailable" | Some fps -> Printf.sprintf "%.1f" fps)
+            Host_metrics.target_fps
         ; Printf.sprintf "Frame budget: %.2f ms" Host_metrics.frame_budget_ms
-        ; Printf.sprintf "Presented p50 / p95: %.2f / %.2f ms"
-            (Host_metrics.phase_summary metrics Presentation_interval).p50
-            (Host_metrics.phase_summary metrics Presentation_interval).p95
+        ; (let presented = Host_metrics.phase_summary metrics Presentation_interval in
+           if presented.count = 0 then "Presented p50 / p95: unavailable"
+           else Printf.sprintf "Presented p50 / p95: %.2f / %.2f ms" presented.p50 presented.p95)
         ; Printf.sprintf "Work p50 / p95: %.2f / %.2f ms"
             (Host_metrics.percentile metrics 0.5) (Host_metrics.percentile metrics 0.95)
         ; Printf.sprintf "Interaction p50 / p95: %.2f / %.2f ms"

@@ -42,7 +42,7 @@ type t = {
   mutable cursor : int;
   mutable presented : int;
   mutable started : float;
-  mutable fps : float;
+  mutable fps : float option;
   mutable frame_ms : float;
   mutable paint_ms : float;
   mutable layout_ms : float;
@@ -53,7 +53,7 @@ type t = {
   mutable input_latency_ms : float;
   mutable missed : int;
   mutable panel_open : bool;
-  mutable panel_sample : (int * float * string list) option;
+  mutable panel_sample : (int * float option * string list) option;
   mutable input_at : float option;
   mutable layout_count : int;
   mutable patch_ops : int;
@@ -79,7 +79,7 @@ let create ~now =
   {process_memory=None; raster_background_domains=0; export_buffer=Buffer.create 4096; key_downs=0; enter_downs=0; text_commits=0; text_bytes=0;
   presentation_seen=0; gpu_submitted=0; gpu_busy_skips=0; phases=List.map (fun (phase, _) -> phase,
   sample_history ()) phases; samples=work_samples.values; work_samples; work_sorted=false; count=0; cursor=0;
-  presented=0; started=now; fps=0.; frame_ms=0.; paint_ms=0.; layout_ms=0.;
+  presented=0; started=now; fps=None; frame_ms=0.; paint_ms=0.; layout_ms=0.;
   render_ms=0.; gpu_submit_ms=0.; populate_ms=0.; event_ms=0.; input_latency_ms=0.; missed=0;
   panel_open=false; panel_sample=None; input_at=None; layout_count=0; patch_ops=0; event_count=0; pump_ms=0.}
 let note_key t key =
@@ -101,6 +101,12 @@ let record_phase t phase ms =
   history.total_ms <- history.total_ms +. ms;
   history.summary <- None;
   history.serialized_header <- None
+
+let render_overlay t ~now ~prepare render =
+  let started = now () in
+  Fun.protect ~finally:(fun () ->
+    record_phase t Overlay ((now () -. started) *. 1000.)) prepare;
+  render ()
 
 let record_presentation_samples t ~total values =
   if total < t.presentation_seen then invalid_arg "Presentation counter moved backwards";
@@ -167,8 +173,9 @@ let snapshot_buffer t ~now =
   let gc = Gc.quick_stat () in
   let buffer = t.export_buffer in
   Buffer.clear buffer;
-  Printf.bprintf buffer "{\"time_s\":%.3f,\"fps\":%.2f,\"target_fps\":%.0f,\"layout_count\":%d,\"event_count\":%d,\"gpu_submitted\":%d,\"gpu_busy_skips\":%d,\"key_downs\":%d,\"enter_downs\":%d,\"text_commits\":%d,\"text_bytes\":%d,\"gc\":{\"allocated_bytes\":%.0f,\"host_allocated_bytes\":%.0f,\"minor_collections\":%d,\"major_collections\":%d,\"heap_bytes\":%d,\"live_bytes\":%d,\"top_heap_bytes\":%d}"
-    now t.fps target_fps t.layout_count t.event_count t.gpu_submitted t.gpu_busy_skips t.key_downs t.enter_downs t.text_commits t.text_bytes
+  Printf.bprintf buffer "{\"time_s\":%.3f,\"fps\":%s,\"target_fps\":%.0f,\"layout_count\":%d,\"event_count\":%d,\"gpu_submitted\":%d,\"gpu_busy_skips\":%d,\"key_downs\":%d,\"enter_downs\":%d,\"text_commits\":%d,\"text_bytes\":%d,\"gc\":{\"allocated_bytes\":%.0f,\"host_allocated_bytes\":%.0f,\"minor_collections\":%d,\"major_collections\":%d,\"heap_bytes\":%d,\"live_bytes\":%d,\"top_heap_bytes\":%d}"
+    now (match t.fps with None -> "null" | Some fps -> Printf.sprintf "%.2f" fps)
+    target_fps t.layout_count t.event_count t.gpu_submitted t.gpu_busy_skips t.key_downs t.enter_downs t.text_commits t.text_bytes
     ((gc.minor_words +. gc.major_words -. gc.promoted_words) *. float (Sys.word_size / 8))
     (Gc.allocated_bytes ())
     gc.minor_collections gc.major_collections
@@ -274,10 +281,13 @@ let dialog_rect t width =
 let contains (r : Lui_scene.rect) x y =
   x >= r.x && x < r.x +. r.w && y >= r.y && y < r.y +. r.h
 
+let fps_label t =
+  match t.fps with None -> "n/a FPS" | Some fps -> Printf.sprintf "%.0f FPS" fps
+
 let record_display_count t ~now ~presented =
   let elapsed = now -. t.started in
   if elapsed >= 1. then begin
-    t.fps <- float (presented - t.presented) /. elapsed;
+    t.fps <- Some (float (presented - t.presented) /. elapsed);
     t.presented <- presented;
     t.started <- now
   end

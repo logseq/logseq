@@ -5,6 +5,58 @@ let contains text fragment =
     && (String.sub text index (String.length fragment) = fragment || search (index + 1))
   in
   search 0
+
+let () =
+  let metrics = Host_metrics.create ~now:0. in
+  check "An unobserved display rate must not be reported as zero FPS"
+    (contains (Host_metrics.snapshot metrics ~now:2.) "\"fps\":null");
+  for frame = 1 to 120 do
+    Host_metrics.record_present metrics ~now:(float frame /. 120.) ~work_ms:2.
+  done;
+  check "Rendering work cannot establish a display rate"
+    (contains (Host_metrics.snapshot metrics ~now:2.) "\"fps\":null");
+  Host_metrics.record_display_count metrics ~now:0.5 ~presented:30;
+  check "An incomplete display interval must remain unmeasured"
+    (contains (Host_metrics.snapshot metrics ~now:0.5) "\"fps\":null");
+  Host_metrics.record_display_count metrics ~now:1. ~presented:60;
+  check "Observed display frames must establish the measured rate"
+    (contains (Host_metrics.snapshot metrics ~now:1.) "\"fps\":60.00,");
+  Host_metrics.record_display_count metrics ~now:2. ~presented:60;
+  check "A measured interval without new frames must report zero FPS"
+    (contains (Host_metrics.snapshot metrics ~now:2.) "\"fps\":0.00,");
+  print_endline "native measured and unavailable display rates: OK"
+
+let () =
+  List.iter (fun renderer_fails ->
+    let metrics = Host_metrics.create ~now:0. and clock = ref 0. in
+    let result = Bytes.of_string "rendered frame" in
+    let failed = try
+      let rendered = Host_metrics.render_overlay metrics ~now:(fun () -> !clock)
+        ~prepare:(fun () -> clock := !clock +. 0.002)
+        (fun () ->
+          clock := !clock +. 0.075;
+          if renderer_fails then failwith "renderer failure";
+          result) in
+      check "Overlay measurement changed the rendered result" (rendered == result);
+      false
+    with Failure message when message = "renderer failure" -> true in
+    check "Overlay measurement hid a renderer failure" (failed = renderer_fails);
+    let sample = Host_metrics.phase_summary metrics Overlay in
+    check "Overlay timing includes downstream rasterization or surface submission"
+      (sample.count = 1 && abs_float (sample.mean -. 2.) < 0.00001)) [false;true];
+  let metrics = Host_metrics.create ~now:0. and clock = ref 0. in
+  let rendered = ref false in
+  let failed = try
+    Host_metrics.render_overlay metrics ~now:(fun () -> !clock)
+      ~prepare:(fun () -> clock := 0.003; failwith "overlay failure")
+      (fun () -> rendered := true);
+    false
+  with Failure message when message = "overlay failure" -> true in
+  check "A failed overlay still submitted a frame" (failed && not !rendered);
+  check "A failed overlay lost its measured work"
+    (abs_float ((Host_metrics.phase_summary metrics Overlay).mean -. 3.) < 0.00001);
+  print_endline "native exclusive overlay timing: OK"
+
 let () =
   let metrics = Host_metrics.create ~now:0. in
   metrics.panel_open <- true;
@@ -50,7 +102,8 @@ let () =
     Host_metrics.record_present metrics ~now:(float frame /. 120.) ~work_ms:2.;
     Host_metrics.record_display_count metrics ~now:(float frame /. 120.) ~presented:(frame / 2)
   done;
-  check "FPS counts render attempts instead of displayed frames" (abs_float (metrics.fps -. 60.) < 0.1);
+  check "FPS counts render attempts instead of displayed frames"
+    (match metrics.fps with Some fps -> abs_float (fps -. 60.) < 0.1 | None -> false);
   check "Frame work percentile is incorrect" (Host_metrics.percentile metrics 0.95 = 2.);
   Host_metrics.record_present metrics ~now:1.1 ~work_ms:20.;
   check "An over-budget frame was not counted" (metrics.missed = 1);
@@ -296,7 +349,7 @@ let () =
   check "Reading sampled metrics allocates new formatted strings" (allocated <= 128.);
   ignore (Host_metrics.sample_panel metrics ~generation:11 build);
   check "A new sampling interval retained stale values" (!samples=2);
-  metrics.fps <- 120.;
+  metrics.fps <- Some 120.;
   ignore (Host_metrics.sample_panel metrics ~generation:11 build);
   check "A new FPS reading retained stale panel values" (!samples=3);
   Host_metrics.toggle_panel metrics;
