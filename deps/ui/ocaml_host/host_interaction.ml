@@ -142,25 +142,7 @@ let scroll_shifts ~store ~scroll_epoch ~scroll_x ~scroll_y =
   in
   read
 
-type content_edges = {
-  mutable left : float;
-  mutable top : float;
-  mutable right : float;
-  mutable bottom : float;
-}
-
-let content_bounds ~store ~rect_of id =
-  let bounds = {left=Float.max_float; top=Float.max_float;
-    right = -.Float.max_float; bottom = -.Float.max_float} in
-  Lui_store.iter_preorder ~root:id store (fun child ->
-    if child<>id then begin
-      let r = rect_of child in
-      bounds.left <- Float.min bounds.left r.Lui_scene.x;
-      bounds.top <- Float.min bounds.top r.Lui_scene.y;
-      bounds.right <- Float.max bounds.right (r.Lui_scene.x +. r.Lui_scene.w);
-      bounds.bottom <- Float.max bounds.bottom (r.Lui_scene.y +. r.Lui_scene.h)
-    end);
-  bounds.left,bounds.top,bounds.right,bounds.bottom
+let content_bounds = Lui_window.content_bounds
 
 let measure_width width = if Float.is_finite width && width > 0. then width else 0.
 

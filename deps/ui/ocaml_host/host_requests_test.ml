@@ -4085,16 +4085,15 @@ let () = Native_embed.with_entry_lock (fun () ->
 let () = Native_embed.with_entry_lock (fun () ->
   let failures = ref [] in
   let expect message condition = if not condition then failures:=message::!failures in
-  let old_avail = !Views_table.avail_sig_cell
-  and old_sidebar = !Sidebar_state.st_ref and old_sidebar_model = !Sidebar_state.model_signal in
-  Views_table.avail_sig_cell:=None;Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
+  let old_sidebar = !Sidebar_state.st_ref and old_sidebar_model = !Sidebar_state.model_signal in
+  Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
   let snapshot = Ui_theme.snapshot Ui_theme.Light in
   Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
     ["mode",`String "light";"vars",`Assoc
       (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
   Theme_vars.set_dark false;
   Fun.protect ~finally:(fun () ->
-    Views_table.avail_sig_cell:=old_avail;Sidebar_state.st_ref:=old_sidebar;
+    Sidebar_state.st_ref:=old_sidebar;
     Sidebar_state.model_signal:=old_sidebar_model) (fun () ->
     List.iter (fun scale ->
       let host_cell = ref None and labels = ref [] in
@@ -4193,3 +4192,102 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native table geometry and paint parity" (!failures=[]);
   print_endline "native table geometry and paint parity: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let old_sidebar = !Sidebar_state.st_ref and old_sidebar_model = !Sidebar_state.model_signal in
+  Fun.protect ~finally:(fun () ->
+    Sidebar_state.st_ref:=old_sidebar;
+    Sidebar_state.model_signal:=old_sidebar_model) (fun () ->
+    List.iter (fun scale ->
+      let surface_cell = ref None in
+      let surface () = Option.get !surface_cell in
+      let engine = lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (A.host (surface ())))
+        ~scale:(fun () -> scale) ~store:(fun () -> A.store (surface ()))) in
+      let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun id text -> Text_engine.measure_text (Lazy.force engine) id text);
+          text_ops=(fun id r color text -> Text_engine.text_ops (Lazy.force engine) id r color text);
+          hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="table-scroll-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (846.*.scale)) ~height:(int_of_float (200.*.scale)) () in
+      surface_cell:=Some surface;
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      let inst_cell = ref None in
+      let app = Lui_app.create_with_extensions (A.backend surface (profile MacOS GenericHost))
+        registry {Model.initial with left_sidebar_open=true;right_sidebar_open=false}
+        (fun model () -> model) (fun context model _ ->
+          let state value = Signal.state context.Lui_ui.ui_scheduler value in
+          let sidebar : Sidebar_state.t =
+            {favorites=state [];recents=state [];nav_checked=state [];nav_tag_titles=state [];
+             items=state [];open_menu=state "";groups_collapsed=state [];
+             left_fraction=state (246./.1140.);right_fraction=state 0.3;viewport_w=state 1140.} in
+          Sidebar_state.st_ref:=Some sidebar;Sidebar_state.model_signal:=Some model;
+          let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+          let blocks = Hashtbl.create 1 in
+          Hashtbl.add blocks "scroll-page" (Wire.Map
+            [Wire.Keyword "block/uuid",Wire.Uuid "scroll-page";
+             Wire.Keyword "block/name",Wire.String "Scrollable page";
+             Wire.Keyword "block/title",Wire.String "Scrollable page"]);
+          let view = {(Views_state.empty_vstate ()) with
+            Views_state.columns=[Views_table.select_column;Views_table.page_title_column;
+              Views_table.refs_count_column;Views_table.tags_column;Views_table.created_column;
+              Views_table.updated_column];blocks;loading=false;
+            data=Views_wire.VFlat {rows=["scroll-page"];count=1;previews=Hashtbl.create 0;qprops=[]}} in
+          let inst = {inst with Views_state.st=state view} in
+          inst_cell:=Some inst;
+          Lui_elements.column ~grow:1. ~min_width:0
+            [Lui_elements.scroll ~orientation:`vertical ~grow:1.
+              [Lui_elements.column ~min_width:0 [Views_table.table_el inst view]]]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (A.store_changed surface);
+        ignore (A.repaint surface);
+        let store = A.store surface and ui = A.ui surface in
+        let ids = Lui_store.preorder store and inst = Option.get !inst_cell in
+        let horizontal = List.find (fun id -> Lui_store.kind store id="scroll"
+          && Lui_store.string_prop store id "orientation"=Some "horizontal") ids in
+        let vertical = List.find (fun id -> Lui_store.kind store id="scroll" && id<>horizontal) ids in
+        let header c = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+          =Some (Views_table.header_cell_id inst c)) ids in
+        let rect id = W.Rects.get (A.rects surface) id in
+        let title = header Views_table.page_title_column
+        and updated = header Views_table.updated_column in
+        expect "Narrow tables must preserve the reference's 360-point title column"
+          (abs_float ((rect title).w-.360.*.scale)<0.1);
+        expect "The table scroller expands instead of remaining inside its viewport"
+          (abs_float ((rect horizontal).w-.846.*.scale)<0.1);
+        expect "Narrow tables must expose their natural horizontal overflow"
+          (abs_float (W.Ui.scroll_cap_x ui horizontal-.226.*.scale)<1.1*.scale);
+        expect "Nested table overflow must not scroll the outer page horizontally"
+          (W.Ui.scroll_cap_x ui vertical=0.);
+        expect "The table scrollbar must be hidden before interaction"
+          (not (W.Ui.scrollbar_visible ui horizontal));
+        let before = rect updated and viewport = rect horizontal in
+        ignore (A.handle surface (W.Input.Move
+          ((viewport.x+.viewport.w-.10.*.scale)/.scale,(viewport.y+.16.*.scale)/.scale)));
+        ignore (A.handle surface (W.Input.Wheel (2000.,0.)));ignore (A.repaint surface);
+        let offset = W.Ui.scroll_offset_x ui horizontal and final = rect updated in
+        expect "Horizontal wheel input does not reach the final table column"
+          (offset>200.*.scale && abs_float (before.x-.final.x-.offset)<0.1);
+        expect "The final table header stays clipped after horizontal scrolling"
+          (final.x>=viewport.x && final.x+.final.w<=viewport.x+.viewport.w+.1.);
+        expect "The final table header is not hit-testable after horizontal scrolling"
+          (List.mem updated (W.hit_path store (A.rects surface)
+            ~x:(final.x+.10.*.scale) ~y:(final.y+.10.*.scale)));
+        Lui_host.resize (A.host surface) ~width:(int_of_float (1146.*.scale))
+          ~height:(int_of_float (200.*.scale)) ~scale;
+        ignore (A.repaint surface);
+        expect "Widening a table must clear its obsolete horizontal scroll range"
+          (W.Ui.scroll_cap_x ui horizontal=0. && W.Ui.scroll_offset_x ui horizontal=0.);
+        expect "Window resize must preserve the natural title-column width"
+          (abs_float ((rect title).w-.360.*.scale)<0.1))) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native nested table horizontal scrolling" (!failures=[]);
+  print_endline "native nested table horizontal scrolling: OK")

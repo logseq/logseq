@@ -2672,25 +2672,7 @@ let test_views_table () =
     && not (Views_table.sortable { col_title with c_id = "select" })
     && not
          (Views_table.sortable
-            { col_title with c_id = "block.temp/refs-count" }));
-  let fit_cols =
-    [ Views_table.select_column; Views_table.page_title_column
-    ; Views_table.tags_column; Views_table.created_column
-    ; Views_table.updated_column ]
-  in
-  let widths =
-    List.map (fun c -> Views_table.fitted_px ~avail:700 c fit_cols) fit_cols
-  in
-  let fit_sum = List.fold_left ( + ) 0 widths in
-  check "fitted select stays" (List.hd widths = 32);
-  check "fitted title shrinks"
-    (let w = List.nth widths 1 in w < 360 && w >= 72);
-  check "fitted created stays readable"
-    (let w = List.nth widths 3 in w < 160 && w >= 120);
-  check "fitted row fits the track" (fit_sum <= 700);
-  check "fitted wide track keeps the title"
-    (Views_table.fitted_px ~avail:2000 Views_table.page_title_column fit_cols
-     = 360)
+            { col_title with c_id = "block.temp/refs-count" }))
 
 (* ---- popups_state ---- *)
 
