@@ -1050,17 +1050,6 @@ let on_doc_contextmenu st ev =
 ;;
 
 let on_doc_click st ev =
-  (* dropdown menus dismiss on outside interaction; the trigger controls and
-     the menu content itself are excluded so their own handlers can run *)
-  if Runtime.signal_get st.open_menu <> "" then (
-    match
-      click_target
-        ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         .cp__graphs-selector, .sidebar-page-actions, .sidebar-item-more"
-        ev
-    with
-    | Some _ -> ()
-    | None -> close_menu st);
   (* in-app anchors all render href="#" (page-ref, tag, link-item,
      timestamps) and navigate through their own handlers — without
      preventDefault the browser's "#" default stomps the programmatic
@@ -1132,11 +1121,6 @@ let on_doc_keydown st (ev : Ui_services.ev) =
   match ev.Ui_services.key with
   | Some k -> (
       match k with
-      | "Escape" ->
-          if Runtime.signal_get st.open_menu <> "" then close_menu st
-          else if (model ()).Model.appearance <> None then
-            Runtime.send (Action.Appearance_set None)
-
       (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
       | "f" | "F"
         when jbool "shiftKey" ev && (jbool "metaKey" ev || jbool "ctrlKey" ev) ->

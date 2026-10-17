@@ -38,6 +38,25 @@ test('web chrome omits native-only performance controls', () => {
   assert.equal(evaluate("document.querySelector('[aria-label=\"dialog\"]') === null"), true);
 });
 
+test('graph switch focuses its first action so Enter opens graph creation', () => {
+  open();
+  browser('click', '.cp__graphs-selector > .item');
+  browser('wait', '--fn', "document.activeElement?.textContent === 'Create db graph'");
+  browser('press', 'Enter');
+  browser('wait', '--fn', "document.querySelector('#ls-dialog-title-new-graph') !== null");
+  assert.equal(evaluate("document.activeElement?.tagName"), 'INPUT');
+  browser('press', 'Escape');
+});
+
+test('graph menu Escape returns focus through the popup lifecycle', () => {
+  open();
+  browser('click', '.cp__graphs-selector > .item');
+  browser('wait', '--fn', "document.activeElement?.textContent === 'Create db graph'");
+  browser('press', 'Escape');
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.cp__graphs-selector > .item')");
+  assert.equal(evaluate("document.querySelector('.repos-list[data-open]') === null"), true);
+});
+
 test('table property pickers retain shared paint and full-sized rows while filtering', () => {
   open();
   browser('click', '.all-pages-nav .item');

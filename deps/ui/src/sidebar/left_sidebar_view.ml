@@ -48,14 +48,8 @@ let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) ?transition name =
 
 (* ---------- popup menu helpers ---------- *)
 
-(* Menus dismiss via the document-level outside-click + Escape handlers in
-   Sidebar_state — no fullscreen backdrop element (an invisible inset:0
-   overlay would intercept every pointer hit beneath it, matching the cljs
-   dropdown which has none). *)
-
-(* dropdown menus are popover nodes at computed viewport coords; outside
-   press / Escape also closes via ~on_dismiss (close_menu is idempotent
-   with Sidebar_state's document handler) *)
+(* Popovers own outside dismissal, Escape and focus return through their
+   shared layer lifecycle. Sidebar state only handles the dismiss action. *)
 let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
   Ui_components.menu_surface (popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
     ~transition:Ui_components.popover_transition
