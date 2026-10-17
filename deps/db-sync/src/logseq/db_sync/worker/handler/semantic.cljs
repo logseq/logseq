@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.handler.semantic
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -347,6 +348,21 @@
       {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
        :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)})))
 
+(defn- valid-block-tree?
+  "A non-empty list of blocks, each a map with a string :title and optional
+  :children of the same shape."
+  [nodes]
+  (and (sequential? nodes)
+       (seq nodes)
+       (every? (fn [node]
+                 (and (map? node)
+                      (string? (:title node))
+                      (or (nil? (:children node))
+                          (and (sequential? (:children node))
+                               (or (empty? (:children node))
+                                   (valid-block-tree? (:children node)))))))
+               nodes)))
+
 (defn- tree-block [conn e2ee? node]
   (assoc (prepare-block-title! conn e2ee? (:title node)) :block/uuid (random-uuid)))
 
@@ -377,11 +393,15 @@
               [_ page-id] (outliner-page/create! conn title {:journal? true :today-journal? true})]
           (d/entity @conn [:block/uuid page-id])))))
 
-(defn- resolve-property-ident [db value]
-  (or (when-let [entity (find-entity db value)] (:db/ident entity))
+(defn- resolve-property-ident
+  "The ident of the property `value` names (uuid, ident or title); nil when it
+  names no entity or an entity that is not a property (a class, a block)."
+  [db value]
+  (or (when-let [entity (find-entity db value)]
+        (when (property? entity) (:db/ident entity)))
       (when (string? value)
         (let [ident (keyword value)]
-          (or (when (d/entity db ident) ident)
+          (or (when (property? (d/entity db ident)) ident)
               (some->> (d/datoms db :avet :block/title value)
                        (map #(d/entity db (:e %)))
                        (filter property?)
@@ -431,7 +451,9 @@
                         [property-ident (string/lower-case value)] value)
                 value)
         entity (cond
-                 (number? value) (d/entity db value)
+                 ;; an entity id; datascript throws on any other number (-1, 1.5)
+                 (pos-int? value) (d/entity db value)
+                 (number? value) nil
                  (qualified-keyword? value) (d/entity db value)
                  (and (string? value) (common-util/uuid-string? value))
                  (d/entity db [:block/uuid (uuid value)])
@@ -628,7 +650,7 @@
     (p/let [body (body-clj request)
             target (find-entity db (:block-id path-params))]
       (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
-              (not (sequential? (:blocks body))) (empty? (:blocks body)))
+              (not (valid-block-tree? (:blocks body))))
         (http/bad-request "invalid target, position, or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (:position body) e2ee?)]
           (broadcast-change! self)
@@ -637,7 +659,7 @@
     :semantic/blocks-insert-tree
     (p/let [body (body-clj request)
             target (find-entity db (:target-id body))]
-      (if (or (nil? target) (not (sequential? (:blocks body))) (empty? (:blocks body)))
+      (if (or (nil? target) (not (valid-block-tree? (:blocks body))))
         (http/bad-request "invalid target or blocks")
         (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append") e2ee?)]
           (broadcast-change! self)
@@ -715,7 +737,7 @@
 
     :semantic/capture
     (p/let [body (body-clj request)]
-      (if (or (not (sequential? (:blocks body))) (empty? (:blocks body)))
+      (if-not (valid-block-tree? (:blocks body))
         (http/bad-request "missing blocks")
         (let [today (ensure-today-page! conn)
               inserted (insert-tree! conn today (:blocks body) "append" e2ee?)]
@@ -899,7 +921,8 @@
                                  (p/let [_ (.delete bucket key)]
                                    (throw error)))))))
               (p/catch (fn [error]
-                         (http/error-response (or (.-message error) "asset upload failed") 500)))))))
+                         (log/error :db-sync/semantic-asset-upload-failed {:error error})
+                         (http/error-response "asset upload failed" 500)))))))
 
     :semantic/assets-get
     (if-let [asset (find-visible-entity db (:asset-block-id path-params))]
@@ -941,7 +964,8 @@
     :semantic/properties-update
     (p/let [body (body-clj request)
             property (resolve-property db (:property-id path-params))]
-      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body)))
+      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body))
+              (and (contains? body :title) (not (non-blank-string? (:title body)))))
         (http/bad-request "invalid property-id or update")
         (let [schema (cond-> {}
                        (:type body) (assoc :logseq.property/type (keyword (:type body)))
@@ -1057,7 +1081,17 @@
     (contains? property-and-search-handlers handler) (handle-properties-and-search context)
     :else (http/not-found)))
 
-(defn handle [{:keys [^js self route ^js url] :as context}]
+(defn- validation-error-response
+  "The outliner rejects a write the graph does not allow (a page name with
+  \"/\", a change to a built-in node, a duplicate tag...) by throwing an error
+  meant to notify the user. Such a request is the client's mistake: 400 with
+  that message, not the 500 of a server error."
+  [error]
+  (let [data (ex-data error)]
+    (when (= :notification (:type data))
+      (http/bad-request (or (get-in data [:payload :message]) (ex-message error))))))
+
+(defn- handle* [{:keys [^js self route ^js url] :as context}]
   (let [conn (ensure-conn! self)
         handler (:handler route)
         db @conn
@@ -1074,3 +1108,9 @@
           (dispatch-handle context handler)
           result))
       (dispatch-handle context handler))))
+
+(defn handle [context]
+  (-> (p/do (handle* context))
+      (p/catch (fn [error]
+                 (or (validation-error-response error)
+                     (p/rejected error))))))
