@@ -2680,6 +2680,18 @@ let () =
                            snapshot.vars) );
                   ]));
           Theme_vars.set_dark (mode = Ui_theme.Dark);
+          let channels = List.filter (fun (key, _) ->
+              String.starts_with ~prefix:"--rx-" key
+              && String.ends_with ~suffix:"-hsl" key) snapshot.vars in
+          check "Native palette contains the complete generated channel table"
+            (List.length channels >= 300);
+          List.iter (fun (key, _) ->
+              let color_key = String.sub key 0 (String.length key - 4) in
+              let full = Theme_vars.color_of ("var(" ^ color_key ^ ")") in
+              check ("Native palette resolves " ^ key)
+                (Option.is_some full
+                 && Theme_vars.color_of ("hsl(var(" ^ key ^ "))") = full))
+            channels;
           check
             "Native modal scrim uses the active background at ninety percent"
             (Theme_vars.color_of "scrim"

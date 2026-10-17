@@ -27,3 +27,12 @@
  (deps ../../assets/icon-names.json)
  (action
   (run %{exe:../../tools/icon_names_gen.exe} %{deps} %{target})))
+; CSS and native share one palette source and one channel generator.
+(rule
+ (target ui_theme_radix.ml)
+ (deps (universe))
+ (action
+  (run
+   sh
+   -c
+   "node \"$DUNE_SOURCEROOT/../../scripts/generate-ui-radix.mjs\" \"$DUNE_SOURCEROOT/../../resources/css/theme/radix.css\" %{target}")))

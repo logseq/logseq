@@ -1881,23 +1881,6 @@ select.form-select {
   opacity: 0.7;
 }
 
-/* cljs settings.css: .it value column is a vertical stack (grid cell is
-   display:flex by the .it row rule, so force the column direction) */
-/* cljs settings.css .cp__accent-colors-list-wrap: grid-cols-8 swatch grid */
-.cp__accent-colors-list-wrap {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 0.5rem;
-  max-width: 250px;
-}
-
-.cp__accent-colors-list-wrap.as-modal-picker {
-  padding-bottom: 0.25rem;
-  margin-left: 0.25rem;
-  max-width: 320px;
-}
-
-/* accent swatches */
 /* plugins + remaining helper classes */
 .ui__switch.ls-switch-lg {
   width: 2.25rem;

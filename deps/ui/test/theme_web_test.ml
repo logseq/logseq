@@ -14,7 +14,8 @@ let style_prop : string -> string option =
 let run () =
   Ui_theme.apply "dark";
   List.iter (fun name -> check ("stylesheet owns " ^ name) (style_prop name = None))
-    [ "--background"; "--card"; "--border"; "--primary"; "--ring" ];
+    [ "--background"; "--card"; "--border"; "--primary"; "--ring"
+    ; "--rx-gray-12"; "--rx-gray-12-hsl"; "--lx-gray-12" ];
   check "dark literal on root"
     (style_prop "--ls-page-title-size" = Some "36px");
   check "dark canonical twin"

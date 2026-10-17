@@ -189,7 +189,7 @@ let color_label = function
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
-  box ~key ~width:20 ~height:20
+  row ~key ~width:20 ~height:20 ~main:`center ~cross:`center
     ~opacity:(if active then 1. else 0.5)
     [ Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
@@ -222,10 +222,9 @@ let accent_row ~modal =
          cs)
   in
   let swatches =
-    column ~key:"acc-l" ~gap:8
-      ~style_class:
-        ("cp__accent-colors-list-wrap"
-       ^ if modal then " as-modal-picker" else "")
+    column ~key:"acc-l" ~gap:8 ~cross:`start
+      ~margin_left:(if modal then 4 else 0)
+      ~margin_bottom:(if modal then 4 else 0)
       [ swatch_row ~key:"acc-r0" (List.filteri (fun i _ -> i < 8) names)
       ; swatch_row ~key:"acc-r1" (List.filteri (fun i _ -> i >= 8) names)
       ]

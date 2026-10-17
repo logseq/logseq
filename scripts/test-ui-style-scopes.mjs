@@ -67,3 +67,33 @@ test('popup content consumes the positioner available-height contract directly',
   assert.deepEqual(caps, ['var(--lui-popup-available-height, none)'],
     'A variable resolved on an ancestor cannot see the content node available height')
 })
+
+const themeSources = [
+  'theme/radix.css', 'theme/vars-classic.css', 'theme/colors.css',
+  'theme/index.css', 'shui.css',
+]
+
+test('every referenced Radix color and channel has a definition in both modes', async () => {
+  const config = (await import('../postcss.config.js')).default
+  const sources = await Promise.all(themeSources.map(async name => ({
+    name, source: await readFile(new URL(`../resources/css/${name}`, import.meta.url), 'utf8'),
+  })))
+  const radix = await postcss(config.plugins.filter(plugin => plugin.postcssPlugin !== '@tailwindcss/postcss'))
+    .process(sources[0].source, { from: undefined })
+  const referenced = new Set()
+  for (const { source } of sources) {
+    for (const match of source.matchAll(/var\((--rx-[a-z]+-\d+(?:-hsl|-alpha)?)\b/g)) referenced.add(match[1])
+  }
+  assert.ok(referenced.size > 0)
+  for (const mode of ['light', 'dark']) {
+    const defined = new Map()
+    radix.root.walkRules(rule => {
+      if (rule.selector === ':root' || mode === 'dark' && rule.selector.includes('data-theme=dark')) {
+        rule.walkDecls(declaration => defined.set(declaration.prop, declaration.value))
+      }
+    })
+    for (const name of referenced) assert.ok(defined.has(name), `${mode}: missing ${name}`)
+    assert.equal(defined.get('--rx-gray-12-hsl'), mode === 'light' ? '0 0% 9.0%' : '0 0% 93.0%')
+    assert.equal(defined.get('--rx-yellow-10-hsl'), mode === 'light' ? '50 100% 48.5%' : '54 100% 68.0%')
+  }
+})

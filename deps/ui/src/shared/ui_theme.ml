@@ -641,7 +641,10 @@ let shui_vars = function
     ; "--ring", "200 97% 37%"
     ]
 
-let stylesheet_owned_var name = List.mem_assoc name (shui_vars Light)
+let stylesheet_owned_var name =
+  List.mem_assoc name (shui_vars Light)
+  || String.starts_with ~prefix:"--rx-" name
+  || String.starts_with ~prefix:"--lx-gray-" name
 
 (* colors.css binds --lx-gray-* onto the rx-gray steps (and
    --lx-gray-*-alpha onto the matching alpha step); emit the same

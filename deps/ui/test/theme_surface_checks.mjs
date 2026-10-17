@@ -52,3 +52,33 @@ export function assertKeymapFilterPaint(filters) {
     assert.equal(filter.foreground, filter.expected, `${filter.label}: muted filter surface must retain its inherited text color`);
   }
 }
+
+export function measureAccentControls(dialog) {
+  return Array.from(dialog.querySelectorAll('button')).filter(button =>
+    button.style.background.startsWith('var(--rx-') && button.style.background.endsWith('-09)'),
+  ).map(button => {
+    const rect = button.getBoundingClientRect();
+    return {
+      label: button.getAttribute('aria-label'),
+      x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+      hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        ?.closest('button') === button,
+    };
+  });
+}
+
+export function assertAccentControls(controls) {
+  assert.equal(controls.length, 16, 'The accent picker retains every choice');
+  for (const control of controls) {
+    assert.equal(control.width, 20, `${control.label}: width`);
+    assert.equal(control.height, 20, `${control.label}: height`);
+    assert.equal(control.hit, true, `${control.label}: its center must activate this choice`);
+  }
+  for (let i = 0; i < controls.length; i++) {
+    const row = Math.floor(i / 8);
+    assert.ok(Math.abs(controls[i].x - controls[0].x - i % 8 * 28) < 0.1,
+      `${controls[i].label}: eight-point horizontal gap`);
+    assert.ok(Math.abs(controls[i].y - controls[0].y - row * 28) < 0.1,
+      `${controls[i].label}: eight choices per row with an eight-point gap`);
+  }
+}

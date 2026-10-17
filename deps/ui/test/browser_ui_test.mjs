@@ -4,7 +4,7 @@ import test, {after} from 'node:test';
 import {measureKeymapRecording, assertKeymapRecording, measureRecordingBounds, assertRecordingBounds} from './keymap_record_checks.mjs';
 import {measureKeymapSearch, assertKeymapSearch, measureKeymapCategories, assertKeymapCategories} from './keymap_search_checks.mjs';
 import {measureSettingsNavigation, assertSettingsNavigation} from './settings_nav_geometry.mjs';
-import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint} from './theme_surface_checks.mjs';
+import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKeymapFilterPaint, measureAccentControls, assertAccentControls} from './theme_surface_checks.mjs';
 import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
 import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
@@ -514,6 +514,34 @@ test('modal surfaces retain valid theme colors across mode changes and reopen', 
   verify();
   button('Close');
 });
+
+for (const surface of ['settings', 'appearance']) {
+  test(`${surface} accent choices remain separated and each click selects its own color`, () => {
+    open();
+    if (surface === 'settings') {
+      openSettings();
+      button('General');
+    } else {
+      browser('click', '#head button[aria-label="More"]');
+      browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+    }
+    const choices = ['none', 'logseq', 'tomato', 'red', 'crimson', 'pink', 'plum',
+      'purple', 'violet', 'indigo', 'blue', 'cyan', 'teal', 'green', 'grass', 'orange'];
+    for (const mode of ['light', 'dark']) {
+      button(`${mode} ${mode}`);
+      const controls = evaluate(`(${measureAccentControls.toString()})(document.body)`);
+      assertAccentControls(controls);
+      controls.forEach((control, index) => {
+        button(control.label);
+        assert.equal(evaluate("document.documentElement.getAttribute('data-color')"), choices[index]);
+      });
+    }
+    button('Logseq classic color');
+    button('light light');
+    if (surface === 'settings') button('Close');
+    else browser('press', 'Escape');
+  });
+}
 
 test('keymap filter selection retains readable text on its muted surface', () => {
   open();
