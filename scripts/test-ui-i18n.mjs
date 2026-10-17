@@ -50,3 +50,40 @@ test("translation validation fails on malformed OCaml sources", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.output, /Cannot parse OCaml/);
 });
+
+test("translation validation accepts portable Unicode literals and ignores JavaScript payloads", () => {
+  const result = validate(`
+(* Ordinary Unicode in comments: 中文 😀 *)
+let label = {js|中文 café é 😀|js}
+let punctuation = {js|⌘ ⇧ ⏎ · →|js}
+let raw = [%mel.raw {| "中文" |}]
+let translated = I18n.t "ui/cancel"
+`);
+  assert.equal(result.status, 0, result.output);
+});
+
+test("translation validation rejects byte-oriented Unicode UI literals", () => {
+  for (const source of [
+    'let label = "中文 😀"',
+    String.raw`let label = "\xe2\x8c\x98"`,
+    String.raw`let label = "\u{2318}"`,
+    'let label = {|café|}',
+    'let label = function "中文" -> true | _ -> false',
+  ]) {
+    const result = validate(source);
+    assert.notEqual(result.status, 0, result.output);
+    assert.match(result.output, /Unicode UI literal must use \{js\|/);
+  }
+});
+
+test("translation validation rejects runtime literal decoding and ambiguous JavaScript escapes", () => {
+  for (const source of [
+    'let label value = Ui_services.literal_text value',
+    'let label value = Platform.utf8 value',
+    String.raw`let label = {js|中文\n|js}`,
+  ]) {
+    const result = validate(source);
+    assert.notEqual(result.status, 0, result.output);
+    assert.match(result.output, /Runtime UI text must not be decoded again|Unicode UI literal must not contain JavaScript escapes/);
+  }
+});

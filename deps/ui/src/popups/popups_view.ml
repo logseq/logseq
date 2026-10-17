@@ -164,7 +164,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
   else
   let txt =
     match it.S.ai_info with
-    | Some info -> it.S.ai_label ^ " — " ^ info
+    | Some info -> it.S.ai_label ^ {js| — |js} ^ info
     | None -> it.S.ai_label
   in
   box ~key:"lbl"
@@ -534,11 +534,11 @@ let ac_popover (st : S.t) : t =
                        [ Ui_components.shortcut_combo ~key:"sc" ~glow:true
                            [ Ui_components.keycap ~key:"k0" ~boxed:false
                                ~glow:true ~min_slot:20
-                               ~value:(Ui_services.literal_text "\xe2\x8c\x98")
+                               ~value:{js|⌘|js}
                            ; Ui_components.keycap_separator ~key:"sep1"
                            ; Ui_components.keycap ~key:"k1" ~boxed:false
                                ~glow:true ~min_slot:20
-                               ~value:(Ui_services.literal_text "\xe2\x8f\x8e") ] ]
+                               ~value:{js|⏎|js} ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ])
@@ -674,7 +674,7 @@ let cm_shortcut_el (binding, caps) : t =
            @ [ Ui_components.keycap
                  ~key:("k" ^ string_of_int i)
                  ~boxed:(not combo) ~glow:true ~min_slot:20
-                 ~value:(Ui_services.literal_text cap) ])
+                 ~value:(cap) ])
          caps)
   in
   (* web: ml-auto pl-2, content padded to px-2 — cross:center keeps the

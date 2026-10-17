@@ -9,16 +9,16 @@ module T = I18n
 module C = Settings_controls
 
 let languages =
-  [ ("en", "English"); ("fr", "Français"); ("de", "Deutsch")
-  ; ("nl", "Dutch (Nederlands)"); ("zh-CN", "简体中文")
-  ; ("zh-Hant", "繁體中文"); ("af", "Afrikaans"); ("ca", "Català")
-  ; ("es", "Español"); ("vi", "Tiếng Việt")
-  ; ("nb-NO", "Norsk (bokmål)"); ("pl", "Polski")
-  ; ("pt-BR", "Português (Brasileiro)"); ("pt-PT", "Português (Europeu)")
-  ; ("ru", "Русский"); ("ja", "日本語"); ("it", "Italiano")
-  ; ("tr", "Türkçe"); ("uk", "Українська"); ("ko", "한국어")
-  ; ("sk", "Slovenčina"); ("fa", "فارسی"); ("id", "Bahasa Indonesia")
-  ; ("cs", "Čeština"); ("ar", "العربية") ]
+  [ ("en", "English"); ("fr", {js|Français|js}); ("de", "Deutsch")
+  ; ("nl", "Dutch (Nederlands)"); ("zh-CN", {js|简体中文|js})
+  ; ("zh-Hant", {js|繁體中文|js}); ("af", "Afrikaans"); ("ca", {js|Català|js})
+  ; ("es", {js|Español|js}); ("vi", {js|Tiếng Việt|js})
+  ; ("nb-NO", {js|Norsk (bokmål)|js}); ("pl", "Polski")
+  ; ("pt-BR", {js|Português (Brasileiro)|js}); ("pt-PT", {js|Português (Europeu)|js})
+  ; ("ru", {js|Русский|js}); ("ja", {js|日本語|js}); ("it", "Italiano")
+  ; ("tr", {js|Türkçe|js}); ("uk", {js|Українська|js}); ("ko", {js|한국어|js})
+  ; ("sk", {js|Slovenčina|js}); ("fa", {js|فارسی|js}); ("id", "Bahasa Indonesia")
+  ; ("cs", {js|Čeština|js}); ("ar", {js|العربية|js}) ]
 
 (* cljs :ui/system-theme? default is (or util/mac? util/win32?) — the
    service resolves the raw preference including the host default *)
@@ -73,7 +73,7 @@ let set_language code =
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
-  | Some (_, l) -> Ui_services.literal_text l
+  | Some (_, l) -> l
   | None -> code
 
 (* language dropdown — LUI select + anchored dropdown_menu (mounted =
@@ -89,7 +89,6 @@ let lang_menu ~key st mst =
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
-         let label = Ui_services.literal_text label in
          Ui_components.with_props
            [ Ui_components.Prop.font_size "0.875rem"
            ; Ui_components.Prop.line_height "1.25rem"

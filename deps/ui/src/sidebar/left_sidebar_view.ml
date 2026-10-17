@@ -77,7 +77,7 @@ let menu_sc caps =
                  else [])
                 @ [ Ui_components.keycap ~key:("k" ^ string_of_int i)
                       ~boxed:false ~glow:true ~min_slot:20
-                      ~value:(Ui_services.literal_text cap) ])
+                      ~value:(cap) ])
               caps)) ]
 ;;
 
@@ -203,12 +203,12 @@ let lp_menu st =
       let items =
         (if recent then []
          else
-           [ item (t "page/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
+           [ item (t "page/unfavorite") "star-off" [ {js|⌘|js}; {js|⇧|js}; "F" ]
                (fun () ->
                  if Wire.is_uuid_string target then
                    Sidebar_state.unfavorite st target) ])
         @ [ item (t "sidebar.right/open") "layout-sidebar-right"
-              [ "⇧"; "Click" ]
+              [ {js|⇧|js}; "Click" ]
               (fun () -> Sidebar_state.open_ref st target) ]
       in
       (* cljs popup-show! anchors the dropdown to the event target:
@@ -366,7 +366,7 @@ let shortcut_hint hov binding =
                (fun i k ->
                  Ui_components.keycap ~key:("k" ^ string_of_int i)
                    ~boxed:true ~glow:true ~min_slot:20
-                   ~value:(Ui_services.literal_text (String.uppercase_ascii k)))
+                   ~value:((String.uppercase_ascii k)))
                keys) ] ]
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the

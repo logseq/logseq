@@ -382,7 +382,6 @@ type dom = {
 
 type t = {
   storage : storage;
-  literal_text : string -> string;
   request_flush : unit -> unit;
   assert_owner : unit -> unit;
   theme : theme;
@@ -424,7 +423,6 @@ let storage_unquote s =
 
 let storage_quote v = "\"" ^ v ^ "\""
 
-let literal_text value = (get ()).literal_text value
 let request_flush () = (get ()).request_flush ()
 
 let theme_mode () = (get ()).theme.mode ()

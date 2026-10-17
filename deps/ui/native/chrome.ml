@@ -32,12 +32,13 @@ open Lui_elements
    hidden DOM mounts below so their emitters stay live. *)
 let menu_dismiss_installed = ref false
 
-let icon_btn ~key ?(acc = "") ~icon_name ~label ?disabled_signal
+let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ?foreground_signal ?style_class on_press =
   button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
     ?disabled_signal ?foreground_signal ?style_class
+    ~data_attrs:(match keys with Some value -> ["data-tooltip-keys",value] | None -> [])
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ]
 
@@ -57,7 +58,9 @@ let left_menu_btn ?(key = "left-menu-btn") () =
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
 let search_btn ?(key = "search-btn") () =
+  let keys = Keymap_data.tooltip_keys "go/search" in
   icon_btn ~key ~acc:"search-button" ~icon_name:"search"
+    ?keys:(if keys = "" then None else Some keys)
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
 (* cljs anchors the dropdown to the trigger's right edge — the fixed

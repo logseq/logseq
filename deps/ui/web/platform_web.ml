@@ -155,7 +155,6 @@ let install ~request_flush ~dom ~timers ~files =
         ; set = Platform.local_storage_set
         ; remove = Platform.local_storage_remove
         }
-    ; literal_text = Platform.utf8
     ; request_flush
     ; assert_owner = (fun () -> ())
     ; theme =

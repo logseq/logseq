@@ -1077,7 +1077,7 @@ and mount_buttons (t : t) (buttons : D.el) : unit =
   let area_title =
     I18n.sub
       (I18n.t "pdf/area-highlight-shortcut")
-      [ if Ui_services.env_is_mac () then "⌘" else "Shift" ]
+      [ if Ui_services.env_is_mac () then {js|⌘|js} else "Shift" ]
   in
   let area_btn_ref = ref None in
   let area_btn =

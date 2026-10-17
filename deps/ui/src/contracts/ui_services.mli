@@ -289,7 +289,6 @@ type dom = {
 
 type t = {
   storage : storage;
-  literal_text : string -> string;
   request_flush : unit -> unit;
   assert_owner : unit -> unit;
   theme : theme;
@@ -316,7 +315,6 @@ val storage_remove : string -> unit
 val storage_unquote : string -> string
 val storage_quote : string -> string
 
-val literal_text : string -> string
 val request_flush : unit -> unit
 
 val theme_mode : unit -> string

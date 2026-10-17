@@ -487,7 +487,6 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; set = local_storage_set
         ; remove = local_storage_remove
         }
-    ; literal_text = Fun.id
     ; request_flush
     ; assert_owner
     ; theme =

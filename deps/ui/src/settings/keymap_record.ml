@@ -56,12 +56,13 @@ let update ~strokes ~committed ev =
 let keycaps stroke =
   String.split_on_char '+' stroke
   |> List.map (function
-    | "meta" -> "⌘"
+    | "mod" -> if Ui_services.env_is_mac () then {js|⌘|js} else "Ctrl"
+    | "meta" -> if Ui_services.env_is_mac () then {js|⌘|js} else {js|⊞|js}
     | "ctrl" -> "Ctrl"
-    | "alt" -> "⌥"
-    | "shift" -> "⇧"
-    | "enter" -> "⏎"
-    | "backspace" -> "⌫"
+    | "alt" -> {js|⌥|js}
+    | "shift" -> {js|⇧|js}
+    | "enter" -> {js|⏎|js}
+    | "backspace" -> {js|⌫|js}
     | "escape" -> "Esc"
     | "tab" -> "Tab"
     | "space" -> "Space"
@@ -71,10 +72,10 @@ let keycaps stroke =
     | "pageup" -> "PageUp"
     | "pagedown" -> "PageDown"
     | "insert" -> "Insert"
-    | "up" -> "↑"
-    | "down" -> "↓"
-    | "left" -> "←"
-    | "right" -> "→"
+    | "up" -> {js|↑|js}
+    | "down" -> {js|↓|js}
+    | "left" -> {js|←|js}
+    | "right" -> {js|→|js}
     | "open-square-bracket" -> "["
     | "close-square-bracket" -> "]"
     | value -> String.uppercase_ascii value)

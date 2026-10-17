@@ -1,9 +1,8 @@
 (* Port of src/main/frontend/common/search_fuzzy.cljs (score +
    fuzzy-search) so [[ ]] and # popups rank like cljs. Accent handling:
    NFD + strip combining marks approximates the remove-accents lib for
-   Latin input; CJK is unaffected. Char iteration is over UTF-8 bytes —
-   equivalent to cljs UTF-16 unit iteration for ASCII and still correct
-   subsequence behavior for multi-byte chars.
+   Latin input; CJK is unaffected. Normalize host text to UTF-8 at the
+   scoring boundary, then compare complete Unicode characters.
 
    Portability: String.prototype.normalize('NFKC') and
    String.prototype.toLowerCase() are implemented over the generated
@@ -12,24 +11,35 @@
    ordering of combining marks, composition) are outside the search
    use-case: precomposed Latin input decomposes identically. *)
 
-(* ---- UTF-8 codepoint iteration ---- *)
+(* Native text is UTF-8; Melange text contains UTF-16 code units. The
+   normalization tables below contain UTF-8 bytes on every backend. *)
+let utf8_bytes text =
+  match Sys.backend_type with
+  | Native | Bytecode -> text
+  | Other "Melange" ->
+      if not (String.exists (fun c -> Char.code c >= 0x80) text) then text
+      else
+        let buffer = Buffer.create (String.length text) in
+        let index = ref 0 in
+        while !index < String.length text do
+          let first = Char.code text.[!index] in
+          incr index;
+          let codepoint =
+            if first >= 0xD800 && first <= 0xDBFF
+               && !index < String.length text then
+              let second = Char.code text.[!index] in
+              if second >= 0xDC00 && second <= 0xDFFF then begin
+                incr index;
+                0x10000 + ((first - 0xD800) lsl 10) + second - 0xDC00
+              end else first
+            else first in
+          Buffer.add_utf_8_uchar buffer (Uchar.of_int codepoint)
+        done;
+        Buffer.contents buffer
+  | Other backend -> invalid_arg ("Fuzzy: unsupported text backend " ^ backend)
 
-let decode_utf8 s i =
-  let n = String.length s in
-  let byte j = Char.code s.[i + j] in
-  let cont j =
-    if i + j < n then byte j land 0x3F else 0
-  in
-  let c = byte 0 in
-  if c < 0x80 then (c, 1)
-  else if c < 0xC0 then (0xFFFD, 1)
-  else if c < 0xE0 then (((c land 0x1F) lsl 6) lor cont 1, 2)
-  else if c < 0xF0 then
-    (((c land 0x0F) lsl 12) lor (cont 1 lsl 6) lor cont 2, 3)
-  else if c < 0xF8 then
-    (((c land 0x07) lsl 18) lor (cont 1 lsl 12) lor (cont 2 lsl 6)
-     lor cont 3, 4)
-  else (0xFFFD, 1)
+(* Internal normalization helpers consume UTF-8 bytes. Public scoring
+   and search functions accept host text and return original items. *)
 
 (* binary search in a sorted (codepoint, replacement) table *)
 let lookup table cp =
@@ -48,7 +58,9 @@ let map_codepoints table s =
   let b = Buffer.create n in
   let i = ref 0 in
   while !i < n do
-    let cp, w = decode_utf8 s !i in
+    let decoded = String.get_utf_8_uchar s !i in
+    let cp = Uchar.to_int (Uchar.utf_decode_uchar decoded) in
+    let w = Uchar.utf_decode_length decoded in
     (match lookup table cp with
      | Some rep -> Buffer.add_string b rep
      | None -> Buffer.add_substring b s !i w);
@@ -109,8 +121,10 @@ let search_normalize s = strip_combining (nfkd s)
 let max_string_length = 1000.0
 
 let str_len_distance s1 s2 =
-  let c1 = float_of_int (String.length s1) in
-  let c2 = float_of_int (String.length s2) in
+  let length text = String.fold_left (fun count c ->
+      if Char.code c land 0xC0 = 0x80 then count else count + 1) 0 text in
+  let c1 = float_of_int (length s1) in
+  let c2 = float_of_int (length s2) in
   let maxed = Float.max c1 c2 in
   if maxed = 0.0 then 1.0
   else
@@ -131,10 +145,10 @@ let index_of s sub =
   if m = 0 then Some 0 else scan 0
 
 let score oquery ostr =
-  let query = search_normalize (clean_str oquery) in
-  let original_s = search_normalize (clean_str ostr) in
+  let query = search_normalize (clean_str (utf8_bytes oquery)) in
+  let original_s = search_normalize (clean_str (utf8_bytes ostr)) in
   let qlen = String.length query and slen = String.length original_s in
-  let rec loop qi si mult idx score' =
+  let rec loop qi si mult score' =
     if qi >= qlen then
       score'
       +. str_len_distance query original_s
@@ -143,11 +157,16 @@ let score oquery ostr =
           else 0.)
       +. if si >= slen then 1.0 else 0.0
     else if si >= slen then 0.0
-    else if query.[qi] = original_s.[si] then
-      loop (qi + 1) (si + 1) (mult +. 1.) (idx -. 1.) (score' +. mult)
-    else loop qi (si + 1) 1. (idx -. 1.) (score' -. 0.1)
+    else
+      let query_char = String.get_utf_8_uchar query qi in
+      let text_char = String.get_utf_8_uchar original_s si in
+      let next_text = si + Uchar.utf_decode_length text_char in
+      if Uchar.utf_decode_uchar query_char = Uchar.utf_decode_uchar text_char then
+        loop (qi + Uchar.utf_decode_length query_char) next_text
+          (mult +. 1.) (score' +. mult)
+      else loop qi next_text 1. (score' -. 0.1)
   in
-  loop 0 0 1. max_string_length 0.
+  loop 0 0 1. 0.
 
 (* cljs fuzzy-search-multi: max score over the extract fns, keep score>
    0, stable sort by score desc, take `limit` *)

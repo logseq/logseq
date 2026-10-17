@@ -80,14 +80,12 @@ let current_lang () =
   | Some v -> Ui_services.storage_unquote v
   | None -> "en"
 
-(* dict values are OCaml literals — Melange emits them as JS strings
-   treating the UTF-8 source bytes as Latin-1, so non-ASCII entries must
-   pass through Platform.utf8 (same convention as keymap_data/settings_view);
-   kept on the raw platform op because en_tbl is forced during module
-   init, before services are installed *)
+(* The generated English dictionary contains UTF-8 byte strings. Decode
+   that data once at import; ordinary UI source uses {js|...|js} literals
+   and runtime strings already use the host's text representation. *)
 let tbl_of arr =
   let h = Hashtbl.create (Array.length arr) in
-  Array.iter (fun (k, v) -> Hashtbl.replace h k (Platform.utf8 v)) arr;
+  Array.iter (fun (k, v) -> Hashtbl.replace h k (Platform.decode_utf8_bytes v)) arr;
   h
 
 let en_tbl = lazy (tbl_of Dicts_gen.en)
@@ -113,9 +111,8 @@ let locale_loads : (string, unit Js.Promise.t) Hashtbl.t = Hashtbl.create 4
 
 let locale_tbl loc = Option.join (Hashtbl.find_opt locale_tbls loc)
 
-(* fetched text is already a decoded JS string — no Ui_services.literal_text
-   pass (that's only for Latin-1-misread OCaml literals). Only
-   keyword->string pairs, same filter dict_gen applies *)
+(* Fetched dictionaries already contain decoded text. Keep keyword/string
+   pairs, applying the same filter as dict_gen without another decode. *)
 let tbl_of_text file text =
   match Edn.parse text with
   | Wire.Map kvs ->
@@ -610,9 +607,7 @@ let en_overrides = function
       "Congrats, you've reviewed all the cards for this query, see you \
        next time!"
   | "settings.editor/preferred-outdenting-tip" ->
-      "The left side shows outdenting with the default setting, and the \
-       right shows outdenting with logical outdenting enabled \
-       \226\134\146 Learn more"
+      {js|The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled → Learn more|js}
   | _ -> raise Not_found
 
 let en_text key =

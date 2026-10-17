@@ -633,7 +633,7 @@ let test_ui_strings () =
   eqs "replace_all miss" "abc"
     (I18n.replace_all "abc" "+" "-");
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
-  eqs "decorate mod" (Platform.utf8 "\xe2\x8c\x98" ^ "+enter")
+  eqs "decorate mod" (Platform.decode_utf8_bytes "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");
   eqs "display unbound" "" (Commands_data.display Commands_data.Unbound);
   eqs "display disabled" "Disabled"
@@ -4203,16 +4203,16 @@ let test_pure_helpers () =
   (* Fuzzy: Unicode normalization on the shared path *)
   check "fuzzy nfkc fullwidth"
     (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "full-width"; "x" ]
-       "ＦＵＬＬ"
+       {js|ＦＵＬＬ|js}
      = [ "full-width" ]);
   check "fuzzy accent fold nfc->nfd text"
-    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "cafe\xCC\x81 menu"; "x" ]
-       "café"
-     = [ "cafe\xCC\x81 menu" ]);
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ {js|café menu|js}; "x" ]
+       {js|café|js}
+     = [ {js|café menu|js} ]);
   check "fuzzy accent fold nfd query"
-    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "café menu"; "x" ]
-       "cafe\xCC\x81"
-     = [ "café menu" ]);
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ {js|café menu|js}; "x" ]
+       {js|café|js}
+     = [ {js|café menu|js} ]);
   eqs "fuzzy lowercase dotted-i" "i\xCC\x87" (Fuzzy.lowercase "İ");
   eqs "fuzzy lowercase sigma final" "ας" (Fuzzy.lowercase "ΑΣ");
   eqs "fuzzy clean_str unicode" "abcé" (Fuzzy.clean_str "A[B]C é");

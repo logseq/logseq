@@ -29,19 +29,18 @@ let scroller_class = "cp__cmdk-scroller"
 
 (* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
 
-let gph = (fun s -> Ui_services.literal_text s)
-let g_cmd () = gph "\xe2\x8c\x98"
-let g_win () = gph "\xe2\x8a\x9e"
-let g_ret () = gph "\xe2\x8f\x8e"
-let g_shift () = gph "\xe2\x87\xa7"
-let g_opt () = gph "\xe2\x8c\xa5"
-let g_ctrl () = gph "\xe2\x8c\x83"
-let g_up () = gph "\xe2\x86\x91"
-let g_down () = gph "\xe2\x86\x93"
-let g_left () = gph "\xe2\x86\x90"
-let g_right () = gph "\xe2\x86\x92"
-let g_bs () = gph "\xe2\x8c\xab"
-let g_caps () = gph "\xe2\x87\xaa"
+let g_cmd () = {js|⌘|js}
+let g_win () = {js|⊞|js}
+let g_ret () = {js|⏎|js}
+let g_shift () = {js|⇧|js}
+let g_opt () = {js|⌥|js}
+let g_ctrl () = {js|⌃|js}
+let g_up () = {js|↑|js}
+let g_down () = {js|↓|js}
+let g_left () = {js|←|js}
+let g_right () = {js|→|js}
+let g_bs () = {js|⌫|js}
+let g_caps () = {js|⇪|js}
 
 (* cljs print-shortcut-key — logical key -> display glyph/text *)
 let print_shortcut_key (svs : Svs.t) key =
@@ -280,9 +279,8 @@ let hl_segments ~query ~text : (bool * string) list =
 let display_spaces s =
   if not (String.contains s ' ') then s
   else
-    (* Decode only the inserted source literal; runtime text is already
-       decoded on web and remains UTF-8 on the native host. *)
-    let nbsp = Ui_services.literal_text "\u{00A0}" in
+    (* Insert one nonbreaking space without reinterpreting runtime text. *)
+    let nbsp = {js| |js} in
     let b = Buffer.create (String.length s + 8) in
     String.iter
       (fun c ->
@@ -478,7 +476,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                                  item_sig)
                             (Ui_components.cmdk_info_text ~key:"info"
                                [ text ~key:"dash" ~as_:`Span
-                                   ~value:(gph " — ") []
+                                   ~value:{js| — |js} []
                                ; hl_span "info-hl" item_sig
                                    (fun it ->
                                      Option.value ~default:"" it.S.info)

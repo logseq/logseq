@@ -81,22 +81,42 @@ let run () =
   (* ---- fuzzy ---- *)
   check "fuzzy nfkc fullwidth"
     (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "full-width"; "x" ]
-       "ＦＵＬＬ"
+       {js|ＦＵＬＬ|js}
      = [ "full-width" ]);
   check "fuzzy accent fold nfc->nfd text"
-    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "cafe\xCC\x81 menu"; "x" ]
-       "café"
-     = [ "cafe\xCC\x81 menu" ]);
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ {js|café menu|js}; "x" ]
+       {js|café|js}
+     = [ {js|café menu|js} ]);
   check "fuzzy accent fold nfd query"
-    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "café menu"; "x" ]
-       "cafe\xCC\x81"
-     = [ "café menu" ]);
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ {js|café menu|js}; "x" ]
+       {js|café|js}
+     = [ {js|café menu|js} ]);
   eqs "fuzzy lowercase dotted-i" (Fuzzy.lowercase "İ") "i\xCC\x87";
   eqs "fuzzy lowercase sigma final" (Fuzzy.lowercase "ΑΣ") "ας";
   eqs "fuzzy clean_str unicode" (Fuzzy.clean_str "A[B]C é") "abcé";
   eqs "fuzzy search_normalize folds accent" (Fuzzy.search_normalize "café") "cafe";
   eqs "fuzzy search_normalize fullwidth" (Fuzzy.search_normalize "ＡＢＣ")
     "ABC";
+  List.iter (fun (query, title) ->
+    let result =
+      try Some (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [title;"other"] query)
+      with Invalid_argument _ -> None in
+    check ("fuzzy search accepts host Unicode and preserves its title: " ^ query)
+      (result = Some [title]))
+    [ {js|café|js}, {js|café menu|js}
+    ; {js|café|js}, {js|café menu|js}
+    ; {js|ＦＵＬＬ|js}, "full-width"
+    ; {js|中文|js}, {js|中文 café 😀|js}
+    ; {js|🧑‍💻|js}, {js|🧑‍💻 notes|js}
+    ; {js|İ|js}, {js|i̇ notes|js}
+    ; {js|ΑΣ|js}, {js|ας notes|js} ];
+  List.iter (fun (query, title) ->
+    check "fuzzy search cannot assemble a character across UTF-8 boundaries"
+      (Fuzzy.score query title = 0.))
+    [ {js|甲|js}, {js|申串|js}; {js|😀|js}, {js|😁🌀|js} ];
+  check "fuzzy scores count characters consistently across scripts"
+    (Fuzzy.score {js|😀|js} {js|a😀|js} = Fuzzy.score "a" "ba"
+     && Fuzzy.score {js|中|js} {js|a中|js} = Fuzzy.score "a" "ba");
 
   (* ---- sprintf ---- *)
   eqs "sprintf basic" (Sprintf.sprintf "%s-%d" "a" 1) "a-1";

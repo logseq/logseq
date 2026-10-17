@@ -87,8 +87,6 @@ let run_views ~registry ~profile ~finish =
   Sidebar_state.st_ref:=previous_sidebar;Sidebar_state.model_signal:=previous_sidebar_model;
   Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;Runtime.app_send:=previous_send;
   List.iter (fun (name, title, query, expected) ->
-    let title = Ui_services.literal_text title in
-    let query = Ui_services.literal_text query in
     let palette = mount (fun ms ->
       let item : Cmdk_state.item =
         { ikey = name; idx = 0; gid = G_recently_updated; ititle = title
@@ -100,15 +98,31 @@ let run_views ~registry ~profile ~finish =
       |> List.sort (fun a b -> Int.compare a.M.id b.M.id)
       |> List.filter_map (fun n -> M.string_prop n "text") in
     check ("command palette preserves Unicode text and spacing: " ^ name)
-      (runs = List.map Ui_services.literal_text expected);
+      (runs = expected);
     ignore (Lui_app.dispose palette.S.app))
-    [ "date", "Oct 17th, 2026", "", ["Oct\xc2\xa017th,\xc2\xa02026"]
+    [ "date", "Oct 17th, 2026", "", [{js|Oct 17th, 2026|js}]
     ; "highlighted date", "Oct 17th, 2026", "17th",
-        ["Oct\xc2\xa0"; "17th"; ",\xc2\xa02026"]
-    ; "Unicode", "中文 café 😀", "café",
-        ["中文\xc2\xa0"; "café"; "\xc2\xa0😀"]
-    ; "existing spaces", "a\xc2\xa0b  c", "", ["a\xc2\xa0b\xc2\xa0\xc2\xa0c"]
+        [{js|Oct |js}; "17th"; {js|, 2026|js}]
+    ; "Unicode", {js|中文 café 😀|js}, {js|café|js},
+        [{js|中文 |js}; {js|café|js}; {js| 😀|js}]
+    ; "existing spaces", {js|a b  c|js}, "", [{js|a b  c|js}]
     ; "empty", "", "", [] ];
+  List.iter (fun value ->
+    List.iter (fun (name, view) ->
+      let rendered = mount view in
+      let text = nodes rendered |> List.filter_map (fun n -> M.string_prop n "text") in
+      check (name ^ " preserves runtime Unicode: " ^ value) (text=[value]);
+      ignore (Lui_app.dispose rendered.S.app))
+      [ "settings shortcut", (fun _ -> Settings_controls.kbd_seq
+          ~key:"unicode" ~binding:"custom" [value])
+      ; "context menu shortcut", (fun _ -> Popups_view.cm_shortcut_el ("custom",[value]))
+      ; "journal format menu", (fun ms ->
+          let state = Signal.state (Signal.signal_owner ms) true in
+          Settings_page.dfmt_menu ~key:"unicode" state [value] value) ])
+    [ {js|中文|js}; {js|café|js}; {js|é|js}; {js|😀|js}; {js|a b|js} ];
+  check "English fallback text emits its Unicode arrow without byte decoding"
+    (I18n.t "settings.editor/preferred-outdenting-tip" =
+      {js|The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled → Learn more|js});
   let chosen = ref None in
   let picker = mount (fun _ ->
       Icon_picker.picker_view ~del:true ~emoji_only:false
@@ -208,7 +222,141 @@ let run_views ~registry ~profile ~finish =
       files = []; has_files = false; prevent_default = (fun () -> ());
       stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
   in
+  let previous_tip = !Tooltip.state and previous_armed = !Tooltip.armed_on
+  and previous_timer = !Tooltip.timer in
+  let pending = ref [] and next_timer = ref 0 and flushes = ref 0 in
+  let window : Js.Json.t = Stub_dom.get_field Stub_dom.global "window" in
+  let document : Js.Json.t = Stub_dom.get_field Stub_dom.global "document" in
+  let previous_timeout : Js.Json.t = Stub_dom.get_field window "setTimeout"
+  and previous_clear : Js.Json.t = Stub_dom.get_field window "clearTimeout" in
+  let previous_query : string -> Js.Json.t = Stub_dom.get_field document "querySelector" in
+  let bubble = Stub_dom.make_element "div" in
+  Stub_dom.set_field bubble "getBoundingClientRect" (fun () ->
+    Js.Json.object_ (Js.Dict.fromList ["x",Js.Json.number 0.;"y",Js.Json.number 0.;
+      "width",Js.Json.number 120.;"height",Js.Json.number 28.]));
+  Stub_dom.set_field window "setTimeout" (fun f _ ->
+    incr next_timer;pending:=(!next_timer,f)::!pending;!next_timer);
+  Stub_dom.set_field window "clearTimeout" (fun id ->
+    pending:=List.filter (fun (i,_) -> i<>id) !pending);
+  Stub_dom.set_field document "querySelector" (fun q ->
+    if q="#lui-tooltip" then bubble else previous_query q);
+  let base = Ui_services.dom_body () in
+  let connected = ref true in
+  let trigger_pending = ref false in
+  let trigger token tag attrs =
+    let rec el = {base with token;tag=(fun () -> String.uppercase_ascii tag);
+      id=(fun () -> string_of_int token);attr=(fun k -> List.assoc_opt k attrs);
+      closest=(fun _ -> Some el);contains=(fun other -> other.Ui_services.token=token);
+      connected=(fun () -> !connected);
+      rect=(fun () -> if !trigger_pending then 0.,0.,0.,0. else 100.,100.,32.,32.);
+      rect_pending=(fun () -> !trigger_pending)} in el in
+  let button = trigger 901 "button" ["aria-label","Search"] in
+  let toolbar = trigger 902 "div" ["role","toolbar";"aria-label","Selection actions"] in
+  let tooltip = mount (fun ms ->
+    Tooltip.state:=Some (Signal.state (Signal.signal_owner ms) None);
+    Tooltip.armed_on:=None;Tooltip.timer:= -1;Tooltip.el) in
+  Runtime.app_flush:=(fun () -> incr flushes;S.flush tooltip);
+  let move target = Tooltip.on_mousemove {(key_event "") with key=None;target} in
+  let fire () = let ready=List.rev !pending in pending:=[];List.iter (fun (_,f) -> f ()) ready in
+  let shown () = Runtime.signal_get (Option.get !Tooltip.state) in
+  Fun.protect ~finally:(fun () ->
+    Tooltip.hide ();ignore (Lui_app.dispose tooltip.S.app);
+    Tooltip.state:=previous_tip;Tooltip.armed_on:=previous_armed;Tooltip.timer:=previous_timer;
+    Stub_dom.set_field window "setTimeout" previous_timeout;
+    Stub_dom.set_field window "clearTimeout" previous_clear;
+    Stub_dom.set_field document "querySelector" previous_query) (fun () ->
+    move (Some toolbar);
+    check "an accessible toolbar is not an implicit tooltip trigger" (List.length !pending=0);
+    fire ();
+    check "hovering popup ancestry never shows a toolbar name" (shown ()=None);
+    Tooltip.hide ();pending:=[];
+    move (Some button);
+    check "button tooltip waits for its hover delay" (shown ()=None && List.length !pending=1);
+    fire ();S.flush tooltip;
+    check "the delayed tooltip mounts its button label"
+      (List.exists (fun n -> M.string_prop n "text"=Some "Search") (nodes tooltip));
+    fire ();
+    let before = !flushes in
+    move (Some button);
+    check "moving within a shown tooltip trigger preserves its timer and content"
+      (List.length !pending=0 && shown ()<>None && !flushes=before);
+    move None;
+    check "leaving the document target hides and disarms the tooltip"
+      (shown ()=None && !Tooltip.armed_on=None && List.length !pending=0);
+    let before = !flushes in
+    let blank = {base with closest=(fun _ -> None)} in
+    move (Some blank);move (Some blank);
+    check "unlabelled pointer moves do not request redundant UI flushes" (!flushes=before);
+    move (Some button);connected:=false;fire ();
+    check "a detached trigger cannot display after its delay" (shown ()=None);
+    connected:=true;Tooltip.hide ();pending:=[];
+    trigger_pending:=true;move (Some button);fire ();
+    check "an unmeasured anchor never flashes a tooltip at zero coordinates"
+      (shown ()=None && List.length !pending=1);
+    trigger_pending:=false;fire ();
+    check "resolved anchor geometry places the tooltip below its button"
+      (Option.map (fun t -> t.Tooltip.tip_x,t.tip_y) (shown ())=Some (116.,132.));
+    Tooltip.hide ();pending:=[];
+    trigger_pending:=true;move (Some button);fire ();Tooltip.hide ();
+    trigger_pending:=false;fire ();
+    check "dismissal while measuring the trigger cancels deferred mounting" (shown ()=None);
+    Tooltip.hide ();pending:=[];
+    move (Some button);fire ();
+    let stale = (match !pending with (_,f)::_ -> Some f | [] -> None) in
+    Tooltip.hide ();
+    check "dismissal cancels pending placement work" (List.length !pending=0);
+    Option.iter (fun f -> f ()) stale;
+    check "a dequeued placement cannot resurrect a dismissed tooltip" (shown ()=None);
+    Tooltip.hide ();pending:=[];
+    move (Some button);fire ();
+    let stale = (match !pending with (_,f)::_ -> Some f | [] -> None) in
+    Tooltip.hide ();move (Some button);
+    Option.iter (fun f -> f ()) stale;
+    check "old placement cannot bypass the delay after re-entering the same anchor"
+      (shown ()=None && List.length !pending=1);
+    Tooltip.hide ();pending:=[];
+    move (Some button);fire ();
+    let stale = (match !pending with (_,f)::_ -> Some f | [] -> None) in
+    let other = trigger 906 "button" ["aria-label","Other action"] in
+    move (Some other);fire ();
+    Option.iter (fun f -> f ()) stale;
+    check "old placement cannot replace the new anchor's content"
+      (Option.map (fun t -> t.Tooltip.tip_label) (shown ())=Some "Other action");
+    Tooltip.hide ();pending:=[];
+    let suppressed = trigger 903 "button" ["aria-label","Accessible name";"data-tooltip",""] in
+    move (Some suppressed);
+    check "explicit suppression does not arm a tooltip timer" (List.length !pending=0);
+    Tooltip.hide ();pending:=[];
+    let explicit = trigger 904 "div" ["aria-label","Name";"data-tooltip","Explicit tip"] in
+    move (Some explicit);fire ();
+    check "explicit tooltip text can describe a non-button and owns its label"
+      (Option.map (fun t -> t.Tooltip.tip_label) (shown ())=Some "Explicit tip"));
   let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  check "keycap modifier glyphs are ready for the host text runtime"
+    (Keymap_record.keycaps "meta+shift+k" =
+      [{js|⌘|js};{js|⇧|js};"K"]);
+  let dynamic_key = {js|é|js} in
+  check "keycaps preserve runtime Unicode key names"
+    (Keymap_record.keycaps dynamic_key=[dynamic_key]);
+  let header_keys () =
+    let header = mount (fun _ -> Chrome.search_button ()) in
+    let keys = nodes header |> List.find_map (fun n ->
+      if n.M.kind="button" then Option.bind (M.string_prop n "data-attrs")
+        (fun encoded -> List.assoc_opt "data-tooltip-keys" (P.data_attrs_decode encoded))
+      else None) in
+    ignore (Lui_app.dispose header.S.app);keys in
+  check "search tooltip emits decoded shortcut glyphs"
+    (header_keys ()=Some {js|⌘ K|js});
+  let stored_search_shortcut = Ui_services.storage_get "ls-shortcuts" in
+  Ui_services.storage_set "ls-shortcuts" "{:go/search [\"f8\"]}";
+  Keymap_data.reload_shortcuts ();
+  check "search tooltip follows the configured binding" (header_keys ()=Some "F8");
+  Ui_services.storage_set "ls-shortcuts" "{:go/search false}";
+  Keymap_data.reload_shortcuts ();
+  check "disabled search binding has no shortcut keycaps" (header_keys ()=None);
+  restore_storage "ls-shortcuts" stored_search_shortcut;
+  Keymap_data.reload_shortcuts ();
+  Runtime.app_flush:=(fun () -> S.flush keymap);
   let keymap_nodes () = nodes keymap in
   let keymap_rows () =
     List.filter (fun n -> class_has n "shortcut-row") (keymap_nodes ())
@@ -299,7 +447,7 @@ let run_views ~registry ~profile ~finish =
     (M.string_prop (pill "All") "text"
     <> Some
          (I18n.keymap_all
-         ^ Ui_services.literal_text " · "
+         ^ {js| · |js}
          ^ string_of_int (Keymap_data.count Keymap_data.All)));
   eqi "nonempty query shows exactly one clear control" 1
     (List.length (clear_buttons ()));
@@ -352,7 +500,7 @@ let run_views ~registry ~profile ~finish =
   let update strokes committed event = R.update ~strokes ~committed event in
   check "the plus key is distinct from the chord separator"
     (update [] false (key_event ~shift:true "+") = R.Set (["shift+="], false)
-     && R.keycaps "shift+=" = ["⇧";"="]);
+     && R.keycaps "shift+=" = [{js|⇧|js};"="]);
   check "shifted punctuation uses the same names as command bindings"
     (update [] false (key_event ~shift:true "?") = R.Set (["shift+/"], false));
   check "folded native Shift is restored for recorded modifiers"
@@ -403,7 +551,7 @@ let run_views ~registry ~profile ~finish =
   in
   check "stored custom shortcut is shown by the real Keymap view"
     (configured_binding () <> None);
-  let custom_label = I18n.keymap_custom ^ Ui_services.literal_text " · 1" in
+  let custom_label = I18n.keymap_custom ^ {js| · 1|js} in
   let custom_pill () = List.find (fun n ->
       M.string_prop n "text" = Some custom_label)
       (configured_nodes ()) in

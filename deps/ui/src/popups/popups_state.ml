@@ -1832,21 +1832,21 @@ let color_hex = function
    shortcut utils decorate-binding/print-shortcut-key output on macOS *)
 let block_entries () =
   [ Ci_colors; Ci_headings; Ci_sep
-  ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ "\u{21e7}"; "Click" ]), "open-in-sidebar")
+  ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ {js|⇧|js}; "Click" ]), "open-in-sidebar")
   ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_sub (U.t "command.editor/add-reaction", Sub_picker Picker_emoji)
   ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
-  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut")
   ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
   ; Ci_sep
   ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
   ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
-  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ {js|⌘|js}; {js|↓|js} ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ {js|⌘|js}; {js|↑|js} ]), "collapse-children")
   ]
   (* cljs block-context-menu-item simple commands append below *)
   @ (match
@@ -1869,18 +1869,18 @@ let multi_entries () =
   [ Ci_colors; Ci_headings
   ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
-  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut")
   ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
-  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "copy")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "copy")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")  ; Ci_sep
   ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
   ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
-  ; Ci_item (U.t "editor/cycle-todo", Some ("meta+enter", [ "\u{2318}"; "\u{21b5}" ]), "cycle-todo")
+  ; Ci_item (U.t "editor/cycle-todo", Some ("meta+enter", [ {js|⌘|js}; {js|↵|js} ]), "cycle-todo")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
-  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ {js|⌘|js}; {js|↓|js} ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ {js|⌘|js}; {js|↑|js} ]), "collapse-children")
   ]
 ;;
 
@@ -1889,11 +1889,11 @@ let multi_entries () =
    per-browser native menus, the native host gets the same edit
    commands *)
 let edit_entries () =
-  [ Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "edit-cut")
-  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "edit-copy")
-  ; Ci_item (U.t "editor/paste", Some ("meta+v", [ "\u{2318}"; "V" ]), "edit-paste")
+  [ Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "edit-cut")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "edit-copy")
+  ; Ci_item (U.t "editor/paste", Some ("meta+v", [ {js|⌘|js}; "V" ]), "edit-paste")
   ; Ci_sep
-  ; Ci_item (U.t "editor/select-all", Some ("meta+a", [ "\u{2318}"; "A" ]), "edit-select-all") ]
+  ; Ci_item (U.t "editor/select-all", Some ("meta+a", [ {js|⌘|js}; "A" ]), "edit-select-all") ]
 ;;
 
 (* cljs state/developer-mode? — storage holds raw "true" (ours) or a
@@ -2155,12 +2155,12 @@ let tag_entries ~title ~priv =
       ( "Go to #" ^ title
       , Some
           ( "mod+click"
-          , [ (if Ui_services.env_is_mac () then "\u{2318}" else "Ctrl")
+          , [ (if Ui_services.env_is_mac () then {js|⌘|js} else "Ctrl")
             ; "Click" ] )
       , "go-to-tag" )
   ; Ci_item
       ( U.t "sidebar.right/open"
-      , Some ("shift+click", [ "\u{21e7}"; "Click" ])
+      , Some ("shift+click", [ {js|⇧|js}; "Click" ])
       , "open-tag-sidebar" ) ]
   @ if priv then []
     else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]

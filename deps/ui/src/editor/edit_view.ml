@@ -81,11 +81,8 @@ let frag_key f =
 
 let cls_suffix f = if f.cls = "" then "" else " " ^ f.cls
 
-(* the zero-width space the caret lands on at line end — decoded to a
-   real U+200B codepoint so the DOM side carries one code unit *)
-(* module-init constant — evaluated before services install, so the raw
-   platform utf8 op rather than Ui_services.literal_text *)
-let pad_text = Platform.utf8 "\xe2\x80\x8b"
+(* The line-end caret pad is one U+200B character on both hosts. *)
+let pad_text = {js|​|js}
 
 let pad_frag hi =
   { idx = -1

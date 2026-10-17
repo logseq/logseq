@@ -328,7 +328,7 @@ and retry_focus () =
     (* one line per exhausted arm — never mounting is a bug worth
        seeing, just not 50 PERF lines per click *)
     Ui_services.log_error
-      "focus retry budget exhausted — editor sink never mounted";
+      {js|focus retry budget exhausted — editor sink never mounted|js};
     drain_pending_focus_actions ())
 
 (* flush-time pass over pending focus — main.ml and the test driver run

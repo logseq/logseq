@@ -4,8 +4,8 @@
    list/record literals emitted a cons skeleton ~30x the size of the
    data itself. Wire shape:
      [ ["c", label] | ["s", label, title] ]
-   Non-ASCII label/key text is raw UTF-8; render through Ui_services.literal_text
-   like other i18n literals. *)
+   Resolved keycaps already use the host's text representation; render
+   them directly, including runtime Unicode bindings. *)
 
 type binding =
   { kind : string  (* "combo" | "separate" *)
@@ -110,6 +110,14 @@ let effective_shortcut id =
   | Some binding -> binding
   | None -> default_shortcut id
 
+let tooltip_keys id =
+  match effective_shortcut id with
+  | Unbound | Disabled | Binds [] -> ""
+  | Binds (binding :: _) ->
+      String.split_on_char ' ' binding
+      |> List.concat_map Keymap_record.keycaps
+      |> String.concat " "
+
 let command_id title =
   let title = String.sub title 1 (String.length title - 1) in
   match String.index_opt title '#' with
@@ -145,7 +153,7 @@ let decode_item j =
   | "c" -> Category (jstr a.(1))
   | "s" ->
       let row = { label = jstr a.(1); title = jstr a.(2); unset = false; bindings = [] } in
-      Shortcut (row_with_shortcut ~mac:true row (default_shortcut (command_id row.title)))
+      Shortcut row
   | _ -> failwith "keymap_data: item"
 
 let items : item list =

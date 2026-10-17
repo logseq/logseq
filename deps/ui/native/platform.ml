@@ -251,7 +251,7 @@ let open_url (u : string) = Host.open_url u
 let decode_uri = Uri.pct_decode
 let encode_uri_component s = Uri.pct_encode ~component:`Query_value s
 let js_escape s = s
-let utf8 s = s (* OCaml strings are already UTF-8 bytes *)
+let decode_utf8_bytes s = s (* OCaml strings are already UTF-8 bytes *)
 
 let desktop_os () = true
 let is_mac = Platform_native.is_mac

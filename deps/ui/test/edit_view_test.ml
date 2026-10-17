@@ -383,8 +383,8 @@ let test_input_mapping () =
 (* ---------- U16 unit mode ---------- *)
 
 (* proper JS strings: these literals are byte-strings in the file;
-   Platform.utf8 decodes them into real UTF-16 JS strings *)
-let js s = Platform.utf8 s
+   Platform.decode_utf8_bytes decodes them into real UTF-16 JS strings *)
+let js s = Platform.decode_utf8_bytes s
 
 let test_u16 () =
   let s = js "中a文" in (* 3 code units *)
@@ -534,7 +534,7 @@ let run ~env =
   test_bytes_default ()
 
 (* web-entry only: UTF-16 code-unit semantics, JS string literals via
-   Platform.utf8, and the bounded retained-node web surface. These call
+   Platform.decode_utf8_bytes, and the bounded retained-node web surface. These call
    mount_editor ~units:M.U16 — under native byte semantics a U16 model
    would mis-step over multi-byte text, so they do not run natively *)
 let run_web ~env =

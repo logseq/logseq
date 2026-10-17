@@ -225,12 +225,9 @@ let copy_to_clipboard s = if not (exec_copy s) then ignore (clipboard_write_text
 external decode_uri : string -> string = "decodeURIComponent"
 
 external encode_uri_component : string -> string = "encodeURIComponent"
-(* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
-   byte-string so non-ASCII renders mojibake. Copy the byte chars into a
-   Uint8Array and UTF-8 decode to obtain the real JS string. Only safe for
-   literals — worker (transit-decoded) strings are already proper JS strings
-   and would throw. *)
-let utf8 : string -> string =
+(* Import UTF-8 byte data, such as Dicts_gen.en. UI source literals use
+   {js|...|js}; DOM and worker text must never pass through this decoder. *)
+let decode_utf8_bytes : string -> string =
   [%mel.raw
     "function (s) { var u8 = new Uint8Array(s.length); for (var i = 0; i < \
      s.length; i++) u8[i] = s.charCodeAt(i) & 0xff; return new \

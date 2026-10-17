@@ -2733,6 +2733,23 @@ let () =
     (!errors = []);
   print_endline "native shared search fields: OK"
 
+let () = Native_embed.with_entry_lock (fun () ->
+  let host = Lui_host.create ~hooks:Lui_paint.default_hooks
+    ~layout:(module Lui_layout) ~measure:(fun _ _ _ _ -> Some (80.,20.))
+    ~renderer:{Lui_host.name="search-tooltip-test";render=(fun _ -> Bytes.empty)}
+    ~width:800 ~height:600 ~scale:1. () in
+  let app = Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) ()
+    (fun () () -> ()) (fun _ _ _ -> Chrome.search_btn ()) in
+  ignore (Lui_app.start app);ignore (Lui_app.flush app);
+  let button = List.find (fun id -> Lui_store.kind (Lui_host.store host) id="button")
+    (Lui_store.preorder (Lui_host.store host)) in
+  let el = Ui_dom_native.el_of (Native_embed.ext_snapshot (Lui_app.runtime app) button) in
+  let actual = el.Ui_services.attr "data-tooltip-keys" in
+  ignore (Lui_app.dispose app);
+  check "Native Search tooltip omits its default shortcut keycaps"
+    (actual=Some (if Ui_services.env_is_mac () then "⌘ K" else "Ctrl K"));
+  print_endline "native search tooltip shortcut: OK")
+
 let () =
   Native_embed.with_entry_lock (fun () ->
       let module A = Lui_window.Assembly in

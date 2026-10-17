@@ -843,7 +843,7 @@ let repeat_panel ps : t =
                       ~value:(reactive
                                 (fun po ->
                                   match rpt_of po with
-                                  | Some { repeated = true; _ } -> "✓"
+                                  | Some { repeated = true; _ } -> {js|✓|js}
                                   | _ -> "")
                                 ps)
                       [] ])

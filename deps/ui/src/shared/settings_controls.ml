@@ -20,20 +20,20 @@ let info_icon ~key ~title =
    map to their glyphs *)
 let print_key k =
   match String.lowercase_ascii k with
-  | "cmd" | "command" | "mod" -> "⌘"
-  | "meta" -> "⌘"
-  | "return" | "enter" -> "⏎"
-  | "shift" -> "⇧"
-  | "alt" | "option" | "opt" -> "⌥"
+  | "cmd" | "command" | "mod" -> {js|⌘|js}
+  | "meta" -> {js|⌘|js}
+  | "return" | "enter" -> {js|⏎|js}
+  | "shift" -> {js|⇧|js}
+  | "alt" | "option" | "opt" -> {js|⌥|js}
   | "ctrl" | "control" -> "Ctrl"
   | "space" -> "Space"
-  | "up" -> "↑"
-  | "down" -> "↓"
-  | "left" -> "←"
-  | "right" -> "→"
+  | "up" -> {js|↑|js}
+  | "down" -> {js|↓|js}
+  | "left" -> {js|←|js}
+  | "right" -> {js|→|js}
   | "tab" -> "Tab"
-  | "delete" -> "⌫"
-  | "backspace" -> "⌫"
+  | "delete" -> {js|⌫|js}
+  | "backspace" -> {js|⌫|js}
   | s when String.length s = 1 -> String.uppercase_ascii s
   | s -> s
 
@@ -46,7 +46,7 @@ let kbd_seq ~key ~binding:_ keys =
        (fun i k ->
          Ui_components.keycap ~key:(key ^ "-" ^ string_of_int i)
            ~boxed:true ~glow:true ~min_slot:20
-           ~value:(Ui_services.literal_text (print_key k)))
+           ~value:((print_key k)))
        keys)
 
 (* ---- buttons ---- *)

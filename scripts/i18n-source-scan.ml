@@ -1,4 +1,4 @@
-(* Read translation calls from the OCaml AST, including local aliases. *)
+(* Read translation calls and validate portable UI text from the OCaml AST. *)
 open Parsetree
 
 let translation_functions =
@@ -49,6 +49,30 @@ let scan_file path =
           exit 1)
   in
   let references = ref [] in
+  (* Native-only files already contain UTF-8. The generated normalization
+     table is byte data consumed by Fuzzy's normalization, not rendered text. *)
+  let portable_text =
+    String.starts_with ~prefix:"deps/ui/src/" path
+    && path <> "deps/ui/src/shared/unicode_data.ml"
+  in
+  let invalid location message =
+    Printf.eprintf "%s:%d: %s\n" path
+      location.Location.loc_start.pos_lnum message;
+    exit 1
+  in
+  let check_constant constant =
+    if portable_text then
+      match constant.pconst_desc with
+      | Pconst_string (value, _, delimiter) ->
+          if delimiter = Some "js" && String.contains value '\\' then
+            invalid constant.pconst_loc
+              "Unicode UI literal must not contain JavaScript escapes; concatenate an ordinary ASCII literal instead";
+          if delimiter <> Some "js"
+             && String.exists (fun c -> Char.code c >= 128) value then
+            invalid constant.pconst_loc
+              "Unicode UI literal must use {js|...|js} so both renderers receive text"
+      | _ -> ()
+  in
   let add expression =
     Option.iter
       (fun key -> references := (path, key) :: !references)
@@ -83,7 +107,17 @@ let scan_file path =
   let rec walk aliases : Ast_iterator.iterator =
     { Ast_iterator.default_iterator with
       expr = (fun iterator expression ->
+        (match expression.pexp_desc with
+         | Pexp_constant constant -> check_constant constant
+         | Pexp_ident name when portable_text ->
+             (match identifier_name name.txt with
+              | Some ("Ui_services.literal_text" | "Platform.utf8") ->
+                  invalid expression.pexp_loc
+                    "Runtime UI text must not be decoded again; use portable source literals"
+              | _ -> ())
+         | _ -> ());
         match expression.pexp_desc with
+        | Pexp_extension ({ txt = ("mel.raw" | "mel.re"); _ }, _) -> ()
         | Pexp_let (_, bindings, body) ->
             List.iter (iterator.value_binding iterator) bindings;
             let nested = walk (extend aliases bindings) in
@@ -92,6 +126,11 @@ let scan_file path =
             add argument;
             Ast_iterator.default_iterator.expr iterator expression
         | _ -> Ast_iterator.default_iterator.expr iterator expression);
+      pat = (fun iterator pattern ->
+        (match pattern.ppat_desc with
+         | Ppat_constant constant -> check_constant constant
+         | _ -> ());
+        Ast_iterator.default_iterator.pat iterator pattern);
       structure = (fun _ items ->
         let rec loop names = function
           | [] -> ()

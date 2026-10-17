@@ -271,10 +271,7 @@ let journal_formatters =
   ; "EEEE, MM/dd/yyyy"; "EEEE, yyyy/MM/dd"; "dd-MM-yyyy"; "MM/dd/yyyy"
   ; "MM-dd-yyyy"; "MM_dd_yyyy"; "yyyy/MM/dd"; "yyyy-MM-dd"
   ; "yyyy-MM-dd EEE"; "yyyy-MM-dd EEEE"; "yyyy_MM_dd"; "yyyyMMdd"
-  ; "yyyy\xe5\xb9\xb4MM\xe6\x9c\x88dd\xe6\x97\xa5" ]
-
-(* option text reaches js as raw utf8 bytes from Melange literals *)
-let date_option_text fmt = Ui_services.literal_text fmt
+  ; {js|yyyy年MM月dd日|js} ]
 
 (* the cljs native <select> becomes a LUI select + anchored
    dropdown_menu, same shape as Settings_view.lang_trigger *)
@@ -296,7 +293,7 @@ let dfmt_menu ~key mst options current =
     (List.mapi
        (fun i fmt ->
          menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
-           ~text:(date_option_text fmt)
+           ~text:fmt
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
              if String.trim fmt <> "" then (
@@ -324,7 +321,7 @@ let date_format_row ctx =
              ~padding_horizontal:8
              ~background:"var(--lx-gray-03)"
              ~style_class:"form-select is-small ls-date-format"
-             ~text:(date_option_text current)
+             ~text:current
              ~on_press:(fun _ ->
                Signal.set mst (not (Runtime.signal_get mst));
                Runtime.flush ())
@@ -379,7 +376,7 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
       |> List.mapi (fun i stroke ->
           row ~key:(string_of_int i) ~cross:`center ~gap:4
             ((if i = 0 then []
-              else [ text ~value:(Ui_services.literal_text "->") [] ])
+              else [ text ~value:("->") [] ])
             @ [
                 keymap_binding
                   ~key:(key ^ string_of_int i)
@@ -416,7 +413,7 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
                                 ~key:(key ^ "k" ^ string_of_int i)
                                 ~boxed:(b.kind = "separate") ~glow:true
                                 ~min_slot:20
-                                ~value:(Ui_services.literal_text k);
+                                ~value:k;
                             ])
                         b.keys)
                  in
@@ -462,7 +459,7 @@ let keymap_pill st ~key ~title filter =
       (reactive
          (fun s ->
            title
-           ^ Ui_services.literal_text " \xc2\xb7 "
+           ^ {js| · |js}
            ^ string_of_int
                (Keymap_data.count ~query:s.km_query ~label:keymap_label filter))
          (Signal.value st))

@@ -13,8 +13,7 @@ let standard_kind context node =
   try Lui_ui.node_kind context node
   with Invalid_argument _ ->
     invalid_arg
-      "Ui_parts adapters wrap standard-kind elements only — \
-       dom/extension nodes must use their own ~events/~attrs props"
+      {js|Ui_parts adapters wrap standard-kind elements only — dom/extension nodes must use their own ~events/~attrs props|js}
 
 (* Pressable container: container kinds take no ~on_press, so wrap the
    element and register Press on the mounted node. Kinds that admit no
@@ -28,8 +27,7 @@ let pressable ~on_press (elem : t) : t =
   then
     invalid_arg
       (Printf.sprintf
-         "Ui_parts.pressable: kind %s admits no Press — route the press \
-          through a supported kind or a Logseq_el.el ~events node"
+         {js|Ui_parts.pressable: kind %s admits no Press — route the press through a supported kind or a Logseq_el.el ~events node|js}
          (Lui_wire_schema.node_kind_name kind));
   enable context node Lui_protocol.PressEnabled;
   register_press context node on_press;

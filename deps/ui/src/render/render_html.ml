@@ -124,7 +124,7 @@ and decode_entities s =
           | "lt" -> Buffer.add_char b '<'; go (j + 1)
           | "gt" -> Buffer.add_char b '>'; go (j + 1)
           | "quot" -> Buffer.add_char b '"'; go (j + 1)
-          | "nbsp" -> Buffer.add_string b "\xc2\xa0"; go (j + 1)
+          | "nbsp" -> Buffer.add_string b {js| |js}; go (j + 1)
           | _ -> Buffer.add_char b s.[i]; go (i + 1)
         else begin Buffer.add_char b s.[i]; go (i + 1) end
       end else begin Buffer.add_char b s.[i]; go (i + 1) end

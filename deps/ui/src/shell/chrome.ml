@@ -58,8 +58,10 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
    (sidebar open) — the key must differ per site or the reconciler
    folds the two mounted copies into one *)
 let search_button ?(key = "search-btn") () =
+  let keys = Keymap_data.tooltip_keys "go/search" in
   icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search" ~tip:(I18n.t "nav/search") ~keys:"\xE2\x8C\x98 K"
+    ~icon:"search" ~tip:(I18n.t "nav/search")
+    ?keys:(if keys = "" then None else Some keys)
     ~on_click:(fun _ -> Cmdk_state.open_latest ()) ()
 
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the

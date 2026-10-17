@@ -277,7 +277,7 @@ let updates_btn ~pid ~plj ~web_pkg =
     (match Plugin_host.update_version pid with
      | Some v ->
          [ button ~key:"b" ~style_class:"btn"
-             ~text:(t "plugin/update" ^ " \240\159\145\137 " ^ v)
+             ~text:(t "plugin/update" ^ {js| 👉 |js} ^ v)
              ~on_press:(fun _ ->
                Plugin_host.check_or_update pid repo false)
              [] ]

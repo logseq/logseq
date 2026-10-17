@@ -58,7 +58,6 @@ let run () =
         ; set = Hashtbl.replace values
         ; remove = Hashtbl.remove values
         }
-    ; literal_text = Fun.id
     ; request_flush = (fun () -> incr flushes)
     ; assert_owner = (fun () -> ())
     ; theme =
@@ -429,8 +428,6 @@ let run () =
      && Ui_services.storage_unquote "plain" = "plain"
      && Ui_services.storage_quote "dark" = "\"dark\"");
 
-  (* literal_text identity on the fake; real impls decode UTF-8 *)
-  check "literal_text dispatches" (Ui_services.literal_text "abc" = "abc");
 
   (* log/perf: calls reach the host sinks *)
   Ui_services.log_error ("boom", 1);
