@@ -69,14 +69,16 @@
   (is (false? (#'gp-exporter/logseq-class-ident? :foo/bar)))
   (is (false? (#'gp-exporter/logseq-class-ident? :bar))))
 
-;; Fails if, in `convert-tags-to-classes`, `and` becomes `or`.
-(deftest convert-tags-to-classes-keeps-all-tags-without-a-namespace
+;; Fails if, in `convert-tags-to-classes`, `logseq-class-ident?` is negated or the tags are reordered.
+(deftest convert-tags-to-classes-keeps-class-idents-in-order
   (is (= [:logseq.class/Task :logseq.class/Query]
          (#'gp-exporter/convert-tags-to-classes [:logseq.class/Task :logseq.class/Query] nil nil nil nil))))
 
-;; Fails if, in `convert-tags-to-classes`, `first` becomes `last`.
-(deftest convert-tags-to-classes-keeps-only-first-tag-with-a-namespace
-  (is (= [:logseq.class/Task]
+;; Fails if, in `convert-tags-to-classes`, `keep` becomes `map`: a tag that is not
+;; converted (`convert-tag?` false for "child" with no options) is left out, and the
+;; block's other tags stay (#13758).
+(deftest convert-tags-to-classes-leaves-out-unconverted-tags-and-keeps-the-others
+  (is (= [:logseq.class/Task :logseq.class/Query]
          (#'gp-exporter/convert-tags-to-classes
           [{:block/name "child" :block/namespace {:block/name "parent"}}
            :logseq.class/Task
