@@ -37,16 +37,26 @@ let task_of_promise promise =
     | Ok value -> Db_worker_effect.pure value
     | Error message -> Db_worker_effect.error (Failure message))
 
-(* bodies are raw bytes (e.g. framed gzip snapshot batches); send as
-   Uint8Array like the cljs upload does with ArrayBuffer, otherwise fetch
-   would utf-8 re-encode the string body. *)
+(* Text bodies are Unicode. Encode every one as UTF-8 so Chinese and
+   other non-Latin text stay valid JSON on the wire. Copying char codes
+   into a byte array wraps code points above 255 and turns characters
+   such as 明 into control bytes. Raw payloads (gzip snapshots, asset
+   bytes) go through Http_bytes instead. *)
+type text_encoder
+
+external new_text_encoder : unit -> text_encoder = "TextEncoder" [@@mel.new]
+
+external encode_utf8 : text_encoder -> string -> Js.Typed_array.Uint8Array.t
+  = "encode" [@@mel.send]
+
 external buffer_source_of_u8 : Js.Typed_array.Uint8Array.t -> Fetch.bufferSource
   = "%identity"
 
+let utf8_encoder = new_text_encoder ()
+
 let body_init_of_string s =
-  let a = Js.Typed_array.Uint8Array.fromLength (String.length s) in
-  String.iteri (fun i c -> Js.Typed_array.Uint8Array.unsafe_set a i (Char.code c)) s;
-  Fetch.BodyInit.makeWithBufferSource (buffer_source_of_u8 a)
+  Fetch.BodyInit.makeWithBufferSource
+    (buffer_source_of_u8 (encode_utf8 utf8_encoder s))
 
 let method_of_string = function
   | "POST" -> Fetch.Post

@@ -157,17 +157,39 @@ let auth_headers () : (string * string) list =
   | None -> raise (ex_info "Empty token" [])
   | Some token -> [ "authorization", "Bearer " ^ token ]
 
+(* Snapshot uploads are framed bytes (gzip when the platform can).
+   Callers mark them application/transit+json and, when compressed,
+   content-encoding. Those bodies are bytes. JSON and other text use
+   Http.send, which encodes Unicode as UTF-8. *)
+let raw_byte_body headers =
+  List.exists
+    (fun (name, value) ->
+       match String.lowercase_ascii name with
+       | "content-encoding" -> true
+       | "content-type" ->
+           String.lowercase_ascii value = "application/transit+json"
+       | _ -> false)
+    headers
+
+let perform_http url ~meth ~headers ~body : (int * string) Db_worker_effect.t =
+  if raw_byte_body headers then
+    Http_bytes.send { Http_bytes.url; method_ = meth; headers; body }
+    >>= fun resp ->
+    Db_worker_effect.pure (resp.Http_bytes.status, resp.body)
+  else
+    Http.send { Http.url; method_ = meth; headers; body } >>= fun resp ->
+    Db_worker_effect.pure (resp.status, resp.body)
+
 (* sync-util/fetch-json — the platform impl wired as the default
    Sync_deps.fetch_json hook; tests may override the hook. *)
 let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
     ?response_schema ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
   let headers = auth_headers () @ headers in
-  Http.send { Http.url; method_ = meth; headers; body } >>= fun resp ->
+  perform_http url ~meth ~headers ~body >>= fun (status, resp_body) ->
   let data =
-    if String.length resp.body = 0 then Wire.Nil
-    else Json_codec.parse resp.body
+    if String.length resp_body = 0 then Wire.Nil else Json_codec.parse resp_body
   in
-  if resp.status >= 200 && resp.status < 300 then
+  if status >= 200 && status < 300 then
     match response_schema with
     | Some schema ->
         (match coerce_http_response schema data with
@@ -175,7 +197,7 @@ let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
          | None ->
              Db_worker_effect.error
                (ex_info "db-sync invalid response"
-                  [ Wire.keyword "status", Wire.Int resp.status
+                  [ Wire.keyword "status", Wire.Int status
                   ; Wire.keyword "url", Wire.String url
                   ; Wire.keyword "body", data ]))
     | None -> Db_worker_effect.pure data
@@ -187,7 +209,7 @@ let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
     in
     Db_worker_effect.error
       (ex_info "db-sync request failed"
-         [ Wire.keyword "status", Wire.Int resp.status
+         [ Wire.keyword "status", Wire.Int status
          ; Wire.keyword "url", Wire.String url
          ; Wire.keyword "body", body ])
 
