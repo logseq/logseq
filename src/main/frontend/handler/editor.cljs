@@ -1906,6 +1906,17 @@
           (some #(when (= container-id (row-container-id %)) %) rows))
         (first rows))))
 
+(defn- edit-row-container-id
+  "The container of the row being edited (the editor's own row, not a copy of
+  the block drawn first elsewhere)."
+  []
+  (some-> (state/get-edit-input-id) gdom/getElement row-container-id))
+
+(defn- selection-container-id
+  "The container the first of `blocks` was selected in."
+  [container-ids blocks]
+  (get container-ids (str (:block/uuid (first blocks)))))
+
 (defn- move-scroll-context
   []
   [(state/get-current-repo) (state/get-route-match)])
@@ -1930,13 +1941,12 @@
   (let [repo (state/get-current-repo)
         edit-block-id (:block/uuid (state/get-edit-block))
         start-context (move-scroll-context)
-        move-nodes (fn [blocks]
+        ;; `container-id`: the view the block is moved in (it can also be
+        ;; drawn in an embed, a query or the sidebar), from the row being
+        ;; edited or selected
+        move-nodes (fn [blocks container-id]
                      (let [blocks' (block-handler/get-top-level-blocks blocks)
-                           block-id (str (:block/uuid (first blocks)))
-                           ;; the view the block is moved in: it can also be
-                           ;; drawn in an embed or the sidebar
-                           container-id (some-> (util/get-first-block-by-id block-id)
-                                                row-container-id)]
+                           block-id (str (:block/uuid (first blocks)))]
                        (p/let [result (ui-outliner-tx/transact!
                                        (merge {:outliner-op :move-blocks}
                                               (block-handler/outliner-tx-meta (first blocks')))
@@ -1955,11 +1965,12 @@
         (p/let [block (db-async/<get-block repo edit-block-id {:children? false})]
           (let [blocks [(assoc block :block/title (state/get-edit-content))]
                 blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
-                container-id (get-new-container-id (if up? :move-up :move-down) {})]
+                container-id (get-new-container-id (if up? :move-up :move-down) {})
+                edit-container-id (edit-row-container-id)]
             (when (seq blocks)
               (p/do!
                (save-current-block!)
-               (move-nodes blocks)
+               (move-nodes blocks edit-container-id)
                (if container-id
                  (state/set-editing-block-id! [container-id edit-block-id])
                  (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
@@ -1976,7 +1987,7 @@
                     blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
               (when (seq blocks)
                 (p/do!
-                 (move-nodes blocks)
+                 (move-nodes blocks (selection-container-id container-ids blocks))
                  ;; The transaction flushes its delta before settling, so moved
                  ;; rows can be resolved in their original view.
                  (let [nodes (keep new-row ids)

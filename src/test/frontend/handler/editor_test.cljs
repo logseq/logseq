@@ -3512,6 +3512,19 @@
       (is (= "page-row" (#'editor/moved-row "b" 3)))
       (is (= "sidebar-row" (#'editor/moved-row "b" nil)) "no known view: the first row"))))
 
+(deftest move-scrolls-in-the-view-of-the-edited-or-selected-row-test
+  ;; the block is also drawn earlier in an embed (container 7); it is edited
+  ;; or selected in the page (container 3), so the scroll goes there
+  (let [container-of {"editor-input" 3 "selected-row" 3}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-input-id")
+                  gdom/getElement (fn [id] (when (= id "edit-input-id") "editor-input"))
+                  util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))
+                  dom/attr (fn [node _attr] (when (= node "selected-row") "b"))]
+      (is (= 3 (#'editor/edit-row-container-id)))
+      (is (= 3 (#'editor/selection-container-id (#'editor/row-container-ids ["selected-row"])
+                                                [{:block/uuid "b"}]))))))
+
 (deftest move-scroll-context-is-the-graph-and-route-test
   ;; a scroll after a move runs only when these are unchanged
   (with-redefs [state/get-current-repo (constantly "graph-a")
