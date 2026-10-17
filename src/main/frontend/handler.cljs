@@ -53,7 +53,10 @@
 (defn restore-and-setup!
   [repo]
   (when repo
-    (-> (p/let [_ (db-restore/restore-graph! repo)
+    (-> (p/let [_ (-> (db-restore/restore-graph! repo)
+                      (p/catch (fn [error]
+                                 (db-restore/abandon-unopened-graph!)
+                                 (throw error))))
                 _ (repo-handler/<restore-date-formatter! repo)
                 _ (graph-handler/<upsert-current-graph-registry!)]
           (graph-handler/remember-current-graph-id-in-tab!)
