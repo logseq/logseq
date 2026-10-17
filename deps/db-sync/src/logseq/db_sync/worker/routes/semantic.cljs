@@ -346,7 +346,9 @@
    :components
    {:schemas (ordered-map
               :BlockTree {:type "object" :required ["title"]
-                          :properties {:title {:type "string"}
+                          :properties {:uuid {:type "string" :format "uuid"
+                                              :description "Optional stable identity for retry-safe insertion. An existing block under the same parent is reused without changing its title or order; duplicate IDs and other-parent collisions are rejected."}
+                                       :title {:type "string"}
                                        :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
               :BlockResponse {:type "object" :required ["uuid" "kind" "title"]
                               :properties {:uuid {:type "string"}
@@ -409,7 +411,7 @@
                                                    :scheduled {:type "integer"}
                                                    :deadline {:type "integer"}}}]}
               :PropertyValue
-              {:description "For ref properties, pass an existing entity by UUID, ident, or title. Status and Priority also accept case-insensitive built-in aliases such as TODO, DONE, and HIGH; user-defined choices use UUID, ident, or exact title. Class properties such as Tags accept a class UUID, ident, or title, or an array of those selectors. Scalar properties accept their JSON scalar value."
+              {:description "For ref properties, pass an existing entity by UUID, ident, or title. Status and Priority also accept case-insensitive built-in aliases such as TODO, DONE, and HIGH; user-defined choices use UUID, ident, or exact title. Class properties such as Tags accept a class UUID, ident, or title, or an array of those selectors. On unencrypted graphs, URL properties also accept URL strings and arrays of URL strings, creating native URL values. Encrypted graphs require existing entity selectors for URL properties. Scalar properties accept their JSON scalar value."
                :oneOf [{:type "string"} {:type "number"} {:type "boolean"}
                        {:type "array" :items {:oneOf [{:type "string"} {:type "number"}]}}]})
     :securitySchemes
