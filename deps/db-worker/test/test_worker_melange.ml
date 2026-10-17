@@ -13,6 +13,9 @@ let promise_of_task t =
   Js.Promise.make (fun ~resolve ~reject ->
       Db_worker_effect.on_any t (fun v -> resolve v [@u]) (fun e -> reject e [@u]))
 
+external promise_finally : 'a Js.Promise.t -> (unit -> unit [@u]) -> 'a Js.Promise.t
+  = "finally" [@@mel.send]
+
 external browser_process : 'a Js.Undefined.t = "process" [@@mel.scope "globalThis"]
 external browser_global : 'a = "globalThis"
 external set_browser_process : 'a -> 'b Js.Undefined.t -> unit = "process" [@@mel.set]
@@ -646,4 +649,100 @@ let () =
             | Search_index.Rows rows | Search_index.Rows_with_count (rows, _) -> rows in
           Fest.expect |> Fest.equal
             (List.map (fun row -> List.assoc_opt "block/title" row) rows
-             = [ Some (String (marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js})) ]) true))
+             = [ Some (String (marked "Repro" ^ {js| · 列边界拖拽热区过窄，难以命中，光标反馈弱|js})) ]) true));
+
+  (* Chinese graph create POSTs JSON. Http.send must emit UTF-8 for every
+     script; snapshot/asset byte bodies stay one byte per char. *)
+  Fest.Promise.test "graph-create JSON is UTF-8 and byte bodies stay bytes" (fun () ->
+      let module Probe = struct
+        type server
+        type req
+        type res
+
+        external create_server : (req -> res -> unit [@u]) -> server
+          = "createServer" [@@mel.module "http"]
+
+        external listen : server -> int -> string -> (unit -> unit [@u]) -> unit
+          = "listen" [@@mel.send]
+
+        external address : server -> < port : int > Js.t = "address" [@@mel.send]
+        external close : server -> (unit -> unit [@u]) -> unit = "close" [@@mel.send]
+        external req_on : req -> string -> ('a -> unit [@u]) -> unit = "on" [@@mel.send]
+        external res_end : res -> string -> unit = "end" [@@mel.send]
+        external as_buffer : 'a -> Node.Buffer.t = "%identity"
+        external buf_concat : Node.Buffer.t array -> Node.Buffer.t = "concat"
+          [@@mel.scope "Buffer"]
+        external buf_from : string -> string -> Node.Buffer.t = "from"
+          [@@mel.scope "Buffer"]
+        external buf_to_string : Node.Buffer.t -> string -> string = "toString"
+          [@@mel.send]
+      end in
+      let hex_of chunks =
+        let buf = Probe.buf_concat (Array.of_list (List.rev chunks)) in
+        Probe.buf_to_string buf "hex"
+      in
+      let utf8_hex s = Probe.buf_to_string (Probe.buf_from s "utf8") "hex" in
+      let received = ref "" in
+      let server =
+        Probe.create_server (fun [@u] req res ->
+            let chunks = ref [] in
+            Probe.req_on req "data" (fun [@u] c ->
+                chunks := Probe.as_buffer c :: !chunks);
+            Probe.req_on req "end" (fun [@u] (_ : Js.Json.t) ->
+                received := hex_of !chunks;
+                Probe.res_end res "{\"ok\":true}"))
+      in
+      let name = {js|中文明文 café مرحبا 😀|js} in
+      let json_body =
+        Json_codec.encode
+          (Wire.Map
+             [ Wire.Keyword "graph-name", Wire.String name
+             ; Wire.Keyword "schema-version", Wire.String "4b5"
+             ; Wire.Keyword "graph-e2ee?", Wire.Bool false ])
+      in
+      let byte_body = String.make 1 (Char.chr 0xff) ^ String.make 1 (Char.chr 0x0e) ^ "AB" in
+      let prev_fetch = !Sync_deps.fetch_json in
+      let prev_auth = !Sync_util.auth_token_fn in
+      Sync_deps.fetch_json := Some Sync_util.fetch_json_default;
+      Sync_util.auth_token_fn := (fun () -> Some "token");
+      let restore () =
+        Sync_deps.fetch_json := prev_fetch;
+        Sync_util.auth_token_fn := prev_auth;
+        Probe.close server (fun [@u] () -> ())
+      in
+      let finish p = promise_finally p (fun [@u] () -> restore ()) in
+      let listen_port () =
+        Js.Promise.make (fun ~resolve ~reject:_ ->
+            Probe.listen server 0 "127.0.0.1" (fun [@u] () ->
+                resolve (Probe.address server)##port [@u]))
+      in
+      let post_json port =
+        let url = Printf.sprintf "http://127.0.0.1:%d/graphs" port in
+        promise_of_task
+          (Sync_util.fetch_json url ~meth:"POST"
+             ~headers:[ ("content-type", "application/json") ]
+             ~body:json_body ())
+      in
+      let post_bytes port =
+        promise_of_task
+          (Sync_util.fetch_json
+             (Printf.sprintf "http://127.0.0.1:%d/snapshot" port)
+             ~meth:"POST"
+             ~headers:
+               [ ("content-type", "application/transit+json")
+               ; ("content-encoding", "gzip") ]
+             ~body:byte_body ())
+      in
+      finish
+        (listen_port ()
+         |> Js.Promise.then_ (fun port ->
+                post_json port
+                |> Js.Promise.then_ (fun _parsed ->
+                       Fest.expect |> Fest.equal !received (utf8_hex json_body);
+                       Fest.expect |> Fest.equal (contains !received "e6988e") true;
+                       Fest.expect |> Fest.equal (contains !received "f09f9880") true;
+                       received := "";
+                       post_bytes port)
+         |> Js.Promise.then_ (fun _parsed ->
+                Fest.expect |> Fest.equal !received "ff0e4142";
+                Js.Promise.resolve ()))))

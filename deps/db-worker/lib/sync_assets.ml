@@ -184,21 +184,36 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
            else String.length payload
          in
          notify_asset_progress repo asset_id "upload" 0 total;
-         !http_send_fn
-           { Http.url = put_url
-           ; method_ = "PUT"
-           ; headers =
-               Sync_util.auth_headers ()
-               @ [ "x-amz-meta-checksum", cs; "x-amz-meta-type", at ]
-           ; body = Some payload }
-         >>= fun (resp : Http.response) ->
+         let headers =
+           Sync_util.auth_headers ()
+           @ [ "x-amz-meta-checksum", cs; "x-amz-meta-type", at ]
+         in
+         (* Transit ciphertext is Unicode text. Raw asset bytes stay on
+            the byte transport so values above 127 are not UTF-8-encoded. *)
+         (if text_payload then
+            !http_send_fn
+              { Http.url = put_url
+              ; method_ = "PUT"
+              ; headers
+              ; body = Some payload }
+            >>= fun (resp : Http.response) ->
+            Db_worker_effect.pure resp.status
+          else
+            !http_bytes_send_fn
+              { Http_bytes.url = put_url
+              ; method_ = "PUT"
+              ; headers
+              ; body = Some payload }
+            >>= fun (resp : Http_bytes.response) ->
+            Db_worker_effect.pure resp.status)
+         >>= fun status ->
          notify_asset_progress repo asset_id "upload" total total;
-         if resp.status >= 200 && resp.status < 300 then
+         if status >= 200 && status < 300 then
            Db_worker_effect.pure ()
          else
            raise
              (err "rtc.exception/upload-asset-failed" "upload-asset failed"
-                ~data:[ (Wire.Keyword "status", Wire.Int resp.status) ]))
+                ~data:[ (Wire.Keyword "status", Wire.Int status) ]))
         (fun e ->
            match e with
            | Dispatcher.Exn_info (_, kvs)
