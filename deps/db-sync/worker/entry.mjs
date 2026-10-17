@@ -172,12 +172,20 @@ async function handleMcp(request, env, ctx) {
 
   const apiToolDescriptors = registerSemanticApiTools(server, spec, semanticApiRequest);
 
-  const transport = new WebStandardStreamableHTTPServerTransport();
-  await server.connect(transport);
-  server.server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: [...chatGptToolDescriptors(), ...apiToolDescriptors],
-  }));
-  return transport.handleRequest(request);
+  // Each request owns its server; no session exists to deliver SSE messages later.
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  try {
+    await server.connect(transport);
+    server.server.setRequestHandler(ListToolsRequestSchema, () => ({
+      tools: [...chatGptToolDescriptors(), ...apiToolDescriptors],
+    }));
+    return await transport.handleRequest(request);
+  } finally {
+    await server.close();
+  }
 }
 
 export default {
@@ -192,7 +200,14 @@ export default {
       return protectedResourceMetadata(request, env);
     }
     if (path === "/mcp/icon.png") return logseqIconResponse();
-    if (path === "/mcp") return handleMcp(ensureMcpAcceptHeader(request), env, ctx);
+    if (path === "/mcp") {
+      // Reject probes before loading the spec or constructing a server/transport.
+      // A standalone SSE stream has no producer in this stateless worker.
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleMcp(ensureMcpAcceptHeader(request), env, ctx);
+    }
     return worker.fetch(request, env, ctx);
   },
 };
