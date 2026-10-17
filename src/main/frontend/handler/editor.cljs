@@ -2994,7 +2994,7 @@
                        (not root-block?)
                        (not single-block?)
                        (not custom-query?))
-              (if (own-order-number-list? block)
+              (if (own-order-number-list? (latest-renderer-block block))
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
