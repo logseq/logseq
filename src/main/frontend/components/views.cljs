@@ -1716,6 +1716,17 @@
    {:value :custom-date
     :label (t :view.filter/custom-date)}])
 
+(defn- filter-clause
+  "View resource validation requires every clause to be a 3-tuple.
+  Text operators keep an empty string while the input is still blank;
+  other operators may omit the value until the user supplies one."
+  [property operator value]
+  (if (some? value)
+    [property operator value]
+    (case operator
+      (:text-contains :text-not-contains) [property operator ""]
+      [property operator])))
+
 (hsx/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
@@ -1746,7 +1757,7 @@
                                  (do
                                    (shui/popup-hide!)
                                    (let [property internal-property
-                                         new-filter [(:db/ident property) :text-contains]
+                                         new-filter (filter-clause (:db/ident property) :text-contains nil)
                                          filters' (if (seq (:filters filters))
                                                     (conj (:filters filters) new-filter)
                                                     [new-filter])]
@@ -1893,16 +1904,14 @@
          {:on-click (fn []
                       (p/let [data (db-async/<get-view-filter-data property
                                                                     {:operator operator
-                                                                     :value (nth (get-in filters [:filters idx]) 2)})
+                                                                     :value (nth (get-in filters [:filters idx]) 2 nil)})
                               value' (:value-after-operator-change data)]
                         (set-filters!
                          (update filters :filters
                                  (fn [col]
                                    (update col idx
                                            (fn [[property _old-operator _value]]
-                                             (if value'
-                                               [property operator value']
-                                               [property operator]))))))))}
+                                             (filter-clause property operator value'))))))))}
          (operator->text operator)))))))
 
 (hsx/defc between
@@ -2163,9 +2172,7 @@
 
                       :else
                       matches)]
-       (if (some? matches')
-         [property operator matches']
-         [property operator])))
+       (filter-clause property operator matches')))
    filters))
 
 (defn- db-set-table-state!
