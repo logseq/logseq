@@ -5,6 +5,20 @@ import postcss from 'postcss'
 
 const stylesheet = new URL('../resources/css/lui-overlay.css', import.meta.url)
 
+test('left sidebar groups are independent of the right sidebar scope', async () => {
+  const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
+  const root = postcss.parse(source)
+  for (const selector of ['.sidebar-navigations', '.sidebar-content-group']) {
+    const matches = []
+    root.walkRules(selector, rule => matches.push(rule))
+    assert.equal(matches.length, 1, `${selector} must have one semantic owner`)
+    assert.equal(matches[0].parent.type, 'root', `${selector} must style the left sidebar`)
+  }
+  const rightOnly = []
+  root.walkRules('.sidebar-item-list', rule => rightOnly.push(rule.parent.selector))
+  assert.deepEqual(rightOnly, ['.cp__right-sidebar'], 'Right panel list spacing stays scoped')
+})
+
 test('dialog surface declarations do not apply to dropdown menu items or slots', async () => {
   const source = await readFile(stylesheet, 'utf8')
   const root = postcss.parse(source, { from: stylesheet.pathname })

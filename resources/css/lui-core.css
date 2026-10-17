@@ -947,6 +947,8 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   .page {
     margin: 0 0.75rem 1.25rem;
   }
+}
+
 .sidebar-navigations {
   gap: 0.125rem;
   margin-top: 0.25rem;
@@ -1129,6 +1131,7 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 }
 
 
+.cp__right-sidebar {
   /* cljs wraps the page in .mt-2 and renders no empty grid rows; the LUI
      page emits empty placeholder divs that take .page-inner gap space */
   .page-inner > div:empty {

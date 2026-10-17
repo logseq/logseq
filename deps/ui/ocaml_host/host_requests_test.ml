@@ -712,6 +712,49 @@ let () = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () in
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+  let previous_flush = !Runtime.app_flush in
+  let app = Lui_app.create backend () (fun () () -> ())
+      (fun context _ _ ->
+        let state value = Signal.state context.Lui_ui.ui_scheduler value in
+        let st : Sidebar_state.t =
+          {favorites=state []; recents=state []; nav_checked=state [];
+           nav_tag_titles=state []; favorited=state false; items=state [];
+           open_menu=state ""; groups_collapsed=state [];
+           left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 1440.} in
+        Left_sidebar_view.content_group st ~key:"native-recent" ~class_:"recent"
+          ~label:"Recent" ~items_sig:(Signal.value st.recents)
+          ~li_class:"recent-item" ~ul_class:"" ~always_bd:true ~recent:true) in
+  ignore (Lui_app.start app); ignore (Lui_app.flush app);
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+  let has_class id name =
+    match Lui_store.string_prop store id "style-class" with
+    | Some value -> List.mem name (String.split_on_char ' ' value)
+    | None -> false in
+  let body () = List.exists (fun id -> has_class id "bd") (Lui_store.preorder store) in
+  let header = List.find (fun id -> has_class id "hd") (Lui_store.preorder store) in
+  let label = List.find (fun id -> has_class id "wrap-th") (Lui_store.preorder store) in
+  let failures = ref [] in
+  let expect message value = if not value then failures := message :: !failures in
+  expect "An empty expanded Recent retains its list body" (body ());
+  expect "Sidebar group labels match the reference opacity"
+    (Lui_store.float_prop store label "opacity" = Some 0.5);
+  for _ = 1 to 2 do
+    ignore (Lui_app.dispatch_event app (Press header)); ignore (Lui_app.flush app);
+    expect "Collapsed native sidebar groups must remove their content" (not (body ()));
+    expect "Collapsing a sidebar group must retain its header" (Lui_store.mem store header);
+    ignore (Lui_app.dispatch_event app (Press header)); ignore (Lui_app.flush app);
+    expect "Reopening a native sidebar group restores its content" (body ())
+  done;
+  Runtime.app_flush := previous_flush;
+  ignore (Lui_app.dispose app);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native sidebar group collapse and style" (!failures = []);
+  print_endline "native sidebar group collapse and style: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store = Lui_store.create () in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
   let app = Lui_app.create backend Model.initial (fun model _ -> model)
       (fun context _ _ ->
         Left_sidebar_view.nav_link ~sched:context.Lui_ui.ui_scheduler

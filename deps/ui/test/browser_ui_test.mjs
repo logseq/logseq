@@ -72,6 +72,23 @@ const appendBlock = text => {
   browser('keyboard', 'type', text);
   return uuid;
 };
+
+test('sidebar group headings match the reference and collapse their content', () => {
+  open();
+  if (evaluate("document.querySelector('#left-sidebar').getBoundingClientRect().width") === 0) {
+    button('Toggle left sidebar');
+  }
+  assert.deepEqual(evaluate("[...document.querySelectorAll('#left-sidebar .wrap-th')].map(e => getComputedStyle(e).opacity)"),
+    ['0.5', '0.5', '0.5']);
+  for (let cycle = 0; cycle < 2; cycle += 1) {
+    browser('click', '.sidebar-content-group.recent .hd');
+    browser('wait', '--fn', "!document.querySelector('.sidebar-content-group.recent').classList.contains('is-expand')");
+    assert.equal(evaluate("document.querySelector('.sidebar-content-group.recent .bd')"), null,
+      'Collapsed groups must remove interactive rows, including their keyboard targets');
+    browser('click', '.sidebar-content-group.recent .hd');
+    browser('wait', '--fn', "document.querySelector('.sidebar-content-group.recent .bd') !== null");
+  }
+});
 const assertExited = () => {
   browser('wait', '250');
   assert.equal(evaluate("document.querySelectorAll('.editor-wrapper').length"), 0);

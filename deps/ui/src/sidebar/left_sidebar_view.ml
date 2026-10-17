@@ -541,7 +541,7 @@ let nav_group ms st =
                        [ Ui_components.Prop.font_size "0.875rem"
                        ; Ui_components.Prop.line_height "1.25rem"
                        ; Ui_components.Prop.font_weight 500 ]
-                       (row ~cross:`center ~grow:1. ~opacity:0.4
+                       (row ~cross:`center ~grow:1. ~opacity:0.5
                           ~style_class:"wrap-th"
                           [ (* web .wrap-th > .lui-text: sm:text-xs
                                (12px/16px) — the smaller label reads
@@ -762,7 +762,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                              [ Ui_components.Prop.font_size "0.875rem"
                              ; Ui_components.Prop.line_height "1.25rem"
                              ; Ui_components.Prop.font_weight 500 ]
-                             (row ~cross:`center ~grow:1. ~opacity:0.4
+                             (row ~cross:`center ~grow:1. ~opacity:0.5
                                 ~style_class:"wrap-th"
                                 [ (* web .wrap-th > .lui-text:
                                      sm:text-xs (12px/16px) *)
@@ -790,7 +790,9 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                    else "chevron-down"))
                               (Sidebar_state.group_collapsed_sig st class_)
                          ] ]))
-           ; reactive
+           ; if_ ~test:(reactive (fun groups -> not (List.mem class_ groups))
+                         (Signal.value st.Sidebar_state.groups_collapsed))
+             (reactive
                ~equal:(fun a b ->
                  List.map
                    (fun (p : Model.page) -> (p.page_uuid, p.page_title))
@@ -816,7 +818,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                    ^ Option.value p.Model.page_uuid
                                        ~default:p.Model.page_title))
                             ps)) ])
-               items_sig
+               items_sig)
            ]
        ])
 

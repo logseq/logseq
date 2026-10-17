@@ -381,7 +381,32 @@ let test_left_sidebar () =
        (List.exists
           (fun n ->
             subtree_contains n (fun c -> M.string_prop c "url" = Some "#"))
-          rec_items))
+          rec_items));
+  let collapse_group cls =
+    let group = List.find (fun n -> has_tok n cls && has_tok n "sidebar-content-group")
+        (find_where (fun n -> has_tok n "sidebar-content-group")) in
+    let inner = List.hd (M.children (tree ()) group.M.id) in
+    let header = List.find (fun n -> has_tok n "hd")
+        (M.children (tree ()) inner.M.id) in
+    S.press (s ()) header.M.id;
+    group
+  in
+  let recent = collapse_group "recent" in
+  check "collapsing Recent removes its body on every host"
+    (not (subtree_contains recent (fun n -> has_tok n "bd")));
+  check "collapsing Recent preserves Favorites" (find_where (fun n -> has_tok n "favorite-item") <> []);
+  Runtime.signal_set st.Sidebar_state.recents
+    [sidebar_page ~uuid:"rec-new" "Updated Recent Page"];
+  check "updating a collapsed group does not expose its rows"
+    (find_where (fun n -> has_tok n "recent-item") = []);
+  ignore (collapse_group "recent");
+  at_least "text:\"Updated Recent Page\"" 1;
+  let favorite = collapse_group "favorites" in
+  check "Favorites collapses independently"
+    (not (subtree_contains favorite (fun n -> has_tok n "bd"))
+     && find_where (fun n -> has_tok n "recent-item") <> []);
+  ignore (collapse_group "favorites");
+  at_least "text:\"Fav Page\"" 1
 
 (* ---------------- right sidebar ---------------- *)
 
