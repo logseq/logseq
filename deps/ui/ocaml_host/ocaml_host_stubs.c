@@ -300,8 +300,8 @@ CAMLprim void logseq_native_activate(void) {
    host builds a real NSMenu bar: every item carries a command tag and
    fires the single LogseqMenuTarget action, which forwards the tag to
    the "ocaml_host_menu_command" named value registered in
-   logseq_native.ml. OCaml owns the whole dispatch table — Edit
-   commands are re-injected as real SDL key events so they behave
+   logseq_native.ml. OCaml owns the dispatch table. Direct Edit actions
+   are injected as SDL key events so they behave
    identically to the keyboard, app commands reuse the app's menu-*
    platform_event contract, and OS verbs go back out through
    logseq_native_app_op below. */
@@ -330,11 +330,29 @@ enum {
 
 static id logseq_menu_target = nil;
 
-static void logseq_menu_action(id self, SEL _cmd, id sender) {
-  (void)self;
-  (void)_cmd;
+static bool logseq_menu_key_equivalent(id sender, id event) {
+  if (event == nil || ((unsigned long(*)(id, SEL))objc_msgSend)(
+          event, sel_registerName("type")) != 10) return false;
+  id key = ((id(*)(id, SEL))objc_msgSend)(sender, sel_registerName("keyEquivalent"));
+  id chars = ((id(*)(id, SEL))objc_msgSend)(event, sel_registerName("charactersIgnoringModifiers"));
+  if (key == nil || chars == nil || ((unsigned long(*)(id, SEL))objc_msgSend)(
+          key, sel_registerName("length")) == 0) return false;
+  const unsigned long modifiers = (1UL << 17) | (1UL << 18) | (1UL << 19) | (1UL << 20);
+  unsigned long actual = ((unsigned long(*)(id, SEL))objc_msgSend)(event, sel_registerName("modifierFlags"));
+  unsigned long expected = ((unsigned long(*)(id, SEL))objc_msgSend)(sender, sel_registerName("keyEquivalentModifierMask"));
+  if ((actual & modifiers) != (expected & modifiers)) return false;
+  key = ((id(*)(id, SEL))objc_msgSend)(key, sel_registerName("lowercaseString"));
+  chars = ((id(*)(id, SEL))objc_msgSend)(chars, sel_registerName("lowercaseString"));
+  return ((bool(*)(id, SEL, id))objc_msgSend)(key, sel_registerName("isEqualToString:"), chars);
+}
+
+static void logseq_menu_dispatch(id sender, id event) {
   long tag = ((long (*)(id, SEL))objc_msgSend)(sender,
                                                sel_registerName("tag"));
+  /* SDL already receives physical Edit shortcuts. Only direct menu
+     actions need a synthetic key; reinjecting an equivalent executes twice. */
+  if (tag >= kMenuUndo && tag <= kMenuSelectAll &&
+      logseq_menu_key_equivalent(sender, event)) return;
   /* AppKit also dispatches menus inside SDL's unlocked event wait. */
   bool acquire = Caml_state_opt == NULL;
   if (acquire) caml_acquire_runtime_system();
@@ -344,6 +362,15 @@ static void logseq_menu_action(id self, SEL _cmd, id sender) {
     (void)Is_exception_result(res);
   }
   if (acquire) caml_release_runtime_system();
+}
+
+static void logseq_menu_action(id self, SEL _cmd, id sender) {
+  (void)self;
+  (void)_cmd;
+  id app = ((id(*)(Class, SEL))objc_msgSend)(
+      objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+  id event = ((id(*)(id, SEL))objc_msgSend)(app, sel_registerName("currentEvent"));
+  logseq_menu_dispatch(sender, event);
 }
 
 static id menu_nsstr(const char *s) {
@@ -2713,6 +2740,35 @@ CAMLprim value logseq_native_test_menu_action(value tag, value unlocked) {
   if (release) caml_acquire_runtime_system();
   ((void(*)(id, SEL))objc_msgSend)(sender, sel_registerName("release"));
   if (!sent) caml_failwith("Native menu action was not dispatched");
+#else
+  caml_invalid_argument("Native menu dispatch requires macOS");
+#endif
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_test_menu_key_action(value tag, value key,
+                                                 value item_mods, value chars,
+                                                 value event_mods) {
+  CAMLparam5(tag, key, item_mods, chars, event_mods);
+#ifdef __APPLE__
+  id pool = ((id(*)(id, SEL))objc_msgSend)(
+      menu_alloc(objc_getClass("NSAutoreleasePool")), sel_registerName("init"));
+  id sender = ((id(*)(Class, SEL))objc_msgSend)(
+      objc_getClass("NSMenuItem"), sel_registerName("new"));
+  ((void(*)(id, SEL, long))objc_msgSend)(sender, sel_registerName("setTag:"), Long_val(tag));
+  ((void(*)(id, SEL, id))objc_msgSend)(sender, sel_registerName("setKeyEquivalent:"), menu_nsstr(String_val(key)));
+  ((void(*)(id, SEL, unsigned long))objc_msgSend)(sender,
+      sel_registerName("setKeyEquivalentModifierMask:"), Long_val(item_mods));
+  id text = menu_nsstr(String_val(chars));
+  id event = ((id(*)(Class, SEL, unsigned long, CGPoint, unsigned long,
+                    double, long, id, id, id, bool, unsigned short))objc_msgSend)(
+      objc_getClass("NSEvent"),
+      sel_registerName("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+      10, CGPointZero, Long_val(event_mods), 0., 0, nil, text, text, false, 0);
+  if (event == nil) caml_failwith("Native test key event was not created");
+  logseq_menu_dispatch(sender, event);
+  ((void(*)(id, SEL))objc_msgSend)(sender, sel_registerName("release"));
+  ((void(*)(id, SEL))objc_msgSend)(pool, sel_registerName("drain"));
 #else
   caml_invalid_argument("Native menu dispatch requires macOS");
 #endif

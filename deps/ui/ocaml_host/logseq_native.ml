@@ -1329,7 +1329,6 @@ let () =
   in
   let dom_down_node = ref 0 in
   let dom_down_clicks = ref 0 in
-  let last_dom_key = ref None in
   (* Same-hit free moves carry no new information — cap them the way
      native hosts do (~25/s); drags emit every move. *)
   let last_move_emit = ref (0, 0.) in
@@ -1607,34 +1606,7 @@ let () =
          | None -> [])
       @ mods_fields mods
     in
-    (* macOS routes menu keyEquivalents (Edit-menu tags 6-11:
-       z/x/c/v/a with gui or gui+shift) to both SDL and the menu
-       callback, which re-injects the key — one physical press arrives
-       as two keydown/keyup pairs ~1ms apart. Browsers dispatch each
-       key once, and a doubled mod+a exits editing to block selection
-       on the second dispatch, so drop an identical
-       (scancode, shift, down) meta event inside a short window. *)
-    let dupe =
-      if Host_platform.is_macos && mods.Input.meta
-         && not (mods.Input.ctrl || mods.Input.alt)
-      then
-        let now = Unix.gettimeofday () in
-        let dupe =
-          match !last_dom_key with
-          | Some (sc', sh', dn', t) ->
-              sc' = scancode && sh' = mods.Input.shift && dn' = down
-              && now -. t < 0.08
-          | None -> false
-        in
-        if dupe then true
-        else begin
-          last_dom_key := Some (scancode, mods.Input.shift, down, now);
-          false
-        end
-      else false
-    in
-    if dupe then ()
-    else begin
+    begin
       if down && not recording && target <> 0
          && Lui_store.kind store target = "extension:logseq-editor"
       then begin
@@ -1714,11 +1686,9 @@ let () =
 
      ocaml_host_stubs.c installs the NSMenu bar; every item's tag is
      forwarded here through the "ocaml_host_menu_command" named value.
-     One dispatch path: Edit commands are re-injected as real SDL key
-     events so the app's keymap sees exactly what a keyboard press
-     produces (the item's keyEquivalent fires the same action, so
-     Cmd+Z from the keyboard is routed here instead of being
-     swallowed); app-level commands reuse the "menu-*" platform_event
+     Direct Edit menu actions become SDL keys; physical key equivalents
+     are already owned by SDL and are filtered at the AppKit callback.
+     App-level commands reuse the "menu-*" platform_event
      contract Menu_bar.install registers; OS verbs bounce back to the
      AppKit stub (native_app_op). Tags match the kMenu* enum in
      ocaml_host_stubs.c. *)

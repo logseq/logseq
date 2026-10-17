@@ -6,6 +6,8 @@ external input_chain : int -> bool = "logseq_native_input_chain"
 external expose_unlocked : int -> unit = "logseq_native_test_expose_unlocked"
 external install_menus : unit -> unit = "logseq_native_install_menus"
 external menu_action : int -> bool -> unit = "logseq_native_test_menu_action"
+external menu_key_action : int -> string -> int -> string -> int -> unit
+  = "logseq_native_test_menu_key_action"
 
 let menu_runtime_regression () =
   if Host_platform.is_macos then begin
@@ -23,6 +25,27 @@ let menu_runtime_regression () =
     menu_action 104 false;
     Gc.minor ();
     check "Idle menu dispatch left the runtime in the wrong state" (!calls = [104;103;102;101]);
+    let command=1 lsl 20 and shift=1 lsl 17 and caps=1 lsl 16 and alt=1 lsl 19 in
+    List.iter (fun (tag,key,mods) ->
+      calls := [];
+      menu_key_action tag key mods (String.uppercase_ascii key) (mods lor caps);
+      menu_key_action tag key mods key mods;
+      check "Physical Edit shortcuts must not reinject keys, including rapid repeats" (!calls=[]);
+      menu_action tag false;
+      check "Direct Edit menu actions must dispatch exactly once" (!calls=[tag]);
+      calls := [];
+      menu_key_action tag key mods "\r" 0;
+      check "Keyboard menu navigation must still activate its action" (!calls=[tag]);
+      calls := [];
+      menu_key_action tag key mods key (mods lor alt);
+      check "Unrelated modifier combinations must not suppress a menu action" (!calls=[tag]))
+      [6,"z",command;7,"z",command lor shift;8,"x",command;
+       9,"c",command;10,"v",command;11,"a",command];
+    List.iter (fun (tag,key) ->
+      calls := [];
+      menu_key_action tag key command key command;
+      check "OS and application menu shortcuts retain their dispatch" (!calls=[tag]))
+      [5,"q";12,"f";14,"r"];
     print_endline "native menu runtime boundary: OK"
   end
 let physical_footprint () =
