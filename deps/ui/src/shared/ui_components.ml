@@ -67,7 +67,7 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
     ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
     ?text_signal ~variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
-    ?selected ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : t =
   let size = Option.value size ~default:`default in
   let base, ink, hover, hover_ink, pressed = match variant with
@@ -121,8 +121,35 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
     ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
     ?text_signal ~variant ~size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
-    ?selected ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children)
+
+let chrome_button element =
+  with_props [Prop.opacity 0.7; Prop.hover_opacity 1.] element
+
+let native_performance ~label ~unavailable ~format_fps () : t =
+ fun ctx parent ->
+  match Ui_services.native_performance () with
+  | None -> box ~display:`contents [] ctx parent
+  | Some service ->
+    let sample = Signal.state ctx.Lui_ui.ui_scheduler (service.current ()) in
+    let cancel = service.subscribe (fun value ->
+      Signal.set sample value;
+      Ui_services.request_flush ()) in
+    Signal.on_dispose ctx.Lui_ui.ui_scope cancel;
+    let source = Signal.value sample in
+    row ~key:"native-performance" ~gap:8 ~cross:`center ~padding_horizontal:8
+      [ text ~key:"fps" ~accessibility_identifier:"native-performance-fps"
+          ~font_size:"0.875rem" ~line_height:"1.25rem" ~white_space:"nowrap"
+          ~value:(reactive (fun (value : Ui_services.native_performance_sample) ->
+            match value.fps with
+            | None -> unavailable
+            | Some fps -> format_fps (Printf.sprintf "%.0f" fps)) source) []
+      ; button ~key:"dialog" ~variant:`ghost ~size:`sm ~label ~text:label
+          ~accessibility_identifier:"native-performance-toggle"
+          ~selected:(reactive (fun (value : Ui_services.native_performance_sample) -> value.panel_open) source)
+          ~on_press:(fun _ -> service.toggle_panel ()) []
+      ] ctx parent
 
 (* Post-mount reactive binds (state channels + cursor on the cmdk item
    rows). *)

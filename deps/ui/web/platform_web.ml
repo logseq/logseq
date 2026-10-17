@@ -156,6 +156,7 @@ let install ~request_flush ~dom ~timers ~files =
         ; remove = Platform.local_storage_remove
         }
     ; request_flush
+    ; native_performance = None
     ; assert_owner = (fun () -> ())
     ; theme =
         { mode = theme_mode

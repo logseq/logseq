@@ -29,6 +29,30 @@ let host_request : (string -> unit) ref = ref (fun _ -> ())
 
 let request_host name payload = !host_request (name ^ "\n" ^ payload)
 
+let native_performance_sample : Ui_services.native_performance_sample ref =
+  ref { Ui_services.fps = None; panel_open = false }
+let native_performance_listeners = Hashtbl.create 2
+let native_performance_listener_id = ref 0
+
+let update_native_performance (sample : Ui_services.native_performance_sample) =
+  Option.iter (fun fps ->
+    if not (Float.is_finite fps) || fps < 0. then
+      invalid_arg "Invalid native presentation rate") sample.fps;
+  if sample <> !native_performance_sample then begin
+    native_performance_sample := sample;
+    Hashtbl.iter (fun _ notify -> notify sample) native_performance_listeners
+  end
+
+let native_performance : Ui_services.native_performance =
+  { current = (fun () -> !native_performance_sample)
+  ; subscribe = (fun notify ->
+      incr native_performance_listener_id;
+      let id = !native_performance_listener_id in
+      Hashtbl.add native_performance_listeners id notify;
+      fun () -> Hashtbl.remove native_performance_listeners id)
+  ; toggle_panel = (fun () -> request_host "native-performance-toggle" "{}")
+  }
+
 (* In-app menus rendered as real NSMenu popups (experiment). The OCaml
    host opts in by exporting LOGSEQ_NATIVE_MENUS=1 unless the user
    pinned =0 — other native hosts leave it unset and keep the LUI
@@ -487,6 +511,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; remove = local_storage_remove
         }
     ; request_flush
+    ; native_performance = Some native_performance
     ; assert_owner
     ; theme =
         { mode = theme_mode

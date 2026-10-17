@@ -33,6 +33,11 @@ test('graph switch keeps the shared trailing indicator geometry', () => {
   assertGraphSwitch(evaluate(`(${measureGraphSwitch.toString()})(document.querySelector('.cp__graphs-selector > .item'))`));
 });
 
+test('web chrome omits native-only performance controls', () => {
+  open();
+  assert.equal(evaluate("document.querySelector('[aria-label=\"dialog\"]') === null"), true);
+});
+
 test('table property pickers retain shared paint and full-sized rows while filtering', () => {
   open();
   browser('click', '.all-pages-nav .item');

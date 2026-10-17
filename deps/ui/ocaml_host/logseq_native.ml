@@ -419,8 +419,6 @@ let () =
      installed further down is its only user. *)
   let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let cached_overlay = ref None in
-  let painted_fps = ref None in
-  let overlay_fps () = metrics.fps in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
     if metrics.panel_open then Host_metrics.panel_generation ~now:(perf_s ()) else 0 in
@@ -446,10 +444,9 @@ let () =
                     let caret = Host_requests.editor_caret_ops ~color in
                     let key =
                       (s.Lui_scene.width, s.Lui_scene.height, !overlay_viewport (),
-                       overlay_fps (), metrics.panel_open, overlay_generation (),
+                       metrics.panel_open, overlay_generation (),
                        !Theme_vars.generation, caret)
                     in
-                    painted_fps := overlay_fps ();
                     (match !cached_overlay with
                      | Some (body_ops, body_glyphs, previous, ops, glyphs, width)
                        when body_ops == retained_ops && body_glyphs == retained_glyphs
@@ -836,13 +833,28 @@ let () =
   let content_width () =
     Host_metrics.content_width metrics (float !win_w)
   in
-  let metrics_button_down = ref false in
   let resize_metrics_split () =
     Lui_host.resize host ~width:(int_of_float (content_width () *. !scale_cell))
       ~height:(int_of_float (float !win_h *. !scale_cell)) ~scale:!scale_cell;
     Native_embed.platform_event
       (Printf.sprintf "window-size\n{\"width\":%d,\"height\":%d}"
          (int_of_float (content_width ())) !win_h)
+  in
+  let published_performance = ref None in
+  let publish_native_performance () =
+    let sample = metrics.fps, metrics.panel_open in
+    if !published_performance <> Some sample then begin
+      published_performance := Some sample;
+      Native_embed.platform_event
+        (Printf.sprintf "native-performance\n{\"fps\":%s,\"panel_open\":%b}"
+           (match metrics.fps with None -> "null" | Some fps -> Printf.sprintf "%.17g" fps)
+           metrics.panel_open)
+    end
+  in
+  let toggle_native_performance () =
+    Host_metrics.toggle_panel metrics;
+    resize_metrics_split ();
+    publish_native_performance ()
   in
   if metrics.panel_open then resize_metrics_split ();
   (* Diagnostic samples have a separate bounded layout cache. Each
@@ -853,6 +865,7 @@ let () =
   let draw_metrics (scene : Lui_scene.t) =
     let sc = !scale_cell in
     scene.width <- int_of_float (float !win_w *. sc);
+    if not metrics.panel_open then [] else
     let fg = Option.get (Theme_vars.color_of "foreground") in
     let bg = Option.get (Theme_vars.color_of "background") in
     let accent = Option.get (Theme_vars.color_of "accent") in
@@ -874,15 +887,6 @@ let () =
       Host_interaction.overlay_cached cache ~key scene (fun () ->
         Text_engine.text_ops metrics_text_engine 0 rect fg value)
     in
-    let button = Host_metrics.dialog_rect metrics (float !win_w) in
-    let ops =
-      box (button.x -. 115.) 7. 108. 32. bg
-      :: box button.x button.y button.w button.h accent
-      :: label 0 (button.x -. 108.) 9. 100. (Host_metrics.fps_label metrics)
-      @ label 1 (button.x +. 12.) 9. 70. "dialog"
-    in
-    if not metrics.panel_open then ops
-    else
       let x = content_width () in
       let width = float !win_w -. x in
       let lines = Host_metrics.sample_panel metrics ~generation:(overlay_generation ()) (fun () ->
@@ -919,7 +923,7 @@ let () =
         ; "Click dialog again to close this buffer."
         ])
       in
-      ops @ (box x 48. width (float !win_h -. 48.) bg
+      (box x 48. width (float !win_h -. 48.) bg
         :: box x 48. 1. (float !win_h -. 48.) accent
         :: List.concat (List.mapi (fun i line ->
              label (i+2) (x +. 18.) (64. +. float i *. 31.) (width -. 36.) line) lines)) in
@@ -1002,9 +1006,7 @@ let () =
       Ui.notify_layout ui
       ; Native_window.set_drag_regions (Sdl.get_window_id !win)
           (Native_window.drag_regions ~store ~rect_of:engine_rect ~scale:!scale_cell
-             ~blocked:[Host_metrics.dialog_rect metrics (float !win_w)
-               |> fun r -> Lui_scene.rect (r.x *. !scale_cell) (r.y *. !scale_cell)
-                   (r.w *. !scale_cell) (r.h *. !scale_cell)])
+             ~blocked:[])
     end
   in
   let spatial_index () = Host_interaction.hit_index hit_cache
@@ -1829,19 +1831,6 @@ let () =
            let at = perf_s () -. Int32.to_float age /. 1000. in
            metrics.input_at <- Some (match metrics.input_at with None -> at | Some old -> min old at)
          | _ -> ());
-        let consumed = match input with
-          | Some (Input.Button_down (x, y, Input.Left, _, _)) ->
-            Daemon_client.boot_mark (Printf.sprintf "button down %.0f,%.0f" x y);
-            metrics_button_down := Host_metrics.contains
-              (Host_metrics.dialog_rect metrics (float !win_w)) x y;
-            !metrics_button_down
-          | Some (Input.Button_up (_, _, Input.Left, _)) when !metrics_button_down ->
-            metrics_button_down := false;
-            Host_metrics.toggle_panel metrics;
-            resize_metrics_split (); true
-          | _ -> false
-        in
-        if not consumed then begin
         (match input with
          | Some (Input.Resize (w, h)) when w <> !win_w || h <> !win_h ->
            win_w := w;
@@ -1897,7 +1886,6 @@ let () =
             | _ -> ())
          | None -> ());
         if not !component_input then emit_dom_event e
-        end
       end
       else go := false
     done;
@@ -1935,11 +1923,13 @@ let () =
       apply_actions;
       set_ime_rect;
       focused_text_input;
+      toggle_native_performance;
       (* host requests mark dirty instead of repainting inline: the
          loop already coalesces all pending work into one paint per
          iteration — several boot-time ui-state/theme pushes would
          otherwise each pay a full layout+shape+render. *)
       repaint = (fun () -> host_req_repaint := true) };
+  publish_native_performance ();
   Daemon_client.boot_mark "requests installed";
   (* appearance + window-size environment push — the app's
      prefers_dark and inner_width/inner_height resolve against these. *)
@@ -2329,7 +2319,6 @@ let () =
     end
     else if Host_interaction.can_render ~replay:replay_mode ~visible:can_present
         ~backing:use_cocoa && (Host_interaction.presentation_due presentation
-             || overlay_fps () <> !painted_fps
              || Host_metrics.panel_due metrics ~now:(perf_s ()) ~last_render:!last_render)
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
       last_render := perf_s ();
@@ -2350,6 +2339,7 @@ let () =
      | _ -> ());
     if now -. !last_metrics_export >= 1. then begin
       last_metrics_export := now;
+      publish_native_performance ();
       metrics.raster_background_domains <- raster_background_domains ();
       if Host_platform.is_macos && Option.is_some metrics_log then begin
         let footprint_bytes,rss_bytes,peak_footprint_bytes = Native_window.memory_usage () in

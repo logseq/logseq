@@ -34,25 +34,23 @@ let menu_dismiss_installed = ref false
 
 let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ?foreground_signal ?style_class on_press =
-  button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
+  Ui_components.chrome_button
+  (Ui_components.button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
     ?disabled_signal ?foreground_signal ?style_class
     ~data_attrs:(match keys with Some value -> ["data-tooltip-keys",value] | None -> [])
     ~on_press:(fun _ -> on_press ())
-    [ Icons.icon ~size:20. icon_name ]
+    [ Icons.icon ~size:20. icon_name ])
 
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar —
    mounted twice (header .l when the sidebar is closed, the sidebar's
    own top strip when open): the key must differ per site or the
    reconciler folds the two mounted copies into one *)
 let left_menu_btn ?(key = "left-menu-btn") () =
-  button ~key ~size:`icon ~width:32 ~height:32
-    ~main:`center ~cross:`center ~variant:`ghost
+  icon_btn ~key ~acc:"left-menu" ~icon_name:"menu-2"
     ~label:(I18n.t "header/toggle-left-sidebar")
-    ~accessibility_identifier:"left-menu"
-    ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-    [ Icons.icon ~size:20. "menu-2" ]
+    (fun () -> Runtime.send Action.Toggle_left_sidebar)
 
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
@@ -85,16 +83,14 @@ let dots_btn =
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
 
 let home_btn ms =
-  button ~key:"home-btn" ~label:(I18n.t "nav/home")
-    ~variant:`ghost ~size:`icon ~width:32 ~height:32 ~main:`center
-    ~cross:`center ~accessibility_identifier:"home-btn"
-    ~on_press:(fun _ ->
+  icon_btn ~key:"home-btn" ~acc:"home-btn" ~icon_name:"home"
+    ~label:(I18n.t "nav/home")
+    (fun () ->
       match (Signal.get ms).Model.route with
       | Model.Home -> ()
       | _ ->
           Platform.set_location_hash "#/";
           Platform.dispatch "ls:navigate" Js.Json.null)
-    [ Icons.icon ~size:20. "home" ]
 
 (* cljs header.cljs mounts the home button only off the :home route *)
 let home_item (ms : Model.t Signal.signal) : t =
@@ -173,7 +169,11 @@ let topbar (ms : Model.t Signal.signal) : t list =
                 [ left_menu_btn (); search_btn () ]) ms
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
-          [ rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
+          [ Ui_components.native_performance
+              ~label:(I18n.t "profiler.native/metrics-dialog-label")
+              ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
+              ~format_fps:(I18n.t1 "profiler.native/fps-label") ()
+          ; rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
@@ -216,7 +216,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
                     ~value:(rtc_tx_text r) [] ]
             ; row ~key:"rtc-ind" ~cross:`center ~gap:4
                 ~style_class:"cp__rtc-sync-indicator"
-                [ Lui_elements.button ~key:"rtc-btn" ~variant:`ghost
+                [ Ui_components.button ~key:"rtc-btn" ~variant:`ghost
                     ~size:`icon ~style_class:cls ~label:"rtc sync"
                     ~icon:(`app "cloud") [] ]
             ])
@@ -548,7 +548,7 @@ let not_found_page : t =
         ~value:(I18n.t "page/not-found-title") []
     ; paragraph ~key:"nf-p"
         ~value:(I18n.t "page/not-found-desc") []
-    ; button ~key:"nf-btn" ~variant:`outline ~height:40
+    ; Ui_components.button ~key:"nf-btn" ~variant:`outline ~height:40
         ~padding_horizontal:16 ~padding_vertical:8
         ~style_class:"ui__button as-outline" ~icon:(`app "home")
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")

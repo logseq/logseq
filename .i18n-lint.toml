@@ -356,6 +356,7 @@ always_used_key_patterns = [
   "^:import/sqlite-label$",
   "^:import/unsupported-error$",
   "^:page.delete/title$",
+  "^:profiler\\.native/(fps-label|fps-unavailable-label|metrics-dialog-label)$",
   "^:property/invalid-name-error$",
   "^:publish/page-not-found-error$",
   "^:export/level-all$",

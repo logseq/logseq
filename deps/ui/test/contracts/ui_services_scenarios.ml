@@ -59,6 +59,7 @@ let run () =
         ; remove = Hashtbl.remove values
         }
     ; request_flush = (fun () -> incr flushes)
+    ; native_performance = None
     ; assert_owner = (fun () -> ())
     ; theme =
         { mode = (fun () ->

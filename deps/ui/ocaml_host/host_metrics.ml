@@ -275,15 +275,6 @@ let toggle_panel t =
 
 let panel_width t width = if t.panel_open then min 440. (width *. 0.35) else 0.
 let content_width t width = width -. panel_width t width
-let dialog_rect t width =
-  let available = content_width t width in
-  Lui_scene.rect (max 280. (available *. 0.5)) 7. 80. 32.
-let contains (r : Lui_scene.rect) x y =
-  x >= r.x && x < r.x +. r.w && y >= r.y && y < r.y +. r.h
-
-let fps_label t =
-  match t.fps with None -> "n/a FPS" | Some fps -> Printf.sprintf "%.0f FPS" fps
-
 let record_display_count t ~now ~presented =
   let elapsed = now -. t.started in
   if elapsed >= 1. then begin

@@ -53,6 +53,7 @@ type env = {
   set_ime_rect : Lui_scene.rect -> unit;
   focused_text_input : int -> unit;
   repaint : unit -> unit;
+  toggle_native_performance : unit -> unit;
 }
 
 let env : env option ref = ref None
@@ -887,6 +888,7 @@ let handle (envelope : string) =
       | None -> ()
       | Some e -> (
           match name with
+          | "native-performance-toggle" -> e.toggle_native_performance ()
           | "clipboard" ->
             ignore (Lui_shell.clipboard_write payload)
           | "clipboard-read" ->

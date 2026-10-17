@@ -1383,6 +1383,10 @@
  :profiler/input-fn-placeholder "在此输入函数名"
  :profiler/unregister "注销"
 
+ :profiler.native/fps-label "{1} FPS"
+ :profiler.native/fps-unavailable-label "暂无 FPS 数据"
+ :profiler.native/metrics-dialog-label "指标"
+
  :property/add-choice "添加选项"
  :property/add-choices "添加选项"
  :property/add-description "添加描述"

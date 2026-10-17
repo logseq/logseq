@@ -39,9 +39,7 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
   (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
-  Ui_components.with_props
-    [ Ui_components.Prop.opacity 0.7
-    ; Ui_components.Prop.hover_opacity 1. ]
+  Ui_components.chrome_button
     (Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
        ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
@@ -740,6 +738,10 @@ let header (ms : Model.t Signal.signal) =
                               ~text:p.Model.page_title ])
                   | _ -> spacer ~key:"head-bc-empty" [])
                 ms ]
+        ; Ui_components.native_performance
+            ~label:(I18n.t "profiler.native/metrics-dialog-label")
+            ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
+            ~format_fps:(I18n.t1 "profiler.native/fps-label") ()
         ; row ~key:"head-acts" ~cross:`center
             [ (* cljs header.cljs: inside the same rtc-indicator-visible?
                  gate — collaborators then the cloud indicator *)

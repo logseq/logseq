@@ -4,6 +4,14 @@ type storage = {
   remove : string -> unit;
 }
 
+type native_performance_sample = { fps : float option; panel_open : bool }
+
+type native_performance = {
+  current : unit -> native_performance_sample;
+  subscribe : (native_performance_sample -> unit) -> (unit -> unit);
+  toggle_panel : unit -> unit;
+}
+
 (* Application tokens delivered to the body scope on both hosts.
    Global mode/accent declarations are owned by the shared CSS palette. *)
 type theme_snapshot = {
@@ -377,6 +385,7 @@ type dom = {
 
 type t = {
   storage : storage;
+  native_performance : native_performance option;
   request_flush : unit -> unit;
   assert_owner : unit -> unit;
   theme : theme;
@@ -419,6 +428,7 @@ let storage_unquote s =
 let storage_quote v = "\"" ^ v ^ "\""
 
 let request_flush () = (get ()).request_flush ()
+let native_performance () = (get ()).native_performance
 
 let theme_mode () = (get ()).theme.mode ()
 let theme_system_default () = (get ()).theme.system_default ()

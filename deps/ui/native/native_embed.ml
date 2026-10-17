@@ -679,6 +679,16 @@ let platform_event payload =
                 | None -> ())
             | None -> ())
         | _ -> ())
+      else if name = "native-performance" then (
+        let fields = match json with
+          | Js.Json.JObject fields -> fields
+          | _ -> invalid_arg "Invalid native performance sample" in
+        let fps = List.assoc "fps" fields in
+        let sample : Ui_services.native_performance_sample =
+          { fps = (if fps = Js.Json.null then None
+              else Some (Option.get (Js.Json.decodeNumber fps)))
+          ; panel_open = Option.get (Js.Json.decodeBoolean (List.assoc "panel_open" fields)) } in
+        Host.enqueue (fun () -> Platform.update_native_performance sample))
       else if name = "node-rect" then Dom_ext.note_node_rect json
       else if name = "node-natural-size" then
         Dom_ext.note_node_natural_size json

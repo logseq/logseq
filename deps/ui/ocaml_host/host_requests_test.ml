@@ -405,6 +405,7 @@ let () =
       text_layout=(fun id s -> Text_engine.text_layout engine id rect s);
       apply_batch=(fun _ -> ()); apply_actions=(fun _ -> ());
       set_ime_rect=(fun _ -> ()); focused_text_input=(fun _ -> ());
+      toggle_native_performance = (fun () -> failwith "Unexpected native performance toggle");
       repaint=(fun () -> ()) } in
   let ctx : Host_requests.ed_ctx =
     {sink=2; ox=100.; oy=200.; runs=[|0,String.length text|]; nodes=[|1|]} in
@@ -489,6 +490,7 @@ let () =
   Hashtbl.replace rects 1 (Lui_scene.rect 0. 0. 800. 600.);
   Lui_window.Ui.set_content_rect ui (Lui_window.Rects.get rects);
   Lui_window.Ui.set_scroll_cap ui 1 400.;
+  let metric_toggles = ref 0 in
   let env : Host_requests.env =
     {
       store;
@@ -502,6 +504,7 @@ let () =
       apply_actions = (fun _ -> ());
       set_ime_rect = (fun _ -> ());
       focused_text_input = (fun _ -> ());
+      toggle_native_performance = (fun () -> incr metric_toggles);
       repaint = (fun () -> ());
     }
   in
@@ -518,6 +521,8 @@ let () =
       Host_requests.pending_focus_reveal := old_reveal)
     (fun () ->
       Host_requests.env := Some env;
+      Host_requests.handle "native-performance-toggle\n{}";
+      check "Native metrics request must reach its installed toggle callback" (!metric_toggles=1);
       Host_requests.editor_focus_bid := None;
       Host_requests.pending_focus := [];
       check "The mounted editor did not accept focus"
@@ -911,6 +916,29 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native neutral control themes and hover: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let service = Option.get (Ui_services.native_performance ()) in
+  let saved = service.current () and notifications = ref 0 in
+  let cancel = service.subscribe (fun _ -> incr notifications) in
+  let publish sample =
+    Native_embed.platform_event ("native-performance\n" ^ sample);
+    Host.drain () in
+  Fun.protect ~finally:(fun () -> cancel (); Platform.update_native_performance saved) (fun () ->
+    publish "{\"fps\":120,\"panel_open\":false}";
+    check "The native metrics bridge must publish a changed sample" (!notifications=1);
+    publish "{\"fps\":120,\"panel_open\":false}";
+    check "Identical native metrics samples must not notify views" (!notifications=1);
+    cancel ();
+    publish "{\"fps\":60,\"panel_open\":true}";
+    check "A disposed native metrics subscription must not notify its view" (!notifications=1);
+    check "The native metrics bridge must retain the latest panel state" (service.current ()).panel_open;
+    List.iter (fun fps ->
+      let invalid = try
+        Platform.update_native_performance {fps=Some fps;panel_open=false}; false
+      with Invalid_argument _ -> true in
+      check "Invalid native presentation rates must fail fast" invalid) [-1.;nan;infinity]);
+  print_endline "native metrics service publication and disposal: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in
   let failures = ref [] in
@@ -960,8 +988,12 @@ let () = Native_embed.with_entry_lock (fun () ->
         let refresh () = ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
         refresh ();
         app,surface,refresh in
+      let subscriptions = Hashtbl.length Platform.native_performance_listeners in
       let app,surface,refresh = mount width in
-      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose app);
+        expect "Disposing the shell must release its native metrics subscription"
+          (Hashtbl.length Platform.native_performance_listeners=subscriptions)) (fun () ->
         let store = A.store surface in
         let find name = List.find (fun id ->
           Lui_store.string_prop store id "accessibility-identifier"=Some name) (Lui_store.preorder store) in
@@ -1004,6 +1036,53 @@ let () = Native_embed.with_entry_lock (fun () ->
           (abs_float ((selector_rect.y-.graph_rect.y)/.scale-.8.)<0.1);
         expect "Graph selector indicator must retain the reference muted opacity"
           (Lui_store.float_prop store selector "opacity" = Some 0.4);
+        let diagnostics = List.filter (fun id ->
+          Lui_store.kind store id = "button"
+          && Lui_store.string_prop store id "accessibility-label" = Some "dialog")
+          (Lui_store.preorder store) in
+        expect ("Native performance toggle must be an ordinary shared header button; found "
+          ^ String.concat ", " (List.filter_map (fun id ->
+              if Lui_store.kind store id = "button" then
+                Lui_store.string_prop store id "accessibility-label" else None)
+              (Lui_store.preorder store)))
+          (List.length diagnostics = 1);
+        (match diagnostics with
+         | [toggle] ->
+           let publish fps panel_open =
+             Native_embed.platform_event
+               (Printf.sprintf "native-performance\n{\"fps\":%s,\"panel_open\":%b}" fps panel_open);
+             Host.drain (); refresh () in
+           publish "120" false;
+           let fps_node = List.find_opt (fun id ->
+             Lui_store.string_prop store id "text" = Some "120 FPS")
+             (Lui_store.preorder store) in
+           expect "Native performance sample must update its shared text" (Option.is_some fps_node);
+           publish "60" true;
+           expect "Native performance toggle must retain identity on a sample"
+             (Lui_store.string_prop store toggle "accessibility-label" = Some "dialog");
+           expect "Native performance toggle must reflect the open split panel"
+             (Lui_store.bool_prop store toggle "selected");
+           Option.iter (fun id -> expect "FPS text must update without remount"
+             (Lui_store.string_prop store id "text" = Some "60 FPS")) fps_node;
+           let previous_request = !Platform.host_request and requests = ref [] in
+           Fun.protect ~finally:(fun () -> Platform.host_request := previous_request) (fun () ->
+             Platform.host_request := (fun request -> requests := request :: !requests);
+             let r = rect toggle in
+             let x = (r.x+.r.w/.2.)/.scale and y=(r.y+.r.h/.2.)/.scale in
+             apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+             apply (A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)));
+             expect "A completed native metrics click must request one toggle"
+               (!requests = ["native-performance-toggle\n{}"]);
+             requests := [];
+             apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+             apply (A.handle surface (W.Input.Move (fst !viewport-.20.,600.)));
+             apply (A.handle surface (W.Input.Button_up (fst !viewport-.20.,600.,W.Input.Left,W.Input.mods_none)));
+             expect "Dragging off the native metrics button must cancel its press" (!requests=[]));
+           publish "null" false;
+           expect "A missing presentation sample must remain explicitly unavailable"
+             (List.exists (fun id -> Lui_store.string_prop store id "text"=Some "n/a FPS")
+                (Lui_store.preorder store))
+         | _ -> ());
         Lui_host.set_reduced_motion (A.host surface) false;
         Lui_host.tick (A.host surface) ~now:0.;
         set_model (fun m -> {m with right_sidebar_open=true});
@@ -1028,7 +1107,10 @@ let () = Native_embed.with_entry_lock (fun () ->
         drag left 10.;assert_width left 240. "Left minimum drag bound";
         drag left 301.5;assert_width left 300. "Final persisted left width");
       let reopened,surface,_refresh = mount (width+.160.) in
-      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose reopened)) (fun () ->
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose reopened);
+        expect "Reopened shell metrics subscription must be released"
+          (Hashtbl.length Platform.native_performance_listeners=subscriptions)) (fun () ->
         let left = List.find (fun id -> Lui_store.string_prop (A.store surface) id "accessibility-identifier"=Some "left-sidebar")
           (Lui_store.preorder (A.store surface)) in
         expect "Reopening at another viewport loses the resized pixel width"
@@ -1105,7 +1187,8 @@ let () = Native_embed.with_entry_lock (fun () ->
        scale=(fun () -> !current_scale); measure=Text_engine.measure_text engine;
        text_layout=(fun id text -> Text_engine.text_layout engine id (rect_of id) text);
        apply_batch=(fun _ -> ()); apply_actions=(fun _ -> ()); set_ime_rect=(fun _ -> ());
-       focused_text_input=(fun _ -> ()); repaint=(fun () -> ())} in
+       focused_text_input=(fun _ -> ()); repaint=(fun () -> ());
+       toggle_native_performance=(fun () -> failwith "Unexpected native performance toggle")} in
     List.iter (fun (scale,width) ->
       current_scale := scale;
       Lui_layout.sync ~scale ~width ~height:1600.
@@ -3762,6 +3845,7 @@ let () =
                   apply_actions = (fun _ -> failwith "Unexpected keymap action request");
                   set_ime_rect = (fun _ -> failwith "Unexpected keymap IME request");
                   focused_text_input = (fun id -> focused_input := id);
+                  toggle_native_performance = (fun () -> failwith "Unexpected native performance toggle");
                   repaint = (fun () -> failwith "Unexpected keymap repaint request");
                 }
               in
@@ -5208,6 +5292,7 @@ let () =
     apply_actions = (fun _ -> failwith "Unexpected theme input");
     set_ime_rect = (fun _ -> failwith "Unexpected theme IME update");
     focused_text_input = (fun _ -> failwith "Unexpected theme focus");
+    toggle_native_performance = (fun () -> failwith "Unexpected native performance toggle");
     repaint = (fun () -> incr repaint_count);
   } in
   let state mode accent = Host_requests.handle ("ui-state\n" ^
