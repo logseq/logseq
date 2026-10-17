@@ -5425,3 +5425,54 @@ let () = Option.iter (fun path ->
   check "Replay must cover every nontransparent Settings control" (!matched >= 20);
   Printf.printf "native captured Settings paint: %d controls match direct replay\n%!"
     !matched) (Sys.getenv_opt "LOGSEQ_NATIVE_PAINT_REPLAY")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let previous_width = Host.inner_width () and previous_height = Host.inner_height ()
+  and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Host.set_window_size previous_width previous_height;
+    Runtime.app_flush := previous_flush) (fun () ->
+    List.iter (fun scale -> List.iter (fun (name, cap) ->
+      Host.set_window_size 1440. 932.;
+      let listener_count () = List.length
+        (Option.value (Hashtbl.find_opt Platform.window_listeners "resize") ~default:[]) in
+      let before = listener_count () in
+      let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
+          hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="shared-dialog-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1440.*.scale)) ~height:(int_of_float (932.*.scale)) () in
+      let app = Lui_app.create (A.backend surface (profile MacOS GenericHost))
+        Model.initial (fun m () -> m) (fun _ ms _ -> Dialogs_view.dialog_view name ms) in
+      Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);
+        ignore (Lui_app.flush app);
+        let store = A.store surface in
+        let dialog = List.find (fun id -> Lui_store.kind store id="dialog") (Lui_store.preorder store) in
+        List.iter (fun width ->
+          Host.set_window_size width 932.;
+          Platform.emit_event "resize" (Js.Json.JObject []);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
+            ~height:(int_of_float (932.*.scale)) ~scale;
+          ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
+          let rect = W.Rects.get (A.rects surface) dialog in
+          let cap = match cap with Some cap -> cap | None -> if width>=1024. then 768. else 672. in
+          let expected = Float.min cap (width-.32.) in
+          check (Printf.sprintf "%s short-content width at %.0f/%.0f: %.2f rather than %.2f"
+            name width scale (rect.w/.scale) expected)
+            (abs_float (rect.w/.scale-.expected)<0.1);
+          check "Resizing a shared dialog must preserve its mounted node"
+            (List.exists ((=) dialog) (Lui_store.preorder store));
+          check "A resized shared dialog must stay centered"
+            (abs_float (rect.x/.scale-.(width-.expected)/.2.)<0.1))
+          [1440.;600.;320.;1024.;800.;1440.]);
+      check "Disposing a shared dialog must remove its viewport subscription"
+        (listener_count ()=before))
+      ["new-graph",Some 500.;"parity-short-content",None]) [1.;2.]);
+  print_endline "native shared short-content dialog resize and disposal: OK")

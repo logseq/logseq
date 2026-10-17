@@ -473,6 +473,11 @@ let ops : Ui_services.dom =
           (match capture with Some c -> c | None -> false))
   ; on_window_event =
       (fun name f -> add_window_listener_js name (fun e -> f (ev_of e)))
+  ; subscribe_window_event =
+      (fun name f ->
+        let listener e = f (ev_of e) in
+        Web_dom.add_window_listener name listener;
+        fun () -> Web_dom.remove_window_listener name listener)
   ; query_all =
       (fun sel ->
         List.map el_of

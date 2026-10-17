@@ -349,6 +349,7 @@ type dom = {
      events) — the typed [ev] snapshot replaces raw event access. *)
   on_window_event : string -> (ev -> unit) -> unit;
   (* Window-level subscription (resize, visibilitychange relays). *)
+  subscribe_window_event : string -> (ev -> unit) -> (unit -> unit);
   query : string -> el option;
   query_all : string -> el list;
   by_id : string -> el option;
@@ -496,6 +497,14 @@ let env_menu_popup spec = (get ()).env.menu_popup spec
 
 let dom_on_document_event ?capture name f = (get ()).dom.on_document_event ?capture name f
 let dom_on_window_event name f = (get ()).dom.on_window_event name f
+
+let viewport_width_signal ~scheduler ~scope =
+  let width = Signal.state scheduler ((get ()).dom.viewport_width ()) in
+  let cancel = (get ()).dom.subscribe_window_event "resize" (fun _ ->
+    Signal.set width ((get ()).dom.viewport_width ());
+    request_flush ()) in
+  Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value width));
+  Signal.value width
 let dom_query sel = (get ()).dom.query sel
 let dom_query_all sel = (get ()).dom.query_all sel
 let dom_by_id id = (get ()).dom.by_id id

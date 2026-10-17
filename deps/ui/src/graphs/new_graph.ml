@@ -20,6 +20,10 @@ let checkbox ~key ~id ~checked ~on_toggle =
     ~style_class:"ui__checkbox" ~checked_signal:checked
     ~on_toggle:(fun _ -> on_toggle ()) []
 
+let checkbox_label ~key ~value ~on_press =
+  Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+    (text ~key ~font_size:"0.875rem" ~value ~on_press [])
+
 let invalid_name name = Graphs_ops.invalid_chars name <> []
 
 let already_exists name = Graphs_ops.already_exists name
@@ -61,7 +65,8 @@ let body (_ms : Model.t Signal.signal) : t =
   let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
   let name_st = Signal.state ctx.ui_scheduler "" in
-  column ~key:"new-graph" ~style_class:"new-graph"
+  Ui_components.with_props [Ui_components.Prop.padding_top 8;Ui_components.Prop.padding_bottom 4]
+    (column ~key:"new-graph" ~style_class:"new-graph" ~gap:16 ~padding_horizontal:4
       [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
            compact variant *)
         input ~key:"ng-in" ~style_class:"ui__input" ~height:40
@@ -80,27 +85,23 @@ let body (_ms : Model.t Signal.signal) : t =
            cognito rtc group). ?rtc-test=true keeps it reachable in e2e
            without auth *)
         (if Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () then
-           column ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
-             [ row ~key:"ng-rtc-row" ~style_class:"ls-ng-row"
+           column ~key:"ng-rtc"
+             [ row ~key:"ng-rtc-row" ~cross:`center ~gap:4
                  [ checkbox ~key:"rtc" ~id:"rtc-sync"
                      ~checked:(Signal.value cloud)
                      ~on_toggle:(fun () -> toggle cloud)
-                 ; text ~key:"rtc-lbl" ~style_class:"ls-ng-label"
+                 ; checkbox_label ~key:"rtc-lbl"
                      ~value:T.use_sync_label
                      ~on_press:(fun _ -> toggle cloud)
-                     []
                  ; if_ ~test:(Signal.value cloud)
                      (row ~key:"ng-e2ee-row"
-                        ~style_class:"ls-ng-row ls-ng-sub"
-                        ~margin_left:12
+                        ~margin_left:12 ~cross:`center ~gap:4
                         [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
                             ~checked:(Signal.value e2ee)
                             ~on_toggle:(fun () -> toggle e2ee)
-                        ; text ~key:"e2ee-lbl"
-                            ~style_class:"ls-ng-label"
+                        ; checkbox_label ~key:"e2ee-lbl"
                             ~value:T.encrypt_data_label
                             ~on_press:(fun _ -> toggle e2ee)
-                            []
                         ])
                  ]
              ]
@@ -110,5 +111,5 @@ let body (_ms : Model.t Signal.signal) : t =
              ~disabled_signal:(Signal.value creating)
              ~on_press:(fun _ -> submit name_st cloud e2ee creating)
              []
-      ]
+      ])
     ctx parent

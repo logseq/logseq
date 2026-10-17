@@ -34,55 +34,19 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
 
-(* cljs shui/dialog-open! :label opts became the ls-dialog-<name> class on
-   the dialog element — lui-overlay.css carried class-selector twins of
-   its .ui__dialog-content[label=…] rules (settings -> app-settings,
-   plugins -> plugins-dashboard, login -> user-login,
-   new-graph/add-graph -> new-db-graph). The declarations migrated onto
-   the element: the .lui-dialog base rule keeps only gap/pad/width/
-   height for the dialog kinds emitted elsewhere (cards, views_popup,
-   properties_menu, cmdk); padding repeats here so every named dialog
-   carries its own spec (the native host reads the same prop).
-   Sizing is carried twice: typed props (viewport fractions and px
-   clamps) for the native host, and the original style string for the
-   web host where calc()/box-sizing/overflow still apply. *)
+(* Named dialogs specialize the shared card recipe with typed constraints. *)
 let dialog_spec name =
   match name with
-  | "settings" ->
-      ( 0
-      , "box-sizing:border-box;width:min(1024px, calc(100vw - 2rem));\
-         max-width:min(64rem, calc(100vw - 2rem));overflow:hidden"
-      , [ ( Ui_components.Prop.width
-              (int_of_float
-                 (Float.min 1024.
-                    (Ui_services.dom_viewport_width () -. 32.))) )
-        ; Ui_components.Prop.max_width 1024
-        ; Ui_components.Prop.max_width_viewport 0.97
-        ; ( Ui_components.Prop.max_height_viewport 0.75 ) ] )
-  | "plugins" ->
-      ( 24
-      , "width:90vw;max-width:1246px;max-height:calc(100vh - 50px);\
-         overflow-y:hidden"
-      , [ Ui_components.Prop.width_viewport 0.9
-        ; Ui_components.Prop.max_width 1246
-        ; Ui_components.Prop.max_height_viewport 0.94 ] )
-  | "sync-server" | "publish-server" ->
-      (24, "max-width:42rem", [ Ui_components.Prop.max_width 672 ])
-  | "plugin-readme" ->
-      ( 24
-      , "max-height:86vh;overflow:auto"
-      , [ Ui_components.Prop.max_height_viewport 0.86 ] )
-  | "export-page" ->
-      ( 24
-      , "max-height:80vh;overflow-y:auto"
-      , [ Ui_components.Prop.max_height_viewport 0.8 ] )
-  | "new-graph" | "add-graph" ->
-      (24, "max-width:500px", [ Ui_components.Prop.max_width 500 ])
-  | "login" ->
-      ( 24
-      , "padding-top:0;width:auto;max-width:none;align-items:center"
-      , [] )
-  | _ -> (24, "", [])
+  | "settings" -> 0, (fun _ -> 1024.),
+      [Ui_components.Prop.max_height_viewport 0.75;Ui_components.Prop.overflow `hidden]
+  | "plugins" -> 24, (fun viewport -> Float.min 1246. (viewport *. 0.9)),
+      [Ui_components.Prop.max_height_viewport 0.94;Ui_components.Prop.overflow `hidden]
+  | "sync-server" | "publish-server" -> 24, (fun _ -> 672.), []
+  | "plugin-readme" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.86]
+  | "export-page" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.8]
+  | "new-graph" | "add-graph" -> 24, (fun _ -> 500.), []
+  | "login" -> 24, Ui_components.dialog_width, [Ui_components.Prop.padding_top 0]
+  | _ -> 24, Ui_components.dialog_width, []
 
 (* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
 let title_of = function
@@ -95,16 +59,14 @@ let title_of = function
    button overlays the content column. *)
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let title = title_of name in
-  let padding, chrome, binds = dialog_spec name in
+  let padding, width, binds = dialog_spec name in
   Ui_components.with_props binds
-    (dialog ~key:("dlg-" ^ name) ~padding
-       ~background:"hsl(var(--background))"
-       ~border_width:1 ~border_color:"hsl(var(--border))"
+    (Ui_components.dialog ~key:("dlg-" ^ name) ~padding ~width
+       ~content_sized:(name = "login")
        ~style_class:("ls-dialog-" ^ name)
        ~data_attrs:
-         ((if chrome = "" then [] else [ ("style", chrome) ])
-          @ (if title = "" then []
-             else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ]))
+         (if title = "" then []
+         else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ])
        ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
        [ (* no ~grow — the dialog hugs its content height instead of
             filling the window *)
@@ -231,7 +193,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
    kind — scrim, centering, focus trap and Escape/outside dismiss all
    come from the platform. *)
 let docinfo_view (di : Dialogs_state.docinfo) : t =
-  dialog ~key:"dlg-pdf-docinfo" ~padding:24
+  Ui_components.dialog ~key:"dlg-pdf-docinfo" ~padding:24
     ~style_class:"ls-dialog-pdf-docinfo"
     ~on_dismiss:(fun _ -> Dialogs_state.close_docinfo ())
     [ column ~key:"di-m" ~min_height:0
@@ -278,7 +240,7 @@ let render (ms : Model.t Signal.signal) : t =
           reactive ~equal:(fun a b -> a.Dialogs_state.prompt == b.Dialogs_state.prompt)
             (fun d -> match d.Dialogs_state.prompt with
               | Some p ->
-                  dialog ~key:"dlg-prompt" ~padding:24
+                  Ui_components.dialog ~key:"dlg-prompt" ~padding:24
                     ~style_class:"ls-dialog-prompt"
                     ~data_attrs:[ ("aria-labelledby", "ls-prompt-title") ]
                     ~on_dismiss:(fun _ -> Dialogs_state.close_prompt ())

@@ -257,6 +257,15 @@ let ops : Ui_services.dom =
   ; on_window_event =
       (fun name f ->
         Platform.add_event_listener name (fun payload -> f (ev_of payload)))
+  ; subscribe_window_event =
+      (fun name f ->
+        let listener payload = f (ev_of payload) in
+        Platform.add_event_listener name listener;
+        fun () ->
+          let remaining = List.filter (fun callback -> callback != listener)
+            (Hashtbl.find Platform.window_listeners name) in
+          if remaining=[] then Hashtbl.remove Platform.window_listeners name
+          else Hashtbl.replace Platform.window_listeners name remaining)
   ; query = (fun sel -> Option.map el_of (Dom_ext.doc_query_selector sel))
   ; query_all =
       (fun sel -> List.map el_of (Dom_ext.doc_query_selector_all sel))

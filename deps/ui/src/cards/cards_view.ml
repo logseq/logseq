@@ -344,10 +344,10 @@ let modal st =
          outside/Escape dismiss; ls-dialog-flashcards keeps the
          per-dialog CSS hooks. The opening click's 400ms debounce
          guards the modal from the same-press dismiss. *)
-      (* cljs ui__dialog-content: w-full max-w-2xl/lg:max-w-3xl →
-         min(85%, 980px); fixed 980 approximates the desktop case *)
-      dialog ~key:"cards-dlg" ~style_class:"ls-dialog-flashcards"
-        ~width:980 ~padding:20
+      (* Flashcards use the standard card below the desktop breakpoint. *)
+      Ui_components.dialog ~key:"cards-dlg" ~style_class:"ls-dialog-flashcards"
+        ~width:(fun viewport -> if viewport >= 820. then Float.max 800. (Float.min 980. (viewport *. 0.85)) else Ui_components.dialog_width viewport)
+        ~padding:24 ~padding_horizontal:20 ~padding_bottom:16
         ~on_dismiss:(fun _ ->
           if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)

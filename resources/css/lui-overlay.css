@@ -686,22 +686,9 @@
   flex-shrink: 0;
 }
 
-/* dialog kind chrome: the kit .lui-dialog centers the card but owns no
-   padding/gap/width — cljs ui__dialog-content was gap 1rem, padding
-   1.5rem, w-full max-w-2xl lg:max-w-3xl */
+/* Shared dialog recipes own card geometry and colors. The Web primitive
+   supplies presentation; content height follows the native layout contract. */
 .lui-dialog {
-  gap: 1rem;
-  padding: 1.5rem;
-  width: min(42rem, calc(100vw - 2rem));
-  /* cljs ui__dialog-content paints no foreground — dialog text inherits
-     body color; the kit's --color-card-foreground (slate-950) and the
-     radius-xl corner read darker than prod's rounded-lg card */
-  color: inherit;
-  border-radius: 8px;
-  /* kit .lui-dialog is fixed inset-0 m-auto: height:auto stretches to
-     the max-height cap; cljs ui__dialog-content is content-sized
-     (top-50% translate) — fit-content restores that for every named
-     dialog (settings was filling 100dvh-2rem with dead space) */
   height: fit-content;
   transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
@@ -720,22 +707,6 @@
   display: none;
 }
 
-@media (min-width: 1024px) {
-  .lui-dialog {
-    width: 48rem;
-  }
-}
-
-/* settings mounts its own padded shell */
-.lui-dialog.ls-dialog-settings {
-  padding: 0;
-}
-
-/* cljs ui.css: flashcards dialog sizing */
-.lui-dialog.ls-dialog-flashcards {
-  padding: 1.5rem 1.25rem 1rem;
-}
-
 .lui-dialog.ls-dialog-flashcards .ui__dialog-main-content {
   max-height: 85vh;
   min-height: 65vh;
@@ -743,24 +714,10 @@
   padding: 0.25rem;
 }
 
-@media (min-width: 820px) {
-  .lui-dialog.ls-dialog-flashcards {
-    min-width: 800px;
-    max-width: min(85%, 980px);
-  }
-}
-
 /* dnd-kit a11y live regions (views_table dnd_described/dnd_live) —
    inline style attrs from the old dom() nodes */
 
 /* LUI dialog bodies stack their content in one column */
-
-/* per-name dialog sizing (was inline utilities on the content node) */
-.ls-dialog-export-page {
-  /* cljs export dialog keeps the default 42/48rem cap */
-  max-height: 80vh;
-  overflow-y: auto;
-}
 
 /* cljs export dialog gaps: 6px between the preview textarea and the
    options block (margin-collapsed select my-2), mt-4 before the
@@ -769,27 +726,6 @@
 
 /* cljs shui/dialog-open! on publish-page-dialog uses the default
    .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
-
-.ls-dialog-sync-server,
-.ls-dialog-publish-server {
-  max-width: 42rem;
-}
-
-.ls-dialog-plugin-readme {
-  max-height: 86vh;
-  overflow: auto;
-}
-
-.lui-dialog.ls-dialog-settings {
-  max-width: 64rem;
-  overflow: hidden;
-}
-
-/* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
-.lui-dialog.ls-dialog-new-graph,
-.lui-dialog.ls-dialog-add-graph {
-  max-width: 500px;
-}
 
 /* cljs marks the settings overlay data-align="top", but its dialog-content
    still resolves to top:50% + translate(-50%,-50%): the tailwind top-[50%]
@@ -1963,30 +1899,6 @@ select.form-select {
 
 .ls-imp-title {
   font-size: 1.25rem;
-}
-
-.ls-ng-rtc {
-  display: flex;
-  flex-direction: column;
-}
-
-.ls-ng-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.ls-ng-label {
-  opacity: 0.7;
-  font-size: 0.875rem;
-}
-
-.new-graph {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 0.5rem 0.25rem 0.25rem;
 }
 
 .ls-dialog-title-lg {

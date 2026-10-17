@@ -139,7 +139,7 @@ let delete_confirm_dialog context m ~close =
     S.refresh_all ();
     close ()
   in
-  dialog ~text:title ~description:desc ~on_dismiss:dismiss
+  Ui_components.dialog ~text:title ~description:desc ~on_dismiss:dismiss
     [ Ui_components.button ~text:(I18n.t "ui/cancel") ~variant:`outline
         ~on_press:dismiss []
     ; Ui_components.button ~text:(I18n.t "ui/confirm") ~variant:`destructive

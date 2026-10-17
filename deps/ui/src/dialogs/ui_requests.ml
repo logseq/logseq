@@ -120,14 +120,11 @@ let view (r : Dialogs_state.ui_request) : t =
   in
   (* dialog kind supplies the card chrome; the ls-dialog-layer cover
      popover supplies the scrim and Escape dispatch *)
-  (* .e2ee-password-modal-content declarations migrated: grid gap
-     covers the deleted flex-column gap; px max-width rides the
-     data-attrs style pair (no prop on the modal kind) *)
-  dialog ~key:"e2ee-dlg" ~padding:16
+  (* Shared typed spacing and width also reach the native host. *)
+  Ui_components.dialog ~key:"e2ee-dlg" ~padding:16 ~gap:32 ~width:(fun _ -> 672.)
     ~style_class:("e2ee-password-modal-content" ^ extra)
     ~data_attrs:
-      [ ("aria-modal", "true"); ("aria-labelledby", "ls-e2ee-title")
-      ; ("style", "gap:2rem;max-width:42rem") ]
+      [ ("aria-modal", "true"); ("aria-labelledby", "ls-e2ee-title") ]
     [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title
         ~font_size:"1.5rem" ~font_weight:500
         ~accessibility_identifier:"ls-e2ee-title" []

@@ -160,6 +160,31 @@ let with_signal_props (binds : Prop.s list) (elem : t) : t =
   List.iter (Prop.set_signal ctx node) binds;
   node
 
+(* Application dialog geometry is shared by both hosts. The primitive
+   owns presentation; this recipe owns the responsive card dimensions. *)
+let dialog_width viewport = if viewport >= 1024. then 768. else 672.
+
+let dialog ?key ?(gap=16) ?(padding=24) ?padding_horizontal ?padding_vertical
+    ?padding_top ?padding_bottom
+    ?(width=dialog_width) ?(content_sized=false) ?style_class ?data_attrs
+    ?text ?description ?on_dismiss children : t =
+ fun ctx parent ->
+  let element = with_props
+    (List.filter_map Fun.id
+      [Option.map Prop.padding_top padding_top;Option.map Prop.padding_bottom padding_bottom])
+    (Lui_elements.dialog ?key ~gap ~padding ?padding_horizontal ?padding_vertical
+    ~corner_radius:8 ~background:"hsl(var(--background))" ~foreground:"inherit"
+    ~border_width:1 ~border_color:"hsl(var(--border))"
+    ?style_class ?data_attrs ?text ?description ?on_dismiss children) in
+  if content_sized then element ctx parent
+  else
+    let viewport = Ui_services.viewport_width_signal
+      ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
+    Ui_parts.int_prop P.WidthValue
+      ~value:(reactive (fun viewport ->
+        int_of_float (Float.max 0. (Float.min (width viewport) (viewport -. 32.)))) viewport)
+      element ctx parent
+
 (* -- cmdk frame ------------------------------------------------------ *)
 
 (* Rounded clip column inside the dialog host; the host keeps

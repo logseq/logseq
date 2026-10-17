@@ -249,6 +249,7 @@ let run () =
          in
          { on_document_event = (fun ?capture:_ name f -> Hashtbl.replace listeners name f)
          ; on_window_event = (fun _ _ -> ())
+         ; subscribe_window_event = (fun _ _ -> fun () -> ())
          ; query = (fun _ -> None)
          ; query_all = (fun _ -> [])
          ; by_id = (fun _ -> None)

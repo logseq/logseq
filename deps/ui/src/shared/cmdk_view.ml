@@ -862,8 +862,8 @@ let handle_mousemove st (ev : Svs.move_ev) =
 (* The host owns modal placement, focus trapping, and dismissal. *)
 let modal_shell svs st =
   (* prod .ui__dialog-content measures 898 border-box at 1280 *)
-  let width = int_of_float (Float.min 898. (Ui_services.dom_viewport_width () *. 0.9)) in
-  dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
+  let width viewport = Float.min 898. (viewport *. 0.9) in
+  Ui_components.dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
     ~on_dismiss:(fun _ -> S.close st)
     [ Ui_components.cmdk_modal ~key:"modal" [ palette svs st ] ]
 

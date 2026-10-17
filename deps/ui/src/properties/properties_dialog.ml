@@ -619,7 +619,7 @@ let view : t =
                       [ dialog_content ~compact_width:232 d ]
                   ]
             | Centered ->
-                dialog ~text:(I18n.t "property/add-or-change")
+                Ui_components.dialog ~text:(I18n.t "property/add-or-change")
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
                   [ card ~padding:8 ~min_width:340 ~max_width:520
