@@ -290,10 +290,8 @@ let sized (c : V.column) (cols : V.column list) (node : t) : t =
         (Ui_parts.int_prop_signal Lui_protocol.MinWidth w Fun.id node)
 
 let inner_cell children =
-  (* .ls-table-cell > div: height:100% has no prop channel *)
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
-    (row ~cross:`center ~padding_horizontal:8 ~min_width:0
-       ~data_attrs:[ ("style", "height:100%") ] children)
+    (row ~cross:`center ~height:32 ~padding_horizontal:8 ~min_width:0 children)
 
 let created_column : V.column =
   builtin_column "block/created-at" I.created_at "datetime" ()
@@ -720,17 +718,20 @@ let header_button inst (c : V.column) : t =
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
          (Signal.value (inst.V.st)))
   in
-  button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
+  button ~variant:`ghost ~size:`sm ~label:c.V.c_name ~grow:1.
+    ~foreground:"hsl(var(--muted-foreground))"
     ~main:`start ~height:32 ~padding_horizontal:8
-    [ if_
-        ~test:(Logseq_el.own ctx (Signal.map (fun o -> o <> None) sort_sig))
-        (icon_dyn
-           (Signal.map
-              (fun o ->
-                match o with
-                | Some x when x.V.s_asc -> "arrow-up"
-                | _ -> "arrow-down")
-              sort_sig)) ]
+    [ row ~main:`start ~cross:`center ~gap:4
+        [ text ~value:c.V.c_name ~white_space:"nowrap" []
+        ; if_
+            ~test:(Logseq_el.own ctx (Signal.map (fun o -> o <> None) sort_sig))
+            (icon_dyn
+               (Signal.map
+                  (fun o ->
+                    match o with
+                    | Some x when x.V.s_asc -> "arrow-up"
+                    | _ -> "arrow-down")
+                  sort_sig)) ] ]
     ctx parent
 
 let set_column_sort inst (c : V.column) asc =
@@ -831,7 +832,7 @@ let header_cell_id inst (c : V.column) =
 let header_cell inst ~cols (c : V.column) : t =
   sized c cols
   (if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
-  let fg = "var(--muted-foreground, var(--ls-secondary-text-color))" in
+  let fg = "hsl(var(--muted-foreground))" in
   match c.V.c_id with
   | "select" ->
       Ui_components.with_props
@@ -840,7 +841,6 @@ let header_cell inst ~cols (c : V.column) : t =
         ; Ui_components.Prop.font_weight 500 ]
         (box ~style_class:"ls-table-header-cell" ~width:(column_size c)
            ~min_width:(column_size c) ~foreground:fg
-           ~data_attrs:[ ("style", "border-right:0") ]
            [ header_select_cell inst ])
   | _ ->
       let menu () =
@@ -865,13 +865,13 @@ let header_cell inst ~cols (c : V.column) : t =
            ; Ui_components.Prop.line_height "1.25rem"
            ; Ui_components.Prop.font_weight 500
            ; Ui_components.Prop.cursor `pointer
-           ; Ui_components.Prop.position `relative ]
+           ; Ui_components.Prop.position `relative
+           ; Ui_components.Prop.padding_right 1
+           ; Ui_components.Prop.shadow "inset -1px 0 0 hsl(var(--border))" ]
            (box ~style_class:"ls-table-header-cell"
               ~accessibility_identifier:(header_cell_id inst c)
               ~width:(column_size c) ~min_width:(column_size c)
               ~foreground:fg
-              ~data_attrs:
-                [ ("style", "border-right:1px solid hsl(var(--border))") ]
               [ Ui_components.with_props
                   [ Ui_components.Prop.overflow `hidden ]
                   (header_button inst c)
@@ -1115,7 +1115,7 @@ let table_row_keydown inst ~row_uuid name payload =
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
-  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk ~cols c ] in
+  let cell_wrap c = box ~height:32 [ cell_el inst ~row_uuid ~blk ~cols c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
@@ -1138,15 +1138,15 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
            (fun sel ->
              if sel then "hsl(var(--muted))" else "transparent")
            (Ui_components.with_props
-              [ Ui_components.Prop.overflow `hidden ]
+              [ Ui_components.Prop.overflow `hidden
+              ; Ui_components.Prop.padding_bottom 1
+              ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
               (row ~cross:`stretch ~height:33 ~min_height:33
                  ~max_height:33 ~transition:"background-color 150ms"
                  ~accessibility_identifier:("ls-block-" ^ row_uuid)
                  ~data_attrs:
                    [ ("data-blockid", row_uuid); ("data-id", row_uuid)
-                   ; ("tabindex", "0")
-                   ; ( "style"
-                     , "border-bottom:1px solid hsl(var(--border))" ) ]
+                   ; ("tabindex", "0") ]
                  [ (* cljs: .sticky-columns holds pinned cells, sibling
                       row holds the unpinned ones *)
                    Ui_components.with_props
@@ -1224,16 +1224,13 @@ let table_header inst cols : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  (* per-side borders, fit-content width and will-change ride the
-     style channel *)
-  row ~style_class:"ls-table-header" ~cross:`center
+  Ui_components.with_props
+    [ Ui_components.Prop.padding_top 1
+    ; Ui_components.Prop.padding_bottom 1
+    ; Ui_components.Prop.shadow
+        "inset 0 1px 0 hsl(var(--border)), inset 0 -1px 0 hsl(var(--border))" ]
+  (row ~style_class:"ls-table-header" ~cross:`center ~height:34
     ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
-    ~data_attrs:
-      [ ( "style"
-        , "width:fit-content;min-width:100%;border-top:1px solid \
-           hsl(var(--border));border-bottom:1px solid \
-           hsl(var(--border));will-change:transform;\
-           transform:translate3d(0,0,0)" ) ]
     [ Ui_components.with_props
         [ Ui_components.Prop.position `sticky
         ; Ui_components.Prop.inset_left 0.
@@ -1266,7 +1263,7 @@ let table_header inst cols : t =
                               | None -> ())
                             [] ] ] ]
             | None -> [])
-         @ [ dnd_described "1"; dnd_live "1" ]) ]
+         @ [ dnd_described "1"; dnd_live "1" ]) ])
 
 (* footer add-new-row (cljs: property-objects always; class-objects for
    non-private classes; all-pages/query never) *)

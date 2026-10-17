@@ -2214,40 +2214,6 @@ select.form-select {
   opacity: 1;
 }
 
-/* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
-   kept in flow here so the rows list needs no top offset) —
-   .sticky-columns and the unpinned cell row are flex items on the same
-   line, not stacked block children */
-.ls-table-header {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  width: fit-content;
-  min-width: 100%;
-  will-change: transform;
-  transform: translate3d(0, 0, 0);
-  /* cljs .ls-table-header is border-y bg-gray-01 */
-  border-top: 1px solid hsl(var(--border));
-  border-bottom: 1px solid hsl(var(--border));
-  background: var(--lx-gray-01, var(--ls-primary-background-color));
-}
-
-.ls-table-header-cell {
-  cursor: pointer;
-  text-align: left;
-  vertical-align: middle;
-  font-weight: 500;
-  color: var(--muted-foreground, var(--ls-secondary-text-color));
-  border-right: 1px solid hsl(var(--border));
-}
-
-/* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
-   beats the h-8 utility on specificity */
-.ls-table-header-cell > .ui__button {
-  height: 2rem !important;
-  overflow: hidden;
-}
-
 /* cljs .ls-table-resize-handle: absolute col-resize grip on the cell's
    right edge, invisible until hover */
 .ls-table-resize-handle {
@@ -2271,30 +2237,6 @@ select.form-select {
 }
 
 /* position:sticky is not a LUI position value; background moved to a prop */
-
-/* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
-   padding box used by outline rows */
-.ls-table-row.ls-block {
-  /* cljs .ls-table-row markup is .flex.flex-row — the .sticky-columns
-     pinned band and the unpinned cell row must share one line, not
-     stack as 100%-wide blocks (the opaque sticky band then covers the
-     cells inside the clipped 33px row) */
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  /* 33px box including the cljs border-b separator — inner content band
-     is 32px so centered text lands on the same subpixel as cljs */
-  height: 33px;
-  min-height: 33px;
-  max-height: 33px;
-  box-sizing: border-box;
-  /* cljs tailwind border-b = hsl(var(--border)); --ls-border-color is
-     the darker #ccc used by outliner/chrome borders */
-  border-bottom: 1px solid hsl(var(--border));
-  padding-top: 0;
-  padding-bottom: 0;
-  overflow: hidden;
-}
 
 .ls-table-row div,
 .ls-table-row span,

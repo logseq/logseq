@@ -4081,3 +4081,115 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native page-menu favorite target and reactive label" (!failures=[]);
   print_endline "native page-menu favorite target and reactive label: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let old_avail = !Views_table.avail_sig_cell
+  and old_sidebar = !Sidebar_state.st_ref and old_sidebar_model = !Sidebar_state.model_signal in
+  Views_table.avail_sig_cell:=None;Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
+  let snapshot = Ui_theme.snapshot Ui_theme.Light in
+  Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+    ["mode",`String "light";"vars",`Assoc
+      (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+  Theme_vars.set_dark false;
+  Fun.protect ~finally:(fun () ->
+    Views_table.avail_sig_cell:=old_avail;Sidebar_state.st_ref:=old_sidebar;
+    Sidebar_state.model_signal:=old_sidebar_model) (fun () ->
+    List.iter (fun scale ->
+      let host_cell = ref None and labels = ref [] in
+      let host () = Option.get !host_cell in
+      let engine = lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (host ()))
+        ~scale:(fun () -> scale) ~store:(fun () -> Lui_host.store (host ()))) in
+      let hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+        shadow_of=Lui_paint.parse_shadows Theme_vars.color_of;
+        text_ops=(fun id r color text ->
+          let scene = Lui_host.scene (host ()) in
+          let previous = scene.Lui_scene.glyphs in
+          let ops = Text_engine.text_ops (Lazy.force engine) id r color text in
+          let rec bounds glyphs left top right =
+            if glyphs==previous then left,top,right
+            else match glyphs with
+              | g::rest -> bounds rest (min left g.Lui_scene.gx) (min top g.gy)
+                  (max right (g.gx+.g.gw))
+              | [] -> failwith "Text paint did not retain its glyph suffix" in
+          let left,top,right = bounds scene.glyphs infinity infinity neg_infinity in
+          labels:=(text,left,top,right,color)::!labels;
+          ops)} in
+      let h = Lui_host.create ~hooks ~layout:(module Lui_layout)
+        ~measure:(fun id _ _ _ -> Some (Text_engine.measure (Lui_host.store (host ())) id ~scale))
+        ~renderer:{Lui_host.name="table-parity-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (600.*.scale)) ~height:(int_of_float (200.*.scale)) ~scale () in
+      host_cell:=Some h;
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      let inst_cell = ref None in
+      let app = Lui_app.create_with_extensions (Lui_host.backend h (profile MacOS GenericHost))
+        registry () (fun () () -> ()) (fun context _ _ ->
+          let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+          let blocks = Hashtbl.create 1 in
+          Hashtbl.add blocks "table-page" (Wire.Map
+            [Wire.Keyword "block/uuid",Wire.Uuid "table-page";
+             Wire.Keyword "block/name",Wire.String "Fixture page";
+             Wire.Keyword "block/title",Wire.String "Fixture page"]);
+          let state = {(Views_state.empty_vstate ()) with
+            Views_state.columns=[Views_table.page_title_column;Views_table.updated_column];
+            sorting=[{Views_state.s_id="block/updated-at";s_asc=false}];
+            blocks;loading=false;
+            data=Views_wire.VFlat {rows=["table-page"];count=1;previews=Hashtbl.create 0;qprops=[]}} in
+          let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler state} in
+          inst_cell:=Some inst;
+          Lui_elements.column ~width:600 ~height:200 [Views_table.table_el inst state]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+        let store = Lui_host.store h and inst = Option.get !inst_cell in
+        let ids = Lui_store.preorder store in
+        let rect id = Option.get (Lui_host.layout_rect h id) in
+        let has_class id name = match Lui_store.string_prop store id "style-class" with
+          | Some s -> List.mem name (String.split_on_char ' ' s) | None -> false in
+        let header = List.find (fun id -> has_class id "ls-table-header") ids
+        and row = List.find (fun id -> has_class id "ls-table-row") ids in
+        let header_rect = rect header and row_rect = rect row in
+        expect "Native table header does not reserve its two grid lines"
+          (abs_float (header_rect.h-.34.*.scale)<0.1);
+        expect "Native table data rows differ from the reference's 33-point pitch"
+          (abs_float (row_rect.h-.33.*.scale)<0.1);
+        let label text = List.find (fun (s,_,_,_,_) -> s=text) !labels in
+        List.iter (fun c ->
+          let cell = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+            =Some (Views_table.header_cell_id inst c)) ids in
+          let _,left,_,_,color = label c.Views_state.c_name in
+          expect "Native table header ink is centered instead of following its leading inset"
+            (left >= (rect cell).x+.7.*.scale && left <= (rect cell).x+.13.*.scale);
+          expect "Native table header ink ignores its muted foreground"
+            (Some color=Theme_vars.color_of "hsl(var(--muted-foreground))"))
+          [Views_table.page_title_column;Views_table.updated_column];
+        let arrow = List.find (fun id -> Lui_store.kind store id="icon") ids in
+        let _,_,_,right,_ = label Views_table.updated_column.c_name in
+        expect "Native sort arrow precedes or overlaps its column label"
+          ((rect arrow).x >= right+.2.*.scale);
+        let _,_,top,_,_ = label "Fixture page" in
+        expect "Native table cell text is not centered in its 32-point content band"
+          (top >= row_rect.y+.6.*.scale && top <= row_rect.y+.13.*.scale);
+        let border = Option.get (Theme_vars.color_of "hsl(var(--border))") in
+        let has_grid cast dx dy =
+          List.exists (function
+            | Lui_scene.Shadow s ->
+                s.sinset && s.scolor=border && s.scast=cast
+                && abs_float (s.srect.x-.cast.Lui_scene.x-.dx*.scale)<0.1
+                && abs_float (s.srect.y-.cast.y-.dy*.scale)<0.1
+            | _ -> false) (Lui_host.scene h).ops in
+        expect "Native table header omits its top or bottom grid line"
+          (has_grid header_rect 0. 1. && has_grid header_rect 0. (-1.));
+        expect "Native table data row omits its bottom grid line"
+          (has_grid row_rect 0. (-1.));
+        List.iter (fun c ->
+          let cell = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+            =Some (Views_table.header_cell_id inst c)) ids in
+          expect "Native table header cell omits its trailing grid line"
+            (has_grid (rect cell) (-1.) 0.))
+          [Views_table.page_title_column;Views_table.updated_column])) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native table geometry and paint parity" (!failures=[]);
+  print_endline "native table geometry and paint parity: OK")
