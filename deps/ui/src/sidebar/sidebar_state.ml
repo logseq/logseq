@@ -42,7 +42,6 @@ type t =
   ; recents : Model.page list Signal.state
   ; nav_checked : string list Signal.state
   ; nav_tag_titles : (string * string) list Signal.state
-  ; favorited : bool Signal.state
   ; items : item list Signal.state
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
@@ -465,19 +464,6 @@ let menu_page (m : Model.t) =
         (fun (p : Model.page) ->
           p.page_journal_day = Some (Dates.today_journal_day ()))
         m.Model.journals
-
-let refresh_favorited repo st =
-  match menu_page (Runtime.model ()) with
-  | Some p -> (
-      match p.Model.page_uuid with
-      | Some u ->
-          then_keep
-            (Runtime.invoke2 "thread-api/favorited-page?"
-               (Wire.String repo) (Wire.Uuid u))
-            (fun w ->
-              Runtime.signal_set st.favorited (Wire.as_bool w = Some true))
-      | None -> Runtime.signal_set st.favorited false)
-  | None -> Runtime.signal_set st.favorited false
 
 (* ---------- navigation ---------- *)
 
@@ -922,9 +908,8 @@ let refresh_items repo st =
 let toggle_favorite_uuid st u =
   match (model ()).Model.repo with
   | Some repo ->
-      (* the cached favorited signal can still hold the previous page's
-         flag right after navigation; ask the worker for this page's
-         state instead of toggling from stale UI state *)
+      (* Read the target's current persisted state before toggling; a
+         menu can remain open while another view changes its favorite. *)
       then_keep
         (Runtime.invoke2 "thread-api/favorited-page?" (Wire.String repo)
            (Wire.Uuid u))
@@ -933,9 +918,7 @@ let toggle_favorite_uuid st u =
           then_keep
             (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
                (Wire.Uuid u) (Wire.Bool (not fav)))
-            (fun _ ->
-              load_favorites repo st;
-              refresh_favorited repo st))
+            (fun _ -> load_favorites repo st))
   | None -> ()
 
 let toggle_favorite st =
@@ -994,8 +977,7 @@ let on_sync st affected =
       in
       if sets_hit then begin
         load_favorites repo st;
-        load_recents repo st;
-        refresh_favorited repo st
+        load_recents repo st
       end;
       if sets_hit || item_hits affected st then refresh_items repo st
   | None -> ()
@@ -1017,15 +999,13 @@ let on_model st (m : Model.t) =
        install_worker_hook st;
        load_favorites repo st;
        load_recents repo st;
-       load_nav_tag_titles repo st;
-       refresh_favorited repo st
+       load_nav_tag_titles repo st
    | _ -> ());
   (match m.Model.route_page with
    | Some p when m.Model.phase = Model.Ready ->
        let key = page_key p in
        if !last_page_key <> Some key then (
          last_page_key := Some key;
-         refresh_favorited (Runtime.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
              (* recents only on explicit navigation (cljs
@@ -1210,7 +1190,6 @@ let init (ms : Model.t Signal.signal) : t =
         ; recents = Signal.state owner []
         ; nav_checked = Signal.state owner (nav_checked_of_storage ())
         ; nav_tag_titles = Signal.state owner []
-        ; favorited = Signal.state owner false
         ; items = Signal.state owner []
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []

@@ -805,7 +805,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         let state value = Signal.state context.Lui_ui.ui_scheduler value in
         let st : Sidebar_state.t =
           {favorites=state []; recents=state []; nav_checked=state [];
-           nav_tag_titles=state []; favorited=state false; items=state [];
+           nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
            left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 1440.} in
         Left_sidebar_view.content_group st ~key:"native-recent" ~class_:"recent"
@@ -3947,7 +3947,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         let state value = Signal.state context.Lui_ui.ui_scheduler value in
         let st : Sidebar_state.t =
           {favorites=state []; recents=state []; nav_checked=state [];
-           nav_tag_titles=state []; favorited=state false; items=state [];
+           nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
            left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 240.} in
         sidebar := Some st;
@@ -4010,3 +4010,74 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native sidebar page and menu input ownership" (!failures = []);
   print_endline "native sidebar page and menu input ownership: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let old_sidebar = !Sidebar_state.st_ref and old_sidebar_model = !Sidebar_state.model_signal
+  and old_model = !Runtime.read_model and old_worker = !Runtime.worker
+  and old_send = !Runtime.app_send and old_flush = !Runtime.app_flush in
+  let summary uuid = Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid uuid;
+                              Wire.Keyword "block/title",Wire.String "Same title"] in
+  let target = Option.get (Decode.page_of_summary (summary "menu-target"))
+  and current = Option.get (Decode.page_of_summary (summary "current-route")) in
+  let store = Lui_store.create () and sidebar = ref None in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app = Lui_app.create backend
+    {Model.initial with repo=Some "menu-fixture";route_page=Some current}
+    (fun model (_ : Action.t) -> model) (fun ctx ms _ ->
+      let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t =
+        {favorites=state [target];recents=state [];nav_checked=state [];
+         nav_tag_titles=state [];items=state [];
+         open_menu=state "";groups_collapsed=state [];
+         left_fraction=state 0.2;right_fraction=state 0.3;viewport_w=state 1440.} in
+      sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
+      Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Sidebar_state.st_ref:=old_sidebar;Sidebar_state.model_signal:=old_sidebar_model;
+    Runtime.read_model:=old_model;Runtime.worker:=old_worker;
+    Runtime.app_send:=old_send;Runtime.app_flush:=old_flush) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let st = Option.get !sidebar in
+      let item = List.find (fun id -> Lui_store.kind store id="menu-item")
+        (Lui_store.preorder store) in
+      let label () = Lui_store.string_prop store item "text" in
+      expect "Native favorite label uses the route instead of its target"
+        (label ()=Some I18n.unfavorite_page);
+      expect "Native navigation checkbox menu displays a translation key instead of Pages"
+        (List.exists (fun id ->
+          Lui_store.string_prop store id "text"=Some (I18n.t "nav.all-pages/label"))
+          (Lui_store.preorder store));
+      Runtime.signal_set st.favorites [current];ignore (Lui_app.flush app);
+      expect "Native favorite label does not follow its target UUID"
+        (label ()=Some I18n.add_to_favorites);
+      Runtime.signal_set st.favorites [target];ignore (Lui_app.flush app);
+      expect "Native favorite label does not update on the existing row"
+        (label ()=Some I18n.unfavorite_page);
+      let favorites = Hashtbl.create 2 and writes = ref [] in
+      Hashtbl.add favorites "menu-target" true;Hashtbl.add favorites "current-route" false;
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+          Js.Promise.resolve (match name,args with
+            | "thread-api/favorited-page?",[_;Wire.Uuid uuid] ->
+                Wire.Bool (Hashtbl.find favorites uuid)
+            | "thread-api/set-page-favorite",[_;Wire.Uuid uuid;Wire.Bool value] ->
+                writes:=(uuid,value)::!writes;Hashtbl.replace favorites uuid value;Wire.Nil
+            | "thread-api/get-favorite-pages",[_] ->
+                Wire.List (List.filter_map (fun uuid ->
+                  if Hashtbl.find favorites uuid then Some (summary uuid) else None)
+                  ["menu-target";"current-route"])
+            | _ -> failwith ("Unexpected favorite fixture request: "^name)));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      Runtime.read_model:=(fun () -> Lui_app.model app);
+      Runtime.app_send:=(fun _ -> false);Runtime.app_flush:=(fun () -> ());
+      ignore (Lui_app.dispatch_event app (Press item));ignore (Lui_app.flush app);
+      expect "Native favorite action mutates the current route instead of its target"
+        (!writes=["menu-target",false]);
+      expect "Native favorite action does not refresh the target's label"
+        (label ()=Some I18n.add_to_favorites));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native page-menu favorite target and reactive label" (!failures=[]);
+  print_endline "native page-menu favorite target and reactive label: OK")

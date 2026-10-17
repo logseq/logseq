@@ -32,6 +32,60 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let previous_sidebar = !Sidebar_state.st_ref
+  and previous_sidebar_model = !Sidebar_state.model_signal
+  and previous_model = !Runtime.read_model
+  and previous_worker = !Runtime.worker
+  and previous_send = !Runtime.app_send in
+  let page uuid = Option.get (Decode.page_of_summary
+    (Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid uuid;
+               Wire.Keyword "block/title",Wire.String "Same title"])) in
+  let target = page "menu-target" and current = page "current-route" in
+  let sidebar = ref None in
+  let menu = S.mount ~registry ~profile
+    ~initial:{Model.initial with repo=Some "menu-fixture";route_page=Some current}
+    ~reducer:(fun m () -> m) ~view:(fun ctx ms _ ->
+      let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t =
+        {favorites=state [target];recents=state [];nav_checked=state [];
+         nav_tag_titles=state [];items=state [];
+         open_menu=state "";groups_collapsed=state [];
+         left_fraction=state 0.2;right_fraction=state 0.3;viewport_w=state 1440.} in
+      sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
+      Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
+  let st = Option.get !sidebar in
+  let item = nodes menu |> List.filter (fun n -> n.M.kind="menu-item")
+    |> List.sort (fun a b -> Int.compare a.M.id b.M.id) |> List.hd in
+  let label () = M.string_prop (List.find (fun n -> n.M.id=item.M.id) (nodes menu)) "text" in
+  check "page menu reflects the target favorite instead of the current route"
+    (label ()=Some I18n.unfavorite_page);
+  check "navigation checkbox menu uses the translated Pages label"
+    (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "nav.all-pages/label")) (nodes menu));
+  Runtime.signal_set st.favorites [current]; S.flush menu;
+  check "page menu reacts to favorite changes without remounting its row"
+    (label ()=Some I18n.add_to_favorites);
+  Runtime.signal_set st.favorites [target]; S.flush menu;
+  check "page menu restores the target's favorite label with the same row identity"
+    (label ()=Some I18n.unfavorite_page);
+  let queried = ref [] in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+      queried:=(name,args)::!queried;
+      Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Runtime.read_model:=(fun () -> Lui_app.model menu.S.app);
+  Runtime.app_send:=(fun _ -> false);
+  S.press menu item.M.id;
+  check "page menu favorite action queries its target UUID"
+    (List.exists (function
+      | "thread-api/favorited-page?",[_;Wire.Uuid "menu-target"] -> true
+      | _ -> false) !queried);
+  check "page menu favorite action does not query the current route UUID"
+    (not (List.exists (function
+      | "thread-api/favorited-page?",[_;Wire.Uuid "current-route"] -> true
+      | _ -> false) !queried));
+  ignore (Lui_app.dispose menu.S.app);
+  Sidebar_state.st_ref:=previous_sidebar;Sidebar_state.model_signal:=previous_sidebar_model;
+  Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;Runtime.app_send:=previous_send;
   List.iter (fun (name, title, query, expected) ->
     let title = Ui_services.literal_text title in
     let query = Ui_services.literal_text query in

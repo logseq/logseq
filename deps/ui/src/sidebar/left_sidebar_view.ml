@@ -85,7 +85,7 @@ let menu_sc caps =
 
 let nav_labels =
   [ ("flashcards", "nav/flashcards")
-  ; ("all-pages", "sidebar.left/nav-all-pages")
+  ; ("all-pages", "nav.all-pages/label")
   ; ("tag/tasks", "nav/tasks")
   ; ("tag/assets", "nav/assets")
   ]
@@ -339,28 +339,15 @@ let repos_menu st =
 
 let menu_host st =
  fun ctx parent ->
-  (* nested maps each own their upstream subscription on the shared
-     state cells — own both levels *)
-  let menu_sig =
-    Logseq_el.own ctx
-      (Signal.map2
-         (fun menu (checked, favorited) -> (menu, checked, favorited))
-         (Signal.value st.Sidebar_state.open_menu)
-         (Logseq_el.own ctx
-            (Signal.map2
-               (fun a b -> (a, b))
-               (Signal.value st.nav_checked)
-               (Signal.value st.favorited))))
-  in
   (reactive
-    (fun (menu, _checked, _favorited) ->
+    (fun menu ->
       match menu with
       | "nav-edit" -> nav_edit_menu st
       | "plugins" -> plugins_menu st
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
           lp_menu st
       | _ -> Logseq_el.nothing)
-    menu_sig)
+    (Signal.value st.Sidebar_state.open_menu))
     ctx parent
 
 (* ---------- navigations ---------- *)

@@ -51,17 +51,17 @@ let page_items (p : Model.page) =
             | None -> ()) ]
   in
   let fav =
-    match !Sidebar_state.st_ref with
-    | Some st ->
-        let label =
-          if Signal.get_state st.Sidebar_state.favorited then
-            I18n.unfavorite_page
-          else I18n.add_to_favorites
-        in
-        [ item "fav" label (fun () ->
+    match !Sidebar_state.st_ref, p.page_uuid with
+    | Some st, Some uuid ->
+        [ Menu_item.el ~key:"fav"
+            ~label:(reactive (fun favorites ->
+                if List.exists (fun (page : Model.page) -> page.page_uuid=Some uuid) favorites
+                then I18n.unfavorite_page else I18n.add_to_favorites)
+              (Signal.value st.Sidebar_state.favorites))
+            ~on_click:(fun () ->
               Runtime.send (Action.Page_menu_set None);
-              Sidebar_state.toggle_favorite st) ]
-    | None -> []
+              Sidebar_state.toggle_favorite_uuid st uuid) () ]
+    | _ -> []
   in
   let export_page =
     item "exp-page" I18n.export_page (fun () ->

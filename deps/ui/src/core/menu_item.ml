@@ -33,10 +33,10 @@ let chrome element =
    [icon] fills the kind's leading icon slot; only use [before] for
    content that is not an icon (extra slots shift the label) *)
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
-    ?(after = []) ?(data_attrs = []) ?icon ~label ~on_click () =
+    ?(after = []) ?(data_attrs = []) ?icon ?label ?label_signal ~on_click () =
   ignore attrs;
   chrome
-    (menu_item ~key ~style_class:cls ~data_attrs ~text:label ?icon
+    (menu_item ~key ~style_class:cls ~data_attrs ?text:label ?text_signal:label_signal ?icon
        ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
        ~on_press:(fun _ -> on_click ())
        (before @ after))
