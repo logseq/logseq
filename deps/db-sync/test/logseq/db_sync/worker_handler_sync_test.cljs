@@ -14,7 +14,9 @@
             [logseq.db-sync.worker.handler.semantic :as semantic-handler]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
@@ -3115,3 +3117,75 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(defn- capture-normalized-tx!
+  [conn f]
+  (let [captured (atom [])]
+    (d/listen! conn ::capture-normalized-tx
+               (fn [tx-report]
+                 (swap! captured into
+                        (db-normalize/normalize-tx-data
+                         (:db-after tx-report)
+                         (:db-before tx-report)
+                         (:tx-data tx-report)))))
+    (try
+      (f)
+      (vec @captured)
+      (finally
+        (d/unlisten! conn ::capture-normalized-tx)))))
+
+(defn- assert-delete-wins-deleted-property
+  [ptype]
+  (let [sql (test-sql/make-sql)
+        _ (storage/init-schema! sql)
+        conn (sqlite-export/create-conn)
+        self #js {:sql sql :conn conn :schema-ready true}
+        page-uuid (random-uuid)
+        a-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid page-uuid :block/name "page 1" :block/title "page 1"
+                              :block/tags :logseq.class/Page :block/created-at 1 :block/updated-at 1}
+                             {:block/uuid a-uuid :block/title "a"
+                              :block/page [:block/uuid page-uuid] :block/parent [:block/uuid page-uuid]
+                              :block/order "a0" :block/created-at 1 :block/updated-at 1}])
+        _ (outliner-property/upsert-property! conn :user.property/rating
+                                              {:logseq.property/type ptype}
+                                              {:property-name "rating"})
+        rating (d/entity @conn :user.property/rating)
+        bob-conn (d/conn-from-db @conn)
+        bob-value (if (= ptype :checkbox) true 5)
+        bob-tx-data (capture-normalized-tx!
+                     bob-conn
+                     #(outliner-property/set-block-property!
+                       bob-conn [:block/uuid a-uuid] :user.property/rating bob-value))
+        alice-tx-data (outliner-page/build-page-retract-tx @conn rating)
+        t0 (storage/get-t sql)
+        r1 (with-redefs [ws/broadcast! (fn [& _] nil)]
+             (sync-handler/handle-tx-batch!
+              self nil [{:tx (protocol/tx->transit (vec alice-tx-data))
+                         :outliner-op :delete-page}]
+              t0))
+        r2 (with-redefs [ws/broadcast! (fn [& _] nil)]
+             (sync-handler/handle-tx-batch!
+              self nil [{:tx (protocol/tx->transit bob-tx-data)
+                         :outliner-op :save-block}]
+              (storage/get-t sql)))
+        a (d/entity @conn [:block/uuid a-uuid])
+        a-datoms (mapv (juxt :a :v) (d/datoms @conn :eavt (:db/id a)))
+        errors (:errors (db-validate/validate-db @conn))]
+    (is (= "tx/batch/ok" (:type r1))
+        (str ptype " alice delete should apply: " (pr-str r1)))
+    (is (= "tx/batch/ok" (:type r2))
+        (str ptype " bob set should be accepted (delete wins by dropping the value): "
+             (pr-str r2)))
+    (is (nil? (d/entity @conn :user.property/rating))
+        (str ptype " property entity must be gone"))
+    (is (not-any? #(= :user.property/rating (first %)) a-datoms)
+        (str ptype " server must not keep a value of the deleted property: "
+             (pr-str a-datoms)))
+    (is (empty? errors)
+        (str ptype " server db must stay valid: " (pr-str (take 3 errors))))))
+
+(deftest tx-batch-delete-property-wins-over-concurrent-set-test
+  (testing "Alice deletes rating while Bob concurrently sets it; delete wins on the server"
+    (doseq [ptype [:checkbox :number]]
+      (assert-delete-wins-deleted-property ptype))))
