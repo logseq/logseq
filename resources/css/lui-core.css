@@ -56,10 +56,6 @@ body {
   overflow-y: overlay;
 }
 
-#root {
-  font-size: var(--ls-page-text-size);
-}
-
 #skip-to-main {
   position: fixed;
   padding: 0.5rem;

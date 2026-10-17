@@ -5,6 +5,15 @@ import postcss from 'postcss'
 
 const stylesheet = new URL('../resources/css/lui-overlay.css', import.meta.url)
 
+test('root stylesheet does not compound the shared application font size', async () => {
+  const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
+  const fontSizes = []
+  postcss.parse(source).walkRules('#root', rule => {
+    rule.walkDecls('font-size', declaration => fontSizes.push(declaration.value))
+  })
+  assert.deepEqual(fontSizes, [], 'The shared root applies relative page text sizes exactly once')
+})
+
 test('left sidebar groups are independent of the right sidebar scope', async () => {
   const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
   const root = postcss.parse(source)

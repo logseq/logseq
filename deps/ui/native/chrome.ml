@@ -592,10 +592,7 @@ let shell (ms : Model.t Signal.signal) : t =
        absolute, edge-stretched) instead of in-flow document-tail
        siblings a plain box would size to content *)
     (Ui_components.with_props
-      [ Ui_components.Prop.height_viewport 1.
-      ; Ui_components.Prop.font_size "1rem"
-      ; Ui_components.Prop.font_family "var(--ls-font-family, Inter)"
-      ; Ui_components.Prop.line_height "1.5" ]
+      [ Ui_components.Prop.height_viewport 1. ]
     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ (* horizontal shell: the docked splits own both side docks'
          tracks — the left split's second pane is the detail column

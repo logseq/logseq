@@ -5679,3 +5679,153 @@ let () = Native_embed.with_entry_lock (fun () ->
       check "Space after a caption click must toggle the same checkbox"
         (List.exists (function W.Dispatch (ToggleChanged (id,_)) -> id=checkbox | _ -> false) keyboard))) [1.;2.];
   print_endline "native font row and labeled checkbox geometry/input: OK")
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let previous_mode = !Theme_vars.mode
+      and previous_accent = !Theme_vars.accent in
+      let previous_sidebar = !Sidebar_state.st_ref
+      and previous_model_signal = !Sidebar_state.model_signal in
+      let previous_light = Hashtbl.copy Theme_vars.light_overrides
+      and previous_dark = Hashtbl.copy Theme_vars.dark_overrides in
+      let failures = ref [] in
+      let expect message condition =
+        if not condition then failures := message :: !failures
+      in
+      Fun.protect
+        ~finally:(fun () ->
+          Sidebar_state.st_ref := previous_sidebar;
+          Sidebar_state.model_signal := previous_model_signal;
+          List.iter
+            (fun (target, saved) ->
+              Hashtbl.reset target;
+              Hashtbl.iter (Hashtbl.replace target) saved)
+            [
+              (Theme_vars.light_overrides, previous_light);
+              (Theme_vars.dark_overrides, previous_dark);
+            ];
+          Theme_vars.set_accent previous_accent;
+          Theme_vars.rebuild Lui_theme.Light;
+          Theme_vars.rebuild Lui_theme.Dark;
+          Theme_vars.set_dark (previous_mode = Lui_theme.Dark))
+        (fun () ->
+          List.iter
+            (fun scale ->
+              Sidebar_state.st_ref := None;
+              Sidebar_state.model_signal := None;
+              let store = Lui_store.create () in
+              let backend =
+                {
+                  backend_profile = profile MacOS GenericHost;
+                  apply_batch =
+                    (fun batch ->
+                      Lui_store.apply_batch store batch;
+                      true);
+                }
+              in
+              let registry = Lui_extension.registry () in
+              Logseq_el.register_all registry;
+              Logseq_codemirror.register registry;
+              Logseq_editor.register registry;
+              let app =
+                Lui_app.create_with_extensions backend registry
+                  { Model.initial with route = Model.Not_found "/missing" }
+                  (fun model _ -> model)
+                  View.view
+              in
+              Fun.protect
+                ~finally:(fun () -> ignore (Lui_app.dispose app))
+                (fun () ->
+                  ignore (Lui_app.start app);
+                  ignore (Lui_app.flush app);
+                  let scene =
+                    Lui_scene.create
+                      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+                      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+                  in
+                  let verify name =
+                    let ink = ref None in
+                    Lui_paint.paint
+                      {
+                        Lui_paint.default_hooks with
+                        color_of = Theme_vars.color_of;
+                        layout =
+                          (fun _ ->
+                            Lui_paint.placement_of_rect
+                              (Lui_scene.rect 0. 0. (400. *. scale)
+                                 (80. *. scale)));
+                        text_ops =
+                          (fun _ _ color text ->
+                            if text = "404" then ink := Some color;
+                            []);
+                      }
+                      store scene ~width:1280 ~height:720 ~scale
+                      ~clear:(Lui_scene.color 255 255 255 255);
+                    let expected =
+                      match
+                        Theme_vars.color_of
+                          "var(--lx-gray-12, var(--ls-primary-text-color))"
+                      with
+                      | Some color -> color
+                      | None ->
+                          failwith
+                            ("Unresolved body color " ^ name ^ ": "
+                            ^ Option.value ~default:"invalid"
+                                (Theme_vars.resolve_value
+                                   "var(--lx-gray-12, \
+                                    var(--ls-primary-text-color))"))
+                    in
+                    expect
+                      ("Application text must inherit the stylesheet body \
+                        color: " ^ name)
+                      (!ink = Some expected)
+                  in
+                  List.iter
+                    (fun mode ->
+                      let snapshot = Ui_theme.snapshot mode in
+                      Theme_vars.install_snapshot
+                        (Yojson.Safe.to_string
+                           (`Assoc
+                              [
+                                ( "mode",
+                                  `String
+                                    (if mode = Ui_theme.Dark then "dark"
+                                     else "light") );
+                                ( "vars",
+                                  `Assoc
+                                    (List.map
+                                       (fun (key, value) ->
+                                         (key, `String value))
+                                       snapshot.vars) );
+                              ]));
+                      Theme_vars.set_dark (mode = Ui_theme.Dark);
+                      List.iter
+                        (fun accent ->
+                          Theme_vars.set_accent accent;
+                          verify accent)
+                        [ "logseq"; "orange"; "blue"; "pink" ];
+                      Theme_vars.set_var "--lx-gray-12" "#123456";
+                      verify "custom body ink")
+                    [ Ui_theme.Light; Ui_theme.Dark ];
+                  let paragraph =
+                    List.find
+                      (fun id ->
+                        Lui_store.kind store id = "paragraph"
+                        && Lui_store.string_prop store id "text"
+                           = Some (I18n.t "page/not-found-desc"))
+                      (Lui_store.preorder store)
+                  in
+                  List.iter
+                    (fun (value, size) ->
+                      Theme_vars.set_var "--ls-page-text-size" value;
+                      expect
+                        ("Application body text must honor the stylesheet font \
+                          size: " ^ value)
+                        (Text_engine.font_of store paragraph
+                        |> Lui_text.size = size))
+                    [ ("18px", 18.); ("2em", 32.); ("0.875rem", 14.) ]))
+            [ 1.; 2. ]);
+      List.iter prerr_endline (List.rev !failures);
+      check "Application body typography must inherit shared theme tokens"
+        (!failures = []);
+      print_endline "native application body foreground inheritance: OK")
