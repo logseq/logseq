@@ -240,15 +240,20 @@ let right_sidebar (ms : Model.t Signal.signal) =
       ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
-       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+       (Ui_parts.int_prop Lui_protocol.MinWidth
+         ~value:(reactive (fun (m : Model.t) -> if m.right_sidebar_open then 320 else 0) ms)
+        (Ui_parts.int_prop Lui_protocol.MaxWidth
+         ~value:(reactive (fun viewport -> int_of_float (viewport *. Sidebar_state.right_fraction_max))
+           (Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w))
+        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
           ~inert:(reactive (fun (m : Model.t) -> not m.right_sidebar_open) ms)
-       ~min_width:240 ~min_height:0
+       ~min_height:0
        ~style_class:"cp__right-sidebar closed"
           [ Ui_components.with_props
               [ Ui_components.Prop.overflow `hidden ]
               (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
                  ~background:"muted"
-                 [ Right_sidebar_view.render ms ]) ]))
+                 [ Right_sidebar_view.render ms ]) ]))))
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
    is an overlay layer; on the native host it is the docked split's
@@ -264,19 +269,17 @@ let left_sidebar (ms : Model.t Signal.signal) =
       ^ if m.left_sidebar_open then " is-open" else "")
     (Ui_components.with_props
        [ Ui_components.Prop.height_viewport 1. ]
-       (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+       (Ui_parts.int_prop Lui_protocol.MinWidth
+          ~value:(reactive (fun (m : Model.t) ->
+            if m.left_sidebar_open then Sidebar_state.left_width_min else 0) ms)
+        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
           ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
-          ~min_width:240 ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+          ~max_width:Sidebar_state.left_width_max ~min_height:0 ~style_class:"cp__sidebar-left-layout"
           [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
              [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
                     ~min_width:(reactive
-                      (fun (m : Model.t) lf rf viewport ->
-                        let outer = if m.right_sidebar_open then 1. -. rf else 1. in
-                        let track = max 0. ((viewport -. 3.) *. outer -. 3.) in
-                        max 240 (int_of_float (lf *. track)))
-                      ms (Signal.value st.Sidebar_state.left_fraction)
-                      (Signal.value st.Sidebar_state.right_fraction)
-                      (Signal.value st.Sidebar_state.viewport_w))
+                      (fun width -> int_of_float (Float.round width)-1)
+                      (Signal.value st.Sidebar_state.left_width))
                     ~background:"var(--left-sidebar-bg-color)"
                     ~style_class:"left-sidebar-inner as-container"
                [ (* The sidebar's titlebar strip shares the system traffic
@@ -294,7 +297,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
                              [ left_menu_btn ~key:"left-menu-sidebar" ();
                                search_btn ~key:"search-sidebar" () ]
                          else spacer ~key:"sidebar-titlebar-empty" []) ms ]
-               ; column ~key:"ls-wrap" ~grow:1. ~min_height:0
+               ; column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
                    [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
                        ~style_class:"sidebar-header-container"
                        [ Left_sidebar_view.graphs_selector
@@ -305,32 +308,31 @@ let left_sidebar (ms : Model.t Signal.signal) =
                    ]
                ]
            )
+           ; box ~key:"ls-border" ~width:1
+               ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" []
            ]
-       ]))
+       ])))
 
-(* The host advances split transitions on its frame clock. The
-   application owns the persisted pane fractions. *)
+(* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1. ~gap:3
-    ~value:
+  split ~key:"left-split" ~grow:1. ~gap:Sidebar_state.divider_width
+    ~first_width:
       (reactive
-         (fun (m : Model.t) f ->
-           if m.Model.left_sidebar_open then f
-           else Sidebar_state.closed_fraction)
-         ms (Signal.value st.Sidebar_state.left_fraction))
+         (fun (m : Model.t) width -> if m.Model.left_sidebar_open then width else 0.)
+         ms (Signal.value st.Sidebar_state.left_width))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
     (left_sidebar ms) content
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1. ~gap:3
+  split ~key:"right-split" ~grow:1. ~gap:Sidebar_state.divider_width
     ~value:
       (reactive
-         (fun (m : Model.t) f ->
-           if m.Model.right_sidebar_open then 1. -. f else 1.)
-         ms (Signal.value st.Sidebar_state.right_fraction))
+         (fun (m : Model.t) fraction viewport ->
+           if m.Model.right_sidebar_open then Sidebar_state.right_split_fraction ~viewport fraction else 1.)
+         ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
     first second

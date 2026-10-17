@@ -595,11 +595,10 @@ let sidebar_item st idx (it : Sidebar_state.item) =
    expanded layout and is clipped by the pane's overflow:hidden
    (slide-out) instead of reflowing/shrinking its text *)
 let inner st =
-  Ui_parts.int_prop_signal Lui_protocol.MinWidth
-    (Signal.map2 (fun a b -> (a, b))
+  Ui_parts.int_prop Lui_protocol.MinWidth
+    ~value:(reactive (fun rf vw -> int_of_float (Float.round (rf *. vw)))
        (Signal.value st.Sidebar_state.right_fraction)
        (Signal.value st.Sidebar_state.viewport_w))
-    (fun (rf, vw) -> int_of_float (rf *. vw) - 12)
     (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
        ~grow:1.
        ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"

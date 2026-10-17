@@ -52,12 +52,13 @@ let prop_signal prop source f (elem : t) : t =
   Lui_ui.string_property_signal context node prop (Signal.map f source);
   node
 
-(* reactive int prop — same wrap pattern as prop_signal *)
-let int_prop_signal prop source f (elem : t) : t =
+(* Integer properties share constructor-style reactive ownership. *)
+let int_prop prop ?value ?value_signal (elem : t) : t =
  fun context parent ->
   let node = elem context parent in
   ignore (standard_kind context node);
-  Lui_ui.int_property_signal context node prop (Signal.map f source);
+  Option.iter (Lui_ui.int_property context node prop) value;
+  Option.iter (Lui_ui.int_property_signal context node prop) value_signal;
   node
 
 (* Float props on kinds without constructor arguments use the same

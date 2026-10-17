@@ -45,9 +45,7 @@ type t =
   ; items : item list Signal.state
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
-  ; (* docked-split fractions + the viewport width the left docked
-       gate reads — see the docked-split fractions section *)
-    left_fraction : float Signal.state
+  ; left_width : float Signal.state
   ; right_fraction : float Signal.state
   ; viewport_w : float Signal.state
   }
@@ -124,28 +122,23 @@ let click_target sel (ev : Ui_services.ev) =
 
 let detail_string name (ev : Ui_services.ev) = ev.Ui_services.detail name
 
-(* ---------- docked-split fractions ----------
-   The LUI `split` kind owns drag + animation on every platform; the
-   cljs interact.js resizers and their px bookkeeping are gone. Both
-   docks persist a fraction (0..1) — :ls-left-sidebar-width used to
-   hold a px string and :ls-right-sidebar-width a percent; unparseable
-   legacy values fall back to the defaults (unreleased branch — no
-   converter). *)
+(* ---------- docked-split geometry ----------
+   Keep the reference units: left pixels, right viewport ratio. Only
+   the right split boundary converts its ratio to a divider-free fraction. *)
 
 let class_add (el : Ui_services.el) c = el.Ui_services.add_class c
 let class_rm (el : Ui_services.el) c = el.Ui_services.remove_class c
 
 let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 
-(* ~240px / ~460px against a 1440px viewport, expressed as ratios *)
-let left_fraction_min = 0.167
-let left_fraction_max = 0.32
-(* app.logseq.com ships 246px / 480px docks — px semantics, so the
-   defaults are the 1434px-track ratios that floor to those px *)
-let left_fraction_default = 0.1716
-let right_fraction_min = 0.167
-let right_fraction_max = 0.5
-let right_fraction_default = 0.3375
+let divider_width = 3
+let left_width_min = 240
+let left_width_max = 460
+let left_width_default = 246.
+let left_width_key = "ls-left-sidebar-width-px"
+let right_fraction_min = 0.1
+let right_fraction_max = 0.7
+let right_fraction_default = 0.4
 
 let fraction_of_storage ~key ~default =
   match Ui_services.storage_get key with
@@ -159,41 +152,26 @@ let fraction_of_storage ~key ~default =
 let store_fraction key f =
   Ui_services.storage_set key (Printf.sprintf "%.4g" f)
 
-(* the left dock keeps a constant pixel width (cljs persisted px):
-   left_fraction is always the inner split's effective value — when the
-   right dock opens or the window resizes, it is rescaled so the dock's
-   rendered px width does not move. Stored values are viewport
-   fractions; a drag writes back value * content-ratio. *)
-let right_dock_open _st = (model ()).Model.right_sidebar_open
+let right_split_fraction ~viewport fraction =
+  1. -. (fraction *. viewport /. (viewport -. float divider_width))
 
-let left_content_ratio st =
-  if right_dock_open st then 1. -. Runtime.signal_get st.right_fraction
-  else 1.
-
-let rescale_left st factor =
-  let f = Runtime.signal_get st.left_fraction *. factor in
-  Runtime.signal_set st.left_fraction (clampf 0.02 0.98 f)
-
-(* split drags report the new first-pane fraction of the CONTENT area;
-   normalize to a viewport fraction before persisting *)
 let on_left_split_resize st ev =
   match ev with
   | Lui_protocol.ValueChanged (_, v) ->
-      Runtime.signal_set st.left_fraction v;
-      let f = clampf left_fraction_min left_fraction_max
-          (v *. left_content_ratio st) in
-      store_fraction "ls-left-sidebar-width" f
+      let width = clampf (float left_width_min) (float left_width_max) v in
+      Runtime.signal_set st.left_width width;
+      Ui_services.storage_set left_width_key (Printf.sprintf "%.8g" width)
   | _ -> ()
 
 (* the right dock is the split's SECOND pane — its fraction is 1 - v *)
 let on_right_split_resize st ev =
   match ev with
   | Lui_protocol.ValueChanged (_, v) ->
-      let ratio_old = left_content_ratio st in
-      let f = clampf right_fraction_min right_fraction_max (1. -. v) in
+      let viewport = Runtime.signal_get st.viewport_w in
+      let minimum = Float.max right_fraction_min (320. /. viewport) in
+      let f = clampf minimum right_fraction_max
+        ((1. -. v) *. (viewport -. float divider_width) /. viewport) in
       Runtime.signal_set st.right_fraction f;
-      if right_dock_open st then
-        rescale_left st (ratio_old /. left_content_ratio st);
       store_fraction "ls-right-sidebar-width" f
   | _ -> ()
 
@@ -201,12 +179,6 @@ let on_right_split_resize st ev =
    so the docked split fraction must collapse or the empty track would
    still hold space *)
 let left_docked (open_ : bool) (vw : float) = open_ && vw >= 640.
-
-(* fully-collapsed first pane. The web split backend treats a
-   non-positive ProgressValue as "unset" and falls back to 0.5, so a
-   closed dock reads as a hairline fraction rather than literal 0 —
-   invisible, and it gives the open animation a non-degenerate start. *)
-let closed_fraction = 0.0001
 
 (* ---------- edge-swipe + small-viewport behavior (cljs
    left_sidebar.cljs) ----------
@@ -990,7 +962,6 @@ let page_key (p : Model.page) =
   | Some u -> "u:" ^ u
   | None -> "d:" ^ string_of_int (Option.value p.Model.page_db_id ~default:0)
 
-let prev_right_open = ref false
 
 let on_model st (m : Model.t) =
   (match m.Model.repo with
@@ -1019,14 +990,7 @@ let on_model st (m : Model.t) =
   let owner_open =
     if String.starts_with ~prefix:"item-" menu then m.right_sidebar_open
     else m.left_sidebar_open in
-  if menu <> "" && not owner_open then Runtime.signal_set st.open_menu "";
-  (* right-dock open/close: rescale the left split so its px width
-     stays put *)
-  if m.Model.right_sidebar_open <> !prev_right_open then (
-    prev_right_open := m.Model.right_sidebar_open;
-    let ratio = 1. -. Runtime.signal_get st.right_fraction in
-    rescale_left st
-      (if m.Model.right_sidebar_open then 1. /. ratio else ratio))
+  if menu <> "" && not owner_open then Runtime.signal_set st.open_menu ""
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 
@@ -1193,10 +1157,11 @@ let init (ms : Model.t Signal.signal) : t =
         ; items = Signal.state owner []
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []
-        ; left_fraction =
+        ; left_width =
             Signal.state owner
-              (fraction_of_storage ~key:"ls-left-sidebar-width"
-                 ~default:left_fraction_default)
+              (match Ui_services.storage_get left_width_key with
+               | None -> left_width_default
+               | Some value -> Float.of_string (Ui_services.storage_unquote value))
         ; right_fraction =
             Signal.state owner
               (fraction_of_storage ~key:"ls-right-sidebar-width"
@@ -1223,11 +1188,8 @@ let init (ms : Model.t Signal.signal) : t =
       Ui_services.dom_on_document_event "touchmove" on_doc_touchmove;
       Ui_services.dom_on_document_event "touchend" on_doc_touchend;
       Ui_services.dom_on_window_event "resize" (fun _ ->
-          let w_old = Runtime.signal_get st.viewport_w in
           let w_new = Ui_services.dom_viewport_width () in
-          Runtime.signal_set st.viewport_w w_new;
-          if w_new > 0. && w_new <> w_old then
-            rescale_left st (w_old /. w_new));
+          Runtime.signal_set st.viewport_w w_new);
       st
 
 let ensure ms = init ms

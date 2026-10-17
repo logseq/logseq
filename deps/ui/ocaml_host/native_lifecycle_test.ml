@@ -253,9 +253,8 @@ let () =
         if (Lui_app.model app).Model.right_sidebar_open <> right_open then
           ignore (Lui_app.send app Action.Toggle_right_sidebar);
         Runtime.signal_set st.right_fraction 0.3;
-        Runtime.signal_set st.left_fraction 0.2);
-      let content_ratio = if right_open then 0.7 else 1. in
-      let initial = Signal.get (Signal.value st.left_fraction) *. Host.inner_width () *. content_ratio in
+        Runtime.signal_set st.left_width 288.);
+      let initial = Signal.get (Signal.value st.left_width) in
       List.iter (fun (width,height) ->
         let count = List.length !observed in
         resize width height;
@@ -267,7 +266,7 @@ let () =
         expect "Native resize left the shared sidebar viewport stale"
           (Signal.get (Signal.value st.viewport_w) = width);
         expect "Native window resizing changed the left sidebar pixel width"
-          (abs_float (Signal.get (Signal.value st.left_fraction) *. width *. content_ratio -. initial) < 0.0001))
+          (abs_float (Signal.get (Signal.value st.left_width) -. initial) < 0.0001))
         [1000.,700.; 1600.,1000.; 1600.,800.; 1600.,800.; 1440.,900.])
       [false;true];
     observed := [];
@@ -276,7 +275,7 @@ let () =
     expect "Queued native resizes lost their viewport ordering"
       (List.rev !observed = [1200.,800.; 1000.,700.; 1440.,900.]);
     expect "A native resize burst drifted the sidebar width"
-      (abs_float (Signal.get (Signal.value st.left_fraction) -. 0.2) < 0.0001));
+      (abs_float (Signal.get (Signal.value st.left_width) -. 288.) < 0.0001));
   List.iter prerr_endline (List.rev !failures);
   check "Native window resize delivery and shared sidebar geometry" (!failures = []);
   print_endline "native window resize delivery and shared sidebar geometry: OK"

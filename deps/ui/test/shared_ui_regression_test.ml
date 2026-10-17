@@ -295,7 +295,7 @@ let run_views ~registry ~profile ~finish =
         {favorites=state [target];recents=state [];nav_checked=state [];
          nav_tag_titles=state [];items=state [];
          open_menu=state "";groups_collapsed=state [];
-         left_fraction=state 0.2;right_fraction=state 0.3;viewport_w=state 1440.} in
+         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
   let st = Option.get !sidebar in

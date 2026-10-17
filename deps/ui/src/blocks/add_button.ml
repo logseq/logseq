@@ -45,8 +45,8 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
               [ (* margin-left follows .ls-block-content-indent on the
                    outer column: 22px flat, 6px indented — bound to the
                    same flags signal as the class toggle *)
-                Ui_parts.int_prop_signal Lui_protocol.MarginLeft fs
-                  (fun (_has, indented) -> if indented then 6 else 22)
+                Ui_parts.int_prop Lui_protocol.MarginLeft
+                  ~value:(reactive (fun (_has, indented) -> if indented then 6 else 22) fs)
                   (row ~key:"bab-inner" ~cross:`center ~height:28 ~grow:1.
                      ~style_class:"bab-inner"
                      [ (* same bullet metrics as the block gutter dot in

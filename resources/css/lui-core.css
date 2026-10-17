@@ -656,56 +656,16 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 }
 
 .left-sidebar-inner {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-
   &.as-container {
-    position: relative;
-    height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-    /* cljs container.css: 74vw overlay sheet below sm; >=sm the docked
-       pane's track owns the width so the sheet stretches to fill it —
-       the pane's overflow clip (not the overlay translate) hides it
-       while closed */
-    width: 100%;
-    background-color: var(--left-sidebar-bg-color);
-    border-right: 1px solid var(--lx-gray-03, var(--ls-tertiary-background-color));
-    z-index: 3;
-
     @media (max-width: 639.98px) {
       width: var(--ls-left-sidebar-sm-width);
       transform: translateX(-100%);
       transition: transform 0.3s;
 
-      .is-open > & {
+      #left-sidebar.is-open & {
         transform: translate3d(0, 0, 0);
         overflow: hidden;
       }
-    }
-  }
-
-  > .wrap {
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    width: 100%;
-    /* the .left-sidebar-top buttons row owns the top offset now — the
-       wrap only needs a small gap (cljs had mt-6/mt-52px under a
-       sidebar that started below the header's buttons) */
-    margin-top: 4px;
-    height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
-  }
-
-  @media (min-width: 640px) {
-    &.as-container {
-      padding-top: 0;
-    }
-
-    > .wrap {
-      margin-top: 12px;
     }
   }
 

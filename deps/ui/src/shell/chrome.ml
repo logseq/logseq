@@ -773,11 +773,16 @@ let right_sidebar (ms : Model.t Signal.signal) =
        ; Ui_components.Prop.position `relative
        ; Ui_components.Prop.user_select `none
        ; Ui_components.Prop.overflow `hidden ]
-       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+       (Ui_parts.int_prop Lui_protocol.MinWidth
+          ~value:(reactive (fun (m : Model.t) -> if m.right_sidebar_open then 320 else 0) ms)
+        (Ui_parts.int_prop Lui_protocol.MaxWidth
+          ~value:(reactive (fun viewport -> int_of_float (viewport *. Sidebar_state.right_fraction_max))
+            (Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w))
+        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
           ~inert:(reactive (fun (m : Model.t) -> not m.right_sidebar_open) ms)
           ~style_class:"cp__right-sidebar closed"
-          ~data_attrs:[ ("style", "container-type:inline-size;min-width:0") ]
-          [ Right_sidebar_view.render ms ]))
+          ~data_attrs:[ ("style", "container-type:inline-size") ]
+          [ Right_sidebar_view.render ms ]))))
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
    holds .left-sidebar-inner (contents) + .shade-mask. The element is
@@ -785,79 +790,53 @@ let right_sidebar (ms : Model.t Signal.signal) =
    the split kind's divider replaced the hand-rolled resizer. The
    sidebar's own top row hosts the toggle + search buttons while
    docked-open (the header only mounts its copies when closed). *)
-(* reactive MinWidth = the pane's expanded width in px — while the
-   docked track animates to/from ~0 the sidebar's inner column keeps
-   its expanded layout and is clipped by the pane's overflow:hidden
-   (slide-out) instead of reflowing/shrinking its text. The left
-   split's own width is the right split's first track. *)
-let left_inner_min_width (st : Sidebar_state.t)
-    (ms : Model.t Signal.signal) =
-  Ui_parts.int_prop_signal Lui_protocol.MinWidth
-    (Signal.map2 (fun a b -> (a, b))
-       (Signal.map2 (fun m lf -> (m, lf)) ms
-          (Signal.value st.Sidebar_state.left_fraction))
-       (Signal.map2 (fun rf vw -> (rf, vw))
-          (Signal.value st.Sidebar_state.right_fraction)
-          (Signal.value st.Sidebar_state.viewport_w)))
-    (fun ((m, lf), (rf, vw)) ->
-      (* -12 slack: the gaps/dividers keep the exact track fraction a
-         few px under lf*vw; a min-width 1px too wide would clip the
-         pane's border while open *)
-      int_of_float
-        (lf *. vw *. if m.Model.right_sidebar_open then 1. -. rf else 1.)
-      - 12)
+let left_inner_width width viewport =
+  int_of_float (Float.round (if viewport < 640. then viewport *. 0.74 else width)) - 1
 
 let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       "cp__sidebar-left-layout"
       ^ if m.left_sidebar_open then " is-open" else "")
-    (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-          ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
-       ~style_class:"cp__sidebar-left-layout"
-       [ left_inner_min_width st ms
+    (Ui_parts.int_prop Lui_protocol.MinWidth
+       ~value:(reactive (fun (m : Model.t) viewport ->
+         if Sidebar_state.left_docked m.left_sidebar_open viewport then Sidebar_state.left_width_min else 0)
+         ms (Signal.value st.Sidebar_state.viewport_w))
+     (Ui_parts.int_prop Lui_protocol.MaxWidth
+       ~value:(reactive (fun viewport ->
+         if viewport>=640. then Sidebar_state.left_width_max else int_of_float viewport)
+         (Signal.value st.Sidebar_state.viewport_w))
+     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+       ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
+       ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+       [ row ~key:"ls-dock" ~container_relative_frame:`both ~min_height:0 ~cross:`stretch
+         [ Ui_components.with_props
+           [Ui_components.Prop.position `relative;Ui_components.Prop.overflow `auto;
+            Ui_components.Prop.z_index 3]
            (column ~key:"ls-inner" ~grow:1. ~min_height:0
-              ~background:
-                "var(--left-sidebar-bg-color)"
+              ~min_width:(reactive left_inner_width
+                (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
+              ~max_width:(reactive left_inner_width
+                (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
+              ~background:"var(--left-sidebar-bg-color)"
               ~style_class:"left-sidebar-inner as-container"
-              ~data_attrs:
-                [ ( "style"
-                  , "position:relative;height:100%;overflow-y:auto;\
-                     overflow-x:hidden;width:100%;\
-                     border-right:1px solid \
-                     var(--lx-gray-03, \
-                     var(--ls-tertiary-background-color));z-index:3" )
-                ]
-           [ row ~key:"ls-top" ~height:52 ~style_class:"left-sidebar-top"
-               []
-           ; box ~key:"ls-wrap" ~style_class:"wrap"
-               ~data_attrs:
-                 [ ( "style"
-                   , "display:flex;flex-direction:column;\
-                      position:relative;width:100%;margin-top:4px;\
-                      height:calc(100vh - \
-                      var(--ls-headbar-inner-top-padding) - 50px)" )
-                 ]
-               [ column ~key:"ls-head" ~gap:4
-                   ~style_class:"sidebar-header-container"
-                   ~margin_bottom:4
-                   ~data_attrs:[ ("style", "flex-shrink:0") ]
-                   [ Left_sidebar_view.graphs_selector st ms
-                   ; Left_sidebar_view.nav_group ms st ]
-               ; Left_sidebar_view.contents ms
-               ]
-           ])
+              [ row ~key:"ls-top" ~height:48 ~style_class:"left-sidebar-top" []
+              ; Ui_components.with_props [Ui_components.Prop.position `relative]
+                  (column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
+                    ~style_class:"wrap"
+                    [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
+                        ~style_class:"sidebar-header-container"
+                        [ Left_sidebar_view.graphs_selector st ms
+                        ; Left_sidebar_view.nav_group ms st ]
+                    ; Left_sidebar_view.contents ms ]) ])
+       ; box ~key:"ls-border" ~width:1
+           ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" [] ]
        ; Ui_parts.pressable
            ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-           (box ~key:"shade" ~style_class:"shade-mask" [])
-       ])
+           (box ~key:"shade" ~style_class:"shade-mask" []) ])))
 
-(* docked left split: first pane is the full-height sidebar, second is
-   #left-container (header + page scroll). The fraction is a fraction
-   of THIS split's width, persists via ~on_resize, and animates through
-   ~resize_duration when the open flag or the docked gate flips it.
-   Below 640px the pane is a fixed overlay — the track must collapse
-   there or it would hold empty space. *)
+(* The left dock retains pixels while the right dock or window resizes.
+   Below 640px it becomes an overlay and releases its split track. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
   Ui_parts.class_signal
@@ -868,15 +847,12 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       if Sidebar_state.left_docked m.Model.left_sidebar_open vw then
         "cp__left-split"
       else "cp__left-split is-collapsed")
-    (split ~key:"left-split" ~grow:1. ~gap:3
-       ~value:
+    (split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:Sidebar_state.divider_width
+       ~first_width:
          (reactive
-            (fun (m : Model.t) f vw ->
-              if Sidebar_state.left_docked m.Model.left_sidebar_open vw
-              then f
-              else Sidebar_state.closed_fraction)
-            ms
-            (Signal.value st.Sidebar_state.left_fraction)
+            (fun (m : Model.t) width vw ->
+              if Sidebar_state.left_docked m.Model.left_sidebar_open vw then width else 0.)
+            ms (Signal.value st.Sidebar_state.left_width)
             (Signal.value st.Sidebar_state.viewport_w))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_left_split_resize st)
@@ -893,12 +869,12 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (fun (m : Model.t) ->
       "cp__right-split"
       ^ if m.right_sidebar_open then "" else " is-collapsed")
-    (split ~key:"right-split" ~grow:1. ~gap:3
+    (split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:Sidebar_state.divider_width
        ~value:
          (reactive
-            (fun (m : Model.t) f ->
-              if m.Model.right_sidebar_open then 1. -. f else 1.)
-            ms (Signal.value st.Sidebar_state.right_fraction))
+            (fun (m : Model.t) fraction viewport ->
+              if m.Model.right_sidebar_open then Sidebar_state.right_split_fraction ~viewport fraction else 1.)
+            ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_right_split_resize st)
        first second)
@@ -1212,10 +1188,12 @@ let shell (ms : Model.t Signal.signal) : t =
       ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
       ^ (if wide_mode then " ls-wide-mode" else "")
       ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else ""))
-    (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+    (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
+     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+       ~min_height:0
        ~style_class:"theme-container-inner"
        [ skip_to_main
-    ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
+    ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
         [ right_split ms st
             (left_split ms st
                (Ui_parts.prop_signal Lui_protocol.Overflow ms
@@ -1247,4 +1225,4 @@ let shell (ms : Model.t Signal.signal) : t =
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"route-none" [])
             ms
-       ])
+       ]))

@@ -754,7 +754,7 @@ let () =
   check "Native split dragging emits no application resize feedback" (Option.is_some fraction);
   let fraction=Option.get fraction in
   check "Native split dragging does not mirror pointer geometry immediately"
-    (Float.abs (fraction-.before-.0.05)<1.e-6
+    (Float.abs (fraction-.before-.40./.797.)<1.e-6
       && Lui_store.float_prop store 1 "value"=Some fraction);
   apply [SetProp (1,ProgressValue,FloatValue fraction)];
   step 0.11;

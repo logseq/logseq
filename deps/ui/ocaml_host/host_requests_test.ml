@@ -544,20 +544,22 @@ let () = Native_embed.with_entry_lock (fun () ->
   let left_split = List.find (fun id -> Lui_store.parent store sidebar=Some id) splits in
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
   let expanded = (Option.get (Lui_layout.rect layout inner)).Lui_scene.w in
-  let expanded_value=Option.get (Lui_store.float_prop store left_split "value") in
-  Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue 0.03));
+  let expanded_value=Option.get (Lui_store.float_prop store left_split "first-pane-width") in
+  Lui_store.apply_op store (SetProp (left_split,FirstPaneWidth,FloatValue 30.));
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
   let contracted = (Option.get (Lui_layout.rect layout inner)).Lui_scene.w in
   check "Narrowing the sidebar reflows its text and titlebar controls together"
     (contracted >= expanded -. 2.);
-  Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue expanded_value));
+  Lui_store.apply_op store (SetProp (left_split,FirstPaneWidth,FloatValue expanded_value));
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
   let right_split = Option.get (Lui_store.parent store left_split) in
-  let right_value = Option.get (Lui_store.float_prop store right_split "value") in
   let right_sidebar = List.find (fun id ->
     Lui_store.string_prop store id "accessibility-identifier" = Some "right-sidebar")
     (Lui_store.preorder store) in
-  Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue 0.7));
+  ignore (Lui_app.send app {initial with right_sidebar_open=true});
+  ignore (Lui_app.flush app);
+  let expanded_value=Option.get (Lui_store.float_prop store left_split "first-pane-width")
+  and right_value=Option.get (Lui_store.float_prop store right_split "value") in
   List.iter (fun (split,pane,endpoint) ->
     Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
     let rects = Lui_window.Rects.create () in
@@ -575,12 +577,13 @@ let () = Native_embed.with_entry_lock (fun () ->
     Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
     check (Printf.sprintf "Dragging native sidebar %d leaves %.1f points (split %d, value %.4f)"
       pane ((Option.get (Lui_layout.rect layout pane)).Lui_scene.w /. 2.) split
-      (Option.get (Lui_store.float_prop store split "value")))
+      (Option.get (Lui_store.float_prop store split (if split=left_split then "first-pane-width" else "value"))))
       ((Option.get (Lui_layout.rect layout pane)).Lui_scene.w >= 479.);
-    Lui_store.apply_op store (SetProp (left_split,ProgressValue,FloatValue expanded_value));
-    Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue 0.7)))
+    Lui_store.apply_op store (SetProp (left_split,FirstPaneWidth,FloatValue expanded_value));
+    Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue right_value)))
     [left_split,sidebar,-2000.;right_split,right_sidebar,3000.];
-  Lui_store.apply_op store (SetProp (right_split,ProgressValue,FloatValue right_value));
+  ignore (Lui_app.send app initial);
+  ignore (Lui_app.flush app);
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
   let shell_scene =
     Lui_scene.create
@@ -748,6 +751,123 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native icon inherited theme color: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_sidebar = !Sidebar_state.st_ref
+  and previous_model_signal = !Sidebar_state.model_signal
+  and previous_read = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_sources = !Editor_state.extra_sources
+  and previous_width = Host.inner_width () and previous_height = Host.inner_height () in
+  let keys = ["ls-left-sidebar-width";"ls-left-sidebar-width-px";"ls-right-sidebar-width"] in
+  let saved_storage = List.map (fun key -> key,Ui_services.storage_get key) keys in
+  let listeners = Hashtbl.copy Platform.window_listeners
+  and captures = Hashtbl.copy Platform.capture_listeners in
+  let viewport = ref (1280.,720.) in
+  Fun.protect ~finally:(fun () ->
+    Sidebar_state.st_ref:=previous_sidebar;
+    Sidebar_state.model_signal:=previous_model_signal;Runtime.read_model:=previous_read;
+    Runtime.app_flush:=previous_flush;Editor_state.extra_sources:=previous_sources;
+    Host.set_window_size previous_width previous_height;
+    Hashtbl.clear Platform.window_listeners;Hashtbl.iter (Hashtbl.replace Platform.window_listeners) listeners;
+    Hashtbl.clear Platform.capture_listeners;Hashtbl.iter (Hashtbl.replace Platform.capture_listeners) captures;
+    List.iter (fun (key,value) -> match value with
+      | Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key) saved_storage) (fun () ->
+    List.iter (fun scale -> List.iter (fun width ->
+      List.iter Ui_services.storage_remove keys;
+      let mount width =
+        viewport:=width,720.;Host.set_window_size width 720.;
+        Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
+        Hashtbl.clear Platform.window_listeners;Hashtbl.clear Platform.capture_listeners;
+        let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+          ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
+            hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+            caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+              {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+               c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+          ~renderer:{Lui_host.name="sidebar-geometry-test";render=(fun _ -> Bytes.empty)}
+          ~width:(int_of_float (width*.scale)) ~height:(int_of_float (720.*.scale)) () in
+        Lui_host.set_reduced_motion (A.host surface) true;
+        let registry = Lui_extension.registry () in
+        Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+        let initial = {Model.initial with left_sidebar_open=true;right_sidebar_open=false} in
+        let app = Lui_app.create_with_extensions (A.backend surface (profile MacOS GenericHost))
+          registry initial (fun _ next -> next) (fun _ ms _ -> Chrome.shell ms) in
+        Runtime.read_model:=(fun () -> Lui_app.model app);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let refresh () = ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+        refresh ();
+        app,surface,refresh in
+      let app,surface,refresh = mount width in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        let store = A.store surface in
+        let find name = List.find (fun id ->
+          Lui_store.string_prop store id "accessibility-identifier"=Some name) (Lui_store.preorder store) in
+        let left = find "left-sidebar" and right = find "right-sidebar" in
+        let rect id = W.Rects.get (A.rects surface) id in
+        let assert_width id expected label =
+          let actual=(rect id).w/.scale in
+          expect (Printf.sprintf "%s at viewport %.0f scale %.0f: %.3f rather than %.3f"
+            label (fst !viewport) scale actual expected)
+            (abs_float (actual-.expected)<=1./.scale+.0.01) in
+        let set_model f = ignore (Lui_app.send app (f (Lui_app.model app)));refresh () in
+        let resize width =
+          viewport:=width,720.;
+          Host.set_window_size width 720.;
+          Platform.emit_event "resize" (Js.Json.JObject []);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
+            ~height:(int_of_float (720.*.scale)) ~scale;refresh () in
+        let apply actions = List.iter (function W.Dispatch ev -> ignore (Lui_app.dispatch_event app ev) | _ -> ()) actions;refresh () in
+        let drag first target =
+          let r=rect first in
+          let x=(r.x+.r.w)/.scale+.1.5 in
+          apply (A.handle surface (W.Input.Button_down (x,180.,W.Input.Left,1,W.Input.mods_none)));
+          apply (A.handle surface (W.Input.Move (target,180.)));
+          apply (A.handle surface (W.Input.Button_up (target,180.,W.Input.Left,W.Input.mods_none))) in
+        assert_width left 246. "Cold left dock";
+        let graph = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "cp__graphs-selector")
+          (Lui_store.preorder store) in
+        expect "Graph selector does not begin below the shared 48-point titlebar and four-point inset"
+          (abs_float ((rect graph).y/.scale-.52.)<0.1);
+        expect "Graph selector differs from the reference 221-point width inside a cold dock"
+          (abs_float ((rect graph).w/.scale-.221.)<0.1);
+        Lui_host.set_reduced_motion (A.host surface) false;
+        Lui_host.tick (A.host surface) ~now:0.;
+        set_model (fun m -> {m with right_sidebar_open=true});
+        List.iter (fun now -> Lui_host.tick (A.host surface) ~now;refresh ();
+          assert_width left 246. "Right dock animation moves the left dock")
+          [0.05;0.1;0.15;0.2;0.25;0.35];
+        Lui_host.set_reduced_motion (A.host surface) true;refresh ();
+        assert_width left 246. "Opening the right dock moves the left dock";
+        assert_width right (width*.0.4) "Default right dock";
+        let left_split = Option.get (Lui_store.parent store left) in
+        drag left_split (width*.0.45-.1.5);
+        assert_width right (width*.0.55) "Resized right dock";
+        assert_width left 246. "Resizing the right dock moves the left dock";
+        List.iter (fun next -> resize next;assert_width left 246. "Window resize drifts the left dock";
+          assert_width right (next*.0.55) "Window resize changes the right ratio")
+          [1000.;1600.;width];
+        drag left 301.5;assert_width left 300. "Resized left dock";
+        List.iter (fun open_ -> set_model (fun m -> {m with right_sidebar_open=open_});
+          assert_width left 300. "Toggling the right dock changes the resized left width") [false;true;false];
+        List.iter (fun target -> drag left target;assert_width left 460. "Left maximum drag bound")
+          [width-.10.;width-.5.];
+        drag left 10.;assert_width left 240. "Left minimum drag bound";
+        drag left 301.5;assert_width left 300. "Final persisted left width");
+      let reopened,surface,_refresh = mount (width+.160.) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose reopened)) (fun () ->
+        let left = List.find (fun id -> Lui_store.string_prop (A.store surface) id "accessibility-identifier"=Some "left-sidebar")
+          (Lui_store.preorder (A.store surface)) in
+        expect "Reopening at another viewport loses the resized pixel width"
+          (abs_float ((W.Rects.get (A.rects surface) left).w/.scale-.300.)<0.1)))
+      [1000.;1280.;1440.;1920.]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native sidebar reference widths, independent resize and persistence" (!failures=[]);
+  print_endline "native sidebar reference widths, independent resize and persistence: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () in
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
@@ -863,7 +983,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           {favorites=state []; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
-           left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 1440.} in
+           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 1440.} in
         Left_sidebar_view.content_group st ~key:"native-recent" ~class_:"recent"
           ~label:"Recent" ~items_sig:(Signal.value st.recents)
           ~li_class:"recent-item" ~ul_class:"" ~always_bd:true ~recent:true) in
@@ -4022,7 +4142,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           {favorites=state []; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
-           left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 240.} in
+           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.} in
         sidebar := Some st;
         Lui_elements.column ~width:240 ~height:100
           [Left_sidebar_view.page_item_el st page
@@ -4105,7 +4225,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         {favorites=state [target];recents=state [];nav_checked=state [];
          nav_tag_titles=state [];items=state [];
          open_menu=state "";groups_collapsed=state [];
-         left_fraction=state 0.2;right_fraction=state 0.3;viewport_w=state 1440.} in
+         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) in
   Fun.protect ~finally:(fun () ->
@@ -4300,7 +4420,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           let sidebar : Sidebar_state.t =
             {favorites=state [];recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];open_menu=state "";groups_collapsed=state [];
-             left_fraction=state (246./.1140.);right_fraction=state 0.3;viewport_w=state 1140.} in
+             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1140.} in
           Sidebar_state.st_ref:=Some sidebar;Sidebar_state.model_signal:=Some model;
           let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
             ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in

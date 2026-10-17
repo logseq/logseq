@@ -210,6 +210,25 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
 
 (* ---------------- shell + header ---------------- *)
 
+let test_sidebar_content_bounds () =
+  let st = Option.get (Sidebar_state.current ()) in
+  let viewport = Runtime.signal_get st.Sidebar_state.viewport_w
+  and width = Runtime.signal_get st.Sidebar_state.left_width in
+  Fun.protect ~finally:(fun () ->
+    Runtime.signal_set st.left_width width;
+    Runtime.signal_set st.viewport_w viewport;flush ()) (fun () ->
+      Runtime.signal_set st.left_width 246.;
+      List.iter (fun (viewport,expected) ->
+        Runtime.signal_set st.viewport_w viewport;flush ();
+        let inner = List.find (fun n -> match M.string_prop n "style-class" with
+          | Some classes -> List.mem "left-sidebar-inner" (String.split_on_char ' ' classes)
+          | None -> false) (M.all_nodes (tree ())) in
+        check (Printf.sprintf "sidebar content reserves the reference %.0f-point inset at viewport %.0f"
+          (float expected) viewport)
+          (Hashtbl.find_opt inner.M.props "min-width"=Some (Wv.IntValue expected)
+           && Hashtbl.find_opt inner.M.props "max-width"=Some (Wv.IntValue expected)))
+        [1440.,245;600.,443;320.,236;1280.,245])
+
 let test_shell () =
   has "prop:accessibility-identifier=\"head\"";
   has "prop:accessibility-identifier=\"search-button\"";
@@ -1966,6 +1985,7 @@ let run ~finish =
     ~profile:Logseq_el.web_profile ~finish:(fun () ->
   Shared_ui_regression_test.dates ();
   Shared_ui_regression_test.dialogs ();
+  test_sidebar_content_bounds ();
   test_shell ();
   test_left_menu_dispatch ();
   test_block_tree ();

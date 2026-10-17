@@ -822,11 +822,11 @@ let cm_popover (st : S.t) : t =
             ^ (if m.S.flip then " ls-anchor-top" else "")
         | _ -> ""))
      (Ui_components.with_props [ Ui_components.card_shadow ]
-        (Ui_parts.int_prop_signal P.WidthValue vs
-           (fun (v : S.view) ->
+        (Ui_parts.int_prop P.WidthValue
+           ~value:(reactive (fun (v : S.view) ->
              match v.S.cm with
              | Some m when m.S.tag <> None -> 240
-             | _ -> 280)
+             | _ -> 280) vs)
            (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
               ~border_color:"hsl(var(--border))" ~border_width:1
               ~corner_radius:6
