@@ -35,6 +35,23 @@
           (db-editor-handler/wrap-parse-block {:block/title " \n$$\n  E = mc^2  \n$$\n "})
           [:block/title :logseq.property.node/display-type]))))
 
+(deftest wrap-parse-block-math-block-saved-with-its-dollars-test
+  (testing "a math block saved again with the editor's $$E=mc^2$$ keeps the formula alone"
+    (is (= {:block/title "E=mc^2"
+            :logseq.property.node/display-type :math}
+           (select-keys
+            (db-editor-handler/wrap-parse-block {:block/title "$$E=mc^2$$"
+                                                 :logseq.property.node/display-type :math})
+            [:block/title :logseq.property.node/display-type]))))
+  (testing "a math block's formula without dollars is kept as is"
+    (is (= "E=mc^2"
+           (:block/title (db-editor-handler/wrap-parse-block {:block/title "E=mc^2"
+                                                              :logseq.property.node/display-type :math})))))
+  (testing "a code block keeps $$ text"
+    (is (= "$$x$$"
+           (:block/title (db-editor-handler/wrap-parse-block {:block/title "$$x$$"
+                                                              :logseq.property.node/display-type :code}))))))
+
 (deftest wrap-parse-block-markdown-heading-test
   (testing "normal blocks save markdown heading syntax as heading property"
     (is (= {:block/title "Heading"
