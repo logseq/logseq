@@ -16,14 +16,15 @@ module P = Lui_protocol
 
 let t = Sidebar_state.t
 
-(* Column/row kinds admit Press but do not set press-enabled unless
-   asked. Without it the deepest text node swallows the click and
-   [on_press_detail] on the row never runs — the sidebar page click
-   draws a pointer and stays put. *)
-let arm_press (elem : Lui_elements.t) : Lui_elements.t =
+(* Container activation must opt into Press as well as pointer details;
+   otherwise a passive text or icon leaf can own the native click. *)
+let arm_press ~on_press_detail (elem : Lui_elements.t) : Lui_elements.t =
  fun ctx parent ->
   let node = elem ctx parent in
   enable ctx node P.PressEnabled;
+  enable ctx node P.PointerEnabled;
+  ignore (on_event ctx node
+    (function P.PressDetail _ -> true | _ -> false) on_press_detail);
   node
 
 
@@ -610,17 +611,9 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | Some u -> u
     | None -> p.Model.page_title
   in
-  (* li wrapper: list_item would emit a <button> on web around the
-     interactive .link-item anchor + dots button (nested interactives) —
-     a column keeps the class hook, and its press-detail handler reads
-     the deepest hit's class (dots button -> lp menu, anything else ->
-     navigate; shift opens in the right sidebar). The data-lp-* attrs
-     still feed the document-level contextmenu handler in
-     sidebar_state. *)
-  (* A real `url:"#"` link races the column press: the host follows
-     "#" and stomps the programmatic page hash. The column is
-     press-enabled so the click lands here instead of on the title
-     text; the dots button is a deeper press target and owns its menu. *)
+  (* Keep navigation and the menu as sibling interaction targets. Click
+     details bubble on both hosts, so the row wrapper must stay passive.
+     The data-lp-* attributes also feed the document context-menu handler. *)
   let open_lp d =
     (* cljs anchors the dots dropdown to the button element,
        not the press point *)
@@ -656,20 +649,19 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     ([ Ui_components.Prop.font_weight 500
      ; Ui_components.Prop.cursor `pointer ]
      @ if recent then [ Ui_components.Prop.user_select `none ] else [])
-    (arm_press
     (column ~key ~style_class:li_class
-       ~on_press_detail:(fun ev ->
-      match ev with
-      | Lui_protocol.PressDetail (_, d) ->
-          go_page (d.Lui_protocol.modifiers land 2 <> 0)
-      | _ -> ())
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative
         ; Ui_components.Prop.opacity 0.8
         ; Ui_components.Prop.hover_opacity 1.
         ; Ui_components.Prop.hover_background
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
-        (row ~cross:`center ~main:`space_between
+        (arm_press ~on_press_detail:(fun ev ->
+             match ev with
+             | Lui_protocol.PressDetail (_, d) ->
+                 go_page (d.Lui_protocol.modifiers land 2 <> 0)
+             | _ -> ())
+          (row ~cross:`center ~main:`space_between
            ~style_class:"link-item group"
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
@@ -685,9 +677,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
-               [] ])
-        (* Dots are a deeper press target than the row, so the click
-           never reaches the column's press-detail. *)
+               [] ]))
+        (* The menu button is outside the navigation target. *)
         ; Ui_components.with_props
             [ Ui_components.Prop.position `absolute
             ; Ui_components.Prop.inset_top 0.
@@ -706,8 +697,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
                ~padding_horizontal:6
                ~style_class:"sidebar-page-actions ui__button"
-               (* press-enabled so this button, not the row, takes the
-                  click. The detail handler anchors the menu. *)
+               (* The detail handler anchors the menu. *)
                ~on_press:(fun _ -> ())
                ~on_press_detail:(fun ev ->
                  match ev with
@@ -716,7 +706,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~data_attrs:
                  [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
                [ Icons.icon ~size:18. "dots" ])
-        ]))
+        ])
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always

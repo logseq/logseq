@@ -3853,3 +3853,85 @@ let () =
         (abs_float (row.Lui_scene.h -. 32. *. scale) < 0.01))
     [1.; 2.];
   print_endline "native menu intrinsic padding: OK"
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  List.iter (fun recent ->
+    let store = Lui_store.create () in
+    let backend = {backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+    let sidebar = ref None in
+    let page = Option.get (Decode.page_of_summary
+      (Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid "menu-page";
+                 Wire.Keyword "block/title",Wire.String "Menu page"])) in
+    let app = Lui_app.create backend () (fun () () -> ())
+      (fun context _ _ ->
+        let state value = Signal.state context.Lui_ui.ui_scheduler value in
+        let st : Sidebar_state.t =
+          {favorites=state []; recents=state []; nav_checked=state [];
+           nav_tag_titles=state []; favorited=state false; items=state [];
+           open_menu=state ""; groups_collapsed=state [];
+           left_fraction=state 0.2; right_fraction=state 0.3; viewport_w=state 240.} in
+        sidebar := Some st;
+        Lui_elements.column ~width:240 ~height:100
+          [Left_sidebar_view.page_item_el st page
+             ~li_class:(if recent then "recent-item" else "favorite-item")
+             ~recent ~key:"menu-page-row"]) in
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let st = Option.get !sidebar in
+    let layout = Lui_layout.create () in
+    Lui_layout.sync ~scale:1. ~width:240. ~height:100. layout store;
+    let rects = W.Rects.create () in
+    List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+      (Lui_layout.rect layout id)) (Lui_store.preorder store);
+    let has_class id name =
+      match Lui_store.string_prop store id "style-class" with
+      | Some value -> List.mem name (String.split_on_char ' ' value)
+      | None -> false in
+    let find name = List.find (fun id -> has_class id name) (Lui_store.preorder store) in
+    let menu = find "sidebar-page-actions" and entry = find "link-item" in
+    let ui = W.Ui.create () in
+    W.Ui.set_scale ui 1.;
+    let click id mods =
+      let r = W.Rects.get rects id in
+      let x,y = r.Lui_scene.x +. r.w /. 2.,r.y +. r.h /. 2. in
+      ignore (W.Ui.handle ui store rects (W.Input.Move (x,y)));
+      ignore (W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,mods)));
+      W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,mods)) in
+    let details acts = List.filter_map (function
+      | W.Dispatch (PressDetail (id,d)) -> Some (id,d)
+      | _ -> None) acts in
+    let deliver acts = List.iter (function
+      | W.Dispatch event -> ignore (Lui_app.dispatch_event app event)
+      | _ -> ()) acts; ignore (Lui_app.flush app) in
+    List.iter (fun mods ->
+      Runtime.signal_set st.open_menu "";
+      let acts = click menu mods in
+      let targets = List.map fst (details acts) in
+      expect "Sidebar more-button click must not reach a page navigation handler"
+        (targets = [menu]);
+      (* Dispatch only the menu-owned events: a failing ownership check must
+         not navigate the surrounding test application's graph. *)
+      deliver (List.filter (function
+        | W.Dispatch event -> Lui_protocol.event_node event = menu
+        | _ -> false) acts);
+      expect "Sidebar more-button click must open its menu"
+        (Runtime.signal_get st.open_menu = "lp-menu-page");
+      deliver (List.filter (function
+        | W.Dispatch event -> Lui_protocol.event_node event = menu
+        | _ -> false) (click menu mods));
+      expect "Sidebar more-button second click must close its menu"
+        (Runtime.signal_get st.open_menu = ""))
+      [W.Input.mods_none; {W.Input.mods_none with shift=true}];
+    List.iter (fun target ->
+      let ds = details (click target {W.Input.mods_none with shift=true}) in
+      expect "Sidebar title and file icon must retain one page navigation target"
+        (match ds with [(id,d)] -> id=entry && d.modifiers land 2 <> 0 | _ -> false))
+      [find "page-title"; find "page-icon"];
+    ignore (Lui_app.dispose app)) [false;true];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native sidebar page and menu input ownership" (!failures = []);
+  print_endline "native sidebar page and menu input ownership: OK")
