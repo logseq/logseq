@@ -377,6 +377,13 @@ let () = Native_embed.with_entry_lock (fun () ->
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  List.iter (fun (source, expected) ->
+    check "Native command-palette spacing must preserve UTF-8 text"
+      (Cmdk_view.display_spaces source = expected))
+    [ "Oct 17th, 2026", "Oct\xc2\xa017th,\xc2\xa02026"
+    ; "中文 café 😀", "中文\xc2\xa0café\xc2\xa0😀"
+    ; "a\xc2\xa0b  c", "a\xc2\xa0b\xc2\xa0\xc2\xa0c"
+    ; "", "" ];
   Keyboard_capture.install ();
   let before = Gc.allocated_bytes () in
   let icons = Icons.app_icon_svgs () in

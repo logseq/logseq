@@ -32,6 +32,29 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  List.iter (fun (name, title, query, expected) ->
+    let title = Ui_services.literal_text title in
+    let query = Ui_services.literal_text query in
+    let palette = mount (fun ms ->
+      let item : Cmdk_state.item =
+        { ikey = name; idx = 0; gid = G_recently_updated; ititle = title
+        ; info = None; header = None; iicon = ""; isc = ""; ibadge = No_badge
+        ; act = Open_page name; ihl = false; imouse = false; iq = query } in
+      let item_s = Signal.state (Signal.signal_owner ms) item in
+      Cmdk_view.hl_span "label" (Signal.value item_s) (fun it -> it.Cmdk_state.ititle)) in
+    let runs = nodes palette
+      |> List.sort (fun a b -> Int.compare a.M.id b.M.id)
+      |> List.filter_map (fun n -> M.string_prop n "text") in
+    check ("command palette preserves Unicode text and spacing: " ^ name)
+      (runs = List.map Ui_services.literal_text expected);
+    ignore (Lui_app.dispose palette.S.app))
+    [ "date", "Oct 17th, 2026", "", ["Oct\xc2\xa017th,\xc2\xa02026"]
+    ; "highlighted date", "Oct 17th, 2026", "17th",
+        ["Oct\xc2\xa0"; "17th"; ",\xc2\xa02026"]
+    ; "Unicode", "中文 café 😀", "café",
+        ["中文\xc2\xa0"; "café"; "\xc2\xa0😀"]
+    ; "existing spaces", "a\xc2\xa0b  c", "", ["a\xc2\xa0b\xc2\xa0\xc2\xa0c"]
+    ; "empty", "", "", [] ];
   let chosen = ref None in
   let picker = mount (fun _ ->
       Icon_picker.picker_view ~del:true ~emoji_only:false
