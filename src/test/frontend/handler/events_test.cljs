@@ -66,6 +66,26 @@
                [:refocus new-id]]
               @calls))))))
 
+(deftest-async upsert-type-block-sets-no-property-when-no-block-is-inserted-test
+  (let [source-id #uuid "33333333-3333-3333-3333-333333333333"
+        calls (atom [])
+        record! (fn [call] (swap! calls conj call) nil)
+        upsert! (get @@#'events/event-definitions :editor/upsert-type-block)]
+    (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                    db-async/<get-block (fn [_repo _id & _] (p/resolved {:db/id 1 :block/uuid source-id :block/title "https://x.y"}))
+                    state/<invoke-db-worker (fn [& _] (p/resolved "clojure"))
+                    editor-handler/save-current-block! (fn [& _] nil)
+                    ;; a single URL value: insert-new-block-aux! skips the insert
+                    editor-handler/insert-new-block-aux! (fn [& _] (p/resolved [nil nil nil]))
+                    db-property-handler/set-block-properties! (fn [id m] (record! [:set-properties id m]) (p/resolved nil))
+                    db-property-handler/set-block-property! (fn [id k v] (record! [:set-property id k v]) (p/resolved nil))
+                    events/refocus-upsert-type-block! (fn [& _] nil)]
+      (p/do!
+       (upsert! [:editor/upsert-type-block {:block {:db/id 1 :block/uuid source-id :block/title "https://x.y"}
+                                            :type :code}])
+       (p/delay 150)
+       (is (= [] @calls) "no block was inserted, so no property is set on a missing block")))))
+
 (deftest refocus-upsert-type-block-test
   (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"
