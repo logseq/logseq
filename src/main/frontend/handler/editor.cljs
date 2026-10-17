@@ -1702,8 +1702,36 @@
 (def insert-command! editor-common-handler/insert-command!)
 
 
+(defn- titled-class-alias
+  [alias]
+  (when (and (map? alias)
+             (:db/id alias)
+             (not (string/blank? (:block/title alias))))
+    (cond-> {:db/id (:db/id alias)
+             :block/title (:block/title alias)}
+      (:block/uuid alias) (assoc :block/uuid (:block/uuid alias)))))
+
+(defn- class-search-choice
+  [class]
+  (select-keys class [:db/id :db/ident :block/uuid :block/title :block/tags]))
+
+(defn- class-alias-search-choice
+  [class alias]
+  (when-let [alias-summary (titled-class-alias alias)]
+    (assoc (class-search-choice class) :alias alias-summary)))
+
+(defn- class-search-text
+  [class]
+  (string/trim
+   (str (:block/title class)
+        " "
+        (get-in class [:alias :block/title]))))
+
 (defn get-matched-classes
-  "Return matched classes except the root tag"
+  "Return matched classes except the root tag.
+
+  Alias titles are searchable, but the chosen item is always the source class
+  so `#<alias>` tags the tag, not the alias page."
   [q]
   (let [editing-block (state/get-edit-block)
         non-page-block? (and editing-block (not (entity/page? editing-block)))]
@@ -1716,12 +1744,13 @@
             all-classes (cond-> all-classes
                           (and non-page-block? page-class)
                           (conj page-class))
-            classes (->> all-classes
-                         (mapcat (fn [class]
-                                   (conj (:block/alias class) class)))
-                         (common-util/distinct-by :db/id)
-                         (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title]))))]
-        (search/fuzzy-search classes q {:extract-fn :block/title})))))
+            choices (mapcat (fn [class]
+                              (concat [(class-search-choice class)]
+                                      (keep #(class-alias-search-choice class %)
+                                            (:block/alias class))))
+                            all-classes)]
+        (->> (search/fuzzy-search choices q {:extract-fn class-search-text})
+             (common-util/distinct-by :db/id))))))
 
 (defn <get-matched-blocks
   "Return matched blocks, optionally including public built-ins"

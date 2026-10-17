@@ -184,14 +184,31 @@
   [page]
   (:block/alias-source-page-class? page))
 
+(defn- matched-class-or-class-alias?
+  "True when `page` is a matched class or an alias of one. Alias matches keep
+   the source class's id, so compare both the class and its :alias summary."
+  [page classes]
+  (let [page-id (:db/id page)
+        page-uuid (:block/uuid page)]
+    (some (fn [class]
+            (or (and page-id (= (:db/id class) page-id))
+                (and page-uuid (= (:block/uuid class) page-uuid))
+                (and page-id (= (get-in class [:alias :db/id]) page-id))
+                (and page-uuid (= (get-in class [:alias :block/uuid]) page-uuid))))
+          classes)))
+
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q exact-page]
   (when (some? partial-matched-pages)
     (let [page-exists? (and (nil? (:block/parent exact-page))
                             (if db-tag?
                               (entity/class? exact-page)
-                              (entity/page? exact-page)))]
-      (if (or page-exists?
-              (and db-tag? (class-alias? exact-page)))
+                              (entity/page? exact-page)))
+          class-alias-match? (and db-tag?
+                                  (or (class-alias? exact-page)
+                                      (matched-class-or-class-alias? exact-page partial-matched-pages)
+                                      (some #(= q (get-in % [:alias :block/title]))
+                                            partial-matched-pages)))]
+      (if (or page-exists? class-alias-match?)
         partial-matched-pages
         (if db-tag?
           (concat
@@ -216,7 +233,8 @@
                        (if (and (entity/internal-page? block)
                                 (= (:block/title block) q)
                                 (not (ldb/built-in? block))
-                                (not (class-alias? block)))
+                                (not (class-alias? block))
+                                (not (matched-class-or-class-alias? block classes)))
                          (cons {:block/title q
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)
