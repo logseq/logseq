@@ -180,15 +180,18 @@ let run_rect e ctx i =
 let run_at ctx i =
   ctx.runs.(min i (Array.length ctx.runs - 1))
 
-(* Span index the model offset lands in — an offset on a boundary
-   takes the later span so a caret at a run edge sits at the start
-   of that run's rect, matching DOM caret affinity. *)
+(* Boundaries prefer the next source run. A zero-length landing span
+   has no source glyphs: use the preceding run's shaped end when it
+   shares this offset. Empty logical lines retain their own landing span. *)
 let run_of_off ctx off =
   let rec find i =
     if i >= Array.length ctx.runs then Array.length ctx.runs - 1
     else
       let lo, hi = ctx.runs.(i) in
-      if off < hi || (off = lo && lo = hi) then i else find (i + 1)
+      if off < hi then i
+      else if off = lo && lo = hi then
+        if i > 0 && snd ctx.runs.(i - 1) = off then i - 1 else i
+      else find (i + 1)
   in
   find 0
 

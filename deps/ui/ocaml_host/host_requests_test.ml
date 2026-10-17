@@ -642,6 +642,73 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native editor logical line reflow: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  List.iter (fun source ->
+    let store = Lui_store.create () in
+    let backend = {backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+    let registry = Lui_extension.registry () in
+    Logseq_editor.register registry;
+    let model = Edit_model.select (Edit_model.create source)
+        ~anchor:(String.length source) ~focus:(String.length source) in
+    let app = Lui_app.create_with_extensions backend registry model (fun _ next -> next)
+        (fun context model _ ->
+          let frame = Signal.state context.Lui_ui.ui_scheduler Edit_input.empty_frame in
+          Edit_view.view ~model ~frame:(Signal.value frame) ~block_id:"caret-end"
+            ~on_input:(fun _ -> ()) ~cls:"") in
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let layout = Lui_layout.create () in
+    let scene = Lui_scene.create
+        ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64) in
+    let current_scale = ref 2. in
+    let engine = Text_engine.create ~scene:(fun () -> scene)
+        ~scale:(fun () -> !current_scale) ~store:(fun () -> store) in
+    let rect_of id = Option.get (Lui_layout.rect layout id) in
+    let env : Host_requests.env =
+      {store; ui=Lui_window.Ui.create (); rects=Lui_window.Rects.create (); rect_of;
+       scale=(fun () -> !current_scale); measure=Text_engine.measure_text engine;
+       text_layout=(fun id text -> Text_engine.text_layout engine id (rect_of id) text);
+       apply_batch=(fun _ -> ()); apply_actions=(fun _ -> ()); set_ime_rect=(fun _ -> ());
+       focused_text_input=(fun _ -> ()); repaint=(fun () -> ())} in
+    List.iter (fun (scale,width) ->
+      current_scale := scale;
+      Lui_layout.sync ~scale ~width ~height:1600.
+        ~measure:(fun id text width _ -> Some (Text_engine.measure_text ~width engine id text))
+        layout store;
+      let ctx = Option.get (Host_requests.ed_ctx env "caret-end") in
+      let last = Array.length ctx.nodes - 1 in
+      let previous = last - 1 in
+      let content_end = previous >= 0 &&
+        let lo,hi = ctx.runs.(previous) in
+        hi = String.length source && hi > lo in
+      if content_end then begin
+        let node = ctx.nodes.(previous) in
+        let text = Option.get (Lui_store.string_prop store node "text") in
+        let shaped,x0,y0 = env.text_layout node text in
+        let expected = Lui_text.caret_rect shaped (String.length text) in
+        let x,y,h = Host_requests.caret_rect env ctx (String.length source) in
+        expect "Native line-end caret must follow the final visual glyph, not the landing span"
+          (abs_float (x -. (x0 +. expected.rx *. scale -. ctx.ox)) < 0.01
+           && abs_float (y -. (y0 +. expected.ry *. scale -. ctx.oy)) < 0.01
+           && abs_float (h -. expected.rh *. scale) < 0.01)
+      end else begin
+        let x,y,h = Host_requests.caret_rect env ctx (String.length source) in
+        let pad = rect_of ctx.nodes.(last) in
+        expect "An empty logical line keeps its own caret landing position"
+          (h > 0. && abs_float (x -. (pad.x -. ctx.ox)) < 0.01
+           && y >= pad.y -. ctx.oy)
+      end) [2.,320.; 1.,320.; 2.,1200.; 2.,320.];
+    ignore (Lui_app.dispose app))
+    [String.concat " " (List.init 12 (fun _ -> "wrapped editor text"));
+     "plain **bold** tail"; "plain [[Page]]"; "你好，编辑器。你好，光标。你好，换行。";
+     ""; "first line\n"; "first line\n\n"];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native editor line-end caret geometry" (!failures = []);
+  print_endline "native editor line-end caret geometry: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () in
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in

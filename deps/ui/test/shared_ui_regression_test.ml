@@ -420,6 +420,104 @@ let run_views ~registry ~profile ~finish =
   check "closing a submenu preserves its parent trigger"
     (List.exists (fun n -> n.M.id = trigger.M.id) (nodes submenu));
   ignore (Lui_app.dispose submenu.S.app);
+  let previous_view_ops = !Views_state.ops_ref in
+  let previous_popup_stack = !Views_popup.stack_st in
+  Views_popup.stack_st := None;
+  let refreshes = ref 0 in
+  let sorting_inst = ref None in
+  let sorting = mount (fun _ context parent ->
+      let sched = context.Lui_ui.ui_scheduler in
+      let view = Option.get (Views_wire.decode_view_ent (Wire.Map
+        [Wire.kw "block/uuid", Wire.Uuid "sort-parity";
+         Wire.kw "db/id", Wire.Int 42;
+         Wire.kw "block/title", Wire.String I18n.all])) in
+      let created = Views_state.make ~sched ~kind:Views_state.KAllPages
+          ~feature:"all-pages" ~owner:Wire.Nil in
+      let initial = { (Views_state.empty_vstate ()) with
+        Views_state.view_uuid=view.vu; views=[view]; view_ent=Some view;
+        columns=[Views_table.updated_column; Views_table.created_column];
+        sorting=[{Views_state.s_id="block/updated-at"; s_asc=false};
+                 {Views_state.s_id="block/created-at"; s_asc=true}] } in
+      let inst = {created with Views_state.st=Signal.state sched initial} in
+      sorting_inst := Some inst;
+      Views_state.install_ops
+        {o_refresh=(fun _ -> incr refreshes); o_refresh_src=(fun _ _ -> ());
+         o_create_view=(fun _ -> ()); o_rename_box=(fun _ _ -> Lui_elements.spacer []);
+         o_export=(fun _ -> ()); o_add_object=(fun _ -> ());
+         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
+      Views_head.sorting_popup inst (Ui_services.dom_body ());
+      Lui_elements.column
+        [Views_head.view_tab inst (Signal.value (Signal.state sched view)); Views_popup.layer]
+        context parent) in
+  let inst = Option.get !sorting_inst in
+  let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
+  check "Pages preserves the default All view title"
+    (M.string_prop tab "accessibility-label" = Some I18n.all);
+  let order () = List.find (fun n -> class_has n "ls-sort-order") (nodes sorting) in
+  check "sorting direction exposes a select trigger" ((order ()).M.kind = "select");
+  let parent_popups = List.length !Views_popup.open_popups in
+  let options () = List.filter (fun n -> class_has n "ls-sort-option") (nodes sorting) in
+  S.press sorting (order ()).M.id;
+  eqi "opening sort direction does not refresh data" 0 !refreshes;
+  check "opening sort direction preserves its value"
+    (not (List.hd (Views_state.get inst).sorting).s_asc);
+  eqi "sort direction offers both choices" 2 (List.length (options ()));
+  (match List.find_opt (fun n -> class_has n "ls-sort-options") (nodes sorting) with
+   | Some menu -> S.dismiss sorting menu.M.id
+   | None -> check "sort direction has its own dismissible layer" false);
+  eqi "cancelled sort direction does not refresh data" 0 !refreshes;
+  check "cancelling direction preserves the sorting menu"
+    (List.length !Views_popup.open_popups = parent_popups);
+  S.press sorting (order ()).M.id;
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.ascending) (options ()) with
+   | Some option -> S.press sorting option.M.id
+   | None -> check "ascending sort option is available" false);
+  check "choosing ascending updates sorting" (List.hd (Views_state.get inst).sorting).s_asc;
+  eqi "choosing a direction refreshes exactly once" 1 !refreshes;
+  check "choosing direction updates the retained trigger label"
+    (M.string_prop (order ()) "text" = Some I18n.ascending);
+  check "choosing direction closes only its option list"
+    (options () = [] && List.length !Views_popup.open_popups = parent_popups);
+  S.press sorting (order ()).M.id;
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.ascending) (options ()) with
+   | Some option -> S.press sorting option.M.id
+   | None -> ());
+  eqi "reselecting the current direction does not refresh" 1 !refreshes;
+  S.press sorting (order ()).M.id;
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.descending) (options ()) with
+   | Some option -> S.press sorting option.M.id
+   | None -> ());
+  check "choosing descending restores sorting" (not (List.hd (Views_state.get inst).sorting).s_asc);
+  eqi "choosing the other direction refreshes once" 2 !refreshes;
+  let remove = List.find (fun n -> class_has n "ls-sort-x") (nodes sorting) in
+  let removed = try S.press sorting remove.M.id; true with _ -> false in
+  check "removing a sorting row closes its owner before invalidating its value" removed;
+  check "removing one sorting row preserves the other row and parent menu"
+    (List.map (fun so -> so.Views_state.s_id) (Views_state.get inst).sorting
+       = ["block/created-at"]
+     && List.length (List.filter (fun n -> class_has n "ls-sort-order") (nodes sorting)) = 1
+     && List.length !Views_popup.open_popups = parent_popups);
+  (match List.find_opt (fun n -> class_has n "ls-sort-x") (nodes sorting) with
+   | Some remove ->
+       check "removing the final sorting row is safe"
+         (try S.press sorting remove.M.id; true with _ -> false)
+   | None -> check "the remaining sorting row can be removed" false);
+  check "removed sorting row and menu leave no controls behind"
+    ((Views_state.get inst).sorting = []
+     && not (List.exists (fun n -> class_has n "ls-sort-order") (nodes sorting)));
+  Views_state.update inst (fun s -> {s with sorting=
+    [{Views_state.s_id="block/updated-at"; s_asc=false}]});
+  Views_head.sorting_popup inst (Ui_services.dom_body ());
+  S.flush sorting;
+  let delete = List.find (fun n -> class_has n "ls-sort-delete") (nodes sorting) in
+  check "Delete sort closes the complete sorting configuration safely"
+    (try S.press sorting delete.M.id;
+       (Views_state.get inst).sorting = [] && !Views_popup.open_popups = []
+     with _ -> false);
+  Views_popup.close_all ();
+  ignore (Lui_app.dispose sorting.S.app);
+  Views_popup.stack_st := previous_popup_stack;
+  Views_state.ops_ref := previous_view_ops;
   let previous_cmdk =
     (!Cmdk_state.latest_vs, !Cmdk_state.latest_t, !Cmdk_state.latest_st,
      !Cmdk_state.services_ref)

@@ -74,15 +74,6 @@ let view_type_icon v =
 let view_tab_anchor_id inst (v : Wr.view_ent) =
   "view-tab-" ^ string_of_int inst.V.id ^ "-" ^ v.Wr.vu
 
-(* The built-in all-pages view is titled "All" (view/all). Next to the
-   table glyph and the row count that reads as "All 3 +", which is not
-   a page title. Show the nav name "Pages" for that default only. *)
-let tab_label inst (v : Wr.view_ent) =
-  let raw = V.display_title v in
-  match inst.V.kind with
-  | V.KAllPages when raw = I.all -> I18n.t "nav.all-pages/title"
-  | _ -> raw
-
 let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
  fun ctx parent ->
   (* icon/title/count ride v_sig — a rename or retype republishes the
@@ -102,7 +93,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   Ui_parts.float_prop_signal Lui_protocol.Opacity current_sig
     (fun cur -> if cur then 1. else 0.75)
     (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
-    (button ~variant:`ghost ~size:`sm ~label:(tab_label inst v0)
+    (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~style_class:"ls-view-tab"
        ~height:24 ~min_height:24
        ~padding_horizontal:4 ~padding_vertical:2
@@ -166,7 +157,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                           v_sig))
                   [] ])
        ; text
-           ~value:(reactive (fun (v : Wr.view_ent) -> tab_label inst v) v_sig)
+           ~value:(reactive V.display_title v_sig)
            []
        ; (* show-items-count? is set for linked-references but not
             unlinked — linked also appends /total when the unfiltered
@@ -224,7 +215,9 @@ let tabs_el inst ~op : t =
 let sorting_popup inst anchor =
   let s = V.get inst in
   let set_asc so asc =
-    V.update inst (fun s ->
+    let current = List.find (fun x -> x.V.s_id = so.V.s_id) (V.get inst).V.sorting in
+    if current.V.s_asc <> asc then begin
+      V.update inst (fun s ->
         { s with
           V.sorting =
             List.map
@@ -233,101 +226,87 @@ let sorting_popup inst anchor =
                 else x)
               s.V.sorting
         });
-    V.persist_sorting inst;
-    P.close_all ();
-    refresh inst
+      V.persist_sorting inst;
+      refresh inst
+    end
   in
   let remove_sort so =
+    if List.length (V.get inst).V.sorting = 1 then P.close_all ();
     V.update inst (fun s ->
         { s with
           V.sorting =
             List.filter (fun x -> x.V.s_id <> so.V.s_id) s.V.sorting
         });
     V.persist_sorting inst;
-    P.close_all ();
     refresh inst
   in
-  let items =
-    List.concat_map
-      (fun so ->
-        match List.find_opt (fun c -> c.V.c_id = so.V.s_id) s.V.columns with
-        | None -> []
-        | Some c ->
-            (* verbatim rows — the sort controls are buttons inside the
-               menuitem slot, so they ride the Logseq_el escape channel *)
-            [ P.MCustom
-                (row ~cross:`center ~main:`space_between ~gap:8
-                   ~padding_horizontal:8
-                   [ row ~cross:`center ~gap:4
-                       [ D.el ~tag:"i"
-                           ~attrs:[ ("class", "ti ti-grip-vertical") ] []
-                       ; text ~value:(c.V.c_name ^ ":")
-                           ~white_space:"nowrap"
-                           ~foreground:
-                             "var(--ls-secondary-text-color, \
-                              hsl(var(--muted-foreground)))"
-                           [] ]
-                   ; row ~cross:`center ~gap:8
-                       [ (* cljs shui/select trigger: order-button
-                            !px-2 !py-0 !h-8 — one click flips asc/desc;
-                            ls-sort-order stays a hook for the .ti/svg
-                            icon-size rules *)
-                         Ui_components.with_props
-                           [ Ui_components.Prop.font_size "0.875rem"
-                           ; Ui_components.Prop.white_space `nowrap ]
-                           (button ~variant:`ghost ~height:32
-                              ~padding_horizontal:8
-                              ~style_class:"ls-sort-order"
-                              ~border_width:1
-                              ~border_color:"var(--ls-border-color)"
-                              ~corner_radius:6 ~background:"transparent"
-                              ~foreground:"var(--ls-primary-text-color)"
-                              ~on_press:(fun _ ->
-                                set_asc so (not so.V.s_asc))
-                              [ text
-                                  ~value:
-                                    (if so.V.s_asc then I.ascending
-                                     else I.descending)
-                                  []
-                              ; icon_el "chevron-down" ])
-                       ; Ui_components.with_props
-                           [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                           (button ~variant:`ghost ~size:`sm ~height:32
-                              ~padding_horizontal:4 ~corner_radius:4
-                              ~style_class:"ls-sort-x"
-                              ~foreground:
-                                "var(--ls-secondary-text-color, \
-                                 hsl(var(--muted-foreground)))"
-                              ~label:I.delete_sort
-                              ~icon:(Views_table.icon_of "x")
-                              ~on_press:(fun _ -> remove_sort so) []) ]
-                   ]) ])
-      s.V.sorting
+  let order_select so_s context parent =
+    let opened = Signal.state context.Lui_ui.ui_scheduler false in
+    let close () = Runtime.signal_set opened false in
+    let choose value = close (); set_asc (Signal.get so_s) value in
+    (box ~style_class:"ls-select-wrap"
+       [ Ui_components.with_props
+           [Ui_components.Prop.font_size "0.875rem"]
+         (select ~style_class:"ls-sort-order"
+           ~text:(reactive (fun so -> if so.V.s_asc then I.ascending else I.descending) so_s)
+           ~height:32 ~min_height:32 ~padding_horizontal:8
+           ~corner_radius:6 ~background:"transparent"
+           ~border_width:1 ~border_color:"var(--ls-border-color)"
+           ~foreground:"var(--ls-primary-text-color)"
+           ~on_press:(fun _ -> Runtime.signal_set opened (not (Runtime.signal_get opened)))
+           [])
+       ; if_ ~test:(Signal.value opened)
+           (Ui_components.menu_card ~key:"sort-options" ~cls:"ls-sort-options"
+              ~anchor:`below ~anchor_alignment:`start ~on_dismiss:(fun _ -> close ())
+              (List.map (fun (value,label) ->
+                 menu_item ~style_class:"ls-sort-option" ~text:label
+                   ~selected:(reactive (fun so -> so.V.s_asc = value) so_s)
+                   ~selection_placement:`leading
+                   ~padding_horizontal:8 ~padding_vertical:6 ~min_height:32
+                   ~on_press:(fun _ -> choose value) [])
+                 [true,I.ascending; false,I.descending])) ]) context parent
   in
-  ignore
-    (P.show_menu ~anchor ~align_end:true
-       (items
-        @ [ P.MCustom
-              ((* cljs: ghost button, muted, pl-3, trash icon + label —
-                  the asymmetric padding has no prop channel *)
-               Ui_components.with_props
-                 [ Ui_components.Prop.font_size "0.875rem"
-                 ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                 (button ~variant:`ghost ~grow:1. ~main:`start
-                    ~corner_radius:4 ~style_class:"ls-sort-delete"
-                    ~foreground:
-                      "var(--ls-secondary-text-color, \
-                       hsl(var(--muted-foreground)))"
-                    ~data_attrs:
-                      [ ( "style"
-                        , "padding:0.375rem 0.5rem 0.375rem 0.75rem" ) ]
-                    ~icon:(Views_table.icon_of "trash") ~text:I.delete_sort
-                    ~on_press:(fun _ ->
-                      V.update inst (fun s -> { s with V.sorting = [] });
-                      V.persist_sorting inst;
-                      P.close_all ();
-                      refresh inst)
-                    [])) ] ))
+  let sort_row so_s =
+    let so = Signal.sample so_s in
+    let c = List.find (fun c -> c.V.c_id = so.V.s_id) s.V.columns in
+    row ~style_class:"ls-sort-row" ~cross:`center ~main:`space_between ~gap:8
+      ~padding_horizontal:8
+      [ row ~cross:`center ~gap:4
+          [ icon ~name:(Views_table.icon_of "grip-vertical") ~point_size:14 []
+          ; text ~value:(c.V.c_name ^ ":") ~white_space:"nowrap"
+              ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))" [] ]
+      ; row ~cross:`center ~gap:8
+          [ order_select so_s
+          ; Ui_components.with_props
+              [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
+              (button ~variant:`ghost ~size:`sm ~height:32
+                 ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
+                 ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+                 ~label:I.delete_sort ~icon:(Views_table.icon_of "x")
+                 ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
+  in
+  P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
+    (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
+       (column ~gap:8 ~padding_vertical:8
+          [ keyed
+              ~source:(reactive (fun state ->
+                List.filter (fun so ->
+                  List.exists (fun c -> c.V.c_id = so.V.s_id) state.V.columns)
+                  state.V.sorting) (sig_of inst))
+              ~key:(fun so -> so.V.s_id) ~cmp:String.compare ~mount:sort_row
+          ; Ui_components.with_props
+              [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
+              (button ~variant:`ghost ~main:`start
+                 ~corner_radius:4 ~style_class:"ls-sort-delete"
+                 ~padding_vertical:6 ~padding_horizontal:8
+                 ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+                 ~icon:(Views_table.icon_of "trash") ~text:I.delete_sort
+                 ~on_press:(fun _ ->
+                   P.close_all ();
+                   V.update inst (fun s -> { s with V.sorting = [] });
+                   V.persist_sorting inst;
+                   refresh inst)
+                 []) ]))
 
 (* ---------- filter popup ---------- *)
 
