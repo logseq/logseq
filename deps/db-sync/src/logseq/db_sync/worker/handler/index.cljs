@@ -54,7 +54,10 @@
     (when (and namespace (string? member-id))
       (let [do-id (.idFromName namespace graph-id)
             stub (.get namespace do-id)
-            close-url (str (.-origin url) "/internal/close-sockets?user-id=" (js/encodeURIComponent member-id))
+            ;; graph-id too: the node server's Durable Object stand-in finds
+            ;; the graph by it
+            close-url (str (.-origin url) "/internal/close-sockets?user-id=" (js/encodeURIComponent member-id)
+                           "&graph-id=" (js/encodeURIComponent graph-id))
             headers #js {}
             admin-token (aget env "DB_SYNC_ADMIN_TOKEN")]
         (when (seq admin-token)
@@ -449,7 +452,8 @@
                 (http/error-response "insufficient scope" 403)
 
                 :else
-                (do (index/<user-upsert! db claims)
+                (p/let [_ (when (nil? (aget claims "pat_id"))
+                            (index/<user-upsert! db claims))]
                     (if (and (string? (aget claims "pat_graph_id"))
                              ;; PAT claims may only fetch their graph's wrapped AES key (agent bootstrap)
                              (not (and (= :e2ee/graph-aes-key-get (:handler route))
