@@ -4647,6 +4647,38 @@ let () = Native_embed.with_entry_lock (fun () ->
           apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
           expect "Escape does not dismiss the unset picker" (not (Properties_dialog.is_open ()));
           click trigger;
+          apply (A.handle surface (W.Input.Text_input "Fresh type fixture"));
+          key W.Input.Return W.Input.mods_none;
+          let type_control = List.find_opt (fun id -> Lui_store.kind store id="select") (ids ()) in
+          expect "New property type selection is missing its control" (Option.is_some type_control);
+          Option.iter (fun control ->
+            let menu () = List.find_opt (fun id -> Lui_store.kind store id="dropdown-menu") (ids ()) in
+            expect "The type menu does not open automatically" (Option.is_some (menu ()));
+            let first = List.find (fun id -> Lui_store.kind store id="menu-item"
+              && Lui_store.string_prop store id "text"=Some (I18n.t "property/type-text")) (ids ()) in
+            expect "The type control has no keyboard focus on entry" (W.Ui.focused (A.ui surface)=control);
+            expect "The first type is not highlighted on entry" (W.Ui.hl_item (A.ui surface)=first);
+            let type_popup = List.find (fun id -> Lui_store.kind store id="popover") (ids ()) in
+            let p = rect type_popup and c = rect control in
+            expect "Type selection retains the tall property results popup" (abs_float (p.h-.34.*.scale)<0.1);
+            expect "The type control is not aligned with the property name" (abs_float (c.y-.p.y-.scale)<0.1);
+            expect "The type control differs from the 32-point reference height" (abs_float (c.h-.32.*.scale)<0.1);
+            key W.Input.Arrow_down W.Input.mods_none;
+            expect "Type menu does not navigate to Number"
+              (Lui_store.string_prop store (W.Ui.hl_item (A.ui surface)) "text"=Some (I18n.t "property/type-number"));
+            key W.Input.Escape W.Input.mods_none;
+            expect "Inner Escape closes the entire property workflow"
+              (Properties_dialog.is_open () && menu ()=None);
+            expect "Inner Escape fails to restore type-control focus" (W.Ui.focused (A.ui surface)=control);
+            key W.Input.Arrow_up W.Input.mods_none;
+            expect "The type selector cannot reopen with the keyboard" (Option.is_some (menu ()));
+            expect "ArrowUp does not focus the final type"
+              (Lui_store.string_prop store (W.Ui.hl_item (A.ui surface)) "text"=Some (I18n.t "property/type-asset"));
+            key W.Input.Escape W.Input.mods_none;
+            key W.Input.Escape W.Input.mods_none;
+            expect "Outer Escape leaves the property workflow open" (not (Properties_dialog.is_open ()))) type_control;
+          Properties_dialog.close ();refresh ();
+          click trigger;
           apply (A.handle surface (W.Input.Key_down (W.Input.Arrow_down,W.Input.mods_none,false)));
           apply (A.handle surface (W.Input.Key_down (W.Input.Return,W.Input.mods_none,false)));
           expect "Enter ignores the property selected with the keyboard"

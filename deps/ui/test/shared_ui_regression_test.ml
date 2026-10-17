@@ -36,6 +36,67 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let type_choice_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "type-fixture"});
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;done_ ()
+      | (ty,label,name)::rest ->
+          let requests = ref [] in
+          let notified,notify =
+            let callback = ref (fun () -> ()) in
+            let promise = Js.Promise.make (fun ~resolve ~reject:_ -> callback := (fun () -> let value=() in resolve value [@u])) in
+            promise,(fun () -> !callback ()) in
+          Runtime.worker := Some {Worker_client.invoke_fn=(fun method_ args ->
+            requests := (method_,args)::!requests;notify ();
+            Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+            on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+          let d : Properties_dialog.dlg_state =
+            {d_target={uuid="type-target";uuids=[];db_id=None;is_tag=false;title=""};
+             d_remove=false;d_placement=Properties_dialog.Centered;
+             d_phase=Properties_dialog.Type_select name;d_phase_sig=None} in
+          let picker = mount (fun _ -> Properties_dialog.type_select_view d name) in
+          let control = List.find_opt (fun n -> n.M.kind="select") (nodes picker) in
+          check ("new property has a type selection control: "^ty) (Option.is_some control);
+          check "entering property type selection does not write to the graph" (!requests=[]);
+          match control with
+          | None -> ignore (Lui_app.dispose picker.S.app);next rest
+          | Some control ->
+              let menus () = List.filter (fun n -> n.M.kind="dropdown-menu") (nodes picker) in
+              check "new property opens its type menu immediately" (List.length (menus ())=1);
+              eqs "new property preserves its Unicode name" name
+                (List.find_map (fun n -> match M.string_prop n "text" with
+                  | Some value when value=name -> Some value | _ -> None) (nodes picker) |> Option.value ~default:"");
+              let menu = List.hd (menus ()) in
+              S.dismiss picker menu.M.id;
+              check "type dismissal preserves the property workflow and control"
+                (menus ()=[] && List.exists (fun n -> n.M.id=control.M.id) (nodes picker));
+              S.press picker control.M.id;
+              check "type control reopens the dismissed menu" (List.length (menus ())=1);
+              let options = List.filter (fun n -> n.M.kind="menu-item") (nodes picker) in
+              check "type selection exposes all eight supported types" (List.length options=8);
+              let option = List.find (fun n -> M.string_prop n "text"=Some (I18n.t label)) options in
+              S.press picker option.M.id;
+              check "choosing a type closes only its menu" (menus ()=[]);
+              ignore (Js.Promise.then_ (fun () ->
+                check ("type choice sends its exact name and schema: "^ty)
+                  (match !requests with
+                   | ["thread-api/apply-outliner-ops",[_;Wire.Array [Wire.Array
+                       [Wire.Keyword "upsert-property";Wire.Array [Wire.Nil;schema;opts]]];_]] ->
+                       Wire.get schema "logseq.property/type"=Some (Wire.Keyword ty)
+                       && Wire.get opts "property-name"=Some (Wire.String name)
+                   | _ -> false);
+                ignore (Lui_app.dispose picker.S.app);next rest;Js.Promise.resolve ()) notified)
+    in
+    next ["default","property/type-text","Type fixture";
+      "number","property/type-number",{js|中文 café 😀|js};
+      "date","property/type-date","A property with a deliberately long display name";
+      "datetime","property/type-datetime","Type fixture";
+      "checkbox","property/type-checkbox","Type fixture";
+      "url","property/type-url","Type fixture";
+      "node","property/type-node","Type fixture";
+      "asset","property/type-asset","Type fixture"]
+  in
   List.iter (fun (label,case_sensitive,allow_new,titles,query,expected) ->
     let chosen = ref None in
     let selector = mount (fun _ -> Properties_select.view ~placeholder:"Rank fixture"
@@ -1028,7 +1089,7 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
-      async_selection_check (fun () -> Runtime.app_flush := previous_flush;finish ());
+      async_selection_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

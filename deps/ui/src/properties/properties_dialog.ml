@@ -320,22 +320,49 @@ let prop_select_view d : t =
      Js.Promise.resolve items)
 
 let type_select_view d name : t =
-  column ~gap:4
-    [ row ~gap:6 ~cross:`center
-        [ icon ~name:`circle_dot ~point_size:14 []
-        ; text ~value:name []
-        ]
-    ; column ~gap:0
-        (List.map
-           (fun ty ->
-             menu_item
-               ~text:(I18n.t ("property/type-" ^ ty))
-               ~on_press:(fun _ -> on_type_chosen d name ty)
-               [])
-           (* cljs db-property-type/user-built-in-property-types order *)
-           [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"
-           ; "node"; "asset" ])
-    ]
+ fun context parent ->
+  let expanded = Signal.state context.Lui_ui.ui_scheduler true in
+  let collapse () = Runtime.signal_set expanded false in
+  let dismiss _ = collapse () in
+  (row ~gap:4 ~cross:`center
+     [ row ~gap:4 ~cross:`center ~min_width:160 ~min_height:28
+         [ row ~width:15 ~height:24 ~main:`center ~cross:`center
+             [ Ui_components.with_props [Ui_components.Prop.opacity 0.8]
+                 (box ~width:6 ~height:6 ~corner_radius:3
+                   ~background:"var(--lx-gray-08)" []) ]
+         ; text ~value:name ~font_size:"15px" ~line_height:"22.5px" [] ]
+     ; box
+         [ Ui_components.with_props
+             [Ui_components.Prop.font_size "14px";
+              Ui_components.Prop.line_height "20px"]
+             (select ~key:"type-control"
+                ~placeholder:(I18n.t "property/select-type-placeholder")
+                ~height:32 ~padding_horizontal:8 ~padding_vertical:0
+                ~gap:0 ~corner_radius:6 ~border_width:1
+                ~border_color:"hsl(var(--border))"
+                ~background:"hsl(var(--background))"
+                ~foreground:"hsl(var(--foreground))"
+                ~on_press:(fun _ -> Runtime.signal_set expanded
+                  (not (Runtime.signal_get expanded)))
+                ~on_dismiss:dismiss [])
+         ; reactive (fun open_ ->
+             if not open_ then spacer []
+             else
+               Ui_components.menu_card ~key:"type-options"
+                 ~anchor:`below
+                 ~anchor_alignment:`start ~on_dismiss:dismiss
+                 (List.map (fun (ty,label) ->
+                   Ui_components.with_props
+                     [Ui_components.Prop.hover_background "var(--lx-gray-05)";
+                      Ui_components.Prop.hover_foreground "var(--lx-gray-12)"]
+                     (menu_item ~key:ty ~text:(I18n.t label)
+                       ~selected:false ~selection_placement:`leading ~gap:8
+                       ~height:32 ~padding_horizontal:8 ~padding_vertical:6
+                       ~corner_radius:4 ~foreground:"var(--lx-gray-12)"
+                       ~on_press:(fun _ -> collapse ();
+                         on_type_chosen d name ty) []))
+                   Properties_menu.type_names)) (Signal.value expanded) ]
+     ]) context parent
 
 let node_tags_view d prop : t =
   async_select ~placeholder:(I18n.t "property/choose-tags")
@@ -547,7 +574,7 @@ let value_edit_view d prop : t =
           Js.Promise.resolve (value_items d prop (W.elems w))))
         context parent
 
-let dialog_content d : t =
+let dialog_content ?compact_width d : t =
  fun context parent ->
   let phase_sig = Signal.state context.Lui_ui.ui_scheduler d.d_phase in
   d.d_phase_sig <- Some phase_sig;
@@ -555,7 +582,7 @@ let dialog_content d : t =
      (fun p ->
         (* stable root: same-kind prop diffs across reactive branches emit
            unsupported set-prop ops on native *)
-        column ~gap:0
+        column ~gap:0 ?width:(match p with Type_select _ -> None | _ -> compact_width)
           [ (match p with
              | Prop_select -> prop_select_view d
              | Type_select name -> type_select_view d name
@@ -587,9 +614,9 @@ let view : t =
                   ~data_attrs:[ ("role", "dialog") ]
                   ~transition:Ui_components.popover_transition
                   ~on_dismiss:(fun _ -> close ())
-                  [ box ~key:"prop-body" ~width:232
+                  [ box ~key:"prop-body"
                       ~style_class:"ls-property-dialog"
-                      [ dialog_content d ]
+                      [ dialog_content ~compact_width:232 d ]
                   ]
             | Centered ->
                 dialog ~text:(I18n.t "property/add-or-change")
@@ -637,7 +664,7 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
            | Some d when d.d_placement = Trigger key ->
                Ui_components.with_props
                  [Ui_components.Prop.overflow `auto; Ui_components.card_shadow]
-                 (popover ~anchor:`below ~anchor_offset:0. ~width:226
+                 (popover ~anchor:`below ~anchor_offset:0.
                     ~padding:0 ~max_height:288 ~border_width:1
                     ~corner_radius:6 ~background:"hsl(var(--popover))"
                     ~foreground:"hsl(var(--popover-foreground))"
@@ -645,7 +672,7 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
                     ~style_class:"ui__popover-content ls-property-dialog"
                     ~data_attrs:["role","dialog"]
                     ~transition:Ui_components.popover_transition
-                    ~on_dismiss:(fun _ -> close ()) [dialog_content d])
+                    ~on_dismiss:(fun _ -> close ()) [dialog_content ~compact_width:224 d])
            | _ -> column ~gap:0 [])
          (Signal.value state)
      ]) context parent

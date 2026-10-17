@@ -1113,7 +1113,7 @@ body {
   }
 
   .lui-menu-item-icon,
-  .lui-menu-item-check {
+  .lui-menu-item > .lui-menu-item-check {
     @apply size-4 shrink-0;
   }
 
@@ -2151,7 +2151,7 @@ body {
     box-shadow: var(--lui-shadow, revert-layer);
   }
 
-  :where([class*="lui-"]:hover) {
+  :where([class*="lui-"]:hover, .lui-menu-item[data-highlighted]) {
     background-color: var(--lui-hover-bg, revert-layer);
     color: var(--lui-hover-fg, revert-layer);
     border-color: var(--lui-hover-border, revert-layer);
@@ -2170,7 +2170,9 @@ body {
     box-shadow: var(--lui-selected-shadow, var(--lui-shadow, revert-layer));
   }
 
-  :where([class*="lui-"][data-selected]:hover) {
+  :where([class*="lui-"][data-selected]:hover,
+    .lui-menu-item[data-selected][data-highlighted]) {
+    background-color: var(--lui-selected-bg, var(--lui-hover-bg, revert-layer));
     box-shadow: var(--lui-selected-hover-shadow,
       var(--lui-selected-shadow, var(--lui-hover-shadow, var(--lui-shadow, revert-layer))));
   }
