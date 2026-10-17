@@ -655,3 +655,88 @@ let () =
   Tsdl.Sdl.destroy_window window;
   Tsdl.Sdl.quit ();
   print_endline "native window drag and live resize: OK"
+
+
+let () =
+  let module S = Tsdl.Sdl in
+  let module I = Lui_window.Input in
+  let old_mods = S.get_mod_state () in
+  Fun.protect ~finally:(fun () -> S.set_mod_state old_mods) (fun () ->
+    let failures = ref [] in
+    let expect name condition = if not condition then failures := name :: !failures in
+    let event kind = let e = S.Event.create () in S.Event.set e S.Event.typ kind; e in
+    let key state kind keymod =
+      let e = event kind in
+      S.Event.set e S.Event.keyboard_scancode S.Scancode.lshift;
+      S.Event.set e S.Event.keyboard_keymod keymod;
+      S.Event.set e S.Event.keyboard_repeat 0;
+      Native_window.input_of_event state e in
+    let mouse state kind =
+      let e = event kind in
+      S.Event.set e S.Event.mouse_button_x 216;
+      S.Event.set e S.Event.mouse_button_y 342;
+      S.Event.set e S.Event.mouse_button_button S.Button.left;
+      S.Event.set e S.Event.mouse_button_clicks 1;
+      Native_window.input_of_event state e in
+    let text state =
+      let e = event S.Event.text_input in
+      S.Event.set e S.Event.text_input_text "x";
+      Native_window.input_of_event state e in
+    let wheel state =
+      let e = event S.Event.mouse_wheel in
+      S.Event.set e S.Event.mouse_wheel_x 1;
+      S.Event.set e S.Event.mouse_wheel_y 2;
+      Native_window.input_of_event state e in
+    let mods = function
+      | Some (I.Button_down (_,_,_,_,m) | I.Button_up (_,_,_,m)
+              | I.Wheel_mods (_,_,m)) -> m
+      | _ -> failwith "Expected a pointer input" in
+    let state = Native_window.input_state ~keymod:0 in
+    (* SDL has already pumped the later release, but the application's
+       dequeue position is still before it. *)
+    S.set_mod_state 0;
+    ignore (key state S.Event.key_down S.Kmod.lshift);
+    expect "Queued Shift mouse-down loses its modifier to a later release"
+      (mods (mouse state S.Event.mouse_button_down)).I.shift;
+    expect "Queued Shift mouse-up loses its modifier to a later release"
+      (mods (mouse state S.Event.mouse_button_up)).I.shift;
+    expect "Document pointer events disagree with the queued Shift state"
+      (Native_window.current_modifiers state).I.shift;
+    ignore (key state S.Event.key_up 0);
+    S.set_mod_state S.Kmod.lshift;
+    expect "A released modifier leaks from future global state into a click"
+      (not (mods (mouse state S.Event.mouse_button_up)).I.shift);
+    expect "A released modifier leaks into document pointer events"
+      (not (Native_window.current_modifiers state).I.shift);
+    S.set_mod_state 0;
+    ignore (key state S.Event.key_down S.Kmod.lctrl);
+    expect "A queued Ctrl shortcut also inserts its committed text"
+      (text state = None);
+    expect "A queued modified wheel reads future keyboard state"
+      (mods (wheel state)).I.ctrl;
+    ignore (key state S.Event.key_up 0);
+    S.set_mod_state S.Kmod.lctrl;
+    expect "Plain typing after release is suppressed by a future Ctrl press"
+      (text state = Some (I.Text_input "x"));
+    S.set_mod_state 0;
+    ignore (key state S.Event.key_down (S.Kmod.lctrl lor S.Kmod.ralt));
+    expect "AltGr text must remain admissible" (text state = Some (I.Text_input "x"));
+    ignore (key state S.Event.key_down S.Kmod.lgui);
+    expect "A queued Meta shortcut also inserts its committed text" (text state = None);
+    let initial = Native_window.input_state ~keymod:S.Kmod.lshift in
+    expect "The initial held modifier is not preserved"
+      (mods (mouse initial S.Event.mouse_button_down)).I.shift;
+    let loss = event S.Event.window_event in
+    S.Event.set loss S.Event.window_event_id S.Event.window_event_focus_lost;
+    ignore (Native_window.input_of_event initial loss);
+    S.set_mod_state S.Kmod.lshift;
+    expect "Focus loss leaves a stale modifier on later input"
+      (not (mods (mouse initial S.Event.mouse_button_up)).I.shift);
+    let gain = event S.Event.window_event in
+    S.Event.set gain S.Event.window_event_id S.Event.window_event_focus_gained;
+    ignore (Native_window.input_of_event initial gain);
+    expect "Focus gain does not recover a modifier held outside the window"
+      (mods (mouse initial S.Event.mouse_button_down)).I.shift;
+    List.iter prerr_endline (List.rev !failures);
+    check "Native queued input modifier semantics" (!failures = []));
+  print_endline "native queued input modifiers: OK"

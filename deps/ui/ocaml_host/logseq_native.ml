@@ -82,90 +82,7 @@ let dbg fmt =
 
 let perf_s = Native_window.performance_time
 
-let mods_of_keymod km =
-  Input.
-    { ctrl = km land Sdl.Kmod.ctrl <> 0;
-      shift = km land Sdl.Kmod.shift <> 0;
-      alt = km land Sdl.Kmod.alt <> 0;
-      meta = km land Sdl.Kmod.gui <> 0 }
-
-let input_of_event e =
-  let open Input in
-  match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
-  | `Window_event -> (
-      match
-        Sdl.Event.window_event_enum
-          (Sdl.Event.get e Sdl.Event.window_event_id)
-      with
-      | `Resized | `Size_changed ->
-        Some
-          (Resize
-             ( Int32.to_int (Sdl.Event.get e Sdl.Event.window_data1)
-             , Int32.to_int (Sdl.Event.get e Sdl.Event.window_data2) ))
-      | `Close -> Some Quit_input
-      | _ -> None)
-  | `Key_down ->
-    Some
-      (Key_down
-         ( Input.key_of_sdl_scancode
-             (Sdl.Event.get e Sdl.Event.keyboard_scancode)
-         , mods_of_keymod (Sdl.Event.get e Sdl.Event.keyboard_keymod)
-         , Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0 ))
-  | `Text_input ->
-    (* SDL on X11 still commits TEXTINPUT for Ctrl/Super chords whose
-       keysym is not a letter (Ctrl+, Ctrl+. Ctrl+/ ...), so a shortcut
-       also typed its punctuation into the focused editor. Browsers never
-       insert text for a Ctrl/Meta chord; drop it here. Ctrl+Alt stays
-       (Windows AltGr layouts report it). *)
-    let m = mods_of_keymod (Sdl.get_mod_state ()) in
-    if (m.Input.ctrl && not m.Input.alt) || m.Input.meta then None
-    else Some (Text_input (Sdl.Event.get e Sdl.Event.text_input_text))
-  | `Text_editing ->
-    Some
-      (Text_editing
-         ( Sdl.Event.get e Sdl.Event.text_editing_text
-         , Sdl.Event.get e Sdl.Event.text_editing_start
-         , Sdl.Event.get e Sdl.Event.text_editing_length ))
-  | `Mouse_motion ->
-    Some
-      (Move
-         ( float (Sdl.Event.get e Sdl.Event.mouse_motion_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_motion_y) ))
-  | `Mouse_button_down ->
-    Some
-      (Button_down
-         ( float (Sdl.Event.get e Sdl.Event.mouse_button_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_button_y)
-         , Input.button_of_sdl
-             (Sdl.Event.get e Sdl.Event.mouse_button_button)
-         , Sdl.Event.get e Sdl.Event.mouse_button_clicks
-         , mods_of_keymod (Sdl.get_mod_state ()) ))
-  | `Mouse_button_up ->
-    Some
-      (Button_up
-         ( float (Sdl.Event.get e Sdl.Event.mouse_button_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_button_y)
-         , Input.button_of_sdl
-             (Sdl.Event.get e Sdl.Event.mouse_button_button)
-         , mods_of_keymod (Sdl.get_mod_state ()) ))
-  | `Mouse_wheel ->
-    Some
-      (Wheel_mods
-         ( float (Sdl.Event.get e Sdl.Event.mouse_wheel_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_wheel_y)
-         , mods_of_keymod (Sdl.get_mod_state ()) ))
-  | `Drop_file ->
-    let s = Sdl.Event.drop_file_file e in
-    Sdl.Event.drop_file_free e;
-    (match s with Some f -> Some (Drop_file f) | None -> None)
-  | `Drop_text ->
-    let s = Sdl.Event.drop_file_file e in
-    Sdl.Event.drop_file_free e;
-    (match s with Some t -> Some (Drop_text t) | None -> None)
-  | `Drop_begin | `Drop_complete -> None
-  | `Quit -> Some Quit_input
-  | _ -> None
-
+let mods_of_keymod = Native_window.mods_of_keymod
 
 
 let () =
@@ -1403,6 +1320,7 @@ let () =
   (* DOM `buttons` bitmask: 1 primary, 2 secondary, 4 auxiliary. SDL
      button numbers are 1 left, 2 middle, 3 right while DOM is 0 left,
      1 middle, 2 right — map through Input.mouse_button. *)
+  let input_state = Native_window.input_state ~keymod:(Sdl.get_mod_state ()) in
   let dom_buttons = ref 0 in
   let dom_button_bit (b : Input.mouse_button) =
     match b with
@@ -1767,21 +1685,21 @@ let () =
         ~btn:(Input.button_of_sdl
                 (Sdl.Event.get e Sdl.Event.mouse_button_button))
         ~clicks:(Sdl.Event.get e Sdl.Event.mouse_button_clicks)
-        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+        ~mods:(Native_window.current_modifiers input_state)
     | `Mouse_button_up ->
       on_dom_button_up
         ~x:(Sdl.Event.get e Sdl.Event.mouse_button_x)
         ~y:(Sdl.Event.get e Sdl.Event.mouse_button_y)
         ~btn:(Input.button_of_sdl
                 (Sdl.Event.get e Sdl.Event.mouse_button_button))
-        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+        ~mods:(Native_window.current_modifiers input_state)
     | `Mouse_motion ->
       on_dom_motion
         ~x:(Sdl.Event.get e Sdl.Event.mouse_motion_x)
         ~y:(Sdl.Event.get e Sdl.Event.mouse_motion_y)
         ~rx:(Sdl.Event.get e Sdl.Event.mouse_motion_xrel)
         ~ry:(Sdl.Event.get e Sdl.Event.mouse_motion_yrel)
-        ~mods:(mods_of_keymod (Sdl.get_mod_state ()))
+        ~mods:(Native_window.current_modifiers input_state)
     | `Key_down ->
       on_dom_key ~down:true
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
@@ -1821,7 +1739,7 @@ let () =
   in
   let menu_key ~scancode ~keymod =
     push_menu_key ~down:true ~scancode ~keymod;
-    push_menu_key ~down:false ~scancode ~keymod
+    push_menu_key ~down:false ~scancode ~keymod:(Sdl.get_mod_state ())
   in
   let menu_command tag =
     dbg "menu-command %d" tag;
@@ -1894,7 +1812,7 @@ let () =
         component_input := false;
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         metrics.event_count <- metrics.event_count + 1;
-        let input = input_of_event e in
+        let input = Native_window.input_of_event input_state e in
         (match input with
          | Some (Input.Key_down _) ->
            Host_metrics.note_key metrics
