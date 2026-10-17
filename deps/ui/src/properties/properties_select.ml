@@ -118,20 +118,17 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
            visible_items ~items ~filter:s.q ~searched:s.searched
              ~new_option
          in
-         (* a native List can't size itself inside a content-sized
-            sheet — it needs an explicit height, 0 when empty so the
-            sheet still shrinks like web. Keep the node mounted across
-            filter edits (height prop, not mount churn) and give rows
-            stable keys: a drop+recreate per keystroke leaves taps
-            hitting a dead node. The empty-query state shows the same
-            "No matched result" note as the shui select *)
-         column ~gap:0 ~padding_vertical:(if compact then 4 else 0)
-           ((if vis = [] && String.trim s.q <> "" then
+         (* Bound the results viewport while retaining every option in
+            its scrollable content. Empty results collapse the list;
+            unmatched nonempty queries display the shared no-result message. *)
+         column ~gap:0
+           ((if compact then [box ~height:4 []] else [])
+            @ (if vis = [] && String.trim s.q <> "" then
                [ text ~key:"select-empty"
                    ~value:(I18n.t "search/no-result")
                    [] ]
              else [])
-            @ [ list ~height:(if vis = [] then 0 else if compact then min 280 (32 * List.length vis) else 280)
+            @ [ list ~height:(if vis = [] then 0 else if compact then min 250 (32 * List.length vis) else 280)
                (List.mapi
               (fun index it ->
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
@@ -153,7 +150,9 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
               vis) ]))
       (Signal.value st)
   in
-  (column ~gap:(if compact then 0 else 2)
+  (Ui_components.with_props
+     (if compact then [Ui_components.Prop.font_size "14px";Ui_components.Prop.line_height "20px"] else [])
+   (column ~gap:(if compact then 0 else 2)
      ~style_class:(if compact then "ls-property-select-compact" else "")
      [ text_field ~placeholder ~autofocus:true
          ?height:(if compact then Some 32 else None)
@@ -180,5 +179,5 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
          ~on_submit:(fun _ -> pick ())
          []
      ; list_view
-     ])
+     ]))
     context parent

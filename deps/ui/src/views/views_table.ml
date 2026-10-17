@@ -839,14 +839,12 @@ let copy_selected inst () =
     V.update inst (fun s -> { s with V.selected = V.Sset.empty })
   end
 
-(* cljs :editor/new-property {:selected-blocks}: the property dialog in
-   batch mode over the selected rows; ~remove selects the unset variant *)
-let open_prop_dlg inst ~remove =
+(* Selected table rows share one property workflow target. *)
+let property_target inst () =
   match selected_uuids inst with
-  | [] -> ()
+  | [] -> None
   | u :: _ as us ->
-      Properties_dialog.open_dialog ~remove
-        { uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
+      Some { Properties_dialog.uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
 
 let set_tags_dlg inst =
   match selected_uuids inst with
@@ -894,12 +892,12 @@ let action_bar inst : t =
                  set_tags_dlg inst);
              action ~label:(I.t "ui/copy") ~text:(I.t "ui/copy")
                (copy_selected inst);
-             action ~label:(I.t "property/set-property")
-               ~text:(I.t "property/set-property") (fun () ->
-                 open_prop_dlg inst ~remove:false);
-             action ~label:(I.t "property/unset-property")
-               ~text:(I.t "property/unset-property") (fun () ->
-                 open_prop_dlg inst ~remove:true);
+             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-set-property" inst.V.id)
+               ~margin_left:(-1) ~remove:false ~target:(property_target inst)
+               (action ~margin_left:0 ~label:(I.t "property/set-property") ~text:(I.t "property/set-property"));
+             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-unset-property" inst.V.id)
+               ~margin_left:(-1) ~remove:true ~target:(property_target inst)
+               (action ~margin_left:0 ~label:(I.t "property/unset-property") ~text:(I.t "property/unset-property"));
              action
                ~label:(I.t "ui/delete")
                ~icon:`trash ~width:31 ~corner_radius:6 (delete_selected inst);

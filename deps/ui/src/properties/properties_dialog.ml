@@ -2,11 +2,9 @@
    opened from the "/" command popover, mod+p / Ctrl+Alt+P, the
    `.ls-new-property` button, or `;;` in the editor.
 
-   Declarative LUI version: the dialog is one state slot rendered as a
-   centered card inside .cp__overlays (every platform presents it
-   natively; anchored popover positioning belongs to the imperative
-   popup layer which this module no longer uses — recorded in
-   the native twin).
+   One state slot owns the active property workflow. Trigger-owned
+   pickers follow their buttons; editor-positioned pickers use a point,
+   and commands without a trigger use the centered overlay.
 
    Phases (cljs property.cljs property-input):
    1. property select — text field + property list ("New option:"
@@ -41,12 +39,14 @@ type phase =
   | Node_tags of W.t (* property entity *)
   | Value_edit of W.t (* property entity *)
 
+type placement = Centered | Point of float * float | Trigger of string
+
 (* one open dialog at a time (cljs treats it as the single active
    modal); the signal is created lazily by the overlay view's context *)
 type dlg_state =
   { d_target : target
   ; d_remove : bool
-  ; d_anchor : (float * float) option
+  ; d_placement : placement
   ; mutable d_phase : phase
   ; mutable d_phase_sig : phase Signal.state option
   }
@@ -297,7 +297,7 @@ let async_select ~placeholder ?(compact = false) ?new_option ?on_search
 
 let prop_select_view d : t =
   async_select ~placeholder:(I18n.t "property/add-or-change")
-    ~compact:(d.d_anchor <> None)
+    ~compact:(d.d_placement <> Centered)
     ~new_option:(fun name ->
       (* no client-side name validation: invalid names go through
          type-select and the worker rejects the upsert with a
@@ -338,7 +338,7 @@ let type_select_view d name : t =
 
 let node_tags_view d prop : t =
   async_select ~placeholder:(I18n.t "property/choose-tags")
-    ~compact:(d.d_anchor <> None)
+    ~compact:(d.d_placement <> Centered)
     (let* w = D.all_classes () in
      let items =
        Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
@@ -532,12 +532,12 @@ let value_edit_view d prop : t =
         V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
           ~on_pick:(fun id -> pick_value d prop id)
       in
-      (async_select ~placeholder ~compact:(d.d_anchor <> None)
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
          ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
     else
-      (async_select ~placeholder ~compact:(d.d_anchor <> None)
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
          ?new_option:on_new
          (let* w =
             D.property_values ~property_ident:(ident_of prop)
@@ -571,13 +571,14 @@ let dialog_content d : t =
 let view : t =
  fun context parent ->
   let s = state_signal context.Lui_ui.ui_scheduler in
-  (reactive ~equal:(fun a b -> Option.is_some a = Option.is_some b)
+  (reactive ~equal:(==)
      (fun dopt ->
         match dopt with
         | None -> column ~gap:2 []
         | Some d -> (
-            match d.d_anchor with
-            | Some (x, y) ->
+            match d.d_placement with
+            | Trigger _ -> column ~gap:0 []
+            | Point (x, y) ->
                 popover ~key:"prop-pop" ~at:(x, y)
                   ~style_class:"ui__popover-content"
                   ~available_height:
@@ -589,7 +590,7 @@ let view : t =
                       ~style_class:"ls-property-dialog"
                       [ dialog_content d ]
                   ]
-            | None ->
+            | Centered ->
                 dialog ~text:(I18n.t "property/add-or-change")
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
@@ -603,15 +604,47 @@ let view : t =
 
 (* a second open replaces the dialog — cljs treats it as the single
    active modal *)
-let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
+let open_at ~remove ~phase placement target =
   (* a second open replaces every popup — cljs treats it as the single
      active modal *)
   S.close_overlays ();
   S.close_all_view_overlays ();
-  let d = { d_target = target; d_remove = remove; d_anchor = anchor
+  let d = { d_target = target; d_remove = remove; d_placement = placement
           ; d_phase = phase; d_phase_sig = None } in
   current := Some d;
   publish (Some d)
+
+let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
+  open_at ~remove ~phase (match anchor with Some (x,y) -> Point (x,y) | None -> Centered) target
+
+(* Retain the popup under its trigger so both renderers track layout,
+   scrolling and resizing without asynchronous rectangle polling. *)
+let trigger ~key ?margin_left ~remove ~target make_button : t =
+ fun context parent ->
+  let state = state_signal context.Lui_ui.ui_scheduler in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+    match !current with
+    | Some d when d.d_placement = Trigger key -> close ()
+    | _ -> ());
+  (button_group ~key ~gap:0 ?margin_left ~background:"transparent"
+     ~border_width:0 ~corner_radius:0
+     [ make_button (fun () -> match target () with
+         | Some target -> open_at ~remove ~phase:Prop_select (Trigger key) target
+         | None -> ())
+     ; reactive ~equal:(==)
+         (fun current -> match current with
+           | Some d when d.d_placement = Trigger key ->
+               Ui_components.with_props [Ui_components.Prop.overflow `auto]
+                 (popover ~anchor:`below ~anchor_offset:0. ~width:226
+                    ~padding:0 ~max_height:288 ~border_width:1
+                    ~border_color:"hsl(var(--border))"
+                    ~style_class:"ui__popover-content ls-property-dialog"
+                    ~data_attrs:["role","dialog"]
+                    ~transition:Ui_components.popover_transition
+                    ~on_dismiss:(fun _ -> close ()) [dialog_content d])
+           | _ -> column ~gap:0 [])
+         (Signal.value state)
+     ]) context parent
 
 (* anchored-open helper for click triggers: measure the element and
    open the popover at its bottom-left (base-ui align=start). On

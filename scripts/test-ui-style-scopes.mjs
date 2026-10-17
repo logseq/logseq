@@ -56,3 +56,14 @@ test('a shared search clear action owns browser cancel chrome', async () => {
   })
   assert.deepEqual(owners, [true], 'Only fields with a shared clear action suppress browser cancel chrome')
 })
+
+test('popup content consumes the positioner available-height contract directly', async () => {
+  const root = postcss.parse(await readFile(stylesheet, 'utf8'))
+  const caps = []
+  root.walkRules(rule => {
+    if (!rule.selectors.includes('.ui__popover-content')) return
+    rule.walkDecls('max-height', declaration => caps.push(declaration.value))
+  })
+  assert.deepEqual(caps, ['var(--lui-popup-available-height, none)'],
+    'A variable resolved on an ancestor cannot see the content node available height')
+})

@@ -1068,7 +1068,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
      resolve well after the mount (first query after a cold load), so
      retry while the popup is up (~2s) to match base-ui's continuous
      collision re-check.
-     The popover's --available-height clamp already bounds the rendered
+     The popover's --lui-popup-available-height clamp already bounds the rendered
      rect, so lift it briefly to learn the real height (CSS caps such
      as the commands list's own max-height still apply — matching what
      the popup can actually render on either side) *)
@@ -1097,7 +1097,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
         | Some inner -> (
             match inner.Ui_services.closest ".ui__popover-content" with
             | Some pop ->
-                (* --available-height propagates to #ui__ac-inner's own
+                (* --lui-popup-available-height propagates to #ui__ac-inner's own
                    max-height; lift it to read the real rendered height
                    (the list's own CSS max still applies). The lift must
                    stay the last override while measuring — the rect
@@ -1106,7 +1106,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
                    when the loop ends without a flip. The lifted frame
                    renders clipped at the window edge either way, so it
                    is not visible to the user. *)
-                pop.Ui_services.set_style "--available-height"
+                pop.Ui_services.set_style "--lui-popup-available-height"
                   "2000px";
                 let _rx, _ry, w, h_measured = pop.Ui_services.rect () in
                 (* Hosts whose element-rect reads report the popover's
@@ -1157,7 +1157,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
                 if flip' <> a.flip then
                   set_ac t (Some { a with flip = flip' });
                 if tries <= 0 then
-                  pop.Ui_services.set_style "--available-height"
+                  pop.Ui_services.set_style "--lui-popup-available-height"
                     (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 5.))
                 else retry tries
             | None -> retry tries)

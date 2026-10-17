@@ -337,7 +337,7 @@ let ac_inner (st : S.t) : t =
     else ac_item_static st it
   in
   (* web clamps ac-inner through the inline style's
-     --available-height expression; the native host ignores attrs-carried
+     --lui-popup-available-height expression; the native host ignores attrs-carried
      style, so the same bound goes out as the wire max-height prop *)
   let max_height_sig =
     Logseq_el.own context
@@ -377,7 +377,7 @@ let ac_inner (st : S.t) : t =
                     (* the popup-ref scoped max-heights — slash popup
                        flipped to top-side clamps tighter *)
                     [ ( "style"
-                      , "max-height:min(calc(var(--available-height, "
+                      , "max-height:min(calc(var(--lui-popup-available-height, "
                         ^ (match a.S.kind, a.S.flip with
                            | S.Slash, Some _ -> "460px) - 60px), 460px"
                            | _ -> "480px) - 20px), 480px")

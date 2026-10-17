@@ -9,7 +9,7 @@
    .lui-popup-portal (a body-level sibling of the app root). ~at:(x,y)
    writes inline left/top on the positioner; with no position props the
    positioner spans the viewport (cover mode). The rules below put the
-   scroll clamp (max-height: var(--available-height)) and the type
+   scroll clamp (max-height: var(--lui-popup-available-height)) and the type
    metrics on the content node, matching popup-normal-style in
    shui/components.cljs. */
 
@@ -46,8 +46,8 @@
 /* LUI popover kind shell — the portal is a non-interactive fixed layer;
    the positioner gets inline left/top (or data-cover); the inner
    .lui-popover re-enables pointer events and carries the node's
-   style_class. --lui-popup-available-height is re-exported as
-   --available-height so the shared popup rules keep one variable name. */
+   style_class. The measured content consumes its available-height
+   variable directly; an ancestor alias would resolve before that value. */
 .lui-popup-portal {
   position: fixed;
   inset: 0;
@@ -61,7 +61,6 @@
   width: max-content;
   pointer-events: none;
   z-index: calc(100 + var(--lui-layer-index, 0));
-  --available-height: var(--lui-popup-available-height, none);
 }
 
 .lui-popover {
@@ -131,7 +130,7 @@
   font-size: 1rem;
   line-height: 1.5;
   min-width: 8rem;
-  max-height: var(--available-height, none);
+  max-height: var(--lui-popup-available-height, none);
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--lui-c-border);
@@ -223,12 +222,12 @@
 .ui__popover-content[data-editor-popup-ref="block-search"] #ui__ac-inner,
 .ui__popover-content[data-editor-popup-ref="page-search-hashtag"]
   #ui__ac-inner {
-  max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
+  max-height: min(calc(var(--lui-popup-available-height, 480px) - 20px), 480px);
 }
 
 .ui__popover-content[data-editor-popup-ref="commands"][data-side="top"]
   #ui__ac-inner {
-  max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
+  max-height: min(calc(var(--lui-popup-available-height, 460px) - 60px), 460px);
 }
 
 .ui__popover-content[data-editor-popup-ref][data-side="top"] {

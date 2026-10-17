@@ -276,7 +276,7 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
   in
   let y = if flip then atop else abot in
   (* popover ~at is the same point placement the inline left/top carried;
-     --available-height = viewport space below y *)
+     --lui-popup-available-height = viewport space below y *)
   Ui_components.menu_surface (popover ~key:"page-menu" ~at:(x, y)
     ~available_height:
       (if flip then atop -. 5. else inner_height -. y -. 5.)

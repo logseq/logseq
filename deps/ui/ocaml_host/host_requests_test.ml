@@ -4431,3 +4431,135 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native table selection geometry, visibility and input" (!failures=[]);
   print_endline "native table selection geometry, visibility and input: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush
+  and previous_dialog = !Properties_dialog.current
+  and previous_signal = !Properties_dialog.current_sig in
+  let properties = List.init 30 (fun index -> Wire.Map
+    [Wire.Keyword "db/ident",Wire.Keyword ("test/property-"^string_of_int index);
+     Wire.Keyword "block/title",Wire.String (Printf.sprintf "Property %02d" index);
+     Wire.Keyword "logseq.property/type",Wire.Keyword "number"]) in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+    Js.Promise.resolve (match name with
+      | "thread-api/get-all-properties" -> Wire.List properties
+      | "thread-api/get-property-values" -> Wire.List []
+      | _ -> failwith ("Unexpected property fixture request: "^name)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "property-fixture"});
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Properties_dialog.current:=previous_dialog;
+    Properties_dialog.current_sig:=previous_signal) (fun () ->
+    List.iter (fun scale ->
+      Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
+      let inst_cell = ref None in
+      let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);
+          text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="property-picker-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1440.*.scale)) ~height:(int_of_float (932.*.scale)) () in
+      Lui_host.set_reduced_motion (A.host surface) true;
+      let app = Lui_app.create (A.backend surface (profile MacOS GenericHost)) ()
+        (fun () () -> ()) (fun context _ _ ->
+          let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+          let state = {(Views_state.empty_vstate ()) with
+            Views_state.selected=Views_state.Sset.of_list ["row-a";"row-b"]} in
+          let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler state} in
+          inst_cell:=Some inst;
+          Lui_elements.column ~grow:1.
+            [Lui_elements.box ~height:96 [];Views_table.action_bar inst;Properties_dialog.view]) in
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> Properties_dialog.close ();ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);
+        let store = A.store surface in
+        let refresh () = ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+        let apply actions = List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;refresh () in
+        refresh ();
+        let ids () = Lui_store.preorder store in
+        let rect id = W.Rects.get (A.rects surface) id in
+        let click id =
+          let r = rect id in
+          let x,y = (r.x+.r.w/.2.)/.scale,(r.y+.r.h/.2.)/.scale in
+          apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+          apply (A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none))) in
+        let trigger = List.find (fun id -> Lui_store.kind store id="button"
+          && Lui_store.string_prop store id "accessibility-label"=Some (I18n.t "property/set-property")) (ids ()) in
+        click trigger;
+        let popup = List.find_opt (fun id -> Lui_store.kind store id="popover") (ids ()) in
+        expect "Bulk property selection must open an anchored popover" (Option.is_some popup);
+        Option.iter (fun popup ->
+          let field = List.find (fun id -> Lui_store.kind store id="text-field") (ids ()) in
+          List.iter (fun (width,height) ->
+            Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale))
+              ~height:(int_of_float (height*.scale)) ~scale;refresh ();
+            let p = rect popup and t = rect trigger in
+            expect "A property picker loses its trigger's leading edge" (abs_float (p.x-.t.x)<1.*.scale);
+            expect "A property picker moves over its trigger instead of fitting below"
+              (abs_float (p.y-.t.y-.t.h)<1.*.scale);
+            expect "A property picker escapes its resized viewport"
+              (p.y+.p.h<= (height-.8.)*.scale+.0.1);
+            expect "A property picker differs from the reference width" (abs_float (p.w-.226.*.scale)<1.);
+            expect "A property picker exceeds its normal results height" (p.h<=288.*.scale+.0.1))
+            [1440.,932.;1140.,329.;800.,260.;1440.,932.];
+          let selected = Option.get !Properties_dialog.current in
+          expect "The property picker loses bulk selection targets"
+            (selected.Properties_dialog.d_target.uuids=["row-a";"row-b"]);
+          let results = List.find (fun id -> Lui_store.kind store id="list") (ids ()) in
+          Lui_host.resize (A.host surface) ~width:(int_of_float (1140.*.scale))
+            ~height:(int_of_float (329.*.scale)) ~scale;refresh ();
+          let p = rect popup in
+          apply (A.handle surface (W.Input.Move ((p.x+.10.*.scale)/.scale,(p.y+.p.h-.10.*.scale)/.scale)));
+          apply (A.handle surface (W.Input.Wheel (0.,-2000.)));
+          apply (A.handle surface (W.Input.Wheel (0.,-2000.)));
+          expect "A property list at its end swallows scrolling needed by its outer popup"
+            (W.Ui.scroll_offset (A.ui surface) popup > 0.);
+          let last = List.hd (List.rev (List.filter (fun id -> Lui_store.kind store id="list-item") (ids ()))) in
+          let last_rect = rect last and p = rect popup in
+          expect "The final property remains clipped in a short window"
+            (last_rect.y>=p.y && last_rect.y+.last_rect.h<=p.y+.p.h+.0.1);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (1440.*.scale))
+            ~height:(int_of_float (932.*.scale)) ~scale;refresh ();
+          let r = rect results in
+          apply (A.handle surface (W.Input.Move ((r.x+.10.*.scale)/.scale,(r.y+.10.*.scale)/.scale)));
+          apply (A.handle surface (W.Input.Wheel (0.,-2000.)));
+          expect "A bounded property list cannot scroll to its final rows"
+            (W.Ui.scroll_offset (A.ui surface) results > 0.);
+          click field;
+          apply (A.handle surface (W.Input.Text_input "Property 29"));
+          expect "Property filtering does not reduce the visible list"
+            (List.length (List.filter (fun id -> Lui_store.kind store id="list-item") (ids ()))=1);
+          apply (A.handle surface (W.Input.Key_down (W.Input.Return,W.Input.mods_none,false)));
+          expect "Enter does not advance the chosen property to value editing"
+            (match (Option.get !Properties_dialog.current).Properties_dialog.d_phase with
+             | Properties_dialog.Value_edit prop -> Properties_dialog.ident_of prop="test/property-29"
+             | _ -> false);
+          apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
+          expect "Escape does not dismiss the property picker" (not (Properties_dialog.is_open ()));
+          let unset = List.find (fun id -> Lui_store.kind store id="button"
+            && Lui_store.string_prop store id "accessibility-label"=Some (I18n.t "property/unset-property")) (ids ()) in
+          click unset;
+          expect "Unset property does not preserve its operation and selected targets"
+            (match !Properties_dialog.current with
+             | Some d -> d.Properties_dialog.d_remove && d.d_target.uuids=["row-a";"row-b"]
+             | None -> false);
+          apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
+          expect "Escape does not dismiss the unset picker" (not (Properties_dialog.is_open ()));
+          click trigger;
+          Views_state.update (Option.get !inst_cell)
+            (fun state -> {state with Views_state.selected=Views_state.Sset.empty});refresh ();
+          expect "Removing a property trigger leaves a detached active workflow"
+            (not (Properties_dialog.is_open ()))) popup)
+      ) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native bulk property picker anchoring and viewport bounds" (!failures=[]);
+  print_endline "native bulk property picker anchoring and viewport bounds: OK")
