@@ -32,7 +32,10 @@
   (when-not util/node-test?
     (or @*load-promise
         (let [result
-              (p/let [_ (loader/load :code-editor)
+              (p/let [_ (p/create
+                         (fn [resolve reject]
+                           (let [deferred (loader/load :code-editor #(resolve nil))]
+                             (.addErrback deferred reject))))
                       editor @*editor
                       _ (when-not (fn? editor)
                           (throw (ex-info "Code editor module did not register its component"
