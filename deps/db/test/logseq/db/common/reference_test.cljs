@@ -83,6 +83,35 @@
     (is (not (contains? titles "SelfRefAlias"))
         "The alias page entity itself is not an unlinked reference.")))
 
+(deftest get-unlinked-references-ignores-ref-ids-in-block-titles
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "A"}}
+                {:page {:block/title "C"
+                        :block/uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                        :build/keep-uuid? true}}
+                {:page {:block/title "Notes"}
+                 :blocks [{:block/title "[[C]]"}
+                          {:block/title "plain mention of a"}]}]})
+        page-a (db-test/find-page-by-title @conn "A")
+        refs (db-reference/get-unlinked-references @conn (:db/id page-a))]
+    (is (= #{"plain mention of a"} (set (map :block/title refs)))
+        "A block whose only text is a ref to another page is not an unlinked reference of A, though the ref's stored id contains an a")))
+
+(deftest get-unlinked-references-matches-alias-titles
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "λόγος"}}
+                {:page {:block/title "Logos"}}
+                {:page {:block/title "Notes"}
+                 :blocks [{:block/title "Logos is a rational form of discourse"}]}]})
+        target (db-test/find-page-by-title @conn "λόγος")
+        alias (db-test/find-page-by-title @conn "Logos")
+        _ (d/transact! conn [[:db/add (:db/id target) :block/alias (:db/id alias)]])
+        titles (unlinked-titles (db-reference/get-unlinked-references @conn (:db/id target)))]
+    (is (contains? titles "Logos is a rational form of discourse")
+        "A plain-text mention of an alias is an unlinked reference of the page")))
+
 (deftest get-block-refs-count-excludes-blocks-on-the-page-itself
   (testing "ref counts stay aligned with visible linked references"
     (let [conn (create-self-ref-conn)
