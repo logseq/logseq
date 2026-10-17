@@ -5,5 +5,18 @@
  (libraries logseq_db_worker logseq_db_worker_platform_native
   logseq_db_worker_sqlite_vendored))
 
-(copy_files ../runtime/native/zvec/*.dylib)
-(copy_files ../runtime/native/zvec/ZVEC-*)
+;; macOS arm64 only. Dune rejects an empty copy_files glob, which fails
+;; `dune build` on every other platform.
+(copy_files
+ (files ../runtime/native/zvec/*.dylib)
+ (enabled_if
+  (and
+   (= %{system} macosx)
+   (= %{architecture} arm64))))
+
+(copy_files
+ (files ../runtime/native/zvec/ZVEC-*)
+ (enabled_if
+  (and
+   (= %{system} macosx)
+   (= %{architecture} arm64))))
