@@ -36,49 +36,29 @@ let matches needle item =
     in
     nl <= hl && go 0
 
-let visible_items ~items ~filter ~searched ~new_option =
+let visible_items ~items ~filter ~searched ~new_option ~new_case_sensitive =
+  let query = String.trim filter in
   let base =
-    let matched =
-      match searched with
-      | Some found -> found
-      | None -> List.filter (matches filter) items
-    in
-    let q = String.lowercase_ascii (String.trim filter) in
-    if q = "" then matched
-    else
-      (* cljs fuzzy ranks exact/prefix hits first *)
-      List.stable_sort
-        (fun a b ->
-          let score it =
-            let t = String.lowercase_ascii it.it_title in
-            if t = q then 0
-            else if String.length t > String.length q
-                    && String.sub t 0 (String.length q) = q
-            then 1
-            else 2
-          in
-          compare (score a) (score b))
-        matched
+    match searched with
+    | Some found -> List.take 100 found
+    | None -> Fuzzy.fuzzy_search ~extract:(fun it -> it.it_title) ~limit:100 items query
   in
   let exact =
-    List.exists
-      (fun it ->
-        String.lowercase_ascii it.it_title
-        = String.lowercase_ascii (String.trim filter))
-      base
+    List.exists (fun it ->
+      if new_case_sensitive then it.it_title = query
+      else String.lowercase_ascii it.it_title = String.lowercase_ascii query) base
   in
   match new_option with
-  | Some on_new when String.trim filter <> "" && not exact ->
-      base
-      @ [ { it_title = String.trim filter
-          ; it_tip = ""
-          ; it_icon = ""
-          ; it_strong = false
-          ; it_checked = false
-          ; it_new = true
-          ; on_choose = (fun () -> on_new (String.trim filter))
-          }
-        ]
+  | Some on_new when query <> "" && not exact ->
+      let fresh =
+        { it_title = query; it_tip = ""; it_icon = ""; it_strong = false
+        ; it_checked = false; it_new = true; on_choose = (fun () -> on_new query)
+        }
+      in
+      (* Literal matches lead; a new choice precedes sparse-only matches. *)
+      (match base with
+       | first :: rest when List.exists (matches query) base -> first :: fresh :: rest
+       | _ -> fresh :: base)
   | _ -> base
 
 (* Selection changes retain rows; queries replace their contents. *)
@@ -92,7 +72,7 @@ type sel_state =
 (* Builds the select as a [t]: text_field over a scrollable list of
    menu_items. Mounted inside the property dialog card or an anchored
    dropdown_menu. *)
-let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
+let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -100,7 +80,7 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
   let request = Ui_effect.request () in
   let visible () =
     let s = Runtime.signal_get st in
-    visible_items ~items ~filter:s.q ~searched:s.searched ~new_option
+    visible_items ~items ~filter:s.q ~searched:s.searched ~new_option ~new_case_sensitive
   in
   let pick () =
     let vis = visible () in
@@ -130,7 +110,7 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
       (fun s ->
          let vis =
            visible_items ~items ~filter:s.q ~searched:s.searched
-             ~new_option
+             ~new_option ~new_case_sensitive
          in
          (* Bound the results viewport while retaining every option in
             its scrollable content. Empty results collapse the list;

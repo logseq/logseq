@@ -36,6 +36,46 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  List.iter (fun (label,case_sensitive,allow_new,titles,query,expected) ->
+    let chosen = ref None in
+    let selector = mount (fun _ -> Properties_select.view ~placeholder:"Rank fixture"
+      ~compact:true ~new_case_sensitive:case_sensitive
+      ?new_option:(if allow_new then Some (fun value -> chosen:=Some ("new:"^value)) else None)
+      (List.map (fun title -> Properties_select.item title (fun () -> chosen:=Some title)) titles)) in
+    let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+    S.text_changed selector input.M.id query;
+    let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+    let rows = M.children selector.S.tree list.M.id |> List.filter (fun n -> n.M.kind="list-item") in
+    eqs ("property ranking: "^label) (String.concat " | " expected)
+      (String.concat " | " (List.filter_map (fun n -> M.string_prop n "key") rows));
+    S.submit selector input.M.id;
+    let expected_choice = match expected with
+      | "__new__"::_ -> Some ("new:"^String.trim query)
+      | first::_ -> Some first | [] -> None in
+    check ("property ranking submits the first choice: "^label) (!chosen=expected_choice);
+    check ("property ranking retains its focused input node: "^label)
+      (List.exists (fun n -> n.M.id=input.M.id) (nodes selector));
+    ignore (Lui_app.dispose selector.S.app))
+    ["sparse match",true,true,["User Avatar";"Status";"Tags"],"Sta",["Status";"__new__";"User Avatar"];
+     "new before sparse-only matches",true,true,["User Avatar"],"Sta",["__new__";"User Avatar"];
+     "exact property",true,true,["Status";"User Avatar"],"Status",["Status"];
+     "case-sensitive property creation",true,true,["Status"],"status",["Status";"__new__"];
+     "case-insensitive value",false,true,["Status"],"status",["Status"];
+     "creation disabled",true,false,["User Avatar";"Status"],"Sta",["Status";"User Avatar"];
+     "empty query preserves order",true,true,["Zebra";"Alpha";"Beta"],"",["Zebra";"Alpha";"Beta"];
+     "empty source",true,true,[],"",[];
+     "unmatched new value",true,true,["Status"],"Missing",["__new__"];
+     "unmatched query",true,false,["Status"],"Missing",[];
+     "Unicode accent",true,true,[{js|Café|js};"Cafe menu";{js|中文|js}],"cafe",[{js|Café|js};"__new__";"Cafe menu"];
+     "Unicode sparse match",true,true,[{js|中文|js};{js|中间文字|js};{js|世界|js}],{js|中文|js},[{js|中文|js};{js|中间文字|js}];
+     "emoji",true,true,[{js|😀 note|js};"Other";{js|🧑‍💻|js}],{js|😀|js},[{js|😀 note|js};"__new__"];
+     "canonical forms remain distinct new names",true,true,[{js|café|js}],{js|café|js},["__new__";{js|café|js}]];
+  let many = List.init 120 (fun index -> Printf.sprintf "Choice %03d" index) in
+  let selector = mount (fun _ -> Properties_select.view ~placeholder:"Limit fixture"
+    (List.map (fun title -> Properties_select.item title (fun () -> ())) many)) in
+  check "property selector limits the mounted fuzzy result set to 100"
+    (List.length (List.filter (fun n -> n.M.kind="list-item") (nodes selector))=100);
+  ignore (Lui_app.dispose selector.S.app);
   List.iter (fun compact ->
     let chosen = ref [] in
     let selector = mount (fun _ -> Properties_select.view ~placeholder:"Select fixture"

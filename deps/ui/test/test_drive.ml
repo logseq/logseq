@@ -1734,7 +1734,7 @@ let props_host () : (Model.t, Action.t) Shared_scenarios_props.host =
                (List.map
                   (fun (_id, t) -> Properties_select.item t (fun () -> ()))
                   items)
-             ~filter ~searched:None ~new_option:None))
+             ~filter ~searched:None ~new_option:None ~new_case_sensitive:false))
   }
 
 (* ---------------- subs async pipeline (Ui_task boundary) ----------------

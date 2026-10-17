@@ -4663,3 +4663,47 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native bulk property picker anchoring and viewport bounds" (!failures=[]);
   print_endline "native bulk property picker anchoring and viewport bounds: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () -> Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun scale ->
+      List.iter (fun (label,titles,query,expected,choice) ->
+        let chosen = ref None in
+        let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+          ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);
+            text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+            caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+              {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+               c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+          ~renderer:{Lui_host.name="property-ranking-test";render=(fun _ -> Bytes.empty)}
+          ~width:(int_of_float (400.*.scale)) ~height:(int_of_float (600.*.scale)) () in
+        let app = Lui_app.create (A.backend surface (profile MacOS GenericHost)) ()
+          (fun () () -> ()) (fun _ _ _ ->
+            Properties_select.view ~placeholder:"Rank fixture" ~compact:true ~new_case_sensitive:true
+              ~new_option:(fun value -> chosen:=Some ("new:"^value))
+              (List.map (fun title -> Properties_select.item title (fun () -> chosen:=Some title)) titles)) in
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+          ignore (Lui_app.start app);
+          let refresh () = ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+          let apply actions = List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;refresh () in
+          refresh ();
+          let field = W.Ui.focused (A.ui surface) in
+          apply (A.handle surface (W.Input.Text_input query));
+          let store = A.store surface in
+          let keys = Lui_store.preorder store |> List.filter (fun id -> Lui_store.kind store id="list-item")
+            |> List.filter_map (fun id -> Lui_store.string_prop store id "key") in
+          check ("Native property ranking: "^label) (keys=expected);
+          check ("Native ranked input keeps focus: "^label) (W.Ui.focused (A.ui surface)=field && field<>0);
+          apply (A.handle surface (W.Input.Key_down (W.Input.Return,W.Input.mods_none,false)));
+          check ("Native ranked Enter: "^label) (!chosen=Some choice)))
+        ["sparse match",["User Avatar";"Status";"Tags"],"Sta",["Status";"__new__";"User Avatar"],"Status";
+         "new before sparse-only matches",["User Avatar"],"Sta",["__new__";"User Avatar"],"new:Sta";
+         "case-sensitive property creation",["Status"],"status",["Status";"__new__"],"Status";
+         "Unicode accent",[{js|Café|js};"Cafe menu"],"cafe",[{js|Café|js};"__new__";"Cafe menu"],{js|Café|js};
+         "Unicode sparse match",[{js|中文|js};{js|中间文字|js}],{js|中文|js},[{js|中文|js};{js|中间文字|js}],{js|中文|js}]) [1.;2.]);
+  print_endline "native property ranking and submission: OK")

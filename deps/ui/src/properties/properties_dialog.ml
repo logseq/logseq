@@ -275,7 +275,7 @@ and on_type_chosen d name ty =
    switches to the anchored popover spec (32px input + 32px rows) —
    master's mod+p picker is that compact dropdown, not the roomier
    centered-card variant *)
-let async_select ~placeholder ?(compact = false) ?new_option ?on_search
+let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search
     fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -291,13 +291,14 @@ let async_select ~placeholder ?(compact = false) ?new_option ?on_search
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ~compact ?new_option ?on_search items)
+            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search items)
      (Signal.value items_st))
     context parent
 
 let prop_select_view d : t =
   async_select ~placeholder:(I18n.t "property/add-or-change")
     ~compact:(d.d_placement <> Centered)
+    ~new_case_sensitive:true
     ~new_option:(fun name ->
       (* no client-side name validation: invalid names go through
          type-select and the worker rejects the upsert with a

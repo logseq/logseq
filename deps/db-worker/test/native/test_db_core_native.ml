@@ -1804,6 +1804,48 @@ let test_get_all_properties () =
 
 (* ---------- import-file-graph ---------- *)
 
+let test_get_all_properties_entity_context () =
+  let conn = create_conn_bare () in
+  let journal_uuid = "dddddddd-0000-0000-0000-000000000021"
+  and page_uuid = "dddddddd-0000-0000-0000-000000000022"
+  and block_uuid = "dddddddd-0000-0000-0000-000000000023" in
+  let property ident title context =
+    ["db/ident",Kw ident;"block/title",Str title;
+     "block/tags",Vec [Kw "logseq.class/Property"];
+     "logseq.property/view-context",Kw context] in
+  ignore (transact_maps conn
+    [["db/ident",Kw "logseq.class/Property"];
+     ["db/ident",Kw "logseq.class/Journal"];
+     ["db/ident",Kw "logseq.class/Page"];
+     ["block/uuid",Uuid journal_uuid;"block/title",Str "Journal fixture";
+      "block/tags",Vec [Kw "logseq.class/Journal"]];
+     ["block/uuid",Uuid page_uuid;"block/title",Str "Page fixture";
+      "block/tags",Vec [Kw "logseq.class/Page"]];
+     ["block/uuid",Uuid block_uuid;"block/title",Str "Block fixture"];
+     property "user.property/all" "All" "all";
+     property "user.property/page" "Page" "page";
+     property "user.property/journal" "Journal" "journal";
+     property "user.property/block" "Block" "block";
+     property "block/alias" "Alias" "all"]);
+  register_conn conn;
+  List.iter (fun (uuid,expected) ->
+    let entity = Option.get (entity_by_uuid (db_of conn) uuid) in
+    let refs =
+      [Wire.List [kw "block/uuid";Wire.Uuid uuid];
+       Wire.Array [kw "block/uuid";Wire.Uuid uuid];
+       Wire.Map [kw "db/id",Wire.Int entity.id]] in
+    List.iter (fun target ->
+      let actual = api "get-all-properties"
+        [Wire.String test_repo;Wire.Map
+          [kw "remove-ui-non-suitable-properties?",Wire.Bool true;kw "block",target]]
+        |> wire_maps |> List.filter_map (fun row ->
+          match wire_get "block/title" row with Some (Wire.String title) -> Some title | _ -> None) in
+      Alcotest.(check (slist string compare))
+        "property choices use complete entity context for every reference shape" expected actual) refs)
+    [journal_uuid,["Alias";"All";"Journal";"Page"];
+     page_uuid,["Alias";"All";"Page"];
+     block_uuid,["All";"Block"]]
+
 (* (deftest import-file-graph-imports-documents-test ...) *)
 let import_config_file =
   Wire.Map
@@ -3398,6 +3440,8 @@ let cases =
   ; Alcotest.test_case "get-file-content" `Quick test_get_file_content
   ; Alcotest.test_case "get-all-properties-returns-typed-worker-properties-test" `Quick
       test_get_all_properties
+  ; Alcotest.test_case "get-all-properties-keeps-complete-entity-context" `Quick
+      test_get_all_properties_entity_context
   ; Alcotest.test_case "import-file-graph-imports-documents-test" `Quick
       test_import_file_graph_imports_documents
   ; Alcotest.test_case "import-file-graph-reports-lazy-read-failure-test" `Quick
