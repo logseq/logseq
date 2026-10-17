@@ -652,13 +652,18 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
   let state = state_signal context.Lui_ui.ui_scheduler in
   Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
     match !current with
-    | Some d when d.d_placement = Trigger key -> close ()
+    | Some d when d.d_placement = Trigger key ->
+        current := None;
+        (* Teardown owns the flush; do not remount siblings during disposal. *)
+        Signal.set state None
     | _ -> ());
   (button_group ~key ~gap:0 ?margin_left ~background:"transparent"
      ~border_width:0 ~corner_radius:0
-     [ make_button (fun () -> match target () with
-         | Some target -> open_at ~remove ~phase:Prop_select (Trigger key) target
-         | None -> ())
+     [ make_button (fun () -> match !current with
+         | Some d when d.d_placement = Trigger key -> close ()
+         | _ -> match target () with
+           | Some target -> open_at ~remove ~phase:Prop_select (Trigger key) target
+           | None -> ())
      ; reactive ~equal:(==)
          (fun current -> match current with
            | Some d when d.d_placement = Trigger key ->

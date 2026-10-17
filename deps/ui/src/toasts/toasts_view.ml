@@ -62,7 +62,7 @@ let toast_item (t : Model.toast) : t =
                ; spacer ~width:20 []
                ]
            ; align `trailing
-               (button ~key:"ti-close" ~variant:`ghost ~size:`icon
+               (Ui_components.button ~key:"ti-close" ~variant:`ghost ~size:`icon
                    ~width:32 ~height:32 ~corner_radius:6
                    ~foreground:
                      "color-mix(in oklab, var(--lui-c-foreground) 50%, \

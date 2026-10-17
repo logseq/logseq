@@ -279,25 +279,17 @@ let repos_menu st =
   in
   let action key label icn act =
     (* cljs repos-footer: ghost button rows — icon + label, w-full *)
-    Ui_parts.pressable
+    Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.7
+      ; Ui_components.Prop.hover_opacity 0.9 ]
+      (Ui_components.button ~key ~variant:`ghost ~size:`sm
+      ~label ~height:32 ~corner_radius:4 ~main:`start ~gap:6
       ~on_press:(fun _ ->
         close ();
         act ())
-      (Ui_components.with_props
-         [ Ui_components.Prop.cursor `pointer
-         ; Ui_components.Prop.font_size "0.875rem"
-         ; Ui_components.Prop.font_weight 500
-         ; Ui_components.Prop.hover_opacity 0.9
-         ; Ui_components.Prop.hover_background
-             "var(--lx-gray-03, \
-              var(--ls-tertiary-background-color, hsl(var(--muted))))" ]
-         (row ~key ~cross:`center ~gap:6 ~padding_horizontal:12
-            ~padding_vertical:4 ~min_height:32 ~opacity:0.7
-            ~corner_radius:4
-            ~data_attrs:[ ("role", "menuitem") ]
-            [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ]))
+        [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
   in
-  popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
+  Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
     ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
     ~padding_horizontal:8
     ~transition:Ui_components.popover_transition
@@ -311,31 +303,32 @@ let repos_menu st =
                ; Ui_components.Prop.font_weight 500 ]
                (row ~key:"hd" ~main:`space_between ~cross:`center
                   ~padding:8 ~opacity:0.5
-                  [ text ~key:"h4" ~value:I18n.switch_to
-                      ~data_attrs:[ ("style", "padding-bottom:4px") ] [] ]))
+                  [ Ui_components.with_props [Ui_components.Prop.padding_bottom 4]
+                      (text ~key:"h4" ~value:I18n.switch_to []) ]))
         ; (if n_repos <= 1 then Logseq_el.nothing
            else
-             column ~key:"lst" ~max_height:320
-               ~data_attrs:
-                 [ ( "style"
-                   , "overflow-y:auto;margin:0 -8px;padding:0 8px 8px" )
-                 ]
-               (List.map repo_item switch_repos
-               @ List.map remote_item remote))
-        ; column ~key:"qa"
-            ~data_attrs:
-              [ ( "style"
-                , "margin:0 -8px;padding:12px 8px 6px 4px"
-                  ^ if n_repos <= 1 then ";margin-top:-6px"
-                    else ";border-top:1px solid hsl(var(--border))" )
-              ]
+             scroll ~key:"lst" ~orientation:`vertical ~max_height:320
+               ~margin_horizontal:(-8)
+               [Ui_components.with_props [Ui_components.Prop.padding_bottom 8]
+                 (column ~padding_horizontal:8
+                   (List.map repo_item switch_repos @ List.map remote_item remote))])
+        ; (if n_repos <= 1 then Logseq_el.nothing else
+             box ~key:"qa-separator" ~height:1 ~margin_horizontal:(-8)
+               ~background:"hsl(var(--border))" [])
+        ; Ui_components.with_props
+            [ Ui_components.Prop.padding_top 12
+            ; Ui_components.Prop.padding_right 8
+            ; Ui_components.Prop.padding_bottom 6
+            ; Ui_components.Prop.padding_left 4 ]
+          (column ~key:"qa" ~margin_horizontal:(-8)
+            ~margin_top:(if n_repos<=1 then -6 else 0)
             [ action "qa-new" I18n.create_db_graph "database-plus"
                 (fun () -> Dialogs_state.open_ "new-graph")
             ; action "qa-imp" I18n.import_existing_notes "database-import"
                 (fun () -> Ui_services.nav_set_hash "#/import")
             ; action "qa-all" I18n.all_graphs "layout-2" (fun () ->
                   Ui_services.nav_set_hash
-                    (Runtime.nav_hash "#/graphs")) ] ] ]
+                    (Runtime.nav_hash "#/graphs")) ]) ] ])
 
 let menu_host st =
  fun ctx parent ->
@@ -679,7 +672,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
             ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
             ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
-            (button ~variant:`ghost ~size:`icon
+            (Ui_components.button ~variant:`ghost ~size:`icon
                ~label:(t "ui/show-more")
                ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
                ~padding_horizontal:6
@@ -868,18 +861,16 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative
             ; Ui_components.Prop.overflow `hidden
+            ; Ui_components.Prop.padding_right 16
             ; Ui_components.Prop.opacity 0.9
             ; Ui_components.Prop.pressed_opacity 0.7 ]
-            (button ~key:"gsel-a" ~variant:`ghost ~grow:1.
+            (Ui_components.button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
                ~label:(t "graph.switch/select-prompt")
-               ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:6
+               ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:4
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
                    [ ("data-tooltip", ""); ("aria-haspopup", "menu")
-                   ; ("aria-expanded", string_of_bool (menu = "repos"))
-                   ; ( "style"
-                     , "padding:4px 16px 4px 4px;border-radius:\
-                        calc(var(--radius) - 2px)" ) ])
+                   ; ("aria-expanded", string_of_bool (menu = "repos")) ])
                    (Signal.value st.Sidebar_state.open_menu) ms)
                ~on_press:(fun _ ->
                  (* the trigger is inside the popover layer's owned set,
@@ -904,7 +895,6 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                           ~white_space:"nowrap" ~text_overflow:"ellipsis"
                           ~font_weight:500 ~font_size:"var(--text-sm)"
                           ~line_height:"1.25rem"
-                          ~margin_left:4
                           ~data_attrs:
                             [ ( "style"
                               , "overflow:hidden;\

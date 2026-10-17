@@ -211,7 +211,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          @ (match font_size with
             | Some fz -> [ Ui_components.Prop.font_size fz ]
             | None -> []))
-        (button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
+        (Ui_components.button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
            ~padding:0 ~corner_radius:9999 ~label ~tooltip ~on_press
            ~transition:"opacity 150ms"
            [ child ])
@@ -482,7 +482,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  [ Ui_components.with_props
                      [ Ui_components.Prop.position `relative
                      ; Ui_components.Prop.overflow `hidden ]
-                     (button ~style_class:(btn_outline_sm ^ " color-picker")
+                     (Ui_components.button ~style_class:(btn_outline_sm ^ " color-picker")
                         ~height:28 ~width:24 ~padding_vertical:4
                         ~padding_horizontal:12 ~corner_radius:4
                         ~label:(I.t "icon/select-color") ~icon:(`app "palette")
@@ -501,7 +501,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ]) ]
           @
           (if del then
-             [ button ~key:"del" ~style_class:btn_outline_sm ~height:28
+             [ Ui_components.button ~key:"del" ~style_class:btn_outline_sm ~height:28
                  ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
                  ~data_attrs:[ ("data-action", "del") ]
                  ~tooltip:(I.t "ui/delete")
@@ -530,7 +530,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                         ~test:(reactive (fun s -> s.q <> "") sv)
                         (Ui_components.with_props
                            [ Ui_components.Prop.opacity 0.5 ]
-                           (button ~key:"x" ~variant:`ghost ~padding:8
+                           (Ui_components.button ~key:"x" ~variant:`ghost ~padding:8
                               ~on_press:(fun _ -> reset_q ())
                               [ Icons.icon ~size:14. "x" ]))
                     ]

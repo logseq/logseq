@@ -67,7 +67,7 @@ let dots_menu ~key ?(menu_cls = "") items : t =
       [])
   in
   row ~key
-    [ button ~key:(key ^ "-btn") ~variant:`ghost ~size:`icon
+    [ Ui_components.button ~key:(key ^ "-btn") ~variant:`ghost ~size:`icon
         ~icon:(Icons.name_ref "dots")
         ~style_class:"graph-action-btn"
         ~label:(I18n.t "ui/more-actions")

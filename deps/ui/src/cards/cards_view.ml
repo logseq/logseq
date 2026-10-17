@@ -61,7 +61,7 @@ let selector_row st =
         ; opts_box st ])
     ; Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer ]
-        (button ~key:"add" ~accessibility_identifier:"ls-cards-add"
+        (Ui_components.button ~key:"add" ~accessibility_identifier:"ls-cards-add"
            ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
            ~padding_horizontal:4
            ~foreground:
@@ -101,7 +101,7 @@ let ratings =
 let rating_btn st i (r, label_key, sc, style, hex) =
   let id = "card-" ^ r in
   row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
-    [ button ~key:"b" ~accessibility_identifier:id
+    [ Ui_components.button ~key:"b" ~accessibility_identifier:id
         ~padding_horizontal:8 ~padding_vertical:4
         ~background:(hex ^ "0d")
         ~border_color:"rgb(235,234,235)" ~border_width:1
@@ -127,7 +127,7 @@ let rating_btn st i (r, label_key, sc, style, hex) =
 let info_btn st =
   fun ctx parent ->
   (box ~key:"info-wrap"
-     [ button ~key:"info" ~variant:`ghost ~size:`sm
+     [ Ui_components.button ~key:"info" ~variant:`ghost ~size:`sm
          ~padding_horizontal:0 ~height:16
          ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
          ~icon:`info ~label:"rating info"
@@ -212,7 +212,7 @@ let rec card_view st b phase =
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
                 a kbd shortcut hint — no accent fill/border *)
-             button ~key:"answers" ~accessibility_identifier:"card-answers"
+             Ui_components.button ~key:"answers" ~accessibility_identifier:"card-answers"
                ~padding_horizontal:8 ~padding_vertical:4
                ~style_class:"card-answers"
                ~variant:`secondary ~size:`sm
@@ -251,7 +251,7 @@ and keyed_card st b : t =
     ctx parent
 
 let practice_again_btn st =
-  button ~key:"again" ~variant:`outline ~size:`sm
+  Ui_components.button ~key:"again" ~variant:`outline ~size:`sm
     ~accessibility_identifier:"card-practice-again"
     ~text:(t_ "flashcard.review/practice-again")
     ~on_press:(fun _ -> Cards_state.practice_again st)

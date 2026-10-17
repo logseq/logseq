@@ -198,7 +198,7 @@ let submit ctx =
   end
 
 let ghost_btn () =
-  button ~key:"pub-cancel" ~variant:`ghost
+  Ui_components.button ~key:"pub-cancel" ~variant:`ghost
     ~style_class:"ui__button as-ghost"
     ~text:(I18n.t "ui/cancel")
     ~on_press:(fun _ -> Dialogs_state.close_top ())
@@ -240,7 +240,7 @@ let toggle_pw ctx =
            (fun v ->
              I18n.t
                (if v then "publish/hide-password" else "publish/show-password"))
-           (button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+           (Ui_components.button ~key:"pub-eye" ~variant:`ghost ~size:`sm
               ~style_class:"ui__button as-ghost"
               ~icon:(reactive
                    (fun (s : pst) ->
@@ -274,7 +274,7 @@ let body (_ms : Model.t Signal.signal) : t =
       ; toggle_pw ctx
       ; row ~key:"pub-btns" ~main:`end_ ~gap:8
           [ ghost_btn ()
-          ; button ~key:"pub-submit" ~variant:`primary
+          ; Ui_components.button ~key:"pub-submit" ~variant:`primary
               ~style_class:"ui__button as-solid" ~autofocus:true
               ~disabled:(reactive
                    (fun (s : pst) -> s.publishing)

@@ -177,7 +177,7 @@ let user_item () : Lui_elements.t =
                   I18n.t
                     (if m then "account/show-email-address"
                      else "account/hide-email-address"))
-                (button ~key:"u-eye" ~variant:`ghost ~size:`icon
+                (Ui_components.button ~key:"u-eye" ~variant:`ghost ~size:`icon
                    ~style_class:"ui__button as-ghost"
                    ~icon:
                      (reactive
@@ -191,7 +191,7 @@ let user_item () : Lui_elements.t =
         ; (* the opacity-0/group-hover reveal and absolute right-1 top-3
              positioning have no component equivalent — the logout
              button renders inline until an imperative pass restyles it *)
-          button ~key:"u-logout" ~variant:`ghost ~size:`icon
+          Ui_components.button ~key:"u-logout" ~variant:`ghost ~size:`icon
             ~style_class:"ui__button as-ghost"
             ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
             ~on_press:(fun _ ->
@@ -366,10 +366,10 @@ let confirm_view (c : Model.confirm) =
                       hsl(var(--muted-foreground)))" [] ])
         ; Ui_components.alert_dialog_footer ~key:"adlg-f"
             [ (* cljs dialog-confirm footer buttons are :size :sm *)
-              button ~key:"adlg-cancel" ~variant:`outline ~size:`sm
+              Ui_components.button ~key:"adlg-cancel" ~variant:`outline ~size:`sm
                 ~text:I18n.cancel ~style_class:"ui__button"
                 ~on_press:(fun _ -> close ()) []
-            ; button ~key:"adlg-confirm" ~variant:`primary ~size:`sm
+            ; Ui_components.button ~key:"adlg-confirm" ~variant:`primary ~size:`sm
                 ~text:I18n.confirm ~style_class:"ui__button"
                 ~on_press:(fun _ ->
                   close ();

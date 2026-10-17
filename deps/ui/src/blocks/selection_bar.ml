@@ -151,7 +151,7 @@ and node () : t =
                            property actions keep their text labels;
                            thin dividers separate every cell *)
                          let sbtn ~key ~label ?icon ?text ~on_press () =
-                           button ~key ~variant:`ghost ~size:`sm ~label
+                           Ui_components.button ~key ~variant:`ghost ~size:`sm ~label
                              ?icon ?text ~on_press []
                          in
                          let sep k = divider ~key:k ~orientation:`vertical [] in

@@ -188,7 +188,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
         [ heading ~key:"rh" ~level:2
             ~value:T.remote_graphs []
-        ; button ~key:"refresh" ~text:T.refresh
+        ; Ui_components.button ~key:"refresh" ~text:T.refresh
             ~disabled_signal:(Signal.value refreshing)
             ~on_press:(fun _ ->
               Runtime.signal_set refreshing true;
@@ -243,7 +243,7 @@ let view (ms : Model.t Signal.signal) : t =
         ~value:T.all_graphs []
     ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
         [ row ~key:"create-row" ~padding_vertical:32
-            [ button ~key:"create" ~variant:`primary ~size:`sm
+            [ Ui_components.button ~key:"create" ~variant:`primary ~size:`sm
                 ~text:T.create_new_graph
                 ~on_press:(fun _ -> Dialogs_state.open_ "new-graph")
                 []

@@ -36,6 +36,50 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let previous_property = !Properties_dialog.current
+  and previous_property_signal = !Properties_dialog.current_sig
+  and previous_worker = !Runtime.worker in
+  Properties_dialog.current := None;Properties_dialog.current_sig := None;
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ ->
+    Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let property_ctx : Properties_value.ctx =
+    {block_uuid="inline-property-owner";block_id=Some 123;refresh=(fun () -> ());
+     is_page=true;class_schema=false} in
+  let inline_properties = mount (fun _ -> Lui_elements.column
+    [Properties_area.new_property_btn property_ctx ~for_class:false ~owner_title:"Owner";
+     Properties_area.new_property_btn property_ctx ~for_class:true ~owner_title:"Owner";
+     Properties_area.new_property_btn property_ctx ~for_class:false ~owner_title:"Owner"]) in
+  let restore_inline () =
+    ignore (Lui_app.dispose inline_properties.S.app);
+    Properties_dialog.current:=previous_property;
+    Properties_dialog.current_sig:=previous_property_signal;
+    Runtime.worker:=previous_worker in
+  (let buttons = List.filter (fun n -> n.M.kind="button") (nodes inline_properties) in
+    let popups () = List.filter (fun n -> n.M.kind="popover") (nodes inline_properties) in
+    List.iteri (fun index button ->
+      S.press inline_properties button.M.id;
+      check "inline Add property uses its known owner without a worker round trip"
+        (match !Properties_dialog.current with
+         | Some d -> d.Properties_dialog.d_target=
+             {uuid="inline-property-owner";uuids=[];db_id=Some 123;is_tag=(index=1);title="Owner"}
+         | None -> false);
+      check "inline Add property opens exactly one anchored popup" (List.length (popups ())=1);
+      check "inline Add property popup belongs to the clicked occurrence"
+        (match popups () with [popup] -> popup.M.parent=button.M.parent | _ -> false);
+      S.press inline_properties button.M.id;
+      check "pressing the same Add property button closes its workflow"
+        (not (Properties_dialog.is_open ()) && popups ()=[])) buttons;
+    S.press inline_properties (List.nth buttons 0).M.id;
+    S.press inline_properties (List.nth buttons 2).M.id;
+    check "another occurrence of the same block replaces the popup owner"
+      (match popups () with [popup] -> popup.M.parent=(List.nth buttons 2).M.parent | _ -> false);
+    (match popups () with [popup] -> S.dismiss inline_properties popup.M.id | _ -> ());
+    check "dismissing the inline popup closes its workflow" (not (Properties_dialog.is_open ()));
+    S.press inline_properties (List.hd buttons).M.id;
+    ignore (Lui_app.dispose inline_properties.S.app);
+    check "disposing an inline Add property owner closes its workflow" (not (Properties_dialog.is_open ())));
+  restore_inline ();
   let type_choice_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "type-fixture"});

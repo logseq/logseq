@@ -613,6 +613,33 @@ let () = Native_embed.with_entry_lock (fun () ->
   sidebar_surface Ui_theme.Light None;
   sidebar_surface Ui_theme.Dark None;
   sidebar_surface Ui_theme.Light (Some "#e3f1e9");
+  let saved_repos = !Graphs_ops.repos in
+  Graphs_ops.repos := [];
+  let sidebar_state = Option.get (Sidebar_state.current ()) in
+  Signal.set sidebar_state.open_menu "repos";
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let graph_popup = find_class "repos-list" in
+  let popup_rect = Option.get (Lui_layout.rect layout graph_popup) in
+  let graph_actions = List.filter (fun id ->
+    Lui_query.is_desc store id graph_popup && Lui_store.kind store id="button")
+    (Lui_store.preorder store) in
+  check "Graph quick actions must use the shared button interaction and appearance"
+    (List.length graph_actions=3);
+  check "Graph quick actions must expose accessible button names on every host"
+    (List.map (fun id -> Lui_store.string_prop store id "accessibility-label") graph_actions
+     = List.map Option.some [I18n.create_db_graph;I18n.import_existing_notes;I18n.all_graphs]);
+  check (Printf.sprintf "Native graph menu height %.1f differs from the 118-point reference" (popup_rect.h/.2.))
+    (abs_float (popup_rect.h-.236.)<0.1);
+  List.iteri (fun index id ->
+    let r = Option.get (Lui_layout.rect layout id) in
+    check "Graph quick actions lose the reference 32-point rows and footer insets"
+      (abs_float (r.x-.popup_rect.x-.10.)<0.1
+       && abs_float (r.y-.popup_rect.y-.22.-.float index*.64.)<0.1
+       && abs_float (r.w-.572.)<0.1 && abs_float (r.h-.64.)<0.1)) graph_actions;
+  Signal.set sidebar_state.open_menu "";
+  ignore (Lui_app.flush app);
+  Graphs_ops.repos := saved_repos;
   let snapshot = Ui_theme.snapshot Ui_theme.Light in
   Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
     ["mode", `String "light";
@@ -690,6 +717,35 @@ let () = Native_embed.with_entry_lock (fun () ->
     [2880.,1800.; 1280.,900.; 2000.,1200.; 800.,600.; 2880.,1800.];
   ignore (Lui_app.dispose app);
   print_endline "native shell resize bounds: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store = Lui_store.create () in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+    Lui_elements.column ~foreground:"var(--icon-test-foreground)"
+      [Ui_components.button ~variant:`ghost
+         [Lui_elements.icon ~name:(`app "menu-2") ~point_size:16 []]]) in
+  ignore (Lui_app.start app);
+  ignore (Lui_app.flush app);
+  let icon = List.find (fun id -> Lui_store.kind store id="icon") (Lui_store.preorder store) in
+  let rect = Lui_scene.rect 0. 0. 16. 16. in
+  List.iter (fun (mode,foreground) ->
+    let snapshot = Ui_theme.snapshot mode in
+    let vars = ("--icon-test-foreground",foreground)::snapshot.vars in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+       "vars",`Assoc (List.map (fun (key,value) -> key,`String value) vars)]));
+    Theme_vars.set_dark (mode=Ui_theme.Dark);
+    let inherited = Option.get (Host_icons.image_of store 1. icon rect) in
+    Lui_store.apply_op store (SetProp (icon,ForegroundValue,StringValue foreground));
+    let explicit = Option.get (Host_icons.image_of store 1. icon rect) in
+    check "Native icons stop inheriting the theme color at a shared ghost button"
+      (inherited.Lui_scene.ipix=explicit.Lui_scene.ipix);
+    Lui_store.apply_op store (RemoveProp (icon,ForegroundValue)))
+    [Ui_theme.Light,"#123456";Ui_theme.Dark,"#eeeeee";Ui_theme.Dark,"#8acbab"];
+  ignore (Lui_app.dispose app);
+  print_endline "native icon inherited theme color: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
   let store = Lui_store.create () in
@@ -4518,7 +4574,11 @@ let () = Native_embed.with_entry_lock (fun () ->
           let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler state} in
           inst_cell:=Some inst;
           Lui_elements.column ~grow:1.
-            [Lui_elements.box ~height:96 [];Views_table.action_bar inst;Properties_dialog.view]) in
+            [Lui_elements.box ~height:96 [];Views_table.action_bar inst;
+             Properties_area.new_property_btn
+               {Properties_value.block_uuid="row-a";block_id=Some 123;refresh=(fun () -> ());
+                is_page=true;class_schema=false} ~for_class:false ~owner_title:"Page fixture";
+             Properties_dialog.view]) in
       Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
       Fun.protect ~finally:(fun () -> Properties_dialog.close ();ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app);
@@ -4533,6 +4593,53 @@ let () = Native_embed.with_entry_lock (fun () ->
           let x,y = (r.x+.r.w/.2.)/.scale,(r.y+.r.h/.2.)/.scale in
           apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
           apply (A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none))) in
+        let inline_trigger = List.find (fun id -> Lui_store.kind store id="button"
+          && Lui_store.string_prop store id "text"=Some (I18n.t "property/add-new")) (ids ()) in
+        expect "Inline Add property differs from the 28-point reference height"
+          (abs_float ((rect inline_trigger).h-.28.*.scale)<0.1);
+        let install mode overrides =
+          let snapshot = Ui_theme.snapshot mode in
+          let vars = List.fold_left (fun vars (key,value) -> (key,value)::List.remove_assoc key vars)
+            snapshot.Ui_theme.vars overrides in
+          Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+            ["mode",`String (match mode with Ui_theme.Light -> "light" | Dark -> "dark");
+             "vars",`Assoc (List.map (fun (key,value) -> key,`String value) vars)]));
+          Theme_vars.set_dark (mode=Ui_theme.Dark) in
+        List.iter (fun (mode,overrides) ->
+          install mode overrides;
+          List.iter (fun hovered ->
+            let colors = ref [] in
+            let scene = Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+            Lui_paint.paint {Lui_paint.default_hooks with
+              layout=(fun id -> Lui_paint.placement_of_rect (rect id));
+              color_of=Theme_vars.color_of;shadow_of=Lui_paint.parse_shadows Theme_vars.color_of;
+              state_of=(fun id -> if id=inline_trigger then {Lui_paint.state_neutral with hovered}
+                else Lui_paint.state_neutral);
+              text_ops=(fun id _ color _ -> colors:=(id,color)::!colors;[])}
+              store scene ~width:(int_of_float (1440.*.scale)) ~height:(int_of_float (932.*.scale))
+              ~scale ~clear:(Lui_scene.color 0 0 0 0);
+            let expected = if hovered then "hsl(var(--secondary))" else "hsl(var(--secondary) / 0.7)" in
+            expect "Inline Add property does not follow the master secondary background in this theme/state"
+              (List.exists (function Lui_scene.Fill f -> f.frect=rect inline_trigger
+                && Some f.fcolor=Theme_vars.color_of expected | _ -> false) scene.ops);
+            expect "Inline Add property does not follow the master secondary foreground in this theme"
+              (List.exists (fun (id,color) -> id=inline_trigger
+                && Some color=Theme_vars.color_of "hsl(var(--secondary-foreground))") !colors)) [false;true])
+          [Ui_theme.Light,[];Dark,[];
+           Light,["--secondary","120 50% 80%";"--secondary-foreground","120 60% 10%"]];
+        install Ui_theme.Light [];
+        click inline_trigger;
+        let inline_popup = List.find_opt (fun id -> Lui_store.kind store id="popover") (ids ()) in
+        expect "Inline Add property does not open a popover" (Option.is_some inline_popup);
+        Option.iter (fun popup ->
+          let button_rect = rect inline_trigger and popup_rect = rect popup in
+          expect "Inline Add property opens away from its trigger"
+            (abs_float (popup_rect.x-.button_rect.x)<0.1
+             && abs_float (popup_rect.y-.button_rect.y-.button_rect.h)<0.1)) inline_popup;
+        click inline_trigger;
+        expect "A second inline Add property press does not close the popup" (not (Properties_dialog.is_open ()));
         let trigger = List.find (fun id -> Lui_store.kind store id="button"
           && Lui_store.string_prop store id "accessibility-label"=Some (I18n.t "property/set-property")) (ids ()) in
         click trigger;

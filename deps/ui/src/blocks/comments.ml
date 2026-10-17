@@ -110,7 +110,7 @@ let title_cell uuid (b : Model.block) : t =
       else
         (* data-area-uuid dropped — the direct on_press below covers the
            action; the delegated editor_keys lookup now no-ops *)
-        button ~key:("clab-" ^ uuid)
+        Ui_components.button ~key:("clab-" ^ uuid)
           ~style_class:"ls-comments-label"
           ~label:(U.t "editor/click-to-edit")
           ~text:(S.title_for uuid b.Model.block_title)
@@ -132,7 +132,7 @@ let comment_row uuid (b : Model.block) : t =
     ; box ~key:("cra-" ^ uuid) ~style_class:"ls-comment-actions"
         [ (* data-comment-uuid dropped — direct on_press covers the
              action; the delegated editor_keys lookup now no-ops *)
-          button ~key:("crd-" ^ uuid)
+          Ui_components.button ~key:("crd-" ^ uuid)
             ~style_class:"ls-comment-delete"
             ~variant:`ghost ~size:`icon
             ~label:(U.t "ui/delete")
@@ -157,7 +157,7 @@ let add_box uuid : t =
         ; box ~key:("cax-" ^ uuid) 
             [ (* data-area-uuid dropped — direct on_press covers the
                  action; the delegated editor_keys lookup now no-ops *)
-              button ~key:("cas-" ^ uuid)
+              Ui_components.button ~key:("cas-" ^ uuid)
                 ~style_class:"ls-comment-submit"
                 ~variant:`ghost ~size:`icon
                 ~label:(U.t "ui/submit")

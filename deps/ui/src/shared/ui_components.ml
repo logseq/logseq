@@ -47,20 +47,71 @@ let with_props (binds : Prop.t list) (elem : t) : t =
   List.iter (Prop.set ctx node) binds;
   node
 
-(* shui ghost-button interaction/layout contract as typed props —
-   pairs with Ui_parts.ghost_btn_cls's semantic classes *)
-let ghost_wrap el =
+(* Master button appearance belongs to the shared view layer. Both hosts
+   receive the same typed defaults; explicit caller properties take precedence. *)
+let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
+    ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left
+    ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width
+    ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
+    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
+    ?text_signal ?variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
+    ?selected ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : t =
+  let variant = Option.value variant ~default:`default in
+  let size = Option.value size ~default:`default in
+  let base, ink, hover, hover_ink, pressed = match variant with
+    | `default | `primary ->
+        "hsl(var(--primary) / 0.9)", "hsl(var(--primary-foreground))",
+        "hsl(var(--primary))", "hsl(var(--primary-foreground))", 0.9
+    | `destructive ->
+        "hsl(var(--destructive) / 0.9)", "hsl(var(--destructive-foreground))",
+        "hsl(var(--destructive))", "hsl(var(--destructive-foreground))", 0.9
+    | `secondary ->
+        "hsl(var(--secondary) / 0.7)", "hsl(var(--secondary-foreground))",
+        "hsl(var(--secondary))", "hsl(var(--secondary-foreground))", 0.8
+    | `outline ->
+        "hsl(var(--background))", "inherit",
+        "hsl(var(--accent))", "hsl(var(--accent-foreground))", 0.8
+    | `ghost ->
+        "transparent", "inherit", "hsl(var(--secondary) / 0.7)",
+        "hsl(var(--secondary-foreground))", 0.8
+  in
+  let h, ph, pv, font, line = match size with
+    | `default -> 40,16,8,"0.875rem","1.25rem"
+    | `sm -> 28,12,4,"0.875rem","1.25rem"
+    | `lg -> 44,32,0,"1rem","1.5rem"
+    | `icon -> 32,4,4,"0.875rem","1.25rem"
+  in
+  let default value fallback = Some (Option.value value ~default:fallback) in
+  let gap = default gap 4 in
+  let height = default height h in
+  let width = match width,size with None,`icon -> Some 32 | _ -> width in
+  let padding_horizontal = match padding with
+    | Some _ -> padding_horizontal | None -> default padding_horizontal ph in
+  let padding_vertical = match padding with
+    | Some _ -> padding_vertical | None -> default padding_vertical pv in
+  let background = default background base and foreground = default foreground ink in
+  let border_width = default border_width (if variant=`outline then 1 else 0) in
+  let border_color = default border_color "hsl(var(--border))" in
+  let corner_radius = default corner_radius 6 in
+  let text_alignment = default text_alignment (if children=[] then `center else `start) in
+  let transition = default transition "background-color 150ms, color 150ms" in
   with_props
-    [ Prop.white_space `nowrap; Prop.cursor `pointer
-    ; Prop.user_select `none; Prop.font_size "0.875rem"
-    ; Prop.font_weight 500
-    ; Prop.hover_background "hsl(var(--secondary) / 0.7)"
-    ; Prop.hover_foreground "hsl(var(--secondary-foreground))"
+    [ Prop.white_space `nowrap;Prop.cursor `pointer;Prop.user_select `none
+    ; Prop.font_size font;Prop.line_height line;Prop.font_weight 500
+    ; Prop.hover_background hover;Prop.hover_foreground hover_ink
     ; Prop.focus_shadow
         "0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--background))"
-    ; Prop.disabled_opacity 0.5; Prop.pressed_opacity 0.8
-    ; Prop.transition "background-color 0.15s, color 0.15s" ]
-    el
+    ; Prop.disabled_opacity 0.5;Prop.pressed_opacity pressed ]
+    (Lui_elements.button
+      ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
+    ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left
+    ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width
+    ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
+    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
+    ?text_signal ~variant ~size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
+    ?selected ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children)
 
 (* Post-mount reactive binds (state channels + cursor on the cmdk item
    rows). *)
@@ -866,6 +917,7 @@ let menu_surface ?max_height element =
        | None -> Prop.max_height_viewport 1.)
     ; Prop.padding 4
     ; Prop.background "hsl(var(--popover))"
+    ; Prop.foreground "inherit"
     ; Prop.border_color "hsl(var(--border))"
     ; Prop.border_width 1
     ; Prop.corner_radius 6
@@ -954,45 +1006,7 @@ let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
                       padding: 0") ]
         children ]
 
-(* -- dialog chrome ------------------------------------------------------
-
-   Typed-prop carriers for the deleted .ui__button.ls-btn /
-   .ls-btn-primary dialog paints and the .ui__alert-dialog-* chrome.
-   The semantic classes stay on the elements as e2e/imperative hooks;
-   the residual stylesheet rules keep only what props can't express
-   (backdrop-filter, entry animations, runtime state attrs). *)
-
-(* cljs .ui__button.ls-btn — the neutral card button used in dialog
-   footers/bodies. ~variant stays: the kit data-variant paint loses to
-   the inline declarations either way, so it only remains a semantic
-   attr + native fallback. *)
-let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
-    ~on_press =
-  with_props
-    [ Prop.font_size "0.875rem"; Prop.font_weight 500
-    ; Prop.cursor `pointer; Prop.hover_background "hsl(var(--muted))" ]
-    (button ~key ?size ~variant ~text ~autofocus
-       ~style_class:"ui__button ls-btn"
-       ~corner_radius:6 ~border_width:1
-       ~border_color:"hsl(var(--border))"
-       ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
-       ~padding_vertical:8 ~padding_horizontal:16
-       ~on_press:(fun _ -> on_press ()) [])
-
-(* cljs .ui__button.ls-btn-primary — lx-accent-09 fill + opacity hover. *)
-let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
-    ~on_press =
-  with_props
-    [ Prop.font_size "0.875rem"; Prop.font_weight 500
-    ; Prop.cursor `pointer; Prop.hover_opacity 0.9 ]
-    (button ~key ?size ~variant ~text ~autofocus
-       ~style_class:"ui__button ls-btn-primary"
-       ~corner_radius:6 ~border_width:0
-       ~background:
-         "var(--lx-accent-09, hsl(var(--primary, var(--ls-link-text-color, \
-           #0f7b6c))))"
-       ~foreground:"#fff" ~height:40 ~padding_horizontal:16
-       ~on_press:(fun _ -> on_press ()) [])
+(* -- dialog chrome ------------------------------------------------------ *)
 
 (* cljs AlertDialog chrome (shui dialog-confirm!) — shared by
    dialogs_view.confirm_view and the page_menu confirm layers. The card

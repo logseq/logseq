@@ -50,10 +50,10 @@ let body (_ms : Model.t Signal.signal) : t =
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
           ~main:`end_
-          [ Ui_components.dialog_btn_primary ~key:"qa-add" ~variant:`primary
+          [ Ui_components.button ~key:"qa-add" ~variant:`primary
               ~text:(U.t "editor.quick-add/add-to-today")
               ~on_press:(fun _ ->
-                Editor_actions.quick_add_blocks_to_today ()) ]
+                Editor_actions.quick_add_blocks_to_today ()) [] ]
       ]
   in
   node ctx parent

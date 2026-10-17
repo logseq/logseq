@@ -22,7 +22,7 @@ module P = Lui_protocol
 
 
 let skip_to_main =
-  button ~key:"skip" ~accessibility_identifier:"skip-to-main"
+  Ui_components.button ~key:"skip" ~accessibility_identifier:"skip-to-main"
     ~transition:"top 0.3s"
     ~text:(I18n.t "nav/skip-to-main-content") []
 
@@ -42,7 +42,7 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
   Ui_components.with_props
     [ Ui_components.Prop.opacity 0.7
     ; Ui_components.Prop.hover_opacity 1. ]
-    (button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
+    (Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
        ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
        ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
@@ -67,7 +67,7 @@ let search_button ?(key = "search-btn") () =
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the
    imperative query_selector anchor for the dropdown position *)
 let dots_button =
-  button ~key:"dots-btn" ~variant:`ghost ~size:`icon
+  Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn" ())
     ~label:(I18n.t "header/more") ~icon:(`app "dots")
     ~on_press:(fun _ ->
@@ -509,7 +509,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
               ~style_class:"cp__rtc-sync-indicator"
               [ Ui_components.with_props
                   [ Ui_components.Prop.position `relative ]
-                  (button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
+                  (Ui_components.button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
                      ~style_class:cls ~label:"rtc sync"
                      ~icon:(`app "cloud")
                      ~on_press:(fun _ -> toggle_rtc_details ())
@@ -531,7 +531,7 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
       if not (Rtc_flows.logged_in () && active) then
         box ~key:"td-off" ~display:`none []
       else
-        button ~key:"td" ~variant:`ghost
+        Ui_components.button ~key:"td" ~variant:`ghost
           ~style_class:"ui__button as-ghost"
           ~data_attrs:[ ("style", "opacity:0.5") ]
           ~text:
@@ -571,7 +571,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
       if uploadable then
         (* the title attr has no typed-prop equivalent — ~label covers
            the a11y name and feeds the tooltip layer *)
-        button ~key:"lgs" ~variant:`ghost ~size:`icon
+        Ui_components.button ~key:"lgs" ~variant:`ghost ~size:`icon
           ~style_class:(ghost_btn_cls ())
           ~label:(I18n.t "graph/use-sync-beta") ~icon:(`app "cloud")
           ~on_press:(fun _ ->
@@ -1186,7 +1186,7 @@ let not_found_page : t =
     ; paragraph ~key:"nf-p" ~foreground:"var(--ls-secondary-text-color, #6b7280)"
         ~margin_bottom:32
         ~value:(I18n.t "page/not-found-desc") []
-    ; button ~key:"nf-btn" ~variant:`outline ~height:40
+    ; Ui_components.button ~key:"nf-btn" ~variant:`outline ~height:40
         ~padding_horizontal:16 ~padding_vertical:8
         ~style_class:"ui__button as-outline" ~icon:(`app "home")
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")

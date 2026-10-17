@@ -83,7 +83,7 @@ let groups_of roots =
          compare (deleted_at (List.hd b)) (deleted_at (List.hd a)))
 
 let ghost_btn ~key label on_click =
-  button ~key ~variant:`ghost ~size:`sm ~text:label
+  Ui_components.button ~key ~variant:`ghost ~size:`sm ~text:label
     ~on_press:(fun _ -> on_click ())
     []
 

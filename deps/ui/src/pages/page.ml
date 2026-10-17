@@ -655,7 +655,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon"
                                       ~height:46
                                       ~data_attrs:[ ("style", "line-height:1;box-sizing:border-box;padding-top:8px") ]
-                                      [ button ~key:"pt-icbtn"
+                                      [ Ui_components.button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
                                           ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost ls-page-icon-btn"
@@ -976,12 +976,12 @@ let pagebar_slots_el (page : Model.page) : t =
    .ls-foldable-header *)
 let unlinked_head_collapsed key : t =
   row ~key:(key ^ "-views") ~gap:4 ~cross:`center ~style_class:"views"
-    [ button ~key:"uvt" ~variant:`ghost
+    [ Ui_components.button ~key:"uvt" ~variant:`ghost
         ~text:(I18n.t "view/unlinked-references")
         ~style_class:"as-text"
         ~accessibility_identifier:("view-tab-" ^ key)
         []
-    ; button ~key:"uva" ~variant:`ghost ~size:`icon ~icon:(`app "plus")
+    ; Ui_components.button ~key:"uva" ~variant:`ghost ~size:`icon ~icon:(`app "plus")
         ~label:(I18n.t "view/add-new-view")
         ~style_class:"as-text"
         []
@@ -1246,7 +1246,7 @@ let not_found_view name : t =
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
   box ~key:"lib-add" ~padding_horizontal:4 
-    [ button ~key:"lib-add-btn" ~variant:`secondary ~icon:`plus
+    [ Ui_components.button ~key:"lib-add-btn" ~variant:`secondary ~icon:`plus
         ~text:(I18n.t "library/add-existing-pages")
         ~style_class:"ui__button"
         ~on_press:(fun _ -> Runtime.send Action.Toggle_search)

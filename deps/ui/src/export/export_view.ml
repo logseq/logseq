@@ -110,7 +110,7 @@ let toggle_removal ctx k =
            else s.remove_options @ [ k ]) })
 
 let fmt_btn ctx key label fmt =
-  button ~key ~variant:`primary ~size:`sm ~width:80
+  Ui_components.button ~key ~variant:`primary ~size:`sm ~width:80
     ~style_class:"ui__button as-solid" ~text:label
     ~on_press:(fun _ -> P.set_fmt (S.st ctx) fmt)
     []
@@ -124,7 +124,7 @@ let copy_save_row ctx =
             (st_sig ctx)))
     (row ~key:"export-btns" ~gap:24 ~style_class:"export-btns"
       ~margin_top:4
-    [ button ~key:"export-copy" ~variant:`primary ~size:`sm
+    [ Ui_components.button ~key:"export-copy" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
         ~on_press:(fun _ ->
           match (S.cur (S.st ctx)).S.fmt with
@@ -136,7 +136,7 @@ let copy_save_row ctx =
                else I18n.t "ui/copy-to-clipboard")
              (st_sig ctx))
         []
-    ; button ~key:"export-save" ~variant:`primary ~size:`sm
+    ; Ui_components.button ~key:"export-save" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
         ~text:(I18n.t "export/save-to-file")
         ~on_press:(fun _ -> P.save_to_file (S.st ctx))

@@ -115,7 +115,7 @@ let theme_row ctx =
     ()
 
 let font_button ~key ~label ~font_family ~active ~on_click =
-  button ~key ~variant:`secondary ~selected:active
+  Ui_components.button ~key ~variant:`secondary ~selected:active
     ~label
     ~height:40 ~padding_horizontal:16 ~padding_vertical:0
     ~border_width:(if active then 2 else 0)
@@ -191,7 +191,7 @@ let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
   box ~key ~width:20 ~height:20
     ~opacity:(if active then 1. else 0.5)
-    [ button ~key:(key ^ "-b") ~variant:`ghost
+    [ Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
@@ -576,7 +576,7 @@ let keymap_recorder st : t =
                       ~pending:(not model.km_committed)
                       ~trailing:
                         [
-                          button ~key:"remove-key-filter" ~variant:`ghost
+                          Ui_components.button ~key:"remove-key-filter" ~variant:`ghost
                             ~width:16 ~height:16 ~min_width:16 ~min_height:16
                             ~padding:0 ~icon:`x
                             ~label:(I18n.t "keymap/remove-filter")
@@ -599,7 +599,7 @@ let keymap_recorder st : t =
                       (reactive
                          (fun model -> model.km_keys <> [])
                          (Signal.value st))
-                    (button ~variant:`ghost ~min_height:0 ~height:16 ~padding:0
+                    (Ui_components.button ~variant:`ghost ~min_height:0 ~height:16 ~padding:0
                        ~label:(I18n.t "keymap/clear")
                        ~on_press:(fun _ -> clear ())
                        [
@@ -641,7 +641,7 @@ let keymap_key_control st =
         [
           reactive
             (fun model ->
-              button ~key:"key-trigger"
+              Ui_components.button ~key:"key-trigger"
                 ~style_class:
                   ("shortcut-keystroke-trigger "
                   ^
@@ -664,7 +664,7 @@ let keymap_key_control st =
           if_
             ~test:
               (reactive (fun model -> model.km_keys <> []) (Signal.value st))
-            (button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
+            (Ui_components.button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
                ~min_height:0 ~padding:4 ~icon:`x
                ~label:(I18n.t "keymap/clear-keystroke-filter")
                ~on_press:(fun _ ->
@@ -736,7 +736,7 @@ let keymap_controls st =
             (row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
                ~height:22 ~gap:8
                [
-                 button ~key:"km-fold" ~style_class:"icon-link" ~width:18
+                 Ui_components.button ~key:"km-fold" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:T.keymap_toggle_categories ~icon:(`app "fold")
                    ~on_press:(fun _ ->
@@ -753,7 +753,7 @@ let keymap_controls st =
                      Runtime.signal_set st
                        { model with km_collapsed = collapsed })
                    [];
-                 button ~key:"km-rf" ~style_class:"icon-link" ~width:18
+                 Ui_components.button ~key:"km-rf" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:T.keymap_refresh_all ~icon:(`app "refresh")
                    ~on_press:(fun _ ->
@@ -900,7 +900,7 @@ let keymap_pane () : t =
 (* ---- advanced pane ---- *)
 
 let url_button ~key ~label ~on_open =
-  button ~key ~variant:(C.btn_variant `Solid) ~size:`sm
+  Ui_components.button ~key ~variant:(C.btn_variant `Solid) ~size:`sm
     ~style_class:(C.btn_cls ~variant:`Solid ~size:`Sm ())
     ~icon:`edit ~icon_placement:`trailing ~text:label
     ~on_press:(fun _ -> on_open ()) []

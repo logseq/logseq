@@ -140,9 +140,9 @@ let delete_confirm_dialog context m ~close =
     close ()
   in
   dialog ~text:title ~description:desc ~on_dismiss:dismiss
-    [ button ~text:(I18n.t "ui/cancel") ~variant:`outline
+    [ Ui_components.button ~text:(I18n.t "ui/cancel") ~variant:`outline
         ~on_press:dismiss []
-    ; button ~text:(I18n.t "ui/confirm") ~variant:`destructive
+    ; Ui_components.button ~text:(I18n.t "ui/confirm") ~variant:`destructive
         ~on_press:(fun _ -> confirm ()) []
     ]
 
@@ -167,7 +167,7 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
           | _ -> ())
         []
     ; row ~main:`end_
-        [ button ~text:(I18n.t "ui/save")
+        [ Ui_components.button ~text:(I18n.t "ui/save")
             ~on_press:(fun _ ->
               on_save (Runtime.signal_get title_st)
                 (Runtime.signal_get desc_st))

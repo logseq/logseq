@@ -382,11 +382,10 @@ let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
         []
     ]
 
-(* cljs login.css h-10 controls: ls-btn-primary at the default kit
-   size (h-10) — the deleted .cp__user-login .ui__button rule *)
+(* Login controls use the shared default button size. *)
 let submit_btn ~key label on_submit =
-  Ui_components.dialog_btn_primary ~key ~variant:`primary ~text:label
-    ~on_press:(fun _ -> on_submit ())
+  Ui_components.button ~key ~variant:`primary ~text:label
+    ~on_press:(fun _ -> on_submit ()) []
 
 (* cljs "Back to login"/"Sign up"/"Forgot password" are <a> action
    links — component-wise they're pressable text (the ls-auth-link
@@ -495,10 +494,10 @@ let panel ctx fields (a : auth_ui) : t =
         , [ column ~key:"lg-in" ~cross:`center ~gap:16
               [ paragraph ~key:"p"
                   ~value:(I18n.t1 "account/already-logged-in-as" u) []
-              ; Ui_components.dialog_btn_neutral ~key:"so"
+              ; Ui_components.button ~key:"so"
                   ~variant:`outline ~size:`default
                   ~text:(I18n.t "account/sign-out")
-                  ~on_press:(fun _ -> sign_out ctx) ] ] )
+                  ~on_press:(fun _ -> sign_out ctx) [] ] ] )
     | None -> (
         match a.tab with
         | Login -> (I18n.t "ui/login", [ login_panel ctx fields ])

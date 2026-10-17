@@ -94,7 +94,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
            ; Ui_components.Prop.opacity 0.6
            ; Ui_components.Prop.hover_opacity 1.
            ; Ui_components.Prop.cursor `pointer ]
-           (button ~key:(key ^ "-eye") ~variant:`ghost
+           (Ui_components.button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password
            ~icon:(reactive
@@ -150,9 +150,9 @@ let view (r : Dialogs_state.ui_request) : t =
                      [])
               ]
             else [] )
-        @ [ Ui_components.dialog_btn_primary ~key:"s" ~variant:`primary
+        @ [ Ui_components.button ~key:"s" ~variant:`primary
               ~text:I18n.submit
-              ~on_press:(fun _ -> submit_now ()) ]
+              ~on_press:(fun _ -> submit_now ()) [] ]
           )
     ]
     ctx parent

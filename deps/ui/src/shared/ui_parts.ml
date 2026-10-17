@@ -80,7 +80,7 @@ let mock_text_style =
 
 (* cljs shui/button :variant :ghost :size :sm — semantic classes only;
    the former utility bundle's layout/interaction tokens ride the typed
-   prop bind in [ghost_wrap] *)
+   prop bind in [Ui_components.button] *)
 let ghost_btn_cls ?(extra = "") () =
   "ui__button as-ghost" ^ if extra = "" then "" else " " ^ extra
 

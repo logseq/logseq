@@ -66,7 +66,7 @@ let open_url_ = Ui_services.env_open_url
 let control_tabs ~key ~search_st ~cat_st ~nums =
   let ghost_btn id cls (ic : icon) caption =
     Ui_components.with_props [ Ui_components.Prop.cursor `pointer ]
-      (button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
+      (Ui_components.button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
          ~style_class:("ui__button ls-icon-btn-md " ^ cls)
          ~width:32 ~height:32 ~min_width:32 ~min_height:32
          ~corner_radius:6 ~foreground:"inherit"
@@ -164,7 +164,7 @@ let market_card ~stats ~search_st pkg =
                  ([ (* cljs flag icon opens the plugin readme dialog *)
                     Ui_components.with_props
                       [ Ui_components.Prop.cursor `pointer ]
-                      (button ~key:"doc" ~variant:`ghost ~size:`icon
+                      (Ui_components.button ~key:"doc" ~variant:`ghost ~size:`icon
                          ~width:18 ~height:18 ~min_width:18 ~min_height:18
                          ~icon:(`app "book") ~label:"Readme"
                          ~on_press:open_readme [])
@@ -219,7 +219,7 @@ let market_card ~stats ~search_st pkg =
                          ]
                        else []))
              ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
-                 [ button ~key:"btn"
+                 [ Ui_components.button ~key:"btn"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
                      (* cljs CSS gives a.btn.disabled pointer-events:none;
@@ -276,13 +276,13 @@ let updates_btn ~pid ~plj ~web_pkg =
   box ~key:"upd" 
     (match Plugin_host.update_version pid with
      | Some v ->
-         [ button ~key:"b" ~style_class:"btn"
+         [ Ui_components.button ~key:"b" ~style_class:"btn"
              ~text:(t "plugin/update" ^ {js| 👉 |js} ^ v)
              ~on_press:(fun _ ->
                Plugin_host.check_or_update pid repo false)
              [] ]
      | None ->
-         [ button ~key:"b" ~style_class:"btn"
+         [ Ui_components.button ~key:"b" ~style_class:"btn"
              ~text:(t "plugin/check-update")
              ~on_press:(fun _ ->
                Plugin_host.check_or_update pid repo true)
@@ -723,7 +723,7 @@ let item_button pid key s =
     ~control:
       (box ~key:"fc"
          ( html_desc key (Plugin_host.jstr s "description")
-         @ [ button ~key:"btn" ~style_class:"ui__button is-small"
+         @ [ Ui_components.button ~key:"btn" ~style_class:"ui__button is-small"
                ~text:(Plugin_host.jstr s "buttonText")
                ~on_press:(fun _ ->
                  Plugin_host.call_button_action pid action key)
@@ -745,12 +745,12 @@ let code_mode_wrap owner pid code_mode =
            ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
            [])
     ; row ~key:"btns" ~style_class:"ls-form-actions" ~main:`end_
-        [ button ~key:"reset" ~variant:`ghost ~size:`sm
+        [ Ui_components.button ~key:"reset" ~variant:`ghost ~size:`sm
             ~style_class:"ui__button is-small"
             ~text:(t "ui/reset")
             ~on_press:(fun _ -> Plugin_host.bump ())
             []
-        ; button ~key:"save" ~style_class:"ui__button is-small"
+        ; Ui_components.button ~key:"save" ~style_class:"ui__button is-small"
             ~text:(t "ui/save")
             ~on_press:(fun _ ->
               match set_json_exn (Runtime.signal_get code_txt) with

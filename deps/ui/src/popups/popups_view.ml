@@ -623,7 +623,7 @@ let cm_color_row (st : S.t) : t =
 let cm_heading_btn (st : S.t) key title value icn : t =
   Ui_components.with_props
     [ Ui_components.Prop.cursor `pointer ]
-    (button ~key ~variant:`ghost ~size:`icon ~width:30 ~height:30
+    (Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:30 ~height:30
        ~style_class:"ls-cm-heading-btn"
        ~label:title
        ~on_press:(fun _ -> run_cm_heading st value)

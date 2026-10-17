@@ -175,13 +175,13 @@ let confirm_view (c : Dialogs_state.confirm) =
                        ~value:c.desc [] ] ])
         @ [ (* cljs dialog-confirm footer buttons are :size :sm *)
             Ui_components.alert_dialog_footer ~key:"cfrm-f"
-              [ Ui_components.dialog_btn_neutral ~key:"cfrm-cancel"
+              [ Ui_components.button ~key:"cfrm-cancel"
                   ~size:`sm ~variant:`outline ~text:I18n.cancel
-                  ~on_press:(fun _ -> Dialogs_state.close_confirm ())
+                  ~on_press:(fun _ -> Dialogs_state.close_confirm ()) []
               ; (* cljs alert dialog focuses the confirm action on open *)
-                Ui_components.dialog_btn_neutral ~key:"cfrm-ok" ~size:`sm
+                Ui_components.button ~key:"cfrm-ok" ~size:`sm
                   ~variant:`primary ~text:I18n.confirm ~autofocus:true
-                  ~on_press:(fun _ -> Dialogs_state.confirm ()) ] ] ) ]
+                  ~on_press:(fun _ -> Dialogs_state.confirm ()) [] ] ] ) ]
 (* Prompt body — mounted inside a dialog kind in [render]; outside
    presses and Escape dismiss through ~on_dismiss. *)
 let prompt_body (p : Dialogs_state.prompt) : t =
@@ -219,9 +219,9 @@ let prompt_body (p : Dialogs_state.prompt) : t =
               | _ -> ())
             ~on_submit:(fun _ -> submit ())
             []
-        ; Ui_components.dialog_btn_primary ~key:"prmt-ok" ~size:`sm
+        ; Ui_components.button ~key:"prmt-ok" ~size:`sm
             ~variant:`primary ~text:I18n.submit
-            ~on_press:(fun _ -> submit ()) ] )
+            ~on_press:(fun _ -> submit ()) [] ] )
   in
   node ctx parent
 
@@ -247,13 +247,13 @@ let docinfo_view (di : Dialogs_state.docinfo) : t =
                            ; text ~key:"v" ~as_:`I ~value:v [] ])
                        di.di_rows)
                 ; row ~key:"di-f" ~main:`center ~cross:`center
-                    [ Ui_components.dialog_btn_primary ~key:"di-copy"
+                    [ Ui_components.button ~key:"di-copy"
                         ~size:`sm ~variant:`primary
                         ~text:(I18n.t "ui/copy-all")
                         ~on_press:(fun _ ->
                           Ui_services.clipboard_copy di.di_text;
                           Toast.success (I18n.t "notification/copied");
-                          Dialogs_state.close_docinfo ()) ] ] ] ]
+                          Dialogs_state.close_docinfo ()) [] ] ] ] ]
     ; dialog_close ~key:"di-close" Dialogs_state.close_docinfo ]
 
 let render (ms : Model.t Signal.signal) : t =

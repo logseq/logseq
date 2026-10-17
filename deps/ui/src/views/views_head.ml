@@ -29,7 +29,7 @@ let icon_el = Views_table.icon_el
    !px-1 utility overrides moved to size props. *)
 let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
   let mk label =
-    button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
+    Ui_components.button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
       ?label ~style_class:extra
       ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
       ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
@@ -93,7 +93,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   Ui_parts.float_prop Lui_protocol.Opacity
     ~value:(reactive (fun cur -> if cur then 1. else 0.75) current_sig)
     (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
-    (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
+    (Ui_components.button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~style_class:"ls-view-tab"
        ~height:24 ~min_height:24
        ~padding_horizontal:4 ~padding_vertical:2
@@ -200,7 +200,7 @@ let tabs_el inst ~op : t =
         ~cmp:String.compare
         ~mount:(view_tab inst)
     ; Ui_parts.float_prop Lui_protocol.Opacity ~value_signal:op
-        (button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
+        (Ui_components.button ~variant:`ghost ~size:`sm ~icon:`plus ~label:I.add_new_view
            ~style_class:"ls-add-view"
            ~transition:"opacity 300ms ease-in"
            ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
@@ -279,7 +279,7 @@ let sorting_popup inst anchor =
           [ order_select so_s
           ; Ui_components.with_props
               [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-              (button ~variant:`ghost ~size:`sm ~height:32
+              (Ui_components.button ~variant:`ghost ~size:`sm ~height:32
                  ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
                  ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
                  ~label:I.delete_sort ~icon:(Views_table.icon_of "x")
@@ -296,7 +296,7 @@ let sorting_popup inst anchor =
               ~key:(fun so -> so.V.s_id) ~cmp:String.compare ~mount:sort_row
           ; Ui_components.with_props
               [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-              (button ~variant:`ghost ~main:`start
+              (Ui_components.button ~variant:`ghost ~main:`start
                  ~corner_radius:4 ~style_class:"ls-sort-delete"
                  ~padding_vertical:6 ~padding_horizontal:8
                  ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
@@ -382,7 +382,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
         else
           List.map
             (fun (label, op) ->
-              button ~variant:`ghost ~main:`start
+              Ui_components.button ~variant:`ghost ~main:`start
                 ~padding_vertical:4 ~padding_horizontal:8
                 ~on_press:(fun _ ->
                   P.close_all ();
@@ -581,7 +581,7 @@ and mk_group_sort inst ident label =
         V.persist_group_sort_by_ident inst ident (fun () -> refresh inst) )
 
 let more_actions_el inst : t =
-  button ~variant:`ghost ~size:`sm ~icon:`ellipsis
+  Ui_components.button ~variant:`ghost ~size:`sm ~icon:`ellipsis
     ~label:(I.t "ui/show-more")
     ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
     ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
@@ -595,7 +595,7 @@ let more_actions_el inst : t =
 let display_type_el inst : t =
  fun ctx parent ->
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  button ~variant:`ghost ~size:`sm
+  Ui_components.button ~variant:`ghost ~size:`sm
     ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
     ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
     ~accessibility_identifier:wrap_id
@@ -725,13 +725,13 @@ let filter_chip inst idx (f : V.filter_clause) : t =
       Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.disabled_opacity 0.8 ]
-        (button ~text:prop_title ~disabled:true ~padding_horizontal:8
+        (Ui_components.button ~text:prop_title ~disabled:true ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            [])
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem" ]
-        (button ~padding_horizontal:8
+        (Ui_components.button ~padding_horizontal:8
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            ~accessibility_identifier:op_btn_id
@@ -782,7 +782,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
             , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
                white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
         [ text ~value:(filter_value_label inst f) [] ]
-    ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
+    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
         ~padding_horizontal:4
         ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
         ~on_press:(fun _ ->
@@ -929,7 +929,7 @@ let ref_filter_dialog inst anchor =
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
-             (button ~variant:`ghost ~border_width:1 ~corner_radius:6
+             (Ui_components.button ~variant:`ghost ~border_width:1 ~corner_radius:6
                 ~padding_vertical:2 ~padding_horizontal:8
                 ~background:"transparent" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
@@ -1071,7 +1071,7 @@ let refs_filter_btn inst : t =
     (Logseq_el.own ctx
        (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
     (fun c -> c)
-    (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
+    (Ui_components.button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
        ~icon:(Views_table.icon_of "filter-cog")
        ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
        ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
@@ -1101,7 +1101,7 @@ let render_head inst : t =
       [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
           ~key:(fun (v : Wr.view_ent) -> v.Wr.vu) ~cmp:String.compare
           ~mount:(fun vs ->
-            button ~variant:`ghost
+            Ui_components.button ~variant:`ghost
               ~text:(reactive (fun (v : Wr.view_ent) -> V.display_title v) vs)
               ~on_press:(fun _ ->
                 V.update inst (fun s -> V.apply_view_entity s (Signal.get vs));
@@ -1178,7 +1178,7 @@ let render_head inst : t =
                     (Signal.map
                        (fun (s : V.vstate) -> s.V.sorting <> [])
                        (sig_of inst)))
-               (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
+               (Ui_components.button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
                   ~icon:(Views_table.icon_of "arrows-up-down")
                   ~height:28 ~min_height:28 ~padding_horizontal:4
                   ~padding_vertical:2
@@ -1195,7 +1195,7 @@ let render_head inst : t =
                     | Some a -> sorting_popup inst a
                     | None -> ())
                   [])
-           ; button ~variant:`ghost ~size:`sm ~label:I.filter
+           ; Ui_components.button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
                ~height:28 ~min_height:28 ~padding_horizontal:4
                ~padding_vertical:2

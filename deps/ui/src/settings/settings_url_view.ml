@@ -95,7 +95,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               ]
           ; row ~key:(key ^ "-btns") ~gap:8 ~main:`start
               ~style_class:"ls-form-actions"
-              ([ button ~key:(key ^ "-save")
+              ([ Ui_components.button ~key:(key ^ "-save")
                    ~variant:(Settings_controls.btn_variant `Solid)
                    ~size:`sm
                    ~style_class:
@@ -105,7 +105,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                    ~on_press:(fun _ -> save ())
                    [] ]
               @ [ if_ ~test:(reactive (fun value -> String.trim value <> "") (Signal.value url))
-                  (button ~key:(key ^ "-reset")
+                  (Ui_components.button ~key:(key ^ "-reset")
                     ~variant:(Settings_controls.btn_variant `Outline)
                     ~size:`sm
                     ~style_class:

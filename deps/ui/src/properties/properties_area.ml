@@ -77,7 +77,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
      ~style_class:"property-key-inner"
      ~data_attrs:[ ("style", "position:relative;width:100%;min-width:0") ]
      [ (if icon then property_icon row else Logseq_el.nothing)
-     ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
+     ; Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
@@ -181,7 +181,7 @@ let toggle_row () : t =
     ~data_attrs:[ ("style", "padding-right:0.75rem") ]
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         ~main:`center ~min_height:28
-        [ button ~variant:`ghost ~size:`sm ~text_alignment:`start
+        [ Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
             ~icon:(`app (if !S.show_hidden then "chevron-up"
                          else "chevron-down"))
             ~style_class:"property-key-inner hidden-properties-toggle-key"
@@ -313,22 +313,20 @@ let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
 let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
   row ~gap:0 ~style_class:"ls-new-property"
     ~margin_top:(if for_class then 0 else 8)
-    [ button ~variant:`secondary ~size:`sm
-        ~icon:(`app "plus")
-        ~style_class:"jtrigger"
-        ~data_attrs:[ ("style", "display:flex") ]
-        ~label:(I18n.t "property/add-new")
-        ~text:(I18n.t "property/add-new")
-        ~on_press:(fun _ ->
-          if for_class then
-            Properties_dialog.open_dialog
-              { Properties_dialog.uuid = ctx.block_uuid
-              ; uuids = []
-              ; db_id = ctx.block_id
-              ; is_tag = true
-              ; title = owner_title }
-          else Properties_dialog.open_for_block ctx.block_uuid)
-        []
+    [ (fun context parent ->
+        Properties_dialog.trigger ~key:(Printf.sprintf "new-property-%d" (Option.get parent))
+          ~remove:false
+          ~target:(fun () -> Some
+            { Properties_dialog.uuid = ctx.block_uuid
+            ; uuids = []
+            ; db_id = ctx.block_id
+            ; is_tag = for_class
+            ; title = owner_title })
+          (fun open_ -> Ui_components.button ~variant:`secondary ~size:`sm
+              ~icon:(`app "plus") ~style_class:"jtrigger"
+              ~label:(I18n.t "property/add-new")
+              ~text:(I18n.t "property/add-new")
+              ~on_press:(fun _ -> open_ ()) []) context parent)
     ]
 
 (* ---------- block area ---------- *)
@@ -518,7 +516,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
   let add_btn ?a11y text on_press =
     Ui_components.with_props
       [ Ui_components.Prop.font_size "12px" ]
-      (button ~variant:`ghost ~size:`sm ~text_alignment:`start
+      (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
          ~style_class:"as-ghost" ~height:24 ~padding_horizontal:8
          ~padding_vertical:0
          ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"

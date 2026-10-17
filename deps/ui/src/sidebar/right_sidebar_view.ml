@@ -34,7 +34,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
 (* ---------- topbar ---------- *)
 
 let topbar_btn key label on_click =
-  button ~key:("tb-" ^ key) ~text:label
+  Ui_components.button ~key:("tb-" ^ key) ~text:label
     ~style_class:"button cp__right-sidebar-settings-btn"
     ~background:"var(--ls-secondary-background-color)"
     ~height:32 ~padding_horizontal:10 ~padding_vertical:4
@@ -273,7 +273,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ~background:"var(--color-level-2)"
     ~style_class:"sidebar-item-header color-level"
     ~data_attrs:[ ("style", "box-sizing:border-box") ]
-    [ button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~padding_horizontal:8
+    [ Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~padding_horizontal:8
         ~height:32
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
@@ -291,7 +291,7 @@ let item_header st idx (it : Sidebar_state.item) =
             [ item_title it ] ]
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
-        [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
+        [ Ui_components.button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
             ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
@@ -310,7 +310,7 @@ let item_header st idx (it : Sidebar_state.item) =
               in
               Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
             [ Icons.icon ~size:16. "dots" ]
-        ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
+        ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
             ~label:(t "ui/close") ~width:32 ~height:32
             ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
@@ -427,7 +427,7 @@ let sidebar_props_row st (it : Sidebar_state.item) =
           in
           box ~key:("props-" ^ it.key)
             [ column ~gap:8
-                (button ~variant:`ghost ~size:`sm
+                (Ui_components.button ~variant:`ghost ~size:`sm
                    ~style_class:"ui__button"
                    ~foreground:
                      "var(--ls-secondary-text-color, \

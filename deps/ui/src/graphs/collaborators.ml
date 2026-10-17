@@ -292,21 +292,10 @@ let body (_ms : Model.t Signal.signal) : t =
                           | _ -> ())
                         ~on_submit:(fun _ -> submit ())
                         [] ]
-                ; Ui_components.with_props
-                    [ Ui_components.Prop.font_size "0.875rem"
-                    ; Ui_components.Prop.font_weight 500
-                    ; Ui_components.Prop.cursor `pointer
-                    ; Ui_components.Prop.hover_opacity 0.9 ]
-                    (button ~key:"collab-invite-btn"
-                       ~style_class:"ui__button ls-btn-primary"
+                ; Ui_components.button ~key:"collab-invite-btn" ~variant:`primary
                        ~text:(T.t "collaboration/invite")
-                       ~corner_radius:6 ~border_width:0
-                       ~background:
-                         "var(--lx-accent-09, hsl(var(--primary, \
-                          var(--ls-link-text-color, #0f7b6c))))"
-                       ~foreground:"#fff" ~height:40 ~padding_horizontal:16
                        ~on_press:(fun _ -> submit ())
-                       [])
+                       []
                 ]
             ]
         ]
@@ -339,7 +328,7 @@ let widget (ms : Model.t Signal.signal) : t =
          (box ~key:"collab-off" ~display:`none [])
      ; if_ ~test:vis_sig
          (row ~key:"collab" ~gap:4 ~cross:`center
-            [ button ~key:"collab-btn" ~size:`icon
+            [ Ui_components.button ~key:"collab-btn" ~size:`icon
                 ~style_class:"ui__button as-ghost"
                 ~icon:(`app "user-plus")
                 ~label:"rtc collaborators"

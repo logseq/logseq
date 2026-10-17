@@ -192,7 +192,7 @@ let code_block_actions ~self lang =
      Code_mirror — the class stays *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
     ~transition:"opacity 300ms ease-in"
-    [ (if Ui_services.env_publishing () then text ~value:lang [] else button ~key:"sl" ~variant:`ghost ~size:`sm
+    [ (if Ui_services.env_publishing () then text ~value:lang [] else Ui_components.button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~text:
           (if lang <> "" then lang
@@ -200,7 +200,7 @@ let code_block_actions ~self lang =
         ~icon:`chevron_down ~icon_placement:`trailing
         ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
         [])
-    ; button ~key:"cp" ~variant:`ghost ~size:`sm
+    ; Ui_components.button ~key:"cp" ~variant:`ghost ~size:`sm
         ~icon:`copy ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
         ~on_press:(fun _ -> Code_mirror.copy_button self)
@@ -313,7 +313,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
    hovered) that toggles the query source editor inside the block's
    below-row .custom-query-results view *)
 let query_setting_el ~block_uuid =
-  button ~key:"qs" ~variant:`ghost ~size:`icon
+  Ui_components.button ~key:"qs" ~variant:`ghost ~size:`icon
     ~style_class:"ls-query-setting"
     ~transition:"opacity .3s ease-in"
     ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
@@ -326,7 +326,7 @@ let query_setting_el ~block_uuid =
    button next to the title that opens the flashcards modal
    ([:modal/show-cards (:db/id block)] -> ls:open-cards {eid}) *)
 let practice_el ~eid =
-  button ~key:"pr" ~variant:`ghost ~size:`sm
+  Ui_components.button ~key:"pr" ~variant:`ghost ~size:`sm
     ~label:(I18n.t "block/practice-cards")
     ~text:(I18n.t "block/practice")
     ~on_press:(fun _ ->

@@ -536,7 +536,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                       ; Ui_components.Prop.font_weight 500
                       ; Ui_components.Prop.cursor `pointer
                       ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                      (button ~key:("vpsel-a" ^ string_of_int id)
+                      (Ui_components.button ~key:("vpsel-a" ^ string_of_int id)
                          ~style_class:"ui__button ls-btn-outline" ~text:I.apply
                          ~corner_radius:6 ~border_width:1
                          ~border_color:"hsl(var(--border))"
@@ -614,15 +614,15 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
                 ~gap:16 ~margin_top:24
                 [
                   compact
-                    (Ui_components.dialog_btn_neutral ~key:"cancel" ~size:`sm
-                       ~variant:`outline ~text:I.cancel ~on_press:(fun () ->
-                         close_entry id));
+                    (Ui_components.button ~key:"cancel" ~size:`sm
+                       ~variant:`outline ~text:I.cancel ~on_press:(fun _ ->
+                         close_entry id) []);
                   compact
-                    (Ui_components.dialog_btn_primary ~key:"confirm" ~size:`sm
+                    (Ui_components.button ~key:"confirm" ~size:`sm
                        ~variant:`primary ~text:confirm_label
-                       ~on_press:(fun () ->
+                       ~on_press:(fun _ ->
                          close_entry id;
-                         on_confirm ()));
+                         on_confirm ()) []);
                 ];
             ]);
         Ui_components.dialog_close ~key:"close" ~label:I.close

@@ -91,9 +91,10 @@ let svg_of name =
    inherited CSS color property; here the node (or its nearest
    ancestor's) `foreground` prop plays that role, with the theme
    foreground token as fallback. *)
-let effective_fg_css store id =
+let effective_fg store id =
   let rec walk id =
-    match Lui_store.string_prop store id "foreground" with
+    let color = Option.bind (Lui_store.string_prop store id "foreground") Theme_vars.color_of in
+    match color with
     | Some _ as c -> c
     | None -> (
       match Lui_store.parent store id with
@@ -101,8 +102,8 @@ let effective_fg_css store id =
       | None -> None)
   in
   match Lui_store.kind store id with
-  | "select" | "combobox" -> Some "muted-foreground"
-  | _ -> (match walk id with Some _ as c -> c | None -> Some "foreground")
+  | "select" | "combobox" -> Theme_vars.color_of "muted-foreground"
+  | _ -> (match walk id with Some _ as c -> c | None -> Theme_vars.color_of "foreground")
 
 let index_sub s sub =
   let n = String.length s and m = String.length sub in
@@ -148,12 +149,7 @@ let svg_image_of store scale id r : Lui_scene.image option =
       match svg_of name with
       | None -> None
       | Some src0 ->
-        let fg_css = effective_fg_css store id in
-        let color =
-          match fg_css with
-          | Some css -> Theme_vars.color_of css
-          | None -> None
-        in
+        let color = effective_fg store id in
         let src =
           match color with
           | Some { Lui_scene.r; g; b; _ } ->

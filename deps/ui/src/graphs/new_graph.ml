@@ -105,20 +105,10 @@ let body (_ms : Model.t Signal.signal) : t =
                  ]
              ]
          else box ~key:"ng-no-rtc" ~display:`none [])
-      ; Ui_components.with_props
-          [ Ui_components.Prop.font_size "0.875rem"
-          ; Ui_components.Prop.font_weight 500
-          ; Ui_components.Prop.cursor `pointer
-          ; Ui_components.Prop.hover_opacity 0.9 ]
-          (button ~key:"ng-submit" ~style_class:"ui__button ls-btn-primary"
+      ; Ui_components.button ~key:"ng-submit" ~variant:`primary
              ~text:T.submit
-             ~corner_radius:6 ~border_width:0
-             ~background:
-               "var(--lx-accent-09, hsl(var(--primary, \
-                var(--ls-link-text-color, #0f7b6c))))"
-             ~foreground:"#fff" ~height:40 ~padding_horizontal:16
              ~disabled_signal:(Signal.value creating)
              ~on_press:(fun _ -> submit name_st cloud e2ee creating)
-             [])
+             []
       ]
     ctx parent

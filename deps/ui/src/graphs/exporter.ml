@@ -330,7 +330,7 @@ let auto_backup ctx =
                             | Some name -> name | None -> "")
                             folder_sig)
                           []
-                      ; button ~key:"ab-x" ~size:`icon ~icon:`x ~variant:`ghost
+                      ; Ui_components.button ~key:"ab-x" ~size:`icon ~icon:`x ~variant:`ghost
                           ~style_class:"ui__button as-ghost"
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)
@@ -338,7 +338,7 @@ let auto_backup ctx =
                   ; text ~key:"ab-note" ~font_size:"0.875rem"
                       ~data_attrs:[ ("style", "opacity:0.5") ]
                       ~value:(T.t "export.backup/hourly-note") []
-                  ; Ui_components.dialog_btn_primary ~key:"ab-go"
+                  ; Ui_components.button ~key:"ab-go"
                       ~variant:`primary
                       ~text:(T.t "export.backup/backup-now")
                       ~on_press:(fun _ ->
@@ -346,16 +346,16 @@ let auto_backup ctx =
                           (Ui_task.bind (backup_now ()) (fun r ->
                                backup_notify r;
                                Ui_task.resolve ()));
-                        auto_backup_interval ()) ])
+                        auto_backup_interval ()) [] ])
            ; Lui_elements.if_
                ~test:
                  (Logseq_el.own ctx
                     (Signal.map (fun f -> f = None) folder_sig))
                (column ~key:"ab-in" ~gap:16
-                  [ Ui_components.dialog_btn_primary ~key:"ab-set"
+                  [ Ui_components.button ~key:"ab-set"
                       ~variant:`primary
                       ~text:(T.t "export.backup/set-folder-first")
-                      ~on_press:(fun _ -> choose_folder ctx)
+                      ~on_press:(fun _ -> choose_folder ctx) []
                   ; text ~key:"ab-note"
                       ~font_size:"0.875rem"
                       ~data_attrs:[ ("style", "opacity:0.5") ]

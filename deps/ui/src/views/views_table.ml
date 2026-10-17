@@ -417,7 +417,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
          the hover-only visibility is DOM-only; the buttons are always
          rendered now *)
       let ghost icon_name title_ =
-        button ~variant:`ghost ~size:`icon ~icon:(icon_of icon_name)
+        Ui_components.button ~variant:`ghost ~size:`icon ~icon:(icon_of icon_name)
           ~foreground:"muted-foreground"
           ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
           ~label:title_
@@ -599,7 +599,7 @@ let header_button inst (c : V.column) : t =
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
          (Signal.value (inst.V.st)))
   in
-  button ~variant:`ghost ~size:`sm ~label:c.V.c_name ~grow:1.
+  Ui_components.button ~variant:`ghost ~size:`sm ~label:c.V.c_name ~grow:1.
     ~foreground:"hsl(var(--muted-foreground))"
     ~main:`start ~height:32 ~padding_horizontal:8
     [ row ~main:`start ~cross:`center ~gap:4
@@ -863,7 +863,7 @@ let action_bar inst : t =
         Ui_components.Prop.font_size "12px";
         Ui_components.Prop.line_height "16px";
       ]
-      (button ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
+      (Ui_components.button ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
          ~padding_horizontal:8 ~margin_left ~corner_radius
          ~background:"hsl(var(--background))" ~border_width:1
          ~border_color:"hsl(var(--border))"
@@ -1139,7 +1139,7 @@ let table_header inst cols : t =
                    header cell on class-objects tables only *)
                 [ box ~accessibility_identifier:"add property"
                     [ box ~style_class:"ls-table-header-cell"
-                        [ button ~variant:`ghost ~size:`sm ~icon:`plus
+                        [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:`plus
                             ~text:I.new_property ~grow:1. ~main:`start
                             ~height:32 ~padding_horizontal:8
                             ~on_press:(fun _ ->

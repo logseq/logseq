@@ -263,7 +263,7 @@ let rec cal_cell today p d =
         [ Ui_components.Prop.font_size "0.875rem"
         ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
                 hsl(var(--muted))))" ) ]
-        (button ~style_class:"ui__calendar-day" ~variant:`ghost
+        (Ui_components.button ~style_class:"ui__calendar-day" ~variant:`ghost
            ~width:36 ~height:36 ~padding:0 ~corner_radius:6
            ~selected:focused
            ~background:
@@ -301,7 +301,7 @@ and out_cell y m d =
         ; Ui_components.Prop.opacity 0.55
         ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
                 hsl(var(--muted))))" ) ]
-        (button ~style_class:"ui__calendar-day" ~variant:`ghost
+        (Ui_components.button ~style_class:"ui__calendar-day" ~variant:`ghost
            ~width:36 ~height:36 ~padding:0 ~corner_radius:6
            ~foreground:
              "var(--lx-gray-07, var(--ls-secondary-text-color, #999))"
@@ -596,7 +596,7 @@ let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
     ; Ui_components.Prop.overflow `hidden
     ; Ui_components.Prop.text_overflow `ellipsis
     ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
-    (button ~variant:`ghost ~cross:`center ~main:`space_between
+    (Ui_components.button ~variant:`ghost ~cross:`center ~main:`space_between
        ~grow:1. ~min_width:0 ~height:32 ~padding_horizontal:8
        ~border_width:1
        ~border_color:
@@ -703,7 +703,7 @@ let time_row ps : t =
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.8125rem"
         ; Ui_components.Prop.hover_foreground "var(--ls-primary-text-color, inherit)" ]
-        (button ~key:"now" ~style_class:"ls-time-now" ~variant:`ghost
+        (Ui_components.button ~key:"now" ~style_class:"ls-time-now" ~variant:`ghost
            ~padding_horizontal:4 ~padding_vertical:0
            ~foreground:
              "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
@@ -795,7 +795,7 @@ let repeat_panel ps : t =
                (* no [role="checkbox"]: the web focus layer strips [role]
                   from non-tab buttons; [aria-checked] + [data-checked]
                   carry the state *)
-               (button ~key:"cb" ~variant:`ghost
+               (Ui_components.button ~key:"cb" ~variant:`ghost
                   ~width:16 ~min_width:16 ~height:16 ~padding:0
                   ~corner_radius:3 ~border_width:1
                   ~background:
@@ -907,7 +907,7 @@ let repeat_panel ps : t =
 let nav_btn ~key ~label ~on_press children : t =
   Ui_components.with_props
     [ ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
-    (button ~key ~variant:`ghost ~height:32 ~width:36 ~padding:0
+    (Ui_components.button ~key ~variant:`ghost ~height:32 ~width:36 ~padding:0
        ~border_width:1
        ~border_color:
          "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
@@ -921,7 +921,7 @@ let cal_head ps : t =
             [ Ui_components.Prop.font_size "0.875rem"
             ; Ui_components.Prop.font_weight 500
             ; Ui_components.Prop.white_space `nowrap ]
-            (button ~key:"msel" ~style_class:"ls-date-month-select"
+            (Ui_components.button ~key:"msel" ~style_class:"ls-date-month-select"
                ~variant:`ghost ~main:`start ~height:32 ~min_width:96
                ~padding_horizontal:12 ~border_width:1
                ~border_color:
@@ -1059,7 +1059,7 @@ let link_form_body p : t =
     [ input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
         []
     ; input ~key:"label" ~placeholder:(I18n.t "ui/label") []
-    ; button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
+    ; Ui_components.button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
         ~height:28 ~min_height:28 ~text:I18n.submit
         ~on_press:(fun _ -> submit_link p) [] ]
 

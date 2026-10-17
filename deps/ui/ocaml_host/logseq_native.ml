@@ -706,14 +706,7 @@ let () =
            let id = Lui_store.node_id node in
            match Lui_store.string_prop store id "text" with
            | Some s when s <> "" ->
-             let fg =
-               match Host_icons.effective_fg_css store id with
-               | Some css -> (
-                 match Theme_vars.color_of css with
-                 | Some c -> c
-                 | None -> Lui_scene.color 0 0 0 255)
-               | None -> Lui_scene.color 0 0 0 255
-             in
+             let fg = Lui_paint.text_fg ctx store id in
              ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
            | _ -> []) };
   let measure_memo : (int * string * float * float, (float * float) option) Hashtbl.t =

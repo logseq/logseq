@@ -11,7 +11,7 @@ let class_signal = Ui_parts.class_signal
 
 let info_icon ~key ~title =
   box ~key ~opacity:0.56
-    [ button ~key:(key ^ "-button") ~variant:`ghost ~size:`icon
+    [ Ui_components.button ~key:(key ^ "-button") ~variant:`ghost ~size:`icon
         ~style_class:"ls-info-icon" ~width:32 ~height:16 ~min_height:16
         ~padding_horizontal:8 ~padding_vertical:0 ~background:"transparent"
         ~icon:(`app "info-circle-filled") ~label:title ~tooltip:title [] ]

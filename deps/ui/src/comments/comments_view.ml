@@ -138,7 +138,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map
            (fun (emoji_id, count) ->
-             button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~label:emoji_id
+             Ui_components.button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~label:emoji_id
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
                [ Logseq_emoji.el
                    ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
@@ -161,7 +161,7 @@ let open_reaction_picker uuid (btn_id : string) =
 
 let comment_actions st (cuuid : string) : t =
   let btn key icn title action =
-    button ~key
+    Ui_components.button ~key
       ~label:title
       ~accessibility_identifier:key
       ~variant:`ghost ~size:`icon ~icon:icn
@@ -253,7 +253,7 @@ let add_box st (area_uuid : string) : t =
     [ box ~key:("cbox-" ^ area_uuid) 
         ( inner
         @ [ box ~key:("cbact-" ^ area_uuid)
-              [ button ~key:("cbsub-" ^ area_uuid)
+              [ Ui_components.button ~key:("cbsub-" ^ area_uuid)
                   ~style_class:"ls-comment-submit"
                   ~label:(I.t "ui/submit")
                   ~variant:`ghost ~size:`icon ~icon:`send
@@ -279,7 +279,7 @@ let header st (area_uuid : string) (count : int) (target_ids : int list)
                 ~style_class:"ls-comments-title-editor"
                 [ Comments.title_editor_el area_uuid ]
             else
-              button ~key:("cl-" ^ area_uuid)
+              Ui_components.button ~key:("cl-" ^ area_uuid)
                 ~style_class:"ls-comments-label"
                 ~label:(I.t "editor/click-to-edit")
                 ~variant:`ghost
@@ -294,7 +294,7 @@ let header st (area_uuid : string) (count : int) (target_ids : int list)
       ]
     @
     if List.length target_ids > 1 then
-      [ button ~key:("ct-" ^ area_uuid)
+      [ Ui_components.button ~key:("ct-" ^ area_uuid)
           ~label:(I.t "block.comments/on-those-blocks")
           ~variant:`ghost
           ~text:(I.t "block.comments/on-those-blocks")
