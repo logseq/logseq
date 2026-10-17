@@ -38,6 +38,24 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (first-url-property-value @conn block-id)))
 
+(defn- class-alias-summary
+  "Transit writes nested Entities from their realized cache, which is often
+   only {:db/id}. Tag completion matches aliases by title, so realize those
+   fields before leaving the worker."
+  [alias]
+  (when-let [id (:db/id alias)]
+    (cond-> {:db/id id}
+      (:block/uuid alias) (assoc :block/uuid (:block/uuid alias))
+      (:block/title alias) (assoc :block/title (:block/title alias)))))
+
+(defn- class->map
+  [class]
+  (let [m (entity-util/entity->map class)
+        aliases (keep class-alias-summary (:block/alias class))]
+    (cond-> m
+      (seq aliases)
+      (assoc :block/alias (vec aliases)))))
+
 (defn get-all-classes
   [db {:keys [except-root-class? except-private-tags? except-extends-hidden-tags?]
        :or {except-root-class? false
@@ -58,7 +76,7 @@
       (remove #(= :logseq.class/Root (:db/ident %)))
 
       true
-      (map entity-util/entity->map))))
+      (map class->map))))
 
 (defn class-extends-children-tree
   ([db class-id]
@@ -229,8 +247,8 @@
 (def-thread-api :thread-api/get-alias-source-page
   [repo page-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (some-> (ldb/get-alias-source-page @conn page-id)
-            entity-util/entity->map)))
+    (when-let [source (ldb/get-alias-source-page @conn page-id)]
+      (worker-plain/entity-forward-map @conn source {}))))
 
 (def-thread-api :thread-api/get-property-closed-values
   [repo property-ident]

@@ -6,6 +6,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
@@ -264,3 +265,33 @@
     (is (= :logseq.property/default-value
            (:db/ident (d/pull db '[*] :logseq.property/default-value)))
         "A wildcard pull still loads the built-in default-value property.")))
+
+(deftest get-all-classes-serializes-alias-titles
+  (let [conn (d/create-conn db-schema/schema)
+        class-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        alias-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/ExampleTag
+                        :block/title "Example Tag"
+                        :block/name "example tag"
+                        :block/uuid class-uuid
+                        :block/tags :logseq.class/Tag
+                        :block/alias [-2]}
+                       {:db/id -2
+                        :block/title "ET"
+                        :block/name "et"
+                        :block/uuid alias-uuid
+                        :block/tags :logseq.class/Page}])
+    (let [example (->> (worker-property/get-all-classes @conn {:except-root-class? true})
+                       (some #(when (= "Example Tag" (:block/title %)) %)))
+          alias (first (:block/alias example))
+          roundtrip (-> example
+                        ldb/write-transit-str
+                        ldb/read-transit-str
+                        :block/alias
+                        first)]
+      (is (= alias-uuid (:block/uuid alias)))
+      (is (= "ET" (:block/title alias)))
+      (is (= "ET" (:block/title roundtrip))
+          "Alias titles must survive worker transit so # completion can match them"))))
