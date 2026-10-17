@@ -216,13 +216,9 @@ module HTTP = struct
 
   let is_body_forbidden = function Fetch.Get | Fetch.Head -> true | _ -> false
 
-  let request_body method_ body =
-    if is_body_forbidden method_ && body <> "" then
-      invalid_arg "GET and HEAD requests must not include a body"
-    else if body = "" then None
-    else Some (Fetch.BodyInit.make body)
+  let request_body body = if body = "" then None else Some (Fetch.BodyInit.make body)
 
-  let timeout controller timeout_span =
+  let abort_after controller timeout_span =
     match timeout_ms timeout_span with
     | 0 -> None
     | ms ->
@@ -239,10 +235,10 @@ module HTTP = struct
     Fetch.Response.text response
     |> Js.Promise.then_ (fun body -> Js.Promise.resolve (response, body))
 
-  let request ?timeout_span method_ url ~headers ~body =
+  let fetch_request ?timeout_span method_ url ~headers ~body =
     let controller = Fetch.AbortController.make () in
-    let timeout_handle = timeout controller timeout_span in
-    let body = request_body method_ body in
+    let timeout_handle = abort_after controller timeout_span in
+    let body = request_body body in
     let init =
       Fetch.RequestInit.make ~method_
         ~headers:(Fetch.HeadersInit.makeWithArray (Rrbvec.to_array headers))
@@ -253,6 +249,214 @@ module HTTP = struct
     promise_to_effect
       ~on_settle:(fun () -> clear_timeout_opt timeout_handle)
       (Fetch.fetchWithInit url init |> Js.Promise.then_ response_text)
+
+  type parsed_url
+  type client_request
+  type incoming_message
+  type socket
+  type request_options
+  type chunks = string array
+
+  external parse_url : string -> parsed_url = "URL" [@@mel.new]
+  external url_protocol : parsed_url -> string = "protocol" [@@mel.get]
+  external url_hostname : parsed_url -> string = "hostname" [@@mel.get]
+  external url_port : parsed_url -> string = "port" [@@mel.get]
+  external url_pathname : parsed_url -> string = "pathname" [@@mel.get]
+  external url_search : parsed_url -> string = "search" [@@mel.get]
+
+  external empty_options : unit -> request_options = "Object" [@@mel.new]
+  external set_method : request_options -> string -> unit = "method" [@@mel.set]
+
+  external set_hostname : request_options -> string -> unit = "hostname"
+  [@@mel.set]
+
+  external set_port : request_options -> string -> unit = "port" [@@mel.set]
+  external set_path : request_options -> string -> unit = "path" [@@mel.set]
+
+  external set_headers : request_options -> string Js.Dict.t -> unit = "headers"
+  [@@mel.set]
+
+  let request_options method_ hostname port path headers =
+    let options = empty_options () in
+    set_method options method_;
+    set_hostname options hostname;
+    Option.iter (set_port options) port;
+    set_path options path;
+    set_headers options headers;
+    options
+
+  external http_request :
+    request_options -> ((incoming_message -> unit)[@u]) -> client_request
+    = "request"
+  [@@mel.module "http"]
+
+  external request_write : client_request -> string -> unit = "write"
+  [@@mel.send]
+
+  external request_end : client_request -> unit = "end" [@@mel.send]
+
+  type js_error
+
+  external make_error : string -> js_error = "Error" [@@mel.new]
+
+  external request_destroy : client_request -> js_error -> unit = "destroy"
+  [@@mel.send]
+
+  external request_on_error :
+    client_request -> (_[@mel.as "error"]) -> ((js_error -> unit)[@u]) -> unit
+    = "on"
+  [@@mel.send]
+
+  external request_on_socket :
+    client_request -> (_[@mel.as "socket"]) -> ((socket -> unit)[@u]) -> unit
+    = "on"
+  [@@mel.send]
+
+  external set_no_delay : socket -> bool -> unit = "setNoDelay" [@@mel.send]
+
+  external response_status_code : incoming_message -> int = "statusCode"
+  [@@mel.get]
+
+  external response_set_encoding : incoming_message -> string -> unit
+    = "setEncoding"
+  [@@mel.send]
+
+  external response_on_data :
+    incoming_message -> (_[@mel.as "data"]) -> ((string -> unit)[@u]) -> unit
+    = "on"
+  [@@mel.send]
+
+  external response_on_end :
+    incoming_message -> (_[@mel.as "end"]) -> ((unit -> unit)[@u]) -> unit
+    = "on"
+  [@@mel.send]
+
+  external response_on_error :
+    incoming_message -> (_[@mel.as "error"]) -> ((js_error -> unit)[@u]) -> unit
+    = "on"
+  [@@mel.send]
+
+  external byte_length : string -> string -> int = "byteLength"
+  [@@mel.scope "Buffer"]
+
+  external push_chunk : chunks -> string -> int = "push" [@@mel.send]
+  external join_chunks : chunks -> string -> string = "join" [@@mel.send]
+
+  external empty_response : unit -> Fetch.Response.t = "Object" [@@mel.new]
+  external set_status : Fetch.Response.t -> int -> unit = "status" [@@mel.set]
+  external set_ok : Fetch.Response.t -> bool -> unit = "ok" [@@mel.set]
+
+  (* Callers only read [Fetch.Response.status]. The global Response constructor
+     loads undici, and that init dominates a one-shot CLI process. *)
+  let make_response status =
+    let response = empty_response () in
+    set_status response status;
+    set_ok response (status >= 200 && status < 300);
+    response
+
+  let invoke_reject : ((exn -> unit)[@u]) -> js_error -> unit =
+    [%mel.raw {| function (reject, error) { reject(error); } |}]
+
+  let method_name = function
+    | Fetch.Get -> "GET"
+    | Fetch.Head -> "HEAD"
+    | Fetch.Post -> "POST"
+    | Fetch.Put -> "PUT"
+    | Fetch.Delete -> "DELETE"
+    | Fetch.Connect -> "CONNECT"
+    | Fetch.Options -> "OPTIONS"
+    | Fetch.Trace -> "TRACE"
+    | Fetch.Patch -> "PATCH"
+    | Fetch.Other name -> name
+
+  let header_exists headers name =
+    let name = String.lowercase_ascii name in
+    Rrbvec.exists
+      (fun (key, _) -> String.lowercase_ascii key = name)
+      headers
+
+  let headers_dict headers body =
+    let dict = Js.Dict.empty () in
+    Rrbvec.iter (fun (key, value) -> Js.Dict.set dict key value) headers;
+    if body <> "" && not (header_exists headers "content-length") then
+      Js.Dict.set dict "Content-Length"
+        (string_of_int (byte_length body "utf8"));
+    dict
+
+  let request ?timeout_span method_ url ~headers ~body =
+    if is_body_forbidden method_ && body <> "" then
+      invalid_arg "GET and HEAD requests must not include a body";
+    let parsed = parse_url url in
+    (* https stays on fetch: login uses AbortSignal, and the CLI tests stub
+       global fetch. The worker query path is http and was paying undici init
+       on every one-shot process. *)
+    if url_protocol parsed = "https:" then
+      fetch_request ?timeout_span method_ url ~headers ~body
+    else
+    let path = url_pathname parsed ^ url_search parsed in
+    let port = url_port parsed in
+    let port = if port = "" then None else Some port in
+    let options =
+      request_options (method_name method_) (url_hostname parsed) port path
+        (headers_dict headers body)
+    in
+    let promise =
+      Js.Promise.make (fun ~resolve ~reject ->
+          let settled = ref false in
+          let finish_ok value =
+            if not !settled then (
+              settled := true;
+              (resolve value [@u]))
+          in
+          let finish_error error =
+            if not !settled then (
+              settled := true;
+              invoke_reject reject error)
+          in
+          let timeout_handle = ref None in
+          let clear_timeout () =
+            match !timeout_handle with
+            | None -> ()
+            | Some handle ->
+                timeout_handle := None;
+                Timer.clear_timeout handle
+          in
+          let on_incoming incoming =
+            let chunks = [||] in
+            response_set_encoding incoming "utf8";
+            response_on_data incoming (fun[@u] chunk ->
+                ignore (push_chunk chunks chunk));
+            response_on_error incoming (fun[@u] error ->
+                clear_timeout ();
+                finish_error error);
+            response_on_end incoming (fun[@u] () ->
+                clear_timeout ();
+                finish_ok
+                  ( make_response (response_status_code incoming),
+                    join_chunks chunks "" ))
+          in
+          let req =
+            http_request options (fun[@u] incoming -> on_incoming incoming)
+          in
+          request_on_socket req (fun[@u] socket -> set_no_delay socket true);
+          request_on_error req (fun[@u] error ->
+              clear_timeout ();
+              finish_error error);
+          (match timeout_ms timeout_span with
+          | 0 -> ()
+          | ms ->
+              timeout_handle :=
+                Some
+                  (Timer.set_timeout
+                     (fun () ->
+                       let error = make_error "request timeout" in
+                       request_destroy req error;
+                       finish_error error)
+                     ms));
+          if body <> "" then request_write req body;
+          request_end req)
+    in
+    promise_to_effect promise
 end
 
 module Crypto = struct
