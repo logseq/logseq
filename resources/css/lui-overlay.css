@@ -1678,7 +1678,9 @@ select.form-select {
   line-height: 1.25rem;
   text-decoration: underline;
   display: inline;
-  opacity: 0.7;
+  color: var(--ls-primary-text-color);
+  opacity: var(--lx-faded-link-opacity);
+  transition: opacity 300ms ease;
 }
 
 .fade-link:hover {

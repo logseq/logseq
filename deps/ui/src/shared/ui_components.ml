@@ -47,6 +47,18 @@ let with_props (binds : Prop.t list) (elem : t) : t =
   List.iter (Prop.set ctx node) binds;
   node
 
+(* Secondary navigation links keep body text ink while fading on hover. *)
+let faded_link ?key ~url ~text () =
+  with_props
+    [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem"
+    ; Prop.text_decoration "underline"
+    ; Prop.opacity Ui_theme.faded_link_opacity; Prop.hover_opacity 1.
+    ; Prop.hover_foreground "var(--ls-primary-text-color)" ]
+    (link ?key ~url ~text ~style_class:"fade-link"
+       ~foreground:"var(--ls-primary-text-color)"
+       ~transition:"opacity 300ms ease"
+       ~data_attrs:["style", "text-underline-offset: auto"] [])
+
 (* Master button appearance belongs to the shared view layer. Both hosts
    receive the same typed defaults; explicit caller properties take precedence. *)
 let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal

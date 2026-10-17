@@ -58,15 +58,9 @@ let version_row () =
                         [ box ~key:"ver-b" []
                         ; text ~key:"ver-v" ~style_class:"ls-ver-text"
                             ~value:version []
-                        ; Ui_components.with_props
-                            [ Ui_components.Prop.font_size "0.875rem"
-                            ; Ui_components.Prop.line_height "1.25rem"
-                            ; Ui_components.Prop.text_decoration "underline"
-                            ; Ui_components.Prop.opacity 0.7
-                            ; Ui_components.Prop.hover_opacity 1. ]
-                            (link ~key:"ver-cl" ~style_class:"fade-link"
-                               ~url:"https://docs.logseq.com/#/page/changelog"
-                               ~text:T.changelog [])
+                        ; Ui_components.faded_link ~key:"ver-cl"
+                            ~url:"https://docs.logseq.com/#/page/changelog"
+                            ~text:T.changelog ()
                         ]
                     ])
              ])
@@ -191,7 +185,10 @@ let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
   row ~key ~width:20 ~height:20 ~main:`center ~cross:`center
     ~opacity:(if active then 1. else 0.5)
-    [ Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
+    [ Ui_components.with_props
+        [ Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
+        ; Ui_components.Prop.pressed_opacity 1. ]
+      (Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
@@ -208,7 +205,7 @@ let accent_swatch ~key ~modal ~current color =
             ~background:
               (if none then "#b91c1c" else "var(--rx-" ^ color ^ "-07)")
             []
-        ]
+        ])
     ]
 
 let accent_row ~modal =

@@ -193,30 +193,36 @@ let components (c : colors) =
   }
 
 let lui_vars (c : colors) =
-  [ "--lui-background", "var(--ls-primary-background-color)"
-  ; "--lui-foreground", "var(--ls-primary-text-color)"
-  ; "--lui-card", "var(--ls-secondary-background-color)"
-  ; "--lui-card-foreground", "var(--ls-primary-text-color)"
-  ; "--lui-primary", "var(--ls-link-text-color)"
-  ; "--lui-primary-foreground", c.on_accent
-  ; "--lui-secondary", "var(--ls-secondary-background-color)"
-  ; "--lui-secondary-foreground", "var(--ls-primary-text-color)"
-  ; "--lui-accent", "var(--ls-a-chosen-bg)"
-  ; "--lui-accent-foreground", "var(--ls-primary-text-color)"
-  ; "--lui-muted-foreground", c.foreground_muted
-  ; "--lui-destructive", c.danger
-  ; "--lui-destructive-foreground", c.on_accent
-  ; "--lui-success", c.success
+  let channels =
+    [ "background"; "foreground"; "card"; "card-foreground"; "primary"
+    ; "primary-foreground"; "secondary"; "secondary-foreground"; "accent"
+    ; "accent-foreground"; "muted-foreground"; "destructive"
+    ; "destructive-foreground"; "input"; "ring"; "border" ] in
+  let colors =
+    List.map (fun name -> "--lui-" ^ name, "hsl(var(--" ^ name ^ "))") channels
+    @ [ "--lui-success", c.success
   ; "--lui-success-foreground", c.on_accent
   ; "--lui-warning", c.warning
   ; "--lui-warning-foreground", c.on_accent
   ; "--lui-error", c.danger
   ; "--lui-error-foreground", c.on_accent
-  ; "--lui-input", "var(--ls-border-color)"
-  ; "--lui-ring", "var(--ls-focus-ring-color)"
-  ; "--lui-border", "var(--ls-border-color)"
-  ; "--lui-radius", "8px"
-  ]
+  ] in
+  colors
+  @ List.map (fun (name, _) ->
+      "--color-" ^ String.sub name 6 (String.length name - 6),
+      "var(" ^ name ^ ")") colors
+  @ ["--lui-radius", "8px"]
+
+let semantic_color_vars =
+  lui_vars (colors Light)
+  |> List.filter_map (fun (name, value) ->
+      if String.starts_with ~prefix:"--color-" name then
+        Some (String.sub name 8 (String.length name - 8), value)
+      else None)
+
+let semantic_color_var name = List.assoc_opt name semantic_color_vars
+
+let faded_link_opacity = 0.8
 
 (* canonical-only tokens: elevation/overlay, status colors, component
    slots, and the typography scale *)
@@ -230,6 +236,7 @@ let canonical_vars (c : colors) (cs : components) (t : typography) =
     ]
   in
   [ "--lx-overlay-color", c.overlay
+  ; "--lx-faded-link-opacity", string_of_float faded_link_opacity
   ; "--lx-danger-color", c.danger
   ; "--lx-danger-foreground", c.on_accent
   ; "--lx-success-color", c.success

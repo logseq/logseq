@@ -863,9 +863,14 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             ; Ui_components.Prop.overflow `hidden
             ; Ui_components.Prop.padding_right 16
             ; Ui_components.Prop.opacity 0.9
+            ; Ui_components.Prop.hover_opacity 0.9
+            ; Ui_components.Prop.hover_background "var(--lx-gray-04)"
+            ; Ui_components.Prop.hover_foreground "hsl(var(--foreground))"
             ; Ui_components.Prop.pressed_opacity 0.7 ]
             (Ui_components.button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
                ~label:(t "graph.switch/select-prompt")
+               ~foreground:"hsl(var(--foreground))"
+               ~main:`start ~cross:`center
                ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:4
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
@@ -879,32 +884,35 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                  Runtime.signal_set st.Sidebar_state.open_menu
                    (if Runtime.signal_get st.open_menu = "repos" then ""
                     else "repos"))
-                  [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
-                      [ row ~key:"gsel-th" ~cross:`center ~main:`center
+                  [ Ui_components.with_props
+                        [ Ui_components.Prop.overflow `hidden ]
+                      (row ~key:"gsel-th" ~cross:`center ~main:`center
                           ~width:24 ~height:24 ~opacity:0.8
+                          ~background:"var(--lx-gray-04)" ~corner_radius:2
                           ~style_class:"thumb" ~margin_left:(-2)
-                          ~data_attrs:
-                            [ ( "style"
-                              , "overflow:hidden;\
-                                 border-radius:calc(var(--radius) - 4px);\
-                                 flex-shrink:0" )
-                            ]
-                          [ icon_ ~attrs:[ ("style", "margin-right:0") ]
-                              "topology-star" ]
-                      ; text ~key:"gsel-n"
+                          [ Ui_components.with_props
+                              [ Ui_components.Prop.margin_right 0
+                              ; Ui_components.Prop.opacity 0.7 ]
+                              (icon_ "topology-star") ])
+                  ; Ui_components.with_props
+                      [ Ui_components.Prop.overflow `hidden
+                      ; Ui_components.Prop.padding_left 4
+                      ; Ui_components.Prop.padding_right 16
+                      ; Ui_components.Prop.min_width 0 ]
+                      (text ~key:"gsel-n"
                           ~white_space:"nowrap" ~text_overflow:"ellipsis"
                           ~font_weight:500 ~font_size:"var(--text-sm)"
                           ~line_height:"1.25rem"
-                          ~data_attrs:
-                            [ ( "style"
-                              , "overflow:hidden;\
-                                 padding-right:16px;position:relative" )
-                            ]
-                          ~value_signal:(Signal.map name_of ms) ~grow:1. []
-                      ; Ui_components.with_props
-                          [ Ui_components.Prop.margin_right (-4) ]
-                          (icon_ ~size:18 "selector"
-                             ~attrs:[ ("style", "margin-right:0") ]) ] ])
+                          ~value:(reactive name_of ms) ~grow:1. [])
+                  ; Ui_components.with_props
+                          [ Ui_components.Prop.position `absolute
+                          ; Ui_components.Prop.inset_right 4.
+                          ; Ui_components.Prop.inset_top 8.
+                          ; Ui_components.Prop.width 16
+                          ; Ui_components.Prop.height 16
+                          ; Ui_components.Prop.margin_right 0
+                          ; Ui_components.Prop.opacity 0.4 ]
+                          (icon_ ~size:18 "selector") ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st)
         ] ]

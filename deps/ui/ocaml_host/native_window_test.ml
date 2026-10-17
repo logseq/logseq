@@ -452,6 +452,43 @@ let () =
   end
 
 let () =
+  if Array.length Sys.argv = 7 && Sys.argv.(1)="--compare-software-capture" then begin
+    let path = Sys.argv.(2) in
+    let scene : Lui_scene.t = In_channel.with_open_bin path Marshal.from_channel in
+    let captured = In_channel.with_open_bin (path ^ ".bgra") In_channel.input_all in
+    check "Captured backing dimensions must match the scene"
+      (String.length captured = scene.width * scene.height * 4);
+    let x = int_of_string Sys.argv.(3) and y = int_of_string Sys.argv.(4)
+    and width = int_of_string Sys.argv.(5) and height = int_of_string Sys.argv.(6) in
+    check "Pixel comparison must remain inside the captured viewport"
+      (x >= 0 && y >= 0 && width > 0 && height > 0
+       && x+width <= scene.width && y+height <= scene.height);
+    let renderer = Lui_raster.Renderer.create () in
+    ignore (Lui_raster.Renderer.render ~workers:4 renderer scene);
+    let expected = Lui_raster.Renderer.image renderer in
+    let mismatched = ref 0 and maximum = ref 0 in
+    for row=y to y+height-1 do
+      for column=x to x+width-1 do
+        let source=row*scene.width*4+column*4
+        and target=row*expected.stride+column*4 in
+        let delta = ref 0 in
+        for channel=0 to 3 do
+          delta := max !delta (abs (Char.code captured.[source+channel]
+            - Char.code (Bytes.get expected.pix (target+channel))))
+        done;
+        maximum := max !maximum !delta;
+        if !delta > 2 then incr mismatched
+      done
+    done;
+    Lui_raster.Renderer.release renderer;
+    Printf.printf "native backing comparison: %d/%d pixels differ, max channel delta=%d\n%!"
+      !mismatched (width*height) !maximum;
+    check "Native backing pixels must match direct rendering of the captured scene"
+      (!mismatched=0);
+    exit 0
+  end
+
+let () =
   if Array.length Sys.argv = 2 && Sys.argv.(1) = "--software-upload-budget" then begin
     software_upload_budget ();
     exit 0

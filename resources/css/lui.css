@@ -132,6 +132,14 @@ body {
 @property --lui-selected-hover-shadow { syntax: "*"; inherits: false; }
 @property --lui-focus-shadow { syntax: "*"; inherits: false; }
 @property --lui-disabled-opacity { syntax: "*"; inherits: false; }
+@property --lui-current-hover-bg { syntax: "*"; inherits: false; }
+@property --lui-current-hover-fg { syntax: "*"; inherits: false; }
+@property --lui-current-hover-border { syntax: "*"; inherits: false; }
+@property --lui-current-hover-opacity { syntax: "*"; inherits: false; }
+@property --lui-current-pressed-bg { syntax: "*"; inherits: false; }
+@property --lui-current-pressed-opacity { syntax: "*"; inherits: false; }
+@property --lui-current-selected-bg { syntax: "*"; inherits: false; }
+@property --lui-current-disabled-opacity { syntax: "*"; inherits: false; }
 
 @layer components {
   .lui-root {
@@ -2151,7 +2159,12 @@ body {
     box-shadow: var(--lui-shadow, revert-layer);
   }
 
-  :where([class*="lui-"]:hover, .lui-menu-item[data-highlighted]) {
+  :where([class*="lui-"]:hover:not(:disabled, [data-disabled]),
+    .lui-menu-item[data-highlighted]:not([data-disabled])) {
+    --lui-current-hover-bg: var(--lui-hover-bg);
+    --lui-current-hover-fg: var(--lui-hover-fg);
+    --lui-current-hover-border: var(--lui-hover-border);
+    --lui-current-hover-opacity: var(--lui-hover-opacity);
     background-color: var(--lui-hover-bg, revert-layer);
     color: var(--lui-hover-fg, revert-layer);
     border-color: var(--lui-hover-border, revert-layer);
@@ -2159,19 +2172,22 @@ body {
     opacity: var(--lui-hover-opacity, revert-layer);
   }
 
-  :where([class*="lui-"]:active) {
+  :where([class*="lui-"]:active:not(:disabled, [data-disabled])) {
+    --lui-current-pressed-bg: var(--lui-pressed-bg);
+    --lui-current-pressed-opacity: var(--lui-pressed-opacity);
     background-color: var(--lui-pressed-bg, revert-layer);
     box-shadow: var(--lui-pressed-shadow, revert-layer);
     opacity: var(--lui-pressed-opacity, revert-layer);
   }
 
   :where([class*="lui-"][data-selected]) {
+    --lui-current-selected-bg: var(--lui-selected-bg);
     background-color: var(--lui-selected-bg, revert-layer);
     box-shadow: var(--lui-selected-shadow, var(--lui-shadow, revert-layer));
   }
 
-  :where([class*="lui-"][data-selected]:hover,
-    .lui-menu-item[data-selected][data-highlighted]) {
+  :where([class*="lui-"][data-selected]:hover:not(:disabled, [data-disabled]),
+    .lui-menu-item[data-selected][data-highlighted]:not([data-disabled])) {
     background-color: var(--lui-selected-bg, var(--lui-hover-bg, revert-layer));
     box-shadow: var(--lui-selected-hover-shadow,
       var(--lui-selected-shadow, var(--lui-hover-shadow, var(--lui-shadow, revert-layer))));
@@ -2179,6 +2195,7 @@ body {
 
   :where([class*="lui-"][data-disabled]),
   :where([class*="lui-"]:disabled) {
+    --lui-current-disabled-opacity: var(--lui-disabled-opacity);
     opacity: var(--lui-disabled-opacity, revert-layer);
   }
 

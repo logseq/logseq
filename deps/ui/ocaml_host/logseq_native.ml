@@ -2167,6 +2167,21 @@ let () =
           | None -> body in
         Out_channel.with_open_bin path (fun channel ->
           Marshal.to_channel channel scene []);
+        (* Preserve the same frame's inputs for direct-paint comparison.
+           A screenshot alone cannot distinguish missing scene operations
+           from stale backing pixels or incomplete theme delivery. *)
+        let nodes = List.map (fun id ->
+          id, hooks.layout id, hooks.state_of id, Ui.hidden ui store id,
+          hooks.mounted_children id, hooks.scroll_of id)
+          (Lui_store.preorder store) in
+        let vars = Hashtbl.fold (fun name value values -> (name,value)::values)
+          (Theme_vars.vars_of_mode !Theme_vars.mode) [] in
+        Out_channel.with_open_bin (path ^ ".context") (fun channel ->
+          Marshal.to_channel channel
+            (store,nodes,!scale_cell,!Theme_vars.mode,!Theme_vars.accent,vars,
+             !theme_gen_seen,!Theme_vars.generation,
+             Native_window.presentable (Sdl.get_window_id !win),
+             Lui_host.wants_repaint host,perf_s () -. !last_render) []);
         if use_cocoa then
           Out_channel.with_open_bin (path ^ ".bgra") (fun channel ->
             output_bytes channel (Native_window.software_read (Sdl.get_window_id !win))))

@@ -119,6 +119,11 @@ type snapshot = {
     Native resolves it through [css_palette]; Web keeps its CSS declaration. *)
 val stylesheet_owned_var : string -> bool
 
+(** Renderer semantic color names use the same application custom properties. *)
+val semantic_color_var : string -> string option
+
+val faded_link_opacity : float
+
 (** Global CSS palette declarations for a mode and built-in accent.
     Generated from the same stylesheets consumed by Web. *)
 type css_palette = { root : (string * string) list; body : (string * string) list }

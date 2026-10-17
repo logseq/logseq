@@ -219,7 +219,11 @@ let current_value name = Hashtbl.find_opt (vars_of_mode !mode) name
 let resolve_value value = substitute current_value value
 
 let color_of s =
-  let spec = if s = "scrim" then "hsl(var(--background) / 0.9)" else s in
+  let spec =
+    if s = "scrim" then "hsl(var(--background) / 0.9)"
+    else
+      match Ui_theme.semantic_color_var s with Some value -> value | None -> s
+  in
   Option.bind (resolve_value spec) (fun value ->
       match Lui_window.Theme.color_of_hex value with
       | Some _ as color -> color

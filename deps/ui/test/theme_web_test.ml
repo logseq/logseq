@@ -25,7 +25,7 @@ let run () =
   check "dark accent-bound literal withheld"
     (style_prop "--ls-primary-background-color" = None);
   check "dark lui semantic ref"
-    (style_prop "--lui-background" = Some "var(--ls-primary-background-color)");
+    (style_prop "--lui-background" = Some "hsl(var(--background))");
   check "stylesheet owns dark level ladder"
     (style_prop "--color-level-1" = None);
   check "dark overlay literal"

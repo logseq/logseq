@@ -1,5 +1,25 @@
 import assert from 'node:assert/strict';
 
+export function measureGraphSwitch(trigger) {
+  const rect = trigger.getBoundingClientRect();
+  const icons = trigger.querySelectorAll('.ui__icon');
+  const indicator = icons[icons.length - 1];
+  const indicatorRect = indicator.getBoundingClientRect();
+  return {
+    width: rect.width, height: rect.height,
+    indicatorRight: rect.right - indicatorRect.right,
+    indicatorTop: indicatorRect.top - rect.top,
+    indicatorOpacity: Number(getComputedStyle(indicator).opacity),
+  };
+}
+
+export function assertGraphSwitch(paint) {
+  assert.equal(paint.height, 32, 'Graph switch height');
+  assert.equal(paint.indicatorRight, 4, 'Graph indicator trailing inset');
+  assert.equal(paint.indicatorTop, 8, 'Graph indicator top inset');
+  assert.equal(paint.indicatorOpacity, 0.4, 'Graph indicator muted opacity');
+}
+
 export function measureModalTheme(dialog) {
   const style = getComputedStyle(dialog);
   const backdrop = dialog.closest('.lui-modal-layer').querySelector('.lui-modal-backdrop');
@@ -55,7 +75,7 @@ export function assertKeymapFilterPaint(filters) {
 
 export function measureAccentControls(dialog) {
   return Array.from(dialog.querySelectorAll('button')).filter(button =>
-    button.style.background.startsWith('var(--rx-') && button.style.background.endsWith('-09)'),
+    /var\(--rx-[a-z]+-09\)/.test(button.style.background),
   ).map(button => {
     const rect = button.getBoundingClientRect();
     return {
@@ -90,6 +110,18 @@ export function measureThemeAliases(element) {
     'highlight-color-gray', 'font-family'].map(name => ({
     name, source: style.getPropertyValue(`--ls-${name}`).trim(),
     alias: style.getPropertyValue(`--lx-${name}`).trim(),
+  }));
+}
+
+export function measureSemanticAliases(element) {
+  const style = getComputedStyle(element);
+  return ['background', 'foreground', 'card', 'card-foreground', 'primary',
+    'primary-foreground', 'secondary', 'secondary-foreground', 'accent',
+    'accent-foreground', 'muted-foreground', 'destructive', 'destructive-foreground',
+    'success', 'success-foreground', 'warning', 'warning-foreground', 'error',
+    'error-foreground', 'input', 'ring', 'border'].map(name => ({
+    name, source: style.getPropertyValue(`--lui-${name}`).trim(),
+    alias: style.getPropertyValue(`--color-${name}`).trim(),
   }));
 }
 

@@ -59,6 +59,51 @@ let () =
   Theme_vars.rebuild Lui_theme.Light
 
 let () =
+  List.iter (fun mode ->
+    let snapshot = Ui_theme.snapshot mode in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode", `String (if mode = Ui_theme.Dark then "dark" else "light");
+       "vars", `Assoc (List.map (fun (key,value) -> key,`String value) snapshot.vars)]));
+    Theme_vars.set_dark (mode = Ui_theme.Dark);
+    List.iter (fun accent ->
+      Theme_vars.set_accent accent;
+      List.iter (fun name ->
+        check ("Native semantic color ignores shared theme: " ^ accent ^ "/" ^ name)
+          (Theme_vars.color_of name = Theme_vars.color_of ("var(--lui-" ^ name ^ ")")))
+        ["background"; "foreground"; "card"; "card-foreground"; "primary";
+         "primary-foreground"; "secondary"; "secondary-foreground"; "accent";
+         "accent-foreground"; "muted-foreground"; "destructive";
+         "destructive-foreground"; "success"; "success-foreground"; "warning";
+         "warning-foreground"; "error"; "error-foreground"; "input"; "ring"; "border"])
+      ["none"; "logseq"; "orange"; "blue"])
+    [Ui_theme.Light;Ui_theme.Dark];
+  Theme_vars.set_accent "logseq";
+  Theme_vars.set_dark false;
+  print_endline "native shared semantic palette: OK"
+
+let () =
+  List.iter (fun mode ->
+    let snapshot = Ui_theme.snapshot mode in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode", `String (if mode = Ui_theme.Dark then "dark" else "light");
+       "vars", `Assoc (List.map (fun (key,value) -> key,`String value) snapshot.vars)]));
+    Theme_vars.set_dark (mode = Ui_theme.Dark);
+    List.iter (fun accent ->
+      Theme_vars.set_accent accent;
+      List.iter (fun name ->
+        check ("Semantic control color must use its shared CSS channel: " ^ accent ^ "/" ^ name)
+          (Theme_vars.color_of name = Theme_vars.color_of ("hsl(var(--" ^ name ^ "))")))
+        ["background"; "foreground"; "card"; "card-foreground"; "primary";
+         "primary-foreground"; "secondary"; "secondary-foreground"; "accent";
+         "accent-foreground"; "muted-foreground"; "destructive";
+         "destructive-foreground"; "input"; "ring"; "border"])
+      ["logseq"; "orange"; "blue"])
+    [Ui_theme.Light;Ui_theme.Dark];
+  Theme_vars.set_accent "logseq";
+  Theme_vars.set_dark false;
+  print_endline "native stylesheet semantic control channels: OK"
+
+let () =
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
   let host = Lui_host.create ~hooks:Lui_paint.default_hooks
@@ -948,6 +993,17 @@ let () = Native_embed.with_entry_lock (fun () ->
           (abs_float ((rect graph).y/.scale-.52.)<0.1);
         expect "Graph selector differs from the reference 221-point width inside a cold dock"
           (abs_float ((rect graph).w/.scale-.221.)<0.1);
+        let graph_nodes = Lui_store.preorder ~root:graph store in
+        let graph_icons = List.filter (fun id ->
+          Lui_store.kind store id = "icon") graph_nodes in
+        let selector = List.hd (List.rev graph_icons) in
+        let selector_rect = rect selector and graph_rect = rect graph in
+        expect "Graph selector indicator must begin twenty points before its trailing edge"
+          (abs_float ((selector_rect.x-.graph_rect.x)/.scale-.201.)<0.1);
+        expect "Graph selector indicator must align eight points below its top"
+          (abs_float ((selector_rect.y-.graph_rect.y)/.scale-.8.)<0.1);
+        expect "Graph selector indicator must retain the reference muted opacity"
+          (Lui_store.float_prop store selector "opacity" = Some 0.4);
         Lui_host.set_reduced_motion (A.host surface) false;
         Lui_host.tick (A.host surface) ~now:0.;
         set_model (fun m -> {m with right_sidebar_open=true});
@@ -3199,6 +3255,42 @@ let () =
           expect "Settings chrome must include its one-point border in layout"
             ((rect inner).x = (rect dialog).x +. 2. && (rect inner).w = 2044.);
           let pane = find_class "panel-wrap" in
+          let swatch = List.find (fun id ->
+            Lui_store.kind store id="button"
+            && Lui_store.string_prop store id "background"=Some "var(--rx-orange-09)") nodes in
+          List.iter (fun hovered ->
+            let scene = Lui_host.scene host in
+            Lui_paint.paint {icon_hooks with
+              layout=(fun id -> Lui_paint.placement_of_rect (rect id));
+              state_of=(fun id -> if id=swatch then
+                {Lui_paint.state_neutral with hovered} else Lui_paint.state_neutral)}
+              store scene ~width:2880 ~height:1864 ~scale:2.
+              ~clear:(Lui_scene.color 255 255 255 255);
+            expect "Accent swatches must retain their hue on hover"
+              (List.exists (function Lui_scene.Fill fill ->
+                fill.frect=rect swatch
+                && Some fill.fcolor=Theme_vars.color_of "var(--rx-orange-09)"
+                | _ -> false) scene.ops)) [false;true];
+          expect "Pressing a swatch must preserve its reference opacity"
+            ((Lui_paint.resolve_style store swatch
+                {Lui_paint.state_neutral with hovered=true;pressed=true}).rs_opacity=1.);
+          let changelog = find_class "fade-link" in
+          List.iter (fun hovered ->
+            let state = {Lui_paint.state_neutral with hovered} in
+            let style = Lui_paint.resolve_style store changelog state in
+            expect "A faded link must retain the reference opacity and hover behavior"
+              (style.rs_opacity = if hovered then 1. else 0.8);
+            let ink = ref None in
+            let scene = Lui_host.scene host in
+            Lui_paint.paint
+              {icon_hooks with
+               layout=(fun id -> Lui_paint.placement_of_rect (rect id));
+               state_of=(fun id -> if id=changelog then state else Lui_paint.state_neutral);
+               text_ops=(fun id _ foreground _ -> if id=changelog then ink:=Some foreground; [])}
+              store scene ~width:2880 ~height:1864 ~scale:2.
+              ~clear:(Lui_scene.color 255 255 255 255);
+            expect "A faded link must use the shared body text color even on hover"
+              (!ink=Theme_vars.color_of "var(--ls-primary-text-color)")) [false;true];
           expect "General settings content exceeds its six-hundred-point column"
             ((rect pane).w <= 1200.);
           let nav =
@@ -5180,3 +5272,71 @@ let () = Option.iter (fun reference_file ->
   check "Native CSS variables must match the actual reference stylesheet" (!failures = []);
   Printf.printf "native reference palette: %d colors across %d variants: OK\n%!"
     !count (List.length cases)) (Sys.getenv_opt "LOGSEQ_NATIVE_THEME_REFERENCE")
+
+let () = Option.iter (fun path ->
+  check "Scene capture must include its exact paint context"
+    (Sys.file_exists (path ^ ".context"));
+  let (store,nodes,scale,mode,accent,vars,paint_generation,theme_generation,
+       visible,dirty,paint_age :
+      Lui_store.t * (int * Lui_paint.placement * Lui_paint.state * bool
+        * int list option * Lui_paint.scroll_metrics option) list
+      * float * Lui_theme.mode * string * (string * string) list * int * int
+      * bool * bool * float) =
+    In_channel.with_open_bin (path ^ ".context") Marshal.from_channel in
+  let actual : Lui_scene.t = In_channel.with_open_bin path Marshal.from_channel in
+  Printf.printf "native paint context: visible=%b dirty=%b age=%.3fs generation=%d/%d\n%!"
+    visible dirty paint_age paint_generation theme_generation;
+  check "Paint acceptance requires a visible window and a settled scene" (visible && not dirty);
+  check "Captured paint must use the current theme generation"
+    (paint_generation=theme_generation);
+  let table = Theme_vars.vars_of_mode mode in
+  Hashtbl.reset table;
+  List.iter (fun (name,value) -> Hashtbl.replace table name value) vars;
+  Theme_vars.mode := mode;
+  Theme_vars.accent := accent;
+  let contexts = Hashtbl.create (List.length nodes) in
+  List.iter (fun (id,rect,state,hidden,mounted,scroll) ->
+    Hashtbl.add contexts id (rect,state,hidden,mounted,scroll)) nodes;
+  let lookup id = Hashtbl.find contexts id in
+  let replay = Lui_scene.create
+    ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:2048 ~h:2048)
+    ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1024 ~h:1024) in
+  let text = Text_engine.create ~scene:(fun () -> replay)
+    ~scale:(fun () -> scale) ~store:(fun () -> store) in
+  Lui_paint.paint
+    {icon_hooks with
+     layout=(fun id -> let r,_,_,_,_ = lookup id in r);
+     state_of=(fun id -> let _,state,_,_,_ = lookup id in state);
+     hidden=(fun id -> let _,_,hidden,_,_ = lookup id in hidden);
+     mounted_children=(fun id -> let _,_,_,mounted,_ = lookup id in mounted);
+     scroll_of=(fun id -> let _,_,_,_,scroll = lookup id in scroll);
+     text_ops=Text_engine.text_ops text}
+    store replay ~width:actual.width ~height:actual.height ~scale
+    ~clear:(Lui_scene.color 0 0 0 0);
+  let has_class id name =
+    match Lui_store.string_prop store id "style-class" with
+    | None -> false | Some classes -> List.mem name (String.split_on_char ' ' classes) in
+  let pane = List.find (fun (id,_,_,_,_,_) -> has_class id "panel-wrap") nodes in
+  let pane_id,_,_,_,_,_ = pane in
+  let controls = List.filter (fun (id,_,_,hidden,_,_) ->
+    not hidden && Lui_query.is_desc store id pane_id
+    && List.mem (Lui_store.kind store id) ["button";"link"]
+    && Lui_store.string_prop store id "background" <> None) nodes in
+  check "Replay must exercise the real Settings controls" (List.length controls >= 21);
+  let matched = ref 0 in
+  List.iter (fun (id,placement,_,_,_,_) ->
+    let rect = placement.Lui_paint.p_rect in
+    let fills scene = List.filter_map (function
+      | Lui_scene.Fill fill when fill.frect=rect && fill.fcolor.a > 0
+          && fill.fopacity > 0. -> Some (fill.fcolor,fill.fopacity)
+      | _ -> None) scene.Lui_scene.ops in
+    let expected = fills replay and received = fills actual in
+    if expected <> [] then incr matched;
+    List.iter (fun (color,opacity) ->
+      check (Printf.sprintf "Captured control %d differs from direct paint" id)
+        (List.exists (fun (actual_color,actual_opacity) ->
+          color=actual_color && abs_float (opacity-.actual_opacity) < 0.01) received)) expected)
+    controls;
+  check "Replay must cover every nontransparent Settings control" (!matched >= 20);
+  Printf.printf "native captured Settings paint: %d controls match direct replay\n%!"
+    !matched) (Sys.getenv_opt "LOGSEQ_NATIVE_PAINT_REPLAY")
