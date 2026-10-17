@@ -703,7 +703,7 @@ let ls_tooltip_keys ~key children : t =
 (* Form labels use one grid column; controls span two when no side slot
    is present. Responsive properties preserve mounted controls across resize. *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
-    ?(col_gap = 24) ?(min_height = 28) ~control () : t =
+    ?(col_gap = 24) ?(min_height = 28) ?(cross = `start) ~control () : t =
  fun ctx parent ->
   let viewport = Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
@@ -718,7 +718,7 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     ~value:(reactive (fun viewport -> if viewport>=640. then 3 else 1) viewport)
     (Ui_parts.int_prop P.Gap
       ~value:(reactive (fun viewport -> if viewport>=640. then col_gap else 0) viewport)
-    (grid ~key ~style_class:"it" ~min_width:0 ~cross:`start ~min_height
+    (grid ~key ~style_class:"it" ~min_width:0 ~cross ~min_height
       ([column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch ~gap:0
           ([row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
               (label :: label_extra)]

@@ -97,3 +97,32 @@ test('every referenced Radix color and channel has a definition in both modes', 
     assert.equal(defined.get('--rx-yellow-10-hsl'), mode === 'light' ? '50 100% 48.5%' : '54 100% 68.0%')
   }
 })
+
+
+test('legacy form styling is opt-in and leaves shared controls in their component layer', async () => {
+  const config = (await import('../postcss.config.js')).default
+  const source = `@import "tailwindcss" source(none);
+@import "./resources/css/shui.css";
+@import "./resources/css/lui.css";
+@source inline("form-checkbox form-input form-select");
+@config "./tailwind.config.js";`
+  const result = await postcss(config.plugins.filter(plugin => plugin.postcssPlugin !== 'cssnano'))
+    .process(source, { from: new URL('../choice-style-test.css', import.meta.url).pathname })
+  const bareControls = []
+  const formClasses = new Set()
+  const borderResetLayers = []
+  result.root.walkRules(rule => {
+    if (/input:where\(\[type=["'](?:checkbox|radio)/.test(rule.selector)) bareControls.push(rule.selector)
+    for (const selector of rule.selectors) {
+      if (['.form-checkbox', '.form-input', '.form-select'].includes(selector)) formClasses.add(selector)
+    }
+    if (rule.selector === 'html *' && rule.nodes.some(node => node.prop === 'border-color')) {
+      let owner = rule.parent
+      while (owner && !(owner.type === 'atrule' && owner.name === 'layer')) owner = owner.parent
+      borderResetLayers.push(owner?.params)
+    }
+  })
+  assert.deepEqual(bareControls, [], 'Legacy input selectors must not override component chrome')
+  assert.deepEqual([...formClasses].sort(), ['.form-checkbox', '.form-input', '.form-select'])
+  assert.deepEqual(borderResetLayers, ['base'], 'Generic border defaults must yield to component colors')
+})

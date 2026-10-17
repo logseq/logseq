@@ -110,22 +110,18 @@ let theme_row ctx =
 
 let font_button ~key ~label ~font_family ~active ~on_click =
   Ui_components.button ~key ~variant:`secondary ~selected:active
-    ~label
+    ~accessibility_identifier:("editor-" ^ key) ~label
     ~height:40 ~padding_horizontal:16 ~padding_vertical:0
     ~border_width:(if active then 2 else 0)
     ~border_color:"hsl(var(--primary))"
-    ~style_class:
-      (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
-     ^ if active then " ls-active" else "")
+    ~style_class:(C.btn_cls ~variant:`Secondary ())
     ~on_press:(fun _ -> on_click ())
     [ Ui_components.with_props [Ui_components.Prop.font_family font_family]
         (column ~key:(key ^ "-s") ~gap:0 ~cross:`stretch ~grow:1.
-        ~style_class:
-          ("ls-font ls-font-" ^ String.lowercase_ascii label)
-        [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample"
+        [ text ~key:(key ^ "-ag")
             ~font_size:"0.875rem" ~font_weight:700 ~line_height:"1.25rem" ~height:20
             ~text_alignment:`center ~value:"Ag" []
-        ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name"
+        ; text ~key:(key ^ "-sm")
             ~font_size:"0.7rem" ~font_weight:500 ~line_height:"1rem" ~height:16
             ~text_alignment:`center ~value:label []
         ])
@@ -138,22 +134,21 @@ let editor_font_row () =
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
   C.it_row ~key:"font" ~label:T.editor_font
-    ~value_cls:"ls-it-value-col" ~min_height:80
-    [ row ~key:"font-btns" ~style_class:"ls-row-gap" ~gap:8
+    ~cross:`center ~min_height:80
+    [ row ~key:"font-btns" ~gap:8
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
         ; fb "serif" "Serif" "Lyon-Text, Georgia, ui-serif, serif"
         ; fb "mono" "Mono" "iawriter-mono, Nitti, Menlo, Courier, monospace" ]
-    ; box ~key:"font-g" ~style_class:"ls-font-global" ~margin_top:12
-        [ row ~key:"font-gl" ~cross:`center ~min_height:28
-            ~style_class:"ls-check-row" ~gap:4
-            [ C.checkbox_el ~key:"font-gc" ~on:font.S.fglobal
-                ~on_checked:(fun b -> S.set_editor_font_global b)
-            ; Ui_components.with_props [Ui_components.Prop.opacity 0.7]
-                (text ~key:"font-gt" ~style_class:"ls-check-label"
-                   ~font_size:"0.875rem" ~line_height:"1.25rem"
-                   ~value:T.editor_font_global [])
-            ]
-        ]
+    ; Ui_components.with_props
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.line_height "1.25rem" ]
+        (checkbox ~key:"font-g" ~gap:4 ~margin_top:12 ~min_height:28
+          ~text:T.editor_font_global ~label:T.editor_font_global
+          ~foreground:"hsl(var(--foreground) / 0.7)"
+          ~checked:font.S.fglobal
+          ~on_toggle:(function
+            | Lui_protocol.ToggleChanged (_,checked) -> S.set_editor_font_global checked
+            | _ -> ()) [])
     ]
 
 let color_names =
@@ -226,10 +221,9 @@ let accent_row ~modal =
       ; swatch_row ~key:"acc-r1" (List.filteri (fun i _ -> i >= 8) names)
       ]
   in
-  column ~key:"acc" ~min_height:80
+  column ~key:"acc"
     [ C.action_row ~key:"acc-r"
         ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
-        ~min_height:60
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
@@ -238,9 +232,10 @@ let accent_row ~modal =
                  [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ]
              ])
         ()
-    ; text ~key:"acc-n" ~style_class:"ls-desc"
-        ~data_attrs:[ "style", "margin-top: 3px" ]
-        ~value:T.accent_color_alert []
+    ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+        (text ~key:"acc-n" ~style_class:"ls-desc" ~margin_top:4
+          ~font_size:"0.875rem" ~line_height:"1.25rem"
+          ~value:T.accent_color_alert [])
     ]
 
 (* The reference keeps desktop panels at 600 points and scrolls the

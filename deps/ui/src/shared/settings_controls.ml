@@ -99,18 +99,6 @@ let switch_el ~key ~on ~on_checked =
 let switch_controls ~key ~on ~on_checked ?(extra = []) () =
   switch_el ~key:(key ^ "-sw") ~on ~on_checked :: extra
 
-(* shui/checkbox — the kind draws its own check indicator, so the cljs
-   check svg child is dropped *)
-let checkbox_el ~key ~on ~on_checked =
-  checkbox ~key ~style_class:"ui__checkbox" ~checked:on
-    ~width:16 ~height:16 ~min_width:16 ~min_height:16
-    ~border_width:1 ~border_color:"hsl(var(--foreground))"
-    ~on_toggle:(fun ev ->
-      match ev with
-      | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
-      | _ -> ())
-    []
-
 (* ---- rows ---- *)
 
 (* cljs `toggle` row: label | switch (+detail); info icons are extra
@@ -162,13 +150,12 @@ let action_row ~key ~label ?description ~actions ?(desc = [])
          ])
     ()
 
-(* bare .it shell: label | value cell — font/date-format/home rows *)
-let it_row ~key ~label ?(value_cls = "ls-it-value")
-    ?(min_height = 28) children =
-  Ui_components.form_row ~key ~min_height
+(* Label/value rows keep their controls at their natural width. *)
+let it_row ~key ~label ?(min_height = 28) ?(cross = `start) children =
+  Ui_components.form_row ~key ~min_height ~cross
     ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
     ~control:
-      (column ~key:(key ^ "-r") ~style_class:value_cls ~cross:`stretch
+      (column ~key:(key ^ "-r") ~cross:`start
          children)
     ()
 

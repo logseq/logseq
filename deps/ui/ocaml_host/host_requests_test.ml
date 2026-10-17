@@ -3449,12 +3449,12 @@ let () =
           let checkbox =
             List.find (fun id -> Lui_store.kind store id = "checkbox") nodes
           in
-          expect "Settings checkbox has no visible sixteen-point hit target"
-            ((rect checkbox).w = 32. && (rect checkbox).h = 32.
+          expect "Settings checkbox must include its caption in the hit target"
+            ((rect checkbox).w > 32. && (rect checkbox).h = 56.
             && List.mem checkbox
                  (W.hit_path store (A.rects surface)
-                    ~x:((rect checkbox).x +. 16.) ~y:((rect checkbox).y +. 16.))
-            );
+                    ~x:((rect checkbox).x +. (rect checkbox).w -. 4.)
+                    ~y:((rect checkbox).y +. 28.)));
           let cards =
             List.filter
               (fun id ->
@@ -3527,7 +3527,14 @@ let () =
                 | Some color -> color.a > 0
                 | None -> false))
             [ dialog; trigger; thumbnail_ring ];
-          let font_sample = find_class "ls-font-sample" in
+          let fonts=List.map (fun name -> List.find (fun id ->
+              Lui_store.string_prop store id "accessibility-identifier"=Some ("editor-font-" ^ name)) nodes)
+            ["default";"serif";"mono"] in
+          let font_text button ~caption = List.find (fun id ->
+              Lui_store.kind store id="text"
+              && (Lui_store.string_prop store id "text"=Some "Ag")<>caption)
+            (Lui_store.preorder ~root:button store) in
+          let font_sample = font_text (List.hd fonts) ~caption:false in
           let bold =
             Lui_text.create ~families:[ "Inter" ] ~size:14. ~weight:700 ()
           in
@@ -3539,17 +3546,15 @@ let () =
                      "Ag")
                -. fst (Lui_text.measure bold "Ag"))
             < 0.01);
-          let fonts =
-            List.filter (fun id -> has_class id "ls-font-btn") nodes
-          in
           expect "Font choices have no eight-point gap"
             ((rect (List.nth fonts 1)).x
              -. ((rect (List.hd fonts)).x +. (rect (List.hd fonts)).w)
             = 16.);
-          let global_label = find_class "ls-check-label" in
+          let global_label = List.find (fun id -> Lui_store.kind store id="checkbox"
+            && Lui_store.string_prop store id "text"=Some I18n.editor_font_global) nodes in
           expect "Global font checkbox label is not fourteen-point text"
             (Lui_text.size (Text_engine.font_of store global_label) = 14.);
-          let font_name = find_class "ls-font-name" in
+          let font_name = font_text (List.hd fonts) ~caption:true in
           expect
             "Font preview captions differ from the measured eleven-point-two \
              text"
@@ -3558,13 +3563,8 @@ let () =
             < 0.001);
           List.iter2
             (fun button families ->
-              let descendants = Lui_store.preorder ~root:button store in
-              let sample =
-                List.find (fun id -> has_class id "ls-font-sample") descendants
-              in
-              let caption =
-                List.find (fun id -> has_class id "ls-font-name") descendants
-              in
+              let sample = font_text button ~caption:false
+              and caption = font_text button ~caption:true in
               List.iter
                 (fun (id, size, weight) ->
                   let actual = Text_engine.font_of store id in
@@ -4922,10 +4922,15 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Views_state.Sset.elements (selected ())=["row-a";"row-b"]);
       apply (A.handle surface (W.Input.Move (580.,180.)));
       expect "Select-all does not reveal both selected checkboxes" (visible first && visible second);
-      apply (A.handle surface (W.Input.Key_down (W.Input.Tab,W.Input.mods_none,false)));
-      expect "Tab must focus the select-all checkbox" (W.Ui.focused (A.ui surface)=header);
+      expect "Clicking select-all must focus its checkbox" (W.Ui.focused (A.ui surface)=header);
       apply (A.handle surface (W.Input.Key_down (W.Input.Space,W.Input.mods_none,false)));
-      expect "Keyboard activation does not clear the select-all checkbox" (Views_state.Sset.is_empty (selected ()));
+      expect "Space after a select-all click must clear the selection" (Views_state.Sset.is_empty (selected ()));
+      W.Ui.set_focused (A.ui surface) store 0;
+      apply (A.handle surface (W.Input.Key_down (W.Input.Tab,W.Input.mods_none,false)));
+      expect "Tab from an unfocused table must focus select-all" (W.Ui.focused (A.ui surface)=header);
+      apply (A.handle surface (W.Input.Key_down (W.Input.Space,W.Input.mods_none,false)));
+      expect "Space after Tab must select every row"
+        (Views_state.Sset.elements (selected ())=["row-a";"row-b"]);
       expect "Selection updates replace checkbox identities" (find "header-checkbox"=header && find "row-a-checkbox"=first))
     ) [1.;2.];
   Views_popup.open_popups:=previous_popups;Views_popup.stack_st:=previous_stack;Views_popup.open_st:=previous_open;
@@ -5620,3 +5625,57 @@ let () = Native_embed.with_entry_lock (fun () ->
              && Lui_store.string_prop store input "text"=Some "Retained café 中文 😀"))
           [1280.;500.;900.;500.;1280.])) [1.;2.]);
   print_endline "native shared responsive form columns and retained input: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A=Lui_window.Assembly in
+  let module W=Lui_window in
+  List.iter (fun scale ->
+    let surface=A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+      ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
+        hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+        caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+          {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+           c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+      ~renderer:{Lui_host.name="font-checkbox-test";render=(fun _ -> Bytes.empty)}
+      ~width:(int_of_float (600.*.scale)) ~height:(int_of_float (200.*.scale)) () in
+    let app=Lui_app.create (A.backend surface (profile MacOS GenericHost))
+      () (fun model () -> model) (fun _ _ _ -> Lui_elements.column [Settings_page.editor_font_row ();Settings_page.accent_row ~modal:false]) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      ignore (A.store_changed surface);ignore (A.repaint surface);
+      let store=A.store surface in
+      let checkbox=List.find_opt (fun id -> Lui_store.kind store id="checkbox"
+        && Lui_store.string_prop store id "text"=Some I18n.editor_font_global)
+        (Lui_store.preorder store) in
+      check "Global font checkbox must own its visible caption and accessible name" (checkbox<>None);
+      let checkbox=Option.get checkbox in
+      let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some I18n.accent_color_alert)
+        (Lui_store.preorder store) in
+      let accent=Option.get (Lui_store.parent store note) in
+      check "Accent group must use its 48-point swatches, 4-point gap and 20-point note"
+        (abs_float ((W.Rects.get (A.rects surface) accent).h/.scale-.72.)<0.1);
+      let bounds=W.Rects.get (A.rects surface) checkbox in
+      check "Global font caption must remain inside the checkbox hit region" (bounds.w>80.*.scale);
+      check "Global font checkbox must not add wrapper border chrome"
+        (match Lui_store.prop store checkbox "border-width" with
+         | None | Some (IntValue 0) -> true | _ -> false);
+      let form=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "it")
+        (Lui_store.preorder store) in
+      let label=List.hd (Lui_store.child_ids store form) in
+      let label_bounds=W.Rects.get (A.rects surface) label in
+      check "Font label must center alongside its 80-point control group"
+        (abs_float (label_bounds.y/.scale-.26.)<0.1);
+      check "Font checkbox must follow the 40-point buttons by 12 points"
+        (abs_float (bounds.y/.scale-.52.)<0.1 && abs_float (bounds.h/.scale-.28.)<0.1);
+      let x=(bounds.x+.bounds.w-.10.*.scale)/.scale
+      and y=(bounds.y+.bounds.h/.2.)/.scale in
+      ignore (A.handle surface (W.Input.Move (x,y)));
+      ignore (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+      let actions=A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+      let toggles=List.filter (function W.Dispatch (ToggleChanged (id,_)) -> id=checkbox | _ -> false) actions in
+      check "Clicking the global font caption must toggle exactly once" (List.length toggles=1);
+      check "Clicking the global font caption must focus its control" (W.Ui.focused (A.ui surface)=checkbox);
+      let keyboard=A.handle surface (W.Input.Key_down (W.Input.Space,W.Input.mods_none,false)) in
+      check "Space after a caption click must toggle the same checkbox"
+        (List.exists (function W.Dispatch (ToggleChanged (id,_)) -> id=checkbox | _ -> false) keyboard))) [1.;2.];
+  print_endline "native font row and labeled checkbox geometry/input: OK")

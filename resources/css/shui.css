@@ -1,5 +1,7 @@
-html * {
-  border-color: hsl(var(--border));
+@layer base {
+  html * {
+    border-color: hsl(var(--border));
+  }
 }
 
 html[data-theme=light] {
