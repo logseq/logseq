@@ -378,10 +378,19 @@
   [db blocks*]
   (let [;; Remove property value blocks that can't have content refs
         blocks (remove :logseq.property/value blocks*)
-        block-links (->> (filter :block/link blocks)
-                         (map #(:block/uuid (:block/link %))))
-        content-ref-uuids (into (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
-                                block-links)
+        block-refs (fn [blocks]
+                     (into (set (mapcat #(let [title (block-title %)]
+                                           (when (string? title) (db-content/get-matched-ids title)))
+                                        blocks))
+                           (keep #(:block/uuid (:block/link %)) blocks)))
+        ;; A referenced block is exported with its title, so the refs in its title
+        ;; are followed too; otherwise they import as raw uuids
+        content-ref-uuids (loop [uuids (block-refs blocks)]
+                            (let [ref-blocks (->> uuids
+                                                  (keep #(d/entity db [:block/uuid %]))
+                                                  (remove entity-util/page?))
+                                  uuids' (into uuids (block-refs ref-blocks))]
+                              (if (= uuids uuids') uuids (recur uuids'))))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         {:keys [properties classes]}
@@ -434,7 +443,11 @@
                         (when (seq new-pvalue-uuids) (swap! *pvalue-uuids into new-pvalue-uuids))
                         (cond-> node
                           (seq child-nodes) (assoc :build/children child-nodes))))
-        roots (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
+        ;; Without children nesting, every block is a root: a block whose parent is
+        ;; also exported would otherwise be neither nested nor exported
+        roots (if include-children?
+                (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
+                blocks)
         exported-blocks (mapv build-block roots)]
     (cond-> {:blocks exported-blocks
              :pvalue-uuids @*pvalue-uuids}
@@ -443,10 +456,13 @@
       (not= @*classes (get-in opts [:graph-ontology :classes]))
       (assoc :classes @*classes))))
 
-(defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity]}]
+(defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity exported-nodes]}]
   (let [content-ref-blocks (set (remove entity-util/page? content-ref-ents))
-        uuid-block-ents-to-export (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
-                                          content-ref-blocks)
+        ;; a block already in the export (e.g. selected) is not exported a second time
+        exported-ids (set (keep :db/id exported-nodes))
+        uuid-block-ents-to-export (->> (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
+                                               content-ref-blocks)
+                                       (remove #(contains? exported-ids (:db/id %))))
         uuid-block-pages
         (when (seq uuid-block-ents-to-export)
           (->> uuid-block-ents-to-export
@@ -486,13 +502,18 @@
       (:pages-and-blocks merged-map)
       (update :pages-and-blocks sort-pages-and-blocks))))
 
+(defn- property-value-entities
+  "The entities a node's property values point at; a many value is a set."
+  [props]
+  (->> (vals props)
+       (mapcat #(if (set? %) % [%]))
+       (filter de/entity?)))
+
 (defn- build-block-export
   "Exports block for given block eid"
   [db eid]
   (let [block-entity (d/entity db eid)
-        property-value-ents (->> (dissoc (db-property/properties block-entity) :block/tags)
-                                 vals
-                                 (filter de/entity?))
+        property-value-ents (property-value-entities (dissoc (db-property/properties block-entity) :block/tags))
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into [block-entity] property-value-ents))
         node-export (build-node-export db block-entity {:include-uuid-fn content-ref-uuids})
@@ -658,15 +679,16 @@
   [db rows {:keys [group-by?]}]
   (let [eids (if group-by? (mapcat second rows) rows)
         nodes (map #(d/entity db (if (uuid? %) [:block/uuid %] %)) eids)
-        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
-                                          vals
-                                          (filter de/entity?))
+        property-value-ents (mapcat #(property-value-entities
+                                      (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties))
                                     nodes)
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? false})
-        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        ;; an exported node that is another one's property value keeps its uuid
+        (build-nodes-export db nodes {:include-uuid-fn (into (set content-ref-uuids) (keep :block/uuid) property-value-ents)
+                                      :include-children? false})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
 
@@ -680,15 +702,16 @@
                             (mapcat #(rest (ldb/get-block-and-children db (:block/uuid %))))
                             (remove :logseq.property/created-from-property))
         nodes (concat top-level-nodes children-nodes)
-        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
-                                          vals
-                                          (filter de/entity?))
+        property-value-ents (mapcat #(property-value-entities
+                                      (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties))
                                     nodes)
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? true})
-        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        ;; an exported node that is another one's property value keeps its uuid
+        (build-nodes-export db nodes {:include-uuid-fn (into (set content-ref-uuids) (keep :block/uuid) property-value-ents)
+                                      :include-children? true})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:exported-nodes nodes})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
 
