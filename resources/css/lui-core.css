@@ -725,8 +725,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     }
 
     .sidebar-content-group-inner > .hd:not(.non-collapsable):hover {
-      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
-
       * {
         opacity: 1 !important;
       }
@@ -813,7 +811,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
       cursor: pointer;
       z-index: 2;
       border-radius: 6px;
-      background-color: var(--left-sidebar-bg-color);
 
       &.non-collapsable {
         cursor: default;

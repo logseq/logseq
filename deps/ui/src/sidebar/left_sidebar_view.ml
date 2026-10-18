@@ -488,11 +488,7 @@ let nav_group ms st =
             [ Ui_components.Prop.inset_top (-4.)
             ; Ui_components.Prop.z_index 2
             ; Ui_components.Prop.user_select `none
-            ; Ui_components.Prop.cursor `default
-            ; (* no resting fill — section headers stay dim so the
-                 list content pops; hover still gets the web's
-                 gray-04 affordance *)
-              ( Ui_components.Prop.hover_background "var(--lx-gray-04, var(--rx-gray-04))" ) ]
+            ; Ui_components.Prop.cursor `default ]
             (row ~key:"nav-hd" ~cross:`center ~main:`space_between
                ~data_attrs_signal:
                  (Signal.constant ctx.Lui_ui.ui_scheduler
@@ -705,9 +701,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                   [ Ui_components.Prop.inset_top (-4.)
                   ; Ui_components.Prop.z_index 2
                   ; Ui_components.Prop.user_select `none
-                  ; Ui_components.Prop.cursor `pointer
-                  ; ( Ui_components.Prop.hover_background
-                        "var(--lx-gray-04, var(--rx-gray-04))" ) ]
+                  ; Ui_components.Prop.cursor `pointer ]
                   (row ~key:(key ^ "-hd") ~cross:`center
                         ~main:`space_between ~height:32 ~corner_radius:6
                         ~padding_horizontal:4
