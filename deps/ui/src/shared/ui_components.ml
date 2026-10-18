@@ -1181,7 +1181,7 @@ let calendar_grid ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
          ~style_class:"ui__calendar-day" ~variant:`ghost
          ~accessibility_identifier:
            (Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d)
-         ~width:36 ~height:36 ~padding:0 ~corner_radius:6 ~selected:focused
+         ~width:36 ~height:36 ~padding:0 ~corner_radius:6
          ~autofocus:focused
          ~background:
            (if focused then
@@ -1237,12 +1237,19 @@ let calendar_month_names translate =
       "format.month/december";
     |]
 
-let calendar_nav_button ~id ~label ~icon ~on_press =
+let calendar_header ~previous ~next ~month ~year =
+  stack ~key:"calendar-header" ~width:276 ~height:32 ~margin_top:4
+    [ row ~key:"navigation" ~width:276 ~height:32 ~main:`end_ ~cross:`center ~gap:4
+        [previous;next];
+      row ~key:"caption" ~width:196 ~height:32 ~cross:`center ~gap:8
+        [month;year] ]
+
+let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
   with_props
     [ Prop.hover_background "var(--lx-gray-03, hsl(var(--muted)))" ]
     (button ~variant:`ghost ~width:36 ~height:32 ~padding:0 ~border_width:1
        ~border_color:"var(--lx-popover-border, hsl(var(--border)))"
-       ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~on_press [])
+       ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
 let date_picker ~translate ~on_pick : t =
  fun context parent ->
@@ -1298,9 +1305,14 @@ let date_picker ~translate ~on_pick : t =
         [
           column ~style_class:"ui__calendar" ~padding:12 ~gap:16
             [
-              row ~cross:`center ~gap:4 ~margin_top:4
-                [
-                  column ~min_width:0
+              calendar_header
+                ~previous:(calendar_nav_button ~id:"calendar-prev" ~autofocus:true
+                    ~label:(translate "editor.date-picker/previous-month")
+                    ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1)))
+                ~next:(calendar_nav_button ~id:"calendar-next" ~autofocus:false
+                    ~label:(translate "editor.date-picker/next-month")
+                    ~icon:(`app "chevron-right") ~on_press:(fun _ -> move 1))
+                ~month:(column ~min_width:0
                     [
                       button ~variant:`ghost
                         ~accessibility_identifier:"calendar-month" ~width:96
@@ -1331,8 +1343,8 @@ let date_picker ~translate ~on_pick : t =
                                           Signal.set month_open false)
                                         []))
                                  (calendar_month_names translate))));
-                    ];
-                  input ~accessibility_identifier:"calendar-year" ~width:52
+                    ])
+                ~year:(input ~accessibility_identifier:"calendar-year" ~width:52
                     ~height:32 ~padding_horizontal:8 ~padding_vertical:0
                     ~text:
                       (reactive
@@ -1346,15 +1358,7 @@ let date_picker ~translate ~on_pick : t =
                               set_month y m
                           | _ -> ())
                       | _ -> ())
-                    [];
-                  spacer ~grow:1. [];
-                  calendar_nav_button ~id:"calendar-prev"
-                    ~label:(translate "editor.date-picker/previous-month")
-                    ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1));
-                  calendar_nav_button ~id:"calendar-next"
-                    ~label:(translate "editor.date-picker/next-month")
-                    ~icon:(`app "chevron-right") ~on_press:(fun _ -> move 1);
-                ];
+                    []);
               reactive
                 (fun (year, month, d) focused ->
                   calendar_grid ~year ~month ~day:(if focused then Some d else None)

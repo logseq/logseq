@@ -7695,3 +7695,48 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native calendar keyboard navigation and date commitment" (!failures=[]);
   print_endline "native calendar keyboard navigation and date commitment: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store = Lui_store.create () in
+  let backend = {backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+    Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let ids = Lui_store.preorder store in
+    let find name = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name) ids in
+    let prev = find "calendar-prev" and next = find "calendar-next"
+    and month = find "calendar-month" and year = find "calendar-year"
+    and natural = find "calendar-date-input" in
+    let day = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "ui__calendar-day"
+      && Lui_query.data_attr store id "tabindex"=Some "0") ids in
+    let failures = ref [] in
+    let expect message condition = if not condition then failures:=message::!failures in
+    let ui = Lui_window.Ui.create () and rects = Lui_window.Rects.create () in
+    ignore (Lui_window.Ui.store_changed ui store);
+    expect "Standalone calendar opening must focus previous-month navigation"
+      (Lui_window.Ui.focused ui=prev);
+    let traverse ~shift expected = List.iter (fun target ->
+      ignore (Lui_window.Ui.handle ui store rects
+        (Lui_window.Input.Key_down (Lui_window.Input.Tab,{Lui_window.Input.mods_none with shift},false)));
+      expect (Printf.sprintf "Calendar Tab shift=%b must focus %s" shift
+        (Option.get (Lui_store.string_prop store target "accessibility-identifier")))
+        (Lui_window.Ui.focused ui=target)) expected in
+    traverse ~shift:false [next;month;year;day;natural];
+    traverse ~shift:true [day;year;month;next;prev];
+    let layout = Lui_layout.create () in
+    List.iter (fun scale ->
+      Lui_layout.sync ~scale ~width:(300.*.scale) ~height:(700.*.scale)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.*.scale,20.*.scale)) layout store;
+      let rect id = Option.get (Lui_layout.rect layout id) in
+      let p=rect prev and n=rect next and m=rect month and y=rect year in
+      let near actual expected = abs_float (actual-.expected)<0.01 in
+      expect "Calendar caption controls must use the reference eight-point gap"
+        (near (y.x-.m.x-.m.w) (8.*.scale));
+      expect "Calendar navigation must retain its independent right-aligned geometry"
+        (near (p.x-.m.x) (200.*.scale) && near (n.x-.p.x) (40.*.scale)
+         && near p.y m.y && near y.y m.y && near n.y m.y)) [1.;2.];
+    List.iter prerr_endline (List.rev !failures);
+    check "Native calendar initial focus, traversal and header geometry" (!failures=[]);
+    print_endline "native calendar initial focus, traversal and header geometry: OK"))

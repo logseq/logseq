@@ -69,6 +69,16 @@ let run_views ~registry ~profile ~finish =
   let find_day session y m d = List.find (fun n -> M.string_prop n "accessibility-identifier"
       =Some (day_name y m d)) (nodes session) in
   let day = find_day calendar today.year today.month today.day in
+  let header_names = ["calendar-prev";"calendar-next";"calendar-month";"calendar-year"] in
+  let header = List.filter_map (fun n -> match M.string_prop n "accessibility-identifier" with
+    | Some name when List.mem name header_names -> Some name | _ -> None) (nodes calendar) in
+  check "Calendar header order matches navigation, month and year traversal" (header=header_names);
+  check "Standalone calendar initially focuses previous-month navigation"
+    (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-prev"
+      && Hashtbl.find_opt n.M.props "autofocus"=Some (P.BoolValue true)) (nodes calendar));
+  check "Calendar dates must be ordinary activation buttons, not pressed toggles"
+    (List.for_all (fun n -> not (Hashtbl.mem n.M.props "selected"))
+      (List.filter (fun n -> class_has n "ui__calendar-day") (nodes calendar)));
   check "Standalone calendars expose a single date in the Tab sequence"
     (List.length (List.filter (fun n -> class_has n "ui__calendar-day"
       && M.string_prop n "data-attrs"=Some (P.data_attrs_encode ["tabindex","0"])) (nodes calendar))=1);
@@ -93,7 +103,19 @@ let run_views ~registry ~profile ~finish =
   check "Editor month controls clamp the focused day to the target month"
     (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=29 | None -> false);
   Editor_commands.active:=Some popup;
-  let editor_calendar = mount (fun _ -> Editor_commands.cal_table popup) in
+  let editor_calendar = mount (fun _ context parent ->
+    let source = Signal.value (Editor_commands.popup_vs_of context) in
+    Lui_elements.column [Editor_commands.cal_head source;Editor_commands.cal_table popup] context parent) in
+  let editor_header = List.filter (fun n -> n.M.kind="button"
+    && not (class_has n "ui__calendar-day")) (nodes editor_calendar) in
+  check "Editor calendars use the same navigation-first header order"
+    (List.map (fun n -> match M.string_prop n "accessibility-label" with
+       | Some label -> label | None -> Option.get (M.string_prop n "text")) editor_header
+     = [I18n.t "editor.date-picker/previous-month";I18n.t "editor.date-picker/next-month";
+        I18n.t "format.month/january"]);
+  check "Editor calendar dates also remain ordinary activation buttons"
+    (List.for_all (fun n -> not (Hashtbl.mem n.M.props "selected"))
+      (List.filter (fun n -> class_has n "ui__calendar-day") (nodes editor_calendar)));
   let prevented = ref false in
   check "Editor calendar navigation is consumed before editor commands"
     (Editor_commands.popup_key ~key:"ArrowRight" ~inside:(fun () -> true)

@@ -784,27 +784,20 @@ let repeat_panel ps : t =
                ; text ~key:"dl"
                    ~value:(reactive (opt3 done_label_of) ps) [] ] ] ])
 
-(* bordered 32px ghost button — the prev/next month nav chrome (old
-   .ls-cal-nav-btn); the hover paint is the variant's accent *)
-let nav_btn ~key ~label ~on_press children : t =
-  Ui_components.with_props
-    [ ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
-    (Ui_components.button ~key ~variant:`ghost ~height:32 ~width:36 ~padding:0
-       ~border_width:1
-       ~border_color:
-         "var(--lx-popover-border, var(--ls-border-color, #e5e5e5))"
-       ~corner_radius:6 ~label ~on_press children)
-
 let cal_head ps : t =
-  row ~key:"head" ~cross:`center ~main:`space_between
-    ~data_attrs:[ ("style", "margin-bottom: 0.75rem") ]
-    [ row ~key:"selects" ~cross:`center ~gap:4
-        [ Ui_components.with_props
+  Ui_components.calendar_header
+    ~previous:(Ui_components.calendar_nav_button ~id:"editor-calendar-prev" ~autofocus:false
+      ~label:(I18n.t "editor.date-picker/previous-month")
+      ~icon:(`app "chevron-left") ~on_press:(fun _ -> nav_month (-1)))
+    ~next:(Ui_components.calendar_nav_button ~id:"editor-calendar-next" ~autofocus:false
+      ~label:(I18n.t "editor.date-picker/next-month")
+      ~icon:(`app "chevron-right") ~on_press:(fun _ -> nav_month 1))
+    ~month:(Ui_components.with_props
             [ Ui_components.Prop.font_size "0.875rem"
             ; Ui_components.Prop.font_weight 500
             ; Ui_components.Prop.white_space `nowrap ]
             (Ui_components.button ~key:"msel" ~style_class:"ls-date-month-select"
-               ~variant:`ghost ~main:`start ~height:32 ~min_width:96
+               ~variant:`ghost ~main:`start ~height:32 ~width:96 ~min_width:0
                ~padding_horizontal:12 ~border_width:1
                ~border_color:
                  "var(--lx-popover-border, var(--ls-border-color, \
@@ -818,17 +811,8 @@ let cal_head ps : t =
                           | None -> "")
                         ps)
                ~on_press:(fun _ -> toggle_month_menu ())
-               [])
-        ; year_input ps ]
-    ; row ~key:"nav" ~cross:`center ~gap:4
-        [ nav_btn ~key:"prev"
-            ~label:(I18n.t "editor.date-picker/previous-month")
-            ~on_press:(fun _ -> nav_month (-1))
-            [ Icons.icon "chevron-left" ]
-        ; nav_btn ~key:"next"
-            ~label:(I18n.t "editor.date-picker/next-month")
-            ~on_press:(fun _ -> nav_month 1)
-            [ Icons.icon "chevron-right" ] ] ]
+               []))
+    ~year:(year_input ps)
 
 (* comparators: never structural — the record carries closures
    (menu.mitems), so [equal] spells out the fields that drive each
@@ -882,7 +866,7 @@ let cal_body ps (p : popup) : t =
            ~style_class:"ls-property-date-picker"
            [ column ~key:"left"
                [ column ~key:"cal-box" ~style_class:"ui__calendar"
-                   ~min_width:0
+                   ~min_width:0 ~gap:16
                    ~data_attrs:[ ("style", "max-width: 100%") ]
                    [ cal_head ps
                    ; reactive ~equal:cal_eq
