@@ -7539,3 +7539,86 @@ let () =
         "Application form colors and authored overrides must match both hosts"
         (!failures = []);
       print_endline "native application form colors and authored overrides: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition =
+    if not condition then failures:=message::!failures
+  in
+  let previous_flush = !Runtime.app_flush
+  and previous_popups = !Views_popup.open_popups
+  and previous_stack = !Views_popup.stack_st
+  and previous_open = !Views_popup.open_st in
+  Fun.protect ~finally:(fun () ->
+    Runtime.app_flush:=previous_flush;
+    Views_popup.open_popups:=previous_popups;
+    Views_popup.stack_st:=previous_stack;
+    Views_popup.open_st:=previous_open) (fun () ->
+    List.iter (fun scale ->
+      Views_popup.open_popups:=[];
+      Views_popup.stack_st:=None;
+      Views_popup.open_st:=None;
+      let host = Lui_host.create ~hooks:Lui_paint.default_hooks
+        ~layout:(module Lui_layout)
+        ~measure:(fun _ _ _ _ -> Some (80.*.scale,20.*.scale))
+        ~renderer:{Lui_host.name="popup-edge-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (640.*.scale))
+        ~height:(int_of_float (600.*.scale)) ~scale () in
+      Lui_host.set_reduced_motion host true;
+      let app = Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) ()
+        (fun () () -> ()) (fun _ _ _ ->
+          Lui_elements.column ~grow:1.
+            [Lui_elements.button ~accessibility_identifier:"popup-edge-trigger"
+               ~margin_left:320 ~margin_top:300 ~width:24 ~height:24 ~text:"T" [];
+             Views_popup.layer]) in
+      let flush () = ignore (Lui_app.flush app);ignore (Lui_host.repaint host) in
+      Runtime.app_flush:=flush;
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);flush ();
+        let anchor = Ui_dom_native.el_of
+          (Js.Json.JObject ["id",Js.Json.JString "popup-edge-trigger"]) in
+        let open_popup kind align_end = match kind with
+          | "menu" -> Views_popup.show_menu ~anchor ~align_end
+              [Views_popup.MItem ("Action",ignore)]
+          | "select" -> Views_popup.show_select ~anchor ~align_end
+              ~items:(Views_popup.fixed_items []) ~placeholder:"Filter"
+              ~on_chosen:(fun _ _ -> ()) ()
+          | _ -> Views_popup.show_custom ~anchor ~align_end ~cls:"edge-fixture"
+              (Lui_elements.text ~value:"Content" []) in
+        List.iter (fun kind -> List.iter (fun align_end ->
+          open_popup kind align_end;flush ();
+          let store = Lui_host.store host in
+          let find test = List.find test (Lui_store.preorder store) in
+          let trigger = find (fun id -> Lui_store.string_prop store id
+            "accessibility-identifier"=Some "popup-edge-trigger") in
+          let popup = find (fun id -> Lui_store.kind store id="popover") in
+          let rect id = Option.get (Lui_host.layout_rect host id) in
+          let near a b = abs_float (a-.b)<0.1*.scale in
+          let label = Printf.sprintf "%s align-end=%b scale=%g: " kind align_end scale in
+          if kind="select" then begin
+            let input = find (fun id -> Lui_store.kind store id="input") in
+            expect (label ^ "search text differs from the reference sixteen-point font")
+              (Lui_text.size (Text_engine.font_of store input)=16.);
+            expect (label ^ "search text differs from the reference twenty-four-point line")
+              (Text_engine.line_height_of store input=Some 24.)
+          end;
+          let below () =
+            let a=rect trigger and p=rect popup in
+            expect (label ^ "popup adds a gap below its retained trigger")
+              (near p.y (a.y+.a.h)) in
+          below ();
+          Lui_host.resize host ~width:(int_of_float (640.*.scale))
+            ~height:(int_of_float (340.*.scale)) ~scale;
+          ignore (Lui_host.repaint host);
+          let a=rect trigger and p=rect popup in
+          expect (label ^ "flipped popup adds a gap above its retained trigger")
+            (near (p.y+.p.h) a.y);
+          Lui_host.resize host ~width:(int_of_float (640.*.scale))
+            ~height:(int_of_float (600.*.scale)) ~scale;
+          ignore (Lui_host.repaint host);
+          below ();
+          Views_popup.close_all ()) [false;true]) ["menu";"select";"custom"]))
+      [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native view popup trigger-edge placement" (!failures=[]);
+  print_endline "native view popup trigger-edge placement: OK")

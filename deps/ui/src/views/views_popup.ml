@@ -122,7 +122,7 @@ let anchored_popover ~key ~id ~anchor_target ~align_end ~cls ~card ?role ~on_dis
     (if card then [ Ui_components.card_shadow ] else [])
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
-       ~anchor:`below ~anchor_target ~anchor_offset:4.
+       ~anchor:`below ~anchor_target ~anchor_offset:0.
        ~anchor_alignment:(if align_end then `end_ else `start)
        ?background:(if card then Some "hsl(var(--popover))" else None)
        ?foreground:(if card then Some "inherit" else None)
@@ -455,6 +455,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            ~style_class:"cp__select cp__select-main" ~width:224 ~cross:`stretch
            ([ Ui_components.with_props
                 [ Ui_components.Prop.font_size "16px"
+                ; Ui_components.Prop.line_height "24px"
                 ; Ui_components.Prop.focus_shadow "none" ]
                 (Ui_components.input ~key:("vpsel-i" ^ string_of_int id)
                    ~style_class:"cp__select-input" ~placeholder
