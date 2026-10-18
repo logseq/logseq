@@ -6507,7 +6507,7 @@ let () = Native_embed.with_entry_lock (fun () ->
 let () = Native_embed.with_entry_lock (fun () ->
   let module A=Lui_window.Assembly in
   let module W=Lui_window in
-  List.iter (fun scale ->
+  List.iter (fun (scale,compact) ->
     let surface=A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
       ~text:{measure=(fun _ _ -> 80.*.scale,20.*.scale);text_ops=(fun _ _ _ _ -> []);
         hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
@@ -6517,7 +6517,10 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~renderer:{Lui_host.name="font-checkbox-test";render=(fun _ -> Bytes.empty)}
       ~width:(int_of_float (600.*.scale)) ~height:(int_of_float (200.*.scale)) () in
     let app=Lui_app.create (A.backend surface (profile MacOS GenericHost))
-      () (fun model () -> model) (fun _ _ _ -> Lui_elements.column [Settings_page.editor_font_row ();Settings_page.accent_row ~modal:false]) in
+      () (fun model () -> model) (fun ctx _ _ ->
+        if compact then (Settings_state.ensure ctx;
+          Lui_elements.column ~gap:16 (Settings_page.appearance_rows ctx))
+        else Lui_elements.column [Settings_page.editor_font_row ();Settings_page.accent_row ~modal:false]) in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
       ignore (Lui_app.start app);ignore (Lui_app.flush app);
       ignore (A.store_changed surface);ignore (A.repaint surface);
@@ -6535,20 +6538,28 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Lui_store.preorder store) in
       let accent=Option.get (Lui_store.parent store note) in
       check "Accent group must use its 48-point swatches, 4-point gap and 20-point note"
-        (abs_float ((W.Rects.get (A.rects surface) accent).h/.scale-.72.)<0.1);
+        (abs_float ((W.Rects.get (A.rects surface) accent).h/.scale-.(if compact then 76. else 72.))<0.1);
       let bounds=W.Rects.get (A.rects surface) checkbox in
       check "Global font caption must remain inside the checkbox hit region" (bounds.w>80.*.scale);
       check "Global font checkbox must not add wrapper border chrome"
         (match Lui_store.prop store checkbox "border-width" with
          | None | Some (IntValue 0) -> true | _ -> false);
-      let form=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "it")
+      let form=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "it"
+        && Lui_query.is_desc store checkbox id)
         (Lui_store.preorder store) in
       let label=List.hd (Lui_store.child_ids store form) in
       let label_bounds=W.Rects.get (A.rects surface) label in
-      check "Font label must center alongside its 80-point control group"
-        (abs_float (label_bounds.y/.scale-.26.)<0.1);
+      let form_bounds=W.Rects.get (A.rects surface) form in
+      check "Font label must begin at the top of its control group"
+        (abs_float (label_bounds.y-.form_bounds.y)<0.1);
+      check "Font row uses its regular or compact intrinsic control height"
+        (abs_float (form_bounds.h/.scale-.(if compact then 72. else 80.))<0.1);
+      let gap=if compact then 16. else 24. in
+      check "Font controls use the correct density's column gap"
+        (abs_float ((bounds.x-.label_bounds.x-.label_bounds.w)/.scale-.gap)<0.1);
       check "Font checkbox must follow the 40-point buttons by 12 points"
-        (abs_float (bounds.y/.scale-.52.)<0.1 && abs_float (bounds.h/.scale-.28.)<0.1);
+        (abs_float ((bounds.y-.form_bounds.y)/.scale-.52.)<0.1
+         && abs_float (bounds.h/.scale-.(if compact then 20. else 28.))<0.1);
       let x=(bounds.x+.bounds.w-.10.*.scale)/.scale
       and y=(bounds.y+.bounds.h/.2.)/.scale in
       ignore (A.handle surface (W.Input.Move (x,y)));
@@ -6559,7 +6570,8 @@ let () = Native_embed.with_entry_lock (fun () ->
       check "Clicking the global font caption must focus its control" (W.Ui.focused (A.ui surface)=checkbox);
       let keyboard=A.handle surface (W.Input.Key_down (W.Input.Space,W.Input.mods_none,false)) in
       check "Space after a caption click must toggle the same checkbox"
-        (List.exists (function W.Dispatch (ToggleChanged (id,_)) -> id=checkbox | _ -> false) keyboard))) [1.;2.];
+        (List.exists (function W.Dispatch (ToggleChanged (id,_)) -> id=checkbox | _ -> false) keyboard)))
+    [1.,false;2.,false;1.,true;2.,true];
   print_endline "native font row and labeled checkbox geometry/input: OK")
 
 let () =

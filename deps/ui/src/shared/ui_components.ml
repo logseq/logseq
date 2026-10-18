@@ -751,9 +751,14 @@ let ls_tooltip_keys ~key children : t =
 
 (* Form labels use one grid column; controls span two when no side slot
    is present. Responsive properties preserve mounted controls across resize. *)
+type form_density = [ `regular | `compact ]
+
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
-    ?(col_gap = 24) ?(min_height = 28) ?(cross = `start) ~control () : t =
+    ?(density : form_density = `regular) ?col_gap ?min_height ?(cross = `start) ~control () : t =
  fun ctx parent ->
+  let label_height = if density=`compact then 20 else 28 in
+  let col_gap = Option.value col_gap ~default:(if density=`compact then 16 else 24) in
+  let min_height = Option.value min_height ~default:label_height in
   let viewport = Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
   let control =
@@ -769,7 +774,7 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
       ~value:(reactive (fun viewport -> if viewport>=640. then col_gap else 0) viewport)
     (grid ~key ~style_class:"it" ~min_width:0 ~cross ~min_height
       ([column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch ~gap:0
-          ([row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
+          ([row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:label_height
               (label :: label_extra)]
            @ match desc with Some d -> [d] | None -> []);
         control]
@@ -778,7 +783,9 @@ let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
 
 (* `.ls-label`/`.it-label` — 14px medium, 28px line, 70% opacity.
    Inside a flex-col label cell cljs uses leading-5 (20px). *)
-let form_label ~key ?(line_height = "1.75rem") ?text_signal ~text () : t =
+let form_label ~key ?(density : form_density = `regular) ?line_height ?text_signal ~text () : t =
+  let line_height = Option.value line_height
+    ~default:(if density=`compact then "1.25rem" else "1.75rem") in
   with_props
     [ Prop.font_size "0.875rem"
     ; Prop.font_weight 500

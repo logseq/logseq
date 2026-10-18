@@ -105,7 +105,7 @@ let switch_controls ~key ~on ~on_checked ?(extra = []) () =
    label children in cljs. ~binding adds the show-brackets/wide-mode
    shortcut column (narrow switch wrap + right-aligned kbd cell). *)
 let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
-    ?binding ~on ~on_checked () =
+    ?(density = `regular) ?binding ~on ~on_checked () =
   let control =
     row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
       ?max_width:(match binding with Some _ -> Some 320 | None -> None)
@@ -122,17 +122,17 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
         ]
     | None -> []
   in
-  Ui_components.form_row ~key
-    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+  Ui_components.form_row ~key ~density ~cross:`center
+    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~density ~text:label ())
     ~label_extra ~control ~side ()
 
 (* cljs row-with-button-action *)
 let action_row ~key ~label ?description ~actions ?(desc = [])
-    ?(stretch = false) ?(col_gap = 24) ?(label_lh = "1.75rem")
-    ?(min_height = 28) () =
-  Ui_components.form_row ~key ~col_gap ~min_height
+    ?(stretch = false) ?(density = `regular) ?col_gap ?label_lh
+    ?min_height () =
+  Ui_components.form_row ~key ~density ?col_gap ?min_height
     ~label:
-      (Ui_components.form_label ~key:(key ^ "-l") ~line_height:label_lh
+      (Ui_components.form_label ~key:(key ^ "-l") ~density ?line_height:label_lh
          ~text:label ())
     ?desc:
       (Option.map
@@ -151,9 +151,9 @@ let action_row ~key ~label ?description ~actions ?(desc = [])
     ()
 
 (* Label/value rows keep their controls at their natural width. *)
-let it_row ~key ~label ?(min_height = 28) ?(cross = `start) children =
-  Ui_components.form_row ~key ~min_height ~cross
-    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+let it_row ~key ~label ?(density = `regular) ?min_height ?(cross = `start) children =
+  Ui_components.form_row ~key ~density ?min_height ~cross
+    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~density ~text:label ())
     ~control:
       (column ~key:(key ^ "-r") ~cross:`start
          children)

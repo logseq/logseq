@@ -15,27 +15,27 @@ let version = Version.app
 
 (* config.edn-backed toggle row — folds the (config_bool, config_toggle)
    pair every config toggle repeats *)
-let cfg_row ~key ~label ?label_extra ?detail ?binding ~cfg ~default
+let cfg_row ~key ~label ?label_extra ?detail ?density ?binding ~cfg ~default
     () =
-  C.toggle_row ~key ~label ?label_extra ?detail ?binding
+  C.toggle_row ~key ~label ?label_extra ?detail ?density ?binding
     ~on:(S.config_bool cfg ~default)
     ~on_checked:(fun checked -> S.config_set_bool cfg checked)
     ()
 
 (* localStorage-backed toggle row *)
-let storage_row ~key ~label ?label_extra ?detail ?binding ~key_ ~default
+let storage_row ~key ~label ?label_extra ?detail ?density ?binding ~key_ ~default
     ~on_checked () =
-  C.toggle_row ~key ~label ?label_extra ?detail ?binding
+  C.toggle_row ~key ~label ?label_extra ?detail ?density ?binding
     ~on:(S.storage_bool key_ ~default) ~on_checked ()
 
 (* show-brackets and wide-mode appear in both the editor pane and the
    appearance popup — same row spec, different DOM key *)
-let brackets_row ~key =
-  cfg_row ~key ~label:T.show_brackets
+let brackets_row ~key ?density () =
+  cfg_row ~key ?density ~label:T.show_brackets
     ~binding:"t b" ~cfg:"ui/show-brackets?" ~default:true ()
 
-let wide_mode_row ~key =
-  storage_row ~key ~label:T.wide_mode ~binding:"t w"
+let wide_mode_row ~key ?density () =
+  storage_row ~key ?density ~label:T.wide_mode ~binding:"t w"
     ~key_:"wide-mode" ~default:false ~on_checked:S.set_wide_mode ()
 
 (* ---- general pane ---- *)
@@ -80,11 +80,12 @@ let language_row ctx =
       ]
     ()
 
-let theme_row ctx =
+let theme_row ?(density = `regular) ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  Ui_components.form_row ~key:"theme" ~min_height:85
+  Ui_components.form_row ~key:"theme" ~density ~min_height:85
     ~label:
       (Ui_components.form_label ~key:"theme-l"
+         ~density
          ~text:""
          ~text_signal:
            (reactive
@@ -127,14 +128,14 @@ let font_button ~key ~label ~font_family ~active ~on_click =
         ])
     ]
 
-let editor_font_row () =
+let editor_font_row ?(density = `regular) () =
   let font = S.current_editor_font () in
   let fb t label font_family =
     font_button ~key:("font-" ^ t) ~label ~font_family ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  C.it_row ~key:"font" ~label:T.editor_font
-    ~cross:`center ~min_height:80
+  C.it_row ~key:"font" ~density ~label:T.editor_font
+    ~min_height:(if density=`compact then 72 else 80)
     [ row ~key:"font-btns" ~gap:8
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
         ; fb "serif" "Serif" "Lyon-Text, Georgia, ui-serif, serif"
@@ -143,7 +144,8 @@ let editor_font_row () =
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.line_height "1.25rem"
         ; Ui_components.Prop.label_opacity 0.7 ]
-        (checkbox ~key:"font-g" ~gap:4 ~margin_top:12 ~min_height:28
+        (checkbox ~key:"font-g" ~gap:4 ~margin_top:12
+          ~min_height:(if density=`compact then 20 else 28)
           ~text:T.editor_font_global ~label:T.editor_font_global
           ~checked:font.S.fglobal
           ~on_toggle:(function
@@ -176,7 +178,7 @@ let color_label = function
 (* cljs settings.cljs accent-color-row: 20px rounded-full button at
    opacity .5 (1 when active), 1px/4px outline in rx-06/07, inner 8px
    dot in rx-07 hidden unless active; "none" is a red bar *)
-let accent_swatch ~key ~modal ~current color =
+let accent_swatch ~key ~current color =
   let active = color = current and none = color = "none" in
   row ~key ~width:20 ~height:20 ~main:`center ~cross:`center
     ~opacity:(if active then 1. else 0.5)
@@ -187,7 +189,7 @@ let accent_swatch ~key ~modal ~current color =
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
-        ~selected:active ~autofocus:(modal && active)
+        ~selected:active
         ~border_color:("var(--rx-" ^ color ^ (if active then "-07)" else "-06)"))
         ~border_width:(if active then 4 else 1)
         ~width:20 ~height:20 ~corner_radius:999 ~padding:0
@@ -210,7 +212,7 @@ let accent_row ~modal =
     row ~key ~gap:8 ~cross:`center
       (List.mapi
          (fun i c ->
-           accent_swatch ~key:(key ^ "-" ^ string_of_int i) ~modal ~current c)
+           accent_swatch ~key:(key ^ "-" ^ string_of_int i) ~current c)
          cs)
   in
   let swatches =
@@ -223,6 +225,7 @@ let accent_row ~modal =
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"
+        ~density:(if modal then `compact else `regular)
         ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
@@ -339,8 +342,8 @@ let date_format_row ctx =
 let editor_pane ctx =
   panel ~key:"pane-editor"
     [ date_format_row ctx
-    ; brackets_row ~key:"brackets"
-    ; wide_mode_row ~key:"wide"
+    ; brackets_row ~key:"brackets" ()
+    ; wide_mode_row ~key:"wide" ()
     ; cfg_row ~key:"outdent"
         ~label:T.logical_outdenting
         ~label_extra:
@@ -1156,7 +1159,7 @@ let modal_body (_ms : Model.t Signal.signal) : t =
     let node =
       (* cljs general() calls (accent-color-row false) in the settings
          dialog too — modal=true is only for the compact appearance
-         popup (autofocus, as-modal-picker grid, no shortcut chips) *)
+         popup (as-modal-picker grid, no shortcut chips) *)
       column ~key:"settings-modal" ~style_class:"settings-modal"
         ~corner_radius:12
         [ inner ~modal:false ]
@@ -1168,10 +1171,10 @@ let modal_body (_ms : Model.t Signal.signal) : t =
    .toolbar-dots-btn — five rows sharing the settings renderers, wrapped
    in the same ui__dropdown-menu-content shell as the dots menu *)
 let appearance_rows ctx =
-  [ theme_row ctx
-  ; editor_font_row ()
-  ; wide_mode_row ~key:"app-wide"
-  ; brackets_row ~key:"app-brackets"
+  [ theme_row ~density:`compact ctx
+  ; editor_font_row ~density:`compact ()
+  ; wide_mode_row ~key:"app-wide" ~density:`compact ()
+  ; brackets_row ~key:"app-brackets" ~density:`compact ()
   ; accent_row ~modal:true
   ]
 
@@ -1182,7 +1185,7 @@ let appearance_body () : t =
     Ui_components.menu_surface
       (popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
           ~anchor:`below ~anchor_target:"toolbar-dots-btn" ~anchor_alignment:`end_
-          ~anchor_offset:0. ~width:624 ~role:`dialog
+          ~anchor_offset:0. ~width:622 ~role:`dialog
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set false))
           ~style_class:"ui__dropdown-menu-content appearance-popup"

@@ -637,6 +637,8 @@ let test_help () =
     (find_where (fun n -> has_tok n "cp__sidebar-help-menu-popup") = [])
 
 let test_appearance () =
+  let previous_accent = Ui_services.storage_get "radix-color" in
+  Ui_services.storage_set "radix-color" (Ui_services.storage_quote ":logseq");
   send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
   check "Opening the page menu closes appearance"
     (find_where (fun n -> has_tok n "ls-dots-menu") <> []);
@@ -649,6 +651,14 @@ let test_appearance () =
      && M.string_prop appearance "anchor"=Some "below"
      && M.string_prop appearance "role"=Some "dialog"
      && not (Hashtbl.mem appearance.M.props "popup-x"));
+  check "Appearance uses the reference 622-point surface width"
+    (Hashtbl.find_opt appearance.M.props "width"=Some (Wv.IntValue 622));
+  let forms = find_where (fun n -> has_tok n "it") in
+  check "Appearance forms use the compact 16-point column spacing"
+    (List.length forms=5 && List.for_all (fun n ->
+      Hashtbl.find_opt n.M.props "gap"=Some (Wv.IntValue 16)) forms);
+  check "Appearance leaves initial focus on its stable trigger"
+    (find_where (fun n -> Hashtbl.find_opt n.M.props "autofocus"=Some (Wv.BoolValue true))=[]);
   absent "class:ls-dots-menu";
   send (Action.Page_menu_set None);
   check "Closing the retired page menu preserves the appearance popup"
@@ -662,7 +672,10 @@ let test_appearance () =
   absent "class:ls-dots-menu";
   send (Action.Appearance_set true);
   send (Action.Appearance_set false);
-  absent "prop:accessibility-identifier=\"appearance_settings\""
+  absent "prop:accessibility-identifier=\"appearance_settings\"";
+  (match previous_accent with
+   | Some value -> Ui_services.storage_set "radix-color" value
+   | None -> Ui_services.storage_remove "radix-color")
 
 let test_not_found () =
   send (Action.Navigate_to (Model.Not_found "ghost"));
