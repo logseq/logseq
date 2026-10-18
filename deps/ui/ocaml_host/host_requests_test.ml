@@ -5567,7 +5567,194 @@ let () = Native_embed.with_entry_lock (fun () ->
             check "Wide Settings must place the article beside its navigation"
               (abs_float (body.x-.nav.x-.nav.w)<0.1);
             check "Wide Settings must restore Keymap navigation"
-              ((W.Rects.get (A.rects surface) keymap).h>0.))) [500.;1280.;500.;1280.])) [1.;2.]);
+              ((W.Rects.get (A.rects surface) keymap).h>0.))) [500.;1280.;500.;1280.];
+        let general =
+          List.find
+            (fun id ->
+              Lui_store.string_prop store id "accessibility-identifier"
+              = Some "general")
+            (Lui_store.preorder store)
+        in
+        let rec in_general id =
+          id = general
+          || Option.fold ~none:false ~some:in_general (Lui_store.parent store id)
+        in
+        let label =
+          List.find
+            (fun id -> Lui_store.kind store id = "text" && in_general id)
+            (Lui_store.preorder store)
+        in
+        let paint =
+          Lui_scene.create
+            ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+            ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64)
+        in
+        let engine =
+          Text_engine.create
+            ~scene:(fun () -> paint)
+            ~scale:(fun () -> scale)
+            ~store:(fun () -> store)
+        in
+        let first_glyph = ref None in
+        Lui_paint.paint
+          {
+            Lui_paint.default_hooks with
+            color_of = Theme_vars.color_of;
+            layout =
+              (fun id ->
+                Lui_paint.placement_of_rect (W.Rects.get (A.rects surface) id));
+            text_ops =
+              (fun id region color text ->
+                let ops = Text_engine.text_ops engine id region color text in
+                if id = label then
+                  first_glyph :=
+                    List.find_map
+                      (function Lui_scene.Glyphs g -> Some g.gstart | _ -> None)
+                      ops;
+                ops);
+          }
+          store paint
+          ~width:(int_of_float (1280. *. scale))
+          ~height:(int_of_float (720. *. scale))
+          ~scale
+          ~clear:(Lui_scene.color 255 255 255 255);
+        let opacity =
+          Option.bind !first_glyph (fun start ->
+              List.find_map
+                (function
+                  | Lui_scene.Glyphs g when g.gstart = start -> Some g.gopacity
+                  | _ -> None)
+                paint.ops)
+        in
+        check
+          "Shared navigation text must paint at the reference ninety-percent opacity"
+          (Option.fold ~none:false
+             ~some:(fun value -> abs_float (value -. 0.9) < 0.000001)
+             opacity);
+        let failures = ref [] in
+        let expect label condition =
+          if not condition then failures := label :: !failures
+        in
+        let refresh () =
+          ignore (Lui_app.flush app);
+          ignore (A.store_changed surface);
+          ignore (A.repaint surface)
+        in
+        let rect id = W.Rects.get (A.rects surface) id in
+        let inner = find "cp__settings-inner" in
+        let dialog =
+          List.find
+            (fun id -> Lui_store.kind store id = "dialog")
+            (Lui_store.preorder store)
+        in
+        let nav_id name =
+          List.find
+            (fun id ->
+              Lui_store.string_prop store id "accessibility-identifier" = Some name)
+            (Lui_store.preorder store)
+        in
+        let features = nav_id "features" in
+        let visible id =
+          let r = rect id and frame = rect dialog in
+          r.h > 0. && r.y >= frame.y
+          && r.y +. r.h <= frame.y +. frame.h
+          && List.mem id
+               (W.hit_path store (A.rects surface)
+                  ~x:(r.x +. (r.w /. 2.))
+                  ~y:(r.y +. (r.h /. 2.)))
+        in
+        let apply actions =
+          List.iter
+            (function
+              | W.Dispatch event -> ignore (Lui_app.dispatch_event app event)
+              | _ -> ())
+            actions;
+          refresh ()
+        in
+        let wheel id amount =
+          let r = rect id in
+          apply
+            (A.handle surface
+               (W.Input.Move
+                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (40. *. scale)) /. scale)));
+          apply (A.handle surface (W.Input.Wheel (0., amount)))
+        in
+        List.iter
+          (fun (width, height) ->
+            Settings_state.set_tab "general";
+            refresh ();
+            Host.set_window_size width height;
+            Platform.emit_event "resize" (Js.Json.JObject []);
+            Lui_host.resize (A.host surface)
+              ~width:(int_of_float (width *. scale))
+              ~height:(int_of_float (height *. scale))
+              ~scale;
+            refresh ();
+            let label =
+              Printf.sprintf "Settings at %.0fx%.0f/%g" width height scale
+            in
+            expect
+              (label ^ " must keep both dialog borders outside the bounded content")
+              (abs_float ((((rect dialog).h -. (rect inner).h) /. scale) -. 2.) < 0.1);
+            List.iter
+              (fun name ->
+                if name <> "keymap" || width >= 640. then
+                  expect
+                    (label ^ " must preserve 32-point navigation rows: " ^ name)
+                    (abs_float (((rect (nav_id name)).h /. scale) -. 32.) < 0.1))
+              [ "general"; "editor"; "keymap"; "advanced"; "features" ];
+            if width >= 768. && height >= 360. then
+              expect
+                (label ^ " must expose Features before scrolling like the reference")
+                (visible features);
+            if width >= 768. then (
+              let before = W.Ui.scroll_offset (A.ui surface) article in
+              wheel aside (-2000.);
+              expect
+                (label ^ " navigation scrolling must not move the article")
+                (W.Ui.scroll_offset (A.ui surface) article = before));
+            expect
+              (label ^ " must expose a hit-testable Features control")
+              (visible features);
+            if visible features then (
+              let r = rect features in
+              let x, y =
+                ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)
+              in
+              apply
+                (A.handle surface
+                   (W.Input.Button_down (x, y, W.Input.Left, 1, W.Input.mods_none)));
+              apply
+                (A.handle surface
+                   (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+              expect
+                (label ^ " must activate the Features category")
+                ((Settings_state.value ()).tab = "features"));
+            if width < 768. && height < 500. then (
+              Settings_state.set_tab "general";
+              refresh ();
+              wheel aside (-2000.);
+              expect
+                (label ^ " must scroll the stacked settings frame to its article")
+                (W.Ui.scroll_offset (A.ui surface) inner > 0.);
+              expect
+                (label ^ " must preserve the 248-point navigation content")
+                (abs_float (((rect aside).h /. scale) -. 248.) < 0.1));
+            expect
+              (label ^ " must retain navigation nodes across resize")
+              (nav_id "features" = features))
+          [
+            (1080., 360.);
+            (1080., 320.);
+            (500., 360.);
+            (500., 320.);
+            (500., 720.);
+            (1280., 720.);
+          ];
+        List.iter prerr_endline (List.rev !failures);
+        check
+          "Settings navigation must remain readable and reachable in short windows"
+          (!failures = []))) [1.;2.]);
   print_endline "native Settings article owns scrolling independently of navigation: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->

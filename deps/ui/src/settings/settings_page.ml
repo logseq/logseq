@@ -1029,6 +1029,12 @@ let nav_items =
   ; ("features", T.settings_features, "app-feature")
   ]
 
+let nav_gap = 8
+
+let nav_menu_height viewport =
+  let count = List.length nav_items - (if viewport < 640. then 1 else 0) in
+  (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
+
 let tab_title tab =
   match List.find_opt (fun (id, _, _) -> id = tab) nav_items with
   | Some (_, l, _) -> l
@@ -1060,7 +1066,8 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  Ui_components.with_props [Ui_components.Prop.overflow `auto]
+  Ui_components.with_props
+    [Ui_components.Prop.overflow `auto;Ui_components.Prop.height_viewport 0.7]
     (column ~key:"settings-article" ~style_class:"settings-article"
     ~data_attrs:["role", "article"]
     ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
@@ -1086,8 +1093,8 @@ let inner ~modal : t =
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
   let inner_box children =
-    Ui_parts.float_prop Lui_protocol.HeightViewport
-      ~value:(reactive (fun viewport -> if viewport>=768. then 0.7 else 0.75) viewport)
+    Ui_parts.string_prop Lui_protocol.Overflow
+      ~value:(reactive (fun viewport -> if viewport>=768. then "hidden" else "auto") viewport)
       (row ~key:"settings-inner" ~style_class:"cp__settings-inner" ~min_width:0
         ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
         ~cross:`stretch children)
@@ -1102,6 +1109,11 @@ let inner ~modal : t =
                  ~value:(reactive (fun viewport -> if viewport>=768. then 256 else 160) viewport)
                  (Ui_parts.int_prop Lui_protocol.MaxWidth
                    ~value:(reactive (fun viewport -> if viewport>=768. then 256 else int_of_float viewport) viewport)
+                 (Ui_parts.int_prop Lui_protocol.MinHeight
+                   ~value:(reactive (fun viewport ->
+                     if viewport>=768. then 0
+                     else 32 + 40 + 16 + nav_menu_height viewport + 8) viewport)
+                 (Ui_components.with_props [Ui_components.Prop.overflow `auto]
                  (column ~key:"settings-aside"
                  ~style_class:"settings-aside"
                  ~data_attrs:["role", "complementary"]
@@ -1111,7 +1123,7 @@ let inner ~modal : t =
                  ~gap:16
                  [ row ~key:"aside-h"
                      ~style_class:"cp__settings-header"
-                     ~cross:`center ~main:`start ~gap:8 ~height:40
+                     ~cross:`center ~main:`start ~gap:8 ~height:40 ~min_height:40
                      ~padding:8
                      [ heading ~key:"aside-ht" ~level:1
                          ~style_class:"cp__settings-modal-title"
@@ -1120,13 +1132,15 @@ let inner ~modal : t =
                            [ "style", "text-transform: lowercase" ]
                          ~value:T.settings_title []
                      ]
-                 ; list ~key:"aside-menu"
-                     ~style_class:"settings-menu" ~padding:0 ~gap:8 ~margin_bottom:8
+                 ; Ui_parts.int_prop Lui_protocol.MinHeight
+                     ~value:(reactive (fun viewport -> nav_menu_height viewport) viewport)
+                     (list ~key:"aside-menu"
+                     ~style_class:"settings-menu" ~padding:0 ~gap:nav_gap ~margin_bottom:8
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)
-                        nav_items)
-                 ]))
+                        nav_items))
+                 ]))))
              ; article ~modal ctx
              ])
       ]

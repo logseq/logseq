@@ -38,7 +38,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
 let dialog_spec name =
   match name with
   | "settings" -> 0, (fun _ -> 1024.),
-      [Ui_components.Prop.max_height_viewport 0.75;Ui_components.Prop.overflow `hidden]
+      [Ui_components.Prop.overflow `hidden]
   | "plugins" -> 24, (fun viewport -> Float.min 1246. (viewport *. 0.9)),
       [Ui_components.Prop.max_height_viewport 0.94;Ui_components.Prop.overflow `hidden]
   | "sync-server" | "publish-server" -> 24, (fun _ -> 672.), []

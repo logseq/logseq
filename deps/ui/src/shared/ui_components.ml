@@ -811,6 +811,8 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
    replaces the `.active`/`.dark .active` pair). The `.active` class
    itself stays on the element via the caller's class_signal (native
    hook). *)
+let nav_item_height = 32
+
 let nav_item ~key ~data_id ~icon:icon_ ~text:label ~selected_signal:selected
     ~on_press () : t =
   with_props
@@ -820,7 +822,7 @@ let nav_item ~key ~data_id ~icon:icon_ ~text:label ~selected_signal:selected
       Prop.line_height "1.25rem";
       Prop.font_weight 400;
     ]
-    (list_item ~key ~corner_radius:4 ~min_height:0 ~height:32
+    (list_item ~key ~corner_radius:4 ~min_height:nav_item_height ~height:nav_item_height
        ~padding_vertical:6 ~padding_horizontal:8 ~main:`start ~cross:`center
        ~foreground:"inherit" ~style_class:"settings-menu-item"
        ~accessibility_identifier:data_id
@@ -835,7 +837,7 @@ let nav_item ~key ~data_id ~icon:icon_ ~text:label ~selected_signal:selected
          row ~key:"content" ~cross:`center ~gap:4
            [
              Icons.icon ~size:18. ~cls:"ls-nav-item-icon" icon_;
-             text ~key:"label" ~value:label [];
+             with_props [Prop.opacity 0.9] (text ~key:"label" ~value:label []);
            ];
        ])
 
