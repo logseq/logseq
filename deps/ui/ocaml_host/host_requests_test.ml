@@ -5747,6 +5747,14 @@ let () =
                       ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
                       ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
                   in
+                  let root =
+                    List.find
+                      (fun id ->
+                        Lui_store.string_prop store id
+                          "accessibility-identifier"
+                        = Some "app-container-wrapper")
+                      (Lui_store.preorder store)
+                  in
                   let verify name =
                     let ink = ref None in
                     Lui_paint.paint
@@ -5768,7 +5776,8 @@ let () =
                     let expected =
                       match
                         Theme_vars.color_of
-                          "var(--lx-gray-12, var(--ls-primary-text-color))"
+                          "var(--lx-gray-12, var(--ls-primary-text-color, \
+                           hsl(var(--foreground))))"
                       with
                       | Some color -> color
                       | None ->
@@ -5777,8 +5786,47 @@ let () =
                             ^ Option.value ~default:"invalid"
                                 (Theme_vars.resolve_value
                                    "var(--lx-gray-12, \
-                                    var(--ls-primary-text-color))"))
+                                    var(--ls-primary-text-color, \
+                                    hsl(var(--foreground))))"))
                     in
+                    expect
+                      ("Shared body foreground must resolve in every palette: "
+                     ^ name)
+                      (Option.bind
+                         (Lui_store.string_prop store root "foreground")
+                         Theme_vars.color_of
+                      = Some expected);
+                    let background =
+                      Option.get
+                        (Theme_vars.color_of
+                           "var(--lx-gray-01, \
+                            var(--ls-primary-background-color, \
+                            hsl(var(--background))))")
+                    in
+                    expect
+                      ("Shared body background must resolve in every palette: "
+                     ^ name)
+                      (Option.bind
+                         (Lui_store.string_prop store root "background")
+                         Theme_vars.color_of
+                      = Some background);
+                    expect
+                      ("Shared body background must paint the root: " ^ name)
+                      (List.exists
+                         (function
+                           | Lui_scene.Fill fill -> fill.fcolor = background
+                           | _ -> false)
+                         scene.Lui_scene.ops);
+                    if name = "none" then begin
+                      let reference =
+                        if !Theme_vars.mode = Lui_theme.Dark then
+                          Lui_scene.color 242 242 242 255
+                        else Lui_scene.color 2 8 23 255
+                      in
+                      expect
+                        "Unaccented body must retain its authored foreground"
+                        (expected = reference)
+                    end;
                     expect
                       ("Application text must inherit the stylesheet body \
                         color: " ^ name)
@@ -5807,7 +5855,21 @@ let () =
                         (fun accent ->
                           Theme_vars.set_accent accent;
                           verify accent)
-                        [ "logseq"; "orange"; "blue"; "pink" ];
+                        [ "logseq"; "orange"; "blue"; "pink"; "none" ];
+                      let background =
+                        Option.get
+                          (Theme_vars.resolve_value "var(--background)")
+                      in
+                      Theme_vars.set_var "--background" "120 100% 25%";
+                      verify "custom unaccented background";
+                      Theme_vars.set_var "--background" background;
+                      let foreground =
+                        Option.get
+                          (Theme_vars.resolve_value "var(--foreground)")
+                      in
+                      Theme_vars.set_var "--foreground" "120 100% 25%";
+                      verify "custom unaccented foreground";
+                      Theme_vars.set_var "--foreground" foreground;
                       Theme_vars.set_var "--lx-gray-12" "#123456";
                       verify "custom body ink")
                     [ Ui_theme.Light; Ui_theme.Dark ];

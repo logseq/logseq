@@ -135,3 +135,14 @@ test('legacy form styling is opt-in and leaves shared controls in their componen
   assert.deepEqual([...formClasses].sort(), ['.form-checkbox', '.form-input', '.form-select'])
   assert.deepEqual(borderResetLayers, ['base'], 'Generic border defaults must yield to component colors')
 })
+
+test('body leaves application colors to the shared root', async () => {
+  const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
+  const colors = []
+  postcss.parse(source).walkRules('body', rule => {
+    rule.walkDecls(declaration => {
+      if (['color', 'background-color'].includes(declaration.prop)) colors.push(declaration.value)
+    })
+  })
+  assert.deepEqual(colors, [], 'Portaled content must inherit logical shared foregrounds')
+})

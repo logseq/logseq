@@ -48,8 +48,6 @@ html {
 }
 
 body {
-  color: var(--lx-gray-12, var(--ls-primary-text-color));
-  background-color: var(--lx-gray-01, var(--ls-primary-background-color));
   line-height: 1.5;
   min-height: 100%;
   word-break: break-word;
