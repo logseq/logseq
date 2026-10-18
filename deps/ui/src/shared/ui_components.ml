@@ -1012,8 +1012,8 @@ let menu_item_chrome element =
   with_props
     [ Prop.font_size "0.875rem"
     ; Prop.line_height "1.25rem"
-    ; Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))"
-    ; Prop.selected_background "var(--lx-gray-05, hsl(var(--muted)))" ]
+    ; Prop.foreground "inherit"
+    ; Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))" ]
     element
 
 (* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card

@@ -710,9 +710,13 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
              doubles as click-to-open and, just as importantly, marks
              the row interactive so hit-testing reaches it — without
              it the row is hit-transparent and hover can never fire *)
-          Menu_item.chrome (menu_item ~key:"sub"
+          Menu_item.chrome
+            (Ui_components.with_props [Ui_components.Prop.accessibility_label label]
+            (menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
+            ~gap:0
+            ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
             ~data_attrs:
               [ ("role", "menuitem")
               ; ("data-cm-sub", string_of_int idx)
@@ -728,14 +732,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
                   | Some trg -> !cm_press_open_ref st trg
                   | None -> ())
               | _ -> ())
-            ~text:label
-            [ (* margin-left:auto doesn't translate — a grow row
-                 ~main:`end_ pushes the chevron to the item's right
-                 edge on every host; px-2 keeps it 8px in *)
-              row ~key:"chev-wrap" ~main:`end_ ~cross:`center ~grow:1.
-                ~margin_right:8
-                [ icon ~key:"chev" ~name:(`app "chevron-right") ~point_size:16
-                    ~style_class:"ls-menu-chevron" [] ] ])
+            [ Menu_item.submenu_content ~label ]))
       | S.Ci_item (label, scut, cmd) ->
           Menu_item.chrome (menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]

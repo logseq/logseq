@@ -21,6 +21,12 @@ let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
 let chrome = Ui_components.menu_item_chrome
 
+let submenu_content ~label =
+  row ~key:"submenu-content" ~cross:`center ~grow:1. ~gap:0
+    [ Ui_components.with_props [Ui_components.Prop.white_space `nowrap]
+        (text ~key:"label" ~value:label ~grow:1. [])
+    ; icon ~key:"chevron" ~name:(`app "chevron-right") ~point_size:16 [] ]
+
 (* retained-tree item: the menu_item kind renders a role=option button
    with icon/label/check spans; [attrs] is accepted for call-site
    compatibility but ignored — role/tabindex are carried by the kind.

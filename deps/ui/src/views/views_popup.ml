@@ -284,6 +284,8 @@ let rec menu_level_scoped ~scope ~cls ~register ~on_back (items : menu_item list
           (menu_item ~key:(item_rid scope fidx)
              ~accessibility_identifier:(item_rid scope fidx)
              ~data_attrs_signal:(row_attrs ~fidx ~role:"menuitemcheckbox")
+             ~selection_placement:`leading ~gap:8
+             ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
              ~checked_signal:(map (fun st -> checked_of st fidx) msig)
              ~on_press:(fun _ ->
                let v = not (checked_of (Signal.get_state mst) fidx) in
@@ -297,13 +299,15 @@ let rec menu_level_scoped ~scope ~cls ~register ~on_back (items : menu_item list
              ~text:label [])
     | MSub (label, children) ->
         cls_of "ui__dropdown-menu-sub-trigger" fidx
+          (Ui_components.with_props [Ui_components.Prop.accessibility_label label]
           (menu_item ~key:(item_rid scope fidx)
              ~accessibility_identifier:(item_rid scope fidx)
+             ~gap:0
+             ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
              ~data_attrs_signal:(row_attrs ~fidx ~role:"menuitem")
              ~on_press:(fun _ -> enter_sub ~focus:false fidx)
              ~on_pointer_enter:(fun _ -> enter_sub ~focus:false fidx)
-             ~text:label
-             [ icon ~key:"chev" ~name:(`app "chevron-right") []
+             [ Menu_item.submenu_content ~label
              ; if_
                  ~test:(map (fun st -> st.msub = fidx) msig)
                  (Ui_components.with_props [ Ui_components.sub_card_shadow ]
@@ -327,7 +331,7 @@ let rec menu_level_scoped ~scope ~cls ~register ~on_back (items : menu_item list
                            ~on_back:(Some (fun () ->
                              upd (fun st -> { st with msub = -1 });
                              focus_row fidx))
-                           children ])) ])
+                           children ])) ]))
   in
   box ~key:(scope ^ "-items") (List.map view_of entries)
     context parent

@@ -1134,7 +1134,7 @@ let run_views ~registry ~profile ~finish =
   let submenu = mount (fun _ -> Views_popup.menu_level ~pid:9002 ~cls:""
       ~register:(fun h -> key_handler := h)
       [ Views_popup.MSub ("Nested", [ Views_popup.MItem ("Child", (fun () -> ())) ]) ]) in
-  let trigger = List.find (fun n -> M.string_prop n "text" = Some "Nested") (nodes submenu) in
+  let trigger = List.find (fun n -> M.string_prop n "accessibility-identifier" = Some "vp9002-i0") (nodes submenu) in
   S.press submenu trigger.M.id;
   let submenus () = List.filter (fun n -> n.M.kind = "popover") (nodes submenu) in
   eqi "view-action submenu opens" 1 (List.length (submenus ()));
@@ -1164,12 +1164,12 @@ let run_views ~registry ~profile ~finish =
   check "the first down-arrow from the menu container selects its first branch"
     (List.exists (fun n -> M.string_prop n "text"=Some "Nested") (nodes nested));
   check "parent and child menu controls have distinct retained identifiers" (unique_menu_ids ());
-  let press_from label key =
-    let row=List.find (fun n -> M.string_prop n "text"=Some label) (nodes nested) in
+  let press_from identifier key =
+    let row=List.find (fun n -> M.string_prop n "accessibility-identifier"=Some identifier) (nodes nested) in
     let target={ (Ui_services.dom_body ()) with Ui_services.attr=(fun name ->
       if name="id" then M.string_prop row "accessibility-identifier" else None) } in
     !nested_key {(key_event key) with target=Some target} in
-  press_from "Nested" "ArrowRight";
+  press_from "vp9003-s0-i0" "ArrowRight";
   S.flush nested;
   eqi "a second right-arrow opens the next submenu depth" 2 (List.length (nested_popups ()));
   check "deep submenu controls have distinct retained identifiers" (unique_menu_ids ());
@@ -1183,7 +1183,7 @@ let run_views ~registry ~profile ~finish =
   check "a second left-arrow returns to the root menu" (nested_popups ()=[]);
   press_nested "ArrowRight";
   S.flush nested;
-  let other=List.find (fun n -> M.string_prop n "text"=Some "Other parent") (nodes nested) in
+  let other=List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "vp9003-i1") (nodes nested) in
   S.press nested other.M.id;
   check "switching submenu branches removes the previous branch"
     (List.length (nested_popups ())=1

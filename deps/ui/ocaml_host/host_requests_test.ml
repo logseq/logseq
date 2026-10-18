@@ -387,7 +387,12 @@ let () =
          Ui_components.menu_surface
            (Lui_elements.popover ~key:"point-menu" ~at:(100.,40.) ~role:`menu
               ~width:256
-              [Menu_item.el ~key:"point-item" ~label:"Action" ~on_click:ignore ()])]) in
+              [Menu_item.el ~key:"point-item" ~label:"Action" ~on_click:ignore ()]);
+         Ui_components.menu_surface
+           (Lui_elements.popover ~key:"check-menu" ~at:(400.,40.) ~role:`menu
+              ~min_width:128
+              [Views_popup.menu_level ~pid:9201 ~cls:"" ~register:ignore
+                 [Views_popup.MCheck ("Page name",true,ignore)]])]) in
   ignore (Lui_app.start app); ignore (Lui_app.flush app);
   let store = Lui_host.store host in
   let menu = List.find (fun id -> Lui_store.kind store id="dropdown-menu")
@@ -415,13 +420,14 @@ let () =
         store scene ~width:1440 ~height:932 ~scale:1.
         ~clear:(Lui_scene.color 255 255 255 255);
       let expected = Option.get (Theme_vars.color_of "var(--lx-gray-05, hsl(var(--muted)))") in
-      expect ("Menu " ^ name ^ " does not use the application's neutral highlight")
+      expect ("Menu " ^ name ^ " paints an incorrect neutral highlight")
         (List.exists (function Lui_scene.Fill f -> f.frect=item_rect && f.fcolor=expected
-           | _ -> false) scene.ops);
+           | _ -> false) scene.ops = (name<>"checked without highlight"));
       expect ("Menu " ^ name ^ " inverts its foreground on a neutral highlight")
         (!ink=Theme_vars.color_of "foreground"))
       ["pointer",{Lui_paint.state_neutral with hovered=true};
-       "keyboard",{Lui_paint.state_neutral with hovered=true;focused=true;selected=true}])
+       "keyboard",{Lui_paint.state_neutral with hovered=true;focused=true;selected=true};
+       "checked without highlight",{Lui_paint.state_neutral with selected=true}])
     [Ui_theme.Light;Ui_theme.Dark];
   ignore (Lui_host.repaint host);
   let point_menu = List.find (fun id -> Lui_store.kind store id="popover")
@@ -432,6 +438,12 @@ let () =
   expect "A point menu loses the shared card's five-point content inset"
     (abs_float (point_row.x -. point_box.x -. 5.) < 0.1
      && abs_float (point_row.y -. point_box.y -. 5.) < 0.1);
+  let checkbox = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier"=Some "vp9201-i0")
+    (Lui_store.preorder store) in
+  let checkbox_text = Lui_paint.text_placement_of store checkbox in
+  expect "Checkbox menu text does not reserve the reference leading check slot"
+    (checkbox_text.tp_pad_left=32. && checkbox_text.tp_pad_right=8.);
   let full = Option.get (Lui_host.layout_rect host menu) in
   expect "An ordinary menu truncates entries despite available window height" (full.h >= 360.);
   Lui_host.resize host ~width:1440 ~height:200 ~scale:1.;
@@ -443,6 +455,69 @@ let () =
   List.iter prerr_endline (List.rev !failures);
   check "Shared menu highlight and available-height parity" (!failures=[]);
   print_endline "native shared menu chrome: OK"
+
+let () =
+  let failures = ref [] in
+  let expect message condition =
+    if not condition then failures := message :: !failures
+  in
+  let label = "Columns visibility" in
+  List.iter (fun scale ->
+    List.iter (fun kind ->
+      let previous_context = !Popups_state.active in
+      let host = Lui_host.create ~hooks:Lui_paint.default_hooks
+        ~layout:(module Lui_layout)
+        ~measure:(fun _ value _ _ ->
+          Some (float_of_int (String.length value) *. 7. *. scale, 20. *. scale))
+        ~renderer:{Lui_host.name="submenu-label-test";render=(fun _ -> Bytes.empty)}
+        ~width:1440 ~height:932 ~scale () in
+      let app = Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) ()
+        (fun () () -> ()) (fun context _ _ ->
+          let contents =
+            if kind="view" then
+              Views_popup.menu_level ~pid:9200 ~cls:"" ~register:ignore
+                [Views_popup.MSub (label,[])]
+            else
+              let st = Popups_state.make context.Lui_ui.ui_scheduler in
+              Popups_view.cm_item_el st
+                (Signal.value (Signal.state context.Lui_ui.ui_scheduler
+                  (0,Popups_state.Ci_sub (label,Popups_state.Sub_menu []))))
+          in
+          Ui_components.menu_surface
+            (Lui_elements.popover ~at:(100.,40.) ~role:`menu ~min_width:128
+               [contents])) in
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      ignore (Lui_host.repaint host);
+      let store = Lui_host.store host in
+      let ids = Lui_store.preorder store in
+      let find f = List.find f ids in
+      let row = find (fun id -> Lui_store.kind store id="menu-item")
+      and arrow = find (fun id -> Lui_store.kind store id="icon"
+        && Lui_store.string_prop store id "name"=Some "app:chevron-right") in
+      let text = find (fun id -> Lui_store.string_prop store id "text"=Some label) in
+      let rect id = Option.get (Lui_host.layout_rect host id) in
+      let row_box=rect row and arrow_box=rect arrow and text_box=rect text in
+      let near a b = abs_float (a -. b) < 0.1 *. scale in
+      let prefix=Printf.sprintf "%s submenu at %gx: " kind scale in
+      expect (prefix ^ "label and arrow are missing from the intrinsic row width")
+        (near row_box.w ((float_of_int (String.length label) *. 7. +. 32.) *. scale));
+      expect (prefix ^ "chevron differs from the reference sixteen-point square")
+        (near arrow_box.w (16. *. scale) && near arrow_box.h (16. *. scale));
+      expect (prefix ^ "label does not fit before the chevron")
+        (near text_box.x (row_box.x +. 8. *. scale)
+         && near text_box.w (float_of_int (String.length label) *. 7. *. scale)
+         && text_box.x +. text_box.w <= arrow_box.x +. 0.1 *. scale);
+      expect (prefix ^ "chevron is not inside the trailing eight-point inset")
+        (near (arrow_box.x +. arrow_box.w) (row_box.x +. row_box.w -. 8. *. scale));
+      expect (prefix ^ "row height differs from the reference thirty-two points")
+        (near row_box.h (32. *. scale));
+      ignore (Lui_app.dispose app);
+      Popups_state.active:=previous_context)
+      ["view";"block"])
+    [1.;2.];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native submenu label and indicator geometry" (!failures=[]);
+  print_endline "native submenu label and indicator geometry: OK"
 
 let () =
   let failures = ref [] in

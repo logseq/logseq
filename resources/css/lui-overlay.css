@@ -280,8 +280,7 @@
 }
 
 /* cljs dropdown-menu-item packs icon + title with gap-1 (4px) */
-.ui__dropdown-menu-item.lui-menu-item,
-.ui__dropdown-menu-sub-trigger.lui-menu-item {
+.ui__dropdown-menu-item.lui-menu-item {
   gap: 0.25rem;
 }
 
