@@ -107,12 +107,8 @@ let lang_menu ~key st mst =
               []))
        languages)
 
-(* li > i(mode swatch) + strong — list_item ~on_press; the .active
-   ring class and the mode-* swatch classes stay reactive via
-   class_signal since kinds take only a static ~style_class *)
-(* cljs: .radix only when an accent color is stored — no CSS rules
-   target it; dropped as dead. option_card carries the .mode-* thumbnail
-   (as an <img> now, not a CSS background) + the active ring. *)
+(* A shared selected option card owns the thumbnail, caption and ring.
+   Theme changes update typed state without replacing the control. *)
 (* Native and web hosts use the same bundled theme thumbnails. *)
 let theme_thumb_native ~key mode =
   file_image ~key ~path:("img/" ^ mode ^ "-theme.png")
@@ -127,15 +123,13 @@ let theme_item ~st mode label =
         ~data_attrs:[ "style", "height:63.25px;object-fit:cover" ] []
     else theme_thumb_native ~key:("tt-" ^ mode) mode
   in
-  C.class_signal (Signal.value st)
-    (fun active -> if active = mode then "active" else "")
-    (Ui_components.option_card ~key:("tm-" ^ mode) ~mode ~thumbnail ~label
+  Ui_components.option_card ~key:("tm-" ^ mode) ~thumbnail ~label
        ~min_height:85
        ~selected:(reactive (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
          use_mode mode;
          Signal.set st mode;
-         Runtime.flush ()) ())
+         Runtime.flush ()) ()
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =

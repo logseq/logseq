@@ -1111,7 +1111,31 @@ let () = Native_embed.with_entry_lock (fun () ->
     check "Native sidebar must paint the same semantic surface as the Web theme"
       (List.exists (function
         | Lui_scene.Fill fill -> fill.frect = region && fill.fcolor = expected
-        | _ -> false) shell_scene.ops)
+        | _ -> false) shell_scene.ops);
+    let headers = List.filter (fun id ->
+      match Lui_store.string_prop store id "style-class" with
+      | Some value -> List.exists (fun name -> List.mem name
+          (String.split_on_char ' ' value)) ["left-sidebar-top"; "hd"]
+      | None -> false) (Lui_store.preorder store) in
+    check "Sidebar surface regression must include the titlebar and section headings"
+      (List.length headers = 4);
+    List.iter (fun id ->
+      let r = Option.get (Lui_layout.rect layout id) in
+      let x = r.Lui_scene.x +. r.w /. 2. and y = r.y +. r.h /. 2. in
+      let covers r = x >= r.Lui_scene.x && x < r.x +. r.w
+        && y >= r.y && y < r.y +. r.h in
+      let surface = List.fold_left (fun result -> function
+        | Lui_scene.Fill f when covers f.frect && f.fopacity = 1.
+            && f.fcolor.Lui_scene.a = 255 -> Some f.fcolor
+        | _ -> result) None shell_scene.ops in
+      check "Sidebar titlebar and section headings must retain the body background"
+        (surface = Some expected)) headers;
+    check "Native sidebar must not expose a separate material through its theme surface"
+      (not (List.exists (function Lui_scene.Hole h ->
+        let r = h.Lui_scene.hrect in
+        r.x < region.x +. region.w && r.x +. r.w > region.x
+        && r.y < region.y +. region.h && r.y +. r.h > region.y
+        | _ -> false) shell_scene.ops))
   in
   sidebar_surface Ui_theme.Light None;
   sidebar_surface Ui_theme.Dark None;
@@ -3896,12 +3920,7 @@ let () =
               (fun id ->
                 Lui_store.kind store id = "list-item"
                 && List.exists
-                     (fun child ->
-                       match
-                         Lui_store.string_prop store child "style-class"
-                       with
-                       | Some cls -> String.starts_with ~prefix:"mode-" cls
-                       | None -> false)
+                     (fun child -> Lui_store.kind store child = "file-image")
                      (Lui_store.preorder ~root:id store))
               nodes
           in
@@ -6503,6 +6522,95 @@ let () = Native_embed.with_entry_lock (fun () ->
              && Lui_store.string_prop store input "text"=Some "Retained café 中文 😀"))
           [1280.;500.;900.;500.;1280.])) [1.;2.]);
   print_endline "native shared responsive form columns and retained input: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_mode = !Theme_vars.mode and previous_accent = !Theme_vars.accent in
+  let failures = ref [] in
+  let expect message value = if not value then failures := message :: !failures in
+  Fun.protect ~finally:(fun () ->
+    Theme_vars.set_accent previous_accent;
+    Theme_vars.set_dark (previous_mode=Lui_theme.Dark)) (fun () ->
+    List.iter (fun accent ->
+      Theme_vars.set_accent accent;
+      List.iter (fun dark ->
+        Theme_vars.set_dark dark;
+        List.iter (fun scale -> List.iter (fun active -> List.iter (fun color ->
+          let store=Lui_store.create () in
+          let backend={backend_profile=profile MacOS GenericHost;
+            apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+          let app=Lui_app.create backend () (fun model () -> model)
+            (fun ctx _ _ -> Lui_elements.column ~padding:16 ~cross:`start
+              [Settings_page.accent_swatch ~key:"sample"
+                 ~current:(if active then color else "other") color;
+               Ui_components.option_card ~key:"preview"
+                 ~thumbnail:(Lui_elements.box ~width:92 ~height:63 ~background:"#ffffff" [])
+                 ~label:"Preview" ~selected_signal:(Signal.constant ctx.Lui_ui.ui_scheduler active)
+                 ~on_press:(fun _ -> ()) ()]) in
+          Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+            ignore (Lui_app.start app);ignore (Lui_app.flush app);
+            let layout=Lui_layout.create () in
+            Lui_layout.sync ~scale ~width:(200.*.scale) ~height:(220.*.scale) layout store;
+            let scene=Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+            Lui_paint.paint {Lui_paint.default_hooks with
+              layout=Lui_layout.layout_hook layout;color_of=Theme_vars.color_of;
+              shadow_of=Lui_paint.parse_shadows Theme_vars.color_of}
+              store scene ~width:(int_of_float (200.*.scale))
+              ~height:(int_of_float (220.*.scale)) ~scale ~clear:(Lui_scene.color 0 0 0 0);
+            let button=List.find (fun id -> Lui_store.kind store id="button") (Lui_store.preorder store) in
+            let r=Option.get (Lui_layout.rect layout button) in
+            let spread=if active then 4. else 1. in
+            let ring=Option.get (Theme_vars.color_of
+              (if color="none" then "hsl(var(--foreground))"
+               else "var(--rx-" ^ color ^ (if active then "-07)" else "-06)"))) in
+            let context=Printf.sprintf "accent=%s dark=%b scale=%g active=%b color=%s"
+              accent dark scale active color in
+            expect ("Swatch hit bounds remain 20 points: " ^ context)
+              (r.w=20.*.scale && r.h=20.*.scale);
+            expect ("Swatch outline must paint outside its hit bounds: " ^ context)
+              (List.exists (function Lui_scene.Shadow shadow ->
+                shadow.scast=r && shadow.scolor=ring && not shadow.sinset && shadow.sblur=0.
+                && shadow.srect=Lui_scene.rect (r.x-.spread*.scale) (r.y-.spread*.scale)
+                  (r.w+.2.*.spread*.scale) (r.h+.2.*.spread*.scale)
+                | _ -> false) scene.ops);
+            if color<>"none" then begin
+              let fill=Option.get (Theme_vars.color_of ("var(--rx-" ^ color ^ "-09)")) in
+              expect ("Swatch border must not shrink its color surface: " ^ context)
+                (List.exists (function Lui_scene.Fill f ->
+                  f.frect=r && f.fcolor=fill && f.fborder=(0.,0.,0.,0.)
+                  | _ -> false) scene.ops)
+            end;
+            let frame=List.find (fun id -> Lui_store.kind store id="stack") (Lui_store.preorder store) in
+            let bounds=Option.get (Lui_layout.rect layout frame) in
+            let selected=List.exists (function Lui_scene.Fill f ->
+              f.frect=bounds && f.fopacity>0.
+              && f.fborder=(2.*.scale,2.*.scale,2.*.scale,2.*.scale)
+              && f.fborder_color=Option.get (Theme_vars.color_of "var(--ls-link-text-color)")
+              && f.fopacity=1. | _ -> false) scene.ops in
+            expect ("Only the active preview paints its full-opacity link-color ring: " ^ context)
+              (selected=active);
+            Lui_paint.paint {Lui_paint.default_hooks with
+              layout=Lui_layout.layout_hook layout;color_of=Theme_vars.color_of;
+              shadow_of=Lui_paint.parse_shadows Theme_vars.color_of;
+              state_of=(fun id -> if id=button then
+                {Lui_paint.state_neutral with focused=true;focus_visible=true}
+                else Lui_paint.state_neutral)}
+              store scene ~width:(int_of_float (200.*.scale))
+              ~height:(int_of_float (220.*.scale)) ~scale ~clear:(Lui_scene.color 0 0 0 0);
+            let focus_layers=List.filter_map (function
+              | Lui_scene.Shadow shadow when shadow.scast=r && not shadow.sinset ->
+                Some (shadow.scolor,(shadow.srect.w-.r.w)/.(2.*.scale))
+              | _ -> None) scene.ops in
+            expect ("Keyboard focus must retain the themed offset, ring and color outline: " ^ context)
+              (focus_layers=
+                [Option.get (Theme_vars.color_of "hsl(var(--ring))"),4.;
+                 Option.get (Theme_vars.color_of "hsl(var(--background))"),2.;
+                 ring,spread]))) ["none";"logseq";"orange"]) [false;true]) [1.;2.]) [false;true])
+      ["logseq";"orange"]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native theme preview and accent outline paint" (!failures=[]);
+  print_endline "native theme preview and accent outline paint: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
   let module A=Lui_window.Assembly in

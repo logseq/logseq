@@ -639,12 +639,16 @@ body {
 
   .lui-stack > *,
   .lui-panel > *,
-  .lui-card > * {
-    grid-area: 1 / 1;
-  }
-
+  .lui-card > *,
   .lui-resizable > * {
     grid-area: 1 / 1;
+    /* Equal stacking contexts preserve child order when a child is positioned. */
+    z-index: 0;
+  }
+
+  /* Spacers are layout voids, matching native hit testing. */
+  .lui-spacer {
+    pointer-events: none;
   }
 
   .lui-panel {

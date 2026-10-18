@@ -180,18 +180,23 @@ let color_label = function
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~current color =
   let active = color = current and none = color = "none" in
+  let outline = "0 0 0 " ^ (if active then "4px " else "1px ")
+    ^ (if none then "hsl(var(--foreground))"
+       else "var(--rx-" ^ color ^ (if active then "-07)" else "-06)")) in
   row ~key ~height:20 ~main:`start ~cross:`center
     ~opacity:(if active then 1. else 0.5)
     [ Ui_components.with_props
-        [ Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
+        [ Ui_components.Prop.shadow outline
+        ; Ui_components.Prop.focus_shadow
+            (outline ^ ", 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))")
+        ; Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
         ; Ui_components.Prop.pressed_opacity 1. ]
       (Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
         ~selected:active
-        ~border_color:("var(--rx-" ^ color ^ (if active then "-07)" else "-06)"))
-        ~border_width:(if active then 4 else 1)
+        ~border_width:0
         ~width:20 ~height:20 ~corner_radius:999 ~padding:0
         ~on_press:(fun _ -> S.set_accent color)
         [ box ~key:(key ^ "-s")

@@ -980,38 +980,36 @@ let plugin_card ~key ?(classes = "") child : t =
 (* Theme-mode option card — the `.cp__theme-modes-options > li` spec:
    92px thumbnail (`i.mode-*`) over a centered 12px label, `.9` opacity
    until hover/active, selected thumbnail ring = inset 2px link color.
-   list_item keeps the `selected` prop + kind hooks; the active ring
-   rides the thumbnail's shadow signal. Per-side pads ride the
-   documented data-attrs style pair. *)
-let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
+   The selected prop owns state; a shared overlay paints the ring. *)
+let option_card ~key ~thumbnail ~label ?(min_height = 0)
     ~selected_signal:selected
     ~on_press () : t =
   with_props
-    [ Prop.hover_opacity 1.; Prop.cursor `pointer; Prop.opacity 0.9
+    [ Prop.hover_opacity 1.; Prop.cursor `pointer
     ; Prop.hover_background "transparent" ]
+    (Ui_parts.float_prop P.Opacity
+      ~value:(reactive (fun active -> if active then 1. else 0.9) selected)
     (list_item ~key ~on_press ~selected_signal:selected ~background:"transparent"
        ~min_height:0 ~width:100 ~padding_vertical:0 ~padding_horizontal:0
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
           below — column keeps the label under the image instead of
           beside it; cljs li has no padding, i and strong are flush *)
        [ column ~key:"c" ~cross:`start ~gap:6 ~min_height
-           [ Ui_parts.class_signal selected
-               (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-               (with_props [ Prop.overflow `hidden ]
+           [ with_props [ Prop.overflow `hidden ]
                   (stack ~key:"i" ~width:92 ~height:63 ~corner_radius:4
                      ~background:"var(--lx-gray-04, hsl(var(--muted)))"
                      [ thumbnail
                      ; with_props [Prop.pointer_enabled false]
                          (box ~key:"ring" ~width:92 ~height:63 ~corner_radius:4
-                            ~border_width:2 ~border_color:"hsl(var(--primary))"
+                            ~border_width:2 ~border_color:"var(--ls-link-text-color)"
                             ~background:"transparent"
                             ~opacity:(reactive (fun active -> if active then 1. else 0.) selected)
-                            []) ]))
+                            []) ])
            ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
                ~line_height:"1rem" ~width:84 ~height:16
                ~value:label ~text_alignment:`center []
            ]
-       ])
+       ]))
 
 (* -- menus & overlays -------------------------------------------------- *)
 
