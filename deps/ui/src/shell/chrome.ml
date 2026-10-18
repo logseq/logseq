@@ -964,6 +964,7 @@ let main_content (ms : Model.t Signal.signal) =
    mounted overlay mid-batch). cljs mounts them via portals, which
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
+  Ui_components.overlay_typography (
   if Ui_services.env_publishing () then
     Ui_parts.viewport_cover
       (box ~style_class:"cp__overlays" [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms; Toasts_view.render ms ])
@@ -1017,7 +1018,7 @@ let overlays (ms : Model.t Signal.signal) =
           | Some pos -> Settings_page.appearance_body pos
           | None -> spacer ~key:"app-none" [])
         ms
-        ])
+        ]))
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup *)

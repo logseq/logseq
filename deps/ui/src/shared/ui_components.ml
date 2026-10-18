@@ -47,6 +47,11 @@ let with_props (binds : Prop.t list) (elem : t) : t =
   List.iter (Prop.set ctx node) binds;
   node
 
+(* Reference portals live outside the page-size root. Establish the body
+   type scale once on overlay carriers, independently of page text sizing. *)
+let overlay_typography element =
+  with_props [ Prop.font_size "1rem"; Prop.line_height "1.5" ] element
+
 (* Secondary navigation links keep body text ink while fading on hover. *)
 let faded_link ?key ~url ~text () =
   with_props

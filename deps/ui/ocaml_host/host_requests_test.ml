@@ -5895,3 +5895,160 @@ let () =
       check "Application body typography must inherit shared theme tokens"
         (!failures = []);
       print_endline "native application body foreground inheritance: OK")
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let previous_mode = !Theme_vars.mode in
+      let previous_light = Hashtbl.copy Theme_vars.light_overrides
+      and previous_dark = Hashtbl.copy Theme_vars.dark_overrides in
+      let failures = ref [] in
+      let expect message condition =
+        if not condition then failures := message :: !failures
+      in
+      Fun.protect
+        ~finally:(fun () ->
+          List.iter
+            (fun (target, saved) ->
+              Hashtbl.reset target;
+              Hashtbl.iter (Hashtbl.replace target) saved)
+            [
+              (Theme_vars.light_overrides, previous_light);
+              (Theme_vars.dark_overrides, previous_dark);
+            ];
+          Theme_vars.rebuild Lui_theme.Light;
+          Theme_vars.rebuild Lui_theme.Dark;
+          Theme_vars.set_dark (previous_mode = Lui_theme.Dark))
+        (fun () ->
+          List.iter
+            (fun content_sized ->
+              let store = Lui_store.create () in
+              let backend =
+                {
+                  backend_profile = profile MacOS GenericHost;
+                  apply_batch =
+                    (fun batch ->
+                      Lui_store.apply_batch store batch;
+                      true);
+                }
+              in
+              let copy key =
+                Lui_elements.paragraph ~key ~accessibility_identifier:key
+                  ~value:"Portal\ncontent" []
+              in
+              let app =
+                Lui_app.create backend ()
+                  (fun () () -> ())
+                  (fun _ _ _ ->
+                    Ui_components.with_props
+                      [
+                        Ui_components.Prop.font_size "var(--ls-page-text-size)";
+                        Ui_components.Prop.line_height "2";
+                      ]
+                      (Lui_elements.column
+                         [
+                           copy "page-font-sample";
+                           Ui_components.overlay_typography
+                             (Lui_elements.box
+                                [
+                                  Ui_components.dialog ~key:"base-font-dialog"
+                                    ~content_sized
+                                    [
+                                      copy "dialog-font-sample";
+                                      Lui_elements.paragraph
+                                        ~key:"explicit-font-sample"
+                                        ~accessibility_identifier:
+                                          "explicit-font-sample"
+                                        ~font_size:"14px" ~line_height:"20px"
+                                        ~value:"Portal\ncontent" [];
+                                    ];
+                                  Ui_components.with_props
+                                    [
+                                      Ui_components.Prop.font_size "14px";
+                                      Ui_components.Prop.line_height "20px";
+                                    ]
+                                    (Lui_elements.column
+                                       [ copy "explicit-dialog-font-sample" ]);
+                                ]);
+                         ]))
+              in
+              Fun.protect
+                ~finally:(fun () -> ignore (Lui_app.dispose app))
+                (fun () ->
+                  ignore (Lui_app.start app);
+                  ignore (Lui_app.flush app);
+                  let find key =
+                    List.find
+                      (fun id ->
+                        Lui_store.string_prop store id
+                          "accessibility-identifier"
+                        = Some key)
+                      (Lui_store.preorder store)
+                  in
+                  let scene =
+                    Lui_scene.create
+                      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+                      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64)
+                  in
+                  List.iter
+                    (fun mode ->
+                      Theme_vars.set_dark mode;
+                      List.iter
+                        (fun (value, page_size) ->
+                          Theme_vars.set_var "--ls-page-text-size" value;
+                          let page = find "page-font-sample" in
+                          expect
+                            ("Page text must retain configured size " ^ value)
+                            (Lui_text.size (Text_engine.font_of store page)
+                            = page_size);
+                          List.iter
+                            (fun scale ->
+                              let engine =
+                                Text_engine.create
+                                  ~scene:(fun () -> scene)
+                                  ~scale:(fun () -> scale)
+                                  ~store:(fun () -> store)
+                              in
+                              List.iter
+                                (fun (key, size, pitch) ->
+                                  let id = find key in
+                                  let label =
+                                    Printf.sprintf "%s at %s/%g/%b/%b" key value
+                                      scale mode content_sized
+                                  in
+                                  expect
+                                    (label
+                                   ^ " must preserve the shared dialog font \
+                                      boundary")
+                                    (Lui_text.size
+                                       (Text_engine.font_of store id)
+                                    = size);
+                                  expect
+                                    (label
+                                   ^ " must preserve the shared dialog line \
+                                      height")
+                                    (Text_engine.line_height_of store id
+                                    = Some pitch);
+                                  let _, height =
+                                    Text_engine.measure_text engine id
+                                      "Portal\ncontent"
+                                  in
+                                  expect
+                                    (label
+                                   ^ " must measure both lines at the declared \
+                                      pitch")
+                                    (abs_float (height -. (2. *. pitch *. scale))
+                                    < 0.01))
+                                [
+                                  ("dialog-font-sample", 16., 24.);
+                                  ("explicit-font-sample", 14., 20.);
+                                  ("explicit-dialog-font-sample", 14., 20.);
+                                ])
+                            [ 1.; 2. ])
+                        [ ("18px", 18.); ("2em", 32.); ("0.875rem", 14.) ])
+                    [ false; true ]))
+            [ false; true ]);
+      List.iter prerr_endline (List.rev !failures);
+      check "Shared dialogs must keep body typography outside page font sizing"
+        (!failures = []);
+      print_endline
+        "native shared dialog font-size and line-height boundary: OK")

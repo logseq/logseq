@@ -403,7 +403,8 @@ let overlays (ms : Model.t Signal.signal) =
        (overlay ~key:"overlays" ~style_class:"cp__overlays"
     ~data_attrs:[ ("data-overlay-layer", "true") ]
     [ (* Extension fragments mount inside a standard container. *)
-      box ~key:"overlays-wrap" ~grow:1.
+      Ui_components.overlay_typography
+        (box ~key:"overlays-wrap" ~grow:1.
         [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
@@ -438,7 +439,7 @@ let overlays (ms : Model.t Signal.signal) =
           match m.Model.appearance with
           | Some pos -> Settings_page.appearance_body pos
           | None -> spacer ~key:"app-none" []) ms
-    ] ]))
+    ]) ]))
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
