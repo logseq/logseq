@@ -146,3 +146,14 @@ test('body leaves application colors to the shared root', async () => {
   })
   assert.deepEqual(colors, [], 'Portaled content must inherit logical shared foregrounds')
 })
+
+test('application font family has one shared typed owner', async () => {
+  const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
+  const duplicates = []
+  postcss.parse(source).walkRules(rule => {
+    if (rule.selectors.some(selector => ['html', 'html:not(.is-native-android)', 'body', '#root'].includes(selector))) {
+      rule.walkDecls('font-family', declaration => duplicates.push(declaration.value))
+    }
+  })
+  assert.deepEqual(duplicates, [], 'Ordinary and portaled content inherit the shared application font family')
+})

@@ -8,19 +8,6 @@
 
 /* ============================== Base ===================================== */
 
-@supports (font-variation-settings: normal) {
-  html {
-    font-family: 'Inter var', sans-serif;
-  }
-}
-
-html:not(.is-native-android) {
-  font-family:
-    var(--ls-font-family), sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
-    serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
-}
-
 :root {
   text-autospace: normal;
   scrollbar-width: thin;
