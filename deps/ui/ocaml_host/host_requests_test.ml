@@ -5174,7 +5174,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           Lui_paint.paint {Lui_paint.default_hooks with
             layout=(fun id -> Lui_paint.placement_of_rect (rect id));
             color_of=Theme_vars.color_of;shadow_of=Lui_paint.parse_shadows Theme_vars.color_of;
-            state_of=(fun id -> if id=field then {Lui_paint.state_neutral with focused=true}
+            state_of=(fun id -> if id=field then {Lui_paint.state_neutral with focused=true; focus_visible=true}
               else W.Ui.state_of (A.ui surface) store id);
             text_ops=(fun id _ color _ -> colors:=(id,color)::!colors;[])}
             store paint_scene ~width:(int_of_float (1440.*.scale))
@@ -6405,6 +6405,7 @@ let () =
                       Lui_paint.state_neutral with
                       hovered = true;
                       focused = true;
+                      focus_visible = true;
                       selected = true;
                     }
                   else Lui_paint.state_neutral);
@@ -6563,6 +6564,7 @@ let () =
                               {
                                 Lui_paint.state_neutral with
                                 focused = target = id;
+                                focus_visible = target = id;
                               });
                         }
                         store scene
