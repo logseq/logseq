@@ -5300,6 +5300,259 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native table selection geometry, visibility and input: OK")
 
 let () =
+  Native_embed.with_entry_lock (fun () ->
+      let module A = Lui_window.Assembly in
+      let module W = Lui_window in
+      let previous_worker = !Runtime.worker
+      and previous_model = !Runtime.read_model
+      and previous_flush = !Runtime.app_flush
+      and previous_popups = !Views_popup.open_popups
+      and previous_stack = !Views_popup.stack_st
+      and previous_open = !Views_popup.open_st in
+      Fun.protect
+        ~finally:(fun () ->
+          Runtime.worker := previous_worker;
+          Runtime.read_model := previous_model;
+          Runtime.app_flush := previous_flush;
+          Views_popup.open_popups := previous_popups;
+          Views_popup.stack_st := previous_stack;
+          Views_popup.open_st := previous_open)
+        (fun () ->
+          (Runtime.read_model :=
+             fun () -> { Model.initial with repo = Some "native-date-scroll" });
+          Runtime.worker :=
+            Some
+              {
+                Worker_client.invoke_fn =
+                  (fun name _ ->
+                    if name <> "thread-api/get-view-filter-data" then
+                      failwith ("Unexpected date-scroll request: " ^ name);
+                    Js.Promise.resolve
+                      (Wire.Map
+                         [ (Wire.kw "value-source", Wire.Keyword "timestamp") ]));
+                on_message = (fun _ _ -> ());
+                dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ());
+              };
+          List.iter
+            (fun scale ->
+              Views_popup.open_popups := [];
+              Views_popup.stack_st := None;
+              Views_popup.open_st := None;
+              let surface_cell = ref None and instance = ref None in
+              let surface () = Option.get !surface_cell in
+              let engine =
+                lazy
+                  (Text_engine.create
+                     ~scene:(fun () -> Lui_host.scene (A.host (surface ())))
+                     ~scale:(fun () -> scale)
+                     ~store:(fun () -> A.store (surface ())))
+              in
+              let module Measured_layout = struct
+                include Lui_layout
+
+                let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor
+                    ?vport ?anchor_shift ~width ~height layout store =
+                  let measure id text offered_width _ =
+                    Some
+                      (Text_engine.pad_size store id ~scale
+                         (Text_engine.measure_text
+                            ~width:
+                              (Host_interaction.measure_width offered_width)
+                            (Lazy.force engine) id text))
+                  in
+                  Lui_layout.sync ?scale:layout_scale ~measure ?hidden
+                    ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
+              end in
+              let surface =
+                A.create
+                  ~layout:(module Measured_layout)
+                  ~scale_cell:(ref scale)
+                  ~text:
+                    {
+                      measure =
+                        (fun id text ->
+                          Text_engine.measure_text (Lazy.force engine) id text);
+                      text_ops =
+                        (fun id r color text ->
+                          Text_engine.text_ops (Lazy.force engine) id r color
+                            text);
+                      hit_text = (fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+                      caret_ops =
+                        (fun _ _ ~lw:_ ~lh:_ ->
+                          {
+                            W.Ui.c_before = Fun.id;
+                            c_after = Fun.id;
+                            c_up = Fun.id;
+                            c_down = Fun.id;
+                            c_rect = (fun _ -> (0., 0., 20. *. scale));
+                          });
+                    }
+                  ~renderer:
+                    {
+                      Lui_host.name = "date-popup-scroll-test";
+                      render = (fun _ -> Bytes.empty);
+                    }
+                  ~width:(int_of_float (1080. *. scale))
+                  ~height:(int_of_float (350. *. scale))
+                  ()
+              in
+              surface_cell := Some surface;
+              Lui_host.set_reduced_motion (A.host surface) true;
+              let app =
+                Lui_app.create
+                  (A.backend surface (profile MacOS GenericHost))
+                  ()
+                  (fun () () -> ())
+                  (fun context _ _ ->
+                    instance :=
+                      Some
+                        (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+                           ~kind:Views_state.KAllPages
+                           ~feature:"native-date-scroll" ~owner:Wire.Nil);
+                    Lui_elements.column ~grow:1. ~margin_top:82
+                      [
+                        Lui_elements.row ~main:`end_ ~margin_right:100
+                          [
+                            Ui_components.button ~variant:`ghost ~size:`icon
+                              ~label:I18n.close
+                              ~accessibility_identifier:
+                                "native-date-scroll-anchor"
+                              [];
+                          ];
+                        Views_popup.layer;
+                      ])
+              in
+              Fun.protect
+                ~finally:(fun () ->
+                  Views_popup.close_all ();
+                  ignore (Lui_app.dispose app))
+                (fun () ->
+                  ignore (Lui_app.start app);
+                  ignore (Lui_app.flush app);
+                  ignore (A.store_changed surface);
+                  let store = A.store surface and ui = A.ui surface in
+                  let ids () = Lui_store.preorder store in
+                  let rect id = W.Rects.get (A.rects surface) id in
+                  let has_class id value =
+                    match Lui_store.string_prop store id "style-class" with
+                    | None -> false
+                    | Some classes ->
+                        List.mem value (String.split_on_char ' ' classes)
+                  in
+                  let anchor_id =
+                    List.find
+                      (fun id ->
+                        Lui_store.string_prop store id
+                          "accessibility-identifier"
+                        = Some "native-date-scroll-anchor")
+                      (ids ())
+                  in
+                  let anchor =
+                    Ui_dom_native.el_of
+                      (Native_embed.ext_snapshot (Lui_app.runtime app) anchor_id)
+                  in
+                  (Runtime.app_flush := fun () -> ignore (Lui_app.flush app));
+                  Views_head.filter_value_phase (Option.get !instance) ~anchor
+                    Views_table.created_column;
+                  Host.drain ();
+                  ignore (Lui_app.flush app);
+                  ignore (A.store_changed surface);
+                  ignore (A.repaint surface);
+                  let menu =
+                    List.find
+                      (fun id -> Lui_store.kind store id = "popover")
+                      (ids ())
+                  and results =
+                    List.find
+                      (fun id -> has_class id "cp__select-results")
+                      (ids ())
+                  in
+                  let last =
+                    List.find
+                      (fun id ->
+                        Lui_store.kind store id = "list-item"
+                        && List.exists
+                             (fun child ->
+                               Lui_store.string_prop store child "text"
+                               = Some
+                                   (List.assoc "custom-date"
+                                      I18n.timestamp_options))
+                             (Lui_store.preorder ~root:id store))
+                      (ids ())
+                  in
+                  check "The date menu fixture must reproduce nested overflow"
+                    (W.Ui.scroll_cap ui menu > 0.
+                    && W.Ui.scroll_cap ui results > 0.);
+                  check "The final date option must begin clipped by the popup"
+                    ((rect last).y +. (rect last).h
+                    > (rect menu).y +. (rect menu).h);
+                  let first =
+                    List.find
+                      (fun id -> Lui_store.kind store id = "list-item")
+                      (ids ())
+                  in
+                  let point = rect first in
+                  ignore
+                    (A.handle surface
+                       (W.Input.Move
+                          ( (point.x +. (point.w /. 2.)) /. scale,
+                            (point.y +. (point.h /. 2.)) /. scale )));
+                  ignore (A.handle surface (W.Input.Wheel (0., -35.)));
+                  ignore (A.repaint surface);
+                  Printf.printf
+                    "native date popup scale=%g inner=%.1f/%.1f outer=%.1f/%.1f\n\
+                     %!"
+                    scale
+                    (W.Ui.scroll_offset ui results)
+                    (W.Ui.scroll_cap ui results)
+                    (W.Ui.scroll_offset ui menu)
+                    (W.Ui.scroll_cap ui menu);
+                  check
+                    "A single wheel must exhaust the small inner date-list \
+                     range"
+                    (W.Ui.scroll_offset ui results = W.Ui.scroll_cap ui results);
+                  check
+                    "A single wheel must pass remaining distance into the date \
+                     popup"
+                    (W.Ui.scroll_offset ui menu = W.Ui.scroll_cap ui menu);
+                  let r = rect last and viewport = rect menu in
+                  check "One wheel must reveal the complete final date option"
+                    (r.y >= viewport.y && r.y +. r.h <= viewport.y +. viewport.h);
+                  let x = (r.x +. (r.w /. 2.)) /. scale
+                  and y = (r.y +. (r.h /. 2.)) /. scale in
+                  check "The revealed date option must be hit-testable"
+                    (List.mem last
+                       (W.hit_path store (A.rects surface) ~x:(x *. scale)
+                          ~y:(y *. scale)));
+                  let apply actions =
+                    List.iter
+                      (function
+                        | W.Dispatch event ->
+                            ignore (Lui_app.dispatch_event app event)
+                        | _ -> ())
+                      actions;
+                    ignore (Lui_app.flush app);
+                    ignore (A.store_changed surface);
+                    ignore (A.repaint surface)
+                  in
+                  apply (A.handle surface (W.Input.Move (x, y)));
+                  apply
+                    (A.handle surface
+                       (W.Input.Button_down
+                          (x, y, W.Input.Left, 1, W.Input.mods_none)));
+                  apply
+                    (A.handle surface
+                       (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+                  check
+                    "Clicking the scrolled final date option must open the \
+                     calendar"
+                    (List.exists
+                       (fun id -> has_class id "ls-view-date-picker")
+                       (ids ()))))
+            [ 1.; 2. ]);
+      print_endline "native date popup nested scroll and final-option input: OK")
+
+let () =
   List.iter (fun (mode, name, secondary, link) ->
     let snapshot = Ui_theme.snapshot mode in
     let install vars = Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
