@@ -372,7 +372,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
       let pick it =
         if timestamp && it.P.si_value = "custom-date" then
           P.show_custom ~anchor ~align_end:true ~cls:"ls-view-date-picker"
-            (Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
+            (Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
                commit (W.Date_ms (Int64.of_float date))))
         else commit (Option.value it.P.si_extra ~default:(W.String it.P.si_value))
       in

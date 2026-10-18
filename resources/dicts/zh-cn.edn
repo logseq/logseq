@@ -1990,6 +1990,7 @@
  :ui/yes "是"
 
  :ui.calendar/day-label "{4}年{2}{3}日{1}"
+ :ui.calendar/month-label "{2}年{1}"
  :ui.calendar/time-label "时间"
  :ui.calendar/today-day-label "今天，{1}"
 

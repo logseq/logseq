@@ -585,6 +585,9 @@ let t (key : string) : string =
 
 let tf (key : string) (args : string list) : string = sub (t key) args
 
+let calendar_month_label ~year ~month =
+  tf "ui.calendar/month-label" [t Dates.month_keys.(month-1);string_of_int year]
+
 let calendar_day_label ~today ~year ~month ~day =
   let weekday = (Dates.fields (Dates.make ~year ~month ~day ())).wday in
   let weekday_keys =

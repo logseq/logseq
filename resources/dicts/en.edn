@@ -1995,6 +1995,7 @@
  :ui/yes "Yes"
 
  :ui.calendar/day-label "{1}, {2} {3}, {4}"
+ :ui.calendar/month-label "{1} {2}"
  :ui.calendar/time-label "Time"
  :ui.calendar/today-day-label "Today, {1}"
 

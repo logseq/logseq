@@ -162,8 +162,35 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let calendar_structure session expected_label =
+    let attrs n=Option.value (M.string_prop n "data-attrs") ~default:""
+      |> P.data_attrs_decode in
+    let has_role role n=List.assoc_opt "role" (attrs n)=Some role in
+    let grids=List.filter (has_role "grid") (nodes session) in
+    check "A calendar exposes exactly one named date grid" (List.length grids=1);
+    match grids with
+    | [grid] ->
+        check "Calendar grid names the displayed month and year"
+          (List.assoc_opt "aria-label" (attrs grid)=Some expected_label);
+        check "Calendar grid declares single-date selection"
+          (List.assoc_opt "aria-multiselectable" (attrs grid)=Some "false");
+        let rows=M.children session.S.tree grid.M.id in
+        let days=List.filter (fun n -> class_has n "ui__calendar-day") (nodes session) in
+        check "Calendar groups date buttons into complete semantic weeks"
+          (List.length rows=List.length days/7 && List.for_all (has_role "row") rows);
+        List.iter (fun week ->
+          let cells=M.children session.S.tree week.M.id in
+          check "Each calendar week exposes seven date cells"
+            (List.length cells=7 && List.for_all (has_role "gridcell") cells);
+          List.iter (fun cell ->
+            check "Every calendar cell retains one ordinary date button"
+              (match M.children session.S.tree cell.M.id with
+               | [button] -> button.M.kind="button" && class_has button "ui__calendar-day"
+               | _ -> false)) cells) rows
+    | _ -> ()
+  in
   let picked_date = ref None in
-  let calendar = mount (fun _ -> Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t
+  let calendar = mount (fun _ -> Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t
       ~on_pick:(fun date -> picked_date:=Some date)) in
   let today = Dates.fields (Dates.date_now ()) in
   let day_name y m d = Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d in
@@ -199,9 +226,10 @@ let run_views ~registry ~profile ~finish =
   check "Calendar activation commits the navigated date"
     (Option.map Dates.journal_day_of !picked_date=Some (next.year*10000+next.month*100+next.day));
   ignore (Lui_app.dispose calendar.S.app);
-  let labelled_calendar = mount (fun _ -> Ui_components.calendar ~day_label:I18n.calendar_day_label
+  let labelled_calendar = mount (fun _ -> Ui_components.calendar ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label
       ~initial:(Dates.make ~year:2024 ~month:2 ~day:29 ()) ~translate:I18n.t
       ~on_pick:(fun _ -> ()) ()) in
+  calendar_structure labelled_calendar "February 2024";
   List.iter (fun (y,m,d,label) ->
     let button = find_day labelled_calendar y m d in
     check "Calendar date labels distinguish weekdays, months and years"
@@ -224,9 +252,8 @@ let run_views ~registry ~profile ~finish =
   check "Editor month controls clamp the focused day to the target month"
     (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=29 | None -> false);
   Editor_commands.active:=Some popup;
-  let editor_calendar = mount (fun _ context parent ->
-    let source = Signal.value (Editor_commands.popup_vs_of context) in
-    Lui_elements.column [Editor_commands.cal_head source;Editor_commands.cal_table popup] context parent) in
+  let editor_calendar = mount (fun _ ->
+    Lui_elements.column [Editor_commands.popup_view]) in
   let editor_header = List.filter (fun n -> n.M.kind="button"
     && not (class_has n "ui__calendar-day")) (nodes editor_calendar) in
   check "Editor calendars use the same navigation-first header order"
@@ -243,10 +270,12 @@ let run_views ~registry ~profile ~finish =
        ~prevent_default:(fun () -> prevented:=true));
   check "The editor key router leaves calendar navigation to the focused button"
     (!Editor_commands.active=Some popup && not !prevented);
+  calendar_structure editor_calendar "January 2024";
   let day = find_day editor_calendar 2024 1 31 in
   check "Editor calendars share complete date labels"
     (M.string_prop day "accessibility-label"=Some "Wednesday, January 31st, 2024");
   navigate editor_calendar day (P.NavigationKey (day.M.id,"ArrowRight",false));
+  calendar_structure editor_calendar "February 2024";
   check "Editor calendar navigation updates the day exactly once"
     (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=1 | None -> false);
   ignore (Lui_app.dispose editor_calendar.S.app);

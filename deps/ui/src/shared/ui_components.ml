@@ -1168,7 +1168,7 @@ let alert_dialog_footer ~key children =
 
 
 (* One day grid for editor calendars and standalone date selection. *)
-let calendar_grid ~day_label ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
+let calendar_grid ~month_label ~day_label ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
   let today = Dates.today_journal_day () in
   let cell ~outside y m d =
     let focused = (not outside) && day = Some d in
@@ -1217,14 +1217,22 @@ let calendar_grid ~day_label ~year ~month ~day ~tab_day ~on_navigate ~on_pick : 
   let py, pm = if month = 1 then (year - 1, 12) else (year, month - 1) in
   let ny, nm = if month = 12 then (year + 1, 1) else (year, month + 1) in
   let pdays = Dates.days_in_month ~y:py ~m:pm in
-  grid ~key:"grid" ~columns:7 ~gap:4 ~width:276
-    (List.init
-       ((lead + days + 6) / 7 * 7)
-       (fun index ->
-         let d = index + 1 - lead in
-         if d < 1 then cell ~outside:true py pm (pdays + d)
-         else if d > days then cell ~outside:true ny nm (d - days)
-         else cell ~outside:false year month d))
+  column ~key:"grid" ~gap:4 ~width:276
+    ~data_attrs:["role","grid";"aria-label",month_label ~year ~month;
+                 "aria-multiselectable","false"]
+    (List.init ((lead + days + 6) / 7) (fun week ->
+       row ~key:("week-" ^ string_of_int week) ~gap:4
+         ~data_attrs:["role","row"]
+         (List.init 7 (fun weekday ->
+            let d = week * 7 + weekday + 1 - lead in
+            let outside,y,m,d =
+              if d < 1 then true,py,pm,pdays+d
+              else if d > days then true,ny,nm,d-days
+              else false,year,month,d
+            in
+            box ~key:(Printf.sprintf "cell-%04d-%02d-%02d" y m d)
+              ~width:36 ~height:36 ~data_attrs:["role","gridcell"]
+              [cell ~outside y m d]))))
 
 let calendar_month_names translate =
   Array.map translate Dates.month_keys
@@ -1245,7 +1253,7 @@ let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
        ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
 let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
-    ~day_label ~translate ~on_pick () : t =
+    ~month_label ~day_label ~translate ~on_pick () : t =
  fun context parent ->
   let initial = Dates.fields (Option.value initial ~default:(Dates.date_now ())) in
   let date =
@@ -1382,7 +1390,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                     []);
               reactive
                 (fun (year, month, d) focused ->
-                  calendar_grid ~day_label ~year ~month ~day:(if focused then Some d else None)
+                  calendar_grid ~month_label ~day_label ~year ~month ~day:(if focused then Some d else None)
                     ~tab_day:d ~on_navigate:(fun y m d ->
                       Signal.set date (y,m,d);
                       Signal.set day_focused true)
@@ -1419,4 +1427,4 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
         ]))
     context parent
 
-let date_picker ~day_label ~translate ~on_pick = calendar ~day_label ~translate ~on_pick ()
+let date_picker ~month_label ~day_label ~translate ~on_pick = calendar ~month_label ~day_label ~translate ~on_pick ()
