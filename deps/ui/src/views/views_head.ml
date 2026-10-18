@@ -397,20 +397,21 @@ let filter_value_phase inst ~anchor (c : V.column) =
                     ~style_class:"ls-op-label" [] ])
             [ (I.is_empty, "is"); (I.is_not_empty, "is-not") ]
       in
-      P.show_select ~anchor ~align_end:true ~items ~placeholder:c.V.c_name
+      P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name
         ~footer:ops ~on_chosen:(fun item _ -> pick item) ())
 
 let filter_popup inst anchor =
-  let s = V.get inst in
-  let items =
-    List.map
-      (fun c ->
-        { P.si_label = c.V.c_name; si_value = c.V.c_id; si_extra = None })
-      (filterable_columns s)
+  let items context =
+    Logseq_el.own context
+      (Signal.map (fun state ->
+        List.map (fun c ->
+          { P.si_label = c.V.c_name; si_value = c.V.c_id; si_extra = None })
+          (filterable_columns state)) (sig_of inst))
   in
   ignore
     (P.show_select ~anchor ~align_end:true ~items ~placeholder:I.filter
        ~on_chosen:(fun it _ ->
+         let s = V.get inst in
          match
            List.find_opt (fun c -> c.V.c_id = it.P.si_value) s.V.columns
          with

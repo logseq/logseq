@@ -261,13 +261,13 @@ let value_picker inst ~tree ~loc ~anchor ident =
           (P.show_select ~anchor ~placeholder:ident
              ~wrap_cls:"query-builder-picker"
              ~items:
-               (List.map
+               (P.fixed_items (List.map
                   (fun t ->
                     { P.si_label = t
                     ; si_value = t
                     ; si_extra = None
                     })
-                  its)
+                  its))
              ~on_chosen:(fun it _ ->
                add_clause { a_dsl = "\"" ^ it.P.si_value ^ "\""; a_disp = it.si_value })
              ())
@@ -332,7 +332,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
                  [] ])
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items
+        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
            ~extra:(fun () -> head ())
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
@@ -350,10 +350,10 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name =
         (P.show_select ~anchor ~placeholder:I.select_multi_prompt ~multiple:true
          ~wrap_cls:"query-builder-picker"
            ~items:
-             (List.map
+             (P.fixed_items (List.map
                 (fun t ->
                   { P.si_label = t; si_value = t; si_extra = None })
-                items)
+                items))
            ~on_apply:(fun vs ->
              if vs <> [] then begin
                let args =
@@ -376,7 +376,7 @@ let page_picker inst ~tree ~loc ~anchor kind =
           titles
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items
+        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
              let v = it.P.si_value in
@@ -406,7 +406,7 @@ let tag_picker inst ~tree ~loc ~anchor =
           classes
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items
+        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
              (* seed uuid -> title so a re-parsed [[uuid]] clause still
@@ -428,10 +428,10 @@ let between_picker inst ~tree ~loc ~anchor =
         ignore
           (P.show_select ~anchor ~placeholder:start_label
              ~items:
-               (List.map
+               (P.fixed_items (List.map
                   (fun t ->
                     { P.si_label = t; si_value = t; si_extra = None })
-                  titles)
+                  titles))
              ~wrap_cls:"query-builder-picker" ~on_chosen:on_done ())
       in
       pick I.builder_between_start (fun s _ ->
@@ -472,9 +472,9 @@ let sample_picker inst ~tree ~loc ~anchor =
   ignore
     (P.show_select ~anchor ~placeholder:I.select_prompt
        ~items:
-         (List.init 100 (fun i ->
+         (P.fixed_items (List.init 100 (fun i ->
               let n = string_of_int (i + 1) in
-              { P.si_label = n; si_value = n; si_extra = None }))
+              { P.si_label = n; si_value = n; si_extra = None })))
        ~wrap_cls:"query-builder-picker"
        ~on_chosen:(fun it _ ->
          tree := append_at !tree loc (CItem ("sample", [ { a_dsl = it.P.si_value; a_disp = it.si_value } ]));
@@ -506,7 +506,7 @@ let picker inst ~tree ~loc ~anchor =
   in
   ignore
     (P.show_select ~anchor ~placeholder:I.builder_add_filter_placeholder
-       ~items ~wrap_cls:"query-builder-picker"
+       ~items:(P.fixed_items items) ~wrap_cls:"query-builder-picker"
        ~on_chosen:(fun it _ ->
          match it.P.si_value with
          | op when is_op op ->

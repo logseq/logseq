@@ -105,6 +105,62 @@ let run_views ~registry ~profile ~finish =
     ignore (Lui_app.dispose inline_properties.S.app);
     check "disposing an inline Add property owner closes its workflow" (not (Properties_dialog.is_open ())));
   restore_inline ();
+  let previous_stack = !Views_popup.stack_st in
+  Views_popup.stack_st := None;
+  let filter_instance = ref None in
+  let delayed_filter = mount (fun _ context parent ->
+      let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:Views_state.KAllPages ~feature:"delayed-filter-columns"
+          ~owner:Wire.Nil in
+      filter_instance := Some inst;
+      Views_popup.layer context parent) in
+  let filter_inst = Option.get !filter_instance in
+  let options () = List.filter (fun n -> class_has n "ls-view-select-option")
+      (nodes delayed_filter) in
+  let rec caption node = match M.string_prop node "text" with
+    | Some text -> Some text
+    | None -> List.find_map caption (M.children delayed_filter.S.tree node.M.id) in
+  let option_labels () = List.filter_map caption (options ()) in
+  Views_head.filter_popup filter_inst (Ui_services.dom_body ());
+  let filter_input = List.find (fun n -> n.M.kind="input") (nodes delayed_filter) in
+  S.text_changed delayed_filter filter_input.M.id "Later";
+  let column id name =
+    Views_table.builtin_column id name "string" () in
+  let earlier = column "fixture/earlier" "Earlier"
+  and later = column "fixture/later" "Later" in
+  Views_state.update filter_inst (fun state ->
+      {state with columns=[earlier;later]});
+  S.flush delayed_filter;
+  check "Filter options arrive in the already open popup and retain its query"
+    (option_labels ()=["Later"]);
+  check "Loading filter columns preserves the mounted input"
+    (List.exists (fun n -> n.M.id=filter_input.M.id) (nodes delayed_filter));
+  S.text_changed delayed_filter filter_input.M.id "";
+  check "Clearing a pending Filter query exposes the current columns"
+    (option_labels ()=["Earlier";"Later"]);
+  S.dispatch delayed_filter (P.NavigateNext filter_input.M.id);
+  let existing : Views_state.filter_clause =
+    {c_prop="fixture/existing";c_op="text-contains";c_val=None} in
+  Views_state.update filter_inst (fun state ->
+      {state with columns=[{later with c_name="Latest"}];
+        filters=[existing];filters_or=true});
+  S.flush delayed_filter;
+  check "An open Filter replaces renamed and removed columns"
+    (option_labels ()=["Latest"]);
+  check "Filter keeps a visible selected option after its source shrinks"
+    (List.exists (fun n -> Hashtbl.find_opt n.M.props "selected"=Some (P.BoolValue true))
+       (options ()));
+  S.submit delayed_filter filter_input.M.id;
+  check "Filter submits the current column without overwriting newer clauses"
+    ((Views_state.get filter_inst).filters_or
+     && match (Views_state.get filter_inst).filters with
+       | [first;second] -> first=existing && second.c_prop="fixture/later"
+           && second.c_op="text-contains"
+       | _ -> false);
+  check "Filter submission closes the open surface" (!Views_popup.open_popups=[]);
+  Views_popup.close_all ();
+  ignore (Lui_app.dispose delayed_filter.S.app);
+  Views_popup.stack_st := previous_stack;
   let filter_value_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st in
@@ -1264,7 +1320,7 @@ let run_views ~registry ~profile ~finish =
     {Views_popup.si_label=Printf.sprintf "Choice %02d" i;
      si_value=string_of_int i;si_extra=None}) in
   let open_choices ?(multiple=false) items =
-    Views_popup.show_select ~anchor:(Ui_services.dom_body ()) ~items
+    Views_popup.show_select ~anchor:(Ui_services.dom_body ()) ~items:(Views_popup.fixed_items items)
       ~placeholder:"Choice" ~multiple
       ~on_chosen:(fun item checked -> selected_items := !selected_items @ [item.Views_popup.si_value, checked])
       ~on_apply:(fun items -> applied_items := items) ();

@@ -388,6 +388,9 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
 
 (* ---------- select-style search popup ---------- *)
 
+let fixed_items items context =
+  Signal.constant context.Lui_ui.ui_scheduler items
+
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = []) ~on_chosen () =
@@ -395,6 +398,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
   let id = !next_id + 1 in
   let view context parent =
     let sched = context.Lui_ui.ui_scheduler in
+    let source = items context in
     let place = placement_state context anchor ~align_end in
     let query = Signal.state sched "" in
     let chosen = Signal.state sched 0 in
@@ -402,10 +406,12 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let qsig = Signal.value (query)
     and csig = Signal.value (chosen)
     and ssig = (Signal.value (sel_values)) in
-    let filtered q =
-      if q = "" then items
-      else List.filter (fun it -> Fuzzy.score q it.si_label > 0.) items
+    let filter q choices =
+      if q = "" then choices
+      else List.filter (fun it -> Fuzzy.score q it.si_label > 0.) choices
     in
+    let filtered = Logseq_el.own context (Signal.map2 filter qsig source) in
+    let bounded count picked = max 0 (min picked (count - 1)) in
     let choose it =
       if multiple then begin
         let sel = Signal.get_state sel_values in
@@ -421,16 +427,17 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
       end
     in
     let navigate direction =
-      let count = List.length (filtered (Signal.get_state query)) in
+      let count = List.length (Signal.get filtered) in
       if count > 0 then
-        Signal.set chosen (max 0 (min (Signal.get_state chosen + direction) (count - 1)))
+        Signal.set chosen (bounded count (bounded count (Signal.get_state chosen) + direction))
     in
     let submit () =
-      match List.nth_opt (filtered (Signal.get_state query)) (Signal.get_state chosen) with
+      let visible = Signal.get filtered in
+      match List.nth_opt visible (bounded (List.length visible) (Signal.get_state chosen)) with
       | Some it -> choose it
       | None -> ()
     in
-    let row i (it : select_item) =
+    let row count i (it : select_item) =
       Ui_components.with_props
         [ Ui_components.Prop.font_size "14px"
         ; Ui_components.Prop.line_height "20px"
@@ -442,9 +449,9 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            ~height:32 ~min_height:32 ~padding_vertical:6 ~padding_horizontal:8
            ~corner_radius:4
            ~foreground:(reactive (fun picked ->
-             if i = picked then "var(--ls-secondary-text-color)"
+             if i = bounded count picked then "var(--ls-secondary-text-color)"
              else "hsl(var(--popover-foreground) / 0.75)") csig)
-           ~selected:(reactive (fun picked -> i = picked) csig)
+           ~selected:(reactive (fun picked -> i = bounded count picked) csig)
            ~on_pointer_enter:(fun _ -> Signal.set chosen i)
            ~on_press:(fun _ -> choose it)
            [ row ~gap:4 ~cross:`center ~grow:1. ~min_width:0
@@ -456,8 +463,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ])
     in
     let results =
-      reactive (fun q ->
-        let visible = filtered q in
+      reactive (fun visible ->
         if visible = [] then
           if multiple then spacer ~height:0 []
           else text ~style_class:"ls-ac-empty" ~value:I.no_matched_result
@@ -466,9 +472,10 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
           list ~accessibility_identifier:"ui__ac-inner"
             ~style_class:"cp__select-results"
             ~height:(min 280 (32 * List.length visible))
-            ~scroll_target:(reactive (fun picked -> "ac-" ^ string_of_int picked) csig)
+            ~scroll_target:(reactive (fun picked ->
+              "ac-" ^ string_of_int (bounded (List.length visible) picked)) csig)
             ~scroll_token_signal:csig ~scroll_anchor:`nearest
-            (List.mapi row visible)) qsig
+            (List.mapi (row (List.length visible)) visible)) filtered
     in
     let select_col =
       Ui_components.with_props
