@@ -272,13 +272,7 @@ let services : unit -> Svs.t =
               ~on_chosen:(fun c -> on_chosen (icon_choice c))
         | None -> ())
   ; appearance_popup =
-      (fun () ->
-        match Ui_services.dom_query ".toolbar-dots-btn" with
-        | Some el ->
-            let (x, y, w, h) = el.Ui_services.rect () in
-            Runtime.send
-              (Action.Appearance_set (Some (x +. w, y +. h +. 4.)))
-        | None -> ())
+      (fun () -> Runtime.send (Action.Appearance_set true))
   ; dialogs_open = Dialogs_state.open_
   ; dialogs_close = Dialogs_state.close_named
   ; dialogs_is_open = Dialogs_state.is_open

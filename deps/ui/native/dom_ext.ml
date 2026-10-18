@@ -672,8 +672,6 @@ let rect_bottom (r : rect) : float =
 let rect_height (r : rect) : float =
   Option.value (num_prop "height" r) ~default:0.
 
-let toolbar_dots_pos : (float * float) option ref = ref None
-
 (* ---------- timers ---------- *)
 
 let set_timeout (f : unit -> unit) (ms : int) : unit =

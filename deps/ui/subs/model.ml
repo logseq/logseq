@@ -233,7 +233,7 @@ type t =
     (* click position + with_app_items (toolbar dots vs page context
        menu) + the menu page uuid; uuid None = resolve from the current
        route like cljs right-sidebar/get-current-page *)
-  ; appearance : (float * float) option
+  ; appearance : bool
     (* cljs :ui/toggle-appearance popup anchored to .toolbar-dots-btn *)
   ; confirm : confirm option
   ; toasts : toast list
@@ -274,7 +274,7 @@ let initial =
   ; right_sidebar_open = false
   ; editing_title = false
   ; page_menu = None
-  ; appearance = None
+  ; appearance = false
   ; confirm = None
   ; toasts = []
   ; toast_next = 0

@@ -637,9 +637,31 @@ let test_help () =
     (find_where (fun n -> has_tok n "cp__sidebar-help-menu-popup") = [])
 
 let test_appearance () =
-  send (Action.Appearance_set (Some (10., 10.)));
+  send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
+  check "Opening the page menu closes appearance"
+    (find_where (fun n -> has_tok n "ls-dots-menu") <> []);
+  send (Action.Appearance_set true);
   has "prop:accessibility-identifier=\"appearance_settings\"";
-  send (Action.Appearance_set None);
+  let appearance = List.find (fun n -> n.M.kind="popover" && has_tok n "appearance-popup")
+    (find_where (fun _ -> true)) in
+  check "Appearance uses the retained header trigger for its layer and geometry"
+    (M.string_prop appearance "anchor-target"=Some "toolbar-dots-btn"
+     && M.string_prop appearance "anchor"=Some "below"
+     && M.string_prop appearance "role"=Some "dialog"
+     && not (Hashtbl.mem appearance.M.props "popup-x"));
+  absent "class:ls-dots-menu";
+  send (Action.Page_menu_set None);
+  check "Closing the retired page menu preserves the appearance popup"
+    (first "prop:accessibility-identifier=\"appearance_settings\"" <> None);
+  send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
+  absent "prop:accessibility-identifier=\"appearance_settings\"";
+  send (Action.Appearance_set false);
+  check "Closing retired appearance preserves the newly opened page menu"
+    (find_where (fun n -> has_tok n "ls-dots-menu") <> []);
+  send Action.Dismiss_all;
+  absent "class:ls-dots-menu";
+  send (Action.Appearance_set true);
+  send (Action.Appearance_set false);
   absent "prop:accessibility-identifier=\"appearance_settings\""
 
 let test_not_found () =

@@ -1175,27 +1175,16 @@ let appearance_rows ctx =
   ; accent_row ~modal:true
   ]
 
-let appearance_body (_x, y) : t =
+let appearance_body () : t =
  fun ctx parent ->
   S.ensure ctx;
   let node =
-    box ~key:"appearance-popup"
-      [ (* cljs shui popup-show! dismisses on outside click — the
-           transparent backdrop does the hit-testing *)
-        Ui_parts.pressable
-          ~on_press:(fun _ ->
-            Runtime.send (Action.Appearance_set None))
-          (Ui_components.with_props
-             [ Ui_components.Prop.position `fixed
-             ; Ui_components.Prop.inset 0.
-             ; Ui_components.Prop.z_index 40 ]
-             (box ~key:"appearance-backdrop" []))
-        (* cljs PopupContent right-anchors the appearance panel:
-           ~620px wide, right edge ~32px from the viewport edge *)
-      ; popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
-          ~at:(Ui_services.dom_viewport_width () -. 32. -. 624., y) ~width:624
+    Ui_components.menu_surface
+      (popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
+          ~anchor:`below ~anchor_target:"toolbar-dots-btn" ~anchor_alignment:`end_
+          ~anchor_offset:0. ~width:624 ~role:`dialog
           ~on_dismiss:(fun _ ->
-            Runtime.send (Action.Appearance_set None))
+            Runtime.send (Action.Appearance_set false))
           ~style_class:"ui__dropdown-menu-content appearance-popup"
           ~min_width:192
           [ column ~key:"appearance_settings"
@@ -1207,7 +1196,6 @@ let appearance_body (_x, y) : t =
                        flex-col gap-4 between the .it rows *)
                     column ~key:"app-rows" ~gap:16 (appearance_rows ctx))
                   (S.signal ()) ]
-          ]
-      ]
+          ])
   in
   node ctx parent

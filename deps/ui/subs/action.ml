@@ -31,7 +31,7 @@ type t =
          anchor as cx and the trigger rect as top/bottom *)
     (* coords, with_app_items, menu page uuid; uuid None = resolve
        from the current route like cljs right-sidebar/get-current-page *)
-  | Appearance_set of (float * float) option
+  | Appearance_set of bool
   | Confirm_set of Model.confirm option
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast

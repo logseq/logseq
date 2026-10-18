@@ -126,14 +126,7 @@ let global_items () =
         close ();
         Sidebar_state.open_dialog "plugins")
   ; icon_item "appearance" I18n.appearance "color-swatch" (fun () ->
-        close ();
-        (* cljs :ui/toggle-appearance anchors the appearance popup to the
-           dots trigger — the semantic topbar's dots press recorded the
-           anchor when the menu opened *)
-        match !Dom_ext.toolbar_dots_pos with
-        | Some (x, y) ->
-            Runtime.send (Action.Appearance_set (Some (x, y)))
-        | None -> ())
+        Runtime.send (Action.Appearance_set true))
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();
         Runtime.mark_nav ();

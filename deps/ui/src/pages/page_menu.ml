@@ -216,16 +216,7 @@ let global_items () =
         close ();
         Sidebar_state.open_dialog "plugins")
   ; icon_item "appearance" I18n.appearance "color-swatch" (fun () ->
-        close ();
-        (* cljs :ui/toggle-appearance anchors the appearance popup to the
-           dots trigger, same as the menu itself *)
-        match Web_dom.query_selector ".toolbar-dots-btn" with
-        | Some el ->
-            let r = Web_dom.el_bounding_rect el in
-            Runtime.send
-              (Action.Appearance_set
-                 (Some (Web_dom.rect_right r, Web_dom.rect_bottom r)))
-        | None -> ())
+        Runtime.send (Action.Appearance_set true))
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();
         Runtime.mark_nav ();

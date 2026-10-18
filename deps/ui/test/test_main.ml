@@ -454,14 +454,14 @@ let test_update_popups () =
     Update.update m2 (Action.Page_menu_set (Some (10., 15., 20., true, None)))
   in
   check "page_menu set" (m3.page_menu = Some (10., 15., 20., true, None));
-  let m4 = Update.update m3 (Action.Appearance_set (Some (1., 2.))) in
+  let m4 = Update.update m3 (Action.Appearance_set true) in
   check "appearance clears page_menu"
-    (m4.appearance = Some (1., 2.) && m4.page_menu = None);
+    (m4.appearance && m4.page_menu = None);
   let m5 =
     Update.update m4 (Action.Page_menu_set (Some (3., 3., 4., false, None)))
   in
   check "page_menu clears appearance"
-    (m5.page_menu = Some (3., 3., 4., false, None) && m5.appearance = None);
+    (m5.page_menu = Some (3., 3., 4., false, None) && not m5.appearance);
   let m6 =
     Update.update m5
       (Action.Confirm_set
@@ -469,7 +469,7 @@ let test_update_popups () =
   in
   check "confirm clears both popups"
     (m6.confirm = Some (Model.Confirm_delete_page ("u", "T", false))
-    && m6.page_menu = None && m6.appearance = None);
+    && m6.page_menu = None && not m6.appearance);
   let m7 = Update.update m6 Action.Dismiss_all in
   check "dismiss_all clears confirm too" (m7.confirm = None)
 
@@ -491,7 +491,7 @@ let test_update_popups2 () =
     { Model.initial with
       Model.editing_title = true
     ; page_menu = Some (0., 0., 0., true, None)
-    ; appearance = Some (1., 1.)
+    ; appearance = true
     ; unlinked_open = true
     ; unlinked_exists = true
     ; page_ref_count = 5
@@ -501,7 +501,7 @@ let test_update_popups2 () =
   let nav = Update.update dirty (Action.Navigate_to Model.All_pages) in
   check "navigate resets page-local state"
     (nav.route = Model.All_pages && not nav.editing_title
-    && nav.page_menu = None && nav.appearance = None
+    && nav.page_menu = None && not nav.appearance
     && not nav.unlinked_open && not nav.unlinked_exists
     && nav.page_ref_count = 0 && not nav.page_missing)
 

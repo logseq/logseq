@@ -60,9 +60,7 @@ let search_btn ?(key = "search-btn") () =
 
 (* cljs anchors the dropdown to the trigger's right edge — the fixed
    trailing position: menu right edge just left of the last button,
-   just under the header. The resolved anchor is recorded in
-   Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
-   to the same trigger. *)
+   just under the header. *)
 let dots_btn =
   icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
@@ -75,7 +73,6 @@ let dots_btn =
         Runtime.flush ())
       else (
           let x = Host.inner_width () -. 48. in
-          Dom_ext.toolbar_dots_pos := Some (x, 48.);
           Runtime.send
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
 
@@ -426,9 +423,8 @@ let overlays (ms : Model.t Signal.signal) =
                  b.route_page) (fun m -> Page_menu.dialog_view m) ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.appearance = b.appearance) (fun m ->
-          match m.Model.appearance with
-          | Some pos -> Settings_page.appearance_body pos
-          | None -> spacer ~key:"app-none" []) ms
+          if m.Model.appearance then Settings_page.appearance_body ()
+          else spacer ~key:"app-none" []) ms
     ]) ]))
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles

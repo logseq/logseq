@@ -64,6 +64,7 @@ let search_button ?(key = "search-btn") () =
    imperative query_selector anchor for the dropdown position *)
 let dots_button =
   Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
+    ~accessibility_identifier:"toolbar-dots-btn"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn" ())
     ~label:(I18n.t "header/more") ~icon:(`app "dots")
     ~on_press:(fun _ ->
@@ -1020,9 +1021,8 @@ let overlays (ms : Model.t Signal.signal) =
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.appearance = b.appearance)
         (fun m ->
-          match m.Model.appearance with
-          | Some pos -> Settings_page.appearance_body pos
-          | None -> spacer ~key:"app-none" [])
+          if m.Model.appearance then Settings_page.appearance_body ()
+          else spacer ~key:"app-none" [])
         ms
         ]))
 
