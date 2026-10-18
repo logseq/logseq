@@ -5649,6 +5649,10 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Lui_store.preorder store) in
       check "Global font checkbox must own its visible caption and accessible name" (checkbox<>None);
       let checkbox=Option.get checkbox in
+      check "Global font caption must inherit the application's body color"
+        (Lui_store.prop store checkbox "foreground"=None);
+      check "Global font caption opacity must be separate from its indicator"
+        (Lui_store.float_prop store checkbox "label-opacity"=Some 0.7);
       let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some I18n.accent_color_alert)
         (Lui_store.preorder store) in
       let accent=Option.get (Lui_store.parent store note) in

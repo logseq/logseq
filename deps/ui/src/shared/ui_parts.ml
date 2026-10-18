@@ -191,6 +191,7 @@ module Prop : sig
   val border_width : int -> t
   val corner_radius : int -> t
   val opacity : float -> t
+  val label_opacity : float -> t
   val hover_opacity : float -> t
   val pressed_opacity : float -> t
   val disabled_opacity : float -> t
@@ -297,6 +298,7 @@ end = struct
   let border_width v = int BorderWidth v
   let corner_radius v = int CornerRadius v
   let opacity v = flt Opacity v
+  let label_opacity v = flt LabelOpacity v
   let hover_opacity v = flt HoverOpacity v
   let pressed_opacity v = flt PressedOpacity v
   let disabled_opacity v = flt DisabledOpacity v

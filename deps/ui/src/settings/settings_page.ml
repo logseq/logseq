@@ -141,10 +141,10 @@ let editor_font_row () =
         ; fb "mono" "Mono" "iawriter-mono, Nitti, Menlo, Courier, monospace" ]
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem"
-        ; Ui_components.Prop.line_height "1.25rem" ]
+        ; Ui_components.Prop.line_height "1.25rem"
+        ; Ui_components.Prop.label_opacity 0.7 ]
         (checkbox ~key:"font-g" ~gap:4 ~margin_top:12 ~min_height:28
           ~text:T.editor_font_global ~label:T.editor_font_global
-          ~foreground:"hsl(var(--foreground) / 0.7)"
           ~checked:font.S.fglobal
           ~on_toggle:(function
             | Lui_protocol.ToggleChanged (_,checked) -> S.set_editor_font_global checked
