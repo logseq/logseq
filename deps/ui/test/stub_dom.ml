@@ -126,8 +126,10 @@ let match_compound el c =
   in
   go 0 true
 
-let matches el sel =
+let rec matches el sel =
   if not (is_stub el) then false
+  else if String.contains sel ',' then
+    List.exists (matches el) (String.split_on_char ',' sel)
   else
     match List.filter (fun s -> s <> "") (String.split_on_char ' ' sel) with
     | [] -> false

@@ -768,6 +768,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   Ui_components.with_props [ Ui_components.sub_card_shadow ]
     (popover ~transition:Ui_components.popover_transition ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
+       ~accessibility_identifier:"block-context-submenu"
        ~padding:4
        ~border_color:"hsl(var(--border))" ~border_width:1
        ~corner_radius:6
@@ -828,6 +829,7 @@ let cm_popover (st : S.t) : t =
              | Some m when m.S.tag <> None -> 240
              | _ -> 280) vs)
            (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
+              ~accessibility_identifier:"block-context-menu"
               ~border_color:"hsl(var(--border))" ~border_width:1
               ~corner_radius:6
               ~at_signal:
@@ -897,7 +899,7 @@ let cm_highlight (el : Ui_services.el) =
      with
      | Some it when
          it.Ui_services.closest
-           ".ls-context-menu-content, .ui__dropdown-menu-sub-content"
+           "#block-context-menu, #block-context-submenu"
          <> None ->
          it.Ui_services.set_attr "data-highlighted" "";
          Some it
@@ -1075,24 +1077,24 @@ let pv_dyn (st : S.t) : t =
            (Signal.value (st.S.vs)))))
     context parent
 
-(* base-ui dropdown-menu roving focus: ArrowUp/Down (and Home/End) move
-   data-highlighted + DOM focus across the enabled menuitems of the
-   topmost visible menu, looping; Enter selects the highlighted item.
-   Hover shares the same data-highlighted marker via cm_highlight. *)
-let menu_keydown (ev : Ui_services.ev) =
+(* Block context menus own this navigation. Other menu systems keep
+   their own keyboard handlers and must not be intercepted here. *)
+let menu_keydown st (ev : Ui_services.ev) =
   if not (match ev.Ui_services.key with
     | Some ("ArrowDown" | "ArrowUp" | "Home" | "End" | "Enter") -> true
     | _ -> false)
   then false
   else
-  let menus = Ui_services.dom_query_all ".ui__dropdown-menu-content" in
   let menu =
-    menus
-    |> List.filter (fun m ->
-           let _, _, w, _ = m.Ui_services.rect () in
-           w > 0.)
-    |> List.rev
-    |> (fun l -> List.nth_opt l 0)
+    match (S.get st).S.cm, ev.Ui_services.target with
+    | Some cm, Some target when not cm.S.native
+        && target.Ui_services.closest "#block-context-menu, #block-context-submenu" <> None ->
+        Option.bind
+          (Ui_services.dom_by_id
+             (if cm.S.sub_open >= 0 then "block-context-submenu" else "block-context-menu"))
+          (fun menu -> let _,_,width,_ = menu.Ui_services.rect () in
+            if width > 0. then Some menu else None)
+    | _ -> None
   in
   match menu with
   | None -> false
@@ -1147,7 +1149,7 @@ let handle_keydown st (ev : Ui_services.ev) =
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
     ev.Ui_services.stop_immediate ())
-  else if menu_keydown ev then (
+  else if menu_keydown st ev then (
     ev.Ui_services.prevent_default ();
     ev.Ui_services.stop_immediate ())
   else

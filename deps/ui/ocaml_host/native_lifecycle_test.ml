@@ -133,24 +133,36 @@ let () =
 let () = Native_embed.with_entry_lock (fun () ->
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
-  let queries = ref 0 and menus = ref [] and scan_document = ref false in
-  let dom = { Ui_dom_native.ops with query_all = (fun selector ->
+  let queries = ref 0 and menu_node = ref None and target = ref None in
+  let previous_context = !Popups_state.active in
+  let scheduler = Signal.scheduler () in
+  let context = Popups_state.make scheduler in
+  let dom = { Ui_dom_native.ops with by_id = (fun identifier ->
     incr queries;
-    if !scan_document then Ui_dom_native.ops.query_all selector else !menus) } in
+    if identifier="block-context-menu" then !menu_node else None) } in
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
-  let event key = Ui_dom_native.ev_of (Js.Json.JObject
-    (match key with None -> [] | Some key -> ["key", Js.Json.JString key])) in
+  let event key =
+    {(Ui_dom_native.ev_of (Js.Json.JObject
+       (match key with None -> [] | Some key -> ["key", Js.Json.JString key])))
+     with Ui_services.target = !target} in
   List.iter (fun key ->
     queries := 0;
-    expect "Unsupported menu input was consumed" (not (Popups_view.menu_keydown (event key)));
+    expect "Unsupported menu input was consumed" (not (Popups_view.menu_keydown context (event key)));
     expect "Unsupported menu input scanned the document" (!queries = 0))
     [None; Some "a"; Some "你"; Some "Backspace"; Some "Escape";
      Some "Tab"; Some "ArrowLeft"; Some "ArrowRight"; Some "Shift"; Some "Dead"];
+  let base = Ui_dom_native.el_of (Js.Json.JObject []) in
+  target:=Some {base with Ui_services.closest=(fun selector ->
+    if selector="#block-context-menu, #block-context-submenu" then Some base else None)};
+  let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+    multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+  Signal.set context.vs {ac=None;cm=Some cm;pv=None};
+  Signal.stabilize scheduler;
   List.iter (fun key ->
     queries := 0;
-    expect "A missing menu consumed navigation" (not (Popups_view.menu_keydown (event (Some key))));
-    expect "Supported menu navigation did not query the menu" (!queries = 1))
+    expect "A missing menu consumed navigation" (not (Popups_view.menu_keydown context (event (Some key))));
+    expect "Supported menu navigation did not resolve its owned menu" (!queries = 1))
     ["ArrowDown"; "ArrowUp"; "Home"; "End"; "Enter"];
   let focused = ref (-1) and clicked = ref 0 in
   let item index =
@@ -165,35 +177,35 @@ let () = Native_embed.with_entry_lock (fun () ->
   let base = Ui_dom_native.el_of (Js.Json.JObject []) in
   let menu = {base with Ui_services.rect = (fun () -> 0.,0.,100.,80.);
     query_all = (fun _ -> items)} in
-  menus := [menu];
+  menu_node := Some menu;
   List.iter (fun (key,index) ->
-    expect "Menu navigation was not consumed" (Popups_view.menu_keydown (event (Some key)));
+    expect "Menu navigation was not consumed" (Popups_view.menu_keydown context (event (Some key)));
     expect "Menu navigation selected the wrong item" (!focused = index))
     ["ArrowDown",0; "ArrowUp",1; "Home",0; "End",1];
   expect "Enter did not activate the highlighted menu item"
-    (Popups_view.menu_keydown (event (Some "Enter")) && !clicked = 1);
-  menus := [{menu with Ui_services.rect = (fun () -> 0.,0.,0.,0.)}];
+    (Popups_view.menu_keydown context (event (Some "Enter")) && !clicked = 1);
+  menu_node := Some {menu with Ui_services.rect = (fun () -> 0.,0.,0.,0.)};
   expect "A hidden menu consumed navigation"
-    (not (Popups_view.menu_keydown (event (Some "ArrowDown"))));
-  menus := [{menu with Ui_services.query_all = (fun _ -> [])}];
+    (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
+  menu_node := Some {menu with Ui_services.query_all = (fun _ -> [])};
   expect "An empty menu consumed navigation"
-    (not (Popups_view.menu_keydown (event (Some "ArrowDown"))));
+    (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
   Popups_view.cm_hi_el := None;
-  scan_document := true;
   let nodes = List.init 2048 (fun _ -> Js.Json.JObject
     ["className",Js.Json.JString "ls-block"]) in
   Dom_ext.doc_elements_provider := (fun () -> nodes);
   let ev = event (Some "a") in
-  ignore (Popups_view.menu_keydown ev);
+  ignore (Popups_view.menu_keydown context ev);
   queries := 0;
   Gc.full_major ();
   let before = Gc.allocated_bytes () in
-  for _ = 1 to 200 do ignore (Popups_view.menu_keydown ev) done;
+  for _ = 1 to 200 do ignore (Popups_view.menu_keydown context ev) done;
   let allocated = Gc.allocated_bytes () -. before in
   Printf.printf "ordinary menu input: %.0f bytes for 200 keys, %d document queries\n%!"
     allocated !queries;
   expect "Ordinary typing allocates menu snapshots" (allocated < 65_536. && !queries = 0);
   Dom_ext.doc_elements_provider := (fun () -> []);
+  Popups_state.active := previous_context;
   List.iter prerr_endline (List.rev !failures);
   check "Menu keyboard dispatch and allocation" (!failures = []);
   print_endline "native menu keyboard dispatch: OK")

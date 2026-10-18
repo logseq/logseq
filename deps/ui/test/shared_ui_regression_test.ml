@@ -1144,6 +1144,106 @@ let run_views ~registry ~profile ~finish =
   check "closing a submenu preserves its parent trigger"
     (List.exists (fun n -> n.M.id = trigger.M.id) (nodes submenu));
   ignore (Lui_app.dispose submenu.S.app);
+  let nested_key = ref (fun (_ : Ui_services.ev) -> ()) in
+  let nested = mount (fun _ -> Views_popup.menu_level ~pid:9003 ~cls:""
+      ~register:(fun handler -> nested_key := handler)
+      [ Views_popup.MSub ("Parent",
+          [Views_popup.MSub ("Nested", [Views_popup.MItem ("Deep action",ignore)]);
+           Views_popup.MItem ("Child action",ignore)]);
+        Views_popup.MSub ("Other parent",[Views_popup.MItem ("Other action",ignore)]) ]) in
+  let nested_popups () = List.filter (fun n -> n.M.kind="popover") (nodes nested) in
+  let unique_menu_ids () =
+    let ids=List.filter_map (fun n -> M.string_prop n "accessibility-identifier") (nodes nested) in
+    List.length ids=List.length (List.sort_uniq String.compare ids) in
+  let press_nested key = !nested_key (key_event key) in
+  press_nested "ArrowDown";
+  press_nested "ArrowRight";
+  check "submenu keyboard entry publishes without another input event"
+    (List.length (nested_popups ())=1);
+  S.flush nested;
+  check "the first down-arrow from the menu container selects its first branch"
+    (List.exists (fun n -> M.string_prop n "text"=Some "Nested") (nodes nested));
+  check "parent and child menu controls have distinct retained identifiers" (unique_menu_ids ());
+  let press_from label key =
+    let row=List.find (fun n -> M.string_prop n "text"=Some label) (nodes nested) in
+    let target={ (Ui_services.dom_body ()) with Ui_services.attr=(fun name ->
+      if name="id" then M.string_prop row "accessibility-identifier" else None) } in
+    !nested_key {(key_event key) with target=Some target} in
+  press_from "Nested" "ArrowRight";
+  S.flush nested;
+  eqi "a second right-arrow opens the next submenu depth" 2 (List.length (nested_popups ()));
+  check "deep submenu controls have distinct retained identifiers" (unique_menu_ids ());
+  press_nested "ArrowLeft";
+  S.flush nested;
+  eqi "left-arrow closes only the deepest submenu" 1 (List.length (nested_popups ()));
+  check "closing the deepest submenu preserves the immediate parent"
+    (List.exists (fun n -> M.string_prop n "text"=Some "Nested") (nodes nested));
+  press_nested "ArrowLeft";
+  S.flush nested;
+  check "a second left-arrow returns to the root menu" (nested_popups ()=[]);
+  press_nested "ArrowRight";
+  S.flush nested;
+  let other=List.find (fun n -> M.string_prop n "text"=Some "Other parent") (nodes nested) in
+  S.press nested other.M.id;
+  check "switching submenu branches removes the previous branch"
+    (List.length (nested_popups ())=1
+     && List.exists (fun n -> M.string_prop n "text"=Some "Other action") (nodes nested)
+     && not (List.exists (fun n -> M.string_prop n "text"=Some "Child action") (nodes nested)));
+  ignore (Lui_app.dispose nested.S.app);
+  let previous_context = !Popups_state.active and previous_highlight = !Popups_view.cm_hi_el in
+  let previous_menu_query : string -> Js.Json.t array = Stub_dom.get_field document "querySelectorAll" in
+  let previous_menu_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+  let foreign_menu=Stub_dom.make_element "div" and foreign_item=Stub_dom.make_element "div" in
+  let owned_menu=Stub_dom.make_element "div" and owned_item=Stub_dom.make_element "div" in
+  let foreign_actions=ref 0 and owned_actions=ref 0 in
+  List.iter (fun menu -> Stub_dom.set_field menu "getBoundingClientRect" (fun () ->
+    Js.Json.object_ (Js.Dict.fromList ["x",Js.Json.number 0.;"y",Js.Json.number 0.;
+      "width",Js.Json.number 200.;"height",Js.Json.number 100.]))) [foreign_menu;owned_menu];
+  Stub_dom.set_field foreign_menu "querySelectorAll" (fun _ -> [|foreign_item|]);
+  Stub_dom.set_field foreign_item "focus" (fun () -> incr foreign_actions);
+  Stub_dom.set_field foreign_item "click" (fun () -> incr foreign_actions);
+  Stub_dom.set_field owned_menu "querySelectorAll" (fun _ -> [|owned_item|]);
+  Stub_dom.set_field owned_item "focus" (fun () -> incr owned_actions);
+  Stub_dom.set_field owned_item "click" (fun () -> incr owned_actions);
+  let set_menu_attr : string -> string -> unit = Stub_dom.get_field owned_menu "setAttribute" in
+  set_menu_attr "id" "block-context-menu";
+  ignore (Stub_dom.append_child owned_menu owned_item);
+  check "the DOM fixture resolves selector lists through owned menu ancestry"
+    (Option.is_some ((Ui_dom_web.el_of owned_item).Ui_services.closest
+      "#missing-context-menu, #block-context-menu"));
+  Stub_dom.set_field document "getElementById" (fun identifier ->
+    if identifier="block-context-menu" then owned_menu else previous_menu_id identifier);
+  Stub_dom.set_field document "querySelectorAll" (fun selector ->
+    if selector=".ui__dropdown-menu-content" then [|foreign_menu|]
+    else previous_menu_query selector);
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field document "querySelectorAll" previous_menu_query;
+    Stub_dom.set_field document "getElementById" previous_menu_id;
+    Popups_state.active:=previous_context;Popups_view.cm_hi_el:=previous_highlight) (fun () ->
+    let context_scheduler=Signal.scheduler () in
+    let context=Popups_state.make context_scheduler in
+    List.iter (fun key ->
+      let consumed=ref false in
+      Popups_view.handle_keydown context {(key_event key) with
+        prevent_default=(fun () -> consumed:=true);
+        stop_immediate=(fun () -> consumed:=true)};
+      check ("a closed block menu cannot consume another menu's " ^ key)
+        (not !consumed)) ["ArrowDown";"Enter"];
+    check "block-menu listeners cannot focus or activate foreign menu items" (!foreign_actions=0);
+    let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+      multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+    Signal.set context.vs {ac=None;cm=Some cm;pv=None};
+    Signal.stabilize context_scheduler;
+    let key_in target key =
+      let consumed=ref false in
+      Popups_view.handle_keydown context {(key_event key) with target=Some (Ui_dom_web.el_of target);
+        prevent_default=(fun () -> consumed:=true);stop_immediate=(fun () -> consumed:=true)};
+      !consumed in
+    check "an open block menu cannot consume a foreign menu's navigation"
+      (not (key_in foreign_item "ArrowDown"));
+    check "the block menu keeps navigation for its own rows" (key_in owned_item "ArrowDown");
+    check "the block menu keeps activation for its own rows" (key_in owned_item "Enter");
+    check "owned context navigation and activation stay inside their menu" (!owned_actions=2));
   let previous_view_ops = !Views_state.ops_ref in
   let previous_popup_stack = !Views_popup.stack_st in
   Views_popup.stack_st := None;

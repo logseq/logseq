@@ -136,8 +136,8 @@ let anchored_popover ~key ~id ~anchor_target ~align_end ~cls ~card ?role ~on_dis
 
 (* ---------- menus ---------- *)
 
-let item_rid pid fidx = Printf.sprintf "vp%d-i%d" pid fidx
-let sub_rid pid fidx = Printf.sprintf "vp%d-s%d" pid fidx
+let item_rid scope fidx = Printf.sprintf "%s-i%d" scope fidx
+let sub_rid scope fidx = Printf.sprintf "%s-s%d" scope fidx
 
 (* one menu level's state — the highlighted focusable row, the open
    sub-trigger, and per-checkbox values. A single state so every row's
@@ -145,6 +145,7 @@ let sub_rid pid fidx = Printf.sprintf "vp%d-s%d" pid fidx
 type menu_state =
   { mf : int
   ; msub : int
+  ; sub_focus : bool
   ; mcheck : (int * bool) list
   }
 
@@ -159,10 +160,10 @@ let is_sub it = match it with MSub _ -> true | _ -> false
    level registers its own keydown handler; while a sub is open the
    parent handler delegates into the sub's (registered under its
    focusable index) so arrows/enter always hit the deepest menu. *)
-let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
+let rec menu_level_scoped ~scope ~cls ~register ~on_back (items : menu_item list) : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
-  let mst = Signal.state sched { mf = 0; msub = -1; mcheck = [] } in
+  let mst = Signal.state sched { mf = -1; msub = -1; sub_focus = false; mcheck = [] } in
   let msig = (Signal.value (mst)) in
   let sub_keys : (int, U.ev -> unit) Hashtbl.t = Hashtbl.create 4 in
   let counter = ref 0 in
@@ -181,18 +182,19 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
   let upd f = Signal.update mst f in
   let focus_row i =
     upd (fun st -> { st with mf = i });
-    match U.dom_by_id (item_rid pid i) with
+    match U.dom_by_id (item_rid scope i) with
     | Some el -> el.U.focus ()
     | None -> ()
   in
-  let enter_sub i =
-    upd (fun st -> { st with mf = i; msub = i });
-    (* the sub popover mounts this tick — focus its first item once the
-       platform has rendered it *)
-    U.timers_later ~ms:32 (fun () ->
-        match U.dom_query ("#" ^ sub_rid pid i ^ " [role=menuitem]") with
-        | Some el -> el.U.focus ()
-        | None -> ())
+  let focus_sub i =
+    match U.dom_by_id (item_rid (sub_rid scope i) 0) with
+    | Some el -> el.U.focus ()
+    | None -> ()
+  in
+  let enter_sub ~focus i =
+    let mounted = (Signal.get_state mst).msub = i in
+    upd (fun st -> { st with mf = i; msub = i; sub_focus = focus });
+    if mounted && focus then focus_sub i
   in
   let key (ev : U.ev) =
     match ev.U.key with
@@ -201,32 +203,36 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
          | " " | "ArrowLeft" ) as k) -> (
         let st = Signal.get_state mst in
         match st.msub >= 0 && Hashtbl.mem sub_keys st.msub, ev.U.target with
-        | true, _ when k = "ArrowLeft" ->
-            ev.U.prevent_default ();
-            let trigger = st.msub in
-            upd (fun st -> { st with msub = -1 });
-            focus_row trigger
         | true, _ -> (Hashtbl.find sub_keys st.msub) ev
         | _, Some t when t.U.editable () -> ()
         | _ when nfocus = 0 -> ()
         | _ -> (
+            let current = match ev.U.target with
+              | Some target -> List.find_map (fun (_, i) ->
+                  if i >= 0 && target.U.attr "id" = Some (item_rid scope i)
+                  then Some i else None) entries
+              | None -> None in
+            let focused = match current with Some i -> i | None -> st.mf in
             ev.U.prevent_default ();
-            match k with
+            (match k with
             | "Home" -> focus_row 0
             | "End" -> focus_row (nfocus - 1)
             | "ArrowDown" ->
-                focus_row (if st.mf < 0 then 0 else (st.mf + 1) mod nfocus)
+                focus_row (if focused < 0 then 0 else (focused + 1) mod nfocus)
             | "ArrowUp" ->
-                focus_row (if st.mf <= 0 then nfocus - 1 else st.mf - 1)
-            | "ArrowLeft" -> ()
+                focus_row (if focused <= 0 then nfocus - 1 else focused - 1)
+            | "ArrowLeft" -> Option.iter (fun back -> back ()) on_back
             | "ArrowRight" ->
                 if
-                  List.exists (fun (it, i) -> i = st.mf && is_sub it) entries
-                then enter_sub st.mf
+                  List.exists (fun (it, i) -> i = focused && is_sub it) entries
+                then enter_sub ~focus:true focused
             | _ -> (
-                match U.dom_by_id (item_rid pid st.mf) with
-                | Some el -> el.U.click ()
-                | None -> ())))
+                if List.exists (fun (it, i) -> i = focused && is_sub it) entries
+                then enter_sub ~focus:true focused
+                else match U.dom_by_id (item_rid scope focused) with
+                  | Some el -> el.U.click ()
+                  | None -> ()));
+            Runtime.flush ()))
     | _ -> ()
   in
   register key;
@@ -256,16 +262,16 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
         (* ls-property-dropdown ruleset gives separators 0.5rem 0 instead
            of the dropdown's default 0.25rem -0.25rem *)
         if String.starts_with ~prefix:"ls-property-dropdown" cls then
-          Menu_item.separator ~key:(Printf.sprintf "vp%d-sep-%d" pid fidx)
+          Menu_item.separator ~key:(Printf.sprintf "%s-sep-%d" scope fidx)
             ~mv:8 ~mh:0
         else
-          Menu_item.separator ~key:(Printf.sprintf "vp%d-sep-%d" pid fidx)
+          Menu_item.separator ~key:(Printf.sprintf "%s-sep-%d" scope fidx)
             ~mv:4 ~mh:(-4)
     | MCustom el -> el
     | MItem (label, on) ->
         cls_of "ui__dropdown-menu-item" fidx
-          (menu_item ~key:(item_rid pid fidx)
-             ~accessibility_identifier:(item_rid pid fidx)
+          (menu_item ~key:(item_rid scope fidx)
+             ~accessibility_identifier:(item_rid scope fidx)
              ~data_attrs_signal:(row_attrs ~fidx ~role:"menuitem")
              ~on_press:(fun _ ->
                close_all ();
@@ -275,8 +281,8 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
     | MCheck (label, init, on) ->
         upd (fun st -> { st with mcheck = (fidx, init) :: st.mcheck });
         cls_of "ui__dropdown-menu-checkbox-item" fidx
-          (menu_item ~key:(item_rid pid fidx)
-             ~accessibility_identifier:(item_rid pid fidx)
+          (menu_item ~key:(item_rid scope fidx)
+             ~accessibility_identifier:(item_rid scope fidx)
              ~data_attrs_signal:(row_attrs ~fidx ~role:"menuitemcheckbox")
              ~checked_signal:(map (fun st -> checked_of st fidx) msig)
              ~on_press:(fun _ ->
@@ -291,19 +297,22 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
              ~text:label [])
     | MSub (label, children) ->
         cls_of "ui__dropdown-menu-sub-trigger" fidx
-          (menu_item ~key:(item_rid pid fidx)
-             ~accessibility_identifier:(item_rid pid fidx)
+          (menu_item ~key:(item_rid scope fidx)
+             ~accessibility_identifier:(item_rid scope fidx)
              ~data_attrs_signal:(row_attrs ~fidx ~role:"menuitem")
-             ~on_press:(fun _ -> enter_sub fidx)
-             ~on_pointer_enter:(fun _ -> enter_sub fidx)
+             ~on_press:(fun _ -> enter_sub ~focus:false fidx)
+             ~on_pointer_enter:(fun _ -> enter_sub ~focus:false fidx)
              ~text:label
              [ icon ~key:"chev" ~name:(`app "chevron-right") []
              ; if_
                  ~test:(map (fun st -> st.msub = fidx) msig)
                  (Ui_components.with_props [ Ui_components.sub_card_shadow ]
-                    (popover ~key:(sub_rid pid fidx)
+                    (popover ~key:(sub_rid scope fidx)
                        ~transition:Ui_components.popover_transition
-                       ~accessibility_identifier:(sub_rid pid fidx)
+                       ~accessibility_identifier:(sub_rid scope fidx)
+                       ~on_appear:(fun _ ->
+                         let state = Signal.get_state mst in
+                         if state.msub = fidx && state.sub_focus then focus_sub fidx)
                        ~anchor:`right ~anchor_alignment:`start
                        ~anchor_offset:(-4.) ~role:`menu ~min_width:128
                        ~padding:4 ~background:"hsl(var(--popover))"
@@ -313,12 +322,18 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
                        ~data_attrs:
                          [ ("data-keep-selection", ""); ("tabindex", "-1") ]
                        ~on_dismiss:(fun _ -> upd (fun st -> { st with msub = -1 }))
-                       [ menu_level ~pid ~cls
+                       [ menu_level_scoped ~scope:(sub_rid scope fidx) ~cls
                            ~register:(fun h -> Hashtbl.replace sub_keys fidx h)
+                           ~on_back:(Some (fun () ->
+                             upd (fun st -> { st with msub = -1 });
+                             focus_row fidx))
                            children ])) ])
   in
-  box ~key:(Printf.sprintf "vp%d-items" pid) (List.map view_of entries)
+  box ~key:(scope ^ "-items") (List.map view_of entries)
     context parent
+
+let menu_level ~pid ~cls ~register items =
+  menu_level_scoped ~scope:(Printf.sprintf "vp%d" pid) ~cls ~register ~on_back:None items
 
 let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
     items =
