@@ -1309,8 +1309,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                        [ Ui_components.Prop.cursor `pointer
                        ; Ui_components.Prop.opacity 0.5
                        ; Ui_components.Prop.hover_opacity 1. ]
-                       (box ~style_class:"ls-foldable-title-control block-control"
-                       ~width:14 ~height:16 ~margin_left:(-27)
+                       (Ui_components.foldable_control
                        [ (* cljs foldable-caret: span.control-show only
                             while the title is hovered or the group is
                             collapsed — control-hide otherwise *)

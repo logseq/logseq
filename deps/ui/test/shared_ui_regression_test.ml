@@ -105,6 +105,66 @@ let run_views ~registry ~profile ~finish =
     ignore (Lui_app.dispose inline_properties.S.app);
     check "disposing an inline Add property owner closes its workflow" (not (Properties_dialog.is_open ())));
   restore_inline ();
+  let filter_value_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_stack = !Views_popup.stack_st in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "filter-value-fixture"});
+    let rec next = function
+      | [] ->
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack;done_ ()
+      | (column,data,expected,empty_action)::rest ->
+          Views_popup.stack_st:=None;
+          Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+              if name="thread-api/get-view-filter-data" then
+                check "filter value requests include their complete property type"
+                  (match args with
+                   | [_;options] -> (match Wire.get options "property" with
+                     | Some property -> Wire.get property "logseq.property/type"=Some (Wire.Keyword column.Views_state.c_type)
+                     | None -> false)
+                   | _ -> false);
+              Js.Promise.resolve (if name="thread-api/get-view-filter-data" then data else Wire.Nil));
+            on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+          let instance = ref None in
+          let selector = mount (fun _ context parent ->
+            let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KAllPages ~feature:"filter-value-fixture" ~owner:Wire.Nil in
+            instance:=Some inst;Views_popup.layer context parent) in
+          let inst=Option.get !instance in
+          Views_head.filter_value_phase inst ~anchor:(Ui_services.dom_body ()) column;
+          ignore (Js.Promise.then_ (fun () ->
+            let rendered = List.exists (fun n -> n.M.kind="input") (nodes selector) in
+            check "asynchronous view popups publish their own frame without another input event" rendered;
+            if rendered then begin
+              eqi "view filter values use the same portable option list" expected
+                (List.length (List.filter (fun n -> class_has n "ls-view-select-option") (nodes selector)));
+              let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
+              if empty_action then begin
+                S.text_changed selector input.M.id "No matching value";
+                let action=List.find_opt (fun n -> n.M.kind="button"
+                  && List.exists (fun c -> M.string_prop c "text"=Some I18n.is_empty)
+                    (M.children selector.S.tree n.M.id)) (nodes selector) in
+                check "value search preserves its empty-value footer action" (Option.is_some action);
+                Option.iter (fun n -> S.press selector n.M.id) action
+              end else S.submit selector input.M.id;
+              check "view filter value selection updates one clause and closes"
+                (List.length (Views_state.get inst).filters=1 && !Views_popup.open_popups=[]);
+              if column.Views_state.c_type="datetime" then
+                check "timestamp filter presets use the reference after operator"
+                  (List.exists (fun f -> f.Views_state.c_op="after") (Views_state.get inst).filters)
+            end;
+            Views_popup.close_all ();
+            ignore (Lui_app.dispose selector.S.app);
+            next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
+    in
+    let data source values=Wire.Map [Wire.kw "value-source",Wire.Keyword source;
+      Wire.kw "values",Wire.Array values] in
+    next [Views_table.created_column,data "timestamp" [],List.length I18n.timestamp_options,false;
+      {Views_table.created_column with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"},
+        data "checkbox" [],2,true;
+      {Views_table.created_column with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
+        data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
+  in
   let type_choice_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "type-fixture"});
@@ -919,6 +979,7 @@ let run_views ~registry ~profile ~finish =
   let previous_popup_stack = !Views_popup.stack_st in
   Views_popup.stack_st := None;
   let refreshes = ref 0 in
+  let fold_presses = ref 0 in
   let sorting_inst = ref None in
   let sorting = mount (fun _ context parent ->
       let sched = context.Lui_ui.ui_scheduler in
@@ -930,6 +991,7 @@ let run_views ~registry ~profile ~finish =
           ~feature:"all-pages" ~owner:Wire.Nil in
       let initial = { (Views_state.empty_vstate ()) with
         Views_state.view_uuid=view.vu; views=[view]; view_ent=Some view;
+        items_count=7;
         columns=[Views_table.updated_column; Views_table.created_column];
         sorting=[{Views_state.s_id="block/updated-at"; s_asc=false};
                  {Views_state.s_id="block/created-at"; s_asc=true}] } in
@@ -942,12 +1004,116 @@ let run_views ~registry ~profile ~finish =
          o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
       Views_head.sorting_popup inst (Ui_services.dom_body ());
       Lui_elements.column
-        [Views_head.view_tab inst (Signal.value (Signal.state sched view)); Views_popup.layer]
+        [Views_table.foldable inst ~key:"tab-fixture"
+           ~title:(Views_head.render_head inst)
+           ~body:(Lui_elements.spacer []);
+         Page.fold_arrow ~on_click:(fun () -> incr fold_presses) "page-fold-fixture";
+         Views_popup.layer]
         context parent) in
   let inst = Option.get !sorting_inst in
   let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
   check "Pages preserves the default All view title"
     (M.string_prop tab "accessibility-label" = Some I18n.all);
+  check "view tabs use the reference's unpadded text button"
+    (Hashtbl.find_opt tab.M.props "padding-horizontal" = Some (P.IntValue 0)
+     && Hashtbl.find_opt tab.M.props "padding-vertical" = Some (P.IntValue 0));
+  let tab_children = M.children sorting.S.tree tab.M.id in
+  let icon_wrap = List.find (fun n -> class_has n "ls-icon-color-wrap") tab_children in
+  check "view icon spacing belongs to the button gap alone"
+    (not (Hashtbl.mem icon_wrap.M.props "margin-right"));
+  let view_icon = List.hd (M.children sorting.S.tree icon_wrap.M.id) in
+  check "view tabs match the reference's fifteen-point icon"
+    (Hashtbl.find_opt view_icon.M.props "width" = Some (P.IntValue 15)
+     && Hashtbl.find_opt view_icon.M.props "height" = Some (P.IntValue 15));
+  let count = List.find (fun n -> M.string_prop n "text" = Some "7") tab_children in
+  check "view counts use their own small-text line height without duplicate spacing"
+    (M.string_prop count "line-height" = Some "1rem"
+     && not (Hashtbl.mem count.M.props "margin-left"));
+  check "view counts use the current theme's valid muted foreground"
+    (M.string_prop count "foreground" = Some "hsl(var(--muted-foreground))");
+  let tabs = List.find (fun n -> class_has n "views") (nodes sorting) in
+  check "view tabs and Add view use the reference's eight-point row gap"
+    (Hashtbl.find_opt tabs.M.props "gap" = Some (P.IntValue 8));
+  let add_view = List.find (fun n -> class_has n "ls-add-view") (nodes sorting) in
+  check "Add view uses the same semantic muted foreground as the reference"
+    (M.string_prop add_view "foreground" = Some "hsl(var(--muted-foreground))");
+  check "Add view offset is portable typed geometry"
+    (Hashtbl.find_opt add_view.M.props "margin-left" = Some (P.IntValue (-4))
+     && not (Hashtbl.mem add_view.M.props "data-attrs"));
+  check "Add view matches the reference's fifteen-point icon"
+    (List.exists (fun n -> n.M.kind = "icon"
+      && Hashtbl.find_opt n.M.props "width" = Some (P.IntValue 15))
+      (M.children sorting.S.tree add_view.M.id));
+  let toolbar = List.find (fun n -> n.M.kind = "toolbar"
+    && M.string_prop n "accessibility-label" = Some "View actions") (nodes sorting) in
+  check "view toolbar wrapper uses flex layout without an inline baseline gap"
+    (match toolbar.M.parent with
+     | Some id -> (List.find (fun n -> n.M.id = id) (nodes sorting)).M.kind = "row"
+     | None -> false);
+  check "flat toolbar chrome is portable typed geometry"
+    (M.string_prop toolbar "background" = Some "transparent"
+     && Hashtbl.find_opt toolbar.M.props "padding" = Some (P.IntValue 0)
+     && Hashtbl.find_opt toolbar.M.props "border-width" = Some (P.IntValue 0)
+     && not (Hashtbl.mem toolbar.M.props "data-attrs"));
+  let rec toolbar_descendants node =
+    List.concat_map (fun n -> n :: toolbar_descendants n)
+      (M.children sorting.S.tree node.M.id) in
+  let toolbar_buttons = List.filter (fun n -> n.M.kind = "button")
+    (toolbar_descendants toolbar) in
+  eqi "view actions include sort, filter, search, type and more" 5 (List.length toolbar_buttons);
+  List.iter (fun n ->
+    check "view actions match the reference's centered twenty-four-point hit area"
+      (Hashtbl.find_opt n.M.props "width" = Some (P.IntValue 24)
+       && Hashtbl.find_opt n.M.props "height" = Some (P.IntValue 24));
+    check "view action glyphs use the effective eighteen-point reference size"
+      (List.exists (fun child -> child.M.kind = "icon"
+        && Hashtbl.find_opt child.M.props "width" = Some (P.IntValue 18))
+        (M.children sorting.S.tree n.M.id))) toolbar_buttons;
+  check "view search uses one supported control group with no internal gap"
+    (List.exists (fun n -> n.M.kind = "button-group"
+      && class_has n "view-action-search"
+      && Hashtbl.find_opt n.M.props "gap" = Some (P.IntValue 0))
+      (toolbar_descendants toolbar));
+  let search_group = List.find (fun n -> class_has n "view-action-search")
+    (toolbar_descendants toolbar) in
+  check "view search has transparent group chrome on every host"
+    (M.string_prop search_group "background" = Some "transparent"
+     && Hashtbl.find_opt search_group.M.props "border-width" = Some (P.IntValue 0)
+     && Hashtbl.find_opt search_group.M.props "corner-radius" = Some (P.IntValue 0));
+  let search_action = List.find (fun n -> M.string_prop n "accessibility-label"
+    = Some (I18n.t "cmdk.action/search")) toolbar_buttons in
+  S.press sorting search_action.M.id;
+  let search_input = List.find (fun n -> M.string_prop n "placeholder"
+    = Some I18n.type_to_search) (nodes sorting) in
+  check "view search shares the measured reference width and padding across hosts"
+    (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 183)
+     && Hashtbl.find_opt search_input.M.props "padding-horizontal" = Some (P.IntValue 12));
+  check "expanded search input stays inside its control group"
+    (match search_input.M.parent with
+     | Some id -> (List.find (fun n -> n.M.id = id) (nodes sorting)).M.kind = "button-group"
+     | None -> false);
+  let close_search = List.find (fun n -> n.M.kind = "button"
+    && M.string_prop n "accessibility-label" = Some I18n.close)
+    (toolbar_descendants toolbar) in
+  S.press sorting close_search.M.id;
+  check "closing grouped view search restores its collapsed state"
+    (not (Views_state.get inst).search_open
+     && not (List.exists (fun n -> n.M.id = search_input.M.id) (nodes sorting)));
+  refreshes := 0;
+  let fold_controls = List.filter (fun n -> class_has n "ls-foldable-title-control")
+    (nodes sorting) in
+  eqi "both page and view fold controls share the fixture" 2 (List.length fold_controls);
+  List.iter (fun n ->
+    check "fold controls include the reference's block-control geometry"
+      (Hashtbl.find_opt n.M.props "width" = Some (P.IntValue 22)
+       && Hashtbl.find_opt n.M.props "height" = Some (P.IntValue 22)
+       && Hashtbl.find_opt n.M.props "padding" = Some (P.IntValue 2)
+       && Hashtbl.find_opt n.M.props "margin-top" = Some (P.IntValue 1)))
+    fold_controls;
+  List.iter (fun n -> S.press sorting n.M.id) fold_controls;
+  eqi "shared page fold geometry preserves its press action" 1 !fold_presses;
+  check "shared view fold geometry preserves collapse behavior"
+    (Views_state.Sset.mem "tab-fixture" (Views_state.get inst).collapsed_groups);
   let order () = List.find (fun n -> class_has n "ls-sort-order") (nodes sorting) in
   check "sorting direction exposes a select trigger" ((order ()).M.kind = "select");
   let parent_popups = List.length !Views_popup.open_popups in
@@ -1009,6 +1175,86 @@ let run_views ~registry ~profile ~finish =
     (try S.press sorting delete.M.id;
        (Views_state.get inst).sorting = [] && !Views_popup.open_popups = []
      with _ -> false);
+  Views_popup.close_all ();
+  let selected_items = ref [] and applied_items = ref [] in
+  let choices = List.init 30 (fun i ->
+    {Views_popup.si_label=Printf.sprintf "Choice %02d" i;
+     si_value=string_of_int i;si_extra=None}) in
+  let open_choices ?(multiple=false) items =
+    Views_popup.show_select ~anchor:(Ui_services.dom_body ()) ~items
+      ~placeholder:"Choice" ~multiple
+      ~on_chosen:(fun item checked -> selected_items := !selected_items @ [item.Views_popup.si_value, checked])
+      ~on_apply:(fun items -> applied_items := items) ();
+    S.flush sorting in
+  let choice_rows () = List.filter (fun n -> class_has n "ls-view-select-option") (nodes sorting) in
+  let choice_input () = List.find (fun n -> n.M.kind="input"
+    && M.string_prop n "placeholder"=Some "Choice") (nodes sorting) in
+  open_choices choices;
+  eqi "view select exposes every option as a portable interactive row" 30 (List.length (choice_rows ()));
+  check "view select rows share a bounded scrolling list"
+    (List.exists (fun n -> n.M.kind="list"
+      && Hashtbl.find_opt n.M.props "height"=Some (P.IntValue 280)) (nodes sorting));
+  check "view select labels use portable text nodes"
+    (List.exists (fun n -> n.M.kind="text"
+      && M.string_prop n "text"=Some "Choice 00") (nodes sorting));
+  List.iter (fun (mode, expected) ->
+    check "view select active background follows the reference theme mode"
+      (List.assoc_opt "--lx-select-active-bg" (Ui_theme.snapshot mode).vars = Some expected))
+    [Ui_theme.Light,"var(--lx-gray-03)";Ui_theme.Dark,"var(--lx-gray-02)"];
+  let select_input = choice_input () in
+  navigate sorting select_input (P.NavigateNext select_input.M.id);
+  S.submit sorting select_input.M.id;
+  check "native and web select navigation submit the next result exactly once"
+    (!selected_items=["1",true] && !Views_popup.open_popups=[]);
+  open_choices choices;
+  let select_input = choice_input () in
+  S.text_changed sorting select_input.M.id "Choice 29";
+  eqi "view select query filters its portable result rows" 1 (List.length (choice_rows ()));
+  S.submit sorting select_input.M.id;
+  check "view select submits the filtered result" (List.nth_opt (List.rev !selected_items) 0 = Some ("29",true));
+  open_choices [];
+  let select_input = choice_input () in
+  navigate sorting select_input (P.NavigateNext select_input.M.id);
+  let before_empty = !selected_items in
+  S.submit sorting select_input.M.id;
+  check "empty view select does not submit a stale result" (!selected_items=before_empty);
+  check "empty view select displays the shared no-result message"
+    (List.exists (fun n -> n.M.kind="text"
+      && M.string_prop n "text"=Some I18n.no_matched_result) (nodes sorting));
+  open_choices ~multiple:true choices;
+  (match choice_rows () with
+   | row::_ -> S.press sorting row.M.id; S.press sorting row.M.id; S.press sorting row.M.id
+   | [] -> check "multiple view select has interactive rows" false);
+  check "multiple view select toggles values while retaining its popup"
+    ((match List.rev !selected_items with
+      | ("0",true)::("0",false)::("0",true)::_ -> true | _ -> false)
+     && !Views_popup.open_popups<>[]);
+  (match List.find_opt (fun n -> n.M.kind="button"
+     && M.string_prop n "text"=Some I18n.apply) (nodes sorting) with
+   | Some apply -> S.press sorting apply.M.id
+   | None -> check "multiple view select exposes its apply action" false);
+  check "multiple view select applies exactly the checked values and closes"
+    (!applied_items=["0"] && !Views_popup.open_popups=[]);
+  Views_popup.close_all ();
+  let rename_error = ref "" in
+  let rename =
+    try Some (mount (fun _ -> Views_view.rename_editor_box inst
+      (Option.get (Views_state.get inst).view_ent)))
+    with Invalid_argument reason -> rename_error:=reason;None in
+  check ("view rename input only uses supported component properties: " ^ !rename_error) (Option.is_some rename);
+  Option.iter (fun editor ->
+    let input=List.find (fun n -> n.M.kind="input") (nodes editor) in
+    check "view rename uses a portable stretchable layout"
+      (List.exists (fun n -> n.M.kind="column"
+        && Hashtbl.find_opt n.M.props "padding"=Some (P.IntValue 8)) (nodes editor));
+    S.text_changed editor input.M.id "Renamed view";
+    check "view rename retains the focused input while typing"
+      (List.exists (fun n -> n.M.id=input.M.id) (nodes editor));
+    ignore (Lui_app.dispose editor.S.app)) rename;
+  Views_builder.full_text_picker inst ~tree:(ref (Views_builder.COp ("and",[])))
+    ~loc:[] ~anchor:(Ui_services.dom_body ());
+  let full_text_rendered = try S.flush sorting;true with Invalid_argument _ -> false in
+  check "query builder full-text input only uses supported component properties" full_text_rendered;
   Views_popup.close_all ();
   ignore (Lui_app.dispose sorting.S.app);
   Views_popup.stack_st := previous_popup_stack;
@@ -1287,7 +1533,8 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
-      async_selection_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()));
+      async_selection_check (fun () -> filter_value_check (fun () ->
+        type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

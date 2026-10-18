@@ -881,8 +881,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
-    box ~key ~width:14 ~height:16 ~margin_left:(-27)
-      ~style_class:"ls-foldable-title-control block-control"
+    Ui_components.foldable_control ~key
       [ box ~key:"ch"
           ~style_class:(if collapsed then "" else "control-hide")
           [ box ~key:"ra"

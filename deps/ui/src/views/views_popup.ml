@@ -48,9 +48,10 @@ let publish () =
   (match !open_st with
    | Some st -> Signal.set st (!open_popups <> [])
    | None -> ());
-  match !stack_st with
+  (match !stack_st with
   | Some st -> Signal.set st !open_popups
-  | None -> ()
+  | None -> ());
+  Runtime.flush ()
 
 let ensure_open_st sched =
   match !open_st with
@@ -388,7 +389,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
 
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> t option) option)
-    ?(wrap_cls = "") ?(align_end = false) ~on_chosen () =
+    ?(wrap_cls = "") ?(align_end = false) ?(footer = []) ~on_chosen () =
   close_all ();
   let id = !next_id + 1 in
   let view context parent =
@@ -418,133 +419,93 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
         on_chosen it true
       end
     in
-    register_key id (fun (ev : U.ev) ->
-        match ev.U.key with
-        | Some "ArrowDown" ->
-            ev.U.prevent_default ();
-            let n = List.length (filtered (Signal.get_state query)) in
-            Signal.set chosen (min (Signal.get_state chosen + 1) (n - 1))
-        | Some "ArrowUp" ->
-            ev.U.prevent_default ();
-            Signal.set chosen (max (Signal.get_state chosen - 1) 0)
-        | Some "Enter" ->
-            ev.U.prevent_default ();
-            (match
-               List.nth_opt (filtered (Signal.get_state query))
-                 (Signal.get_state chosen)
-             with
-             | Some it -> choose it
-             | None -> ())
-        | _ -> ());
-    (* verbatim <a class="menu-link"> rows — the e2e/cljs contract wants
-       the anchor tag, ac-N ids and the chosen class *)
-    let row i (it : select_item) picked sel =
-      Logseq_el.el ~key:("acw-" ^ string_of_int i)
-        ~attrs:[ ("class", "menu-link-wrap") ]
-        [ Menu_item.menu_link ~key:("lnk-" ^ string_of_int i)
-            ~id:("ac-" ^ string_of_int i)
-            ~on_click:(fun () -> choose it) ~chosen:(i = picked)
-            ~transition:false ~plain_bg:true
-            [ Logseq_el.el ~tag:"span"
-                ~attrs:[ ("style", "flex:1;min-width:0") ]
-                [ Logseq_el.el
-                    ~attrs:
-                      [ ("class", "select-item-row")
-                      ; ( "style"
-                        , "display:flex;flex-direction:row;\
-                           justify-content:space-between;align-items:center;\
-                           width:100%" ) ]
-                    [ Logseq_el.el
-                        ~attrs:
-                          [ ("class", "select-item-left")
-                          ; ( "style"
-                            , "display:flex;flex-direction:row;\
-                               align-items:center;gap:0.25rem;min-width:0" ) ]
-                        ((if multiple then
-                            [ Logseq_el.el ~tag:"input"
-                                ~attrs:
-                                  ([ ("type", "checkbox") ]
-                                   @
-                                   if List.mem it.si_value sel then
-                                     [ ("checked", "") ]
-                                   else [])
-                                []
-                            ]
-                          else [])
-                        @ [ Logseq_el.el ~tag:"span" ~text:it.si_label [] ])
-                    ]
-                ]
-            ]
-        ]
+    let navigate direction =
+      let count = List.length (filtered (Signal.get_state query)) in
+      if count > 0 then
+        Signal.set chosen (max 0 (min (Signal.get_state chosen + direction) (count - 1)))
     in
-    let combined =
-      Signal.map2
-        (fun q (picked, sel) -> (q, picked, sel))
-        qsig
-        (Signal.map2 (fun picked sel -> (picked, sel)) csig ssig)
+    let submit () =
+      match List.nth_opt (filtered (Signal.get_state query)) (Signal.get_state chosen) with
+      | Some it -> choose it
+      | None -> ()
+    in
+    let row i (it : select_item) =
+      Ui_components.with_props
+        [ Ui_components.Prop.font_size "14px"
+        ; Ui_components.Prop.line_height "20px"
+        ; Ui_components.Prop.hover_background "var(--lx-select-active-bg)"
+        ; Ui_components.Prop.selected_background "var(--lx-select-active-bg)" ]
+        (list_item ~key:("ac-" ^ string_of_int i)
+           ~accessibility_identifier:("ac-" ^ string_of_int i)
+           ~style_class:"ls-view-select-option"
+           ~height:32 ~min_height:32 ~padding_vertical:6 ~padding_horizontal:8
+           ~corner_radius:4
+           ~foreground:(reactive (fun picked ->
+             if i = picked then "var(--ls-secondary-text-color)"
+             else "hsl(var(--popover-foreground) / 0.75)") csig)
+           ~selected:(reactive (fun picked -> i = picked) csig)
+           ~on_pointer_enter:(fun _ -> Signal.set chosen i)
+           ~on_press:(fun _ -> choose it)
+           [ row ~gap:4 ~cross:`center ~grow:1. ~min_width:0
+             ((if multiple then
+               [ checkbox ~key:"checked" ~width:16 ~height:16
+                   ~checked:(reactive (fun sel -> List.mem it.si_value sel) ssig)
+                   ~on_toggle:(fun _ -> choose it) [] ]
+             else [])
+            @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ])
     in
     let results =
-      Logseq_el.el ~id:"ui__ac" ~attrs:[ ("class", "cp__select-results") ]
-        [ reactive
-            (fun (q, picked, sel) ->
-              match filtered q with
-              | [] ->
-                  if multiple then Logseq_el.nothing
-                  else
-                    Logseq_el.el ~attrs:[ ("class", "ls-ac-empty") ]
-                      ~text:I.no_matched_result []
-              | its ->
-                  Logseq_el.el ~id:"ui__ac-inner"
-                    ~attrs:[ ("class", "hide-scrollbar") ]
-                    (List.mapi (fun i it -> row i it picked sel) its))
-            combined ]
+      reactive (fun q ->
+        let visible = filtered q in
+        if visible = [] then
+          if multiple then spacer ~height:0 []
+          else text ~style_class:"ls-ac-empty" ~value:I.no_matched_result
+            ~padding_vertical:6 ~padding_horizontal:8 []
+        else
+          list ~accessibility_identifier:"ui__ac-inner"
+            ~style_class:"cp__select-results"
+            ~height:(min 280 (32 * List.length visible))
+            ~scroll_target:(reactive (fun picked -> "ac-" ^ string_of_int picked) csig)
+            ~scroll_token_signal:csig ~scroll_anchor:`nearest
+            (List.mapi row visible)) qsig
     in
     let select_col =
       Ui_components.with_props
-        [ Ui_components.Prop.max_height_viewport 0.75 ]
+        [ Ui_components.Prop.max_height_viewport 0.75
+        ; Ui_components.Prop.font_size "14px"
+        ; Ui_components.Prop.line_height "20px" ]
         (column ~key:("vpsel-" ^ string_of_int id)
-           ~style_class:"cp__select cp__select-main"
-           ~data_attrs:[ ("style", "width:fit-content") ]
-           ([ Logseq_el.el ~attrs:[ ("class", "input-wrap"); ("style", "display:flex") ]
-                [ Ui_components.with_props
-                    [ Ui_components.Prop.font_size "16px"
-                    ; Ui_components.Prop.focus_shadow "none" ]
-                    (input ~key:("vpsel-i" ^ string_of_int id)
-                       ~style_class:"cp__select-input" ~placeholder
-                       ~autofocus:true ~padding:16
-                       ~background:"transparent" ~border_width:0
-                       ~foreground:"var(--ls-secondary-text-color)"
-                       ~on_input:(function
-                         | Lui_protocol.TextChanged (_, v) ->
-                             Signal.set query v;
-                             Signal.set chosen 0
-                         | _ -> ())
-                       []) ]
-            ; Logseq_el.el
-                ~attrs:
-                  [ ("class", "item-results-wrap")
-                  ; ( "style"
-                    , "overflow-x:hidden;overflow-y:auto;\
-                       max-height:calc(75vh - 64px)" ) ]
-                [ results ] ]
-            @
-            if multiple then
-              [ Logseq_el.el
-                  ~attrs:[ ("class", "cp__select-apply"); ("style", "padding:1rem") ]
-                  [ Ui_components.with_props
-                      [ Ui_components.Prop.font_size "0.875rem"
-                      ; Ui_components.Prop.font_weight 500
-                      ; Ui_components.Prop.cursor `pointer
-                      ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-                      (Ui_components.button ~variant:`outline ~key:("vpsel-a" ^ string_of_int id)
-                         ~style_class:"ui__button ls-btn-outline" ~text:I.apply
-                         ~padding_vertical:8 ~padding_horizontal:16
-                         ~on_press:(fun _ ->
-                           close_all ();
-                           on_apply (Signal.get_state sel_values))
-                         []) ]
-              ]
-            else []))
+           ~style_class:"cp__select cp__select-main" ~width:224 ~cross:`stretch
+           ([ Ui_components.with_props
+                [ Ui_components.Prop.font_size "16px"
+                ; Ui_components.Prop.focus_shadow "none" ]
+                (input ~key:("vpsel-i" ^ string_of_int id)
+                   ~style_class:"cp__select-input" ~placeholder
+                   ~autofocus:true ~height:32
+                   ~padding_horizontal:8 ~padding_vertical:4
+                   ~background:"transparent" ~border_width:0 ~corner_radius:0
+                   ~foreground:"var(--ls-secondary-text-color)"
+                   ~on_input:(function
+                     | Lui_protocol.TextChanged (_, v) ->
+                         Signal.set query v;
+                         Signal.set chosen 0
+                     | _ -> ())
+                   ~on_navigate:(function
+                     | Lui_protocol.NavigatePrevious _ -> navigate (-1)
+                     | Lui_protocol.NavigateNext _ -> navigate 1
+                     | _ -> ())
+                   ~on_submit:(fun _ -> submit ()) [])
+            ; column ~padding_vertical:4 ~cross:`stretch [ results ] ]
+            @ (if multiple then
+              [ column ~style_class:"cp__select-apply" ~padding:16
+                  [ Ui_components.button ~variant:`outline
+                      ~key:("vpsel-a-" ^ string_of_int id) ~text:I.apply
+                      ~padding_vertical:8 ~padding_horizontal:16
+                      ~on_press:(fun _ ->
+                        close_all ();
+                        on_apply (Signal.get_state sel_values)) [] ] ]
+            else [])
+            @ footer))
     in
     let wrap =
       if wrap_cls = "" then select_col
@@ -556,7 +517,8 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            @ [ select_col ])
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id)
-      ~id:("vpsel-p" ^ string_of_int id) ~place ~card:false ~cls:wrap_cls
+      ~id:("vpsel-p" ^ string_of_int id) ~place ~card:true
+      ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
   in

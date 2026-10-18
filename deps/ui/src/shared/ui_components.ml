@@ -34,6 +34,10 @@ let popover_transition =
 let block_transition =
   "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
 
+let foldable_control ?key children : t =
+  box ?key ~style_class:"ls-foldable-title-control block-control"
+    ~width:22 ~height:22 ~padding:2 ~margin_top:1 ~margin_left:(-27) children
+
 (* Typed prop binds — see Ui_parts.Prop. *)
 module Prop = Ui_parts.Prop
 
@@ -1052,24 +1056,16 @@ let action_bar_capsule ~key ?(cls = "") ?border_color ?border_width
     (box ~key ~style_class:cls ~background:"hsl(var(--popover))"
        ?border_color ?border_width ~corner_radius:6 [ child ])
 
-(* Inline action toolbar — the `toolbar` kind's role=toolbar semantics
-   with the .lui-toolbar card chrome flattened, so it reads as the
-   plain ghost-icon row it replaces (.view-actions). The kind admits
-   only orientation/label/gap/style-class/placement/data-attrs (no
-   background/border/pad/opacity), so the chrome reset goes through
-   the documented data-attrs style pair and the reveal opacity rides
-   a wrapping box (which does take ~opacity_signal). The `toolbar`
-   kind requires a non-empty accessibility label or the store rejects
-   the whole patch batch.
-   Toolbar children are restricted to control kinds (button/input/
-   select/text/spacer/divider): mount conditional buttons with [if_]
-   (mounts no node when false) and never [box]/[row] wrappers inside. *)
+(* Inline action toolbar with typed neutral chrome. Reveal opacity
+   belongs to a wrapping row because Toolbar does not admit opacity;
+   flex layout also avoids an inline toolbar's baseline gap on Web.
+   Toolbar requires a non-empty accessibility label.
+   Toolbar admits controls and control groups. Mount conditional controls
+   with [if_] and group related inputs with ButtonGroup. *)
 let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
-  box ~style_class:cls ?opacity_signal ~min_width:0
+  row ~style_class:cls ?opacity_signal ~min_width:0 ~cross:`center
     [ toolbar ~key ~orientation:`horizontal ~label ~gap:4
-        ~data_attrs:
-          [ ("style", "background: transparent; border: none; \
-                      padding: 0") ]
+        ~background:"transparent" ~border_width:0 ~padding:0 ~corner_radius:0
         children ]
 
 (* -- dialog chrome ------------------------------------------------------ *)

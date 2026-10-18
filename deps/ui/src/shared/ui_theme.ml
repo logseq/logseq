@@ -279,6 +279,7 @@ let ls_vars =
 let cmdk_vars = function
   | Light ->
     [ "--lx-cmdk-chosen-bg", "var(--ls-a-chosen-bg, #dcdcdc)"
+    ; "--lx-select-active-bg", "var(--lx-gray-03)"
     ; "--lx-cmdk-icon-fg", "var(--lx-gray-12, var(--rx-gray-12))"
     ; ( "--lx-cmdk-kb-shadow"
       , "inset 0 0 0 9999px rgb(0 0 0 / 0.07), inset 0 0 0 1px \
@@ -296,6 +297,7 @@ let cmdk_vars = function
     ]
   | Dark ->
     [ "--lx-cmdk-chosen-bg", "var(--ls-a-chosen-bg, #094b5a)"
+    ; "--lx-select-active-bg", "var(--lx-gray-02)"
     ; "--lx-cmdk-icon-fg", "#ffffff"
     ; "--lx-cmdk-kb-shadow", "none"
     ; "--lx-cmdk-hover-ring", "none"

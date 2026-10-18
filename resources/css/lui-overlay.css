@@ -318,23 +318,6 @@
   background: hsl(var(--muted));
 }
 
-/* select item row inside cp__select results */
-.select-item-row {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.select-item-left {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 /* ---- menu links (cljs common.css) ------------------------------------ */
 
 .menu-link {
@@ -562,96 +545,6 @@
   opacity: 1;
 }
 
-/* ---- cp__select (command-palette-style pickers) ----------------------- */
-
-.cp__select {
-  --palettle-input-height: 64px;
-  --palettle-container-height: 75vh;
-}
-
-.cp__select-main {
-  max-height: var(--palettle-container-height);
-  flex-direction: column;
-  width: fit-content;
-}
-
-.cp__select-main .item-results-wrap {
-  overflow-x: hidden;
-  overflow-y: auto;
-  max-height: calc(
-    var(--palettle-container-height) - var(--palettle-input-height));
-}
-
-.cp__select-main .input-wrap {
-  display: flex;
-}
-
-.cp__select-input {
-  padding: 16px;
-  font-size: 16px;
-  outline: none;
-  background: transparent;
-  border-style: none;
-  color: var(--ls-secondary-text-color);
-}
-
-.cp__select-input:focus {
-  box-shadow: none;
-}
-
-/* cljs dropdown selects (view filter/sort pickers) use a compact input —
-   4px 8px, 32px row — not the command-palette's 16px padding */
-.ui__dropdown-menu-content .cp__select-input {
-  padding: 4px 8px;
-  height: 32px;
-}
-
-.ui__dropdown-menu-content .cp__select-main {
-  width: 100%;
-}
-
-.cp__select-results .menu-link {
-  display: flex;
-  justify-content: space-between;
-  transition: none;
-  border-style: none;
-  background: none;
-}
-
-.cp__select-results .menu-link > span:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.cp__select-main .menu-link.chosen,
-.cp__select-main .menu-link.chosen p,
-.cp__select-main .menu-link[data-selected],
-.cp__select-main .menu-link[data-selected] p {
-  background: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
-  color: var(--ls-secondary-text-color);
-}
-
-.dark .cp__select-main .menu-link.chosen,
-.dark .cp__select-main .menu-link.chosen p,
-.dark .cp__select-main .menu-link[data-selected],
-.dark .cp__select-main .menu-link[data-selected] p {
-  background: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
-}
-
-.cp__select-main .menu-link:hover p {
-  color: var(--ls-secondary-text-color);
-}
-
-.cp__select-main .search-result {
-  font-size: 0.875rem;
-  font-weight: 500;
-  display: flex;
-  align-items: baseline;
-}
-
-.cp__select-main .ui__icon {
-  font-size: 16px;
-}
 
 /* ---- dialogs ---------------------------------------------------------- */
 
@@ -1379,26 +1272,6 @@ select.form-select {
   opacity: 1;
 }
 
-/* ---- view switcher + view head -------------------------------------------- */
-
-.views {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.views button {
-  display: inline-flex;
-  align-items: center;
-  background: none;
-  border-style: none;
-  color: inherit;
-  font-size: inherit;
-  cursor: pointer;
-  padding: 0.125rem 0.25rem;
-}
-
 /* ---- misc overlay helpers -------------------------------------------------- */
 
 /* page ⋯ menu (toolbar dots) / page context menu */
@@ -1920,15 +1793,6 @@ select.form-select {
 .ls-icon-color-wrap {
   display: inline-flex;
   align-items: center;
-}
-
-/* cljs view-tab count is text-muted-foreground (gray-133) — the
-   ls-secondary-text-color var resolves to the primary dark color in
-   this theme, so muted-foreground must come first */
-
-.ls-view-tab {
-  /* cljs shui/button base: inline-flex items-center gap-1 */
-  gap: 0.25rem;
 }
 
 /* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */

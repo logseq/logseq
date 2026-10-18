@@ -170,3 +170,13 @@ test('leading toolbar geometry and visibility have no stylesheet implementation'
   })
   assert.deepEqual(duplicateRules, [], 'Shared typed toolbar layout owns placement and visibility')
 })
+
+test('view tabs have one shared typed layout owner', async () => {
+  const source = await readFile(stylesheet, 'utf8')
+  const duplicates = []
+  postcss.parse(source).walkRules(rule => {
+    if (['.views', '.views button', '.ls-view-tab'].includes(rule.selector))
+      duplicates.push(rule.selector)
+  })
+  assert.deepEqual(duplicates, [], 'Shared view recipes own tab spacing on every host')
+})
