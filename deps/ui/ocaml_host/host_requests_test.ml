@@ -577,6 +577,40 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter (fun (name,svg) ->
     check ("Custom native icon changed " ^ name) (Host_icons.svg_of ("app:" ^ name) = Some svg))
     (Icons.custom_icons @ Icons.extension_icons @ Icons.status_icons @ Icons.priority_icons);
+  List.iter (fun name ->
+    let canonical = Icons.svg_of_children ~size:24. name
+      (Icon_tabler_data.tabler_children name) in
+    let builtin = List.assoc name Host_builtin_icons.all in
+    List.iter (fun application_first ->
+      Host_icons.install payload;
+      let application () = Option.get (Host_icons.svg_of ("app:" ^ name)) in
+      let framework () = Option.get (Host_icons.svg_of name) in
+      let app_svg, builtin_svg =
+        if application_first then let a=application () in a,framework ()
+        else let b=framework () in application (),b in
+      check ("Native application glyph must retain its canonical asset: " ^ name)
+        (app_svg=canonical);
+      check ("Native framework glyph must retain its own namespace: " ^ name)
+        (builtin_svg=builtin);
+      let store=Lui_store.create () in
+      List.iter (Lui_store.apply_op store)
+        [CreateNode (1,Icon);SetProp (1,IconName,StringValue ("app:" ^ name));
+         SetProp (1,ForegroundValue,StringValue "#123456")];
+      let image=Option.get (Host_icons.image_of ~hooks:icon_hooks store 2. 1
+        (Lui_scene.rect 0. 0. 18. 18.)) in
+      let expected=Result.get_ok (Lui_svg.render
+        (Host_icons.with_color canonical "rgb(18,52,86)") ~w:36 ~h:36) in
+      check ("Native application image must rasterize the canonical asset: " ^ name)
+        (image.Lui_scene.ipix=expected.Lui_scene.ipix)) [true;false])
+    ["search";"check";"settings";"plus";"chevron-right"];
+  let replacement_search="<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0h8\"/></svg>" in
+  Host_icons.install (Yojson.Safe.to_string (`Assoc ["search",`String replacement_search]));
+  check "An application override must not replace a framework glyph"
+    (Host_icons.svg_of "app:search"=Some replacement_search
+      && Host_icons.svg_of "search"=List.assoc_opt "search" Host_builtin_icons.all);
+  Host_icons.install payload;
+  check "Unknown application names must not fall through to framework aliases"
+    (Host_icons.svg_of "app:refresh-cw"=None);
   let original = Option.get (Host_icons.svg_of "app:menu-2") in
   let before = Gc.allocated_bytes () in
   for _=1 to 1000 do

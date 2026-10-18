@@ -7,6 +7,7 @@
 
 module J = Yojson.Safe
 
+(* Full wire names keep application and framework assets in separate namespaces. *)
 let svgs : (string, string) Hashtbl.t = Hashtbl.create 256
 
 (* (name, w, h) -> rendered image; entries that fail to parse keep a
@@ -47,7 +48,7 @@ let install (payload : string) =
     List.iter
       (fun (name, v) ->
          match v with
-         | `String s -> Hashtbl.replace svgs name (svg_payload s)
+         | `String s -> Hashtbl.replace svgs ("app:" ^ name) (svg_payload s)
          | _ -> ())
       kvs;
     Hashtbl.reset cache
@@ -64,26 +65,20 @@ let icon_name store id =
       | "select" | "combobox" -> Some "chevron-down"
       | _ -> None))
 
-(* App-pushed SVGs win; then the builtin icon table (name-only icon
-   kinds); then the in-process tabler-children table — the boot
-   app-icons envelope only carries the custom/status/priority set, so
-   tabler names are rasterized from the same source the web's
-   app_icons() registry uses. *)
+(* Application assets resolve from the shared registry and bundled Tabler data.
+   Bare names belong to framework chrome; neither namespace aliases the other. *)
 let svg_of name =
-  let name =
-    if String.length name > 4 && String.sub name 0 4 = "app:" then
-      String.sub name 4 (String.length name - 4)
-    else name
-  in
   match Hashtbl.find_opt svgs name with
-  | Some _ as s -> s
+  | Some _ as svg -> svg
   | None ->
-      let resolved = match List.assoc_opt name Host_builtin_icons.all with
-        | Some _ as s -> s
-        | None -> (
-            match Icon_tabler_data.tabler_children name with
-            | [] -> None
-            | kids -> Some (Icons.svg_of_children ~size:24. name kids)) in
+      let resolved =
+        if String.starts_with ~prefix:"app:" name then
+          let asset = String.sub name 4 (String.length name - 4) in
+          match Icon_tabler_data.tabler_children asset with
+          | [] -> None
+          | children -> Some (Icons.svg_of_children ~size:24. asset children)
+        else List.assoc_opt name Host_builtin_icons.all
+      in
       Option.iter (fun svg -> Hashtbl.add svgs name svg) resolved;
       resolved
 
