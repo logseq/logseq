@@ -61,6 +61,51 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let picked_date = ref None in
+  let calendar = mount (fun _ -> Ui_components.date_picker ~translate:I18n.t
+      ~on_pick:(fun date -> picked_date:=Some date)) in
+  let today = Dates.fields (Dates.date_now ()) in
+  let day_name y m d = Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d in
+  let find_day session y m d = List.find (fun n -> M.string_prop n "accessibility-identifier"
+      =Some (day_name y m d)) (nodes session) in
+  let day = find_day calendar today.year today.month today.day in
+  check "Standalone calendars expose a single date in the Tab sequence"
+    (List.length (List.filter (fun n -> class_has n "ui__calendar-day"
+      && M.string_prop n "data-attrs"=Some (P.data_attrs_encode ["tabindex","0"])) (nodes calendar))=1);
+  navigate calendar day (P.NavigationKey (day.M.id,"ArrowRight",false));
+  let next = Dates.fields (Dates.shift_day (Dates.make ~year:today.year ~month:today.month ~day:today.day ()) 1) in
+  let target = find_day calendar next.year next.month next.day in
+  if next.year=today.year && next.month=today.month then
+    check "Moving calendar focus within the month retains its date buttons"
+      (List.exists (fun n -> n.M.id=day.M.id) (nodes calendar));
+  check "Calendar keyboard navigation moves the focused day without committing"
+    (Hashtbl.find_opt target.M.props "autofocus"=Some (P.BoolValue true) && !picked_date=None);
+  S.press calendar target.M.id;
+  check "Calendar activation commits the navigated date"
+    (Option.map Dates.journal_day_of !picked_date=Some (next.year*10000+next.month*100+next.day));
+  ignore (Lui_app.dispose calendar.S.app);
+  let old_calendar = !Editor_commands.active and old_calendar_signal = !Editor_commands.popup_vs in
+  let popup : Editor_commands.popup =
+    {kind=Cal_insert;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
+     hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
+  Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
+  Editor_commands.nav_month 1;
+  check "Editor month controls clamp the focused day to the target month"
+    (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=29 | None -> false);
+  Editor_commands.active:=Some popup;
+  let editor_calendar = mount (fun _ -> Editor_commands.cal_table popup) in
+  let prevented = ref false in
+  check "Editor calendar navigation is consumed before editor commands"
+    (Editor_commands.popup_key ~key:"ArrowRight" ~inside:(fun () -> true)
+       ~prevent_default:(fun () -> prevented:=true));
+  check "The editor key router leaves calendar navigation to the focused button"
+    (!Editor_commands.active=Some popup && not !prevented);
+  let day = find_day editor_calendar 2024 1 31 in
+  navigate editor_calendar day (P.NavigationKey (day.M.id,"ArrowRight",false));
+  check "Editor calendar navigation updates the day exactly once"
+    (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=1 | None -> false);
+  ignore (Lui_app.dispose editor_calendar.S.app);
+  Editor_commands.active:=old_calendar;Editor_commands.popup_vs:=old_calendar_signal;
   let popup_anchor () =
     let body = Ui_services.dom_body () in
     {body with Ui_services.attr=(fun name ->

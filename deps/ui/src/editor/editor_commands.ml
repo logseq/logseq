@@ -240,16 +240,16 @@ let commit_cal p =
 
 let cal_table (p : popup) : t =
   Ui_components.calendar_grid ~year:p.cy ~month:p.cm ~day:(Some p.cd)
+    ~tab_day:p.cd
+    ~on_navigate:(fun cy cm cd -> update_p (fun p -> {p with cy;cm;cd}))
     ~on_pick:(fun y m d ->
       update_p (fun p -> {p with cy=y;cm=m;cd=d});
       with_p commit_cal)
 
 let nav_month delta =
   update_p (fun p ->
-      let m = p.cm + delta in
-      if m < 1 then { p with cm = 12; cy = p.cy - 1 }
-      else if m > 12 then { p with cm = 1; cy = p.cy + 1 }
-      else { p with cm = m })
+      let f = Dates.fields (Dates.make ~year:p.cy ~month:(p.cm+delta) ~day:1 ()) in
+      {p with cy=f.year;cm=f.month;cd=min p.cd (days_in_month f.year f.month)})
 
 let close_menu () =
   with_p (fun p ->
@@ -289,6 +289,7 @@ let toggle_month_menu () =
                                 , fun () ->
                                     update_p (fun r ->
                                         { r with cm = i + 1
+                                               ; cd = min r.cd (days_in_month r.cy (i+1))
                                                ; menu = None }) ))
                               (Array.to_list (month_names ()))
                         } })
@@ -315,24 +316,6 @@ let open_choice_menu sel items =
                       items
                 } })
   | None -> ()
-
-let cal_move delta =
-  update_p (fun p ->
-      let cd = p.cd + delta in
-      let cy, cm, cd =
-        if cd < 1 then (
-          let cm, cy =
-            if p.cm - 1 < 1 then (12, p.cy - 1) else (p.cm - 1, p.cy)
-          in
-          (cy, cm, cd + days_in_month cy cm))
-        else if cd > days_in_month p.cy p.cm then (
-          let cm, cy =
-            if p.cm + 1 > 12 then (1, p.cy + 1) else (p.cm + 1, p.cy)
-          in
-          (cy, cm, cd - days_in_month p.cy p.cm))
-        else (p.cy, p.cm, cd)
-      in
-      { p with cy; cm; cd })
 
 (* cljs nld-parse covers natural language; here a plain JS Date parse
    handles ISO / "Sep 30, 2026" style input, else the warning toast *)
@@ -1252,10 +1235,11 @@ let popup_key ~key ~inside ~prevent_default =
   | None -> false
   | Some p -> (
       match (p.kind, key) with
-      | (Cal_insert | Cal_prop _), "ArrowRight" -> cal_move 1; true
-      | (Cal_insert | Cal_prop _), "ArrowLeft" -> cal_move (-1); true
-      | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move 7; true
-      | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move (-7); true
+      | (Cal_insert | Cal_prop _),
+          ("ArrowRight" | "ArrowLeft" | "ArrowDown" | "ArrowUp"
+          | "Home" | "End" | "PageUp" | "PageDown") ->
+          (* The focused control owns navigation; only stop editor routing. *)
+          true
       | (Cal_insert | Cal_prop _), "Enter" ->
           prevent_default ();
           commit_cal p;

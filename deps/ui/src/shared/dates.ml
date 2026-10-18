@@ -55,6 +55,27 @@ let shift_year (t : t) (delta : int) : t =
 let days_in_month ~y ~m =
   (fields (make ~year:y ~month:(m + 1) ~day:0 ())).day
 
+let calendar_navigate ~year ~month ~day ~key ~shift =
+  let date = make ~year ~month ~day () in
+  let month_step delta =
+    let target = fields (make ~year ~month:(month + delta) ~day:1 ()) in
+    make ~year:target.year ~month:target.month
+      ~day:(min day (days_in_month ~y:target.year ~m:target.month)) ()
+  in
+  let target = match key with
+    | "ArrowLeft" -> shift_day date (-1)
+    | "ArrowRight" -> shift_day date 1
+    | "ArrowUp" -> shift_day date (-7)
+    | "ArrowDown" -> shift_day date 7
+    | "Home" -> shift_day date (-(fields date).wday)
+    | "End" -> shift_day date (6 - (fields date).wday)
+    | "PageUp" -> month_step (if shift then -12 else -1)
+    | "PageDown" -> month_step (if shift then 12 else 1)
+    | _ -> invalid_arg "Unsupported calendar navigation key"
+  in
+  let f = fields target in
+  f.year, f.month, f.day
+
 let month_abbr =
   [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"
    ; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec" |]

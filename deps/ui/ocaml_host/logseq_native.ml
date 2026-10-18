@@ -1059,6 +1059,7 @@ let () =
         | Submit _ -> "Submit"
         | NavigatePrevious _ -> "NavigatePrevious"
         | NavigateNext _ -> "NavigateNext"
+        | NavigationKey _ -> "NavigationKey"
         | ToggleChanged _ -> "ToggleChanged"
         | Change _ -> "Change"
         | ValueChanged _ -> "ValueChanged"

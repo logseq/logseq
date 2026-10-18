@@ -7622,3 +7622,76 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native view popup trigger-edge placement" (!failures=[]);
   print_endline "native view popup trigger-edge placement: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures := message :: !failures in
+  let cases =
+    [ (2024,1,31),"ArrowRight",false,(2024,2,1);
+      (2024,1,1),"ArrowLeft",false,(2023,12,31);
+      (2024,1,31),"ArrowDown",false,(2024,2,7);
+      (2024,3,1),"ArrowUp",false,(2024,2,23);
+      (2024,1,31),"Home",false,(2024,1,28);
+      (2024,1,31),"End",false,(2024,2,3);
+      (2024,3,31),"PageUp",false,(2024,2,29);
+      (2023,1,31),"PageDown",false,(2023,2,28);
+      (2024,2,29),"PageDown",true,(2025,2,28);
+      (2024,2,29),"PageUp",true,(2023,2,28);
+      (2024,12,31),"PageDown",false,(2025,1,31);
+      (2024,3,10),"ArrowRight",false,(2024,3,11) ] in
+  List.iter (fun ((y,m,d),key,shift,(ey,em,ed)) ->
+      let store = Lui_store.create () in
+      let backend = {backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let picked = ref [] in
+      let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+        Ui_components.date_picker ~translate:I18n.t ~on_pick:(fun date -> picked:=date::!picked)) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let ui = Lui_window.Ui.create () and rects = Lui_window.Rects.create () in
+        ignore (Lui_window.Ui.store_changed ui store);
+        let ids () = Lui_store.preorder store in
+        let find name = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name) (ids ()) in
+        let day_name y m d = Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d in
+        let send event = ignore (Lui_app.dispatch_event app event);ignore (Lui_app.flush app) in
+        send (TextChanged (find "calendar-year",string_of_int y));
+        send (Press (find "calendar-month"));
+        let month_name = (Ui_components.calendar_month_names I18n.t).(m-1) in
+        let month = List.find (fun id -> Lui_store.kind store id="menu-item"
+          && Lui_store.string_prop store id "text"=Some month_name) (ids ()) in
+        send (Press month);
+        ignore (Lui_window.Ui.store_changed ui store);
+        let roving () = List.filter (fun id ->
+          Lui_store.string_prop store id "style-class"=Some "ui__calendar-day"
+          && Lui_query.data_attr store id "tabindex"=Some "0") (ids ()) in
+        let label = Printf.sprintf "%04d-%02d-%02d %s shift=%b" y m d key shift in
+        expect (label^" requires one date in the Tab sequence") (List.length (roving ())=1);
+        let start = find (day_name y m d) in
+        let original_days = List.filter (fun id -> Lui_store.string_prop store id "style-class"=Some "ui__calendar-day") (ids ()) in
+        Lui_window.Ui.set_focused ui store start;
+        let navigation = match key with
+          | "ArrowRight" -> Lui_window.Input.Arrow_right | "ArrowLeft" -> Arrow_left
+          | "ArrowUp" -> Arrow_up | "ArrowDown" -> Arrow_down
+          | "Home" -> Home | "End" -> End | "PageUp" -> Page_up | "PageDown" -> Page_down
+          | _ -> assert false in
+        let dispatch input =
+          List.iter (function Lui_window.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ())
+            (Lui_window.Ui.handle ui store rects input);
+          ignore (Lui_app.flush app);ignore (Lui_window.Ui.store_changed ui store) in
+        dispatch (Lui_window.Input.Key_down (navigation,{Lui_window.Input.mods_none with shift},false));
+        if y=ey && m=em then
+          expect (label^" must retain date nodes while focus moves within the month")
+            (List.for_all (Lui_store.mem store) original_days);
+        let target = List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some (day_name ey em ed)) (ids ()) in
+        expect (label^" must transfer actual native focus to the target date")
+          (Some (Lui_window.Ui.focused ui)=target);
+        expect (label^" must move the single Tab stop with focus") (List.map Option.some (roving ())=[target]);
+        expect (label^" must not commit during navigation") (!picked=[]);
+        if Some (Lui_window.Ui.focused ui)=target then begin
+          dispatch (Lui_window.Input.Key_down (Lui_window.Input.Return,Lui_window.Input.mods_none,false));
+          expect (label^" must commit the focused date once on Enter")
+            (List.map Dates.journal_day_of !picked=[ey*10000+em*100+ed])
+        end)) cases;
+  List.iter prerr_endline (List.rev !failures);
+  check "Native calendar keyboard navigation and date commitment" (!failures=[]);
+  print_endline "native calendar keyboard navigation and date commitment: OK")

@@ -107,7 +107,7 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
     ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
     ?text_signal ~variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
-    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_navigate ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : t =
   let size = Option.value size ~default:`default in
   let base, ink, hover, hover_ink, pressed = match variant with
@@ -159,7 +159,7 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
     ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
     ?text_signal ~variant ~size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
-    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
+    ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_navigate ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children)
 
 let chrome_button element =
@@ -1163,7 +1163,7 @@ let alert_dialog_footer ~key children =
 
 
 (* One day grid for editor calendars and standalone date selection. *)
-let calendar_grid ~year ~month ~day ~on_pick : t =
+let calendar_grid ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
   let today = Dates.today_journal_day () in
   let cell ~outside y m d =
     let focused = (not outside) && day = Some d in
@@ -1196,8 +1196,13 @@ let calendar_grid ~year ~month ~day ~on_pick : t =
             else "inherit")
          ~text:(string_of_int d) ~label:(string_of_int d)
          ~data_attrs:
-           ([ ("tabindex", if focused then "0" else "-1") ]
+           ([ ("tabindex", if not outside && d=tab_day then "0" else "-1") ]
            @ if focused then [ ("data-focused", "true") ] else [])
+         ~on_navigate:(function
+           | P.NavigationKey (_,key,shift) ->
+               let y,m,d = Dates.calendar_navigate ~year:y ~month:m ~day:d ~key ~shift in
+               on_navigate y m d
+           | _ -> ())
          ~on_press:(fun _ -> on_pick y m d)
          [])
   in
@@ -1247,9 +1252,11 @@ let date_picker ~translate ~on_pick : t =
       (initial.year, initial.month, initial.day)
   in
   let month_open = Signal.state context.Lui_ui.ui_scheduler false in
+  let day_focused = Signal.state context.Lui_ui.ui_scheduler false in
   let buffer = Signal.state context.Lui_ui.ui_scheduler "" in
   let set_month y m =
     let _, _, d = Signal.get_state date in
+    Signal.set day_focused false;
     Signal.set date (y, m, min d (Dates.days_in_month ~y ~m))
   in
   let move delta =
@@ -1349,9 +1356,13 @@ let date_picker ~translate ~on_pick : t =
                     ~icon:(`app "chevron-right") ~on_press:(fun _ -> move 1);
                 ];
               reactive
-                (fun (year, month, _) ->
-                  calendar_grid ~year ~month ~day:None ~on_pick:pick)
-                (Signal.value date);
+                (fun (year, month, d) focused ->
+                  calendar_grid ~year ~month ~day:(if focused then Some d else None)
+                    ~tab_day:d ~on_navigate:(fun y m d ->
+                      Signal.set date (y,m,d);
+                      Signal.set day_focused true)
+                    ~on_pick:pick)
+                (Signal.value date) (Signal.value day_focused);
             ];
           column ~padding_horizontal:12
             [
