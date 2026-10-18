@@ -4,8 +4,7 @@
    dead-codes unreferenced modules, so without that single call nothing
    in this directory is bundled into main.js. It sets up:
 
-   - document keydown handling: Escape pops overlays (view overlays,
-     then the property dialog, then imperative popups), mod+p /
+   - document keydown handling: mod+p /
      Ctrl+Alt+P and `;;` open the .ls-property-dialog, `p` then `a`
          toggles hidden properties.
 
@@ -34,14 +33,6 @@ let on_keydown (ev : Ui_services.ev) =
   if ev.Ui_services.composing then ()
   else
     match ev.Ui_services.key with
-    | Some "Escape" ->
-        if
-          S.handle_view_escape ()
-          || Dialog.handle_escape ()
-          || S.handle_escape ()
-        then (
-          ev.Ui_services.prevent_default ();
-          ev.Ui_services.stop_propagation ())
     | Some "p"
       when (ev.Ui_services.meta || ev.Ui_services.ctrl)
            && ev.Ui_services.alt ->

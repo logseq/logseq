@@ -162,19 +162,6 @@ let remove_view_overlay key =
         (List.filter (fun o -> o.vo_key <> key) (Runtime.signal_get s))
   | None -> ()
 
-(* Escape pops the top view overlay — context-free for the document
-   keydown handler *)
-let handle_view_escape () =
-  match !view_overlays_state with
-  | Some s -> (
-      match List.rev (Runtime.signal_get s) with
-      | top :: rest ->
-          Runtime.signal_set s (List.rev rest);
-          top.vo_on_escape ();
-          true
-      | [] -> false)
-  | None -> false
-
 (* ---------- pop/close across both stacks ---------- *)
 
 (* "close the top popup" for imperative callers: popovers live on the
@@ -201,16 +188,6 @@ let close_overlays () =
   close_all_view_overlays ()
 
 let overlay_open () = !overlays <> [] || view_overlay_open ()
-
-(* Escape pops the top tracked overlay; view overlays and the property
-   dialog have their own handlers the keydown dispatcher tries first *)
-let handle_escape () =
-  match !overlays with
-  | top :: rest ->
-      overlays := rest;
-      top.on_escape ();
-      true
-  | [] -> false
 
 (* ---------- show hidden properties toggle (`p a`) ---------- *)
 

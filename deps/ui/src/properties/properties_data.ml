@@ -194,12 +194,18 @@ let rec value_display w =
   | W.Tagged (_, inner) -> value_display inner
   | other -> Option.value ~default:"" (W.as_string other)
 
+let empty_placeholder_p w =
+  match untag w with
+  | W.Keyword "logseq.property/empty-placeholder" -> true
+  | W.Map _ as value -> getk value "db/ident" = Some "logseq.property/empty-placeholder"
+  | _ -> false
+
 let value_empty_p w =
-  match w with
+  match untag w with
   | W.Nil -> true
   | W.String s -> String.trim s = ""
-  | W.Set l | W.List l | W.Array l -> l = []
-  | _ -> false
+  | W.Set l | W.List l | W.Array l -> List.for_all empty_placeholder_p l
+  | value -> empty_placeholder_p value
 
 (* ---------- endpoints ---------- *)
 

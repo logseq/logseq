@@ -320,16 +320,6 @@ let node_items_source ~block ~prop ~on_pick =
   in
   (initial, on_search)
 
-let new_choice ctx row ~close text =
-  let ident = D.row_ident row |> Option.value ~default:"" in
-  (let* res = D.upsert_closed_value ~ident ~value:text () in
-  (match D.geti res "db/id" with
-   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-   | None -> ());
-  close ();
-  Js.Promise.resolve ())
-  |> ignore
-
 (* icon id for a closed-choice value — the value's own
    logseq.property/icon map; "line-dashed" for the empty placeholder
    (cljs hardcodes it for empty closed-choice values) *)
@@ -339,16 +329,7 @@ let closed_value_icon_id value =
       (fun icon -> D.gets (D.untag icon) "id")
   with
   | Some id -> Some id
-  | None -> (
-      let is_empty_placeholder =
-        match D.getk (D.untag value) "db/ident" with
-        | Some "logseq.property/empty-placeholder" -> true
-        | _ -> (
-            match value with
-            | W.Keyword "logseq.property/empty-placeholder" -> true
-            | _ -> false)
-      in
-      if is_empty_placeholder then Some "line-dashed" else None)
+  | None -> if D.empty_placeholder_p value then Some "line-dashed" else None
 
 (* cljs <create-page-if-not-exists!: class-type and block/tags values
    are classes *)
@@ -407,6 +388,18 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
          (Signal.value items_st)
      ])
     context parent
+
+(* Closed values share a searchable property chooser on both hosts. *)
+let closed_value_popup ~on_dismiss content =
+  Ui_components.with_props
+    [Ui_components.card_shadow;Ui_components.Prop.max_width_viewport 1.;
+     Ui_components.Prop.max_height_viewport 1.;Ui_components.Prop.overflow `auto]
+    (popover ~role:`dialog ~anchor:`below ~anchor_alignment:`start
+       ~anchor_offset:(-3.) ~min_width:226 ~padding:0
+       ~background:"hsl(var(--popover))" ~foreground:"hsl(var(--popover-foreground))"
+       ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
+       ~style_class:"ui__popover-content ls-property-select-popup"
+       ~transition:Ui_components.popover_transition ~on_dismiss [content])
 
 (* helper: ghost-button value cell — [text] = display label.
    .pv-scalar lets the stylesheet collapse the default 36px button
@@ -577,7 +570,11 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
      let scalar key = Option.map (fun value ->
        Option.value (D.getf value "logseq.property/value") ~default:value)
        (D.getf blk key) in
-     let ref_id key = Option.bind (D.getf blk key) D.entity_id_of |> Option.value ~default:0 in
+     let ref_id key =
+       match D.getf blk key with
+       | Some value when not (D.value_empty_p value) ->
+           Option.value (D.entity_id_of value) ~default:0
+       | _ -> 0 in
      let current_unit=ref_id "logseq.property.repeat/recur-unit" in
      let units_all = List.filter_map choice_of_w (W.elems arr.(1)) in
      let units =
@@ -660,39 +657,19 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
      Js.Promise.resolve ())
 
 (* Repeat controls use the same bounded menu recipe as other application selects. *)
-let rep_select ~key ~label ~selected_signal ~options ~on_pick ~cell : t =
+let rep_select ~key ~label ~selected_signal ~options ~on_pick : t =
  fun context parent ->
   let open_ = Signal.state context.Lui_ui.ui_scheduler false in
-  let title id =
-    if id=0 then I18n.t "ui/empty"
-    else match List.assoc_opt id options with
-      | Some title -> title
-      | None -> invalid_arg "Repeat selection is missing from its choices"
-  in
-  let toggle _ = Runtime.signal_set open_ (not (Signal.get_state open_)) in
-  let trigger =
-    if cell then
-      Ui_components.with_props
-        [Ui_components.Prop.white_space `normal;Ui_components.Prop.font_weight 400;
-         Ui_components.Prop.cursor `pointer]
-        (button ~key:(key ^ "-trigger") ~variant:`ghost ~label
-          ~text:(reactive title selected_signal) ~grow:1. ~min_width:0 ~min_height:0
-          ~padding_horizontal:8 ~padding_vertical:4 ~main:`start ~text_alignment:`start
-          ~background:"transparent" ~foreground:"hsl(var(--foreground))"
-          ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
-          ~style_class:"ls-rep-trigger" ~on_press:toggle [])
-    else
-      select ~key:(key ^ "-trigger") ~label ~text:(reactive title selected_signal)
-        ~container_relative_frame:`horizontal ~min_width:0 ~height:32
-        ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:6
-        ~background:"hsl(var(--background))" ~border_width:1
-        ~border_color:"hsl(var(--border))" ~style_class:"ls-select-trigger ls-rep-trigger"
-        ~on_press:toggle []
-  in
+  let title id = if id=0 then I18n.t "ui/empty" else List.assoc id options in
   (column ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1. ~min_width:0
     [Ui_components.with_props
-       [Ui_components.Prop.font_size "0.875rem";
-        Ui_components.Prop.line_height (if cell then "1.375" else "1.25rem")] trigger;
+       [Ui_components.Prop.font_size "0.875rem";Ui_components.Prop.line_height "1.25rem"]
+       (select ~key:(key ^ "-trigger") ~label ~text:(reactive title selected_signal)
+         ~container_relative_frame:`horizontal ~min_width:0 ~height:32
+         ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:6
+         ~background:"hsl(var(--background))" ~border_width:1
+         ~border_color:"hsl(var(--border))" ~style_class:"ls-select-trigger ls-rep-trigger"
+         ~on_press:(fun _ -> Runtime.signal_set open_ (not (Signal.get_state open_))) []);
      if_ ~test:(Signal.value open_)
        (Ui_components.menu_card ~key:(key ^ "-options") ~max_height:288
           ~cls:"ls-select-content ls-rep-menu" ~anchor:`below ~anchor_alignment:`start
@@ -703,6 +680,34 @@ let rep_select ~key ~label ~selected_signal ~options ~on_pick ~cell : t =
                  ~selected:(reactive ((=) id) selected_signal) ~min_height:32
                  ~padding_horizontal:8 ~padding_vertical:6 ~gap:8 ~corner_radius:4
                  ~on_press:(fun _ -> on_pick id;Runtime.signal_set open_ false) [])) options))]) context parent
+
+let repeat_type_picker ~selected_signal ~options ~on_pick ~on_clear : t =
+ fun context parent ->
+  let open_ = Signal.state context.Lui_ui.ui_scheduler false in
+  let close () = Runtime.signal_set open_ false in
+  let title id = if id=0 then I18n.t "ui/empty" else List.assoc id options in
+  (column ~grow:1. ~min_width:0 ~gap:0
+    [Ui_components.with_props
+       [Ui_components.Prop.white_space `normal;Ui_components.Prop.font_weight 400;
+        Ui_components.Prop.font_size "0.875rem";Ui_components.Prop.line_height "1.375";
+        Ui_components.Prop.cursor `pointer]
+       (button ~key:"repeat-type-trigger" ~variant:`ghost ~label:(I18n.t "property.repeat/next-date")
+          ~text:(reactive title selected_signal) ~grow:1. ~min_width:0 ~min_height:0
+          ~padding_horizontal:8 ~padding_vertical:4 ~main:`start ~text_alignment:`start
+          ~background:"transparent" ~foreground:"hsl(var(--foreground))"
+          ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+          ~style_class:"ls-rep-trigger"
+          ~on_press:(fun _ -> Runtime.signal_set open_ (not (Signal.get_state open_))) []);
+     if_ ~test:(Signal.value open_)
+       (reactive (fun selected ->
+         let items=List.map (fun (id,title) ->
+           Sel.item ~checked:(id=selected) title (fun () -> on_pick id;close ())) options in
+         let items=if selected=0 then items else items @
+           [Sel.item ~icon:"x" (I18n.t "property/clear-value") (fun () -> on_clear ();close ())] in
+         closed_value_popup ~on_dismiss:(fun _ -> close ())
+           (Sel.view ~compact:true ~show_empty_result:false
+              ~placeholder:(I18n.t1 "property/set-placeholder"
+                (I18n.t "property.built-in/repeat-repeat-type")) items)) selected_signal)]) context parent
 
 let repeat_column ctx ~ident ~is_datetime ~rep : t =
   reactive ~equal:(fun before after -> Option.is_some before=Option.is_some after)
@@ -760,21 +765,26 @@ let repeat_column ctx ~ident ~is_datetime ~rep : t =
                      ~text:(reactive Fun.id (Signal.value buffer))
                      ~on_input:(function Lui_protocol.TextChanged (_,value) -> Signal.set buffer value | _ -> ())
                      ~on_submit:(fun _ -> commit_frequency ()) [];
-                   rep_select ~key:"repeat-unit" ~cell:false ~label:(I18n.t "property.repeat/every")
+                   rep_select ~key:"repeat-unit" ~label:(I18n.t "property.repeat/every")
                      ~selected:(reactive (fun value -> (Option.get value).unit_id) (Signal.value rep))
                      ~options:(choices initial.units) ~on_pick:(fun id ->
                        update (fun value -> {value with unit_id=id});
                        save "logseq.property.repeat/recur-unit" (W.Int id))];
                 column ~key:"next" ~gap:4
                   [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/next-date") [];
-                   rep_select ~key:"repeat-type" ~cell:true ~label:(I18n.t "property.repeat/next-date")
+                   repeat_type_picker
                      ~selected:(reactive (fun value -> (Option.get value).type_id) (Signal.value rep))
                      ~options:(choices initial.types) ~on_pick:(fun id ->
                        update (fun value -> {value with type_id=id});
-                       save "logseq.property.repeat/repeat-type" (W.Int id))];
+                       save "logseq.property.repeat/repeat-type" (W.Int id))
+                     ~on_clear:(fun () ->
+                       update (fun value -> {value with type_id=0});
+                       D.remove_block_property ~block_uuid:ctx.block_uuid
+                         ~ident:"logseq.property.repeat/repeat-type" |> ignore;
+                       S.refresh_all ())];
                 column ~key:"when" ~gap:8
                   [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/when") [];
-                   rep_select ~key:"repeat-when" ~cell:false ~label:(I18n.t "property.repeat/when")
+                   rep_select ~key:"repeat-when" ~label:(I18n.t "property.repeat/when")
                      ~selected:(reactive (fun value -> (Option.get value).when_id) (Signal.value rep))
                      ~options:(choices initial.whens) ~on_pick:when_changed;
                    row ~key:"is" ~gap:4
@@ -1091,7 +1101,7 @@ let closed_value_view ~positioned ctx row : t =
                              | None -> None))
                        (D.row_closed_values row)
                    in
-                   let items = items @ [ Sel.item ~icon:"x" (I18n.t "property/clear-value")
+                   let items = if D.value_empty_p value then items else items @ [ Sel.item ~icon:"x" (I18n.t "property/clear-value")
                        (fun () ->
                           ignore (let* _ = D.remove_block_property ~block_uuid:ctx.block_uuid ~ident in
                                   S.refresh_all ();
@@ -1103,26 +1113,18 @@ let closed_value_view ~positioned ctx row : t =
              ((match icon_id with None -> [] | Some id -> [ Icons.icon id ])
               @ if show_text then [ text ~value:label [] ] else []) ])
      ; if_ ~test:(Signal.value open_)
-         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-            ~style_class:"ui__popover-content ls-property-select-popup"
-            ~anchor_offset:(-3.0) ~width:226
-            ~transition:Ui_components.popover_transition
-            ~on_dismiss:(fun _ -> close ())
-            [ reactive
+         (closed_value_popup ~on_dismiss:(fun _ -> close ())
+            (reactive
                 ~equal:(fun a b -> Option.is_some a = Option.is_some b)
                 (fun m ->
                    match m with
                | None -> column ~gap:2 []
                    | Some items ->
-                       Sel.view ~compact:true
+                       Sel.view ~compact:true ~show_empty_result:false
                          ~placeholder:
                            (I18n.t1 "property/set-placeholder"
-                              (D.row_title row))
-                         ~new_option:(fun text ->
-                           new_choice ctx row ~close text)
-                         items)
-                (Signal.value items_st)
-            ])
+                              (D.row_title row)) items)
+                (Signal.value items_st)))
      ])
     context parent
 

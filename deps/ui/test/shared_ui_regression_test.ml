@@ -788,6 +788,30 @@ let run_views ~registry ~profile ~finish =
       files = []; has_files = false; prevent_default = (fun () -> ());
       stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
   in
+  let previous_view_overlays = !Properties_state.view_overlays_state in
+  Properties_state.view_overlays_state := None;
+  let escape_owner = mount (fun _ -> Properties_view.overlays) in
+  let dismissed = ref 0 in
+  let close_escape_owner () =
+    incr dismissed;
+    Properties_state.remove_view_overlay "escape-owner" in
+  ignore (Properties_state.push_view_overlay_ctxfree ~key:"escape-owner"
+    ~on_escape:close_escape_owner
+    ~view:(Lui_elements.popover ~role:`dialog ~anchor:`below
+      ~on_dismiss:(fun _ -> close_escape_owner ())
+      [Lui_elements.text ~value:"Outer property surface" []]));
+  S.flush escape_owner;
+  let surface = List.find (fun n -> n.M.kind = "popover") (nodes escape_owner) in
+  Properties_view.on_keydown (key_event "Escape");
+  S.flush escape_owner;
+  check "Document property shortcuts leave Escape dismissal to the mounted layer"
+    (!dismissed = 0 && Properties_state.view_overlay_open ());
+  if Properties_state.view_overlay_open () then
+    S.dispatch escape_owner (P.Dismiss surface.M.id);
+  check "The mounted property surface still owns its dismissal callback"
+    (!dismissed = 1 && not (Properties_state.view_overlay_open ()));
+  ignore (Lui_app.dispose escape_owner.S.app);
+  Properties_state.view_overlays_state := previous_view_overlays;
   let previous_tip = !Tooltip.state and previous_armed = !Tooltip.armed_on
   and previous_timer = !Tooltip.timer in
   let pending = ref [] and next_timer = ref 0 and flushes = ref 0 in

@@ -79,11 +79,6 @@ let close () =
 
 let is_open () = !current <> None
 
-(* Escape closes the dialog (document keydown order: view overlays,
-   then this, then imperative popups) *)
-let handle_escape () =
-  if is_open () then (close (); true) else false
-
 (* ---------- helpers ---------- *)
 
 let ident_of prop =

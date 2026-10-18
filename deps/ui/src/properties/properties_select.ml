@@ -72,7 +72,7 @@ type sel_state =
 (* Builds the select as a [t]: text_field over a scrollable list of
    menu_items. Mounted inside the property dialog card or an anchored
    dropdown_menu. *)
-let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?(on_enter_text = None)
+let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_sensitive = false) ?new_option ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -117,7 +117,7 @@ let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_opti
             unmatched nonempty queries display the shared no-result message. *)
          column ~gap:0
            ((if compact then [box ~height:4 []] else [])
-            @ (if vis = [] && String.trim s.q <> "" then
+            @ (if show_empty_result && vis = [] && String.trim s.q <> "" then
                [ text ~key:"select-empty"
                    ~value:(I18n.t "search/no-result")
                    [] ]
@@ -144,8 +144,10 @@ let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_opti
                      ~corner_radius:4
                      ~selected:(reactive (fun state -> state.active = index) (Signal.value st))
                      ~on_pointer_enter:(fun _ -> select index) ~on_press
-                     [ row ~gap:4 ~cross:`center ~grow:1.0
-                         ((if it.it_icon = "" then [] else [ Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon ])
+                     [ row ~gap:0 ~cross:`center ~grow:1.0
+                         ((if it.it_icon = "" then [] else
+                             [ Ui_components.with_props [Ui_components.Prop.margin_right 4]
+                                 (Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon) ])
                           @ [ text ~value:title ~grow:1.0 [] ]
                           @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ])
                  else
@@ -156,7 +158,8 @@ let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_opti
                      ~on_pointer_enter:(fun _ -> select index)
                      ?icon:(if it.it_icon = "" then None else Some (Icons.name_ref it.it_icon))
                      ~on_press [])
-              vis) ]))
+              vis) ]
+            @ if compact then [box ~height:4 []] else []))
       (Signal.value st)
   in
   (Ui_components.with_props

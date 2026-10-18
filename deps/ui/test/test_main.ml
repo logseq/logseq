@@ -4060,7 +4060,16 @@ let test_props_data3 () =
   check "value_empty_p seq"
     (Properties_data.value_empty_p (Wire.Array []));
   check "value_empty_p no"
-    (not (Properties_data.value_empty_p (Wire.Int 0)))
+    (not (Properties_data.value_empty_p (Wire.Int 0)));
+  let placeholder = wmap [("db/id", Wire.Int 11);
+    ("db/ident", Wire.kw "logseq.property/empty-placeholder")] in
+  List.iter (fun value -> check "Canonical cleared property values render empty"
+    (Properties_data.value_empty_p value))
+    [Wire.kw "logseq.property/empty-placeholder"; placeholder;
+     Wire.Tagged ("datascript/Entity", placeholder); Wire.Set [placeholder];
+     Wire.Array [Wire.kw "logseq.property/empty-placeholder";placeholder]];
+  check "A real value beside an empty marker must remain visible"
+    (not (Properties_data.value_empty_p (Wire.Set [placeholder;Wire.String "value"])))
 
 let test_props_data4 () =
   (* positioned_rows unwraps value entities and builds display rows *)

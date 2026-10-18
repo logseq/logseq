@@ -7930,7 +7930,8 @@ let () = Native_embed.with_entry_lock (fun () ->
     choice 2 "logseq.property.repeat/recur-unit.week" "Week";
     choice 6 "logseq.property.repeat/recur-unit.minute" "Minute";
     choice 7 "logseq.property.repeat/recur-unit.hour" "Hour"] in
-  let types=[choice 3 "logseq.property.repeat/repeat-type.plus" "After today";
+  let types=[choice 8 "logseq.property.repeat/repeat-type.dotted-plus" "After completion";
+    choice 3 "logseq.property.repeat/repeat-type.plus" "After today";
     choice 4 "logseq.property.repeat/repeat-type.double-plus" "After completion"] in
   let status=map ["db/id",Wire.Int 5;"db/ident",Wire.Keyword "logseq.property/status";
     "block/title",Wire.String "Status"] in
@@ -7951,8 +7952,12 @@ let () = Native_embed.with_entry_lock (fun () ->
     "logseq.property.repeat/repeated?",scalar 195 (Wire.Bool !current_repeated);
     "logseq.property.repeat/recur-frequency",scalar 196 (Wire.Int !current_frequency);
     "logseq.property.repeat/recur-unit",ref_id !current_unit;
-    "logseq.property.repeat/repeat-type",ref_id !current_type;
-    "logseq.property.repeat/checked-property",ref_id !current_when] in
+    "logseq.property.repeat/checked-property",ref_id !current_when]
+    |> function Wire.Map pairs -> Wire.Map (pairs @
+      [Wire.Keyword "logseq.property.repeat/repeat-type",
+       (if !current_type=0 then tagged (map ["db/id",Wire.Int 11;
+          "db/ident",Wire.Keyword "logseq.property/empty-placeholder"])
+        else ref_id !current_type)]) | _ -> assert false in
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
     Js.Promise.resolve (match method_,args with
       | "thread-api/entity",[_;Wire.List [Wire.Keyword "block/uuid";_]] -> block ()
@@ -7977,6 +7982,8 @@ let () = Native_embed.with_entry_lock (fun () ->
                  | "logseq.property.repeat/checked-property",Wire.Int n -> current_when:=n
                  | "logseq.property.repeat/repeated?",Wire.Bool b -> current_repeated:=b
                  | _ -> ())
+            | Wire.Array [Wire.Keyword "remove-block-property";Wire.Array [_;Wire.Keyword "logseq.property.repeat/repeat-type"]] ->
+                current_type:=0
             | _ -> ()) ops;
           Wire.Nil
       | _ -> failwith ("Unexpected repeat fixture request: "^method_)));
@@ -8082,6 +8089,70 @@ let () = Native_embed.with_entry_lock (fun () ->
       expect "Rapid checked-property changes use the latest supplied completion choice"
         ((get ()).when_id=57 && (get ()).done_title="Approved 2");
       expect "Repeat changes retain the frequency input node" (Lui_store.mem store frequency);
+      let next=List.nth (triggers ()) 1 in
+      let field ()=List.find_opt (fun id ->
+        Lui_store.string_prop store id "placeholder"=Some "Set Repeating type") (ids ()) in
+      let rows ()=List.filter (fun id -> Lui_store.kind store id="list-item") (ids ()) in
+      let contains_text id title=List.exists (fun child ->
+        Lui_store.string_prop store child "text"=Some title) (Lui_store.preorder ~root:id store) in
+      let choose title=Option.iter (fun id -> send (Press id))
+        (List.find_opt (fun id -> contains_text id title) (rows ())) in
+      let open_type ()=
+        let r=rect next in
+        let x=r.x+.r.w/.2. and y=r.y+.r.h/.2. in
+        apply (A.handle surface (W.Input.Button_down(x,y,W.Input.Left,1,W.Input.mods_none)));
+        apply (A.handle surface (W.Input.Button_up(x,y,W.Input.Left,W.Input.mods_none)));
+        field () in
+      (match open_type () with
+       | None ->
+           expect "Next date must use the searchable property-value chooser" false;
+           send (Press next)
+       | Some input ->
+           expect "The repeat-type chooser focuses its search field"
+             (W.Ui.focused (A.ui surface)=input);
+           expect "A repeat-type chooser exposes its choices and Clear"
+             (List.length (rows ())=4);
+           let selected_row=List.find (fun id -> contains_text id "Advance from scheduled") (rows ()) in
+           let selected_nodes=Lui_store.preorder ~root:selected_row store in
+           let selected_text=List.find (fun id ->
+             Lui_store.string_prop store id "text"=Some "Advance from scheduled") selected_nodes in
+           let selected_check=List.find (fun id -> Lui_store.kind store id="icon") selected_nodes in
+           expect "Compact selected choices do not add a gap before the trailing check"
+             (abs_float ((rect selected_check).x-.((rect selected_text).x+.(rect selected_text).w))<0.01);
+           let popup=List.find (fun id -> has_class id "ls-property-select-popup") (ids ()) in
+           expect "The repeat-type chooser uses a bounded dialog surface"
+             (Lui_store.string_prop store popup "role"=Some "dialog"
+              && (rect popup).h<=900. && (rect popup).w<=1000.);
+           let write_count=List.length !writes in
+           send (TextChanged(input,"zzzz no rule"));
+           expect "Closed choices cannot create an arbitrary option or show an empty-result label"
+             (rows ()=[] && not (List.exists (fun id -> contains_text id (I18n.t "search/no-result")) (ids ())));
+           expect "Searching repeat types must not transact" (List.length !writes=write_count);
+           send (TextChanged(input,"skip"));
+           expect "Repeat-type search filters the supplied closed values" (List.length (rows ())=1);
+           apply (A.handle surface (W.Input.Key_down(W.Input.Return,W.Input.mods_none,false)));
+           expect "Enter saves the matching repeat type and retains the outer input"
+             ((get ()).type_id=4 && field ()=None && Lui_store.mem store frequency);
+           expect "Closing a repeat-type chooser restores focus to its trigger"
+             (W.Ui.focused (A.ui surface)=next);
+           ignore (open_type ());choose (I18n.t "property/clear-value");
+           expect "Clear removes the stored repeat type and displays Empty"
+             ((get ()).type_id=0 && !current_type=0
+              && Lui_store.string_prop store next "text"=Some (I18n.t "ui/empty"));
+           loaded:=None;
+           Properties_value.fetch_repeat ctx ~ident:"logseq.property/deadline" ~is_datetime:true
+             (fun value -> loaded:=Some value);
+           for _=1 to 12 do Host.drain () done;
+           expect "Reopening after Clear reads the missing repeat type" ((Option.get !loaded).type_id=0);
+           (match open_type () with
+            | None -> expect "The repeat-type chooser reopens after Clear" false
+            | Some input ->
+                expect "An empty repeat type has no redundant Clear action"
+                  (List.length (rows ())=3);
+                apply (A.handle surface (W.Input.Key_down(W.Input.Escape,W.Input.mods_none,false)));
+                expect "Escape closes only the chooser and restores trigger focus"
+                  (field ()=None && Lui_store.mem store next && W.Ui.focused (A.ui surface)=next);
+                ignore input));
       loaded:=None;
       Properties_value.fetch_repeat ctx ~ident:"logseq.property/deadline" ~is_datetime:true
         (fun value -> loaded:=Some value);
@@ -8089,7 +8160,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let reopened=Option.get !loaded in
       expect "Reopening repeat settings reads committed values through stored value entities"
         (reopened.freq=12 && reopened.unit_id=1 && reopened.when_id=57
-         && reopened.done_title="Approved 2" && reopened.repeated)));
+         && reopened.type_id=0 && reopened.done_title="Approved 2" && reopened.repeated)));
 
   List.iter prerr_endline (List.rev !failures);
   check "Native repeat persistence, layout and keyboard selection" (!failures=[]);
