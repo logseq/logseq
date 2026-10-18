@@ -974,6 +974,14 @@ let option_card ~key ~mode ~thumbnail ~label ?(min_height = 0)
 
 (* -- menus & overlays -------------------------------------------------- *)
 
+let menu_item_chrome element =
+  with_props
+    [ Prop.font_size "0.875rem"
+    ; Prop.line_height "1.25rem"
+    ; Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))"
+    ; Prop.selected_background "var(--lx-gray-05, hsl(var(--muted)))" ]
+    element
+
 (* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card
    spec as props — migrated dropdown/select popups carry this chrome so
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
@@ -1145,12 +1153,12 @@ let calendar_grid ~year ~month ~day ~on_pick : t =
            (if focused then
               "var(--lx-accent-09, var(--ls-link-text-color, \
                hsl(var(--primary))))"
-            else if is_today then "hsl(var(--accent))"
+            else if is_today then "var(--lx-calendar-today-background)"
             else "transparent")
          ~foreground:
            (if outside then "var(--lx-gray-07, var(--ls-secondary-text-color))"
             else if focused then "#fff"
-            else if is_today then "hsl(var(--accent-foreground))"
+            else if is_today then "var(--lx-calendar-today-foreground)"
             else "inherit")
          ~text:(string_of_int d) ~label:(string_of_int d)
          ~data_attrs:
@@ -1275,12 +1283,13 @@ let date_picker ~translate ~on_pick : t =
                            (Array.to_list
                               (Array.mapi
                                  (fun index name ->
-                                   menu_item ~text:name
-                                     ~on_press:(fun _ ->
-                                       let y, _, _ = Signal.get_state date in
-                                       set_month y (index + 1);
-                                       Signal.set month_open false)
-                                     [])
+                                   menu_item_chrome
+                                     (menu_item ~text:name
+                                        ~on_press:(fun _ ->
+                                          let y, _, _ = Signal.get_state date in
+                                          set_month y (index + 1);
+                                          Signal.set month_open false)
+                                        []))
                                  (calendar_month_names translate))));
                     ];
                   input ~accessibility_identifier:"calendar-year" ~width:52
@@ -1312,12 +1321,15 @@ let date_picker ~translate ~on_pick : t =
                 (Signal.value date);
             ];
           column ~padding_horizontal:12
-            [ input ~accessibility_identifier:"calendar-date-input" ~height:40
+            [
+              input ~accessibility_identifier:"calendar-date-input" ~height:40
                 ~padding_horizontal:8 ~margin_bottom:12
                 ~placeholder:(translate "ui/date-natural-language-placeholder")
                 ~on_input:(function
-                  | P.TextChanged (_, value) -> Signal.set buffer value | _ -> ())
+                  | P.TextChanged (_, value) -> Signal.set buffer value
+                  | _ -> ())
                 ~on_submit:(fun _ -> submit ())
-                [] ];
+                [];
+            ];
         ]))
     context parent

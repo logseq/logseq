@@ -19,13 +19,7 @@ let separator_cls = "ui__dropdown-menu-separator"
    their own divs *)
 let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
-let chrome element =
-  Ui_components.with_props
-    [ Ui_components.Prop.font_size "0.875rem"
-    ; Ui_components.Prop.line_height "1.25rem"
-    ; Ui_components.Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))"
-    ; Ui_components.Prop.selected_background "var(--lx-gray-05, hsl(var(--muted)))" ]
-    element
+let chrome = Ui_components.menu_item_chrome
 
 (* retained-tree item: the menu_item kind renders a role=option button
    with icon/label/check spans; [attrs] is accepted for call-site

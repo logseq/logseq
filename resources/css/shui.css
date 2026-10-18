@@ -33,6 +33,9 @@ html[data-theme=dark] {
 }
 
 html {
+  --lx-calendar-today-background: var(--rx-gray-04);
+  --lx-calendar-today-foreground: var(--rx-gray-12);
+
   .ui__dropdown-menu-content,
   .ui__dropdown-menu-sub-content,
   .ui__context-menu-content,
@@ -42,11 +45,6 @@ html {
     --accent-foreground: var(--rx-gray-12-hsl);
 
     --muted: var(--rx-gray-05-hsl);
-  }
-
-  .ui__calendar {
-    --accent: var(--rx-gray-04-hsl);
-    --accent-foreground: var(--rx-gray-12-hsl);
   }
 
   &:not([data-color=logseq]) {
@@ -86,6 +84,8 @@ html[data-theme=dark] {
   background-color: #161616;
 
   &[data-color=logseq] {
+    --lx-calendar-today-background: hsl(196 100% 15%);
+
     @apply bg-[#002b36];
 
     .ui__modal-panel {
@@ -137,10 +137,6 @@ html[data-theme=dark] {
 
     .menu-separator {
       @apply opacity-20;
-    }
-
-    .ui__calendar {
-      --accent: 196 100% 15%;
     }
 
     .rc-datepicker {
@@ -406,44 +402,3 @@ kbd.shui-shortcut-key,
 .ui__popover-content {
   @apply !pointer-events-auto;
 }
-
-.ui__calendar {
-
-  /* Day highlight must win over ghost-button focus rings. */
-  [role="gridcell"] > button:focus,
-  [role="gridcell"] > button:focus-visible {
-    box-shadow: none;
-    outline: none;
-    --tw-ring-offset-width: 0px;
-    --tw-ring-shadow: 0 0 #0000;
-  }
-
-  [role="gridcell"][data-today="true"] > button {
-    background-color: hsl(var(--accent));
-    color: hsl(var(--accent-foreground));
-  }
-
-  [role="gridcell"][data-selected="true"] > button,
-  [role="gridcell"][data-focused="true"] > button,
-  [role="gridcell"][data-selected="true"] > button:hover,
-  [role="gridcell"][data-selected="true"] > button:focus,
-  [role="gridcell"][data-selected="true"] > button:focus-visible,
-  [role="gridcell"][data-focused="true"] > button:hover,
-  [role="gridcell"][data-focused="true"] > button:focus,
-  [role="gridcell"][data-focused="true"] > button:focus-visible {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-  }
-
-  input[type=number] {
-    appearance: textfield;
-    -moz-appearance: textfield;
-
-    &::-webkit-inner-spin-button,
-    &::-webkit-outer-spin-button {
-      appearance: none;
-      margin: 0;
-    }
-  }
-}
-

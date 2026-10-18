@@ -6319,3 +6319,157 @@ let () =
         (!failures = []);
       print_endline
         "native shared dialog font-size and line-height boundary: OK")
+
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let store = Lui_store.create () in
+      let backend =
+        {
+          backend_profile = profile MacOS GenericHost;
+          apply_batch =
+            (fun batch ->
+              Lui_store.apply_batch store batch;
+              true);
+        }
+      in
+      let app =
+        Lui_app.create backend ()
+          (fun () () -> ())
+          (fun _ _ _ ->
+            Lui_elements.column ~foreground:"var(--rx-gray-12)"
+              [ Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore ])
+      in
+      ignore (Lui_app.start app);
+      ignore (Lui_app.flush app);
+      let find_identifier name =
+        List.find
+          (fun id ->
+            Lui_store.string_prop store id "accessibility-identifier"
+            = Some name)
+          (Lui_store.preorder store)
+      in
+      let today = Dates.fields (Dates.date_now ()) in
+      let today_id =
+        find_identifier
+          (Printf.sprintf "calendar-day-%04d-%02d-%02d" today.year today.month
+             today.day)
+      in
+      ignore
+        (Lui_app.dispatch_event app (Press (find_identifier "calendar-month")));
+      ignore (Lui_app.flush app);
+      let item =
+        List.find
+          (fun id -> Lui_store.kind store id = "menu-item")
+          (Lui_store.preorder store)
+      in
+      let layout = Lui_layout.create () in
+      let failures = ref [] in
+      let expect message condition =
+        if not condition then failures := message :: !failures
+      in
+      List.iter
+        (fun (mode, accent, background, foreground) ->
+          let snapshot = Ui_theme.snapshot mode in
+          Theme_vars.install_snapshot
+            (Yojson.Safe.to_string
+               (`Assoc
+                  [
+                    ( "mode",
+                      `String (if mode = Ui_theme.Dark then "dark" else "light")
+                    );
+                    ( "vars",
+                      `Assoc
+                        (List.map
+                           (fun (key, value) -> (key, `String value))
+                           snapshot.vars) );
+                  ]));
+          Theme_vars.set_dark (mode = Ui_theme.Dark);
+          Theme_vars.set_accent accent;
+          Lui_layout.sync ~scale:1. ~width:600. ~height:700. layout store;
+          let scene =
+            Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+          in
+          let today_ink = ref None and item_ink = ref None in
+          Lui_paint.paint
+            {
+              Lui_paint.default_hooks with
+              color_of = Theme_vars.color_of;
+              layout = Lui_layout.layout_hook layout;
+              state_of =
+                (fun id ->
+                  if id = item then
+                    {
+                      Lui_paint.state_neutral with
+                      hovered = true;
+                      focused = true;
+                      selected = true;
+                    }
+                  else Lui_paint.state_neutral);
+              text_ops =
+                (fun id _ color _ ->
+                  if id = today_id then today_ink := Some color;
+                  if id = item then item_ink := Some color;
+                  []);
+            }
+            store scene ~width:600 ~height:700 ~scale:1.
+            ~clear:(Lui_scene.color 255 255 255 255);
+          let filled id color =
+            let rect = Option.get (Lui_layout.rect layout id) in
+            List.exists
+              (function
+                | Lui_scene.Fill fill ->
+                    fill.frect = rect && fill.fcolor = color
+                | _ -> false)
+              scene.ops
+          in
+          let context =
+            accent ^ if mode = Ui_theme.Dark then "/dark" else "/light"
+          in
+          expect
+            ("Calendar today background differs from the reference: " ^ context)
+            (filled today_id background);
+          expect
+            ("Calendar today foreground differs from the reference: " ^ context)
+            (!today_ink = Some foreground);
+          expect
+            ("Calendar month menu loses the shared neutral highlight: "
+           ^ context)
+            (filled item
+               (Option.get
+                  (Theme_vars.color_of "var(--lx-gray-05, hsl(var(--muted)))")));
+          let rgba = function
+            | None -> "none"
+            | Some c -> Printf.sprintf "%d,%d,%d,%d" c.Lui_scene.r c.g c.b c.a
+          in
+          expect
+            ("Calendar month menu inverts text on a neutral highlight: "
+           ^ context ^ " actual=" ^ rgba !item_ink ^ " expected="
+            ^ rgba (Theme_vars.color_of "var(--rx-gray-12)"))
+            (!item_ink = Theme_vars.color_of "var(--rx-gray-12)"))
+        [
+          ( Ui_theme.Light,
+            "logseq",
+            Lui_scene.color 237 237 237 255,
+            Lui_scene.color 23 23 23 255 );
+          ( Ui_theme.Dark,
+            "logseq",
+            Lui_scene.color 0 56 77 255,
+            Lui_scene.color 237 237 237 255 );
+          ( Ui_theme.Light,
+            "blue",
+            Lui_scene.color 237 237 237 255,
+            Lui_scene.color 23 23 23 255 );
+          ( Ui_theme.Dark,
+            "blue",
+            Lui_scene.color 40 40 40 255,
+            Lui_scene.color 237 237 237 255 );
+        ];
+      ignore (Lui_app.dispose app);
+      Theme_vars.set_accent "logseq";
+      Theme_vars.set_dark false;
+      List.iter prerr_endline (List.rev !failures);
+      check "Native calendar and month menu theme parity" (!failures = []);
+      print_endline "native calendar and month menu theme parity: OK")
