@@ -189,7 +189,7 @@ let error_message (json : Js.Json.t) =
   in
   match error_name_of json with
   | Some n -> I18n.t (key n)
-  | None -> T.login_failed
+  | None -> (T.t "account/sign-in-error")
 
 (* cljs login.cljs validate-password! — client-side policy check before
    the signup / confirm-reset calls *)
@@ -230,7 +230,7 @@ let cognito_call ctx target payload f_ok =
        | None -> f_ok json)
    | None -> f_ok json)
   |> Js.Promise.catch (fun _ ->
-         fail ctx T.login_failed;
+         fail ctx (T.t "account/sign-in-error");
          Js.Promise.resolve ())
   |> ignore
 
@@ -261,7 +261,7 @@ let submit ctx fields =
         fail ctx (error_message json);
         Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
-           fail ctx T.login_failed;
+           fail ctx (T.t "account/sign-in-error");
            Js.Promise.resolve ())
     |> ignore
 

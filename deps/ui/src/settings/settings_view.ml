@@ -135,9 +135,9 @@ let theme_item ~st mode label =
 let theme_modes_ul ~st =
   row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
     ~cross:`center ~min_height:85
-    [ theme_item ~st "light" T.theme_light
-    ; theme_item ~st "dark" T.theme_dark
-    ; theme_item ~st "system" T.theme_system
+    [ theme_item ~st "light" (T.t "settings.general/theme-light")
+    ; theme_item ~st "dark" (T.t "settings.general/theme-dark")
+    ; theme_item ~st "system" (T.t "settings.general/theme-system")
     ]
 
 (* shui select trigger + chevron; the popover mounts as a sibling so
@@ -184,13 +184,13 @@ let body (_ms : Model.t Signal.signal) : t =
       [ heading ~key:"st-h" ~level:2
           ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
           ~data_attrs:[ ("style", "letter-spacing:-0.01em;margin:0") ]
-          ~style_class:"ui__dialog-title" ~value:T.settings_title []
+          ~style_class:"ui__dialog-title" ~value:(T.t "nav/settings") []
       ; column ~key:"st-theme" ~style_class:"ls-settings-col" ~gap:8
-          [ text ~key:"st-tl" ~value:T.theme_label []
+          [ text ~key:"st-tl" ~value:(T.t "mobile.settings/theme") []
           ; theme_modes_ul ~st:mode
           ]
       ; column ~key:"st-lang" ~style_class:"ls-settings-col" ~gap:8
-          [ text ~key:"st-ll" ~value:T.language_label []
+          [ text ~key:"st-ll" ~value:(T.t "settings.general/language") []
           ; lang_trigger ~ctx ~key:"st-ls" ~height:40
               ~st:lang_label
           ]

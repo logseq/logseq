@@ -61,8 +61,9 @@ let search_btn ?(key = "search-btn") () =
 (* cljs anchors the dropdown to the trigger's right edge — the fixed
    trailing position: menu right edge just left of the last button,
    just under the header. *)
-let dots_btn =
-  icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
+let dots_btn : t =
+ fun context parent ->
+  (icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
     ~label:(I18n.t "header/more") (fun () ->
       (* re-pressing the trigger toggles the menu closed (the document
@@ -75,6 +76,7 @@ let dots_btn =
           let x = Host.inner_width () -. 48. in
           Runtime.send
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
+  ) context parent
 
 let home_btn ms =
   icon_btn ~key:"home-btn" ~acc:"home-btn" ~icon_name:"home"
@@ -459,27 +461,27 @@ let help_menu_popup () : t =
     ~on_dismiss:(fun _ -> close ())
     [ column ~key:"help-menu-inner" ~style_class:"cp__sidebar-help-menu-popup"
     [ column ~key:"hm-wrap"
-        [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
-        ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
+        [ help_item "hm-handbook" (I18n.t "help/handbook") "book-2" close
+        ; help_item "hm-shortcuts" (I18n.t "help.shortcuts/label") "command" close
+        ; help_item "hm-docs" (I18n.t "help/docs") "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; divider ~key:"hm-hr1" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-bug" (I18n.help_bug) "bug" close
-        ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
+        ; help_item "hm-bug" (I18n.t "help/bug") "bug" close
+        ; help_item "hm-feature" (I18n.t "help/feature") "git-pull-request"
             (fun () ->
               open_url
                 "https://discuss.logseq.com/c/feedback/feature-requests/";
               close ())
-        ; help_item "hm-feedback" (I18n.help_feedback) "messages"
+        ; help_item "hm-feedback" (I18n.t "help/submit-feedback") "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
         ; divider ~key:"hm-hr2" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
+        ; help_item "hm-discord" (I18n.t "help/ask-community") "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
+        ; help_item "hm-forum" (I18n.t "help/support-forum") "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
         ; divider ~key:"hm-hr3" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
+        ; help_item "hm-notes" (I18n.t "help/release-notes") "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
@@ -525,7 +527,8 @@ let help_area (ms : Model.t Signal.signal) : t =
    as a fixed overlay (remounting the whole app tree inside a dyn
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
-  (* .cp__not-found (stylesheet / Swift style entry) carries the
+ fun context parent ->
+  ((* .cp__not-found (stylesheet / Swift style entry) carries the
      fixed-overlay positioning the inline style used to *)
   column ~key:"nf-full" ~main:`center ~cross:`center
     ~style_class:"cp__not-found"
@@ -541,10 +544,12 @@ let not_found_page : t =
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")
         ~on_press:(fun _ -> Platform.set_location_hash "#/") []
     ]
+  ) context parent
 
 (* page menu dismiss contract (cljs document handlers): Escape or a
    press outside .ui__dropdown-menu-content closes it. Installed once
    per session — the handler reads the live model via [Runtime.model]. *)
+
 let install_menu_dismiss () =
   if not !menu_dismiss_installed then (
     menu_dismiss_installed := true;

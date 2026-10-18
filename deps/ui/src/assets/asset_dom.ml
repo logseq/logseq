@@ -369,23 +369,23 @@ let set_align uuid a =
 let menu_items uuid (b : Model.block) : Views_popup.menu_item list =
   let align_v = b.Model.block_asset_align in
   [ Views_popup.MSub
-      ( I18n.asset_align
+      ( (I18n.t "asset/align")
       , [ Views_popup.MCheck
-            ( I18n.asset_align_left
+            ( (I18n.t "asset/align-left")
             , align_v = None || align_v = Some "left"
             , fun _ -> set_align uuid "left" )
         ; Views_popup.MCheck
-            ( I18n.asset_align_center
+            ( (I18n.t "asset/align-center")
             , align_v = Some "center"
             , fun _ -> set_align uuid "center" )
         ; Views_popup.MCheck
-            ( I18n.asset_align_right
+            ( (I18n.t "asset/align-right")
             , align_v = Some "right"
             , fun _ -> set_align uuid "right" )
         ] )
   ; Views_popup.MSep
   ; Views_popup.MItem
-      ( I18n.asset_delete
+      ( (I18n.t "asset/delete")
       , fun () ->
           Runtime.send
             (Action.Confirm_set

@@ -37,7 +37,7 @@ let default_view_title inst =
   match inst.V.feature with
   | "linked-references" -> I18n.t "view/linked-references"
   | "unlinked-references" -> I18n.t "view/unlinked-references"
-  | _ -> I.all
+  | _ -> (I.t "view/all")
 
 let row_uuids_of (d : Wr.view_data) : string list =
   match d with
@@ -255,8 +255,8 @@ let query_content inst (s : V.vstate) : t =
           ]
       ]
   else if s.V.loading then
-    text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground" []
-  else text ~value:I.no_matched_result ~padding_vertical:8 []
+    text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
+  else text ~value:(I.t "search/no-result") ~padding_vertical:8 []
 
 let query_view_el inst : t =
   Logseq_el.fragment
@@ -730,7 +730,7 @@ let export_edn inst =
     (Ui_task.bind (Ui_services.clipboard_write_text s) (fun () ->
      Runtime.send
        (A.Toast_push
-          { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
+          { M.toast_id = 0; toast_key = None; toast_text = (I.t "export/view-nodes-data-copied")
           ; toast_kind = "success" });
      Ui_task.resolve ()))
 

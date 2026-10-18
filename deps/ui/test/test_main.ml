@@ -3909,12 +3909,12 @@ let test_views_wire4 () =
 
 let test_views_table2 () =
   (* fmt_cell_value: Int under datetime col formats, others prop_text *)
-  let col_dt = { Views_table.created_column with Views_state.c_type = "datetime" } in
+  let col_dt = { (Views_table.created_column ()) with Views_state.c_type = "datetime" } in
   let s = Views_table.fmt_cell_value col_dt (Wire.Int 0) in
   check "fmt_cell_value datetime shape"
     (String.length s = 16 && String.get s 4 = '-' && String.get s 10 = ' ');
   eqs "fmt_cell_value plain" "5"
-    (Views_table.fmt_cell_value Views_table.title_column (Wire.Int 5));
+    (Views_table.fmt_cell_value (Views_table.title_column ()) (Wire.Int 5));
   (* cell_value: builtin reads directly, else property map fallback *)
   let blk =
     wmap
@@ -3923,7 +3923,7 @@ let test_views_table2 () =
         , wmap [ ("user.prop/x", Wire.Int 9) ] ) ]
   in
   check "cell_value builtin"
-    (Views_table.cell_value blk Views_table.title_column
+    (Views_table.cell_value blk (Views_table.title_column ())
      = Wire.String "T");
   let user_col =
     { Views_state.c_id = "user.prop/x"; c_name = "X"; c_type = "default"
@@ -3940,10 +3940,10 @@ let test_views_table2 () =
     | t -> Some t
   in
   check "title_text select none"
-    (title_text blk Views_table.select_column = None);
-  check "title_text value" (title_text blk Views_table.title_column = Some "T");
+    (title_text blk (Views_table.select_column ()) = None);
+  check "title_text value" (title_text blk (Views_table.title_column ()) = Some "T");
   check "title_text empty none"
-    (title_text (wmap []) Views_table.title_column = None)
+    (title_text (wmap []) (Views_table.title_column ()) = None)
 
 (* ---- Properties_data pure helpers ---- *)
 

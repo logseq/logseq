@@ -479,7 +479,7 @@ let navigate_to_page target =
        && ((flag "hidden?" && not (flag "property?"))
            || (flag "built-in?" && flag "private-built-in?"))
      in
-     if blocked then Toast.warning I18n.cannot_go_to_internal_page
+     if blocked then Toast.warning (I18n.t "nav/cannot-go-to-internal-page")
      else
        (match Wire.map_get_uuid info "alias-source-uuid" with
         | Some src -> push_page_route src

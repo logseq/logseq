@@ -86,20 +86,20 @@ let builtin_column id name ty ?(disable_hide = false) ?(many = false) ()
   { V.c_id = id; c_name = name; c_type = ty; c_prop = None
   ; c_disable_hide = disable_hide; c_many = many }
 
-let select_column : V.column =
-  builtin_column "select" I.select_col "default" ~disable_hide:true ()
+let select_column () : V.column =
+  builtin_column "select" (I.t "view.table/select-column") "default" ~disable_hide:true ()
 
 (* cljs views.cljs keeps the :id column in `columns` but unconditionally
    hides it in `visible-columns` (assoc :id false) — never added here *)
 
-let title_column : V.column = builtin_column "block/title" I.name_ "node" ()
+let title_column () : V.column = builtin_column "block/title" (I.t "view.table/name-column") "node" ()
 
 (* all_pages.cljs uses (t :page/name) — "Page name" — for its title column *)
-let page_title_column : V.column =
-  builtin_column "block/title" I.page_name "node" ()
+let page_title_column () : V.column =
+  builtin_column "block/title" (I.t "view.table/group-page-name") "node" ()
 
-let tags_column : V.column =
-  builtin_column "block/tags" I.filter_tags "node" ~many:true ()
+let tags_column () : V.column =
+  builtin_column "block/tags" (I.t "property.built-in/tags") "node" ~many:true ()
 
 (* cljs get-column-size defaults *)
 let column_size (c : V.column) =
@@ -114,16 +114,16 @@ let inner_cell children =
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
     (row ~cross:`center ~height:32 ~padding_horizontal:8 ~min_width:0 children)
 
-let created_column : V.column =
-  builtin_column "block/created-at" I.created_at "datetime" ()
+let created_column () : V.column =
+  builtin_column "block/created-at" (I.t "page/created-at") "datetime" ()
 
-let updated_column : V.column =
-  builtin_column "block/updated-at" I.updated_at "datetime" ()
+let updated_column () : V.column =
+  builtin_column "block/updated-at" (I.t "page/updated-at") "datetime" ()
 
-let page_column : V.column = builtin_column "block/page" I.page_label "node" ()
+let page_column () : V.column = builtin_column "block/page" (I.t "view.table/page") "node" ()
 
-let refs_count_column : V.column =
-  builtin_column "block.temp/refs-count" I.backlinks "number" ()
+let refs_count_column () : V.column =
+  builtin_column "block.temp/refs-count" (I.t "page/backlinks") "number" ()
 
 (* build-columns port *)
 let titleize_ident ident =
@@ -149,9 +149,9 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
   | "block/collapsed?" | "block/created-at" | "block/updated-at" -> None
   | "block/tags" ->
       Some
-        { (builtin_column "block/tags" I.filter_tags "node" ()) with
+        { (builtin_column "block/tags" (I.t "property.built-in/tags") "node" ()) with
           V.c_many = true }
-  | "block/page" -> Some page_column
+  | "block/page" -> Some (page_column ())
   | "block/journal-day" ->
       Some (builtin_column ident (titleize_ident ident) "datetime" ())
   | _ when
@@ -171,46 +171,46 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
     else
-      { (builtin_column "block/tags" I.filter_tags "node" ()) with
+      { (builtin_column "block/tags" (I.t "property.built-in/tags") "node" ()) with
         V.c_many = true }
       :: props
   in
   match inst.V.kind with
   | V.KAllPages ->
-      [ select_column; page_title_column; refs_count_column; tags_column
-      ; created_column; updated_column ]
+      [ (select_column ()); (page_title_column ()); (refs_count_column ()); (tags_column ())
+      ; (created_column ()); (updated_column ()) ]
   | V.KTagPage _ | V.KPropertyPage _ ->
       (* cljs objects.cljs: Asset-class tag pages get a "File" column
          before the logseq property columns *)
-      [ select_column; title_column ]
+      [ (select_column ()); (title_column ()) ]
       @ (if s.V.asset_class
          then
            [ builtin_column "file" (I18n.t "file/label") "default"
                ~disable_hide:true () ]
          else [])
       @ with_tags
-      @ [ created_column; updated_column; page_column ]
+      @ [ (created_column ()); (updated_column ()); (page_column ()) ]
   | V.KLinkedRefs | V.KUnlinkedRefs ->
       (* cljs build-columns [] {:add-page-column? true} — the "#" index
          column is a cljs-only display column (visible_columns drops
          "id") *)
-      [ select_column; title_column ] @ with_tags
-      @ [ created_column; updated_column; page_column ]
+      [ (select_column ()); (title_column ()) ] @ with_tags
+      @ [ (created_column ()); (updated_column ()); (page_column ()) ]
   | V.KQuery _ ->
       (* cljs get-query-columns: build-columns over view-data :properties
          (idents); created/updated only when pulled for advanced queries *)
       let qcols = List.filter_map (column_of_ident s) s.V.query_idents in
       let tail =
         if s.V.is_advanced then []
-        else [ created_column; updated_column ]
+        else [ (created_column ()); (updated_column ()) ]
       in
-      [ select_column; title_column ] @ qcols @ tail
+      [ (select_column ()); (title_column ()) ] @ qcols @ tail
       @ (if s.V.is_advanced
          then
            (if List.mem "block/created-at" s.V.query_idents
-            then [ created_column ] else [])
+            then [ (created_column ()) ] else [])
            @ (if List.mem "block/updated-at" s.V.query_idents
-              then [ updated_column ] else [])
+              then [ (updated_column ()) ] else [])
          else [])
 
 let visible_columns (s : V.vstate) =
@@ -310,7 +310,7 @@ let select_cell inst ~row_uuid ~blk : t =
         ~style_class:"jtrigger"
         ~data_attrs:[ ("data-table-row-select", "true") ]
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
-            ~aria_label:I.select_row
+            ~aria_label:(I.t "view.table/select-row")
             ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
             ~on_toggle:(fun on ->
               V.update inst (fun s ->
@@ -371,8 +371,8 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                  text (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center ~style_class:"ls-title-ghosts"
                    ~transition:"opacity 150ms"
-                   [ ghost "arrow-right" I.open_
-                   ; ghost "layout-sidebar-right" I.open_in_sidebar ]
+                   [ ghost "arrow-right" (I.t "ui/open")
+                   ; ghost "layout-sidebar-right" (I.t "sidebar.right/open") ]
                ]) ]
 
 let prop_cell ~blk (c : V.column) : t =
@@ -511,7 +511,7 @@ let header_select_cell inst : t =
   let shown (s : V.vstate) = not (V.Sset.is_empty s.V.selected) in
   row ~cross:`center ~main:`center ~width:32 ~height:32
     [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~shown
-        ~aria_label:I.select_all
+        ~aria_label:(I.t "view.table/select-all")
         ~on_toggle:(fun on ->
           V.update inst (fun s ->
               { s with
@@ -560,8 +560,8 @@ let set_column_sort inst (c : V.column) asc =
   refresh inst
 
 let sort_menu_items inst (c : V.column) =
-  [ P.MItem (I.sort_ascending, fun () -> set_column_sort inst c true)
-  ; P.MItem (I.sort_descending, fun () -> set_column_sort inst c false) ]
+  [ P.MItem ((I.t "view.table/sort-ascending"), fun () -> set_column_sort inst c true)
+  ; P.MItem ((I.t "view.table/sort-descending"), fun () -> set_column_sort inst c false) ]
 
 (* sort options as dropdown menuitems — cljs prepends them as
    more-options before the property configure list, with arrow icons *)
@@ -573,7 +573,7 @@ let sort_menuitem_els inst (c : V.column) =
         label (fun () ->
           Properties_state.close_overlays ();
           set_column_sort inst c asc))
-    [ (I.sort_ascending, true); (I.sort_descending, false) ]
+    [ ((I.t "view.table/sort-ascending"), true); ((I.t "view.table/sort-descending"), false) ]
 
 let pinned_columns_ident = "logseq.property.table/pinned-columns"
 
@@ -614,8 +614,8 @@ let column_menuitem_els inst (c : V.column) (p : W.t) =
     | Some _ ->
         [ Properties_menu.menuitem ~icon:"pin"
             (if V.Sset.mem c.V.c_id (V.get inst).V.pinned
-             then I.unpin
-             else I.pin)
+             then (I.t "view.table/unpin")
+             else (I.t "view.table/pin"))
             (fun () ->
               Properties_state.close_overlays ();
               toggle_pin inst c p) ]
@@ -730,7 +730,7 @@ let delete_selected inst () =
           (fun u ->
             match Hashtbl.find_opt s.V.blocks u with
             | Some blk -> (
-                match Wr.prop_text (cell_value blk title_column) with
+                match Wr.prop_text (cell_value blk (title_column ())) with
                 | "" -> None
                 | t -> Some t)
             | None -> None)
@@ -738,7 +738,7 @@ let delete_selected inst () =
       in
       ignore
         (P.show_dialog
-           ~headline:I.batch_delete_title
+           ~headline:(I.t "page.delete/batch-confirm-title")
            ~body:
              [ Ui_components.with_props [Ui_components.Prop.padding_top 16]
                  (scroll ~orientation:`vertical ~max_height:320
@@ -750,7 +750,7 @@ let delete_selected inst () =
              ; text ~padding_horizontal:8 ~font_size:"12px" ~line_height:"20px"
                  ~foreground:"hsl(var(--muted-foreground))"
                  ~value:(I.total (List.length names)) [] ]
-           ~confirm_label:I.yes ~on_confirm:do_delete ())
+           ~confirm_label:(I.t "ui/yes") ~on_confirm:do_delete ())
     else do_delete ()
   end
 
@@ -766,7 +766,7 @@ let copy_selected inst () =
       (fun u ->
         match Hashtbl.find_opt s.V.blocks u with
         | Some blk -> (
-            match Wr.prop_text (cell_value blk title_column) with
+            match Wr.prop_text (cell_value blk (title_column ())) with
             | "" -> None
             | t -> Some t)
         | None -> None)
@@ -1076,7 +1076,7 @@ let table_header inst cols : t =
                 [ box ~accessibility_identifier:"add property"
                     [ box ~style_class:"ls-table-header-cell"
                         [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:(`app "plus")
-                            ~text:I.new_property ~grow:1. ~main:`start
+                            ~text:(I.t "view/new-property") ~grow:1. ~main:`start
                             ~height:32 ~padding_horizontal:8
                             ~on_press:(fun _ ->
                               match p.Model.page_uuid with
@@ -1117,7 +1117,7 @@ let add_row_footer inst : t =
           ~on_press:(fun _ -> (V.ops ()).V.o_add_object inst)
           (row ~gap:4 ~cross:`center ~padding_horizontal:8
              ~padding_vertical:4 ~foreground:"muted-foreground" ~grow:1.
-             [ icon_el "plus"; text ~value:I.new_ [] ]) ])
+             [ icon_el "plus"; text ~value:(I.t "view/new") [] ]) ])
   else spacer ~key:"no-footer" []
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
@@ -1284,7 +1284,7 @@ let group_title s gv =
       | Some t when t <> "" -> t
       | _ -> I.no_group_value (Option.value s.V.group_by ~default:""))
   | W.Nil ->
-      if s.V.group_by = Some "block/page" then I.pages
+      if s.V.group_by = Some "block/page" then (I.t "view.table/pages")
       else I.no_group_value (Option.value s.V.group_by ~default:"")
   | v -> Wr.prop_text v
 
@@ -1643,7 +1643,7 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
          if s.V.loading && refs && not has_data then
            box ~key:"ls-view-pending" []
          else if s.V.loading && not has_data then
-         text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
+         text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground"
            []
        else
          (* master renders no empty-state copy under an empty table *)

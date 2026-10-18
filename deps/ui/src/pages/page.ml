@@ -1239,23 +1239,25 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
 let not_found_view name : t =
   column ~key:"not-found" ~style_class:"page"
     [ column ~key:"nf-inner" ~cross:`center
-        [ text ~key:"nf-t" ~value:(I18n.page_not_found ^ name) [] ]
+        [ text ~key:"nf-t" ~value:((I18n.page_not_found ()) ^ name) [] ]
     ]
 
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
-  box ~key:"lib-add" ~padding_horizontal:4 
+ fun context parent ->
+  (box ~key:"lib-add" ~padding_horizontal:4
     [ Ui_components.button ~key:"lib-add-btn" ~variant:`secondary ~icon:(`app "plus")
         ~text:(I18n.t "library/add-existing-pages")
         ~style_class:"ui__button"
         ~on_press:(fun _ -> Runtime.send Action.Toggle_search)
         []
     ]
+  ) context parent
 
 let empty_state () : t =
   column ~key:"empty" ~style_class:"page"
     [ column ~key:"empty-inner" ~cross:`center
-        [ text ~key:"empty-t" ~value:I18n.loading [] ]
+        [ text ~key:"empty-t" ~value:(I18n.t "ui/loading") [] ]
     ]
 
 (* --- stable page region --------------------------------------------

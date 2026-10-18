@@ -172,7 +172,7 @@ let open_readme (item : Js.Json.t) =
            Dialogs_state.open_ "plugin-readme";
            Js.Promise.resolve ()
        | None ->
-           Toast.warning I18n.plugin_readme_empty;
+           Toast.warning (I18n.t "plugin/readme-empty-warning");
            Js.Promise.resolve ())
 
 (* cljs local-markdown-display *)

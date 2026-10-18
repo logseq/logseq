@@ -201,7 +201,7 @@ let png_preview ctx =
              (st_sig ctx))
         [ image ~key:"export-preview-img"
             ~accessibility_identifier:"export-preview"
-            ~alt:I18n.export_preview_alt
+            ~alt:(I18n.t "export/preview-alt")
             ~url:
               (reactive
                  (fun (st : S.t) -> Option.value st.png_url ~default:"")
@@ -221,7 +221,7 @@ let lower_options ctx =
       match fmt with
       | S.Png ->
           row ~key:"png-opts" ~cross:`center ~gap:16
-            [ text ~key:"png-tb-l" ~value:I18n.export_transparent_bg []
+            [ text ~key:"png-tb-l" ~value:(I18n.t "export/transparent-background") []
             ; checkbox ctx ~key:"cb-tb"
                 ~show:(fun _ -> true)
                 ~on:(fun st -> st.S.png_transparent)

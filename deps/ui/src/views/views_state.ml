@@ -341,7 +341,7 @@ let apply_view_entity s (v : Views_wire.view_ent) : vstate =
   }
 
 let display_title (v : Views_wire.view_ent) =
-  if String.trim v.vtitle = "" then I18n.new_view else v.vtitle
+  if String.trim v.vtitle = "" then (I18n.t "view/new-view") else v.vtitle
 
 (* persisted write helpers *)
 let persist_sorting inst =

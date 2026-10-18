@@ -12,7 +12,7 @@ open Lui_elements
 let keyed = Lui_elements.keyed
 
 let dialog_close ~key close =
-  Ui_components.dialog_close ~key ~label:I18n.close
+  Ui_components.dialog_close ~key ~label:(I18n.t "ui/close")
     ~on_press:(fun _ -> close ())
 
 let body_of name (ms : Model.t Signal.signal) : t =
@@ -50,7 +50,7 @@ let dialog_spec name =
 
 (* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
 let title_of = function
-  | "new-graph" | "add-graph" -> I18n.create_new_graph
+  | "new-graph" | "add-graph" -> (I18n.t "graph/create-new")
   | _ -> ""
 
 (* dialog kind: scrim + centered card + focus trap + outside/Escape
@@ -137,11 +137,11 @@ let confirm_view (c : Dialogs_state.confirm) =
         @ [ (* cljs dialog-confirm footer buttons are :size :sm *)
             Ui_components.alert_dialog_footer ~key:"cfrm-f"
               [ Ui_components.button ~key:"cfrm-cancel"
-                  ~size:`sm ~variant:`outline ~text:I18n.cancel
+                  ~size:`sm ~variant:`outline ~text:(I18n.t "ui/cancel")
                   ~on_press:(fun _ -> Dialogs_state.close_confirm ()) []
               ; (* cljs alert dialog focuses the confirm action on open *)
                 Ui_components.button ~key:"cfrm-ok" ~size:`sm
-                  ~variant:`primary ~text:I18n.confirm ~autofocus:true
+                  ~variant:`primary ~text:(I18n.t "ui/confirm") ~autofocus:true
                   ~on_press:(fun _ -> Dialogs_state.confirm ()) [] ] ] ) ]
 (* Prompt body — mounted inside a dialog kind in [render]; outside
    presses and Escape dismiss through ~on_dismiss. *)
@@ -181,7 +181,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
             ~on_submit:(fun _ -> submit ())
             []
         ; Ui_components.button ~key:"prmt-ok" ~size:`sm
-            ~variant:`primary ~text:I18n.submit
+            ~variant:`primary ~text:(I18n.t "ui/submit")
             ~on_press:(fun _ -> submit ()) [] ] )
   in
   node ctx parent

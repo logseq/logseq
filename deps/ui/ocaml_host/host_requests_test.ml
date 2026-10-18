@@ -1153,7 +1153,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     (List.length graph_actions=3);
   check "Graph quick actions must expose accessible button names on every host"
     (List.map (fun id -> Lui_store.string_prop store id "accessibility-label") graph_actions
-     = List.map Option.some [I18n.create_db_graph;I18n.import_existing_notes;I18n.all_graphs]);
+     = List.map Option.some [(I18n.t "graph/create-db");(I18n.t "import/notes");(I18n.t "graph/all-graphs")]);
   check (Printf.sprintf "Native graph menu height %.1f differs from the 118-point reference" (popup_rect.h/.2.))
     (abs_float (popup_rect.h-.236.)<0.1);
   List.iteri (fun index id ->
@@ -1181,7 +1181,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       else None) (Lui_store.preorder store) in
   check "Native graph switch must show other graphs from the model without visiting All graphs"
     (List.mem "Other" (popup_texts ()) && not (List.mem "Demo" (popup_texts ()))
-      && List.mem I18n.switch_to (popup_texts ()));
+      && List.mem (I18n.t "graph.switch/prompt") (popup_texts ()));
   let graph_popup_id=find_class "repos-list" in
   ignore (Lui_app.send app {graph_model with repos=graph_model.repos@["logseq_db_Added"]});
   ignore (Lui_app.flush app);
@@ -1194,7 +1194,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   check "A single-graph native switch must remove stale rows and its switch heading"
     (not (List.mem "Other" (popup_texts ()))
       && not (List.mem "Added" (popup_texts ()))
-      && not (List.mem I18n.switch_to (popup_texts ())));
+      && not (List.mem (I18n.t "graph.switch/prompt") (popup_texts ())));
   Signal.set sidebar_state.open_menu "";
   ignore (Lui_app.send app initial);
   ignore (Lui_app.flush app);
@@ -4006,7 +4006,7 @@ let () =
              -. ((rect (List.hd fonts)).x +. (rect (List.hd fonts)).w)
             = 16.);
           let global_label = List.find (fun id -> Lui_store.kind store id="checkbox"
-            && Lui_store.string_prop store id "text"=Some I18n.editor_font_global) nodes in
+            && Lui_store.string_prop store id "text"=Some (I18n.t "settings.general/editor-font-set-global")) nodes in
           expect "Global font checkbox label is not fourteen-point text"
             (Lui_text.size (Text_engine.font_of store global_label) = 14.);
           let font_name = font_text (List.hd fonts) ~caption:true in
@@ -4333,7 +4333,7 @@ let () =
                 List.find
                   (fun id ->
                     Lui_store.string_prop store id "accessibility-label"
-                    = Some I18n.keymap_toggle_categories)
+                    = Some (I18n.t "keymap/toggle-categories-pane"))
                   (Lui_store.preorder store)
               in
               let first_category () =
@@ -4343,8 +4343,8 @@ let () =
                 List.filter
                   (fun id ->
                     let label = Lui_store.string_prop store id "accessibility-label" in
-                    label = Some I18n.keymap_toggle_categories
-                    || label = Some I18n.keymap_refresh_all)
+                    label = Some (I18n.t "keymap/toggle-categories-pane")
+                    || label = Some (I18n.t "keymap/refresh-all"))
                   (Lui_store.preorder store)
               in
               expect "Native empty query must show category actions"
@@ -4547,7 +4547,7 @@ let () =
               let refresh () =
                 let target = List.find (fun id ->
                     Lui_store.string_prop store id "accessibility-label"
-                    = Some I18n.keymap_refresh_all) (Lui_store.preorder store) in
+                    = Some (I18n.t "keymap/refresh-all")) (Lui_store.preorder store) in
                 dispatch (Press target)
               in
               let displays value = List.exists (fun id ->
@@ -5002,17 +5002,17 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Lui_store.preorder store) in
       let label () = Lui_store.string_prop store item "text" in
       expect "Native favorite label uses the route instead of its target"
-        (label ()=Some I18n.unfavorite_page);
+        (label ()=Some (I18n.t "page/unfavorite"));
       expect "Native navigation checkbox menu displays a translation key instead of Pages"
         (List.exists (fun id ->
           Lui_store.string_prop store id "text"=Some (I18n.t "nav.all-pages/label"))
           (Lui_store.preorder store));
       Runtime.signal_set st.favorites [current];ignore (Lui_app.flush app);
       expect "Native favorite label does not follow its target UUID"
-        (label ()=Some I18n.add_to_favorites);
+        (label ()=Some (I18n.t "page/add-to-favorites"));
       Runtime.signal_set st.favorites [target];ignore (Lui_app.flush app);
       expect "Native favorite label does not update on the existing row"
-        (label ()=Some I18n.unfavorite_page);
+        (label ()=Some (I18n.t "page/unfavorite"));
       let favorites = Hashtbl.create 2 and writes = ref [] in
       Hashtbl.add favorites "menu-target" true;Hashtbl.add favorites "current-route" false;
       Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
@@ -5033,7 +5033,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       expect "Native favorite action mutates the current route instead of its target"
         (!writes=["menu-target",false]);
       expect "Native favorite action does not refresh the target's label"
-        (label ()=Some I18n.add_to_favorites));
+        (label ()=Some (I18n.t "page/add-to-favorites")));
   List.iter prerr_endline (List.rev !failures);
   check "Native page-menu favorite target and reactive label" (!failures=[]);
   print_endline "native page-menu favorite target and reactive label: OK")
@@ -5089,7 +5089,7 @@ let () = Native_embed.with_entry_lock (fun () ->
              Wire.Keyword "block/name",Wire.String "Fixture page";
              Wire.Keyword "block/title",Wire.String "Fixture page"]);
           let state = {(Views_state.empty_vstate ()) with
-            Views_state.columns=[Views_table.page_title_column;Views_table.updated_column];
+            Views_state.columns=[(Views_table.page_title_column ());(Views_table.updated_column ())];
             sorting=[{Views_state.s_id="block/updated-at";s_asc=false}];
             blocks;loading=false;
             data=Views_wire.VFlat {rows=["table-page"];count=1;previews=Hashtbl.create 0;qprops=[]}} in
@@ -5119,9 +5119,9 @@ let () = Native_embed.with_entry_lock (fun () ->
             (left >= (rect cell).x+.7.*.scale && left <= (rect cell).x+.13.*.scale);
           expect "Native table header ink ignores its muted foreground"
             (Some color=Theme_vars.color_of "hsl(var(--muted-foreground))"))
-          [Views_table.page_title_column;Views_table.updated_column];
+          [(Views_table.page_title_column ());(Views_table.updated_column ())];
         let arrow = List.find (fun id -> Lui_store.kind store id="icon") ids in
-        let _,_,_,right,_ = label Views_table.updated_column.c_name in
+        let _,_,_,right,_ = label (Views_table.updated_column ()).c_name in
         expect "Native sort arrow precedes or overlaps its column label"
           ((rect arrow).x >= right+.2.*.scale);
         let _,_,top,_,_ = label "Fixture page" in
@@ -5144,7 +5144,7 @@ let () = Native_embed.with_entry_lock (fun () ->
             =Some (Views_table.header_cell_id inst c)) ids in
           expect "Native table header cell omits its trailing grid line"
             (has_grid (rect cell) (-1.) 0.))
-          [Views_table.page_title_column;Views_table.updated_column])) [1.;2.]);
+          [(Views_table.page_title_column ());(Views_table.updated_column ())])) [1.;2.]);
   List.iter prerr_endline (List.rev !failures);
   check "Native table geometry and paint parity" (!failures=[]);
   print_endline "native table geometry and paint parity: OK")
@@ -5193,9 +5193,9 @@ let () = Native_embed.with_entry_lock (fun () ->
              Wire.Keyword "block/name",Wire.String "Scrollable page";
              Wire.Keyword "block/title",Wire.String "Scrollable page"]);
           let view = {(Views_state.empty_vstate ()) with
-            Views_state.columns=[Views_table.select_column;Views_table.page_title_column;
-              Views_table.refs_count_column;Views_table.tags_column;Views_table.created_column;
-              Views_table.updated_column];blocks;loading=false;
+            Views_state.columns=[(Views_table.select_column ());(Views_table.page_title_column ());
+              (Views_table.refs_count_column ());(Views_table.tags_column ());(Views_table.created_column ());
+              (Views_table.updated_column ())];blocks;loading=false;
             data=Views_wire.VFlat {rows=["scroll-page"];count=1;previews=Hashtbl.create 0;qprops=[]}} in
           let inst = {inst with Views_state.st=state view} in
           inst_cell:=Some inst;
@@ -5213,8 +5213,8 @@ let () = Native_embed.with_entry_lock (fun () ->
         let header c = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
           =Some (Views_table.header_cell_id inst c)) ids in
         let rect id = W.Rects.get (A.rects surface) id in
-        let title = header Views_table.page_title_column
-        and updated = header Views_table.updated_column in
+        let title = header (Views_table.page_title_column ())
+        and updated = header (Views_table.updated_column ()) in
         expect "Narrow tables must preserve the reference's 360-point title column"
           (abs_float ((rect title).w-.360.*.scale)<0.1);
         expect "The table scroller expands instead of remaining inside its viewport"
@@ -5293,7 +5293,7 @@ let () = Native_embed.with_entry_lock (fun () ->
            Wire.Keyword "block/name",Wire.String uuid;Wire.Keyword "block/title",Wire.String uuid]))
           ["row-a";"row-b"];
         let view = {(Views_state.empty_vstate ()) with
-          Views_state.columns=[Views_table.select_column;Views_table.page_title_column];blocks;loading=false;
+          Views_state.columns=[(Views_table.select_column ());(Views_table.page_title_column ())];blocks;loading=false;
           data=Views_wire.VFlat {rows=["row-a";"row-b"];count=2;previews=Hashtbl.create 0;qprops=[]}} in
         let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler view} in
         inst_cell:=Some inst;
@@ -5360,9 +5360,9 @@ let () = Native_embed.with_entry_lock (fun () ->
       List.iter (fun value ->
         expect ("Page deletion confirmation must paint " ^ value)
           (List.exists (fun (id,text) -> in_confirmation id && text=value) !drawn_text))
-        [I18n.batch_delete_title;"row-a";I18n.total 1];
+        [(I18n.t "page.delete/batch-confirm-title");"row-a";I18n.total 1];
       let cancel = List.find (fun id -> Lui_store.kind store id="button"
-        && Lui_store.string_prop store id "text"=Some I18n.cancel && in_confirmation id)
+        && Lui_store.string_prop store id "text"=Some (I18n.t "ui/cancel") && in_confirmation id)
         (Lui_store.preorder store) in
       apply [W.Dispatch (Press cancel)];
       expect "Cancelling page deletion changes the selected rows"
@@ -5508,7 +5508,7 @@ let () =
                         Lui_elements.row ~main:`end_ ~margin_right:100
                           [
                             Ui_components.button ~variant:`ghost ~size:`icon
-                              ~label:I18n.close
+                              ~label:(I18n.t "ui/close")
                               ~accessibility_identifier:
                                 "native-date-scroll-anchor"
                               [];
@@ -5547,7 +5547,7 @@ let () =
                   in
                   (Runtime.app_flush := fun () -> ignore (Lui_app.flush app));
                   Views_head.filter_value_phase (Option.get !instance) ~anchor
-                    Views_table.created_column;
+                    (Views_table.created_column ());
                   Host.drain ();
                   ignore (Lui_app.flush app);
                   ignore (A.store_changed surface);
@@ -5570,7 +5570,7 @@ let () =
                                Lui_store.string_prop store child "text"
                                = Some
                                    (List.assoc "custom-date"
-                                      I18n.timestamp_options))
+                                      (I18n.timestamp_options ())))
                              (Lui_store.preorder ~root:id store))
                       (ids ())
                   in
@@ -6634,7 +6634,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       ignore (A.store_changed surface);ignore (A.repaint surface);
       let store=A.store surface in
       let checkbox=List.find_opt (fun id -> Lui_store.kind store id="checkbox"
-        && Lui_store.string_prop store id "text"=Some I18n.editor_font_global)
+        && Lui_store.string_prop store id "text"=Some (I18n.t "settings.general/editor-font-set-global"))
         (Lui_store.preorder store) in
       check "Global font checkbox must own its visible caption and accessible name" (checkbox<>None);
       let checkbox=Option.get checkbox in
@@ -6642,7 +6642,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Lui_store.prop store checkbox "foreground"=None);
       check "Global font caption opacity must be separate from its indicator"
         (Lui_store.float_prop store checkbox "label-opacity"=Some 0.7);
-      let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some I18n.accent_color_alert)
+      let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t "settings.general/accent-color-alert"))
         (Lui_store.preorder store) in
       let accent=Option.get (Lui_store.parent store note) in
       check (Printf.sprintf "Accent group height at compact=%b scale=%.0f: %.2f" compact scale ((W.Rects.get (A.rects surface) accent).h/.scale))
@@ -8377,3 +8377,37 @@ let () = Native_embed.with_entry_lock (fun () ->
           (List.concat_map (fun accent -> [Ui_theme.Light,accent;Ui_theme.Dark,accent]) Ui_theme_css.accents)))
       [false;true]);
   print_endline "native property result theme and highlight paint: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  Platform_native.load_state ();
+  let previous_language=Hashtbl.find_opt Platform_native.ls "preferred-language"
+  and previous_dictionary=Hashtbl.find_opt I18n.locale_tbls "zh-CN" in
+  Fun.protect ~finally:(fun () ->
+    (match previous_language with
+     | Some value -> Hashtbl.replace Platform_native.ls "preferred-language" value
+     | None -> Hashtbl.remove Platform_native.ls "preferred-language");
+    (match previous_dictionary with
+     | Some value -> Hashtbl.replace I18n.locale_tbls "zh-CN" value
+     | None -> Hashtbl.remove I18n.locale_tbls "zh-CN")) (fun () ->
+    let dictionary=Hashtbl.create 4 in
+    List.iter (fun (key,value) -> Hashtbl.add dictionary key value)
+      ["header/more","Translated More";
+       "page/not-found-title","Translated Not Found";
+       "settings.sync-server/url","Translated Sync server"];
+    Hashtbl.replace I18n.locale_tbls "zh-CN" (Some dictionary);
+    Hashtbl.replace Platform_native.ls "preferred-language" "\"zh-CN\"";
+    let store=Lui_store.create () in
+    let backend={backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+    let app=Lui_app.create backend Model.initial (fun model () -> model)
+      (fun _ model _ -> Lui_elements.column
+        [Chrome.dots_btn;Chrome.not_found_page;Settings_url_view.sync_body model]) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let ids=Lui_store.preorder store in
+      List.iter (fun (property,value) ->
+        check ("Native retained view resolves late locale: " ^ value)
+          (List.exists (fun id -> Lui_store.string_prop store id property=Some value) ids))
+        ["accessibility-label","Translated More";
+         "text","Translated Not Found";"text","Translated Sync server"]));
+  print_endline "native late locale view construction: OK")

@@ -192,8 +192,8 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; storage_get = Ui_services.storage_get
   ; open_settings = (fun () -> Dialogs_state.open_ "settings")
   ; close_settings = Dialogs_state.close_all
-  ; wide_mode_label = I18n.wide_mode
-  ; theme_label = (function "dark" -> I18n.theme_dark | "light" -> I18n.theme_light | "system" -> I18n.theme_system | _ -> invalid_arg "Unknown theme")
+  ; wide_mode_label = (I18n.t "settings.editor/wide-mode")
+  ; theme_label = (function "dark" -> (I18n.t "settings.general/theme-dark") | "light" -> (I18n.t "settings.general/theme-light") | "system" -> (I18n.t "settings.general/theme-system") | _ -> invalid_arg "Unknown theme")
   ; theme_snapshot = (fun () ->
       let snapshot : unit -> Shared_scenarios.theme_snapshot = [%mel.raw
         "function () { const root = document.documentElement.classList, body = document.body.classList; return {root_dark: root.contains('dark'), body_dark: body.contains('dark-theme'), body_light: body.contains('light-theme'), body_white: body.contains('white-theme')}; }"] in
@@ -2061,6 +2061,7 @@ let run ~finish =
   let install_emoji_fixture : unit -> unit = [%mel.raw
     "function () {document.elementFromPoint = () => null; window.__emojiData = {categories: [], aliases: {}, sheet: {}, emojis: {grinning: {name: 'Grinning Face'}}}}"] in
   install_emoji_fixture ();
+  Shared_ui_regression_test.localization ();
   Shared_ui_regression_test.run_views ~registry:(Views_drive.registry ())
     ~profile:Logseq_el.web_profile ~finish:(fun () ->
   Shared_ui_regression_test.dates ();

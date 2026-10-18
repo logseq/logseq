@@ -273,7 +273,7 @@ let ask_delete ~remote repo =
     ~title:
       (if remote then T.delete_remote_confirm repo
        else T.delete_local_confirm repo)
-    ~desc:T.delete_warning
+    ~desc:(T.t "graph/delete-warning")
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
     ()
 

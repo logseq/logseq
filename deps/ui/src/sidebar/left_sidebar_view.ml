@@ -283,7 +283,7 @@ let repos_menu_content st (m : Model.t) : t =
                (row ~key:"hd" ~main:`space_between ~cross:`center
                   ~padding:8 ~opacity:0.5
                   [ Ui_components.with_props [Ui_components.Prop.padding_bottom 4]
-                      (text ~key:"h4" ~value:I18n.switch_to []) ]))
+                      (text ~key:"h4" ~value:(I18n.t "graph.switch/prompt") []) ]))
         ; (if n_repos <= 1 then Logseq_el.nothing
            else
              scroll ~key:"lst" ~orientation:`vertical ~max_height:320
@@ -301,11 +301,11 @@ let repos_menu_content st (m : Model.t) : t =
             ; Ui_components.Prop.padding_left 4 ]
           (column ~key:"qa" ~margin_horizontal:(-8)
             ~margin_top:(if n_repos<=1 then -6 else 0)
-            [ action "qa-new" I18n.create_db_graph "database-plus"
+            [ action "qa-new" (I18n.t "graph/create-db") "database-plus"
                 (fun () -> Dialogs_state.open_ "new-graph")
-            ; action "qa-imp" I18n.import_existing_notes "database-import"
+            ; action "qa-imp" (I18n.t "import/notes") "database-import"
                 (fun () -> Ui_services.nav_set_hash "#/import")
-            ; action "qa-all" I18n.all_graphs "layout-2" (fun () ->
+            ; action "qa-all" (I18n.t "graph/all-graphs") "layout-2" (fun () ->
                   Ui_services.nav_set_hash
                     (Runtime.nav_hash "#/graphs")) ]) ]
 

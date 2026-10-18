@@ -18,6 +18,75 @@ let button_properties n =
       | None -> props)
     P.Property_map.empty [ P.TextValue; P.AccessibilityLabel ]
 
+let localization () =
+  let previous_language = Platform.local_storage_get "preferred-language" in
+  let previous_dictionary = Hashtbl.find_opt I18n.locale_tbls "zh-CN" in
+  let previous_flush = !Runtime.app_flush in
+  let previous_settings = !Settings_state.st in
+  Settings_state.st:=None;
+  Fun.protect ~finally:(fun () ->
+    (match previous_language with
+     | Some language -> Platform.local_storage_set "preferred-language" language
+     | None -> Platform.local_storage_remove "preferred-language");
+    (match previous_dictionary with
+     | Some dictionary -> Hashtbl.replace I18n.locale_tbls "zh-CN" dictionary
+     | None -> Hashtbl.remove I18n.locale_tbls "zh-CN");
+    Runtime.app_flush:=previous_flush;
+    Settings_state.st:=previous_settings) (fun () ->
+    let dictionary=Hashtbl.create 16 in
+    List.iter (fun (key,value) -> Hashtbl.add dictionary key value)
+      ["nav/settings","Translated Settings";
+       "settings/general","Translated General";
+       "settings/editor","Translated Editor";
+       "settings/keymap","Translated Keymap";
+       "settings/advanced","Translated Advanced";
+       "settings/features","Translated Features";
+       "settings.general/current-version","Translated Version";
+       "view.table/group-page-name","Translated Page name";
+       "view.filter/custom-date","Translated Custom date";
+       "header/more","Translated More";
+       "nav/skip-to-main-content","Translated Skip";
+       "settings.sync-server/url","Translated Sync server";
+       "page/not-found-title","Translated Not Found";
+       "library/add-existing-pages","Translated Add Pages";
+       "view.table/select-column","Translated Select column"];
+    Hashtbl.replace I18n.locale_tbls "zh-CN" (Some dictionary);
+    Platform.local_storage_set "preferred-language" "\"zh-CN\"";
+    check "Locale fixture loads after application modules initialize"
+      (I18n.t "settings/general"="Translated General");
+    let columns=ref [] in
+    let session=S.mount ~registry:(Views_drive.registry ())
+      ~profile:Logseq_el.web_profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context model _ ->
+        Settings_state.ensure context;
+        columns:=Views_table.build_columns
+          (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+             ~kind:Views_state.KAllPages ~feature:"locale-columns" ~owner:Wire.Nil) [];
+        Lui_elements.column
+          (Page_menu.global_items ()
+           @ List.mapi (fun i item -> Settings_page.nav_item ~key:("locale-nav-"^string_of_int i) item)
+               (Settings_page.nav_items ())
+           @ [Settings_page.general_pane ~modal:false context;
+              Chrome.dots_button; Chrome.skip_to_main; Chrome.not_found_page;
+              Settings_url_view.sync_body model;
+              Page.library_add_pages_button])) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let texts=List.filter_map (fun n -> M.string_prop n "text") (nodes session) in
+      List.iter (fun value -> check ("Late locale reaches " ^ value) (List.mem value texts))
+        ["Translated Settings";"Translated General";"Translated Editor";
+         "Translated Keymap";"Translated Advanced";"Translated Features";
+         "Translated Version";"Translated Skip";"Translated Not Found";
+         "Translated Sync server";"Translated Add Pages"];
+      check "Late locale reaches the retained More recipe"
+        (List.exists (fun n -> M.string_prop n "accessibility-label"=Some "Translated More") (nodes session)));
+    check "Built-in view columns resolve the initialized locale"
+      (List.exists (fun (column:Views_state.column) -> column.c_name="Translated Page name") !columns);
+    check "Selection column resolves the initialized locale"
+      (List.exists (fun (column:Views_state.column) -> column.c_name="Translated Select column") !columns);
+    check "Timestamp choices resolve the initialized locale"
+      (List.exists (fun (_,label) -> label="Translated Custom date") (I18n.timestamp_options ())))
+
 let run_views ~registry ~profile ~finish =
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
@@ -324,7 +393,7 @@ let run_views ~registry ~profile ~finish =
               if empty_action then begin
                 S.text_changed selector input.M.id "No matching value";
                 let action=List.find_opt (fun n -> n.M.kind="button"
-                  && List.exists (fun c -> M.string_prop c "text"=Some I18n.is_empty)
+                  && List.exists (fun c -> M.string_prop c "text"=Some (I18n.t "view.filter/is-empty"))
                     (M.children selector.S.tree n.M.id)) (nodes selector) in
                 check "value search preserves its empty-value footer action" (Option.is_some action);
                 Option.iter (fun n -> S.press selector n.M.id) action
@@ -341,10 +410,10 @@ let run_views ~registry ~profile ~finish =
     in
     let data source values=Wire.Map [Wire.kw "value-source",Wire.Keyword source;
       Wire.kw "values",Wire.Array values] in
-    next [Views_table.created_column,data "timestamp" [],List.length I18n.timestamp_options,false;
-      {Views_table.created_column with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"},
+    next [(Views_table.created_column ()),data "timestamp" [],List.length (I18n.timestamp_options ()),false;
+      {(Views_table.created_column ()) with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"},
         data "checkbox" [],2,true;
-      {Views_table.created_column with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
+      {(Views_table.created_column ()) with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
         data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
   in
   let custom_date_check done_ =
@@ -367,7 +436,7 @@ let run_views ~registry ~profile ~finish =
             Views_state.update inst (fun st -> {st with filters_or=true});
             instance:=Some inst;popup_layer context parent) in
           let inst=Option.get !instance in
-          Views_head.filter_value_phase inst ~anchor:(popup_anchor ()) Views_table.created_column;
+          Views_head.filter_value_phase inst ~anchor:(popup_anchor ()) (Views_table.created_column ());
           ignore (Js.Promise.then_ (fun () ->
             let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
             S.text_changed selector input.M.id I18n.(t "view.filter/custom-date");
@@ -657,15 +726,15 @@ let run_views ~registry ~profile ~finish =
     |> List.sort (fun a b -> Int.compare a.M.id b.M.id) |> List.hd in
   let label () = M.string_prop (List.find (fun n -> n.M.id=item.M.id) (nodes menu)) "text" in
   check "page menu reflects the target favorite instead of the current route"
-    (label ()=Some I18n.unfavorite_page);
+    (label ()=Some (I18n.t "page/unfavorite"));
   check "navigation checkbox menu uses the translated Pages label"
     (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "nav.all-pages/label")) (nodes menu));
   Runtime.signal_set st.favorites [current]; S.flush menu;
   check "page menu reacts to favorite changes without remounting its row"
-    (label ()=Some I18n.add_to_favorites);
+    (label ()=Some (I18n.t "page/add-to-favorites"));
   Runtime.signal_set st.favorites [target]; S.flush menu;
   check "page menu restores the target's favorite label with the same row identity"
-    (label ()=Some I18n.unfavorite_page);
+    (label ()=Some (I18n.t "page/unfavorite"));
   let queried = ref [] in
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
       queried:=(name,args)::!queried;
@@ -1009,15 +1078,15 @@ let run_views ~registry ~profile ~finish =
     List.find
       (fun n ->
         M.string_prop n "accessibility-label"
-        = Some I18n.keymap_toggle_categories)
+        = Some (I18n.t "keymap/toggle-categories-pane"))
       (keymap_nodes ())
   in
   let category_tools () =
     List.filter
       (fun n ->
         let label = M.string_prop n "accessibility-label" in
-        label = Some I18n.keymap_toggle_categories
-        || label = Some I18n.keymap_refresh_all)
+        label = Some (I18n.t "keymap/toggle-categories-pane")
+        || label = Some (I18n.t "keymap/refresh-all"))
       (keymap_nodes ())
   in
   eqi "empty query shows category actions" 2 (List.length (category_tools ()));
@@ -1069,7 +1138,7 @@ let run_views ~registry ~profile ~finish =
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "text"
     <> Some
-         (I18n.keymap_all
+         ((I18n.t "keymap/all")
          ^ {js| · |js}
          ^ string_of_int (Keymap_data.count Keymap_data.All)));
   eqi "nonempty query shows exactly one clear control" 1
@@ -1100,7 +1169,7 @@ let run_views ~registry ~profile ~finish =
   check "whitespace query restores categories and hides clear"
     (category_headers () <> [] && clear_buttons () = []);
   let key_search = List.find (fun n ->
-      M.string_prop n "text" = Some I18n.keymap_search_by_keys) (keymap_nodes ()) in
+      M.string_prop n "text" = Some (I18n.t "keymap/search-by-keys")) (keymap_nodes ()) in
   let row_ids () = List.map (fun n -> n.M.id) (keymap_rows ()) |> List.sort Int.compare in
   let grouped_row_ids = row_ids () in
   S.press keymap key_search.M.id;
@@ -1174,7 +1243,7 @@ let run_views ~registry ~profile ~finish =
   in
   check "stored custom shortcut is shown by the real Keymap view"
     (configured_binding () <> None);
-  let custom_label = I18n.keymap_custom ^ {js| · 1|js} in
+  let custom_label = (I18n.t "keymap/custom") ^ {js| · 1|js} in
   let custom_pill () = List.find (fun n ->
       M.string_prop n "text" = Some custom_label)
       (configured_nodes ()) in
@@ -1199,7 +1268,7 @@ let run_views ~registry ~profile ~finish =
   Ui_services.storage_set "ls-shortcuts"
     "{:ui/toggle-left-sidebar [\"f9\"]}";
   let refresh = List.find (fun n ->
-      M.string_prop n "accessibility-label" = Some I18n.keymap_refresh_all)
+      M.string_prop n "accessibility-label" = Some (I18n.t "keymap/refresh-all"))
       (configured_nodes ()) in
   S.press configured_keymap refresh.M.id;
   check "Refresh all re-reads stored bindings without resetting them"
@@ -1218,7 +1287,7 @@ let run_views ~registry ~profile ~finish =
       ~key:"parity-url" ~storage_key ~title:"Server" ~desc:"Address"
       ~placeholder:"https://example.com" ~saved_msg:"Saved" ~cleared_msg:"Cleared"
       ~on_saved:(fun () -> ()) ms) in
-  let reset_buttons () = List.filter (fun n -> M.string_prop n "text" = Some I18n.reset_default) (nodes editor) in
+  let reset_buttons () = List.filter (fun n -> M.string_prop n "text" = Some (I18n.t "settings.sync-server/reset")) (nodes editor) in
   check "empty URL editor hides Reset" (reset_buttons () = []);
   let input = List.find (fun n -> n.M.kind = "input") (nodes editor) in
   S.text_changed editor input.M.id "https://example.com";
@@ -1379,13 +1448,13 @@ let run_views ~registry ~profile ~finish =
       let view = Option.get (Views_wire.decode_view_ent (Wire.Map
         [Wire.kw "block/uuid", Wire.Uuid "sort-parity";
          Wire.kw "db/id", Wire.Int 42;
-         Wire.kw "block/title", Wire.String I18n.all])) in
+         Wire.kw "block/title", Wire.String (I18n.t "view/all")])) in
       let created = Views_state.make ~sched ~kind:Views_state.KAllPages
           ~feature:"all-pages" ~owner:Wire.Nil in
       let initial = { (Views_state.empty_vstate ()) with
         Views_state.view_uuid=view.vu; views=[view]; view_ent=Some view;
         items_count=7;
-        columns=[Views_table.updated_column; Views_table.created_column];
+        columns=[(Views_table.updated_column ()); (Views_table.created_column ())];
         sorting=[{Views_state.s_id="block/updated-at"; s_asc=false};
                  {Views_state.s_id="block/created-at"; s_asc=true}] } in
       let inst = {created with Views_state.st=Signal.state sched initial} in
@@ -1406,7 +1475,7 @@ let run_views ~registry ~profile ~finish =
   let inst = Option.get !sorting_inst in
   let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
   check "Pages preserves the default All view title"
-    (M.string_prop tab "accessibility-label" = Some I18n.all);
+    (M.string_prop tab "accessibility-label" = Some (I18n.t "view/all"));
   check "view tabs use the reference's unpadded text button"
     (Hashtbl.find_opt tab.M.props "padding-horizontal" = Some (P.IntValue 0)
      && Hashtbl.find_opt tab.M.props "padding-vertical" = Some (P.IntValue 0));
@@ -1484,7 +1553,7 @@ let run_views ~registry ~profile ~finish =
     = Some (I18n.t "cmdk.action/search")) toolbar_buttons in
   S.press sorting search_action.M.id;
   let search_input = List.find (fun n -> M.string_prop n "placeholder"
-    = Some I18n.type_to_search) (nodes sorting) in
+    = Some (I18n.t "view.filter/type-to-search")) (nodes sorting) in
   check "view search shares the measured reference width and padding across hosts"
     (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 183)
      && Hashtbl.find_opt search_input.M.props "padding-horizontal" = Some (P.IntValue 12));
@@ -1493,7 +1562,7 @@ let run_views ~registry ~profile ~finish =
      | Some id -> (List.find (fun n -> n.M.id = id) (nodes sorting)).M.kind = "button-group"
      | None -> false);
   let close_search = List.find (fun n -> n.M.kind = "button"
-    && M.string_prop n "accessibility-label" = Some I18n.close)
+    && M.string_prop n "accessibility-label" = Some (I18n.t "ui/close"))
     (toolbar_descendants toolbar) in
   S.press sorting close_search.M.id;
   check "closing grouped view search restores its collapsed state"
@@ -1530,22 +1599,22 @@ let run_views ~registry ~profile ~finish =
   check "cancelling direction preserves the sorting menu"
     (List.length !Views_popup.open_popups = parent_popups);
   S.press sorting (order ()).M.id;
-  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.ascending) (options ()) with
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some (I18n.t "view.table/ascending")) (options ()) with
    | Some option -> S.press sorting option.M.id
    | None -> check "ascending sort option is available" false);
   check "choosing ascending updates sorting" (List.hd (Views_state.get inst).sorting).s_asc;
   eqi "choosing a direction refreshes exactly once" 1 !refreshes;
   check "choosing direction updates the retained trigger label"
-    (M.string_prop (order ()) "text" = Some I18n.ascending);
+    (M.string_prop (order ()) "text" = Some (I18n.t "view.table/ascending"));
   check "choosing direction closes only its option list"
     (options () = [] && List.length !Views_popup.open_popups = parent_popups);
   S.press sorting (order ()).M.id;
-  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.ascending) (options ()) with
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some (I18n.t "view.table/ascending")) (options ()) with
    | Some option -> S.press sorting option.M.id
    | None -> ());
   eqi "reselecting the current direction does not refresh" 1 !refreshes;
   S.press sorting (order ()).M.id;
-  (match List.find_opt (fun n -> M.string_prop n "text" = Some I18n.descending) (options ()) with
+  (match List.find_opt (fun n -> M.string_prop n "text" = Some (I18n.t "view.table/descending")) (options ()) with
    | Some option -> S.press sorting option.M.id
    | None -> ());
   check "choosing descending restores sorting" (not (List.hd (Views_state.get inst).sorting).s_asc);
@@ -1620,7 +1689,7 @@ let run_views ~registry ~profile ~finish =
   check "empty view select does not submit a stale result" (!selected_items=before_empty);
   check "empty view select displays the shared no-result message"
     (List.exists (fun n -> n.M.kind="text"
-      && M.string_prop n "text"=Some I18n.no_matched_result) (nodes sorting));
+      && M.string_prop n "text"=Some (I18n.t "search/no-result")) (nodes sorting));
   open_choices ~multiple:true choices;
   (match choice_rows () with
    | row::_ -> S.press sorting row.M.id; S.press sorting row.M.id; S.press sorting row.M.id
@@ -1630,7 +1699,7 @@ let run_views ~registry ~profile ~finish =
       | ("0",true)::("0",false)::("0",true)::_ -> true | _ -> false)
      && !Views_popup.open_popups<>[]);
   (match List.find_opt (fun n -> n.M.kind="button"
-     && M.string_prop n "text"=Some I18n.apply) (nodes sorting) with
+     && M.string_prop n "text"=Some (I18n.t "ui/apply")) (nodes sorting) with
    | Some apply -> S.press sorting apply.M.id
    | None -> check "multiple view select exposes its apply action" false);
   check "multiple view select applies exactly the checked values and closes"
@@ -1812,7 +1881,7 @@ let run_views ~registry ~profile ~finish =
   let binding_settings = mount (fun _ -> Settings_page.keymap_pane ()) in
   let refresh_bindings () =
     let refresh = List.find (fun n ->
-      M.string_prop n "accessibility-label" = Some I18n.keymap_refresh_all)
+      M.string_prop n "accessibility-label" = Some (I18n.t "keymap/refresh-all"))
       (nodes binding_settings) in
     S.press binding_settings refresh.M.id
   in

@@ -215,7 +215,7 @@ let clause_label inst (c : clause) : string =
                 | None -> k)
           in
           match vs with
-          | [] -> title ^ ": " ^ I.builder_all_values
+          | [] -> title ^ ": " ^ (I.t "query.builder/all-values-label")
           | vs -> title ^ ": " ^ String.concat " " vs)
       | "page-ref", [ t ] -> "[[" ^ t ^ "]]"
       | "tags", [ t ] -> "#" ^ t
@@ -320,7 +320,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
                    ; ( "style"
                      , "opacity:0.5;cursor:pointer;user-select:none;\
                         font-size:0.875rem" ) ]
-                 ~text:I.builder_show_builtin []
+                 ~text:(I.t "query.builder/show-built-in-properties") []
              ; Logseq_el.el ~tag:"input"
                  ~attrs:
                    (([ ("id", "built-in"); ("type", "checkbox") ]
@@ -332,7 +332,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
                  [] ])
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
+        (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~extra:(fun () -> head ())
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
@@ -347,7 +347,7 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name =
           cvs
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_multi_prompt ~multiple:true
+        (P.show_select ~anchor ~placeholder:(I.t "select/default-select-multiple") ~multiple:true
          ~wrap_cls:"query-builder-picker"
            ~items:
              (P.fixed_items (List.map
@@ -376,7 +376,7 @@ let page_picker inst ~tree ~loc ~anchor kind =
           titles
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
+        (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
              let v = it.P.si_value in
@@ -406,7 +406,7 @@ let tag_picker inst ~tree ~loc ~anchor =
           classes
       in
       ignore
-        (P.show_select ~anchor ~placeholder:I.select_prompt ~items:(P.fixed_items items)
+        (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
              (* seed uuid -> title so a re-parsed [[uuid]] clause still
@@ -434,8 +434,8 @@ let between_picker inst ~tree ~loc ~anchor =
                   titles))
              ~wrap_cls:"query-builder-picker" ~on_chosen:on_done ())
       in
-      pick I.builder_between_start (fun s _ ->
-          pick I.builder_between_end (fun e _ ->
+      pick (I.t "query.builder/between-start-label") (fun s _ ->
+          pick (I.t "query.builder/between-end-label") (fun e _ ->
               tree :=
                 append_at !tree loc
                   (CItem
@@ -454,7 +454,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
           ; Ui_components.Prop.line_height "1.25rem" ]
         (Ui_components.input ~style_class:"form-input"
           ~accessibility_identifier:"query-builder-search"
-          ~placeholder:I.type_to_search ~label:I.type_to_search
+          ~placeholder:(I.t "view.filter/type-to-search") ~label:(I.t "view.filter/type-to-search")
           ~autofocus:true
           ~on_input:(function
             | Lui_protocol.TextChanged (_, s) -> value := s
@@ -470,7 +470,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
 
 let sample_picker inst ~tree ~loc ~anchor =
   ignore
-    (P.show_select ~anchor ~placeholder:I.select_prompt
+    (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt")
        ~items:
          (P.fixed_items (List.init 100 (fun i ->
               let n = string_of_int (i + 1) in
@@ -505,7 +505,7 @@ let picker inst ~tree ~loc ~anchor =
       (filters @ operators)
   in
   ignore
-    (P.show_select ~anchor ~placeholder:I.builder_add_filter_placeholder
+    (P.show_select ~anchor ~placeholder:(I.t "query.builder/add-filter-or-operator-placeholder")
        ~items:(P.fixed_items items) ~wrap_cls:"query-builder-picker"
        ~on_chosen:(fun it _ ->
          match it.P.si_value with
@@ -527,7 +527,7 @@ let picker inst ~tree ~loc ~anchor =
 (* clause click popup: delete + wrap + unwrap/replace for operators *)
 let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
   let items =
-    [ P.MItem (I.delete, fun () ->
+    [ P.MItem ((I.t "ui/delete"), fun () ->
           (* cljs: operator delete drops the trailing 0 (butlast loc) *)
           let loc' =
             if is_op_clause then
@@ -538,7 +538,7 @@ let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
           commit inst ~tree ()) ]
     @ (if is_op_clause then
          [ P.MItem
-             ( I.builder_unwrap
+             ( (I.t "query.builder/unwrap-operator")
              , fun () ->
                  (match get_at !tree loc with
                   | Some (COp (_, [ single ])) ->
@@ -552,7 +552,7 @@ let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
                   | _ -> ())) ]
        else [])
     @ [ P.MSub
-          ( I.builder_wrap_label
+          ( (I.t "query.builder/wrap-filter-with-label")
           , List.map
               (fun op ->
                 P.MItem
@@ -616,8 +616,8 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
   Ui_components.button ~variant:`ghost ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
     ~icon:(`app "plus") ~size:`sm ~height:24 ~foreground:"muted-foreground"
-    ~label:I.filter
-    ?text:(if with_label then Some I.filter else None)
+    ~label:(I.t "view.filter/filter")
+    ?text:(if with_label then Some (I.t "view.filter/filter") else None)
     ~grow:1. ~min_width:0
     ~style_class:"jtrigger"
     ~on_press:(fun _ ->

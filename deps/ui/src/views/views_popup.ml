@@ -435,7 +435,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
       reactive (fun visible ->
         if visible = [] then
           if multiple then spacer ~height:0 []
-          else text ~style_class:"ls-ac-empty" ~value:I.no_matched_result
+          else text ~style_class:"ls-ac-empty" ~value:(I.t "search/no-result")
             ~padding_vertical:6 ~padding_horizontal:8 []
         else
           list ~accessibility_identifier:"ui__ac-inner"
@@ -477,7 +477,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             @ (if multiple then
               [ column ~style_class:"cp__select-apply" ~padding:16
                   [ Ui_components.button ~variant:`outline
-                      ~key:("vpsel-a-" ^ string_of_int id) ~text:I.apply
+                      ~key:("vpsel-a-" ^ string_of_int id) ~text:(I.t "ui/apply")
                       ~padding_vertical:8 ~padding_horizontal:16
                       ~on_press:(fun _ ->
                         close_all ();
@@ -504,7 +504,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
 
 (* ---------- confirm dialog ---------- *)
 
-let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
+let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "ui/yes"))
     () =
   let id = !next_id + 1 in
   let view context parent =
@@ -549,7 +549,7 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
                 [
                   compact
                     (Ui_components.button ~key:"cancel" ~size:`sm
-                       ~variant:`outline ~text:I.cancel ~on_press:(fun _ ->
+                       ~variant:`outline ~text:(I.t "ui/cancel") ~on_press:(fun _ ->
                          close_entry id) []);
                   compact
                     (Ui_components.button ~key:"confirm" ~size:`sm
@@ -559,7 +559,7 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
                          on_confirm ()) []);
                 ];
             ]);
-        Ui_components.dialog_close ~key:"close" ~label:I.close
+        Ui_components.dialog_close ~key:"close" ~label:(I.t "ui/close")
           ~on_press:(fun _ -> close_entry id);
       ]
       context parent

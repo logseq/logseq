@@ -65,7 +65,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
   let save () =
     let trimmed = String.trim (read_input ()) in
     if trimmed = "" then reset ()
-    else if not (valid_url trimmed) then Toast.error T.url_invalid
+    else if not (valid_url trimmed) then Toast.error (T.t "settings.sync-server/url-invalid-error")
     else (
       Ui_services.storage_set storage_key trimmed;
       on_saved ();
@@ -101,7 +101,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                    ~style_class:
                      (Settings_controls.btn_cls ~variant:`Solid
                         ~size:`Sm ())
-                   ~text:T.save
+                   ~text:(T.t "ui/save")
                    ~on_press:(fun _ -> save ())
                    [] ]
               @ [ if_ ~test:(reactive (fun value -> String.trim value <> "") (Signal.value url))
@@ -111,7 +111,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                     ~style_class:
                       (Settings_controls.btn_cls ~variant:`Outline
                          ~size:`Sm ())
-                    ~text:T.reset_default
+                    ~text:(T.t "settings.sync-server/reset")
                     ~on_press:(fun _ -> reset ())
                     []) ])
           ]
@@ -119,21 +119,21 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
   in
   node ctx parent
 
-let sync_body =
-  url_editor_body ~key:"sync-server" ~storage_key:"sync-server-url"
-    ~title:T.sync_server_url ~desc:T.sync_url_desc
-    ~placeholder:default_sync_http ~saved_msg:T.sync_saved
-    ~cleared_msg:T.sync_cleared
+let sync_body model =
+  (url_editor_body ~key:"sync-server" ~storage_key:"sync-server-url"
+    ~title:(T.t "settings.sync-server/url") ~desc:(T.t "settings.sync-server/url-desc")
+    ~placeholder:default_sync_http ~saved_msg:(T.t "settings.sync-server/save-success")
+    ~cleared_msg:(T.t "settings.sync-server/clear-success")
     ~on_saved:(fun () ->
       ignore
         ((let* _ = push_sync_config () in
          Js.Promise.resolve ())
          |> Js.Promise.catch (fun _ ->
                 Toast.error (I18n.t "settings/update-worker-error");
-                Js.Promise.resolve ())))
+                Js.Promise.resolve ())))) model
 
-let publish_body =
-  url_editor_body ~key:"publish-server" ~storage_key:"publish-server-url"
-    ~title:T.publish_server_url ~desc:T.publish_url_desc
-    ~placeholder:default_publish_base ~saved_msg:T.publish_saved
-    ~cleared_msg:T.publish_cleared ~on_saved:(fun () -> ())
+let publish_body model =
+  (url_editor_body ~key:"publish-server" ~storage_key:"publish-server-url"
+    ~title:(T.t "settings-page/publish-server-url") ~desc:(T.t "settings-page/publish-server-url-desc")
+    ~placeholder:default_publish_base ~saved_msg:(T.t "settings-page/publish-server-url-saved")
+    ~cleared_msg:(T.t "settings-page/publish-server-url-cleared") ~on_saved:(fun () -> ())) model

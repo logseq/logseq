@@ -96,7 +96,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
            ; Ui_components.Prop.cursor `pointer ]
            (Ui_components.button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
-           ~label:I18n.e2ee_show_password
+           ~label:(I18n.t "encryption/toggle-password-visibility")
            ~icon:(reactive
                     (fun vis -> if vis then `app "eye-off" else `app "eye")
                     (Signal.value visible))
@@ -115,8 +115,8 @@ let view (r : Dialogs_state.ui_request) : t =
   let submit_now () = submit r two warn pw1 pw2 in
   let title, extra =
     if two
-    then (I18n.e2ee_set_password_title, " encryption-password")
-    else (I18n.e2ee_enter_password_title, "")
+    then ((I18n.t "encryption/set-password-title"), " encryption-password")
+    else ((I18n.t "encryption/enter-password-title"), "")
   in
   (* dialog kind supplies the card chrome; the ls-dialog-layer cover
      popover supplies the scrim and Escape dispatch *)
@@ -130,25 +130,25 @@ let view (r : Dialogs_state.ui_request) : t =
         ~accessibility_identifier:"ls-e2ee-title" []
     ; column ~key:"f" ~style_class:"ls-e2ee-form" ~gap:16
         ( [ pw_input ctx ~key:"p1" ~value:pw1 ~autofocus:true
-              ~placeholder:I18n.e2ee_password_ph
+              ~placeholder:(I18n.t "encryption/enter-password")
               ~on_enter:submit_now ]
         @ ( if two
             then
               [ pw_input ctx ~key:"p2" ~value:pw2
                   ~autofocus:false
-                  ~placeholder:I18n.e2ee_password_again_ph
+                  ~placeholder:(I18n.t "encryption/enter-password-again")
                   ~on_enter:submit_now
               ; if_ ~test:(Signal.value (warn))
                   (text ~key:"mm"
                      ~style_class:"ls-warn-text"
                      ~font_size:"0.875rem"
                      ~foreground:"var(--lx-yellow-10, hsl(45 93% 40%))"
-                     ~value:I18n.e2ee_password_not_matched
+                     ~value:(I18n.t "encryption/password-not-matched")
                      [])
               ]
             else [] )
         @ [ Ui_components.button ~key:"s" ~variant:`primary
-              ~text:I18n.submit
+              ~text:(I18n.t "ui/submit")
               ~on_press:(fun _ -> submit_now ()) [] ]
           )
     ]

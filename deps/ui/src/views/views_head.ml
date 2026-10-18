@@ -105,12 +105,12 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                     ((* cljs Rename is a dropdown-menu-sub with an inline
                         block-container editor, not a flat item *)
                      P.MSub
-                       ( I.rename
+                       ( (I.t "view/rename")
                        , [ P.MCustom ((V.ops ()).V.o_rename_box inst v) ] )
                      :: (* cljs only offers Delete when >1 view exists *)
                         (if List.length (V.get inst).V.views > 1 then
                            [ P.MItem
-                               ( I.delete
+                               ( (I.t "ui/delete")
                                , fun () ->
                                    Views_db.delete_blocks [ v.Wr.vu ] (fun () ->
                                        let next =
@@ -197,7 +197,7 @@ let tabs_el inst ~op : t =
         ~cmp:String.compare
         ~mount:(view_tab inst)
     ; Ui_parts.float_prop Lui_protocol.Opacity ~value_signal:op
-        (Ui_components.button ~variant:`ghost ~size:`sm ~label:I.add_new_view
+        (Ui_components.button ~variant:`ghost ~size:`sm ~label:(I.t "view/add-new-view")
            ~style_class:"ls-add-view"
            ~transition:"opacity 300ms ease-in"
            ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
@@ -246,7 +246,7 @@ let sorting_popup inst anchor =
        [ Ui_components.with_props
            [Ui_components.Prop.font_size "0.875rem"]
          (select ~style_class:"ls-sort-order"
-           ~text:(reactive (fun so -> if so.V.s_asc then I.ascending else I.descending) so_s)
+           ~text:(reactive (fun so -> if so.V.s_asc then (I.t "view.table/ascending") else (I.t "view.table/descending")) so_s)
            ~height:32 ~min_height:32 ~padding_horizontal:8
            ~corner_radius:6 ~background:"transparent"
            ~border_width:1 ~border_color:"var(--ls-border-color)"
@@ -262,7 +262,7 @@ let sorting_popup inst anchor =
                    ~selection_placement:`leading
                    ~padding_horizontal:8 ~padding_vertical:6 ~min_height:32
                    ~on_press:(fun _ -> choose value) [])
-                 [true,I.ascending; false,I.descending])) ]) context parent
+                 [true,(I.t "view.table/ascending"); false,(I.t "view.table/descending")])) ]) context parent
   in
   let sort_row so_s =
     let so = Signal.sample so_s in
@@ -280,7 +280,7 @@ let sorting_popup inst anchor =
               (Ui_components.button ~variant:`ghost ~size:`sm ~height:32
                  ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
                  ~foreground:"hsl(var(--muted-foreground))"
-                 ~label:I.delete_sort ~icon:(Icons.name_ref "x")
+                 ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
                  ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
   in
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
@@ -298,7 +298,7 @@ let sorting_popup inst anchor =
                  ~corner_radius:4 ~style_class:"ls-sort-delete"
                  ~padding_vertical:6 ~padding_horizontal:8
                  ~foreground:"hsl(var(--muted-foreground))"
-                 ~icon:(Icons.name_ref "trash") ~text:I.delete_sort
+                 ~icon:(Icons.name_ref "trash") ~text:(I.t "view.table/delete-sort")
                  ~on_press:(fun _ ->
                    P.close_all ();
                    V.update inst (fun s -> { s with V.sorting = [] });
@@ -342,11 +342,11 @@ let filter_value_phase inst ~anchor (c : V.column) =
         | Some (W.Keyword "timestamp") ->
             List.map
               (fun (v, l) -> { P.si_label = l; si_value = v; si_extra = None })
-              I.timestamp_options
+              (I.timestamp_options ())
         | Some (W.Keyword "checkbox") ->
-            [ { P.si_label = I.true_; si_value = "true"
+            [ { P.si_label = (I.t "ui/true"); si_value = "true"
               ; si_extra = Some (W.Bool true) }
-            ; { P.si_label = I.false_; si_value = "false"
+            ; { P.si_label = (I.t "ui/false"); si_value = "false"
               ; si_extra = Some (W.Bool false) } ]
         | Some (W.Keyword "property-values") ->
             List.map
@@ -395,7 +395,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
                      always beats the zero-specificity hover channel) *)
                   text ~value:label ~font_size:"0.875rem"
                     ~style_class:"ls-op-label" [] ])
-            [ (I.is_empty, "is"); (I.is_not_empty, "is-not") ]
+            [ ((I.t "view.filter/is-empty"), "is"); ((I.t "view.filter/is-not-empty"), "is-not") ]
       in
       P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name
         ~footer:ops ~on_chosen:(fun item _ -> pick item) ())
@@ -409,7 +409,7 @@ let filter_popup inst anchor =
           (filterable_columns state)) (sig_of inst))
   in
   ignore
-    (P.show_select ~anchor ~align_end:true ~items ~placeholder:I.filter
+    (P.show_select ~anchor ~align_end:true ~items ~placeholder:(I.t "view.filter/filter")
        ~on_chosen:(fun it _ ->
          let s = V.get inst in
          match
@@ -466,7 +466,7 @@ let groupable_columns inst =
       s.V.columns
   in
   if List.exists (fun c -> c.V.c_id = "block/page") s.V.columns then
-    Views_table.page_column :: cols
+    (Views_table.page_column ()) :: cols
   else cols
 
 let rec show_more_menu inst =
@@ -478,13 +478,13 @@ let rec show_more_menu inst =
           let subs =
             List.concat
               [ (if s.V.display_type = "table" then
-                   [ P.MSub (I.columns_visibility, column_visibility_items inst) ]
+                   [ P.MSub ((I.t "view.table/columns-visibility"), column_visibility_items inst) ]
                  else [])
               ; (match gcs with
                  | [] -> []
                  | _ ->
                      [ P.MSub
-                         ( I.group_by
+                         ( (I.t "view.table/group-by")
                          , List.map
                              (fun c ->
                                P.MCheck
@@ -505,14 +505,14 @@ let rec show_more_menu inst =
                    current group-by *)
                 (if List.exists (fun c -> c.V.c_id = "block/page") gcs then
                    [ P.MSub
-                       ( I.sort_groups_by
+                       ( (I.t "view.table/sort-groups-by")
                        , [ mk_group_sort inst "block/journal-day"
-                             I.group_journal_date
-                         ; mk_group_sort inst "block/title" I.group_page_name
+                             (I.t "view.table/group-journal-date")
+                         ; mk_group_sort inst "block/title" (I.t "view.table/group-page-name")
                          ; mk_group_sort inst "block/updated-at"
-                             I.group_page_updated
+                             (I.t "view.table/group-page-updated-date")
                          ; mk_group_sort inst "block/created-at"
-                             I.group_page_created ] ) ]
+                             (I.t "view.table/group-page-created-date") ] ) ]
                  else [])
               ; (if s.V.group_by <> None then
                    let desc =
@@ -521,14 +521,14 @@ let rec show_more_menu inst =
                      | None -> true
                    in
                    [ P.MSub
-                       ( I.sort_groups_order
+                       ( (I.t "view.table/sort-groups-order")
                        , [ P.MCheck
-                             ( I.descending, desc
+                             ( (I.t "view.table/descending"), desc
                              , fun _ ->
                                  V.persist_group_desc inst true;
                                  refresh inst )
                          ; P.MCheck
-                             ( I.ascending, not desc
+                             ( (I.t "view.table/ascending"), not desc
                              , fun _ ->
                                  V.persist_group_desc inst false;
                                  refresh inst ) ] ) ]
@@ -538,7 +538,7 @@ let rec show_more_menu inst =
           ignore
             (P.show_menu ~anchor ~align_end:true
                (subs
-                @ [ P.MItem (I.export_edn, fun () -> (V.ops ()).V.o_export inst)
+                @ [ P.MItem ((I.t "view/export-edn"), fun () -> (V.ops ()).V.o_export inst)
                   ]))
 
 and mk_group_sort inst ident label =
@@ -575,9 +575,9 @@ let display_type_el inst : t =
           in
           ignore
             (P.show_menu ~anchor ~align_end:true
-               [ P.MItem (I.table_view, fun () -> set "table")
-               ; P.MItem (I.list_view, fun () -> set "list")
-               ; P.MItem (I.gallery_view, fun () -> set "gallery") ])
+               [ P.MItem ((I.t "property.view-type/table"), fun () -> set "table")
+               ; P.MItem ((I.t "property.view-type/list"), fun () -> set "list")
+               ; P.MItem ((I.t "property.view-type/gallery"), fun () -> set "gallery") ])
       | None -> ())
     [ icon ~point_size:18
         ~name:(reactive (fun (s : V.vstate) ->
@@ -620,7 +620,7 @@ let search_items inst : t list =
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.focus_shadow "none" ]
           (Ui_components.input ~accessibility_identifier:input_id
-             ~placeholder:I.type_to_search ~text:(V.get inst).V.input
+             ~placeholder:(I.t "view.filter/type-to-search") ~text:(V.get inst).V.input
              ~width:183 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
@@ -634,7 +634,7 @@ let search_items inst : t list =
        ctx parent)
   ; (fun ctx parent ->
      if_ ~test:(open_cond ctx)
-       (ghost_btn "x" ~title_:I.close ~on_click:(fun () ->
+       (ghost_btn "x" ~title_:(I.t "ui/close") ~on_click:(fun () ->
           V.update inst (fun s ->
               { s with V.input = ""; search_open = false });
           refresh inst))
@@ -650,7 +650,7 @@ let search_el inst : t =
 
 let filter_value_label inst (f : V.filter_clause) =
   match f.V.c_val with
-  | Some (W.Keyword "empty") -> I.empty_label
+  | Some (W.Keyword "empty") -> (I.t "view.filter/empty")
   | Some v -> (
       match v with
       | W.Date_ms ms ->
@@ -667,7 +667,7 @@ let filter_value_label inst (f : V.filter_clause) =
                  | _ -> Wr.prop_text x)
                xs)
       | _ -> Wr.prop_text v)
-  | None -> I.all
+  | None -> (I.t "view/all")
 
 let filter_chip inst idx (f : V.filter_clause) : t =
   let s = V.get inst in
@@ -744,7 +744,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
             , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
                white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
         [ text ~value:(filter_value_label inst f) [] ]
-    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:I.delete
+    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
         ~padding_horizontal:4
         ~foreground:"hsl(var(--muted-foreground))"
         ~on_press:(fun _ ->
@@ -788,15 +788,15 @@ let filters_row inst : t =
                      ~height:24 ~padding_horizontal:8
                      ~background:"transparent" ~border_width:1
                      ~border_color:"hsl(var(--border))"
-                     ~text:(if s.V.filters_or then I.match_any else I.match_all)
-                     [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
+                     ~text:(if s.V.filters_or then (I.t "view.filter/match-any-filter") else (I.t "view.filter/match-all-filters"))
+                     [ menu_item ~text:(I.t "view.filter/match-all-filters") ~selected:(not s.V.filters_or)
                          ~on_press:(fun _ ->
                            V.update inst (fun s ->
                                { s with V.filters_or = false });
                            V.persist_filters inst;
                            refresh inst)
                          []
-                     ; menu_item ~text:I.match_any ~selected:s.V.filters_or
+                     ; menu_item ~text:(I.t "view.filter/match-any-filter") ~selected:s.V.filters_or
                          ~on_press:(fun _ ->
                            V.update inst (fun s ->
                                { s with V.filters_or = true });
@@ -1137,7 +1137,7 @@ let render_head inst : t =
                     (Signal.map
                        (fun (s : V.vstate) -> s.V.sorting <> [])
                        (sig_of inst)))
-               (action_button ~label:I.sort_groups_by
+               (action_button ~label:(I.t "view.table/sort-groups-by")
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1148,7 +1148,7 @@ let render_head inst : t =
                     | Some a -> sorting_popup inst a
                     | None -> ())
                   [ icon ~name:(Icons.name_ref "arrows-up-down") ~point_size:18 [] ])
-           ; action_button ~label:I.filter
+           ; action_button ~label:(I.t "view.filter/filter")
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->
@@ -1163,7 +1163,7 @@ let render_head inst : t =
          @ [ search_el inst ]
          @ [ display_type_el inst; more_actions_el inst ]
          @ (if has_add_object then
-              [ ghost_btn "plus" ~title_:I.new_node
+              [ ghost_btn "plus" ~title_:(I.t "node/new")
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
             else []))) ])
     ctx parent

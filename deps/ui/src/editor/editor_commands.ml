@@ -926,7 +926,7 @@ let link_form_body p : t =
         []
     ; Ui_components.input ~key:"label" ~placeholder:(I18n.t "ui/label") []
     ; Ui_components.button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
-        ~height:28 ~min_height:28 ~text:I18n.submit
+        ~height:28 ~min_height:28 ~text:(I18n.t "ui/submit")
         ~on_press:(fun _ -> submit_link p) [] ]
 
 let popup_body ps (p : popup) : t =

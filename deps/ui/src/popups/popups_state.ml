@@ -492,7 +492,7 @@ let slash_items ~has_heading : ac_item list =  List.concat
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash *)
-let slash_fallback =
+let slash_fallback () =
   mk_item ~key:"no-matched"
     ~label:(U.t "editor.slash/no-matched-commands") Noop
 ;;
@@ -539,7 +539,7 @@ let filter_slash q items =
     Fuzzy.fuzzy_search ~extract:(fun it -> it.ai_label) ~limit:50 items q
   in
 
-  (match fs with [] -> [ slash_fallback ] | _ -> fs)
+  (match fs with [] -> [ slash_fallback () ] | _ -> fs)
   |> with_headers (q = "")
 ;;
 

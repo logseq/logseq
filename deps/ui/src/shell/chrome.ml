@@ -21,14 +21,17 @@ module Wd = Web_dom
 module P = Lui_protocol
 
 
-let skip_to_main =
-  Ui_components.button ~variant:`primary ~key:"skip" ~accessibility_identifier:"skip-to-main"
+let skip_to_main : t =
+ fun context parent ->
+  (Ui_components.button ~variant:`primary ~key:"skip" ~accessibility_identifier:"skip-to-main"
     ~transition:"top 0.3s"
     ~text:(I18n.t "nav/skip-to-main-content") []
+  ) context parent
 
 (* cljs shui/button :ghost :size :sm — semantic classes only; the button
    kind's ~variant:`ghost ~size:`icon carries the layout bundle that the
    tailwind classes used to paint *)
+
 let ghost_btn_cls ?(mid = "") ?(tail = "") () =
   "ui__button as-ghost " ^ mid ^ tail
 
@@ -62,8 +65,9 @@ let search_button ?(key = "search-btn") () =
 
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the
    imperative query_selector anchor for the dropdown position *)
-let dots_button =
-  Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
+let dots_button : t =
+ fun context parent ->
+  (Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
     ~accessibility_identifier:"toolbar-dots-btn"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn" ())
     ~label:(I18n.t "header/more") ~icon:(`app "dots")
@@ -88,10 +92,12 @@ let dots_button =
         | None -> ()
       else Runtime.send (Action.Page_menu_set None))
     []
+  ) context parent
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
    element the e2e reads EDN from. Visible once the worker broadcasts
    rtc-sync-state (i.e. sync is running on the current graph). *)
+
 let rtc_tx_text (r : Model.rtc) =
   let tx = function Some n -> string_of_int n | None -> "nil" in
   Printf.sprintf "{:local-tx %s, :remote-tx %s}"
@@ -1054,7 +1060,8 @@ let help_item key title icon_name act =
           ]))
 
 let help_menu_popup : t =
-  let close () =
+ fun context parent ->
+  (let close () =
     Runtime.send Action.Help_toggle;
     Runtime.flush ()
   in
@@ -1063,9 +1070,9 @@ let help_menu_popup : t =
     ~anchor:`above ~anchor_alignment:`end_
     ~on_dismiss:(fun _ -> close ())
     [ column ~key:"hm-wrap"
-        [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
-        ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
+        [ help_item "hm-handbook" (I18n.t "help/handbook") "book-2" close
+        ; help_item "hm-shortcuts" (I18n.t "help.shortcuts/label") "command" close
+        ; help_item "hm-docs" (I18n.t "help/docs") "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; divider ~key:"hm-hr1" ~margin_vertical:8
             ~data_attrs:
@@ -1074,13 +1081,13 @@ let help_menu_popup : t =
                    hsl(var(--border))" )
               ]
             []
-        ; help_item "hm-bug" (I18n.help_bug) "bug" close
-        ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
+        ; help_item "hm-bug" (I18n.t "help/bug") "bug" close
+        ; help_item "hm-feature" (I18n.t "help/feature") "git-pull-request"
             (fun () ->
               open_url
                 "https://discuss.logseq.com/c/feedback/feature-requests/";
               close ())
-        ; help_item "hm-feedback" (I18n.help_feedback) "messages"
+        ; help_item "hm-feedback" (I18n.t "help/submit-feedback") "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
         ; divider ~key:"hm-hr2" ~margin_vertical:8
@@ -1090,9 +1097,9 @@ let help_menu_popup : t =
                    hsl(var(--border))" )
               ]
             []
-        ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
+        ; help_item "hm-discord" (I18n.t "help/ask-community") "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
+        ; help_item "hm-forum" (I18n.t "help/support-forum") "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
         ; divider ~key:"hm-hr3" ~margin_vertical:8
             ~data_attrs:
@@ -1101,7 +1108,7 @@ let help_menu_popup : t =
                    hsl(var(--border))" )
               ]
             []
-        ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
+        ; help_item "hm-notes" (I18n.t "help/release-notes") "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
@@ -1117,6 +1124,7 @@ let help_menu_popup : t =
                    ~data_attrs:[ ("style", "opacity:0.3") ]
                    ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
     ]
+  ) context parent
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
@@ -1154,7 +1162,8 @@ let help_area (ms : Model.t Signal.signal) : t =
    as a fixed overlay (remounting the whole app tree inside a reactive
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
-  Ui_components.with_props
+ fun context parent ->
+  (Ui_components.with_props
     [ Ui_components.Prop.position `fixed
     ; Ui_components.Prop.inset 0.
     ; Ui_components.Prop.z_index 99999 ]
@@ -1177,6 +1186,7 @@ let not_found_page : t =
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")
         ~on_press:(fun _ -> Ui_services.nav_set_hash "#/") []
     ])
+  ) context parent
 
 (* cljs container.cljs: the wrapper's state classes all have CSS
    consumers — :not(.ls-left-sidebar-open) collapses .cp__header > .l's
@@ -1184,6 +1194,7 @@ let not_found_page : t =
    .ls-hl-colored restyles pdf block highlights. The storage-backed
    flags are re-read on each publish so the live DOM toggles in
    Settings_state (wide-mode) and Pdf_state (hl-colored) stay in sync. *)
+
 let shell (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Ui_parts.class_signal ms

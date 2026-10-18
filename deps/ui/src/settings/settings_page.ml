@@ -31,11 +31,11 @@ let storage_row ~key ~label ?label_extra ?detail ?density ?binding ~key_ ~defaul
 (* show-brackets and wide-mode appear in both the editor pane and the
    appearance popup — same row spec, different DOM key *)
 let brackets_row ~key ?density () =
-  cfg_row ~key ?density ~label:T.show_brackets
+  cfg_row ~key ?density ~label:(T.t "settings.editor/show-brackets")
     ~binding:"t b" ~cfg:"ui/show-brackets?" ~default:true ()
 
 let wide_mode_row ~key ?density () =
-  storage_row ~key ?density ~label:T.wide_mode ~binding:"t w"
+  storage_row ~key ?density ~label:(T.t "settings.editor/wide-mode") ~binding:"t w"
     ~key_:"wide-mode" ~default:false ~on_checked:S.set_wide_mode ()
 
 (* ---- general pane ---- *)
@@ -43,7 +43,7 @@ let wide_mode_row ~key ?density () =
 let revision = "dev" (* logseq.common.version/REVISION — goog-define default *)
 
 let version_row () =
-  C.action_row ~key:"ver" ~label:T.current_version
+  C.action_row ~key:"ver" ~label:(T.t "settings.general/current-version")
     ~actions:
       [ Ui_components.with_props
           [ Ui_components.Prop.position `relative ]
@@ -60,7 +60,7 @@ let version_row () =
                             ~value:version []
                         ; Ui_components.faded_link ~key:"ver-cl"
                             ~url:"https://docs.logseq.com/#/page/changelog"
-                            ~text:T.changelog ()
+                            ~text:(T.t "settings.general/changelog") ()
                         ]
                     ])
              ])
@@ -73,7 +73,7 @@ let language_row ctx =
       (V.lang_label_for (V.current_lang ()))
   in
   C.action_row ~key:"lang"
-    ~label:T.language_label
+    ~label:(T.t "settings.general/language")
     ~actions:
       [ V.lang_trigger ~ctx ~key:"lang-sel" ~height:32
           ~st:lang_label
@@ -97,8 +97,8 @@ let theme_row ?(density = `regular) ctx =
                   else m
                 in
                 T.switch_to_theme
-                  (if effective = "dark" then T.theme_light
-                   else T.theme_dark))
+                  (if effective = "dark" then (T.t "settings.general/theme-light")
+                   else (T.t "settings.general/theme-dark")))
               (Signal.value mode))
          ())
     ~control:
@@ -134,7 +134,7 @@ let editor_font_row ?(density = `regular) () =
     font_button ~key:("font-" ^ t) ~label ~font_family ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  C.it_row ~key:"font" ~density ~label:T.editor_font
+  C.it_row ~key:"font" ~density ~label:(T.t "settings.general/editor-font")
     ~min_height:(if density=`compact then 72 else 80)
     [ row ~key:"font-btns" ~gap:8
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
@@ -146,7 +146,7 @@ let editor_font_row ?(density = `regular) () =
         ; Ui_components.Prop.label_opacity 0.7 ]
         (checkbox ~key:"font-g" ~gap:4 ~margin_top:12
           ~min_height:(if density=`compact then 20 else 28)
-          ~text:T.editor_font_global ~label:T.editor_font_global
+          ~text:(T.t "settings.general/editor-font-set-global") ~label:(T.t "settings.general/editor-font-set-global")
           ~checked:font.S.fglobal
           ~on_toggle:(function
             | Lui_protocol.ToggleChanged (_,checked) -> S.set_editor_font_global checked
@@ -158,22 +158,22 @@ let color_names =
   ; "indigo"; "blue"; "cyan"; "teal"; "green"; "grass"; "orange" ]
 
 let color_label = function
-  | "none" -> T.accent_color_none
-  | "logseq" -> T.accent_color_logseq
-  | "tomato" -> T.color_tomato
-  | "red" -> T.color_red
-  | "crimson" -> T.color_crimson
-  | "pink" -> T.color_pink
-  | "plum" -> T.color_plum
-  | "purple" -> T.color_purple
-  | "violet" -> T.color_violet
-  | "indigo" -> T.color_indigo
-  | "blue" -> T.color_blue
-  | "cyan" -> T.color_cyan
-  | "teal" -> T.color_teal
-  | "green" -> T.color_green
-  | "grass" -> T.color_grass
-  | _ -> T.color_orange
+  | "none" -> (T.t "settings.general/accent-color-none-desc")
+  | "logseq" -> (T.t "settings.general/accent-color-logseq")
+  | "tomato" -> (T.t "color/tomato")
+  | "red" -> (T.t "color/red")
+  | "crimson" -> (T.t "color/crimson")
+  | "pink" -> (T.t "color/pink")
+  | "plum" -> (T.t "color/plum")
+  | "purple" -> (T.t "color/purple")
+  | "violet" -> (T.t "color/violet")
+  | "indigo" -> (T.t "color/indigo")
+  | "blue" -> (T.t "color/blue")
+  | "cyan" -> (T.t "color/cyan")
+  | "teal" -> (T.t "color/teal")
+  | "green" -> (T.t "color/green")
+  | "grass" -> (T.t "color/grass")
+  | _ -> (T.t "color/orange")
 
 (* cljs settings.cljs accent-color-row: 20px rounded-full button at
    opacity .5 (1 when active), 1px/4px outline in rx-06/07, inner 8px
@@ -227,7 +227,7 @@ let accent_row ~modal =
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"
         ~density:(if modal then `compact else `regular)
-        ~label:T.accent_color ~col_gap:16 ~label_lh:"1.25rem"
+        ~label:(T.t "settings.general/accent-color") ~col_gap:16 ~label_lh:"1.25rem"
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
@@ -239,7 +239,7 @@ let accent_row ~modal =
     ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]
         (text ~key:"acc-n" ~style_class:"ls-desc" ~margin_top:4
           ~font_size:"0.875rem" ~line_height:"1.25rem"
-          ~value:T.accent_color_alert [])
+          ~value:(T.t "settings.general/accent-color-alert") [])
     ]
 
 (* The reference keeps desktop panels at 600 points and scrolls the
@@ -262,10 +262,10 @@ let general_pane ~modal ctx =
     ; theme_row ctx
     ; editor_font_row ()
     ; accent_row ~modal
-    ; C.edit_link_row ~key:"cfg" ~label:T.config_custom_configuration
-        ~button:T.edit_config_edn ~href:"#/file/logseq%2Fconfig.edn" ()
-    ; C.edit_link_row ~key:"css" ~label:T.config_custom_theme
-        ~button:T.edit_custom_css ~href:"#/file/logseq%2Fcustom.css" ()
+    ; C.edit_link_row ~key:"cfg" ~label:(T.t "settings.general/custom-configuration")
+        ~button:(T.t "settings.general/edit-config-edn") ~href:"#/file/logseq%2Fconfig.edn" ()
+    ; C.edit_link_row ~key:"css" ~label:(T.t "settings.general/custom-theme")
+        ~button:(T.t "settings.general/edit-custom-css") ~href:"#/file/logseq%2Fcustom.css" ()
     ]
 
 (* ---- editor pane ---- *)
@@ -305,7 +305,7 @@ let dfmt_menu ~key mst options current =
            ~on_press:(fun _ ->
              if String.trim fmt <> "" then (
                S.set_date_format fmt;
-               Toast.success T.refresh_required;
+               Toast.success (T.t "settings.general/refresh-required-feedback");
                Dialogs_state.close_all ());
              V.lang_menu_close mst)
            [])
@@ -320,7 +320,7 @@ let date_format_row ctx =
   Ui_components.form_row ~key:"dfmt"
     ~label:
       (Ui_components.form_label ~key:"dfmt-l"
-         ~text:T.custom_date_format ())
+         ~text:(T.t "settings.editor/custom-date-format") ())
     ~control:
       (column ~key:"dfmt-w" ~max_width:320 ~cross:`stretch
          [ select ~key:"dfmt-s"
@@ -346,29 +346,29 @@ let editor_pane ctx =
     ; brackets_row ~key:"brackets" ()
     ; wide_mode_row ~key:"wide" ()
     ; cfg_row ~key:"outdent"
-        ~label:T.logical_outdenting
+        ~label:(T.t "settings.editor/preferred-outdenting")
         ~label_extra:
-          [ C.info_icon ~key:"outdent-i" ~title:T.outdenting_hint ]
+          [ C.info_icon ~key:"outdent-i" ~title:(T.t "settings.editor/preferred-outdenting-tip") ]
         ~cfg:"editor/logical-outdenting?" ~default:false ()
     ; cfg_row ~key:"fullb"
-        ~label:T.show_full_blocks
+        ~label:(T.t "settings.editor/show-full-blocks")
         ~cfg:"ui/show-full-blocks?" ~default:false ()
     ; cfg_row ~key:"pasting"
-        ~label:T.preferred_pasting
-        ~label_extra:[ C.info_icon ~key:"pasting-i" ~title:T.pasting_hint ]
+        ~label:(T.t "settings.editor/preferred-pasting-file")
+        ~label_extra:[ C.info_icon ~key:"pasting-i" ~title:(T.t "settings.editor/preferred-pasting-file-hint") ]
         ~cfg:"editor/preferred-pasting-file?" ~default:false ()
     ; cfg_row ~key:"autoexp"
-        ~label:T.auto_expand_refs
+        ~label:(T.t "settings.editor/auto-expand-block-refs")
         ~label_extra:
-          [ C.info_icon ~key:"autoexp-i" ~title:T.auto_expand_hint ]
+          [ C.info_icon ~key:"autoexp-i" ~title:(T.t "settings.editor/auto-expand-block-refs-tip") ]
         ~cfg:"ui/auto-expand-block-refs?" ~default:true ()
     ; storage_row ~key:"sttip"
-        ~label:T.shortcut_tooltip ~key_:"shortcut-tooltip?" ~default:true
+        ~label:(T.t "settings.editor/enable-shortcut-tooltip") ~key_:"shortcut-tooltip?" ~default:true
         ~on_checked:S.set_shortcut_tooltip ()
     ; cfg_row ~key:"tooltips"
-        ~label:T.tooltips ~cfg:"ui/enable-tooltip?" ~default:true ()
+        ~label:(T.t "settings.editor/enable-tooltip") ~cfg:"ui/enable-tooltip?" ~default:true ()
     ; cfg_row ~key:"puball"
-        ~label:T.all_pages_public ~cfg:"publishing/all-pages-public?"
+        ~label:(T.t "settings.editor/enable-all-pages-public") ~cfg:"publishing/all-pages-public?"
         ~default:false ()
     ]
 
@@ -659,9 +659,9 @@ let keymap_key_control st =
                 ~border_width:1
                 ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
                 ~background:"var(--lx-gray-02, hsl(var(--muted)))"
-                ~label:T.keymap_search_by_keys ~icon:(`app "keyboard")
+                ~label:(T.t "keymap/search-by-keys") ~icon:(`app "keyboard")
                 ?text:
-                  (if model.km_keys = [] then Some T.keymap_search_by_keys
+                  (if model.km_keys = [] then Some (T.t "keymap/search-by-keys")
                    else None)
                 ~on_press:open_
                 (if model.km_keys = [] then []
@@ -703,7 +703,7 @@ let keymap_controls st =
             [
               Ui_components.search_row ~key:"km-sw" ~height:26
                 ~font_size:"0.875rem" ~pad_left:28 ~pad_right:28 ~autofocus:true
-                ~placeholder:T.keymap_search_placeholder
+                ~placeholder:(T.t "keymap/search-placeholder")
                 ~text_signal:(reactive (fun s -> s.km_query) (Signal.value st))
                 ~clear_label:(I18n.t "keymap/clear-search")
                 ~on_clear:S.focus_keymap_search
@@ -726,12 +726,12 @@ let keymap_controls st =
           toggle_group ~key:"km-fp" ~gap:4 ~style_class:"shortcut-filter-pills"
             ~border_width:0 ~background:"transparent"
             [
-              keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All;
-              keymap_pill st ~key:"km-pc" ~title:T.keymap_custom
+              keymap_pill st ~key:"km-pa" ~title:(T.t "keymap/all") Keymap_data.All;
+              keymap_pill st ~key:"km-pc" ~title:(T.t "keymap/custom")
                 Keymap_data.Custom;
-              keymap_pill st ~key:"km-pu" ~title:T.keymap_unset
+              keymap_pill st ~key:"km-pu" ~title:(T.t "keymap/unset")
                 Keymap_data.Unset;
-              keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled
+              keymap_pill st ~key:"km-pd" ~title:(T.t "keymap/disabled")
                 Keymap_data.Disabled;
             ];
           if_
@@ -744,7 +744,7 @@ let keymap_controls st =
                [
                  Ui_components.button ~variant:`ghost ~key:"km-fold" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
-                   ~label:T.keymap_toggle_categories ~icon:(`app "fold")
+                   ~label:(T.t "keymap/toggle-categories-pane") ~icon:(`app "fold")
                    ~on_press:(fun _ ->
                      let model = Runtime.signal_get st in
                      let collapsed =
@@ -761,7 +761,7 @@ let keymap_controls st =
                    [];
                  Ui_components.button ~variant:`ghost ~key:"km-rf" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
-                   ~label:T.keymap_refresh_all ~icon:(`app "refresh")
+                   ~label:(T.t "keymap/refresh-all") ~icon:(`app "refresh")
                    ~on_press:(fun _ ->
                      Keymap_data.reload_shortcuts ();
                      Runtime.signal_set st
@@ -813,11 +813,11 @@ let keymap_row ~key (r : Keymap_data.row) =
         ; row ~key:(key ^ "a") ~cross:`center ~gap:6
         (if r.unset then
            [ text ~key:(key ^ "u")
-                ~value:T.keymap_unset
+                ~value:(T.t "keymap/unset")
                []
            ]
          else if Keymap_data.disabled r then
-           [ text ~value:T.keymap_disabled [] ]
+           [ text ~value:(T.t "keymap/disabled") [] ]
          else
            List.mapi
              (fun i b ->
@@ -928,20 +928,20 @@ let storage_url key default =
 let advanced_pane () =
   panel ~key:"pane-advanced"
     [ C.toggle_row ~key:"usage"
-        ~label:T.usage_diagnostics
+        ~label:(T.t "settings.advanced/disable-sentry")
         ~detail:
           [ text ~key:"usage-d" ~style_class:"ls-desc"
-              ~value:T.usage_diagnostics_desc [] ]
+              ~value:(T.t "settings.advanced/disable-sentry-desc") [] ]
         ~on:(not (S.instrument_disabled ()))
         ~on_checked:S.set_usage_diagnostics ()
     ; C.toggle_row ~key:"devm"
-        ~label:T.developer_mode
+        ~label:(T.t "settings.advanced/developer-mode")
         ~detail:
           [ text ~key:"devm-d" ~style_class:"ls-desc"
-              ~value:T.developer_mode_desc [] ]
+              ~value:(T.t "settings.advanced/developer-mode-desc") [] ]
         ~on:(S.developer_mode ()) ~on_checked:S.set_developer_mode ()
     ; C.action_row ~key:"syncurl"
-        ~label:T.sync_server_url
+        ~label:(T.t "settings.sync-server/url")
         ~actions:
           [ url_button ~key:"syncurl-b"
               ~label:(storage_url "sync-server-url" "Logseq Sync")
@@ -949,10 +949,10 @@ let advanced_pane () =
           ]
         ()
     ; C.action_row ~key:"puburl"
-        ~label:T.publish_server_url
+        ~label:(T.t "settings-page/publish-server-url")
         ~actions:
           [ url_button ~key:"puburl-b"
-              ~label:(storage_url "publish-server-url" T.publish_default)
+              ~label:(storage_url "publish-server-url" (T.t "settings-page/publish-server-url-default"))
               ~on_open:(fun () -> Dialogs_state.open_ "publish-server")
           ]
         ()
@@ -974,7 +974,7 @@ let home_page_row ctx =
   let home_text =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
-  C.it_row ~key:"homep" ~label:T.home_default_page
+  C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ Ui_components.input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
@@ -989,7 +989,7 @@ let home_page_row ctx =
               let value = Runtime.signal_get home_text in
               S.set_home_page value (fun res ->
                   match res with
-                  | S.Home_ok -> Toast.success T.home_updated
+                  | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
                   | S.Home_missing ->
                       Toast.warning (T.page_not_found_msg value)))
             []
@@ -1008,7 +1008,7 @@ let features_pane ctx =
   panel ~key:"pane-features" ~style_class:"panel-wrap ls-mb" ~margin_bottom:32
     [ home_page_row ctx
     ; C.action_row ~key:"plugs"
-        ~label:T.plugins_label
+        ~label:(T.t "settings/plugins")
         ~actions:
           [ row ~key:"plugs-a" ~style_class:"ls-toolbar-gap"
               (C.switch_controls ~key:"plugs" ~on:(S.plugin_system ())
@@ -1016,7 +1016,7 @@ let features_pane ctx =
           ]
         ()
     ; switch_action_row ~key:"cards"
-        ~label:T.flashcards
+        ~label:(T.t "settings.features/enable-flashcards")
         ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
         ~on_checked:(fun checked ->
           S.config_set_bool "feature/enable-flashcards?" checked)
@@ -1025,24 +1025,24 @@ let features_pane ctx =
 
 (* ---- shell ---- *)
 
-let nav_items =
-  [ ("general", T.settings_general, "adjustments")
-  ; ("editor", T.settings_editor, "writing")
-  ; ("keymap", T.settings_keymap, "keyboard")
-  ; ("advanced", T.settings_advanced, "bulb")
-  ; ("features", T.settings_features, "app-feature")
+let nav_items () =
+  [ ("general", (T.t "settings/general"), "adjustments")
+  ; ("editor", (T.t "settings/editor"), "writing")
+  ; ("keymap", (T.t "settings/keymap"), "keyboard")
+  ; ("advanced", (T.t "settings/advanced"), "bulb")
+  ; ("features", (T.t "settings/features"), "app-feature")
   ]
 
 let nav_gap = 8
 
 let nav_menu_height viewport =
-  let count = List.length nav_items - (if viewport < 640. then 1 else 0) in
+  let count = List.length (nav_items ()) - (if viewport < 640. then 1 else 0) in
   (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
 
 let tab_title tab =
-  match List.find_opt (fun (id, _, _) -> id = tab) nav_items with
+  match List.find_opt (fun (id, _, _) -> id = tab) (nav_items ()) with
   | Some (_, l, _) -> l
-  | None -> T.settings_general
+  | None -> (T.t "settings/general")
 
 let nav_item ~key (id, label, icn) =
   let content = C.class_signal (S.signal ())
@@ -1134,7 +1134,7 @@ let inner ~modal : t =
                          ~font_size:"1.5rem" ~font_weight:600 ~line_height:"2rem"
                          ~data_attrs:
                            [ "style", "text-transform: lowercase" ]
-                         ~value:T.settings_title []
+                         ~value:(T.t "nav/settings") []
                      ]
                  ; Ui_parts.int_prop Lui_protocol.MinHeight
                      ~value:(reactive (fun viewport -> nav_menu_height viewport) viewport)
@@ -1143,7 +1143,7 @@ let inner ~modal : t =
                      (List.mapi
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)
-                        nav_items))
+                        (nav_items ())))
                  ]))))
              ; article ~modal ctx
              ])

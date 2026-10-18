@@ -102,9 +102,9 @@ let root_header ~restore ~delete_forever root : t =
             []
         ]
     ; row ~key:("rhb-" ^ uuid) ~cross:`center ~gap:4
-        [ ghost_btn ~key:("rhr-" ^ uuid) T.restore (fun () ->
+        [ ghost_btn ~key:("rhr-" ^ uuid) (T.t "storage.recycle/restore") (fun () ->
               restore uuid title)
-        ; ghost_btn ~key:("rhd-" ^ uuid) T.delete (fun () ->
+        ; ghost_btn ~key:("rhd-" ^ uuid) (T.t "ui/delete") (fun () ->
               delete_forever uuid title page)
         ]
     ]
@@ -131,11 +131,11 @@ let render_roots ~restore ~delete_forever roots : t =
       
        ~as_:`Small
        ~foreground:"var(--ls-secondary-text-color)"
-       ~value:T.recycle_retention []
+       ~value:(T.t "storage.recycle/retention-desc") []
     :: (if roots = [] then
           [ text ~key:"empty" ~as_:`Small
               ~foreground:"var(--ls-secondary-text-color)"
-              ~value:T.recycle_empty []
+              ~value:(T.t "storage.recycle/empty") []
           ]
         else
           List.map
@@ -183,8 +183,8 @@ let view (_ms : Model.t Signal.signal) : t =
   in
   let delete_forever uuid title is_page =
     let msg =
-      if is_page then T.recycle_delete_confirm_page
-      else T.recycle_delete_confirm_block
+      if is_page then (T.t "storage.recycle/delete-page-confirm-desc")
+      else (T.t "storage.recycle/delete-block-confirm-desc")
     in
     if Ui_services.dom_confirm msg then
       ignore

@@ -91,11 +91,11 @@ let graph_row repo : t =
     ; column ~key:("grc-" ^ repo) ~style_class:"controls"
         [ Menu_item.dots_menu ~key:("grm-" ^ repo)
             ([ ( "open-in-another-tab-menu-item"
-               , T.open_in_another_tab
+               , (T.t "graph/open-in-another-tab-action")
                , false
                , fun () -> open_in_another_tab repo )
              ; ( "delete-local-graph-menu-item"
-               , T.delete_local_graph
+               , (T.t "graph/delete-local-action")
                , not (Graphs_ops.removable repo)
                , fun () -> Graphs_ops.ask_delete ~remote:false repo )
              ]
@@ -136,13 +136,13 @@ let remote_row (name, uuid, e2ee, role) : t =
        graph is also downloaded locally (repo.cljs: root is truthy) *)
     (if List.mem local_repo (Graphs_ops.repos ()) then
        [ ( "delete-local-graph-menu-item"
-         , T.delete_local_graph
+         , (T.t "graph/delete-local-action")
          , not (Graphs_ops.removable local_repo)
          , fun () -> Graphs_ops.ask_delete ~remote:false local_repo )
        ]
      else [])
     @ ( "delete-remote-graph-menu-item"
-      , T.delete_remote_graph
+      , (T.t "graph/delete-server-action")
       , false
       , fun () -> Graphs_ops.ask_delete ~remote:true local_repo )
       :: leave_item
@@ -187,8 +187,8 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
     [ divider ~key:"remote-hr" ~margin_top:32 []
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
         [ heading ~key:"rh" ~level:2
-            ~value:T.remote_graphs []
-        ; Ui_components.button ~variant:`outline ~key:"refresh" ~text:T.refresh
+            ~value:(T.t "graph/remote-graphs") []
+        ; Ui_components.button ~variant:`outline ~key:"refresh" ~text:(T.t "ui/refresh")
             ~disabled_signal:(Signal.value refreshing)
             ~on_press:(fun _ ->
               Runtime.signal_set refreshing true;
@@ -240,17 +240,17 @@ let view (ms : Model.t Signal.signal) : t =
   in
   column ~key:"graphs-root"
     [ heading ~key:"title" ~level:1 ~style_class:"title"
-        ~value:T.all_graphs []
+        ~value:(T.t "graph/all-graphs") []
     ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
         [ row ~key:"create-row" ~padding_vertical:32
             [ Ui_components.button ~key:"create" ~variant:`primary ~size:`sm
-                ~text:T.create_new_graph
+                ~text:(T.t "graph/create-new")
                 ~on_press:(fun _ -> Dialogs_state.open_ "new-graph")
                 []
             ]
         ; column ~key:"local"
             [ heading ~key:"lh" ~level:2
-                ~value:T.local_graphs []
+                ~value:(T.t "graph/local-graphs") []
             ; keyed ~source:merged_src ~key:(fun r -> r)
                 ~cmp:String.compare
                 ~mount:(fun rs -> graph_row (Signal.get rs))

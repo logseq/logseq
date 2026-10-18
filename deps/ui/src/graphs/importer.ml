@@ -22,11 +22,11 @@ let finish_import repo label =
 (* name prompt -> validate -> run import; `run` resolves true only when
    the import actually landed (it may toast a local error itself) *)
 let ask_name_and_run label run =
-  Dialogs_state.prompt ~title:T.set_graph_name ~on_submit:(fun name ->
+  Dialogs_state.prompt ~title:(T.t "import/set-graph-name-label") ~on_submit:(fun name ->
       let name = String.trim name in
-      if name = "" then Toast.warning T.import_empty_name
+      if name = "" then Toast.warning (T.t "import/empty-graph-name")
       else if Graphs_ops.invalid_chars name <> [] then
-        Toast.warning (Printf.sprintf "%s \"%s\"" T.invalid_name name)
+        Toast.warning (Printf.sprintf "%s \"%s\"" (T.t "graph.validation/name-invalid") name)
       else if Graphs_ops.already_exists name then
         Toast.error (T.already_exists name)
       else (
@@ -36,7 +36,7 @@ let ask_name_and_run label run =
           (let* ok =
             (Js.Promise.catch
                (fun _e ->
-                  Toast.error T.import_failed;
+                  Toast.error (T.t "import/import-error");
                   Js.Promise.resolve false)
                (run repo))
           in
@@ -57,7 +57,7 @@ let import_edn repo (file : Ui_services.file) =
   let* text = promise_of (file.Ui_services.file_text ()) in
   match (try Some (Edn.parse text) with _ -> None) with
   | None ->
-      Toast.warning T.import_invalid_edn;
+      Toast.warning (T.t "import/invalid-edn-file");
       Js.Promise.resolve false
   | Some w ->
       let* _ =
@@ -167,7 +167,7 @@ let import_sqlite_zip repo (file : Ui_services.file) =
   let es = Zip.entries buf in
   match sqlite_zip_entry es with
   | None ->
-      Toast.warning T.import_zip_missing_db;
+      Toast.warning (T.t "import/zip-missing-db-sqlite");
       Js.Promise.resolve false
   | Some entry -> (
       let* sqlite = zip_entry_data buf entry in
@@ -264,20 +264,20 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
 
 (* cljs imports.cljs importer — sqlite / zip / file-graph / transit / edn *)
 let items () =
-  [ file_input ~id:"import-sqlite-db" ~label:T.import_sqlite_title
-      ~desc:T.import_sqlite_desc ~accept:".sqlite,.sqlite3,.db" ()
-  ; file_input ~id:"import-sqlite-zip" ~label:T.import_sqlite_zip_title
-      ~desc:T.import_sqlite_zip_desc ~accept:".zip" ()
-  ; file_input ~id:"import-file-graph" ~label:T.import_file_graph_title
-      ~desc:T.import_file_graph_desc
+  [ file_input ~id:"import-sqlite-db" ~label:(T.t "import/sqlite-label")
+      ~desc:(T.t "onboarding.import/sqlite-desc") ~accept:".sqlite,.sqlite3,.db" ()
+  ; file_input ~id:"import-sqlite-zip" ~label:(T.t "import/sqlite-and-assets-title")
+      ~desc:(T.t "import/sqlite-and-assets-desc") ~accept:".zip" ()
+  ; file_input ~id:"import-file-graph" ~label:(T.t "import/file-to-db-title")
+      ~desc:(T.t "import/file-to-db-desc")
       ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"
       ~extra_attrs:[ ("webkitdirectory", "true") ]
       ()
   ; file_input ~id:"import-debug-transit"
-      ~label:T.import_debug_transit_title ~desc:T.import_debug_transit_desc
+      ~label:(T.t "import/debug-transit-title") ~desc:(T.t "import/debug-transit-desc")
       ~accept:".transit,.json" ()
-  ; file_input ~id:"import-db-edn" ~label:T.import_db_edn_title
-      ~desc:T.import_db_edn_desc ~accept:".edn" ()
+  ; file_input ~id:"import-db-edn" ~label:(T.t "import/db-edn-title")
+      ~desc:(T.t "import/db-edn-desc") ~accept:".edn" ()
   ]
 
 let article () =
@@ -289,11 +289,11 @@ let article () =
             [ Ui_components.Prop.font_size "1.25rem"
             ; Ui_components.Prop.font_weight 600 ]
             (heading ~key:"imp-h" ~level:1 ~as_:`H1
-               ~value:T.import_title [])
+               ~value:(T.t "onboarding.import/title") [])
         ; Ui_components.with_props
             [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
             (heading ~key:"imp-d" ~level:2 ~as_:`H2
-               ~value:T.import_desc []) ]
+               ~value:(T.t "onboarding.import/desc") []) ]
     ; column ~key:"imp-l" ~style_class:"d" ~gap:12 (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
@@ -309,11 +309,11 @@ let view () : t =
         ; Ui_components.Prop.font_weight 700 ]
         (heading ~key:"imp-th" ~level:1 ~as_:`H1
            ~style_class:"ls-imp-title"
-           ~value:T.import_existing_notes [])
+           ~value:(T.t "import/notes") [])
     ; Ui_components.with_props
         [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
         (heading ~key:"imp-td" ~level:2 ~as_:`H2
-           ~value:T.import_later [])
+           ~value:(T.t "onboarding.import-option/desc") [])
     ; column ~key:"imp-card"
         ~style_class:"inner-card" ~width:560 ~margin_top:32 ~padding:32
         ~corner_radius:16 ~gap:24

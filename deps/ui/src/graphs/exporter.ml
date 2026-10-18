@@ -370,20 +370,20 @@ let body (_ms : Model.t Signal.signal) : t =
     [ (* .export h1.title.ls-mb keys on the h1 tag — ~as_ retags the
          heading element *)
       heading ~key:"ex-h" ~level:1 ~as_:`H1 ~style_class:"title ls-mb"
-        ~margin_bottom:32 ~value:T.export_title []
+        ~margin_bottom:32 ~value:(T.t "export/title") []
     ; column ~key:"ex-list" ~style_class:"ls-ex-list" ~gap:16
         ~margin_left:4
-        ([ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
+        ([ link ~key:"ex-db" (T.t "export/sqlite-db") (T.t "export.backup/sqlite-desc")
              export_binary
-         ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
+         ; link ~key:"ex-zip" (T.t "export/zip") (T.t "export.backup/zip-desc")
              export_zip
-         ; link ~key:"ex-edn" T.export_edn_file T.export_edn_desc export_edn
-         ; link ~key:"ex-md" T.export_markdown "" export_markdown
+         ; link ~key:"ex-edn" (T.t "export/db-edn") (T.t "export/edn-desc") export_edn
+         ; link ~key:"ex-md" (T.t "export/markdown") "" export_markdown
          ; (if Daemon_client.is_electron () then
               link ~key:"ex-html" (T.t "export/public-pages") "" export_html
             else Logseq_el.fragment [])
-         ; link ~key:"ex-tr" T.export_debug_transit
-             T.export_debug_transit_desc export_transit
+         ; link ~key:"ex-tr" (T.t "export/debug-transit-file")
+             (T.t "export/debug-transit-desc") export_transit
          ]
         @
         (* cljs web only shows the auto-backup section (hr + schedule) on

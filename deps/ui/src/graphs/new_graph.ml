@@ -31,11 +31,11 @@ let already_exists name = Graphs_ops.already_exists name
 let submit name_st cloud e2ee creating =
   let name = String.trim (Runtime.signal_get name_st) in
   if String.trim name = "" then
-    Toast.warning T.name_reserved_warning
+    Toast.warning (T.t "graph.validation/name-reserved-characters-warning")
   else if already_exists name then
     Toast.error (T.already_exists name)
   else if invalid_name name then
-    Toast.warning T.name_reserved_warning
+    Toast.warning (T.t "graph.validation/name-reserved-characters-warning")
   else (
     Signal.set creating true;
     Runtime.flush ();
@@ -70,7 +70,7 @@ let body (_ms : Model.t Signal.signal) : t =
       [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
            compact variant *)
         Ui_components.input ~key:"ng-in" ~style_class:"ui__input" ~height:40
-          ~placeholder:T.graph_name_placeholder
+          ~placeholder:(T.t "graph/name-placeholder")
           ~autofocus:true
           ~text_signal:(Signal.value name_st)
           ~on_input:(fun ev ->
@@ -91,7 +91,7 @@ let body (_ms : Model.t Signal.signal) : t =
                      ~checked:(Signal.value cloud)
                      ~on_toggle:(fun () -> toggle cloud)
                  ; checkbox_label ~key:"rtc-lbl"
-                     ~value:T.use_sync_label
+                     ~value:(T.t "graph/use-sync-label")
                      ~on_press:(fun _ -> toggle cloud)
                  ; if_ ~test:(Signal.value cloud)
                      (row ~key:"ng-e2ee-row"
@@ -100,14 +100,14 @@ let body (_ms : Model.t Signal.signal) : t =
                             ~checked:(Signal.value e2ee)
                             ~on_toggle:(fun () -> toggle e2ee)
                         ; checkbox_label ~key:"e2ee-lbl"
-                            ~value:T.encrypt_data_label
+                            ~value:(T.t "graph/encrypt-data-label")
                             ~on_press:(fun _ -> toggle e2ee)
                         ])
                  ]
              ]
          else box ~key:"ng-no-rtc" ~display:`none [])
       ; Ui_components.button ~key:"ng-submit" ~variant:`primary
-             ~text:T.submit
+             ~text:(T.t "ui/submit")
              ~disabled_signal:(Signal.value creating)
              ~on_press:(fun _ -> submit name_st cloud e2ee creating)
              []

@@ -31,7 +31,7 @@ let page_items (p : Model.page) =
   let del =
     if p.page_built_in then []
     else
-      [ item "del" I18n.delete_page (fun () ->
+      [ item "del" (I18n.t "page/delete") (fun () ->
             match p.page_uuid with
             | Some u ->
                 (* cljs: permanent wording for class/property entities
@@ -56,7 +56,7 @@ let page_items (p : Model.page) =
         [ Menu_item.el ~key:"fav"
             ~label:(reactive (fun favorites ->
                 if List.exists (fun (page : Model.page) -> page.page_uuid=Some uuid) favorites
-                then I18n.unfavorite_page else I18n.add_to_favorites)
+                then (I18n.t "page/unfavorite") else (I18n.t "page/add-to-favorites"))
               (Signal.value st.Sidebar_state.favorites))
             ~on_click:(fun () ->
               Runtime.send (Action.Page_menu_set None);
@@ -64,7 +64,7 @@ let page_items (p : Model.page) =
     | _ -> []
   in
   let export_page =
-    item "exp-page" I18n.export_page (fun () ->
+    item "exp-page" (I18n.t "export/page") (fun () ->
         Runtime.send (Action.Page_menu_set None);
         (match p.page_uuid with
          | Some u -> Export_state.arm u p.page_db_id ~has_top_level:true
@@ -72,7 +72,7 @@ let page_items (p : Model.page) =
         Sidebar_state.open_dialog "export-page")
   in
   let publish_page =
-    item "pub-page" I18n.publish_page (fun () ->
+    item "pub-page" (I18n.t "publish/dialog-title") (fun () ->
         Runtime.send (Action.Page_menu_set None);
         (match p.page_uuid with
          | Some u -> Publish_view.arm u p.page_db_id
@@ -87,7 +87,7 @@ let page_items (p : Model.page) =
     | true, _, _ -> (
         match p.page_db_id with
         | Some id ->
-            [ item "cvt2p" I18n.convert_tag_to_page (fun () ->
+            [ item "cvt2p" (I18n.t "page.convert/tag-to-page-action") (fun () ->
                   Runtime.send
                     (Action.Confirm_set
                        (Some (Model.Confirm_convert_tag_to_page id)));
@@ -96,7 +96,7 @@ let page_items (p : Model.page) =
     | false, true, _ -> (
         match p.page_db_id with
         | Some id ->
-            [ item "cvt" I18n.convert_to_tag (fun () ->
+            [ item "cvt" (I18n.t "page/convert-to-tag") (fun () ->
                   Runtime.send (Action.Page_menu_set None);
                   ignore (Page_ops.convert_to_tag id)) ]
         | None -> [])
@@ -119,25 +119,25 @@ let page_items (p : Model.page) =
    ls:open-dialog, Recycle navigates to its page. *)
 let global_items () =
   let close () = Runtime.send (Action.Page_menu_set None) in
-  [ icon_item "settings" I18n.settings "settings" (fun () ->
+  [ icon_item "settings" (I18n.t "nav/settings") "settings" (fun () ->
         close ();
         Sidebar_state.open_dialog "settings")
-  ; icon_item "plugins" I18n.plugins "apps" (fun () ->
+  ; icon_item "plugins" (I18n.t "nav/plugins") "apps" (fun () ->
         close ();
         Sidebar_state.open_dialog "plugins")
-  ; icon_item "appearance" I18n.appearance "color-swatch" (fun () ->
+  ; icon_item "appearance" (I18n.t "nav/appearance") "color-swatch" (fun () ->
         Runtime.send (Action.Appearance_set true))
-  ; icon_item "recycle" I18n.recycle "trash" (fun () ->
+  ; icon_item "recycle" (I18n.t "storage.recycle/title") "trash" (fun () ->
         close ();
         Runtime.mark_nav ();
         Platform.set_location_hash "#/page/Recycle")
-  ; icon_item "export" I18n.export_graph "database-export" (fun () ->
+  ; icon_item "export" (I18n.t "export/graph") "database-export" (fun () ->
         close ();
         Sidebar_state.open_dialog "export-graph")
-  ; icon_item "import" I18n.import_ "file-upload" (fun () ->
+  ; icon_item "import" (I18n.t "import/title") "file-upload" (fun () ->
         close ();
         Platform.set_location_hash "#/import")
-  ; icon_item "login" I18n.login "user" (fun () ->
+  ; icon_item "login" (I18n.t "ui/login") "user" (fun () ->
         close ();
         Sidebar_state.open_dialog "login")
   ]
@@ -186,20 +186,20 @@ let confirm_view (c : Model.confirm) =
     match c with
     | Model.Confirm_delete_page (u, page_title, permanent) ->
         ( Some (Icons.icon ~size:20. "alert-triangle")
-        , (if permanent then I18n.delete_page_permanent_desc
-           else I18n.delete_page_desc)
+        , (if permanent then (I18n.t "page.delete/permanent-confirm-title")
+           else (I18n.t "page.delete/confirm-title"))
         , "- " ^ page_title
         , "ui__alert-dialog-description"
         , fun () -> ignore (Page_ops.delete u) )
     | Model.Confirm_convert_tag_to_page id ->
         ( None
-        , I18n.convert_tag_to_page
-        , I18n.convert_tag_to_page_desc
+        , (I18n.t "page.convert/tag-to-page-action")
+        , (I18n.t "page.convert/tag-to-page-confirm-desc")
         , "ui__alert-dialog-description"
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
     | Model.Confirm_delete_asset u ->
         ( None
-        , I18n.asset_confirm_delete
+        , (I18n.t "asset/confirm-delete-image")
         , ""
         , "ui__alert-dialog-description"
         , fun () -> Asset_dom.delete_asset u )
@@ -238,8 +238,8 @@ let confirm_view (c : Model.confirm) =
                 ~foreground:"var(--ls-secondary-text-color, \
                    hsl(var(--muted-foreground)))" [] ]
         ; Ui_components.alert_dialog_footer ~key:"adlg-f"
-            [ btn "adlg-cancel" I18n.cancel `outline close
-            ; btn "adlg-confirm" I18n.confirm `primary (fun () ->
+            [ btn "adlg-cancel" (I18n.t "ui/cancel") `outline close
+            ; btn "adlg-confirm" (I18n.t "ui/confirm") `primary (fun () ->
                   close ();
                   act ())
             ]
