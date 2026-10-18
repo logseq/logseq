@@ -120,8 +120,6 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     [ Prop.white_space `nowrap;Prop.cursor `pointer;Prop.user_select `none
     ; Prop.font_size font;Prop.line_height line;Prop.font_weight 500
     ; Prop.hover_background hover;Prop.hover_foreground hover_ink
-    ; Prop.focus_shadow
-        "0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--background))"
     ; Prop.disabled_opacity 0.5;Prop.pressed_opacity pressed ]
     (Lui_elements.button
       ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
@@ -1293,7 +1291,7 @@ let date_picker ~translate ~on_pick : t =
                                  (calendar_month_names translate))));
                     ];
                   input ~accessibility_identifier:"calendar-year" ~width:52
-                    ~height:32 ~padding_horizontal:8
+                    ~height:32 ~padding_horizontal:8 ~padding_vertical:0
                     ~text:
                       (reactive
                          (fun (y, _, _) -> string_of_int y)
@@ -1323,7 +1321,7 @@ let date_picker ~translate ~on_pick : t =
           column ~padding_horizontal:12
             [
               input ~accessibility_identifier:"calendar-date-input" ~height:40
-                ~padding_horizontal:8 ~margin_bottom:12
+                ~margin_bottom:12
                 ~placeholder:(translate "ui/date-natural-language-placeholder")
                 ~on_input:(function
                   | P.TextChanged (_, value) -> Signal.set buffer value

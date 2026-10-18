@@ -3070,7 +3070,7 @@ let () =
       apply [RemoveProp (830001, PaddingValue);
              RemoveProp (830001, PaddingHorizontal);
              RemoveProp (830001, PaddingVertical)];
-      expect ~measured:(10., 6., 10., 6.) 10. 6. 10. 6.)
+      expect ~measured:(12., 8., 12., 8.) 12. 8. 12. 8.)
     [ 1.; 2. ];
   print_endline "native text padding edges: OK"
 
@@ -6473,3 +6473,173 @@ let () =
       List.iter prerr_endline (List.rev !failures);
       check "Native calendar and month menu theme parity" (!failures = []);
       print_endline "native calendar and month menu theme parity: OK")
+
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let store = Lui_store.create () in
+      let backend =
+        {
+          backend_profile = profile MacOS GenericHost;
+          apply_batch =
+            (fun batch ->
+              Lui_store.apply_batch store batch;
+              true);
+        }
+      in
+      let variants = [ `default; `destructive; `secondary; `outline; `ghost ] in
+      let app =
+        Lui_app.create backend ()
+          (fun () () -> ())
+          (fun _ _ _ ->
+            Lui_elements.column ~gap:16 ~padding:12
+              (List.mapi
+                 (fun index variant ->
+                   Ui_components.button ~variant ~text:"Sample"
+                     ~accessibility_identifier:
+                       ("focus-sample-" ^ string_of_int index)
+                     [])
+                 variants
+              @ [ Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore ]
+              ))
+      in
+      ignore (Lui_app.start app);
+      ignore (Lui_app.flush app);
+      let find_identifier name =
+        List.find
+          (fun id ->
+            Lui_store.string_prop store id "accessibility-identifier"
+            = Some name)
+          (Lui_store.preorder store)
+      in
+      let failures = ref [] in
+      let expect message condition =
+        if not condition then failures := message :: !failures
+      in
+      let layout = Lui_layout.create () in
+      List.iter
+        (fun mode ->
+          let snapshot = Ui_theme.snapshot mode in
+          Theme_vars.install_snapshot
+            (Yojson.Safe.to_string
+               (`Assoc
+                  [
+                    ( "mode",
+                      `String (if mode = Ui_theme.Dark then "dark" else "light")
+                    );
+                    ( "vars",
+                      `Assoc
+                        (List.map
+                           (fun (key, value) -> (key, `String value))
+                           snapshot.vars) );
+                  ]));
+          Theme_vars.set_dark (mode = Ui_theme.Dark);
+          List.iter
+            (fun accent ->
+              Theme_vars.set_accent accent;
+              List.iter
+                (fun scale ->
+                  Lui_layout.sync ~scale ~width:(600. *. scale)
+                    ~height:(1000. *. scale) layout store;
+                  List.iteri
+                    (fun index _ ->
+                      let id =
+                        find_identifier ("focus-sample-" ^ string_of_int index)
+                      in
+                      let scene =
+                        Lui_scene.create
+                          ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+                          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+                      in
+                      Lui_paint.paint
+                        {
+                          Lui_paint.default_hooks with
+                          color_of = Theme_vars.color_of;
+                          shadow_of =
+                            Lui_paint.parse_shadows Theme_vars.color_of;
+                          layout = Lui_layout.layout_hook layout;
+                          state_of =
+                            (fun target ->
+                              {
+                                Lui_paint.state_neutral with
+                                focused = target = id;
+                              });
+                        }
+                        store scene
+                        ~width:(int_of_float (600. *. scale))
+                        ~height:(int_of_float (1000. *. scale))
+                        ~scale ~clear:(Lui_scene.color 0 0 0 0);
+                      let r = Option.get (Lui_layout.rect layout id) in
+                      let has_outline grow color =
+                        let region =
+                          Lui_scene.rect
+                            (r.x -. (grow *. scale))
+                            (r.y -. (grow *. scale))
+                            (r.w +. (2. *. grow *. scale))
+                            (r.h +. (2. *. grow *. scale))
+                        in
+                        List.exists
+                          (function
+                            | Lui_scene.Fill f ->
+                                f.frect = region && f.fborder_color = color
+                                && f.fborder
+                                   = ( 2. *. scale,
+                                       2. *. scale,
+                                       2. *. scale,
+                                       2. *. scale )
+                            | Lui_scene.Shadow s ->
+                                s.srect = region && s.scolor = color
+                                && s.sblur = 0. && not s.sinset
+                            | _ -> false)
+                          scene.ops
+                      in
+                      let context =
+                        Printf.sprintf "variant=%d accent=%s dark=%b scale=%g"
+                          index accent (mode = Ui_theme.Dark) scale
+                      in
+                      expect
+                        ("Button focus offset must use background: " ^ context)
+                        (has_outline 2.
+                           (Option.get (Theme_vars.color_of "background")));
+                      expect
+                        ("Button focus outer ring must use ring: " ^ context)
+                        (has_outline 4.
+                           (Option.get (Theme_vars.color_of "ring"))))
+                    variants;
+                  let field = find_identifier "calendar-date-input" in
+                  let year = find_identifier "calendar-year" in
+                  let year_insets = Lui_paint.text_placement_of store year in
+                  expect
+                    "Calendar year must keep the reference's zero vertical \
+                     padding"
+                    (year_insets.tp_pad_top = 0.
+                    && year_insets.tp_pad_bottom = 0.);
+                  let scene =
+                    Lui_scene.create
+                      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+                      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+                  in
+                  let engine =
+                    Text_engine.create
+                      ~scene:(fun () -> scene)
+                      ~scale:(fun () -> scale)
+                      ~store:(fun () -> store)
+                  in
+                  let region = Option.get (Lui_layout.rect layout field) in
+                  let _, x, _ =
+                    Text_engine.text_layout engine field region "2026-10-18"
+                  in
+                  expect
+                    "Calendar input ink must begin at the shared twelve-point \
+                     inset"
+                    (abs_float (x -. region.x -. (12. *. scale)) < 0.001))
+                [ 1.; 2. ])
+            [ "logseq"; "blue" ])
+        [ Ui_theme.Light; Ui_theme.Dark ];
+      ignore (Lui_app.dispose app);
+      Theme_vars.set_accent "logseq";
+      Theme_vars.set_dark false;
+      List.iter prerr_endline (List.rev !failures);
+      check "Shared buttons and calendar input must use portable form styling"
+        (!failures = []);
+      print_endline "native shared button focus and calendar text insets: OK")
