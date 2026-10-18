@@ -3070,6 +3070,10 @@ let () =
       apply [RemoveProp (830001, PaddingValue);
              RemoveProp (830001, PaddingHorizontal);
              RemoveProp (830001, PaddingVertical)];
+      expect ~measured:(12., 8., 12., 8.) 12. 8. 12. 8.;
+      apply [SetProp (830001, BorderWidth, StringValue "1 2 3 4")];
+      expect ~measured:(12., 8., 12., 8.) 16. 9. 14. 11.;
+      apply [SetProp (830001, BorderWidth, IntValue 0)];
       expect ~measured:(12., 8., 12., 8.) 12. 8. 12. 8.)
     [ 1.; 2. ];
   print_endline "native text padding edges: OK"
@@ -3238,8 +3242,9 @@ let () =
                           Text_engine.text_layout (Lazy.force engine) field
                             (rect field) text
                         in
-                        expect "text does not clear the leading image"
-                          (x -. (rect field).x = float pad_left *. scale)
+                        let border = if borderless then 0. else 1. in
+                        expect "text origin must include its border and icon padding"
+                          (x -. (rect field).x = (float pad_left +. border) *. scale)
                       in
                       expect_origin "Undo";
                       ignore
@@ -3886,11 +3891,11 @@ let () =
           let search_layout, search_text_x, _ =
             Text_engine.text_layout keymap_engine search search_region "Undo"
           in
-          expect "Keymap search text must clear the twenty-eight-point icon slot"
-            (search_text_x -. search_region.x = 56.);
+          expect "Keymap search text must include its border and icon slot"
+            (search_text_x -. search_region.x = 58.);
           let first_caret = Lui_text.caret_rect search_layout 0 in
-          expect "Keymap search caret must start after the leading icon slot"
-            (search_text_x +. first_caret.rx -. search_region.x = 56.);
+          expect "Keymap search caret must include its border and icon slot"
+            (search_text_x +. first_caret.rx -. search_region.x = 58.);
           expect "The search icon must not intercept its field's hit target"
             (List.mem search
                (W.hit_path store (A.rects surface) ~x:(search_region.x +. 24.)
@@ -6612,10 +6617,9 @@ let () =
                   let year = find_identifier "calendar-year" in
                   let year_insets = Lui_paint.text_placement_of store year in
                   expect
-                    "Calendar year must keep the reference's zero vertical \
-                     padding"
-                    (year_insets.tp_pad_top = 0.
-                    && year_insets.tp_pad_bottom = 0.);
+                    "Calendar year text includes its border and zero vertical padding"
+                    (year_insets.tp_pad_top = 1.
+                    && year_insets.tp_pad_bottom = 1.);
                   let scene =
                     Lui_scene.create
                       ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
@@ -6632,9 +6636,8 @@ let () =
                     Text_engine.text_layout engine field region "2026-10-18"
                   in
                   expect
-                    "Calendar input ink must begin at the shared twelve-point \
-                     inset"
-                    (abs_float (x -. region.x -. (12. *. scale)) < 0.001))
+                    "Calendar input ink includes twelve-point padding and its border"
+                    (abs_float (x -. region.x -. (13. *. scale)) < 0.001))
                 [ 1.; 2. ])
             [ "logseq"; "blue" ])
         [ Ui_theme.Light; Ui_theme.Dark ];
