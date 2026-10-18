@@ -174,7 +174,7 @@ and node () : t =
                                ~text:(I18n.t "property/unset-property")
                                ~on_press:(fun _ -> open_prop_dlg ~remove:true) ()
                            ; sbtn ~key:"sb-del" ~label:(I18n.t "editor/delete-selection")
-                               ~icon:`trash
+                               ~icon:(`app "trash")
                                ~on_press:(fun _ ->
                                  Editor_actions.delete_selection ()) ()
                            ; sbtn ~key:"sb-mor" ~label:(I18n.t "ui/show-more")

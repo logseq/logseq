@@ -734,7 +734,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
                  edge on every host; px-2 keeps it 8px in *)
               row ~key:"chev-wrap" ~main:`end_ ~cross:`center ~grow:1.
                 ~margin_right:8
-                [ icon ~key:"chev" ~name:`chevron_right ~point_size:16
+                [ icon ~key:"chev" ~name:(`app "chevron-right") ~point_size:16
                     ~style_class:"ls-menu-chevron" [] ] ])
       | S.Ci_item (label, scut, cmd) ->
           Menu_item.chrome (menu_item ~key:"item" ~style_class:cm_item_cls

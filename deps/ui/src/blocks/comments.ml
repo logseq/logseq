@@ -136,7 +136,7 @@ let comment_row uuid (b : Model.block) : t =
             ~style_class:"ls-comment-delete"
             ~variant:`ghost ~size:`icon
             ~label:(U.t "ui/delete")
-            ~icon:`trash
+            ~icon:(`app "trash")
             ~on_press:(fun _ -> Comments_ops.delete uuid)
             []
         ]
@@ -161,7 +161,7 @@ let add_box uuid : t =
                 ~style_class:"ls-comment-submit"
                 ~variant:`ghost ~size:`icon
                 ~label:(U.t "ui/submit")
-                ~icon:`send
+                ~icon:(`app "send")
                 ~on_press:(fun _ -> Comments_ops.submit uuid)
                 []
             ]

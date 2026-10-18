@@ -340,7 +340,7 @@ let installed_card (pl : Js.Json.t) =
             ~data_attrs:[ "style", "margin-top: 6px" ]
             [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:4
                 [ box ~key:"de"
-                    [ icon ~key:"g" ~name:`settings []
+                    [ icon ~key:"g" ~name:(`app "settings") []
                     ; Ui_components.with_props
                         [ Ui_components.Prop.position `absolute
                         ; Ui_components.Prop.z_index 20

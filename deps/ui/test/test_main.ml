@@ -4256,11 +4256,16 @@ let test_pure_helpers () =
     (try ignore (Sprintf.sprintf "%t" (fun _ -> "")); false
      with Invalid_argument _ -> true);
 
-  (* Icons: kebab, builtin/app resolution, svg + data-uri encoding *)
+  (* Icons: canonical application assets, SVG and data URI encoding. *)
   eqs "kebab camel" "arrow-right" (Icons.kebab "arrowRight");
   eqs "kebab space" "arrow-right" (Icons.kebab "arrow right");
   eqs "kebab leading" "x" (Icons.kebab "-x");
-  check "builtin check" (Icons.name_ref "check" = `check);
+  check "check uses the application Tabler asset" (Icons.name_ref "check" = `app "check");
+  List.iter (fun (kind,name) ->
+    check ("toast uses the reference Tabler status icon: " ^ kind)
+      (Toasts_view.toast_icon kind = `app name))
+    ["success","circle-check";"warning","alert-circle";
+     "error","circle-x";"info","info-circle"];
   check "app name kebabed"
     (Icons.name_ref "arrowRightCircle" = `app "arrow-right-circle");
   check "is_filled" (Icons.is_filled "star-filled");

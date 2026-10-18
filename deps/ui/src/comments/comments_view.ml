@@ -172,9 +172,9 @@ let comment_actions st (cuuid : string) : t =
     [ btn ("cr-" ^ cuuid) (`app "mood-smile")
         (I.t "command.editor/add-reaction")
         (fun () -> open_reaction_picker cuuid ("cr-" ^ cuuid))
-    ; btn ("ce-" ^ cuuid) `edit (I.t "editor/click-to-edit") (fun () ->
+    ; btn ("ce-" ^ cuuid) (`app "edit") (I.t "editor/click-to-edit") (fun () ->
           Signal.set st { (Runtime.signal_get st) with editing = Some cuuid })
-    ; btn ("cd-" ^ cuuid) `trash (I.t "ui/delete") (fun () ->
+    ; btn ("cd-" ^ cuuid) (`app "trash") (I.t "ui/delete") (fun () ->
           delete_comment cuuid)
     ]
 
@@ -256,7 +256,7 @@ let add_box st (area_uuid : string) : t =
               [ Ui_components.button ~key:("cbsub-" ^ area_uuid)
                   ~style_class:"ls-comment-submit"
                   ~label:(I.t "ui/submit")
-                  ~variant:`ghost ~size:`icon ~icon:`send
+                  ~variant:`ghost ~size:`icon ~icon:(`app "send")
                   ~on_press:(fun _ ->
                     submit_comment area_uuid (load_draft area_uuid))
                   []

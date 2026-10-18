@@ -1069,6 +1069,13 @@ let run_views ~registry ~profile ~finish =
       (List.exists (fun child -> child.M.kind = "icon"
         && Hashtbl.find_opt child.M.props "width" = Some (P.IntValue 18))
         (M.children sorting.S.tree n.M.id))) toolbar_buttons;
+  List.iter (fun n ->
+    List.iter (fun child ->
+      if child.M.kind="icon" then
+        check "view action glyphs use application assets rather than a second icon family"
+          (match M.string_prop child "name" with
+           | Some name -> String.starts_with ~prefix:"app:" name | None -> false))
+      (M.children sorting.S.tree n.M.id)) toolbar_buttons;
   check "view search uses one supported control group with no internal gap"
     (List.exists (fun n -> n.M.kind = "button-group"
       && class_has n "view-action-search"

@@ -330,7 +330,7 @@ let auto_backup ctx =
                             | Some name -> name | None -> "")
                             folder_sig)
                           []
-                      ; Ui_components.button ~key:"ab-x" ~size:`icon ~icon:`x ~variant:`ghost
+                      ; Ui_components.button ~key:"ab-x" ~size:`icon ~icon:(`app "x") ~variant:`ghost
                           ~style_class:"ui__button as-ghost"
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)

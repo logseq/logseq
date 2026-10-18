@@ -1245,7 +1245,7 @@ let not_found_view name : t =
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
   box ~key:"lib-add" ~padding_horizontal:4 
-    [ Ui_components.button ~key:"lib-add-btn" ~variant:`secondary ~icon:`plus
+    [ Ui_components.button ~key:"lib-add-btn" ~variant:`secondary ~icon:(`app "plus")
         ~text:(I18n.t "library/add-existing-pages")
         ~style_class:"ui__button"
         ~on_press:(fun _ -> Runtime.send Action.Toggle_search)

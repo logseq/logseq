@@ -602,15 +602,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
     ; files
     };
   Ui_task.install { enqueue = Host.enqueue; assert_owner };
-  (* platform-owned singletons: bundled icon table, app icon aliases and
-     the build revision (LOGSEQ_REVISION baked by the app launcher) *)
+  (* Platform-owned icon data and launcher build revision. *)
   Icon_data.install ();
-  Icons.set_app_aliases
-    [ ("new-page", "file-plus"); ("h-auto", "arrow-autofit-height")
-    ; ("app-feature", "layout-grid"); ("page-ref", "link")
-    ; ("block-embed", "brackets-contain"); ("photo-link", "photo")
-    ; ("video-embed", "video"); ("x-embed", "brand-x")
-    ; ("rotating-arrow-down", "rotate-2") ];
   (match Sys.getenv_opt "LOGSEQ_REVISION" with
    | Some r -> Version.set_revision r
    | None -> ())

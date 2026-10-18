@@ -315,7 +315,7 @@ let choices_pane_view m ~set_pane ~close : t =
                submenu ~text:(D.ref_title (Signal.get c_sig))
                  (choice_children (Signal.get c_sig))) ]
          ]
-     ; menu_item ~icon:`plus ~text:(I18n.t "property/add-choice")
+     ; menu_item ~icon:(`app "plus") ~text:(I18n.t "property/add-choice")
          ~on_press:(fun _ ->
            (* the add form replaces the pane body *)
            Runtime.signal_set set_pane (MEditChoice (W.Map [])))

@@ -181,7 +181,7 @@ let user_item () : Lui_elements.t =
                    ~style_class:"ui__button as-ghost"
                    ~icon:
                      (reactive
-                        (fun m -> if m then `eye else `app "eye-off")
+                        (fun m -> if m then `app "eye" else `app "eye-off")
                         maskedv)
                    ~on_press:(fun _ ->
                      Signal.set masked (not (Runtime.signal_get masked));

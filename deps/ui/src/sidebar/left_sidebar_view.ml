@@ -28,18 +28,10 @@ let arm_press ~on_press_detail (elem : Lui_elements.t) : Lui_elements.t =
   node
 
 
-(* component icon: tabler names go through the `app:` registry (the only
-   cljs name matching a builtin is chevron-right). The `ui__icon` class
-   carries over from the cljs span wrapper; `ti`/`ls-icon-*` font classes
-   are dropped — the kind renders its own svg, font glyphs would
-   double-render *)
+(* Sidebar glyphs use the shared canonical registry and semantic wrapper. *)
 let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) ?transition name =
   icon ?key
-    ~name:
-      (match name with
-      | "chevron-right" -> `chevron_right
-      | "chevron-down" -> `chevron_down
-      | n -> `app n)
+    ~name:(Icons.name_ref name)
     ~point_size:size
     ~data_attrs:attrs
     ?transition

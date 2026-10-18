@@ -67,7 +67,7 @@ let selector_row st =
            ~foreground:
              "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
            ~label:(t_ "flashcard/add-cards-query-tooltip")
-           ~icon:`plus
+           ~icon:(`app "plus")
            ~on_press:(fun _ -> Cards_state.add_cards_block st)
            [])
     ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
@@ -130,7 +130,7 @@ let info_btn st =
      [ Ui_components.button ~key:"info" ~variant:`ghost ~size:`sm
          ~padding_horizontal:0 ~height:16
          ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
-         ~icon:`info ~label:"rating info"
+         ~icon:(`app "info-circle") ~label:"rating info"
          ~on_press:(fun _ -> Cards_state.toggle_info st)
          []
      ; reactive

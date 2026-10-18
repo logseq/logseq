@@ -346,7 +346,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
              ~on_press:(fun _ -> enter_sub fidx)
              ~on_pointer_enter:(fun _ -> enter_sub fidx)
              ~text:label
-             [ icon ~key:"chev" ~name:`chevron_right []
+             [ icon ~key:"chev" ~name:(`app "chevron-right") []
              ; if_
                  ~test:(map (fun st -> st.msub = fidx) msig)
                  (Ui_components.with_props [ Ui_components.sub_card_shadow ]

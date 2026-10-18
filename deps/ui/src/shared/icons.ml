@@ -1,77 +1,6 @@
-(* Icons — mirrors shui icon v2 (`logseq.shui.icon.v2/root`).
-
-   Icon names resolve through the component `icon` kind's `~name`:
-   names in the LUI builtin set emit `~name:`x` directly; every other
-   (kebab-cased) name goes through the `app:` icon registry
-   (`app_icons ()` below feeds the web renderer's map, built from the
-   tabler-children table plus the extension pack). Names found nowhere
-   render the host's missing-glyph fallback — the old `ti ti-*`/`tie
-   tie-*` font-glyph fallback is gone (font glyphs can't ride the icon
-   kind; they'd double-render under its svg mask).
-
-   Platform-owned: the extension pack (the web's `window.tablerIcons`
-   react-element bundle — absent on native hosts) is enumerated by the
-   runtime's adapter and passed to [app_icons] as `~ext`; the one
-   alias the native registry needs (its bundle lacks the extension
-   pack's "new-page" glyph) is declared via [set_app_aliases] at
-   bootstrap. *)
-
-(* builtin name -> `name (the 45-name builtin set of Lui_elements.icon) *)
-let builtin_of_name (name : string) : Lui_elements.icon option =
-  match name with
-  | "alert" -> Some `alert
-  | "archive" -> Some `archive
-  | "arrow-down" -> Some `arrow_down
-  | "arrow-right" -> Some `arrow_right
-  | "arrow-up" -> Some `arrow_up
-  | "check" -> Some `check
-  | "check-circle" -> Some `check_circle
-  | "chevron-down" -> Some `chevron_down
-  | "chevron-left" -> Some `chevron_left
-  | "chevron-right" -> Some `chevron_right
-  | "chevron-up" -> Some `chevron_up
-  | "circle-dot" -> Some `circle_dot
-  | "clock" -> Some `clock
-  | "copy" -> Some `copy
-  | "download" -> Some `download
-  | "edit" -> Some `edit
-  | "ellipsis" -> Some `ellipsis
-  | "external-link" -> Some `external_link
-  | "eye" -> Some `eye
-  | "file-text" -> Some `file_text
-  | "folder" -> Some `folder
-  | "folder-open" -> Some `folder_open
-  | "git-branch" -> Some `git_branch
-  | "git-merge" -> Some `git_merge
-  | "git-pull-request" -> Some `git_pull_request
-  | "info" -> Some `info
-  | "menu" -> Some `menu
-  | "mic" -> Some `mic
-  | "moon" -> Some `moon
-  | "music" -> Some `music
-  | "panel-left" -> Some `panel_left
-  | "panel-right" -> Some `panel_right
-  | "pause" -> Some `pause
-  | "play" -> Some `play
-  | "plus" -> Some `plus
-  | "refresh-cw" -> Some `refresh_cw
-  | "repeat" -> Some `repeat
-  | "save" -> Some `save
-  | "search" -> Some `search
-  | "send" -> Some `send
-  | "settings" -> Some `settings
-  | "shuffle" -> Some `shuffle
-  | "skip-back" -> Some `skip_back
-  | "skip-forward" -> Some `skip_forward
-  | "sun" -> Some `sun
-  | "terminal" -> Some `terminal
-  | "trash" -> Some `trash
-  | "volume" -> Some `volume
-  | "wrench" -> Some `wrench
-  | "x" -> Some `x
-  | "x-circle" -> Some `x_circle
-  | _ -> None
-;;
+(* Application icons use the canonical Tabler and extension SVG registry
+   on every host. Name normalization is shared; platform adapters only
+   provide the underlying immutable asset data. *)
 
 let kebab name =
   (* csk/->kebab-case: separators and lower->upper boundaries become '-';
@@ -93,24 +22,7 @@ let kebab name =
   Buffer.contents b
 ;;
 
-(* tabler-extension (tie) names resolve through the extension pack on
-   the web; a host whose icon registry lacks those entries declares an
-   alias to the closest bundled tabler equivalent *)
-let app_aliases : (string * string) list ref = ref []
-
-let set_app_aliases aliases = app_aliases := aliases
-
-(* resolve a cljs icon name (camelCase or spaced ok) to an icon value:
-   builtin names emit the builtin, everything else the app: registry *)
-let name_ref name : Lui_elements.icon =
-  let n = kebab name in
-  match builtin_of_name n with
-  | Some b -> b
-  | None -> (
-      match List.assoc_opt n !app_aliases with
-      | Some a -> `app a
-      | None -> `app n)
-;;
+let name_ref name : Lui_elements.icon = `app (kebab name)
 
 (* stored icon ids are the display name with spaces stripped (cljs
    icon-cp), and display order does not always kebab back to the
@@ -236,16 +148,6 @@ let custom_icons : (string * string) list =
        fill=\"currentColor\"><path fill-rule=\"evenodd\" \
        d=\"M31.3 192h257.3c17.8 0 26.7 21.5 14.1 34.1L174.1 354.8c-7.8 \
        7.8-20.5 7.8-28.3 0L17.2 226.1C4.6 213.5 13.5 192 31.3 192z\"/></svg>" )
-  ; (* tabler "puzzle" — cljs .property-m icon on property key rows *)
-    ( "puzzle"
-    , "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" \
-       fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" \
-       stroke-linecap=\"round\" stroke-linejoin=\"round\"><path \
-       d=\"M4 7h3a1 1 0 0 0 -1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 \
-       1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 \
-       -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 \
-       1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 \
-       0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1\"/></svg>" )
   ; (* cljs video.cljs clock icon, rendered inside a.youtube-timestamp *)
     ( "youtube-timestamp-icon"
     , "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" \

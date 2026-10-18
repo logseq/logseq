@@ -580,7 +580,7 @@ let keymap_recorder st : t =
                         [
                           Ui_components.button ~key:"remove-key-filter" ~variant:`ghost
                             ~width:16 ~height:16 ~min_width:16 ~min_height:16
-                            ~padding:0 ~icon:`x
+                            ~padding:0 ~icon:(`app "x")
                             ~label:(I18n.t "keymap/remove-filter")
                             ~on_press:(fun _ -> clear ())
                             [];
@@ -667,7 +667,7 @@ let keymap_key_control st =
             ~test:
               (reactive (fun model -> model.km_keys <> []) (Signal.value st))
             (Ui_components.button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
-               ~min_height:0 ~padding:4 ~icon:`x
+               ~min_height:0 ~padding:4 ~icon:(`app "x")
                ~label:(I18n.t "keymap/clear-keystroke-filter")
                ~on_press:(fun _ ->
                  Runtime.signal_set st
@@ -791,7 +791,7 @@ let keymap_th ~key ~collapsed ~on_press label =
         ~grow:1. ~min_width:0
         ~value:(I18n.t (keymap_category label)) []
     ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~size:`sm
-        ~name:(if collapsed then `chevron_right else `chevron_down) []
+        ~name:(if collapsed then `app "chevron-right" else `app "chevron-down") []
       ]
     ]
 
@@ -869,7 +869,7 @@ let keymap_pane () : t =
     if items = [] then
       column ~key:"km-empty" ~cross:`center ~gap:8 ~padding:24
         [
-          icon ~name:`search ~size:`lg [];
+          icon ~name:(`app "search") ~size:`lg [];
           text ~value:(I18n.t "keymap/no-matching-shortcuts") [];
         ]
     else
@@ -904,7 +904,7 @@ let keymap_pane () : t =
 let url_button ~key ~label ~on_open =
   Ui_components.button ~key ~variant:(C.btn_variant `Solid) ~size:`sm
     ~style_class:(C.btn_cls ~variant:`Solid ~size:`Sm ())
-    ~icon:`edit ~icon_placement:`trailing ~text:label
+    ~icon:(`app "edit") ~icon_placement:`trailing ~text:label
     ~on_press:(fun _ -> on_open ()) []
 
 (* cljs storage values are pr-str quoted — strip one pair of quotes *)

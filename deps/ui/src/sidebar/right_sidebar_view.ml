@@ -18,12 +18,10 @@ module P = Lui_protocol
 let t = Sidebar_state.t
 
 
-(* component icon: tabler names go through the `app:` registry (only `x`
-   matches a builtin here). `ui__icon` carries over from the cljs span
-   wrapper; `ti` font classes are dropped — the kind renders its own svg *)
+(* Sidebar glyphs use the shared canonical registry and semantic wrapper. *)
 let icon_ ?key ?(cls = "") ?(size = 16) name =
   icon ?key
-    ~name:(match name with "x" -> `x | n -> `app n)
+    ~name:(Icons.name_ref name)
     ~point_size:size
     ~style_class:("ui__icon" ^ if cls = "" then "" else " " ^ cls)
     []

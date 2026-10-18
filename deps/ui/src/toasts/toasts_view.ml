@@ -8,14 +8,13 @@ let toast_kind_class (k : string) : string =
   | "success" | "error" | "warning" | "info" -> k
   | _ -> "info"
 
-(* tabler icon per kind, mirrors notification.cljs status-icon —
-   builtin LUI icon names where one matches, else app-registered *)
+(* Canonical status assets from notification.cljs. *)
 let toast_icon (k : string) : icon =
-  match k with
-  | "success" -> `check_circle
-  | "warning" -> `alert
-  | "error" -> `x_circle
-  | _ -> `info
+  `app (match k with
+    | "success" -> "circle-check"
+    | "warning" -> "alert-circle"
+    | "error" -> "circle-x"
+    | _ -> "info-circle")
 
 (* status-icon colors, from the dropped .ui__toast-status-icon.<kind>
    rules *)
@@ -69,7 +68,7 @@ let toast_item (t : Model.toast) : t =
                       transparent)"
                    ~label:(I18n.t "ui/close")
                    ~on_press:(fun _ -> Toast.dismiss t.toast_id)
-                   ~icon:`x [])
+                   ~icon:(`app "x") [])
            ]
        ])
       ctx parent

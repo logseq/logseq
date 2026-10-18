@@ -665,7 +665,7 @@ let cmdk_search_only_name ~key ~value : t =
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
   with_props [ Prop.cursor `pointer ]
-    (button ~variant:`ghost ~key ~icon:`x ~size:`icon ~label ~on_press
+    (button ~variant:`ghost ~key ~icon:(`app "x") ~size:`icon ~label ~on_press
        ~padding:4 [])
 
 let cmdk_empty ~key children : t =
@@ -788,7 +788,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
             (with_props
                [ Prop.position `absolute; Prop.inset_right 4. ]
                (button ~key:"clear" ~variant:`ghost ~width:20 ~height:20
-                  ~min_width:0 ~min_height:0 ~padding:4 ~label ~icon:`x
+                  ~min_width:0 ~min_height:0 ~padding:4 ~label ~icon:(`app "x")
                   ~on_press:(fun _ ->
                     on_text "";
                     Option.iter (fun focus -> focus ()) on_clear)
@@ -816,7 +816,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
               Prop.opacity 0.5;
               Prop.pointer_enabled false;
             ]
-            (box ~key:"ic" [ icon ~key:"i" ~name:`search ~size:`sm [] ]);
+            (box ~key:"ic" [ icon ~key:"i" ~name:(`app "search") ~size:`sm [] ]);
         ]
        @ clear @ trailing))
 
@@ -1037,7 +1037,7 @@ let dialog_close ~key ~label ~on_press : t =
     ; Prop.opacity 0.7
     ; Prop.hover_opacity 1. ]
     (button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
-       ~corner_radius:4 ~icon:`x ~label ~on_press [])
+       ~corner_radius:4 ~icon:(`app "x") ~label ~on_press [])
 
 (* -- editor chrome (task 5) -------------------------------------------- *)
 

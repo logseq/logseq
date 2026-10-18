@@ -98,7 +98,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password
            ~icon:(reactive
-                    (fun vis -> if vis then `app "eye-off" else `eye)
+                    (fun vis -> if vis then `app "eye-off" else `app "eye")
                     (Signal.value visible))
            ~on_press:(fun _ ->
              Runtime.signal_set visible (not (Runtime.signal_get visible)))

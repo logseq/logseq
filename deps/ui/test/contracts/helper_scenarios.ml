@@ -213,7 +213,11 @@ let run () =
   (* ---- icons ---- *)
   eqs "kebab camel" (Icons.kebab "arrowRight") "arrow-right";
   eqs "kebab space" (Icons.kebab "arrow right") "arrow-right";
-  check "builtin check" (Icons.name_ref "check" = `check);
+  List.iter (fun name ->
+    check ("application icons preserve the canonical registry asset: " ^ name)
+      (Icons.name_ref name = `app name))
+    ["check";"search";"plus";"dots";"chevron-right";"settings";
+     "app-feature";"new-page";"h-auto";"rotating-arrow-down"];
   check "app name kebabed"
     (Icons.name_ref "arrowRightCircle" = `app "arrow-right-circle");
   check "is_filled" (Icons.is_filled "star-filled");
@@ -235,7 +239,7 @@ let run () =
   Icon_tabler_data.install
     { get =
         (fun name ->
-          if name = "good" then
+          if name = "good" || name = "puzzle" then
             Some (Icon_tabler_data.decode_children
               (Json.Array
                  [| Json.Array
@@ -244,12 +248,16 @@ let run () =
                       |]
                  |]))
           else Some (Icon_tabler_data.decode_children (Json.Array [| Json.Null |])))
-    ; keys = (fun () -> [| "good" |])
+    ; keys = (fun () -> [| "good"; "puzzle" |])
     };
   check "tabler decode"
     (Icon_tabler_data.tabler_children "good"
      = [ ("path", [ ("d", "M0 0") ]) ]);
   check "tabler decode drops malformed"
     (Icon_tabler_data.tabler_children "bad" = []);
+  check "the application registry preserves its canonical puzzle asset"
+    (Lui_protocol.String_map.find_opt "puzzle" (Icons.app_icons ())
+     = Some (Icons.data_uri_of_svg (Icons.svg_of_children ~size:24. "puzzle"
+         (Icon_tabler_data.tabler_children "puzzle"))));
   check "icon names populated" (Array.length Icon_picker_names.items > 1000);
   check "version app set" (String.length Version.app > 0)

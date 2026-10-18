@@ -197,11 +197,11 @@ let code_block_actions ~self lang =
         ~text:
           (if lang <> "" then lang
            else I18n.t "editor/code-language-placeholder")
-        ~icon:`chevron_down ~icon_placement:`trailing
+        ~icon:(`app "chevron-down") ~icon_placement:`trailing
         ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
         [])
     ; Ui_components.button ~key:"cp" ~variant:`ghost ~size:`sm
-        ~icon:`copy ~icon_placement:`leading
+        ~icon:(`app "copy") ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
         ~on_press:(fun _ -> Code_mirror.copy_button self)
         []
@@ -318,7 +318,7 @@ let query_setting_el ~block_uuid =
     ~transition:"opacity .3s ease-in"
     ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
     ~label:(I18n.t "block/set-query")
-    ~icon:`settings
+    ~icon:(`app "settings")
     ~on_press:(fun _ -> Views_view.toggle_query_editor ~block_uuid)
     []
 

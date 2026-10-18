@@ -32,7 +32,7 @@ let action_button ?(extra = "") ~label ?accessibility_identifier ~on_press child
 
 let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
   action_button ~extra ~label:title_ ~on_press:(fun _ -> on_click ())
-    [ icon ~name:(Views_table.icon_of icon_name) ~point_size:18 [] ]
+    [ icon ~name:(Icons.name_ref icon_name) ~point_size:18 [] ]
 
 let count_of (s : V.vstate) =
   if s.V.items_count > 0 then s.V.items_count
@@ -150,7 +150,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                     (Logseq_el.own ctx
                        (Signal.map
                           (fun (v : Wr.view_ent) ->
-                            Views_table.icon_of (view_type_icon v))
+                            Icons.name_ref (view_type_icon v))
                           v_sig))
                   [] ])
        ; text
@@ -205,7 +205,7 @@ let tabs_el inst ~op : t =
            ~foreground:
              "hsl(var(--muted-foreground))"
            ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst)
-           [ icon ~name:`plus ~point_size:15 [] ]) ]
+           [ icon ~name:(`app "plus") ~point_size:15 [] ]) ]
     ctx parent
 
 (* ---------- sorting popup ---------- *)
@@ -270,7 +270,7 @@ let sorting_popup inst anchor =
     row ~style_class:"ls-sort-row" ~cross:`center ~main:`space_between ~gap:8
       ~padding_horizontal:8
       [ row ~cross:`center ~gap:4
-          [ icon ~name:(Views_table.icon_of "grip-vertical") ~point_size:14 []
+          [ icon ~name:(Icons.name_ref "grip-vertical") ~point_size:14 []
           ; text ~value:(c.V.c_name ^ ":") ~white_space:"nowrap"
               ~foreground:"hsl(var(--muted-foreground))" [] ]
       ; row ~cross:`center ~gap:8
@@ -280,7 +280,7 @@ let sorting_popup inst anchor =
               (Ui_components.button ~variant:`ghost ~size:`sm ~height:32
                  ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
                  ~foreground:"hsl(var(--muted-foreground))"
-                 ~label:I.delete_sort ~icon:(Views_table.icon_of "x")
+                 ~label:I.delete_sort ~icon:(Icons.name_ref "x")
                  ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
   in
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
@@ -298,7 +298,7 @@ let sorting_popup inst anchor =
                  ~corner_radius:4 ~style_class:"ls-sort-delete"
                  ~padding_vertical:6 ~padding_horizontal:8
                  ~foreground:"hsl(var(--muted-foreground))"
-                 ~icon:(Views_table.icon_of "trash") ~text:I.delete_sort
+                 ~icon:(Icons.name_ref "trash") ~text:I.delete_sort
                  ~on_press:(fun _ ->
                    P.close_all ();
                    V.update inst (fun s -> { s with V.sorting = [] });
@@ -548,7 +548,7 @@ let more_actions_el inst : t =
     ~label:(I.t "ui/show-more")
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst)
-    [ icon ~name:`ellipsis ~point_size:18 [] ]
+    [ icon ~name:(`app "dots") ~point_size:18 [] ]
 
 (* ---------- display type ---------- *)
 
@@ -576,7 +576,7 @@ let display_type_el inst : t =
       | None -> ())
     [ icon ~point_size:18
         ~name:(reactive (fun (s : V.vstate) ->
-          Views_table.icon_of (match s.V.display_type with
+          Icons.name_ref (match s.V.display_type with
             | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table"))
           (sig_of inst)) [] ]
     ctx parent
@@ -736,7 +736,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
             , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
                white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
         [ text ~value:(filter_value_label inst f) [] ]
-    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
+    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:I.delete
         ~padding_horizontal:4
         ~foreground:"hsl(var(--muted-foreground))"
         ~on_press:(fun _ ->
@@ -979,7 +979,7 @@ let ref_filter_dialog inst anchor =
                  ~foreground:
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))"
-                 [ icon ~name:(Views_table.icon_of "filter") ~point_size:20
+                 [ icon ~name:(Icons.name_ref "filter") ~point_size:20
                      ~style_class:"ls-icon-filter" [] ]
              ; column
                  [ heading ~level:3 ~font_size:"1.125rem"
@@ -997,7 +997,7 @@ let ref_filter_dialog inst anchor =
              ~style_class:"cp__filters-input-panel"
              ~foreground:
                "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
-             [ icon ~name:(Views_table.icon_of "search")
+             [ icon ~name:(Icons.name_ref "search")
                  ~style_class:"ls-icon-search" []
              ; Ui_components.with_props
                  [ Ui_components.Prop.focus_shadow "none" ]
@@ -1033,7 +1033,7 @@ let refs_filter_btn inst : t =
          with
          | Some a -> ref_filter_dialog inst a
          | None -> ())
-       [ icon ~name:(Views_table.icon_of "filter-cog") ~point_size:18 [] ])
+       [ icon ~name:(Icons.name_ref "filter-cog") ~point_size:18 [] ])
     ctx parent
 
 (* ---------- head ---------- *)
@@ -1139,7 +1139,7 @@ let render_head inst : t =
                     with
                     | Some a -> sorting_popup inst a
                     | None -> ())
-                  [ icon ~name:(Views_table.icon_of "arrows-up-down") ~point_size:18 [] ])
+                  [ icon ~name:(Icons.name_ref "arrows-up-down") ~point_size:18 [] ])
            ; action_button ~label:I.filter
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
@@ -1150,7 +1150,7 @@ let render_head inst : t =
                  with
                  | Some a -> filter_popup inst a
                  | None -> ())
-               [ icon ~name:(Views_table.icon_of "filter") ~point_size:18 [] ]
+               [ icon ~name:(Icons.name_ref "filter") ~point_size:18 [] ]
            ]
          @ [ search_el inst ]
          @ [ display_type_el inst; more_actions_el inst ]

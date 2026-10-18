@@ -25,68 +25,9 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
   (Signal.value (inst.V.st))
 let refresh inst = (V.ops ()).V.o_refresh inst
 
-(* schema icon names -> builtin variants; every other name resolves
-   through the app icon registry (tabler svgs + custom paths like
-   "caret-right" registered in app_icons) *)
-let icon_of (name : string) : icon =
-  match name with
-  | "alert" -> `alert
-  | "archive" -> `archive
-  | "arrow-down" -> `arrow_down
-  | "arrow-right" -> `arrow_right
-  | "arrow-up" -> `arrow_up
-  | "check" -> `check
-  | "check-circle" -> `check_circle
-  | "chevron-down" -> `chevron_down
-  | "chevron-left" -> `chevron_left
-  | "chevron-right" -> `chevron_right
-  | "chevron-up" -> `chevron_up
-  | "circle-dot" -> `circle_dot
-  | "clock" -> `clock
-  | "copy" -> `copy
-  | "download" -> `download
-  | "edit" -> `edit
-  | "ellipsis" | "dots" -> `ellipsis
-  | "external-link" -> `external_link
-  | "eye" -> `eye
-  | "file-text" -> `file_text
-  | "folder" -> `folder
-  | "folder-open" -> `folder_open
-  | "git-branch" -> `git_branch
-  | "git-merge" -> `git_merge
-  | "git-pull-request" -> `git_pull_request
-  | "info" -> `info
-  | "menu" -> `menu
-  | "mic" -> `mic
-  | "moon" -> `moon
-  | "music" -> `music
-  | "panel-left" -> `panel_left
-  | "panel-right" -> `panel_right
-  | "pause" -> `pause
-  | "play" -> `play
-  | "plus" -> `plus
-  | "refresh-cw" -> `refresh_cw
-  | "repeat" -> `repeat
-  | "save" -> `save
-  | "search" -> `search
-  | "send" -> `send
-  | "settings" -> `settings
-  | "shuffle" -> `shuffle
-  | "skip-back" -> `skip_back
-  | "skip-forward" -> `skip_forward
-  | "sun" -> `sun
-  | "terminal" -> `terminal
-  | "trash" -> `trash
-  | "volume" -> `volume
-  | "wrench" -> `wrench
-  | "x" -> `x
-  | "x-circle" -> `x_circle
-  | n -> `app n
-
-(* component-kind icon carrying the same ls-icon-* marker classes the
-   imperative span emitted (ui__icon comes from the kind itself) *)
+(* Portable view glyphs retain their semantic ls-icon-* markers. *)
 let icon_el ?(cls = "") name : t =
-  icon ~name:(icon_of name) ~point_size:16
+  icon ~name:(Icons.name_ref name) ~point_size:16
     ~style_class:
       ("ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls)
     []
@@ -94,11 +35,7 @@ let icon_el ?(cls = "") name : t =
 (* icons whose glyph flips with state (sort direction) — a reactive
    prop on one icon node, no remount *)
 let icon_dyn (sig_ : string Signal.signal) : t =
- fun ctx parent ->
-  (* the name derivation is owned into the mount's scope — sig_ is a
-     shared column/vstate signal and an unowned map outlives the icon *)
-  icon ~name_signal:(Logseq_el.own ctx (Signal.map icon_of sig_))
-    ~point_size:16 [] ctx parent
+  icon ~name:(reactive Icons.name_ref sig_) ~point_size:16 []
 
 (* ---------- columns ---------- *)
 
@@ -417,7 +354,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
          the hover-only visibility is DOM-only; the buttons are always
          rendered now *)
       let ghost icon_name title_ =
-        Ui_components.button ~variant:`ghost ~size:`icon ~icon:(icon_of icon_name)
+        Ui_components.button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
           ~foreground:"muted-foreground"
           ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
           ~label:title_
@@ -898,7 +835,7 @@ let action_bar inst : t =
                (action ~margin_left:0 ~label:(I.t "property/unset-property") ~text:(I.t "property/unset-property"));
              action
                ~label:(I.t "ui/delete")
-               ~icon:`trash ~width:31 ~corner_radius:6 (delete_selected inst);
+               ~icon:(`app "trash") ~width:31 ~corner_radius:6 (delete_selected inst);
            ];
        ])
 
@@ -1137,7 +1074,7 @@ let table_header inst cols : t =
                    header cell on class-objects tables only *)
                 [ box ~accessibility_identifier:"add property"
                     [ box ~style_class:"ls-table-header-cell"
-                        [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:`plus
+                        [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:(`app "plus")
                             ~text:I.new_property ~grow:1. ~main:`start
                             ~height:32 ~padding_horizontal:8
                             ~on_press:(fun _ ->

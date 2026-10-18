@@ -901,21 +901,21 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
                                 string_of_int vy)
                               (Signal.value view))
                     [] ]
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:`chevron_left
+            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "chevron-left")
                 ~label:"Previous month"
                 ~on_press:(fun _ ->
                   Signal.set view
                     (let vy, vm = Signal.get (Signal.value view) in
                      if vm = 1 then vy - 1, 12 else vy, vm - 1))
                 []
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:`chevron_right
+            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "chevron-right")
                 ~label:"Next month"
                 ~on_press:(fun _ ->
                   Signal.set view
                     (let vy, vm = Signal.get (Signal.value view) in
                      if vm = 12 then vy + 1, 1 else vy, vm + 1))
                 []
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:`trash
+            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "trash")
                 ~label:(I18n.t "ui/delete")
                 ~on_press:(fun _ -> on_clear ())
                 [] ]
@@ -993,7 +993,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
           box ~opacity:(reactive
                           (fun h -> if h then 1. else 0.)
                           (Signal.value hover))
-            [ Ui_components.button ~variant:`ghost ~size:`icon ~icon:`edit
+            [ Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
                 ~style_class:"prop-edit-ico"
                 ~width:18 ~height:18
                 ~data_attrs:[ ("style", "min-width:0;padding:0") ]
@@ -1128,7 +1128,7 @@ let extends_view ctx row : t =
   (column ~gap:2 ~grow:1.0
      [ Lui_elements.row ~gap:4 ~cross:`center
          (chips
-         @ [ Ui_components.button ~variant:`ghost ~icon:`plus ~text:""
+         @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
                ~label:(I18n.t "property/select-property-placeholder")
                ~on_press:(fun _ ->
                  load ();
@@ -1261,7 +1261,7 @@ let node_view ctx row : t =
   (column ~gap:2 ~grow:1.0
      [ Lui_elements.row ~gap:4 ~cross:`center
          (chips
-         @ [ Ui_components.button ~variant:`ghost ~icon:`plus ~text:""
+         @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
                ~label:(I18n.t "property/select-property-placeholder")
                ~on_press:(fun _ -> Runtime.signal_set open_ true)
                []

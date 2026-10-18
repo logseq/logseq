@@ -113,7 +113,7 @@ let block_el uuid (_b : Model.block) : Lui_elements.t =
                 | Some btn -> open_filter_picker ~anchor:btn uuid
                 | None -> ())
             ~text:(I18n.t "query.builder/filter")
-            [ Lui_elements.icon ~key:("qi-" ^ uuid) ~name:`plus
+            [ Lui_elements.icon ~key:("qi-" ^ uuid) ~name:(`app "plus")
                 ~style_class:"ui__icon" []
             ]
         ]

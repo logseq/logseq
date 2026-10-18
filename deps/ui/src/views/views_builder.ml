@@ -615,7 +615,7 @@ and op_label_el inst ~tree ~loc kind : t =
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
   Ui_components.button ~variant:`ghost ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
-    ~icon:`plus ~size:`sm ~height:24 ~foreground:"muted-foreground"
+    ~icon:(`app "plus") ~size:`sm ~height:24 ~foreground:"muted-foreground"
     ~label:I.filter
     ?text:(if with_label then Some I.filter else None)
     ~grow:1. ~min_width:0
