@@ -471,6 +471,11 @@ let ops : Ui_services.dom =
         Web_dom.add_document_listener name
           (fun payload -> f (ev_of payload))
           (match capture with Some c -> c | None -> false))
+  ; subscribe_document_event =
+      (fun ?(capture=false) name f ->
+        let listener payload = f (ev_of payload) in
+        Web_dom.add_document_listener name listener capture;
+        fun () -> Web_dom.remove_document_listener name listener capture)
   ; on_window_event =
       (fun name f -> add_window_listener_js name (fun e -> f (ev_of e)))
   ; subscribe_window_event =

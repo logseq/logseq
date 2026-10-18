@@ -151,9 +151,13 @@ let services : unit -> Svs.t =
         | None -> ())
   ; set_timeout = D.set_timeout
   ; install_listeners =
-      (fun h ->
+      (fun scope h ->
+        let add_document_listener name listener capture =
+          D.add_document_listener name listener capture;
+          Signal.on_dispose scope (fun () -> D.remove_document_listener name listener capture)
+        in
         let open Svs in
-        D.add_document_listener "keydown"
+        add_document_listener "keydown"
           (fun ev ->
             let a =
               h.key
@@ -164,7 +168,7 @@ let services : unit -> Svs.t =
             if a.prevent then D.ev_prevent_default ev;
             if a.stop then D.ev_stop_propagation ev)
           true;
-        D.add_document_listener "click"
+        add_document_listener "click"
           (fun ev ->
             match D.ev_target ev with
             | Some el ->
@@ -178,7 +182,7 @@ let services : unit -> Svs.t =
                        | None -> None) }
             | None -> ())
           true;
-        D.add_document_listener "mousemove"
+        add_document_listener "mousemove"
           (fun ev ->
             match D.ev_target ev with
             | Some el ->

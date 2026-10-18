@@ -179,6 +179,9 @@ let replace_url_fragment hash = replace_state Js.Json.null "" hash
 external add_window_listener : string -> (Js.Json.t -> unit) -> unit
   = "addEventListener" [@@mel.scope "window"]
 
+external remove_window_listener : string -> (Js.Json.t -> unit) -> unit
+  = "removeEventListener" [@@mel.scope "window"]
+
 external open_url : string -> unit = "open" [@@mel.scope "window"]
 
 external qs_all_arr : string -> Js.Json.t array = "querySelectorAll"

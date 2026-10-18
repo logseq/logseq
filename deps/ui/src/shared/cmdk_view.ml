@@ -878,7 +878,7 @@ let modal_shell svs st =
 let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
  fun context parent ->
   let st = S.make context.Lui_ui.ui_scheduler services in
-  services.Svs.install_listeners
+  services.Svs.install_listeners context.Lui_ui.ui_scope
     { Svs.key = handle_keydown st
     ; click = handle_click st
     ; mousemove = handle_mousemove st };

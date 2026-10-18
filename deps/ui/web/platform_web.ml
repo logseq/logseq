@@ -175,6 +175,10 @@ let install ~request_flush ~dom ~timers ~files =
         ; back = Platform.history_back
         ; forward = Platform.history_forward
         ; on_change
+        ; subscribe_change = (fun callback ->
+            let listener _ = callback () in
+            Platform.add_window_listener "hashchange" listener;
+            fun () -> Platform.remove_window_listener "hashchange" listener)
         ; on_navigate
         ; search = Platform.location_search
         ; query_param = Platform.query_param

@@ -644,14 +644,14 @@ let chord_may_run editing cid =
         && not (String.length cid > 7 && String.sub cid 0 7 = "editor/"))
   else true
 
+let palette_open () =
+  match !Cmdk_state.latest_st with
+  | Some st -> (Cmdk_state.get st).Cmdk_state.open_
+  | None -> false
+
 let on_global_key ev =
   (* the open cmdk palette owns every key *)
-  let palette_open =
-    match !Cmdk_state.latest_st with
-    | Some st -> (Cmdk_state.get st).Cmdk_state.open_
-    | None -> false
-  in
-  if (not palette_open) && not (ev.Ui_services.composing) then
+  if (not (palette_open ())) && not (ev.Ui_services.composing) then
     match stroke_of ev with
     | None -> ()
     | Some stroke ->
@@ -1328,7 +1328,14 @@ let drop_active_drag () =
   else false
 
 let on_keydown ev =
-  if Ui_services.env_publishing () then ()
+  let palette_shortcut =
+    mods ev && not ev.Ui_services.alt
+    && (match String.lowercase_ascii (ev_key ev) with
+        | "k" -> not ev.Ui_services.shift
+        | "m" -> ev.Ui_services.shift
+        | _ -> false)
+  in
+  if Ui_services.env_publishing () || palette_open () || palette_shortcut then ()
   else begin
   (if Lazy.force perf_keys then
      Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (ev_key ev)

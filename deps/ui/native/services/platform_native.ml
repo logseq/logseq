@@ -419,9 +419,12 @@ let preferred_lang () =
 let set_lang_pref code =
   local_storage_set "preferred-language" (storage_quote code)
 
-(* native has no page reload — a language swap needs a host restart the
-   same way reload_page() is a no-op today *)
-let doc_reload () = ()
+let document_refresh : (unit -> unit) option ref = ref None
+
+let doc_reload () =
+  match !document_refresh with
+  | Some refresh -> refresh ()
+  | None -> failwith "Native document is not mounted"
 
 (* wall-clock via Unix — mktime normalizes overflow the way the JS Date
    constructor does (month 13 -> January, day 0 -> previous month) *)
@@ -542,6 +545,9 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; back = history_back
         ; forward = history_forward
         ; on_change = on_hash_change
+        ; subscribe_change = (fun callback ->
+            on_hash_change callback;
+            fun () -> hash_change_fns := List.filter (fun f -> f != callback) !hash_change_fns)
         ; on_navigate
         ; search = location_search
         ; query_param

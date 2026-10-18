@@ -40,6 +40,7 @@ type nav = {
   back : unit -> unit;
   forward : unit -> unit;
   on_change : (unit -> unit) -> unit;
+  subscribe_change : (unit -> unit) -> (unit -> unit);
   on_navigate : (unit -> unit) -> unit;
   search : unit -> string;
   query_param : string -> string option;
@@ -266,6 +267,7 @@ type ev = {
 
 type dom = {
   on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit;
+  subscribe_document_event : ?capture:bool -> string -> (ev -> unit) -> (unit -> unit);
   on_window_event : string -> (ev -> unit) -> unit;
   subscribe_window_event : string -> (ev -> unit) -> (unit -> unit);
   query : string -> el option;
@@ -335,6 +337,7 @@ val nav_replace_hash : string -> unit
 val nav_back : unit -> unit
 val nav_forward : unit -> unit
 val nav_on_change : (unit -> unit) -> unit
+val nav_subscribe_change : scope:Signal.scope -> (unit -> unit) -> unit
 val nav_on_navigate : (unit -> unit) -> unit
 val nav_search : unit -> string
 val nav_query_param : string -> string option
@@ -385,6 +388,7 @@ val env_paints_caret : unit -> bool
 val env_menu_popup : Json.t -> bool
 
 val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
+val dom_subscribe_document_event : scope:Signal.scope -> ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_on_window_event : string -> (ev -> unit) -> unit
 val viewport_width_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> float Signal.signal
 val dom_query : string -> el option

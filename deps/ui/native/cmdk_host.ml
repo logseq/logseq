@@ -151,9 +151,9 @@ let services : unit -> Svs.t =
   ; set_timeout =
       (fun f ms -> ignore (Ui_services.timers_timeout f ms))
   ; install_listeners =
-      (fun h ->
+      (fun scope h ->
         let open Svs in
-        Ui_services.dom_on_document_event ~capture:true "keydown"
+        Ui_services.dom_subscribe_document_event ~scope ~capture:true "keydown"
           (fun ev ->
             let a =
               h.key
@@ -164,7 +164,7 @@ let services : unit -> Svs.t =
             in
             if a.prevent then ev.Ui_services.prevent_default ();
             if a.stop then ev.Ui_services.stop_propagation ());
-        Ui_services.dom_on_document_event ~capture:true "click"
+        Ui_services.dom_subscribe_document_event ~scope ~capture:true "click"
           (fun ev ->
             match ev.Ui_services.target with
             | Some el ->
@@ -180,7 +180,7 @@ let services : unit -> Svs.t =
                        | Some wrap -> wrap.Ui_services.attr "data-item-key"
                        | None -> None) }
             | None -> ());
-        Ui_services.dom_on_document_event ~capture:true "mousemove"
+        Ui_services.dom_subscribe_document_event ~scope ~capture:true "mousemove"
           (fun ev ->
             match ev.Ui_services.target with
             | Some el ->

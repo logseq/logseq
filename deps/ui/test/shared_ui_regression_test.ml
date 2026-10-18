@@ -1770,7 +1770,7 @@ let run_views ~registry ~profile ~finish =
     { (Cmdk_host.services ()) with
       repo = (fun () -> None)
     ; focus_input_init = (fun _ -> ())
-    ; install_listeners = (fun h -> handlers := Some h)
+    ; install_listeners = (fun _scope h -> handlers := Some h)
     ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
     }
   in

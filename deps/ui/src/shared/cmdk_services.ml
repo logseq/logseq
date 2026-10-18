@@ -105,7 +105,7 @@ type t =
   ; scroll_row_index : int -> unit (* scroll [data-item-index=n] inside
                                       the scroller into view *)
   ; set_timeout : (unit -> unit) -> int -> unit
-  ; install_listeners : handlers -> unit
+  ; install_listeners : Signal.scope -> handlers -> unit
   ; toast : string -> string -> unit
     (* -- commands/fuzzy --------------------------------------------------- *)
   ; fuzzy_search : 'a. extract:('a -> string) -> limit:int -> 'a list

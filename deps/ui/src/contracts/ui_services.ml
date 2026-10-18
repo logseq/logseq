@@ -56,6 +56,7 @@ type nav = {
   back : unit -> unit;
   forward : unit -> unit;
   on_change : (unit -> unit) -> unit;
+  subscribe_change : (unit -> unit) -> (unit -> unit);
   (* Fires on hash changes only — navigation observers that must not also
      react to the imperative "ls:navigate" re-dispatch. *)
   on_navigate : (unit -> unit) -> unit;
@@ -345,6 +346,7 @@ type ev = {
 
 type dom = {
   on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit;
+  subscribe_document_event : ?capture:bool -> string -> (ev -> unit) -> (unit -> unit);
   (* Document-level event subscription (custom "ls:*" events and input
      events) — the typed [ev] snapshot replaces raw event access. *)
   on_window_event : string -> (ev -> unit) -> unit;
@@ -446,6 +448,8 @@ let nav_replace_hash h = (get ()).nav.replace_hash h
 let nav_back () = (get ()).nav.back ()
 let nav_forward () = (get ()).nav.forward ()
 let nav_on_change f = (get ()).nav.on_change f
+let nav_subscribe_change ~scope f =
+  Signal.on_dispose scope ((get ()).nav.subscribe_change f)
 let nav_on_navigate f = (get ()).nav.on_navigate f
 let nav_search () = (get ()).nav.search ()
 let nav_query_param n = (get ()).nav.query_param n
@@ -496,6 +500,8 @@ let env_paints_caret () = (get ()).env.paints_caret ()
 let env_menu_popup spec = (get ()).env.menu_popup spec
 
 let dom_on_document_event ?capture name f = (get ()).dom.on_document_event ?capture name f
+let dom_subscribe_document_event ~scope ?capture name f =
+  Signal.on_dispose scope ((get ()).dom.subscribe_document_event ?capture name f)
 let dom_on_window_event name f = (get ()).dom.on_window_event name f
 
 let viewport_width_signal ~scheduler ~scope =

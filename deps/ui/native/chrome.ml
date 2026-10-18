@@ -571,21 +571,10 @@ let install_menu_dismiss () =
             Runtime.flush ()
         | _ -> ()))
 
-let shell (ms : Model.t Signal.signal) : t =
+let shell_contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   install_menu_dismiss ();
-  Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      "theme-container-inner ls-hl-colored"
-      ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
-     )
-    (* stack: the app row fills the frame as the in-flow first child;
-       overlays/help/not-found become shared-cell overlays (native:
-       absolute, edge-stretched) instead of in-flow document-tail
-       siblings a plain box would size to content *)
-    (Ui_components.with_props
-      [ Ui_components.Prop.height_viewport 1. ]
-    (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+  stack ~key:"shell-content"
     [ (* horizontal shell: the docked splits own both side docks'
          tracks — the left split's second pane is the detail column
          (titlebar + page scroll), so the sidebar column spans the
@@ -606,4 +595,29 @@ let shell (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ]))
+    ]
+
+(* Reconcile the mounted interface after dictionary loading while retaining
+   the reducer, graph worker, editor sessions and dock state. *)
+let shell (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let revision = Signal.state context.Lui_ui.ui_scheduler 0 in
+  let refresh () = Signal.update revision succ; Runtime.flush () in
+  Platform_native.document_refresh := Some refresh;
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+    match !Platform_native.document_refresh with
+    | Some current when current == refresh -> Platform_native.document_refresh := None
+    | _ -> ());
+  let body =
+    Ui_parts.class_signal ms
+      (fun (m : Model.t) ->
+        "theme-container-inner ls-hl-colored"
+        ^ if m.left_sidebar_open then " ls-left-sidebar-open" else "")
+      (* Keep inherited theme props on the stable root. The inner stack
+         reconciles its shell and overlay children on a locale change. *)
+      (Ui_components.with_props
+         [ Ui_components.Prop.height_viewport 1. ]
+         (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+            [ reactive (fun _ -> shell_contents ms) (Signal.value revision) ]))
+  in
+  body context parent

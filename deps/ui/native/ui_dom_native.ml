@@ -254,6 +254,16 @@ let ops : Ui_services.dom =
       (fun ?capture name f ->
         Platform.add_event_listener ?capture name
           (fun payload -> f (ev_of payload)))
+  ; subscribe_document_event =
+      (fun ?(capture=false) name f ->
+        let listener payload = f (ev_of payload) in
+        Platform.add_event_listener ~capture name listener;
+        fun () ->
+          let table = if capture then Platform.capture_listeners else Platform.window_listeners in
+          let remaining = List.filter (fun callback -> callback != listener)
+            (Hashtbl.find table name) in
+          if remaining=[] then Hashtbl.remove table name
+          else Hashtbl.replace table name remaining)
   ; on_window_event =
       (fun name f ->
         Platform.add_event_listener name (fun payload -> f (ev_of payload)))

@@ -1468,23 +1468,24 @@ let handle_native_menu_select (st : S.t) (ev : Ui_services.ev) =
 ;;
 
 let install_listeners context st =
-  Ui_services.dom_on_document_event ~capture:true "keydown"
+  let scope = context.Lui_ui.ui_scope in
+  Ui_services.dom_subscribe_document_event ~scope ~capture:true "keydown"
     (handle_keydown st);
-  Ui_services.dom_on_document_event ~capture:true "contextmenu"
+  Ui_services.dom_subscribe_document_event ~scope ~capture:true "contextmenu"
     (handle_contextmenu st);
-  Ui_services.dom_on_document_event ~capture:true "click"
+  Ui_services.dom_subscribe_document_event ~scope ~capture:true "click"
     (handle_click st);
-  Ui_services.dom_on_document_event ~capture:true "mousedown"
+  Ui_services.dom_subscribe_document_event ~scope ~capture:true "mousedown"
     (handle_mousedown st);
-  Ui_services.dom_on_document_event "mousemove" (handle_mousemove st);
-  Ui_services.dom_on_document_event ~capture:true "ls:block-picker"
+  Ui_services.dom_subscribe_document_event ~scope "mousemove" (handle_mousemove st);
+  Ui_services.dom_subscribe_document_event ~scope ~capture:true "ls:block-picker"
     (handle_block_picker st);
-  Ui_services.dom_on_document_event "native-menu-select"
+  Ui_services.dom_subscribe_document_event ~scope "native-menu-select"
     (handle_native_menu_select st);
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
-  Ui_services.nav_on_change (fun () -> S.close_pv st);
+  Ui_services.nav_subscribe_change ~scope (fun () -> S.close_pv st);
   Tooltip.install ~scheduler:context.Lui_ui.ui_scheduler
 ;;
 

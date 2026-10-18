@@ -115,6 +115,9 @@ let run () =
                   hash_ref := h;
                   List.iter (fun f -> f ()) !hash_fns)
         ; on_change = (fun f -> hash_fns := f :: !hash_fns)
+        ; subscribe_change = (fun f ->
+            hash_fns := f :: !hash_fns;
+            fun () -> hash_fns := List.filter (fun callback -> callback != f) !hash_fns)
         ; on_navigate =
             (fun f ->
               hash_fns := f :: !hash_fns;
@@ -249,6 +252,11 @@ let run () =
          in
          { on_document_event = (fun ?capture:_ name f -> Hashtbl.replace listeners name f)
          ; on_window_event = (fun _ _ -> ())
+         ; subscribe_document_event = (fun ?capture:_ name f ->
+             Hashtbl.replace listeners name f;
+             fun () -> match Hashtbl.find_opt listeners name with
+               | Some current when current == f -> Hashtbl.remove listeners name
+               | _ -> ())
          ; subscribe_window_event = (fun _ _ -> fun () -> ())
          ; query = (fun _ -> None)
          ; query_all = (fun _ -> [])
