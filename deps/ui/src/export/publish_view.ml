@@ -219,10 +219,10 @@ let toggle_pw ctx =
     in
     let placeholder = I18n.t "publish/password-optional-placeholder" in
     if visible then
-      input ~key ~style_class:"ui__input" ~placeholder
+      Ui_components.input ~key ~style_class:"ui__input" ~placeholder
         ~text_signal:value_sig ~on_input []
     else
-      secure_field ~key ~style_class:"ui__input" ~placeholder
+      Ui_components.secure_field ~key ~style_class:"ui__input" ~placeholder
         ~text_signal:value_sig ~on_input
         ~on_submit:(fun _ -> submit ctx)
         []

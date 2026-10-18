@@ -911,7 +911,7 @@ let cal_body ps (p : popup) : t =
                ; (match p.kind with
                   | Cal_prop _ -> time_row ps
                   | _ -> Logseq_el.nothing)
-               ; input ~key:"nlp" ~style_class:"ls-date-nlp"
+               ; Ui_components.input ~key:"nlp" ~style_class:"ls-date-nlp"
                    ~height:32 ~padding_horizontal:8 ~padding_vertical:0
                    ~border_width:1
                    ~border_color:
@@ -955,9 +955,9 @@ let submit_link p =
 let link_form_body p : t =
   column ~key:"link" ~style_class:"ls-editor-link-form" ~gap:8
     ~padding:15 ~width:288
-    [ input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
+    [ Ui_components.input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
         []
-    ; input ~key:"label" ~placeholder:(I18n.t "ui/label") []
+    ; Ui_components.input ~key:"label" ~placeholder:(I18n.t "ui/label") []
     ; Ui_components.button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
         ~height:28 ~min_height:28 ~text:I18n.submit
         ~on_press:(fun _ -> submit_link p) [] ]

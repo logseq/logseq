@@ -168,7 +168,7 @@ let view ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_opti
            Ui_components.Prop.border_width 0; Ui_components.Prop.corner_radius 0;
            Ui_components.Prop.foreground "hsl(var(--foreground))";
            Ui_components.Prop.focus_shadow "none"] else [])
-       (text_field ~placeholder ~autofocus:true
+       (Ui_components.text_field ~placeholder ~autofocus:true
          ?height:(if compact then Some 32 else None)
          ?padding:(if compact then Some 6 else None)
          ?style_class:(if compact then Some "ls-property-select-input" else None)

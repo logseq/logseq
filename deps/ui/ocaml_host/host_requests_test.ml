@@ -6643,3 +6643,290 @@ let () =
       check "Shared buttons and calendar input must use portable form styling"
         (!failures = []);
       print_endline "native shared button focus and calendar text insets: OK")
+
+
+let () =
+  Native_embed.with_entry_lock (fun () ->
+      let store = Lui_store.create () in
+      let backend =
+        {
+          backend_profile = profile MacOS GenericHost;
+          apply_batch =
+            (fun batch ->
+              Lui_store.apply_batch store batch;
+              true);
+        }
+      in
+      let app =
+        Lui_app.create backend ""
+          (fun value () -> value)
+          (fun _ value _ ->
+            Lui_elements.column ~gap:12
+              [
+                Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore;
+                Properties_menu.text_form_view ~title_v:"Title"
+                  ~desc_v:"Description" ~title_placeholder:"Title"
+                  ~desc_placeholder:"Description" (fun _ _ -> ());
+                Lui_elements.box ~accessibility_identifier:"password-sample"
+                  [
+                    (fun context parent ->
+                      Publish_view.toggle_pw context context parent);
+                  ];
+                Ui_components.search_row ~key:"standard-search"
+                  ~placeholder:"Search" ~text_signal:value ~on_text:ignore ();
+                Lui_elements.box ~accessibility_identifier:"borderless-search"
+                  [
+                    Ui_components.search_row ~key:"bare" ~borderless:true
+                      ~placeholder:"Search" ~text_signal:value ~on_text:ignore
+                      ();
+                  ];
+                Lui_elements.box ~accessibility_identifier:"authored-search"
+                  [
+                    Ui_components.search_row ~key:"authored"
+                      ~background:"#010203" ~borderless:true
+                      ~placeholder:"Search" ~text_signal:value ~on_text:ignore
+                      ();
+                  ];
+                Ui_components.cmdk_input_row ~key:"palette-row"
+                  [
+                    Ui_components.cmdk_search_input ~key:"palette-field"
+                      ~placeholder:"Search" ~text_signal:value ~on_text:ignore
+                      ();
+                  ];
+              ])
+      in
+      ignore (Lui_app.start app);
+      ignore (Lui_app.flush app);
+      let find_kind kind =
+        List.find
+          (fun id -> Lui_store.kind store id = kind)
+          (Lui_store.preorder store)
+      in
+      let secret = "Draft café 中文 😀" in
+      ignore
+        (Lui_app.dispatch_event app
+           (TextChanged (find_kind "secure-field", secret)));
+      ignore (Lui_app.flush app);
+      let failures = ref [] in
+      let expect message condition =
+        if not condition then failures := message :: !failures
+      in
+      let find_identifier name =
+        List.find
+          (fun id ->
+            Lui_store.string_prop store id "accessibility-identifier"
+            = Some name)
+          (Lui_store.preorder store)
+      in
+      let rec inside ancestor id =
+        id = ancestor
+        ||
+        match Lui_store.parent store id with
+        | Some parent -> inside ancestor parent
+        | None -> false
+      in
+      let field_inside ancestor =
+        List.find
+          (fun id ->
+            inside ancestor id
+            && List.mem (Lui_store.kind store id) [ "input"; "search-field" ])
+          (Lui_store.preorder store)
+      in
+      let bare = field_inside (find_identifier "borderless-search") in
+      let authored = field_inside (find_identifier "authored-search") in
+      let palette =
+        List.find
+          (fun id ->
+            Lui_store.string_prop store id "style-class"
+            = Some "cp__cmdk-search-input")
+          (Lui_store.preorder store)
+      in
+      let standard_fields () =
+        List.filter
+          (fun id ->
+            List.mem (Lui_store.kind store id)
+              [
+                "input";
+                "text-field";
+                "secure-field";
+                "search-field";
+                "textarea";
+              ]
+            && not (List.mem id [ bare; authored; palette ]))
+          (Lui_store.preorder store)
+      in
+      List.iter
+        (fun mode ->
+          let snapshot = Ui_theme.snapshot mode in
+          Theme_vars.install_snapshot
+            (Yojson.Safe.to_string
+               (`Assoc
+                  [
+                    ( "mode",
+                      `String (if mode = Ui_theme.Dark then "dark" else "light")
+                    );
+                    ( "vars",
+                      `Assoc
+                        (List.map
+                           (fun (key, value) -> (key, `String value))
+                           snapshot.vars) );
+                  ]));
+          Theme_vars.set_dark (mode = Ui_theme.Dark);
+          List.iter
+            (fun accent ->
+              Theme_vars.set_accent accent;
+              List.iter
+                (fun scale ->
+                  List.iter
+                    (fun visible ->
+                      let secret_id =
+                        List.find
+                          (fun id ->
+                            inside (find_identifier "password-sample") id
+                            && List.mem (Lui_store.kind store id)
+                                 [ "input"; "secure-field" ])
+                          (Lui_store.preorder store)
+                      in
+                      if Lui_store.kind store secret_id = "input" <> visible
+                      then begin
+                        let toggle =
+                          List.find
+                            (fun id ->
+                              Lui_store.string_prop store id
+                                "accessibility-label"
+                              = Some
+                                  (I18n.t
+                                     (if visible then "publish/show-password"
+                                      else "publish/hide-password")))
+                            (Lui_store.preorder store)
+                        in
+                        ignore (Lui_app.dispatch_event app (Press toggle));
+                        ignore (Lui_app.flush app)
+                      end;
+                      let scene =
+                        Lui_scene.create
+                          ~mask_atlas:
+                            (Lui_scene.Atlas.create ~bpp:1 ~w:128 ~h:128)
+                          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1)
+                      in
+                      let engine =
+                        Text_engine.create
+                          ~scene:(fun () -> scene)
+                          ~scale:(fun () -> scale)
+                          ~store:(fun () -> store)
+                      in
+                      let layout = Lui_layout.create () in
+                      let measure id text width _ =
+                        Some
+                          (Text_engine.pad_size store id ~scale
+                             (Text_engine.measure_text ~width engine id text))
+                      in
+                      Lui_layout.sync ~measure ~scale ~width:(600. *. scale)
+                        ~height:(1200. *. scale) layout store;
+                      Lui_paint.paint
+                        {
+                          Lui_paint.default_hooks with
+                          color_of = Theme_vars.color_of;
+                          layout = Lui_layout.layout_hook layout;
+                        }
+                        store scene
+                        ~width:(int_of_float (600. *. scale))
+                        ~height:(int_of_float (1200. *. scale))
+                        ~scale ~clear:(Lui_scene.color 0 0 0 0);
+                      let fills id =
+                        let rect = Option.get (Lui_layout.rect layout id) in
+                        List.filter_map
+                          (function
+                            | Lui_scene.Fill f when f.frect = rect -> Some f
+                            | _ -> None)
+                          scene.ops
+                      in
+                      let background =
+                        Option.get
+                          (Theme_vars.color_of "hsl(var(--background))")
+                      in
+                      let border =
+                        Option.get (Theme_vars.color_of "hsl(var(--border))")
+                      in
+                      let context =
+                        Printf.sprintf "%s dark=%b scale=%g visible=%b" accent
+                          (mode = Ui_theme.Dark) scale visible
+                      in
+                      List.iter
+                        (fun id ->
+                          let own = fills id in
+                          expect
+                            ("Application field must use the reference \
+                              background: " ^ Lui_store.kind store id ^ " "
+                           ^ context)
+                            (List.exists
+                               (fun f -> f.Lui_scene.fcolor = background)
+                               own);
+                          expect
+                            ("Application field must use the reference border: "
+                           ^ Lui_store.kind store id ^ " " ^ context)
+                            (List.exists
+                               (fun f ->
+                                 f.Lui_scene.fborder_color = border
+                                 && f.fborder = (scale, scale, scale, scale))
+                               own);
+                          expect
+                            ("Application field must retain rounded corners: "
+                           ^ context)
+                            (List.exists
+                               (fun f ->
+                                 f.Lui_scene.fradii
+                                 = ( 6. *. scale,
+                                     6. *. scale,
+                                     6. *. scale,
+                                     6. *. scale ))
+                               own))
+                        (standard_fields ());
+                      expect
+                        ("Calendar month must use the common application \
+                          border: " ^ context)
+                        (List.exists
+                           (fun f -> f.Lui_scene.fborder_color = border)
+                           (fills (find_identifier "calendar-month")));
+                      List.iter
+                        (fun id ->
+                          expect
+                            ("Custom borderless fields must stay transparent: "
+                           ^ context)
+                            (not
+                               (List.exists
+                                  (fun f -> f.Lui_scene.fcolor = background)
+                                  (fills id))))
+                        [ bare; palette ];
+                      expect
+                        ("An authored search background must remain intact: "
+                       ^ context)
+                        (List.exists
+                           (fun f ->
+                             f.Lui_scene.fcolor = Lui_scene.color 1 2 3 255)
+                           (fills authored));
+                      let secret_id =
+                        List.find
+                          (fun id ->
+                            inside (find_identifier "password-sample") id
+                            && List.mem (Lui_store.kind store id)
+                                 [ "input"; "secure-field" ])
+                          (Lui_store.preorder store)
+                      in
+                      expect
+                        ("Password visibility must preserve Unicode content: "
+                       ^ context)
+                        (Lui_store.string_prop store secret_id "text"
+                        = Some secret))
+                    [ false; true ])
+                [ 1.; 2. ])
+            [ "logseq"; "blue" ])
+        [ Ui_theme.Light; Ui_theme.Dark ];
+      ignore (Lui_app.dispose app);
+      Theme_vars.set_accent "logseq";
+      Theme_vars.set_dark false;
+      List.iter prerr_endline (List.rev !failures);
+      check
+        "Application form colors and authored overrides must match both hosts"
+        (!failures = []);
+      print_endline "native application form colors and authored overrides: OK")

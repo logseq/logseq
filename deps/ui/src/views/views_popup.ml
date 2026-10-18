@@ -480,7 +480,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            ([ Ui_components.with_props
                 [ Ui_components.Prop.font_size "16px"
                 ; Ui_components.Prop.focus_shadow "none" ]
-                (input ~key:("vpsel-i" ^ string_of_int id)
+                (Ui_components.input ~key:("vpsel-i" ^ string_of_int id)
                    ~style_class:"cp__select-input" ~placeholder
                    ~autofocus:true ~height:32
                    ~padding_horizontal:8 ~padding_vertical:4

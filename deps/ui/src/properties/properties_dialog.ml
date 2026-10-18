@@ -494,7 +494,7 @@ let value_edit_view d prop : t =
       }
     in
     (row ~gap:0 ~grow:1.0
-       [ text_field ~autofocus:true
+       [ Ui_components.text_field ~autofocus:true
            ~text:(Runtime.signal_get buffer)
            ~on_input:(fun ev ->
              match ev with

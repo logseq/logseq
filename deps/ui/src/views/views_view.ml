@@ -711,7 +711,7 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
     [ Ui_components.with_props
         [ Ui_components.Prop.font_size "16px"
         ; Ui_components.Prop.focus_shadow "none" ]
-        (input ~padding:6 ~height:32
+        (Ui_components.input ~padding:6 ~height:32
            ~text:v.Wr.vtitle ~autofocus:true
            ~background:"transparent" ~border_width:0
            ~foreground:"var(--ls-secondary-text-color)"

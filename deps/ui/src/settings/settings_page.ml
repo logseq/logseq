@@ -972,7 +972,7 @@ let home_page_row ctx =
   in
   C.it_row ~key:"homep" ~label:T.home_default_page
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
-        [ input ~key:"homep-in"
+        [ Ui_components.input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
             ~height:26
             ~style_class:"form-input is-small" ~text:current

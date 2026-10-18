@@ -82,7 +82,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               ~value:desc []
           ; box ~key:(key ^ "-i")
               [ label ~key:(key ^ "-il") ~value:"URL" []
-              ; input ~key:(key ^ "-in")
+              ; Ui_components.input ~key:(key ^ "-in")
                   ~accessibility_identifier:(key ^ "-input")
                   ~style_class:"form-input is-small"
                   ~text_signal:(Signal.value url) ~placeholder

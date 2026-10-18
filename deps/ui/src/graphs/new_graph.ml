@@ -69,7 +69,7 @@ let body (_ms : Model.t Signal.signal) : t =
     (column ~key:"new-graph" ~style_class:"new-graph" ~gap:16 ~padding_horizontal:4
       [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
            compact variant *)
-        input ~key:"ng-in" ~style_class:"ui__input" ~height:40
+        Ui_components.input ~key:"ng-in" ~style_class:"ui__input" ~height:40
           ~placeholder:T.graph_name_placeholder
           ~autofocus:true
           ~text_signal:(Signal.value name_st)

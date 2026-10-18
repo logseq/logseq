@@ -154,13 +154,13 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
   let title_st = Signal.state sched title_v in
   let desc_st = Signal.state sched desc_v in
   (column ~gap:8 ~padding:8
-    [ text_field ~placeholder:title_placeholder ~text:title_v
+    [ Ui_components.text_field ~placeholder:title_placeholder ~text:title_v
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
           | _ -> ())
         []
-    ; textarea ~placeholder:desc_placeholder ~text:desc_v
+    ; Ui_components.textarea ~placeholder:desc_placeholder ~text:desc_v
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set desc_st t
@@ -366,7 +366,7 @@ let default_value_pane_view m ~close : t =
          (menu_item ~text:(I18n.t "property/set-default-value")
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
      ; if_ ~test:(Signal.value editing)
-         (text_field ~autofocus:true
+         (Ui_components.text_field ~autofocus:true
             ~text:""
             ~on_input:(fun ev ->
               match ev with

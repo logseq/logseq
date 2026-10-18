@@ -618,7 +618,7 @@ let search_items inst : t list =
         Ui_components.with_props
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.focus_shadow "none" ]
-          (input ~accessibility_identifier:input_id
+          (Ui_components.input ~accessibility_identifier:input_id
              ~placeholder:I.type_to_search ~text:(V.get inst).V.input
              ~width:183 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
@@ -1008,7 +1008,7 @@ let ref_filter_dialog inst anchor =
                  ~style_class:"ls-icon-search" []
              ; Ui_components.with_props
                  [ Ui_components.Prop.focus_shadow "none" ]
-                 (input ~style_class:"cp__filters-input"
+                 (Ui_components.input ~style_class:"cp__filters-input"
                     ~grow:1. ~background:"transparent" ~border_width:0
                     ~data_attrs:
                       [ ("type", "text")

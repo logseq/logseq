@@ -373,7 +373,7 @@ let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
   column ~key ~gap:12 ~cross:`stretch ~style_class:"ls-auth-field"
     ~data_attrs:[ ("style", "padding-bottom:4px") ]
     [ label ~key:"l" ~line_height:"20px" ~value:caption []
-    ; (if secure then secure_field else input ~kind:`text)
+    ; (if secure then Ui_components.secure_field else Ui_components.input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
         ~autofocus
         ~text_signal:(Signal.value value)

@@ -282,7 +282,7 @@ let body (_ms : Model.t Signal.signal) : t =
                 ]
             ; column ~key:"collab-form" ~gap:16 ~margin_top:16
                 [ box ~key:"collab-inv"
-                    [ input ~key:"collab-in" ~style_class:"ui__input"
+                    [ Ui_components.input ~key:"collab-in" ~style_class:"ui__input"
                         ~text_signal:(Signal.value email_st)
                         ~placeholder:(T.t "collaboration/email-address")
                         ~on_input:(fun ev ->

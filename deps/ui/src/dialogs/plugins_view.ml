@@ -636,11 +636,11 @@ let item_input pid key s cur =
   let field =
     match input_as with
     | "textarea" ->
-        textarea ~key:"in" ~style_class:"form-input" ~text:v
+        Ui_components.textarea ~key:"in" ~style_class:"form-input" ~text:v
           ~on_input:(fun ev -> on_change (text_of ev))
           []
     | "color" ->
-        input ~key:"in" ~style_class:"form-input" ~kind:`color ~text:v
+        Ui_components.input ~key:"in" ~style_class:"form-input" ~kind:`color ~text:v
           ~on_input:(fun ev -> on_change (text_of ev))
           []
     | "range" ->
@@ -656,7 +656,7 @@ let item_input pid key s cur =
             | _ -> ())
           []
     | _ ->
-        input ~key:"in" ~style_class:"form-input" ~text:v
+        Ui_components.input ~key:"in" ~style_class:"form-input" ~text:v
           ~on_input:(fun ev -> on_change (text_of ev))
           []
   in

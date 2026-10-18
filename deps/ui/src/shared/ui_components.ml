@@ -51,6 +51,37 @@ let with_props (binds : Prop.t list) (elem : t) : t =
   List.iter (Prop.set ctx node) binds;
   node
 
+(* Application form colors belong to the shared view layer. Constructor
+   arguments remain available to fields with an authored surface. *)
+let form_control make ?(background = "hsl(var(--background))")
+    ?(border_color = "hsl(var(--border))") ?(border_width = 1)
+    ?(corner_radius = 6) =
+  make background border_color border_width corner_radius
+
+let input =
+  form_control (fun background border_color border_width corner_radius ->
+      Lui_elements.input ~background ~border_color ~border_width ~corner_radius)
+
+let text_field =
+  form_control (fun background border_color border_width corner_radius ->
+      Lui_elements.text_field ~background ~border_color ~border_width
+        ~corner_radius)
+
+let secure_field =
+  form_control (fun background border_color border_width corner_radius ->
+      Lui_elements.secure_field ~background ~border_color ~border_width
+        ~corner_radius)
+
+let search_field =
+  form_control (fun background border_color border_width corner_radius ->
+      Lui_elements.search_field ~background ~border_color ~border_width
+        ~corner_radius)
+
+let textarea =
+  form_control (fun background border_color border_width corner_radius ->
+      Lui_elements.textarea ~background ~border_color ~border_width
+        ~corner_radius)
+
 (* Reference portals live outside the page-size root. Establish the body
    type scale once on overlay carriers, independently of page text sizing. *)
 let overlay_typography element =
@@ -773,6 +804,11 @@ let form_desc ~key ~value : t =
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
     ?pad_right ?background ?(borderless = false) ?(trailing = []) ?autofocus
     ?clear_label ?on_clear ~placeholder ~text_signal:text ~on_text () : t =
+  let background =
+    match background, borderless with
+    | None, true -> Some "transparent"
+    | _ -> background
+  in
   let on_input ev =
     match ev with P.TextChanged (_, q) -> on_text q | _ -> ()
   in
@@ -1264,7 +1300,6 @@ let date_picker ~translate ~on_pick : t =
                         ~min_width:0 ~height:32 ~main:`start
                         ~text_alignment:`start ~padding_horizontal:12
                         ~padding_vertical:0 ~border_width:1
-                        ~border_color:"hsl(var(--input))"
                         ~text:
                           (reactive
                              (fun (_, m, _) ->

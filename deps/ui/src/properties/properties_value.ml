@@ -505,7 +505,7 @@ let scalar_edit_cell ctx row : t =
          (* ~text evaluates eagerly when the cell mounts, before
             open_editor registers active_editor — read the local buffer
             (seeded with the current value) instead of edit_buffer *)
-         (text_field ~autofocus:true
+         (Ui_components.text_field ~autofocus:true
             ~text:(Runtime.signal_get buffer)
             ~on_input:(fun ev ->
               match ev with
@@ -774,7 +774,7 @@ let repeat_column ctx ~is_datetime ~rep : t =
                 [ text ~key:"evl" ~style_class:"ls-rep-muted"
                     ~foreground:"var(--ls-secondary-text-color, #6b7280)"
                     ~value:(I18n.t "property.repeat/every") []
-                ; text_field ~key:"evi" ~width:56 ~height:32
+                ; Ui_components.text_field ~key:"evi" ~width:56 ~height:32
                     ~style_class:"ls-rep-num"
                     ~text:(string_of_int r.freq)
                     ~on_input:(fun ev ->
@@ -920,7 +920,7 @@ let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
                 ~on_press:(fun _ -> on_clear ())
                 [] ]
         ; grid
-        ; text_field ~autofocus:true
+        ; Ui_components.text_field ~autofocus:true
             ~placeholder:"e.g. Next week"
             ~text:""
             ~on_input:(fun ev ->

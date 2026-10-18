@@ -452,7 +452,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
        (Ui_components.with_props
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.line_height "1.25rem" ]
-        (input ~style_class:"form-input"
+        (Ui_components.input ~style_class:"form-input"
           ~accessibility_identifier:"query-builder-search"
           ~placeholder:I.type_to_search ~label:I.type_to_search
           ~autofocus:true
