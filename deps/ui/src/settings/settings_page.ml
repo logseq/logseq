@@ -180,7 +180,7 @@ let color_label = function
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~current color =
   let active = color = current and none = color = "none" in
-  row ~key ~width:20 ~height:20 ~main:`center ~cross:`center
+  row ~key ~height:20 ~main:`start ~cross:`center
     ~opacity:(if active then 1. else 0.5)
     [ Ui_components.with_props
         [ Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
@@ -208,20 +208,16 @@ let accent_swatch ~key ~current color =
 let accent_row ~modal =
   let current = S.current_accent () in
   let names = "none" :: "logseq" :: color_names in
-  let swatch_row ~key cs =
-    row ~key ~gap:8 ~cross:`center
-      (List.mapi
-         (fun i c ->
-           accent_swatch ~key:(key ^ "-" ^ string_of_int i) ~current c)
-         cs)
-  in
   let swatches =
-    column ~key:"acc-l" ~gap:8 ~cross:`start
+    column ~key:"acc-l"
       ~margin_left:(if modal then 4 else 0)
       ~margin_bottom:(if modal then 4 else 0)
-      [ swatch_row ~key:"acc-r0" (List.filteri (fun i _ -> i < 8) names)
-      ; swatch_row ~key:"acc-r1" (List.filteri (fun i _ -> i >= 8) names)
-      ]
+      [ grid ~key:"acc-grid" ~columns:8 ~gap:8
+          ?container_relative_frame:(if modal then Some `horizontal else None)
+          ?width:(if modal then None else Some 216) ~max_width:(if modal then 320 else 250)
+          (List.mapi
+             (fun i color -> accent_swatch ~key:("acc-" ^ string_of_int i) ~current color)
+             names) ]
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"

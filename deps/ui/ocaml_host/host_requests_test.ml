@@ -6537,8 +6537,29 @@ let () = Native_embed.with_entry_lock (fun () ->
       let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some I18n.accent_color_alert)
         (Lui_store.preorder store) in
       let accent=Option.get (Lui_store.parent store note) in
-      check "Accent group must use its 48-point swatches, 4-point gap and 20-point note"
+      check (Printf.sprintf "Accent group height at compact=%b scale=%.0f: %.2f" compact scale ((W.Rects.get (A.rects surface) accent).h/.scale))
         (abs_float ((W.Rects.get (A.rects surface) accent).h/.scale-.(if compact then 76. else 72.))<0.1);
+      let swatches=List.filter (fun id -> Lui_store.kind store id="button"
+        && List.exists (fun color -> Lui_store.string_prop store id "accessibility-label"
+          = Some (Settings_page.color_label color))
+          ("none" :: "logseq" :: Settings_page.color_names))
+        (Lui_store.preorder store) in
+      check "Accent palette exposes every color exactly once" (List.length swatches=16);
+      let swatch_rect index=W.Rects.get (A.rects surface) (List.nth swatches index) in
+      let first=swatch_rect 0 and second=swatch_rect 1 and next_row=swatch_rect 8 in
+      let grid=Option.get (Lui_store.parent store
+        (Option.get (Lui_store.parent store (List.hd swatches)))) in
+      let grid_bounds=W.Rects.get (A.rects surface) grid in
+      let expected_width=if compact then 320. else 216. in
+      check "Accent palette matches the compact or regular reference width"
+        (abs_float (grid_bounds.w/.scale-.expected_width)<1. /. scale);
+      let step=(expected_width -. 56.) /. 8. +. 8. in
+      check "Accent palette distributes eight columns across the reference width"
+        (abs_float ((second.x-.first.x)/.scale-.step)<=1. /. scale);
+      check "Accent palette preserves 20-point controls and an 8-point row gap"
+        (abs_float (first.w/.scale-.20.)<0.1
+         && abs_float ((next_row.y-.first.y)/.scale-.28.)<0.1
+         && abs_float (next_row.x-.first.x)<0.1);
       let bounds=W.Rects.get (A.rects surface) checkbox in
       check "Global font caption must remain inside the checkbox hit region" (bounds.w>80.*.scale);
       check "Global font checkbox must not add wrapper border chrome"

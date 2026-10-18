@@ -140,6 +140,7 @@ let action_row ~key ~label ?description ~actions ?(desc = [])
          description)
     ~control:
       (row ~key:(key ^ "-rc") ~cross:`center ~gap:8 ~min_width:0
+         ?grow:(if stretch then Some 1. else None)
          [ box ~key:(key ^ "-a")
              ?grow:(if stretch then Some 1. else None)
              actions
