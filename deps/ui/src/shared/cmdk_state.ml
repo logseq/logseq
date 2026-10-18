@@ -564,12 +564,12 @@ let group_order v q rows total =
     if node_exists q rows then None
     else
       Some
-        { gid = G_create; gtitle = svs.Svs.i18n "cmdk.groups/create"
+        { gid = G_create; gtitle = svs.Svs.i18n "cmdk.group/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
         ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
-    { gid = G_nodes; gtitle = svs.Svs.i18n "cmdk.groups/nodes"
+    { gid = G_nodes; gtitle = svs.Svs.i18n "cmdk.group/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
@@ -585,7 +585,7 @@ let group_order v q rows total =
         rows
     in
     { gid = G_current_page
-    ; gtitle = svs.Svs.i18n "cmdk.groups/current-page"
+    ; gtitle = svs.Svs.i18n "cmdk.group/current-page"
       (* cljs laziness: current-page results load only via the filter row
          or group expansion — a normal search leaves the group empty so it
          renders nothing *)
@@ -600,21 +600,21 @@ let group_order v q rows total =
   in
   let commands_g () =
     let items = commands_items svs q in
-    { gid = G_commands; gtitle = svs.Svs.i18n "cmdk.groups/commands"
+    { gid = G_commands; gtitle = svs.Svs.i18n "cmdk.group/commands"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_commands v.expanded
     ; gfilter_active = false }
   in
   let files_g () =
     let items = file_items q in
-    { gid = G_files; gtitle = svs.Svs.i18n "cmdk.groups/files"
+    { gid = G_files; gtitle = svs.Svs.i18n "cmdk.group/files"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_files v.expanded
     ; gfilter_active = false }
   in
   let filters_g () =
     let items = filter_items () in
-    { gid = G_filters; gtitle = svs.Svs.i18n "cmdk.groups/filters"
+    { gid = G_filters; gtitle = svs.Svs.i18n "cmdk.group/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_filters v.expanded
     ; gfilter_active = false }
@@ -626,7 +626,7 @@ let group_order v q rows total =
         svs.Svs.fuzzy_search ~extract:(fun it -> strip_pfts it.ititle)
           ~limit:99 v.recents q
     in
-    { gid = G_recently_updated; gtitle = svs.Svs.i18n "cmdk.groups/recently-updated"
+    { gid = G_recently_updated; gtitle = svs.Svs.i18n "cmdk.group/recently-updated"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
     ; gfilter_active = false }

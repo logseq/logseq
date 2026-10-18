@@ -23,6 +23,7 @@ let localization () =
   let previous_dictionary = Hashtbl.find_opt I18n.locale_tbls "zh-CN" in
   let previous_flush = !Runtime.app_flush in
   let previous_settings = !Settings_state.st in
+  let previous_cmdk_services = !Cmdk_state.services_ref in
   Settings_state.st:=None;
   Fun.protect ~finally:(fun () ->
     (match previous_language with
@@ -32,8 +33,21 @@ let localization () =
      | Some dictionary -> Hashtbl.replace I18n.locale_tbls "zh-CN" dictionary
      | None -> Hashtbl.remove I18n.locale_tbls "zh-CN");
     Runtime.app_flush:=previous_flush;
+    Cmdk_state.services_ref:=previous_cmdk_services;
     Settings_state.st:=previous_settings) (fun () ->
+    let group_labels = Cmdk_state.[
+      G_create,"create","Translated Create";
+      G_current_page,"current-page","Translated Current page";
+      G_nodes,"nodes","Translated Nodes";
+      G_recently_updated,"recently-updated","Translated Recently updated";
+      G_commands,"commands","Translated Commands";
+      G_files,"files","Translated Files";
+      G_filters,"filters","Translated Filters";
+      G_codes,"codes","Translated Code";
+      G_themes,"themes","Translated Themes"] in
     let dictionary=Hashtbl.create 16 in
+    List.iter (fun (_,key,value) -> Hashtbl.add dictionary ("cmdk.group/" ^ key) value)
+      group_labels;
     List.iter (fun (key,value) -> Hashtbl.add dictionary key value)
       ["nav/settings","Translated Settings";
        "settings/general","Translated General";
@@ -54,12 +68,22 @@ let localization () =
     Platform.local_storage_set "preferred-language" "\"zh-CN\"";
     check "Locale fixture loads after application modules initialize"
       (I18n.t "settings/general"="Translated General");
+    let services = {(Cmdk_host.services ()) with
+      i18n=I18n.t;repo=(fun () -> None);commands=(fun () -> []);
+      route_is_page=(fun () -> true);route_page_uuid=(fun () -> Some "locale-page")} in
+    Cmdk_state.services_ref:=Some services;
+    let result_groups=Cmdk_state.group_order Cmdk_state.initial_view "fixture" [] 0 in
+    List.iter (fun (group:Cmdk_state.group) ->
+      let _,_,expected=List.find (fun (gid,_,_) -> gid=group.gid) group_labels in
+      eqs "Search result groups use the initialized dictionary" expected group.gtitle)
+      result_groups;
     let columns=ref [] in
     let session=S.mount ~registry:(Views_drive.registry ())
       ~profile:Logseq_el.web_profile ~initial:Model.initial
       ~reducer:(fun model () -> model)
       ~view:(fun context model _ ->
         Settings_state.ensure context;
+        let search_state=Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler services in
         columns:=Views_table.build_columns
           (Views_state.make ~sched:context.Lui_ui.ui_scheduler
              ~kind:Views_state.KAllPages ~feature:"locale-columns" ~owner:Wire.Nil) [];
@@ -70,7 +94,11 @@ let localization () =
            @ [Settings_page.general_pane ~modal:false context;
               Chrome.dots_button; Chrome.skip_to_main; Chrome.not_found_page;
               Settings_url_view.sync_body model;
-              Page.library_add_pages_button])) () in
+              Page.library_add_pages_button;Cmdk_view.badge_el services "locale-badge"]
+           @ List.map (fun (gid,key,_) -> Lui_elements.column ~key:("locale-group-" ^ key)
+              [Cmdk_view.group_header services search_state
+               {Cmdk_state.gid;gtitle=Cmdk_view.gid_label services gid;gitems=[];
+                gtotal=0;glimit=5;gexpanded=false;gfilter_active=false}]) group_labels)) () in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
       let texts=List.filter_map (fun n -> M.string_prop n "text") (nodes session) in
       List.iter (fun value -> check ("Late locale reaches " ^ value) (List.mem value texts))
@@ -78,6 +106,10 @@ let localization () =
          "Translated Keymap";"Translated Advanced";"Translated Features";
          "Translated Version";"Translated Skip";"Translated Not Found";
          "Translated Sync server";"Translated Add Pages"];
+      List.iter (fun (_,_,value) -> check ("Localized search heading: " ^ value)
+          (List.mem value texts)) group_labels;
+      eqi "Search current-page badge shares the localized group name" 2
+        (List.length (List.filter ((=) "Translated Current page") texts));
       check "Late locale reaches the retained More recipe"
         (List.exists (fun n -> M.string_prop n "accessibility-label"=Some "Translated More") (nodes session)));
     check "Built-in view columns resolve the initialized locale"

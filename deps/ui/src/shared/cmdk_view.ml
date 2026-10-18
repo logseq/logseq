@@ -332,7 +332,7 @@ let hl_span key (item_sig : S.item Signal.signal)
 
 let badge_el svs key =
   Ui_components.cmdk_badge ~key
-    ~value:(svs.Svs.i18n "cmdk.groups/current-page")
+    ~value:(svs.Svs.i18n "cmdk.group/current-page")
 
 (* -- item row -------------------------------------------------------- *)
 
@@ -501,15 +501,15 @@ let gid_name = function
   | S.G_themes -> "themes"
 
 let gid_label svs = function
-  | S.G_create -> svs.Svs.i18n "cmdk.groups/create"
-  | S.G_current_page -> svs.Svs.i18n "cmdk.groups/current-page"
-  | S.G_nodes -> svs.Svs.i18n "cmdk.groups/nodes"
-  | S.G_recently_updated -> svs.Svs.i18n "cmdk.groups/recently-updated"
-  | S.G_commands -> svs.Svs.i18n "cmdk.groups/commands"
-  | S.G_files -> svs.Svs.i18n "cmdk.groups/files"
-  | S.G_filters -> svs.Svs.i18n "cmdk.groups/filters"
-  | S.G_codes -> svs.Svs.i18n "cmdk.groups/codes"
-  | S.G_themes -> svs.Svs.i18n "cmdk.groups/themes"
+  | S.G_create -> svs.Svs.i18n "cmdk.group/create"
+  | S.G_current_page -> svs.Svs.i18n "cmdk.group/current-page"
+  | S.G_nodes -> svs.Svs.i18n "cmdk.group/nodes"
+  | S.G_recently_updated -> svs.Svs.i18n "cmdk.group/recently-updated"
+  | S.G_commands -> svs.Svs.i18n "cmdk.group/commands"
+  | S.G_files -> svs.Svs.i18n "cmdk.group/files"
+  | S.G_filters -> svs.Svs.i18n "cmdk.group/filters"
+  | S.G_codes -> svs.Svs.i18n "cmdk.group/codes"
+  | S.G_themes -> svs.Svs.i18n "cmdk.group/themes"
 
 (* cljs group header: title click toggles more/less; the trailing link
    (hidden while a filter is active) shows a compact mod+down/up hint *)
