@@ -830,23 +830,6 @@
   max-width: 100%;
 }
 
-.ui__calendar-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ui__calendar-day[data-selected],
-.ui__calendar-day.selected {
-  background: var(--lx-accent-09, var(--ls-link-text-color, hsl(var(--primary, #0f7b6c))));
-  color: #fff;
-}
-
-.ui__calendar-day[data-today]:not([data-selected]) {
-  background: var(--lx-accent-04, hsl(var(--accent, 196 100% 90%)));
-  color: var(--lx-accent-11, hsl(var(--accent-foreground, 196 100% 15%)));
-}
-
 .ls-editor-date-picker {
   display: flex;
   flex-direction: column;
@@ -890,26 +873,6 @@
   background: transparent;
   font-size: 0.875rem;
   color: inherit;
-}
-
-.ls-editor-date-picker table[role="grid"] {
-  border-collapse: collapse;
-  width: 276px;
-  table-layout: fixed;
-}
-
-.ls-editor-date-picker td[role="gridcell"],
-.ls-editor-date-picker td.ui__calendar-cell {
-  display: table-cell;
-  text-align: center;
-  padding: 0;
-  height: 2.5rem;
-}
-
-.ls-editor-date-picker .ui__calendar-day {
-  width: 2.25rem;
-  height: 2.25rem;
-  font-size: 0.875rem;
 }
 
 .ls-editor-date-picker .ls-date-nlp {

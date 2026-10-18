@@ -360,17 +360,21 @@ let filter_value_phase inst ~anchor (c : V.column) =
                  (Option.value (W.get data "values") ~default:W.Nil))
         | _ -> invalid_arg "view filter data has an unsupported value source"
       in
-      let pick it =
+      let commit value =
         P.close_all ();
         set_filters inst
           ((V.get inst).V.filters
            @ [ { V.c_prop = ident; c_op = operator
-               ; c_val =
-                   Some
-                     (Option.value it.P.si_extra
-                        ~default:(W.String it.P.si_value))
+               ; c_val = Some value
                } ])
           (V.get inst).V.filters_or
+      in
+      let pick it =
+        if timestamp && it.P.si_value = "custom-date" then
+          P.show_custom ~anchor ~align_end:true ~cls:"ls-view-date-picker"
+            (Ui_components.date_picker ~translate:I18n.t ~on_pick:(fun date ->
+               commit (W.Date_ms (Int64.of_float date))))
+        else commit (Option.value it.P.si_extra ~default:(W.String it.P.si_value))
       in
       let ops =
         if ident = "block/created-at" || ident = "block/updated-at" then []
@@ -648,6 +652,9 @@ let filter_value_label inst (f : V.filter_clause) =
   | Some (W.Keyword "empty") -> I.empty_label
   | Some v -> (
       match v with
+      | W.Date_ms ms ->
+          let f = Dates.fields (Int64.to_float ms) in
+          Printf.sprintf "%04d-%02d-%02d" f.year f.month f.day
       | W.Map _ -> Option.value (Wr.ref_title v) ~default:""
       | W.Uuid u -> (V.ops ()).V.o_title_of_uuid inst u
       | W.Array xs | W.Set xs | W.List xs ->

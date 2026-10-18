@@ -14,10 +14,9 @@
    signal. The public entries ([install], [popup_key], [click_guard],
    [run_editor_cmd], [on_command]) keep their imperative signatures —
    callers open the popup exactly as before; only the view layer is
-   declarative. The pre-LUI DOM contract is kept verbatim:
-   .ls-editor-date-picker / .ui__calendar-cell / .ui__calendar-day
-   classes, role=grid/gridcell/menu/menuitem
-   attributes, and the [aria-checked]/[data-checked] repeat checkbox. *)
+   declarative. Calendar days use the shared typed seven-column grid;
+   popup menus retain their menu roles and repeat checkboxes retain
+   their checked-state attributes. *)
 
 open Promise_ext
 open Lui_elements
@@ -186,7 +185,7 @@ let day_date p =
 
 let focus_day () =
   match
-    Ui_services.dom_query "#date-time-picker td[data-focused='true'] button"
+    Ui_services.dom_query "#date-time-picker button[data-focused='true']"
   with
   | Some b -> b.Ui_services.focus ()
   | None -> ()
@@ -239,118 +238,18 @@ let commit_cal p =
          scheduled/deadline so the user can keep adjusting *)
   | Link_form _ -> ()
 
-(* one td[role=gridcell] > button.ui__calendar-day; the focused day
-   carries tabindex=0/data-focused on the cell and ~selected on the
-   button, today carries data-today. The table kind emits
-   table/tr/td plus role=grid/row/gridcell itself — the attrs here
-   are the app contract on top; shui.css keeps the web paint via the
-   td[data-*] rules while the typed props carry it for the native
-   host. *)
-let rec cal_cell today p d =
-  let focused = d = p.cd in
-  let is_today =
-    p.cy * 10000 + p.cm * 100 + d = today
-  in
-  table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" p.cy p.cm d)
-    ~style_class:"ui__calendar-cell" ~height:40 ~padding:0
-    ~text_alignment:`center
-    ~data_attrs:
-      ((if focused
-        then [ ("data-focused", "true"); ("aria-selected", "true") ]
-        else [])
-       @ if is_today then [ ("data-today", "true") ] else [])
-    [ Ui_components.with_props
-        [ Ui_components.Prop.font_size "0.875rem"
-        ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
-                hsl(var(--muted))))" ) ]
-        (Ui_components.button ~style_class:"ui__calendar-day" ~variant:`ghost
-           ~width:36 ~height:36 ~padding:0 ~corner_radius:6
-           ~selected:focused
-           ~background:
-             (if focused
-              then
-                "var(--lx-accent-09, var(--ls-link-text-color, \
-                  hsl(var(--primary, #0f7b6c))))"
-              else if is_today
-              then "var(--lx-accent-04, hsl(var(--accent, 196 100% 90%)))"
-              else "transparent")
-           ~foreground:
-             (if focused
-              then "#fff"
-              else if is_today
-              then "var(--lx-accent-11, hsl(var(--accent-foreground, 196 \
-                100% 15%)))"
-              else "inherit")
-           ~text:(string_of_int d)
-           ~label:(string_of_int d)
-           ~autofocus:focused
-           ~data_attrs:
-             ([ ("tabindex", if focused then "0" else "-1") ]
-              @ if is_today then [ ("data-today", "true") ] else [])
-           ~on_press:(fun _ -> pick_day p.cy p.cm d)
-           []) ]
+let cal_table (p : popup) : t =
+  Ui_components.calendar_grid ~year:p.cy ~month:p.cm ~day:(Some p.cd)
+    ~on_pick:(fun y m d ->
+      update_p (fun p -> {p with cy=y;cm=m;cd=d});
+      with_p commit_cal)
 
-(* dimmed prev/next-month day (cljs DayPicker showOutsideDays); y/m is
-   the neighboring month it belongs to *)
-and out_cell y m d =
-  table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" y m d)
-    ~style_class:"ui__calendar-cell" ~height:40 ~padding:0
-    ~text_alignment:`center
-    [ Ui_components.with_props
-        [ Ui_components.Prop.font_size "0.875rem"
-        ; Ui_components.Prop.opacity 0.55
-        ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, \
-                hsl(var(--muted))))" ) ]
-        (Ui_components.button ~style_class:"ui__calendar-day" ~variant:`ghost
-           ~width:36 ~height:36 ~padding:0 ~corner_radius:6
-           ~foreground:
-             "var(--lx-gray-07, var(--ls-secondary-text-color, #999))"
-           ~text:(string_of_int d)
-           ~label:(string_of_int d)
-           ~data_attrs:[ ("tabindex", "-1") ]
-           ~on_press:(fun _ -> pick_day y m d)
-           []) ]
-
-(* the day grid — remounts whole on a cy/cm/cd change, which is what
-   re-fires the focused day's autofocus *)
-and cal_table (p : popup) : t =
-  let today = Dates.today_journal_day () in
-  let days = days_in_month p.cy p.cm in
-  let lead =
-    (let f = Dates.fields (Dates.make ~year:p.cy ~month:p.cm ~day:1 ()) in
-     f.Dates.wday)
-  in
-  let py, pm =
-    if p.cm = 1 then (p.cy - 1, 12) else (p.cy, p.cm - 1)
-  in
-  let pdays = days_in_month py pm in
-  let ny, nm =
-    if p.cm = 12 then (p.cy + 1, 1) else (p.cy, p.cm + 1)
-  in
-  let rows = (lead + days + 6) / 7 in
-  (* .lui-table already carries w-full/table-fixed/border-collapse; the
-     fixed 276px grid width is the cljs datepicker contract *)
-  table ~key:"grid" ~width:276
-    (List.init rows (fun r ->
-       table_row ~key:(string_of_int r)
-         (List.init 7 (fun c ->
-            let d = (r * 7) + c + 1 - lead in
-            if d < 1 then out_cell py pm (pdays + d)
-            else if d > days then out_cell ny nm (d - days)
-            else cal_cell today p d))))
-
-and nav_month delta =
+let nav_month delta =
   update_p (fun p ->
       let m = p.cm + delta in
       if m < 1 then { p with cm = 12; cy = p.cy - 1 }
       else if m > 12 then { p with cm = 1; cy = p.cy + 1 }
       else { p with cm = m })
-
-(* click a calendar day: Cal_insert commits; scheduled/deadline keep the
-   popup open with the new day focused *)
-and pick_day y m d =
-  update_p (fun p -> { p with cy = y; cm = m; cd = d });
-  with_p commit_cal
 
 let close_menu () =
   with_p (fun p ->

@@ -165,6 +165,82 @@ let run_views ~registry ~profile ~finish =
       {Views_table.created_column with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
         data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
   in
+  let custom_date_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_stack = !Views_popup.stack_st in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "custom-date-fixture"});
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun name _ ->
+      Js.Promise.resolve (if name="thread-api/get-view-filter-data" then
+        Wire.Map [Wire.kw "value-source",Wire.Keyword "timestamp"] else Wire.Nil));
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack;done_ ()
+      | mode::rest ->
+          Views_popup.stack_st:=None;
+          let instance=ref None in
+          let selector=mount (fun _ context parent ->
+            let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KAllPages ~feature:"custom-date-fixture" ~owner:Wire.Nil in
+            Views_state.update inst (fun st -> {st with filters_or=true});
+            instance:=Some inst;Views_popup.layer context parent) in
+          let inst=Option.get !instance in
+          Views_head.filter_value_phase inst ~anchor:(Ui_services.dom_body ()) Views_table.created_column;
+          ignore (Js.Promise.then_ (fun () ->
+            let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
+            S.text_changed selector input.M.id I18n.(t "view.filter/custom-date");
+            S.submit selector input.M.id;
+            check "custom date opens a calendar without changing the filter" ((Views_state.get inst).filters=[]);
+            let calendar=List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some "date-time-picker") (nodes selector) in
+            check "custom date renders the shared calendar" (Option.is_some calendar);
+            (match calendar with
+             | None -> ()
+             | Some _ ->
+                 let find id=List.find (fun n -> M.string_prop n "accessibility-identifier"=Some id) (nodes selector) in
+                 let check_value y m d =
+                   let state=Views_state.get inst in
+                   check "custom date writes one typed local-midnight instant and preserves OR"
+                     (state.filters_or && match state.filters with
+                      | [{Views_state.c_prop="block/created-at";c_op="after";c_val=Some (Wire.Date_ms value)}] ->
+                          Int64.to_float value=Dates.make ~year:y ~month:m ~day:d ()
+                      | _ -> false);
+                   check "custom date selection closes its popup" (!Views_popup.open_popups=[]);
+                   let clause=List.hd state.filters in
+                   eqs "custom date chip displays a readable date" (Printf.sprintf "%04d-%02d-%02d" y m d)
+                     (Views_head.filter_value_label inst clause)
+                 in
+                 if mode="dismiss" then begin
+                   let popup=List.find (fun n -> n.M.kind="popover") (nodes selector) in
+                   S.dismiss selector popup.M.id;
+                   check "calendar dismissal preserves the existing filter state"
+                     ((Views_state.get inst).filters=[] && !Views_popup.open_popups=[])
+                 end else if mode="text" then begin
+                   let input=find "calendar-date-input" in
+                   S.text_changed selector input.M.id "not a date";
+                   S.submit selector input.M.id;
+                   check "invalid calendar input does not commit or close"
+                     ((Views_state.get inst).filters=[] && !Views_popup.open_popups<>[]);
+                   S.text_changed selector input.M.id "2024-02-29";
+                   S.submit selector input.M.id;
+                   check_value 2024 2 29
+                 end else begin
+                   S.text_changed selector (find "calendar-year").M.id "2024";
+                   S.press selector (find "calendar-month").M.id;
+                   let feb=List.find (fun n -> n.M.kind="menu-item" && M.string_prop n "text"=Some (I18n.t "format.month/february")) (nodes selector) in
+                   S.press selector feb.M.id;
+                   check "choosing a month keeps the calendar open without committing"
+                     ((Views_state.get inst).filters=[] && !Views_popup.open_popups<>[]);
+                   S.press selector (find "calendar-next").M.id;
+                   check "month navigation renders the following month"
+                     (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-day-2024-03-01") (nodes selector));
+                   S.press selector (find "calendar-prev").M.id;
+                   S.press selector (find "calendar-day-2024-02-29").M.id;
+                   check_value 2024 2 29
+                 end);
+            Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);
+            next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
+    in next ["day";"text";"dismiss"]
+  in
   let type_choice_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "type-fixture"});
@@ -1541,7 +1617,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())));
+        custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =
