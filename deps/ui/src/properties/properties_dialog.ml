@@ -12,7 +12,7 @@
    2. type select   — property name + type list
    3. node tags     — class select (+ "Skip choosing tag") for :node
    4. value         — select with placeholder "Set <title>" or the
-                      inline date field for date/datetime
+                      shared calendar for date/datetime
 
    For tag (class) pages an existing property is added via
    class-add-property instead of taking a value. *)
@@ -473,40 +473,39 @@ let icon_value_view d : t =
      [])
     context parent
 
+let date_value_view d prop : t =
+ fun context parent ->
+  let alive=ref true in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive:=false);
+  let loaded=Signal.state context.Lui_ui.ui_scheduler None in
+  let ident=ident_of prop and is_datetime=type_of prop="datetime" in
+  let owners=match d.d_target.uuids with [] -> [d.d_target.uuid] | owners -> owners in
+  ignore (let* block=D.entity_by_uuid d.d_target.uuid in
+    let value=Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+    let* value=if not is_datetime && not (D.value_empty_p value) then
+      D.entity (W.Int (Option.get (D.entity_id_of value)))
+      else Js.Promise.resolve value in
+    if !alive then Runtime.signal_set loaded (Some (D.untag value));
+    Js.Promise.resolve ());
+  let ctx : V.ctx =
+    {owner_key="property-dialog";block_uuid=d.d_target.uuid;block_id=d.d_target.db_id;
+     refresh=(fun () -> ());is_page=false;class_schema=false} in
+  let write value =
+    D.batch_set_property ~block_uuids:owners ~ident ~value |> ignore;
+    S.refresh_all ()
+  in
+  (reactive (function
+    | None -> column ~width:556 []
+    | Some value -> V.date_picker_content ctx ~ident ~is_datetime ~value
+        ~on_value:write ~on_dismiss:close
+        ~on_clear:(fun () ->
+          List.iter (fun block_uuid -> D.remove_block_property ~block_uuid ~ident |> ignore) owners;
+          close ();S.refresh_all ())) (Signal.value loaded)) context parent
+
 let value_edit_view d prop : t =
  fun context parent ->
-  let sched = context.Lui_ui.ui_scheduler in
   let ty = type_of prop in
-  if ty = "date" || ty = "datetime" then (
-    (* inline date field — same as the cell editor *)
-    let is_datetime = ty = "datetime" in
-    let day = V.today_day () in
-    let buffer =
-      Signal.state sched
-        (if is_datetime then ""
-         else
-           Printf.sprintf "%04d-%02d-%02d" (day / 10000)
-             (day mod 10000 / 100) (day mod 100))
-    in
-    let ctx : V.ctx =
-      { block_uuid = d.d_target.uuid; block_id = d.d_target.db_id
-      ; refresh = (fun () -> ()); is_page = false; class_schema = false
-      }
-    in
-    (row ~gap:0 ~grow:1.0
-       [ Ui_components.text_field ~autofocus:true
-           ~text:(Runtime.signal_get buffer)
-           ~on_input:(fun ev ->
-             match ev with
-             | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
-             | _ -> ())
-           ~on_submit:(fun _ ->
-             V.commit_date_text ctx (ident_of prop) ~is_datetime
-               (Runtime.signal_get buffer);
-             close ())
-           []
-       ])
-      context parent)
+  if ty = "date" || ty = "datetime" then date_value_view d prop context parent
   else if ident_of prop = "logseq.property/icon" then
     icon_value_view d context parent
   else
@@ -574,23 +573,26 @@ let value_edit_view d prop : t =
           Js.Promise.resolve (value_items d prop (W.elems w))))
         context parent
 
-let dialog_content ?compact_width d : t =
+let date_phase = function
+  | Value_edit prop -> List.mem (type_of prop) ["date";"datetime"]
+  | Prop_select | Type_select _ | Node_tags _ -> false
+
+let with_phase d render : t =
  fun context parent ->
-  let phase_sig = Signal.state context.Lui_ui.ui_scheduler d.d_phase in
-  d.d_phase_sig <- Some phase_sig;
-  (reactive
-     (fun p ->
-        (* stable root: same-kind prop diffs across reactive branches emit
-           unsupported set-prop ops on native *)
-        column ~gap:0 ?width:(match p with Type_select _ -> None | _ -> compact_width)
-          [ (match p with
-             | Prop_select -> prop_select_view d
-             | Type_select name -> type_select_view d name
-             | Node_tags prop -> node_tags_view d prop
-             | Value_edit prop -> value_edit_view d prop)
-          ])
-     (Signal.value phase_sig))
-    context parent
+  let phase=Signal.state context.Lui_ui.ui_scheduler d.d_phase in
+  d.d_phase_sig<-Some phase;
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> d.d_phase_sig<-None);
+  render (Signal.value phase) context parent
+
+let dialog_content ?compact_width ~phase d : t =
+  reactive (fun p ->
+    column ~gap:0 ?width:(if date_phase p then None else match p with
+      | Type_select _ -> None | _ -> compact_width)
+      [match p with
+       | Prop_select -> prop_select_view d
+       | Type_select name -> type_select_view d name
+       | Node_tags prop -> node_tags_view d prop
+       | Value_edit prop -> value_edit_view d prop]) phase
 
 (* the dialog rendered inside .cp__overlays: with an anchor point it
    is the anchored ui__popover-content dropdown master uses (title
@@ -603,9 +605,10 @@ let view : t =
      (fun dopt ->
         match dopt with
         | None -> column ~gap:2 []
-        | Some d -> (
+        | Some {d_placement=Trigger _;_} -> column ~gap:0 []
+        | Some d -> with_phase d (fun phase ->
             match d.d_placement with
-            | Trigger _ -> column ~gap:0 []
+            | Trigger _ -> assert false
             | Point (x, y) ->
                 popover ~key:"prop-pop" ~at:(x, y)
                   ~style_class:"ui__popover-content"
@@ -616,14 +619,19 @@ let view : t =
                   ~on_dismiss:(fun _ -> close ())
                   [ box ~key:"prop-body"
                       ~style_class:"ls-property-dialog"
-                      [ dialog_content ~compact_width:232 d ]
+                      [ dialog_content ~compact_width:232 ~phase d ]
                   ]
             | Centered ->
                 Ui_components.dialog ~text:(I18n.t "property/add-or-change")
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
-                  [ card ~padding:8 ~min_width:340 ~max_width:520
-                      [ dialog_content d ]
+                  [ Ui_parts.int_prop Lui_protocol.MaxWidth
+                      ~value:(reactive (fun p -> if date_phase p then 556 else 520) phase)
+                      (Ui_parts.int_prop Lui_protocol.MinWidth
+                         ~value:(reactive (fun p -> if date_phase p then 556 else 340) phase)
+                         (Ui_parts.int_prop Lui_protocol.PaddingValue
+                            ~value:(reactive (fun p -> if date_phase p then 0 else 8) phase)
+                            (card [ dialog_content ~phase d ])))
                   ]))
      (Signal.value s))
     context parent
@@ -667,17 +675,21 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
      ; reactive ~equal:(==)
          (fun current -> match current with
            | Some d when d.d_placement = Trigger key ->
-               Ui_components.with_props
+               with_phase d (fun phase -> Ui_components.with_props
                  [Ui_components.Prop.overflow `auto; Ui_components.card_shadow]
-                 (popover ~anchor:`below ~anchor_offset:0.
-                    ~padding:0 ~max_height:288 ~border_width:1
+                 (Ui_parts.int_prop Lui_protocol.MaxHeight
+                    ~value:(reactive (fun p ->
+                      if date_phase p then max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
+                      else 288) phase)
+                  (popover ~anchor:`below ~anchor_offset:0.
+                    ~padding:0 ~border_width:1
                     ~corner_radius:6 ~background:"hsl(var(--popover))"
                     ~foreground:"hsl(var(--popover-foreground))"
                     ~border_color:"hsl(var(--border))"
                     ~style_class:"ui__popover-content ls-property-dialog"
                     ~data_attrs:["role","dialog"]
                     ~transition:Ui_components.popover_transition
-                    ~on_dismiss:(fun _ -> close ()) [dialog_content ~compact_width:224 d])
+                    ~on_dismiss:(fun _ -> close ()) [dialog_content ~compact_width:224 ~phase d])))
            | _ -> column ~gap:0 [])
          (Signal.value state)
      ]) context parent

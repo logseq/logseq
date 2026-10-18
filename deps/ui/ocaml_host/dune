@@ -449,6 +449,7 @@
 (test
  (name host_requests_test)
  (modules host_requests_test)
+ (preprocess (pps lui.ppx))
  (deps ../assets/tabler-children.json)
  (action
   (setenv LOGSEQ_ICON_DATA %{dep:../assets/tabler-children.json}

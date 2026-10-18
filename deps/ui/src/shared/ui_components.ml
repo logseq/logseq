@@ -1237,12 +1237,13 @@ let calendar_month_names translate =
       "format.month/december";
     |]
 
-let calendar_header ~previous ~next ~month ~year =
-  stack ~key:"calendar-header" ~width:276 ~height:32 ~margin_top:4
+let calendar_header ~clear ~previous ~next ~month ~year : t =
+ fun context parent ->
+  (stack ~key:"calendar-header" ~width:276 ~height:32 ~margin_top:4
     [ row ~key:"navigation" ~width:276 ~height:32 ~main:`end_ ~cross:`center ~gap:4
-        [previous;next];
-      row ~key:"caption" ~width:196 ~height:32 ~cross:`center ~gap:8
-        [month;year] ]
+        ([previous;next] @ Option.to_list clear);
+      row ~key:"caption" ~width:(if clear=None then 196 else 156) ~height:32 ~cross:`center ~gap:8
+        [month;year] ]) context parent
 
 let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
   with_props
@@ -1251,16 +1252,20 @@ let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
        ~border_color:"var(--lx-popover-border, hsl(var(--border)))"
        ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
-let date_picker ~translate ~on_pick : t =
+let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
+    ~translate ~on_pick () : t =
  fun context parent ->
-  let initial = Dates.fields (Dates.date_now ()) in
+  let initial = Dates.fields (Option.value initial ~default:(Dates.date_now ())) in
   let date =
     Signal.state context.Lui_ui.ui_scheduler
       (initial.year, initial.month, initial.day)
   in
   let month_open = Signal.state context.Lui_ui.ui_scheduler false in
-  let day_focused = Signal.state context.Lui_ui.ui_scheduler false in
+  let day_focused = Signal.state context.Lui_ui.ui_scheduler initial_focus_day in
+  let time = Signal.state context.Lui_ui.ui_scheduler
+      (Printf.sprintf "%02d:%02d" initial.hours initial.minutes) in
   let buffer = Signal.state context.Lui_ui.ui_scheduler "" in
+  let committed = ref None in
   let set_month y m =
     let _, _, d = Signal.get_state date in
     Signal.set day_focused false;
@@ -1271,7 +1276,30 @@ let date_picker ~translate ~on_pick : t =
     let f = Dates.fields (Dates.make ~year:y ~month:(m + delta) ~day:1 ()) in
     set_month f.year f.month
   in
-  let pick y m d = on_pick (Dates.make ~year:y ~month:m ~day:d ()) in
+  let time_fields () =
+    let value = Signal.get_state time in
+    let digit index = value.[index]>='0' && value.[index]<='9' in
+    if String.length value=5 && value.[2]=':' && digit 0 && digit 1 && digit 3 && digit 4 then
+      match int_of_string_opt (String.sub value 0 2), int_of_string_opt (String.sub value 3 2) with
+      | Some hours,Some minutes when hours>=0 && hours<24 && minutes>=0 && minutes<60 -> Some (hours,minutes)
+      | _ -> None
+    else None
+  in
+  let commit value =
+    let fields=Dates.fields value in
+    Signal.set date (fields.year,fields.month,fields.day);
+    if datetime then Signal.set time (Printf.sprintf "%02d:%02d" fields.hours fields.minutes);
+    Signal.set day_focused true;
+    if !committed<>Some value then (committed:=Some value;on_pick value)
+  in
+  let publish y m d hours minutes =
+    commit (Dates.make ~year:y ~month:m ~day:d ~hours ~minutes ())
+  in
+  let pick y m d =
+    let selected = if datetime then time_fields () else Some (0,0) in
+    Option.iter (fun (hours,minutes) -> publish y m d hours minutes) selected
+  in
+  let commit_time () = let y,m,d=Signal.get_state date in pick y m d in
   let submit () =
     let value = String.trim (Signal.get_state buffer) in
     let parsed =
@@ -1288,16 +1316,14 @@ let date_picker ~translate ~on_pick : t =
           | Some y, Some m, Some d
             when m >= 1 && m <= 12 && d >= 1 && d <= Dates.days_in_month ~y ~m
             ->
-              Some (y, m, d)
+              Some (Dates.make ~year:y ~month:m ~day:d ())
           | _ -> None)
       | _ ->
-          Option.map
-            (fun date ->
-              let f = Dates.fields date in
-              (f.year, f.month, f.day))
-            (Dates.parse value)
+          Dates.parse value
     in
-    match parsed with Some (y, m, d) -> pick y m d | None -> ()
+    Option.iter (fun value ->
+      if datetime then commit value
+      else let f=Dates.fields value in publish f.year f.month f.day 0 0) parsed
   in
   (with_props
      [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem" ]
@@ -1306,7 +1332,10 @@ let date_picker ~translate ~on_pick : t =
           column ~style_class:"ui__calendar" ~padding:12 ~gap:16
             [
               calendar_header
-                ~previous:(calendar_nav_button ~id:"calendar-prev" ~autofocus:true
+                ~clear:(Option.map (fun clear -> calendar_nav_button
+                    ~id:"calendar-clear" ~autofocus:false ~label:(translate "ui/delete")
+                    ~icon:(`app "trash") ~on_press:(fun _ -> clear ())) on_clear)
+                ~previous:(calendar_nav_button ~id:"calendar-prev" ~autofocus:(not initial_focus_day)
                     ~label:(translate "editor.date-picker/previous-month")
                     ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1)))
                 ~next:(calendar_nav_button ~id:"calendar-next" ~autofocus:false
@@ -1368,8 +1397,24 @@ let date_picker ~translate ~on_pick : t =
                     ~on_pick:pick)
                 (Signal.value date) (Signal.value day_focused);
             ];
-          column ~padding_horizontal:12
-            [
+          column ~padding_horizontal:12 ~gap:12
+            ((if datetime then
+              [row ~key:"calendar-time" ~cross:`center ~gap:8
+                [input ~kind:`time ~accessibility_identifier:"calendar-time-input"
+                   ~label:(translate "ui.calendar/time-label") ~height:32 ~width:112
+                   ~padding_horizontal:12 ~padding_vertical:0 ~submit_on_blur:true
+                   ~text:(reactive Fun.id (Signal.value time))
+                   ~on_input:(function P.TextChanged (_,value) -> Signal.set time value | _ -> ())
+                   ~on_submit:(fun _ -> commit_time ()) [];
+                 button ~variant:`ghost ~size:`sm ~grow:1. ~height:32 ~padding:0
+                   ~foreground:"hsl(var(--muted-foreground))"
+                   ~text:(translate "ui/use-current-time")
+                   ~accessibility_identifier:"calendar-current-time"
+                   ~on_press:(fun _ ->
+                     let now=Dates.fields (Dates.date_now ()) in
+                     Signal.set time (Printf.sprintf "%02d:%02d" now.hours now.minutes);
+                     let y,m,d=Signal.get_state date in
+                     publish y m d now.hours now.minutes) []]] else []) @ [
               input ~accessibility_identifier:"calendar-date-input" ~height:40
                 ~margin_bottom:12
                 ~placeholder:(translate "ui/date-natural-language-placeholder")
@@ -1378,6 +1423,8 @@ let date_picker ~translate ~on_pick : t =
                   | _ -> ())
                 ~on_submit:(fun _ -> submit ())
                 [];
-            ];
+            ]);
         ]))
     context parent
+
+let date_picker ~translate ~on_pick = calendar ~translate ~on_pick ()

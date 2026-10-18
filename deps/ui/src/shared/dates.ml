@@ -29,10 +29,6 @@ let make ?(hours = 0) ?(minutes = 0) ?(seconds = 0) ?(ms = 0) ~year ~month
   Ui_services.time_of_fields
     { year; month; day; wday = 0; hours; minutes; seconds; ms }
 
-(* JS-style date string parse ("2024-01-15", RFC 3339, or the
-   "Sep 30, 2026" journal-title shape each platform supports). *)
-let parse (s : string) : t option = Ui_services.time_parse s
-
 (* d + delta days, as elapsed time (matches the pre-shared behavior of
    getTime + delta * 86400e3). *)
 let add_days (t : t) (delta : int) : t = t +. (float_of_int delta *. 86400000.)
@@ -54,6 +50,39 @@ let shift_year (t : t) (delta : int) : t =
 (* new Date(y, m, 0).getDate() — the last day of month m (1-12). *)
 let days_in_month ~y ~m =
   (fields (make ~year:y ~month:(m + 1) ~day:0 ())).day
+
+(* Local date/time input has identical validation and timezone semantics on every host. *)
+let parse_local_datetime s =
+  let length=String.length s in
+  let number start count =
+    let rec digits index = index=start+count
+      || (s.[index]>='0' && s.[index]<='9' && digits (index+1)) in
+    if start+count<=length && digits start then
+      int_of_string_opt (String.sub s start count) else None
+  in
+  let date_shape=length>=10 && s.[4]='-' && s.[7]='-' in
+  let time_shape=length=10 || ((length=16 || length=19 || length=23)
+    && (s.[10]='T' || s.[10]=' ') && s.[13]=':'
+    && (length=16 || s.[16]=':') && (length<>23 || s.[19]='.')) in
+  if not (date_shape && time_shape) then None
+  else
+    let hours=if length=10 then Some 0 else number 11 2
+    and minutes=if length=10 then Some 0 else number 14 2
+    and seconds=if length<19 then Some 0 else number 17 2
+    and ms=if length=23 then number 20 3 else Some 0 in
+    match number 0 4,number 5 2,number 8 2,hours,minutes,seconds,ms with
+    | Some year,Some month,Some day,Some hours,Some minutes,Some seconds,Some ms
+      when month>=1 && month<=12 && day>=1 && day<=days_in_month ~y:year ~m:month
+        && hours>=0 && hours<24 && minutes>=0 && minutes<60 && seconds>=0 && seconds<60 ->
+          Some (make ~year ~month ~day ~hours ~minutes ~seconds ~ms ())
+    | _ -> None
+
+(* Zoned dates and journal titles use host parsing; unzoned datetime input is shared. *)
+let parse s =
+  let length=String.length s in
+  if List.mem length [16;19;23] && s.[4]='-' && s.[7]='-'
+     && (s.[10]='T' || s.[10]=' ') then parse_local_datetime s
+  else Ui_services.time_parse s
 
 let calendar_navigate ~year ~month ~day ~key ~shift =
   let date = make ~year ~month ~day () in

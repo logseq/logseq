@@ -173,7 +173,7 @@ let run_views ~registry ~profile ~finish =
     Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let property_ctx : Properties_value.ctx =
-    {block_uuid="inline-property-owner";block_id=Some 123;refresh=(fun () -> ());
+    {owner_key="inline-property";block_uuid="inline-property-owner";block_id=Some 123;refresh=(fun () -> ());
      is_page=true;class_schema=false} in
   let inline_properties = mount (fun _ -> Lui_elements.column
     [Properties_area.new_property_btn property_ctx ~for_class:false ~owner_title:"Owner";

@@ -482,7 +482,8 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                    ; (W.Keyword "value", cell_value blk c) ]
                in
                let pctx : Properties_value.ctx =
-                 { block_uuid = row_uuid
+                 { owner_key = "view-" ^ string_of_int inst.V.id
+                 ; block_uuid = row_uuid
                  ; block_id = Properties_data.entity_id_of blk
                  ; refresh = (fun () -> refresh inst)
                  ; is_page = is_page_row blk

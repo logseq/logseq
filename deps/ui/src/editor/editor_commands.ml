@@ -785,7 +785,7 @@ let repeat_panel ps : t =
                    ~value:(reactive (opt3 done_label_of) ps) [] ] ] ])
 
 let cal_head ps : t =
-  Ui_components.calendar_header
+  Ui_components.calendar_header ~clear:None
     ~previous:(Ui_components.calendar_nav_button ~id:"editor-calendar-prev" ~autofocus:false
       ~label:(I18n.t "editor.date-picker/previous-month")
       ~icon:(`app "chevron-left") ~on_press:(fun _ -> nav_month (-1)))

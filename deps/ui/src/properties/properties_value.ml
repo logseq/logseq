@@ -33,7 +33,8 @@ module W = Wire
 
 (* The owner context a value cell is rendered for. *)
 type ctx =
-  { block_uuid : string
+  { owner_key : string
+  ; block_uuid : string
   ; block_id : int option
   ; refresh : unit -> unit
   ; is_page : bool
@@ -162,42 +163,7 @@ let set_date ctx ident day =
   Js.Promise.resolve ())
   |> ignore
 
-(* "YYYY-MM-DD", "YYYY-MM-DD HH:MM[:SS[.fff]]", same with a T —
-   the datetime subset users type (JS Date.parse parity); returns
-   None on malformed input like Date.parse's NaN *)
-let parse_ms (s : string) : float option =
-  let num i n =
-    if i + n > String.length s then None
-    else
-      let ok = ref true in
-      for j = i to i + n - 1 do
-        match s.[j] with '0' .. '9' -> () | _ -> ok := false
-      done;
-      if !ok then Some (int_of_string (String.sub s i n)) else None
-  in
-  match num 0 4, num 5 2, num 8 2 with
-  | Some y, Some m, Some d
-    when String.length s >= 10 && s.[4] = '-' && s.[7] = '-' ->
-      let hh, mm, ss =
-        if String.length s >= 16 && (s.[10] = 'T' || s.[10] = ' ')
-           && s.[13] = ':'
-        then
-          match num 11 2, num 14 2 with
-          | Some hh, Some mm ->
-              let ss =
-                if String.length s >= 19 && s.[16] = ':' then
-                  Option.value (num 17 2) ~default:0
-                else 0
-              in
-              (hh, mm, ss)
-          | _ -> (0, 0, 0)
-        else (0, 0, 0)
-      in
-      Some
-        (Ui_services.time_of_fields
-           { year = y; month = m; day = d; wday = 0
-           ; hours = hh; minutes = mm; seconds = ss; ms = 0 })
-  | _ -> None
+let parse_ms = Dates.parse_local_datetime
 
 let commit_date_text ctx ident ~is_datetime v =
   let v = String.trim v in
@@ -530,10 +496,6 @@ let checkbox_view ctx row : t =
       | _ -> ())
     []
 
-let month_full =
-  [| "January"; "February"; "March"; "April"; "May"; "June"; "July"
-   ; "August"; "September"; "October"; "November"; "December" |]
-
 (* ---------- repeat column (cljs repeat-setting) ----------
 
    The right column of the date popover: persisted as hidden
@@ -736,7 +698,7 @@ let title_of_id cs id =
 
 (* w-64 p-4 gap-4 column (cljs repeat-setting); renders once the
    repeat data resolves like prod's async use-effect *)
-let repeat_column ctx ~is_datetime ~rep : t =
+let repeat_column ctx ~ident ~is_datetime ~rep : t =
   reactive
     (fun (r : rep option) ->
       match r with
@@ -767,7 +729,9 @@ let repeat_column ctx ~is_datetime ~rep : t =
                 ; text ~key:"lb" ~style_class:"ls-rep-lbl"
                     ~value:
                       (I18n.t
-                         (if is_datetime then "property.repeat/datetime"
+                         (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"]
+                          then "property.repeat/task"
+                          else if is_datetime then "property.repeat/datetime"
                           else "property.repeat/date"))
                     [] ]
             ; row ~key:"evr" ~cross:`center ~gap:8
@@ -826,128 +790,66 @@ let repeat_column ctx ~is_datetime ~rep : t =
                 ; text ~key:"isv" ~value:r.done_title [] ] ])
     (Signal.value rep)
 
-(* cljs datetime picker (ui/datepicker): month grid anchored under the
-   value — ‹/› shift the viewed month, adjacent-month cells stay dim,
-   the selected day is accent-filled, the input below commits free
-   text like before *)
-let date_picker_pop sched ctx ~ident ~is_datetime ~buffer ~selected
-    ~on_pick ~on_submit ~on_clear ~on_dismiss : t =
-  let rep : rep option Signal.state = Signal.state sched None in
-  fetch_repeat ctx ~ident ~is_datetime (fun r -> Runtime.signal_set rep (Some r));
-  let ty, tm, _ =
-    match selected with
-    | Some (y, m, _) -> y, m, 0
-    | None -> ymd_of_ms (Ui_services.time_now ())
+(* Property entry points share the same calendar, time input and commit rules. *)
+let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_dismiss : t =
+ fun context parent ->
+  let alive = ref true in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive:=false);
+  let rep = Signal.state context.Lui_ui.ui_scheduler None in
+  fetch_repeat ctx ~ident ~is_datetime (fun value ->
+    if !alive then Runtime.signal_set rep (Some value));
+  let initial =
+    match is_datetime,ms_of_value value,ymd_of_datetime_value value with
+    | true,Some ms,_ -> ms
+    | _,_,Some (year,month,day) -> Dates.make ~year ~month ~day ()
+    | _ -> let now=Dates.fields (Dates.date_now ()) in
+        Dates.make ~year:now.year ~month:now.month ~day:now.day ()
   in
-  let view = Signal.state sched (ty, tm) in
-  let day_cell ~dim ~sel (y, m, d) : t =
-    Ui_components.button ~variant:`ghost ~size:`sm ~style_class:"ls-cal-day"
-        ~foreground:"var(--ls-primary-text-color)"
-      ~text:(string_of_int d)
-      ~on_press:(fun _ -> on_pick y m d)
-      ~data_attrs:
-        ([ ("data-sel", if sel then "1" else "0")
-         ; ("data-dim", if dim then "1" else "0") ])
-      []
+  let pick ms =
+    if is_datetime then on_value (W.Float ms)
+    else ignore (let* page=D.journal_page_by_day (Dates.journal_day_of ms) in
+      if !alive then (
+        let id=Option.get (D.entity_id_of page) in
+        on_value (W.Int id);on_dismiss ());
+      Js.Promise.resolve ())
   in
-  let grid =
-    reactive
-      (fun ((vy, vm) : int * int) ->
-        let first_wday =
-          (Dates.fields (Dates.make ~year:vy ~month:vm ~day:1 ())).wday
-        in
-        let dim = Dates.days_in_month ~y:vy ~m:vm in
-        let py, pm = (if vm = 1 then vy - 1, 12 else vy, vm - 1) in
-        let ny, nm = (if vm = 12 then vy + 1, 1 else vy, vm + 1) in
-        let pdim = Dates.days_in_month ~y:py ~m:pm in
-        let cell i : t =
-          let di = i - first_wday + 1 in
-          if di < 1 then day_cell ~dim:true ~sel:false (py, pm, pdim + di)
-          else if di > dim then
-            day_cell ~dim:true ~sel:false (ny, nm, di - dim)
-          else
-            let sel =
-              (match selected with
-               | Some (sy, sm, sd) -> sy = vy && sm = vm && sd = di
-               | None -> false)
-            in
-            day_cell ~dim:false ~sel (vy, vm, di)
-        in
-        column ~key:"cal-grid" ~style_class:"ls-cal-grid"
-          (List.init 6 (fun r ->
-               row ~key:("r" ^ string_of_int r)
-                 (List.init 7 (fun c -> cell (r * 7 + c))))))
-      (Signal.value view)
-  in
-  popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:4.0 ~min_width:556
+  (row ~key:"property-date-content" ~width:556 ~cross:`start
+     ~style_class:"ls-property-date-picker"
+     [ Ui_components.calendar ~initial ~datetime:is_datetime ~initial_focus_day:true
+         ~translate:I18n.t ~on_pick:pick
+         ?on_clear:(if D.value_empty_p value then None else Some on_clear) ();
+       repeat_column ctx ~ident ~is_datetime ~rep ]) context parent
+
+let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : t =
+  Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
+  (popover ~anchor:`below ~anchor_target ~anchor_alignment:`start ~anchor_offset:4.
+    ~max_height:(max 0 (int_of_float (Ui_services.dom_viewport_height ())-16))
+    ~background:"hsl(var(--popover))"
+    ~foreground:"hsl(var(--popover-foreground))" ~border_width:1
+    ~border_color:"hsl(var(--border))" ~corner_radius:6
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> on_dismiss ())
-    [ row ~key:"dp-row" ~cross:`start
-        ~style_class:"ls-property-date-picker"
-        [ column ~key:"cal" ~style_class:"ls-cal" ~gap:8 ~padding:4
-        [ row ~key:"cal-hd" ~cross:`center ~style_class:"ls-cal-hd"
-            [ row ~key:"cal-ttl" ~cross:`center ~gap:6
-                ~style_class:"ls-cal-fields"
-                [ text ~key:"cal-mn" ~style_class:"ls-cal-field"
-                    ~value:(reactive
-                              (fun ((_, vm) : int * int) ->
-                                month_full.(vm - 1))
-                              (Signal.value view))
-                    []
-                ; text ~key:"cal-yr" ~style_class:"ls-cal-field"
-                    ~value:(reactive
-                              (fun ((vy, _) : int * int) ->
-                                string_of_int vy)
-                              (Signal.value view))
-                    [] ]
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "chevron-left")
-                ~label:"Previous month"
-                ~on_press:(fun _ ->
-                  Signal.set view
-                    (let vy, vm = Signal.get (Signal.value view) in
-                     if vm = 1 then vy - 1, 12 else vy, vm - 1))
-                []
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "chevron-right")
-                ~label:"Next month"
-                ~on_press:(fun _ ->
-                  Signal.set view
-                    (let vy, vm = Signal.get (Signal.value view) in
-                     if vm = 12 then vy + 1, 1 else vy, vm + 1))
-                []
-            ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "trash")
-                ~label:(I18n.t "ui/delete")
-                ~on_press:(fun _ -> on_clear ())
-                [] ]
-        ; grid
-        ; Ui_components.text_field ~autofocus:true
-            ~placeholder:"e.g. Next week"
-            ~text:""
-            ~on_input:(fun ev ->
-              match ev with
-              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
-              | _ -> ())
-            ~on_submit:(fun _ -> on_submit ())
-            [] ]
-        ; repeat_column ctx ~is_datetime ~rep ]
-    ]
+    [date_picker_content ctx ~ident ~is_datetime ~value
+       ~on_value:(fun value -> set_scalar ctx ~ident ~value)
+       ~on_clear:(fun () ->
+         D.remove_block_property ~block_uuid:ctx.block_uuid ~ident |> ignore;
+         on_dismiss ();S.refresh_all ()) ~on_dismiss])
 
 let date_view ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
-  let open_ = Signal.state sched false in
+
   let value = D.row_value row in
   let is_datetime = D.row_type row = "datetime" in
-  let day = today_day () in
   let ident = D.row_ident row |> Option.value ~default:"" in
-  let buffer =
-    Signal.state sched
-      (if is_datetime then ""
-       else
-         Printf.sprintf "%04d-%02d-%02d"
-           (day / 10000)
-           (day mod 10000 / 100)
-           (day mod 100))
+  let anchor_id = "property-date-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
+  let key = "date-picker-" ^ anchor_id in
+  let dismiss () = S.remove_view_overlay key in
+  let open_picker () =
+    S.push_view_overlay context ~key
+      ~view:(date_picker_pop ~anchor_target:anchor_id ctx ~ident ~is_datetime ~value
+        ~on_dismiss:dismiss) ~on_escape:(fun () -> ());
+    Runtime.flush ()
   in
   (* cljs reveals .property-panel-edit-btn while the pointer is over
      the property-pair; without a row-supplied signal fall back to
@@ -955,7 +857,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
   let hover =
     match hover with Some h -> h | None -> Signal.state sched false
   in
-  (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
+  (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~accessibility_identifier:anchor_id
      ~style_class:"ls-datetime"
      ~on_pointer_enter:(fun _ ->
        Signal.set hover true;
@@ -968,7 +870,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
           (* empty date has no journal link — keep the ghost button so
              a click opens the picker *)
           value_button ~text:""
-            ~on_press:(fun _ -> Runtime.signal_set open_ true)
+            ~on_press:(fun _ -> open_picker ())
         else
           (match ymd_of_datetime_value value with
            | Some (y, m, d) ->
@@ -984,7 +886,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
            | None ->
                value_button
                  ~text:(date_display (D.row_type row) value)
-                 ~on_press:(fun _ -> Runtime.signal_set open_ true)))
+                 ~on_press:(fun _ -> open_picker ())))
      ; (if D.value_empty_p value then Logseq_el.nothing
         else
           (* cljs .property-panel-edit-btn is hover-only inside the
@@ -998,26 +900,8 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
                 ~width:18 ~height:18
                 ~data_attrs:[ ("style", "min-width:0;padding:0") ]
                 ~label:(I18n.t "ui/edit")
-                ~on_press:(fun _ -> Runtime.signal_set open_ true) [] ])
-     ; if_ ~test:(Signal.value open_)
-         (date_picker_pop sched ctx ~ident ~is_datetime ~buffer
-            ~selected:(ymd_of_datetime_value value)
-            ~on_pick:(fun y m d ->
-              set_date ctx ident (y * 10000 + m * 100 + d);
-              Runtime.signal_set open_ false)
-            ~on_submit:(fun () ->
-              commit_date_text ctx ident ~is_datetime
-                (Runtime.signal_get buffer);
-              Runtime.signal_set open_ false)
-            ~on_clear:(fun () ->
-              ignore
-                (let* _ =
-                   D.remove_block_property ~block_uuid:ctx.block_uuid
-                     ~ident
-                 in
-                 Js.Promise.resolve ());
-              Runtime.signal_set open_ false)
-            ~on_dismiss:(fun () -> Runtime.signal_set open_ false))
+                ~on_press:(fun _ -> open_picker ()) [] ])
+
      ])
     context parent
 

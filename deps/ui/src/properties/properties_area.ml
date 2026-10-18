@@ -355,8 +355,9 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
 let block_state (context : Lui_ui.ui_context) uuid =
   S.area_state context ~key:(block_key uuid) ~fetch:(block_fetch uuid)
 
-let block_ctx uuid key : V.ctx =
-  { block_uuid = uuid
+let block_ctx ~owner_key uuid key : V.ctx =
+  { owner_key
+  ; block_uuid = uuid
   ; block_id = None
   ; refresh = (fun () -> S.refresh_key key)
   ; is_page = false
@@ -367,7 +368,7 @@ let block_ctx uuid key : V.ctx =
    empty when there is nothing to show. The block-below pills mount
    separately inside .block-content ([block_below_pills]), matching cljs
    where they sit between the editor row and the reactions *)
-let block_area ~uuid : t =
+let block_area ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
@@ -381,7 +382,7 @@ let block_area ~uuid : t =
             column ~gap:2 ~style_class:"ls-block-content-indent"
               ~data_attrs:[ ("style", "padding-left:45px") ] []
           else
-            let ctx = block_ctx uuid key in
+            let ctx = block_ctx ~owner_key:(scope ^ ":panel:" ^ key) uuid key in
             column ~gap:2
               ~style_class:"ls-block-content-indent"
               ~data_attrs:[ ("style", "padding-left:45px") ]
@@ -404,7 +405,7 @@ let block_area ~uuid : t =
 
 (* below pills: .positioned-properties.block-below mounts inside the
    block-content column below the title row *)
-let block_below_pills ~uuid : t =
+let block_below_pills ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
@@ -414,7 +415,7 @@ let block_below_pills ~uuid : t =
           if d.below = [] then
             Logseq_el.nothing
           else
-            let ctx = block_ctx uuid key in
+            let ctx = block_ctx ~owner_key:(scope ^ ":below:" ^ key) uuid key in
             pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.below = b.below))
@@ -425,7 +426,7 @@ let block_below_pills ~uuid : t =
 
 (* left chips: .positioned-properties.block-left inline in
    .block-main-content *)
-let block_left_chips ~uuid : t =
+let block_left_chips ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
@@ -437,7 +438,7 @@ let block_left_chips ~uuid : t =
                position has no properties *)
             Logseq_el.nothing
           else
-            let ctx = block_ctx uuid key in
+            let ctx = block_ctx ~owner_key:(scope ^ ":left:" ^ key) uuid key in
             row ~gap:4 ~cross:`center
               ~style_class:"positioned-properties block-left"
               (List.map
@@ -462,7 +463,7 @@ let block_left_chips ~uuid : t =
 (* right chips: .positioned-properties.block-right inside
    .ls-block-right (cljs block-positioned-properties :block-right —
    e.g. the task priority pill) *)
-let block_right_chips ~uuid : t =
+let block_right_chips ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
@@ -472,7 +473,7 @@ let block_right_chips ~uuid : t =
           if d.right = [] then
             Logseq_el.nothing
           else
-            let ctx = block_ctx uuid key in
+            let ctx = block_ctx ~owner_key:(scope ^ ":right:" ^ key) uuid key in
             row ~gap:2 ~cross:`center
               ~style_class:"positioned-properties block-right"
               (List.map
@@ -700,7 +701,8 @@ let page_fetch ~uuid ~is_tag ~db_id (publish : S.area_data -> unit) :
   Js.Promise.resolve ()
 
 let page_ctx (p : Model.page) key uuid : V.ctx =
-  { block_uuid = uuid
+  { owner_key = key
+  ; block_uuid = uuid
   ; block_id = p.Model.page_db_id
   ; refresh = (fun () -> S.refresh_key key)
   ; is_page = true
@@ -856,7 +858,8 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
         Js.Promise.resolve ())
   in
   let ctx =
-    { V.block_uuid = uuid
+    { V.owner_key = key
+    ; block_uuid = uuid
     ; block_id = db_id
     ; refresh = (fun () -> S.refresh_key key)
     ; is_page = true

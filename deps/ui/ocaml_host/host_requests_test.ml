@@ -5702,7 +5702,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           Lui_elements.column ~grow:1.
             [Lui_elements.box ~height:96 [];Views_table.action_bar inst;
              Properties_area.new_property_btn
-               {Properties_value.block_uuid="row-a";block_id=Some 123;refresh=(fun () -> ());
+               {Properties_value.owner_key="property-fixture";block_uuid="row-a";block_id=Some 123;refresh=(fun () -> ());
                 is_page=true;class_schema=false} ~for_class:false ~owner_title:"Page fixture";
              Properties_dialog.view]) in
       Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
@@ -7740,3 +7740,172 @@ let () = Native_embed.with_entry_lock (fun () ->
     List.iter prerr_endline (List.rev !failures);
     check "Native calendar initial focus, traversal and header geometry" (!failures=[]);
     print_endline "native calendar initial focus, traversal and header geometry: OK"))
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Wire in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush
+  and previous_dialog = !Properties_dialog.current
+  and previous_signal = !Properties_dialog.current_sig
+  and previous_overlays = !Properties_state.view_overlays_state in
+  let failures = ref [] in
+  let expect message value = if not value then failures:=message::!failures in
+  let map entries = W.Map (List.map (fun (key,value) -> W.Keyword key,value) entries) in
+  let initial_ms = Ui_services.time_of_fields
+    {year=2024;month=1;day=31;hours=13;minutes=45;seconds=0;ms=0;wday=0} in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Properties_dialog.current:=previous_dialog;
+    Properties_dialog.current_sig:=previous_signal;Properties_state.view_overlays_state:=previous_overlays) (fun () ->
+    List.iter (fun (entry,is_datetime) ->
+      let ty = if is_datetime then "datetime" else "date" in
+      let ident=if is_datetime then "logseq.property/deadline" else "test/calendar-date" in
+      let prop=map ["db/id",W.Int 101;"db/ident",W.Keyword ident;
+        "block/title",W.String "Date fixture";"logseq.property/type",W.Keyword ty] in
+      let selected = if is_datetime then W.Float initial_ms
+        else map ["db/id",W.Int 901;"block/journal-day",W.Int 20240131] in
+      let block=map ["block/uuid",W.Uuid "date-owner";
+        ident,(if is_datetime then selected else W.Tagged("datascript/Entity",map ["db/id",W.Int 901]))] in
+      let writes = ref [] and journal_days = ref [] in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+        Js.Promise.resolve (match name,args with
+          | "thread-api/entity",[_; W.Int 901] -> selected
+          | "thread-api/entity",[_; W.List [W.Keyword "block/uuid";_]] -> block
+          | "thread-api/entity",[_; W.List [W.Keyword "db/ident";W.Keyword id]] when id=ident -> prop
+          | "thread-api/entity",_ -> map ["db/id",W.Int 102;"db/ident",W.Keyword "logseq.property/status";
+              "block/title",W.String "Status"]
+          | "thread-api/get-property-closed-values",_ | "thread-api/get-all-properties",_ -> W.List []
+          | "thread-api/get-journal-page-by-day",[_;W.Int day] ->
+              journal_days:=day::!journal_days;map ["db/id",W.Int 902]
+          | "thread-api/apply-outliner-ops",_ -> writes:=args::!writes;W.Nil
+          | _ -> failwith ("Unexpected calendar fixture request: "^name)));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      Runtime.read_model:=(fun () -> {Model.initial with repo=Some "calendar-fixture"});
+      Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
+      Properties_state.view_overlays_state:=None;
+      let store=Lui_store.create () in
+      let backend={backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let ctx : Properties_value.ctx = {owner_key="date-fixture";block_uuid="date-owner";block_id=Some 100;
+        refresh=(fun () -> ());is_page=false;class_schema=false} in
+      let refresh_cell = ref (fun () -> ()) in
+      let app=Lui_app.create backend () (fun () () -> ()) (fun context _ _ ->
+        let revision=Signal.state context.Lui_ui.ui_scheduler 0 in
+        refresh_cell:=(fun () -> Signal.set revision (Signal.get_state revision+1));
+        Lui_elements.column
+          [ (if entry="dialog" then Lui_elements.spacer [] else
+              reactive (fun _ -> Lui_elements.column ~key:"cell-owner"
+                [Properties_value.date_view ~hover:None ctx
+                  (map ["property-id",W.Keyword ident;"property",prop;"value",selected])])
+                (Signal.value revision));
+            Properties_view.overlays ]) in
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      let settle () = for _=1 to 12 do Host.drain ();ignore (Lui_app.flush app) done in
+      Fun.protect ~finally:(fun () -> Properties_dialog.close ();ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);settle ();
+        if entry="dialog" then Properties_dialog.open_dialog
+          ~phase:(Properties_dialog.Value_edit prop)
+          {uuid="date-owner";uuids=["date-owner";"date-other"];db_id=Some 100;is_tag=false;title="Date fixture"}
+        else (
+          let edit=List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=Some (I18n.t "ui/edit"))
+            (Lui_store.preorder store) in
+          ignore (Lui_app.dispatch_event app (Press edit)));
+        settle ();
+        let ids ()=Lui_store.preorder store in
+        let find name=List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name) (ids ()) in
+        let label=entry^"/"^ty in
+        expect (label^": opening must not write a value") (!writes=[]);
+        expect (label^": property editing must use the shared calendar") (Option.is_some (find "calendar-month"));
+        expect (label^": built-in temporal properties use the task repeat label")
+          (not is_datetime || List.exists (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t "property.repeat/task")) (ids ()));
+        expect (label^": existing value determines the initial focused day")
+          (match find "calendar-day-2024-01-31" with Some id -> Lui_store.bool_prop store id "autofocus" | None -> false);
+        if is_datetime then begin
+          expect (label^": datetime editing preserves its existing time")
+            (match find "calendar-time-input" with Some id -> Lui_store.string_prop store id "text"=Some "13:45" | None -> false);
+          Option.iter (fun id ->
+            expect (label^": time commits on blur") (Lui_store.bool_prop store id "submit-on-blur");
+            ignore (Lui_app.dispatch_event app (TextChanged(id,"25:75")));
+            settle ();
+            ignore (Lui_app.dispatch_event app (Submit id));settle ();
+            expect (Printf.sprintf "%s: invalid time must not write or dismiss (writes=%d, open=%b)"
+              label (List.length !writes) (Option.is_some (find "calendar-month")))
+              (!writes=[] && Option.is_some (find "calendar-month"));
+            ignore (Lui_app.dispatch_event app (TextChanged(id,"09:20")));
+            settle ();
+            ignore (Lui_app.dispatch_event app (Submit id));settle ();
+            if entry="cell" then (!refresh_cell ();settle ());
+            expect (label^": refreshing a property row must retain its active calendar")
+              (Option.is_some (find "calendar-time-input"));
+            if entry="cell" then
+              List.iter (fun popup ->
+                Option.iter (fun anchor ->
+                  expect (label^": retained popup must still resolve its refreshed anchor")
+                    (Option.is_some (find anchor)))
+                  (Lui_store.string_prop store popup "anchor-target"))
+                (List.filter (fun id -> Lui_store.kind store id="popover") (ids ()));
+            ignore (Lui_app.dispatch_event app (Submit id));settle ()) (find "calendar-time-input")
+        end;
+        Option.iter (fun id -> ignore (Lui_app.dispatch_event app (Press id));settle ())
+          (find "calendar-day-2024-02-01");
+        let values=List.filter_map (function
+          | [_;W.Array [W.Array [W.Keyword op;W.Array args]];_] ->
+              expect (label^": selected owners must share one batch write")
+                (op=(if entry="dialog" then "batch-set-property" else "set-block-property"));
+              if entry="dialog" then
+                expect (label^": the batch retains all selected owners")
+                  (match args with W.List owners::_ -> owners=[W.Uuid "date-owner";W.Uuid "date-other"] | _ -> false);
+              (match args with _::W.Keyword id::value::_ when id=ident -> Some value | _ -> None)
+          | _ -> None) (List.rev !writes) in
+        expect (label^": activating a calendar date writes its property") (values<>[]);
+        expect (label^": changes must not submit twice") (List.length values=(if is_datetime then 2 else 1));
+        if is_datetime then begin
+          expect (label^": datetime selection must not resolve a journal reference") (!journal_days=[]);
+          expect (label^": time and day changes preserve datetime storage")
+            (match List.rev values with
+             | W.Float ms::_ -> let f=Ui_services.time_local_fields ms in
+                 f.year=2024 && f.month=2 && f.day=1 && f.hours=9 && f.minutes=20
+             | _ -> false);
+          expect (label^": datetime remains open after changing its value") (Option.is_some (find "calendar-month"))
+        end else begin
+          expect (label^": date selection resolves the chosen journal day") (!journal_days=[20240201]);
+          expect (label^": date storage remains a journal entity reference") (values=[W.Int 902]);
+          expect (label^": date selection closes its picker") (find "calendar-month"=None)
+        end))
+      ["dialog",true;"dialog",false;"cell",true;"cell",false]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native property calendar entry, time and persistence contract" (!failures=[]);
+  print_endline "native property calendar entry, time and persistence contract: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let store=Lui_store.create () and values=ref [] in
+  let initial=Dates.make ~year:2024 ~month:1 ~day:31 ~hours:13 ~minutes:45 () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+    Ui_components.calendar ~initial ~datetime:true ~translate:I18n.t
+      ~on_pick:(fun value -> values:=value::!values) ()) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let find name=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name)
+      (Lui_store.preorder store) in
+    let send event=ignore (Lui_app.dispatch_event app event);ignore (Lui_app.flush app) in
+    let field=find "calendar-date-input" in
+    let submit source=send (TextChanged(field,source));send (Submit field) in
+    submit "";submit "2024-02-31";
+    check "Invalid calendar text must not write a datetime" (!values=[]);
+    submit "2024-02-01T16:40:00";
+    check "Natural datetime entry must preserve its typed time"
+      (match !values with [ms] -> let f=Dates.fields ms in
+         f.year=2024 && f.month=2 && f.day=1 && f.hours=16 && f.minutes=40 | _ -> false);
+    submit "2024-02-02";
+    check "Natural date entry in a datetime picker uses parsed midnight"
+      (match !values with ms::_ -> let f=Dates.fields ms in f.day=2 && f.hours=0 && f.minutes=0 | _ -> false);
+    let before=Dates.fields (Dates.date_now ()) in
+    send (Press (find "calendar-current-time"));
+    let after=Dates.fields (Dates.date_now ()) in
+    check "Current time must use the new clock value and retain the selected day"
+      (match !values with ms::_ -> let f=Dates.fields ms in
+        f.year=2024 && f.month=2 && f.day=2
+        && List.mem (f.hours,f.minutes) [before.hours,before.minutes;after.hours,after.minutes] | _ -> false));
+  print_endline "native calendar natural datetime and current time: OK")

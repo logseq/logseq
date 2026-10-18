@@ -1721,7 +1721,8 @@ let test_sdk_api () =
 let props_mount_cell ~block_uuid ~row =
   let s_ref = ref None in
   let ctx : Properties_value.ctx =
-    { block_uuid
+    { owner_key = "property-cell-fixture"
+    ; block_uuid
     ; block_id = None
     ; refresh =
         (fun () ->
@@ -1761,7 +1762,8 @@ let props_host () : (Model.t, Action.t) Shared_scenarios_props.host =
   ; commit_date =
       (fun ~ident ~is_datetime ~text ->
         Properties_value.commit_date_text
-          { Properties_value.block_uuid = "b1"
+          { Properties_value.owner_key = "property-fixture"
+          ; block_uuid = "b1"
           ; block_id = None
           ; refresh = (fun () -> ())
           ; is_page = false

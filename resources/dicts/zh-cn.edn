@@ -1981,6 +1981,8 @@
  :ui/use-current-time "使用当前时间"
  :ui/yes "是"
 
+ :ui.calendar/time-label "时间"
+
  :updater/checking-for-updates "正在检查更新"
  :updater/downloading-progress "正在下载更新（{1}%）"
  :updater/quit-and-install "重启并安装"

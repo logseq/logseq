@@ -1986,6 +1986,8 @@
  :ui/use-current-time "Use current time"
  :ui/yes "Yes"
 
+ :ui.calendar/time-label "Time"
+
  :updater/checking-for-updates "Checking for updates"
  :updater/downloading-progress "Downloading update ({1}%)"
  :updater/quit-and-install "Restart and install"

@@ -746,7 +746,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
                                     ~min_width:0
-                                    [ Properties_area.block_left_chips ~uuid
+                                    [ Properties_area.block_left_chips ~scope ~uuid
                                     ; (if Comments.is_comments_area b then
                                          Comments.area_view uuid b
                                        else
@@ -765,7 +765,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                              positioned-properties
                                              :block-right (priority pill)
                                              then tag chips *)
-                                          Properties_area.block_right_chips
+                                          Properties_area.block_right_chips ~scope
                                             ~uuid
                                         ; (* a comments area's tag chips stay
                                              hidden — the area view already
@@ -782,7 +782,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                              below the content-or-editor cell, before the
                              reactions and the .ls-block-content-indent
                              properties area *)
-                          Properties_area.block_below_pills ~uuid
+                          Properties_area.block_below_pills ~scope ~uuid
                         ]
                     ]
                 ]
@@ -823,7 +823,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
-      Properties_area.block_area ~uuid
+      Properties_area.block_area ~scope ~uuid
     ; (* cljs custom-query* — the live query shell sits below
          .block-main-container, not inside the title row *)
       (if Render.is_query_block b then Render.query_below_el uuid
@@ -893,7 +893,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
                 let g, i = Render_inline.invalidation () in
                 (b, g, i))
               bs (S.invalidation_sig ())))
-    ; Properties_area.block_area
+    ; Properties_area.block_area ~scope
         ~uuid:(Option.value b0.Model.block_uuid ~default:"")
     ; (* the query/cards shell keys off the live block record — a block
          that becomes a query/cards block after mount (title or property
@@ -1114,7 +1114,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
-                                    [ Properties_area.block_left_chips ~uuid
+                                    [ Properties_area.block_left_chips ~scope:"reference" ~uuid
                                     ; content_wrapper uuid b
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
@@ -1128,7 +1128,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                         [ (* cljs .ls-block-right order:
                                              positioned-properties
                                              :block-right then tag chips *)
-                                          Properties_area.block_right_chips
+                                          Properties_area.block_right_chips ~scope:"reference"
                                             ~uuid
                                         ; tags_el uuid b
                                         ]
@@ -1138,14 +1138,14 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                         ; (* same as row_main: block-below pills under
                              the content cell — list-view rows render
                              these (Rating/Published/Finished) *)
-                          Properties_area.block_below_pills ~uuid
+                          Properties_area.block_below_pills ~scope:"reference" ~uuid
                         ]
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
-    ; Properties_area.block_area ~uuid
+    ; Properties_area.block_area ~scope:"reference" ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_el.nothing)
     ]))
