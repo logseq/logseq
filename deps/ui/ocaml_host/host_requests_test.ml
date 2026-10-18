@@ -765,8 +765,6 @@ let () = Native_embed.with_entry_lock (fun () ->
   sidebar_surface Ui_theme.Light None;
   sidebar_surface Ui_theme.Dark None;
   sidebar_surface Ui_theme.Light (Some "#e3f1e9");
-  let saved_repos = !Graphs_ops.repos in
-  Graphs_ops.repos := [];
   let sidebar_state = Option.get (Sidebar_state.current ()) in
   Signal.set sidebar_state.open_menu "repos";
   ignore (Lui_app.flush app);
@@ -791,7 +789,41 @@ let () = Native_embed.with_entry_lock (fun () ->
        && abs_float (r.w-.572.)<0.1 && abs_float (r.h-.64.)<0.1)) graph_actions;
   Signal.set sidebar_state.open_menu "";
   ignore (Lui_app.flush app);
-  Graphs_ops.repos := saved_repos;
+  let saved_worker = !Runtime.worker in
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ ->
+      Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    on_message=(fun _ _ -> ());
+    dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let graph_model={initial with Model.repo=Some "logseq_db_Demo";
+    repos=["logseq_db_Demo";"logseq_db_Other"]} in
+  ignore (Lui_app.send app graph_model);
+  Signal.set sidebar_state.open_menu "repos";
+  ignore (Lui_app.flush app);
+  let popup_texts () =
+    let popup=find_class "repos-list" in
+    List.filter_map (fun id ->
+      if Lui_query.is_desc store id popup then Lui_store.string_prop store id "text"
+      else None) (Lui_store.preorder store) in
+  check "Native graph switch must show other graphs from the model without visiting All graphs"
+    (List.mem "Other" (popup_texts ()) && not (List.mem "Demo" (popup_texts ()))
+      && List.mem I18n.switch_to (popup_texts ()));
+  let graph_popup_id=find_class "repos-list" in
+  ignore (Lui_app.send app {graph_model with repos=graph_model.repos@["logseq_db_Added"]});
+  ignore (Lui_app.flush app);
+  check "An open native graph switch must follow graph-list updates"
+    (List.mem "Added" (popup_texts ()));
+  check "Graph-list updates must preserve the open popup and its anchor lifecycle"
+    (find_class "repos-list"=graph_popup_id);
+  ignore (Lui_app.send app {graph_model with repos=["logseq_db_Demo"]});
+  ignore (Lui_app.flush app);
+  check "A single-graph native switch must remove stale rows and its switch heading"
+    (not (List.mem "Other" (popup_texts ()))
+      && not (List.mem "Added" (popup_texts ()))
+      && not (List.mem I18n.switch_to (popup_texts ())));
+  Signal.set sidebar_state.open_menu "";
+  ignore (Lui_app.send app initial);
+  ignore (Lui_app.flush app);
+  Runtime.worker := saved_worker;
   let snapshot = Ui_theme.snapshot Ui_theme.Light in
   Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
     ["mode", `String "light";

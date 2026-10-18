@@ -134,7 +134,7 @@ let remote_row (name, uuid, e2ee, role) : t =
   let items =
     (* cljs shows the local-delete item on a remote row too when the
        graph is also downloaded locally (repo.cljs: root is truthy) *)
-    (if List.mem local_repo !Graphs_ops.repos then
+    (if List.mem local_repo (Graphs_ops.repos ()) then
        [ ( "delete-local-graph-menu-item"
          , T.delete_local_graph
          , not (Graphs_ops.removable local_repo)
@@ -159,7 +159,7 @@ let remote_row (name, uuid, e2ee, role) : t =
                   (* cljs: clicking a merged remote row with a local
                      root switches instead of re-downloading *)
                   let repo = Graph.full_graph_name name in
-                  if List.mem repo !Graphs_ops.repos then
+                  if List.mem repo (Graphs_ops.repos ()) then
                     ignore (Graphs_ops.navigate_journal repo)
                   else
                     ignore (Graphs_ops.download_remote ~name ~uuid ~e2ee))
@@ -226,7 +226,7 @@ let view (ms : Model.t Signal.signal) : t =
      list is always fetched (list_remote_graphs resolves [] logged
      out). on_repos_changed fires after remote-graph-gone broadcasts —
      keep the remote mirror in step *)
-  if !Graphs_ops.repos = [] then ignore (Graphs_ops.refresh ());
+  if (Graphs_ops.repos ()) = [] then ignore (Graphs_ops.refresh ());
   ignore (refresh_remote ctx);
   Graphs_ops.on_repos_changed :=
     (fun () -> ignore (refresh_remote ctx));

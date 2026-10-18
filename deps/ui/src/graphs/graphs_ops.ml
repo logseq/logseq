@@ -5,9 +5,8 @@
 open Promise_ext
 module T = I18n
 
-(* last known repo list (logseq_db_* names) for the all-graphs view +
-   name-conflict checks *)
-let repos : string list ref = ref []
+(* The reducer owns local graph membership for views and operations. *)
+let repos () = (Runtime.model ()).Model.repos
 
 (* cljs repo.cljs invalid-graph-name? reserved chars *)
 let reserved = ":|\\*\\?\"<>|\\#\\\\/"
@@ -35,7 +34,7 @@ let short_name repo =
   else repo
 
 let already_exists name =
-  List.mem (Graph.full_graph_name name) !repos
+  List.mem (Graph.full_graph_name name) (repos ())
 
 (* remote graphs known to the sync server:
    (name-without-prefix, uuid, e2ee?, role) — role is the caller's
@@ -82,7 +81,7 @@ let list_remote_graphs () =
 
 (* removable? = not (demo && it's the only graph) *)
 let removable repo =
-  not (is_demo repo && List.length !repos = 1)
+  not (is_demo repo && List.length (repos ()) = 1)
 
 (* -- ls-graphs-metadata (localStorage EDN map, see Graphs_meta) -- *)
 
@@ -104,7 +103,6 @@ let () =
 
 let refresh () =
   let* rs = Graph.list_graphs () in
-  repos := rs;
   Runtime.send (Action.Repos_loaded rs);
   Runtime.flush ();
   !on_repos_changed ();
@@ -114,9 +112,8 @@ let refresh () =
    graph download finishes; the local list must include it without
    waiting for a full list-db refresh *)
 let add_repo repo =
-  if not (List.mem repo !repos) then begin
-    repos := !repos @ [ repo ];
-    Runtime.send (Action.Repos_loaded !repos);
+  if not (List.mem repo (repos ())) then begin
+    Runtime.send (Action.Repos_loaded (repos () @ [ repo ]));
     !on_repos_changed ()
   end
 
@@ -219,8 +216,7 @@ let delete_remote_http uuid =
 let delete_graph repo ~remote =
   let drop_from_repos () =
     Graphs_meta.drop repo;
-    repos := List.filter (fun r -> r <> repo) !repos;
-    Runtime.send (Action.Repos_loaded !repos);
+    Runtime.send (Action.Repos_loaded (List.filter (fun r -> r <> repo) (repos ())));
     !on_repos_changed ()
   in
   let finish () =
@@ -236,14 +232,13 @@ let delete_graph repo ~remote =
       Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("unlink-db failed " ^ repo, e);
-             repos := repo :: !repos;
-             Runtime.send (Action.Repos_loaded !repos);
+             Runtime.send (Action.Repos_loaded (repo :: repos ()));
              !on_repos_changed ();
              Js.Promise.resolve false)
     in
     if not ok then Js.Promise.resolve ()
     else
-      match (Runtime.model ()).Model.repo = Some repo, !repos with
+      match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
       | true, next :: _ ->
           Toast.success (T.removed_redirecting repo next);
           navigate_journal next

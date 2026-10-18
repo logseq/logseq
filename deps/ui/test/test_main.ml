@@ -3186,15 +3186,15 @@ let test_graphs_ops () =
   check "is_demo suffix" (Graphs_ops.is_demo "logseq_db_xDemo");
   check "is_demo short" (not (Graphs_ops.is_demo "Demo"));
   check "is_demo no" (not (Graphs_ops.is_demo "logseq_db_x"));
-  let saved = !Graphs_ops.repos in
-  Graphs_ops.repos := [ "logseq_db_A"; "logseq_db_Demo" ];
+  let saved = !model_stub in
+  model_stub := {saved with Model.repos=[ "logseq_db_A"; "logseq_db_Demo" ]};
   check "already_exists" (Graphs_ops.already_exists "A");
   check "already_exists no" (not (Graphs_ops.already_exists "B"));
   check "removable demo multi" (Graphs_ops.removable "logseq_db_Demo");
-  Graphs_ops.repos := [ "logseq_db_Demo" ];
+  model_stub := {saved with Model.repos=[ "logseq_db_Demo" ]};
   check "removable demo single" (not (Graphs_ops.removable "logseq_db_Demo"));
   check "removable normal" (Graphs_ops.removable "logseq_db_A");
-  Graphs_ops.repos := saved
+  model_stub := saved
 
 let test_boot () =
   eqs "unquote" "x" (Platform.storage_unquote "\"x\"");

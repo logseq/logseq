@@ -223,8 +223,7 @@ let lp_menu st =
 (* cljs repo.cljs repos-dropdown-content: "Switch to:" header (only
    when >1 repo), the switch list minus the current graph, then the
    quick-actions footer. Remote rows render only for a logged-in user. *)
-let repos_menu st =
-  let m = Runtime.model () in
+let repos_menu_content st (m : Model.t) : t =
   let cur = Option.value m.Model.repo ~default:"" in
   let by_seen a b =
     compare
@@ -235,7 +234,7 @@ let repos_menu st =
      that exists locally renders once, as the local row *)
   let remote =
     if Rtc_flows.logged_in () then
-      let local_names = List.map Graphs_view.short_name !Graphs_ops.repos in
+      let local_names = List.map Graphs_view.short_name m.Model.repos in
       List.filter
         (fun (n, _, _, _) -> not (List.mem n local_names))
         !Graphs_ops.remote_graphs
@@ -243,9 +242,9 @@ let repos_menu st =
   in
   let switch_repos =
     List.sort by_seen
-      (List.filter (fun r -> r <> cur) !Graphs_ops.repos)
+      (List.filter (fun r -> r <> cur) m.Model.repos)
   in
-  let n_repos = List.length switch_repos + List.length remote + 1 in
+  let n_repos = List.length m.Model.repos + List.length remote in
   let close () = Sidebar_state.close_menu st in
   let repo_item repo =
     Menu_item.el ~key:("rp-" ^ repo) ~cls:Menu_item.graphs_cls
@@ -275,13 +274,7 @@ let repos_menu st =
         act ())
         [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
   in
-  Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
-    ~padding_horizontal:8
-    ~transition:Ui_components.popover_transition
-    ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-    ~style_class:"ui__dropdown-menu-content repos-list"
-    [ column ~key:"wrap"
+  column ~key:"wrap"
         [ (if n_repos <= 1 then Logseq_el.nothing
            else
              Ui_components.with_props
@@ -314,7 +307,18 @@ let repos_menu st =
                 (fun () -> Ui_services.nav_set_hash "#/import")
             ; action "qa-all" I18n.all_graphs "layout-2" (fun () ->
                   Ui_services.nav_set_hash
-                    (Runtime.nav_hash "#/graphs")) ]) ] ])
+                    (Runtime.nav_hash "#/graphs")) ]) ]
+
+let repos_menu st (ms : Model.t Signal.signal) : t =
+  Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
+    ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
+    ~padding_horizontal:8
+    ~transition:Ui_components.popover_transition
+    ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+    ~style_class:"ui__dropdown-menu-content repos-list"
+    [ reactive
+        ~equal:(fun (a : Model.t) b -> a.repo=b.repo && a.repos=b.repos)
+        (repos_menu_content st) ms ])
 
 let menu_host st =
  fun ctx parent ->
@@ -873,7 +877,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                   [ Ui_components.with_props
                         [ Ui_components.Prop.overflow `hidden ]
                       (row ~key:"gsel-th" ~cross:`center ~main:`center
-                          ~width:24 ~height:24 ~opacity:0.8
+                          ~width:24 ~min_width:24 ~height:24 ~opacity:0.8
                           ~background:"var(--lx-gray-04)" ~corner_radius:2
                           ~style_class:"thumb" ~margin_left:(-2)
                           [ Ui_components.with_props
@@ -900,7 +904,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                           ; Ui_components.Prop.opacity 0.4 ]
                           (icon_ ~size:18 "selector") ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
-            (repos_menu st)
+            (repos_menu st ms)
         ] ]
 ;;
 

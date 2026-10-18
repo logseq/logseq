@@ -982,6 +982,7 @@ let menu_surface ?max_height element =
     [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ; Prop.font_size "0.875rem"
+    ; Prop.line_height "1.25rem"
     ; (match max_height with
        | Some height -> Prop.max_height height
        | None -> Prop.max_height_viewport 1.)
