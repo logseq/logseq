@@ -52,9 +52,7 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
        ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
-(* mounted twice: header .l (sidebar closed) and .left-sidebar-top
-   (sidebar open) — the key must differ per site or the reconciler
-   folds the two mounted copies into one *)
+(* The shared leading toolbar mounts this control in its active owner. *)
 let search_button ?(key = "search-btn") () =
   let keys = Keymap_data.tooltip_keys "go/search" in
   icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ())
@@ -681,11 +679,9 @@ let header (ms : Model.t Signal.signal) =
            height:calc(var(--ls-headbar-height) + \
            var(--ls-headbar-inner-top-padding))" )
       ]
-    [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
-        ~data_attrs:[ ("style", "padding-left:8px;height:100%") ]
-        [ row ~key:"head-l-btns" ~cross:`center
-            ~style_class:"head-l-btns"
-            [ left_menu_button (); search_button () ] ]
+    [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
+        ~safe_area:0 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+        ~controls:(fun () -> [left_menu_button (); search_button ()])
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
         ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]
@@ -822,7 +818,11 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
                 (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
               ~background:"var(--left-sidebar-bg-color)"
               ~style_class:"left-sidebar-inner as-container"
-              [ row ~key:"ls-top" ~height:48 ~style_class:"left-sidebar-top" []
+              [ row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
+                  ~style_class:"left-sidebar-top"
+                  [ Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true
+                      ~safe_area:0 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+                      ~controls:(fun () -> [left_menu_button (); search_button ()]) ]
               ; Ui_components.with_props [Ui_components.Prop.position `relative]
                   (column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
                     ~style_class:"wrap"
@@ -849,7 +849,11 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       if Sidebar_state.left_docked m.Model.left_sidebar_open vw then
         "cp__left-split"
       else "cp__left-split is-collapsed")
-    (split ~key:"left-split" ~grow:1. ~min_height:0 ~gap:Sidebar_state.divider_width
+    (Ui_parts.int_prop P.Gap ~value:(reactive (fun (m : Model.t) viewport ->
+         if Sidebar_state.left_docked m.left_sidebar_open viewport
+         then Sidebar_state.divider_width else 0)
+         ms (Signal.value st.Sidebar_state.viewport_w))
+     (split ~key:"left-split" ~grow:1. ~min_height:0
        ~first_width:
          (reactive
             (fun (m : Model.t) width vw ->
@@ -860,7 +864,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
        ~on_resize:(Sidebar_state.on_left_split_resize st)
        (if Ui_services.env_publishing () then Logseq_el.nothing
         else left_sidebar ms st)
-       content)
+       content))
 
 (* docked right split: the right dock is the SECOND pane, so the split
    value is 1 - <persisted fraction>; a closed dock pins the value at
@@ -871,7 +875,9 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (fun (m : Model.t) ->
       "cp__right-split"
       ^ if m.right_sidebar_open then "" else " is-collapsed")
-    (split ~key:"right-split" ~grow:1. ~min_height:0 ~gap:Sidebar_state.divider_width
+    (Ui_parts.int_prop P.Gap ~value:(reactive (fun (m : Model.t) ->
+         if m.right_sidebar_open then Sidebar_state.divider_width else 0) ms)
+     (split ~key:"right-split" ~grow:1. ~min_height:0
        ~value:
          (reactive
             (fun (m : Model.t) fraction viewport ->
@@ -879,7 +885,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
             ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_right_split_resize st)
-       first second)
+       first second))
 
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms

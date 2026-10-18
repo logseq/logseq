@@ -157,3 +157,16 @@ test('application font family has one shared typed owner', async () => {
   })
   assert.deepEqual(duplicates, [], 'Ordinary and portaled content inherit the shared application font family')
 })
+
+
+test('leading toolbar geometry and visibility have no stylesheet implementation', async () => {
+  const source = await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8')
+  const root = postcss.parse(source)
+  const duplicateRules = []
+  root.walkRules(rule => {
+    if (rule.selector === '> .l' || rule.selector.includes('.head-l-btns')) {
+      duplicateRules.push(rule.selector)
+    }
+  })
+  assert.deepEqual(duplicateRules, [], 'Shared typed toolbar layout owns placement and visibility')
+})

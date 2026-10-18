@@ -627,6 +627,20 @@ let () = Native_embed.with_entry_lock (fun () ->
   let sidebar_rect = Option.get (Lui_layout.rect layout sidebar) in
   check (Printf.sprintf "Native titlebar toggle x=%.0f w=%.0f exceeds sidebar x=%.0f w=%.0f" menu_rect.x menu_rect.w sidebar_rect.x sidebar_rect.w)
     (menu_rect.x >= 160. && menu_rect.x +. menu_rect.w <= sidebar_rect.x +. sidebar_rect.w);
+  ignore (Lui_app.send app {initial with left_sidebar_open=false});
+  ignore (Lui_app.flush app);
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let closed_menu = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "left-menu")
+      (Lui_store.preorder store) in
+  let closed_menu_rect = Option.get (Lui_layout.rect layout closed_menu) in
+  check "Closed native docks must not shift the toolbar beyond its traffic-light safe area"
+    (abs_float (closed_menu_rect.x -. 176.) <= 0.01);
+  let closed_scroll = Option.get (Lui_layout.rect layout scroll) in
+  check "Closed native docks must release their divider widths"
+    (abs_float (closed_scroll.w -. 2880.) <= 0.01);
+  ignore (Lui_app.send app initial);
+  ignore (Lui_app.flush app);
   List.iter (fun (width,height) ->
     Lui_layout.sync ~scale:2. ~width ~height layout store;
     let viewport = Option.get (Lui_layout.rect layout scroll) in

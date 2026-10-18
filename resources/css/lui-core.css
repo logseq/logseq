@@ -370,32 +370,6 @@ blockquote {
     }
   }
 
-  > .l {
-    display: flex;
-    padding-left: 0.5rem;
-    height: 100%;
-
-    > div {
-      display: flex;
-      align-items: center;
-    }
-
-    /* the header's toggle+search stay mounted while the sidebar is
-       docked-open; is-hidden removes them instantly on open, and the
-       delayed fade-in on close lets the pane's own top row clip out
-       first so both copies are never visible at once */
-    .head-l-btns {
-      visibility: visible;
-      opacity: 1;
-
-      &.is-hidden {
-        visibility: hidden;
-        opacity: 0;
-        transition: none;
-      }
-    }
-  }
-
   > .r {
     display: flex;
     flex: 1;

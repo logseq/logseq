@@ -242,6 +242,47 @@ let test_shell () =
    | None -> check "left sidebar node" false);
   has "text:\"Select a Graph\""
 
+let test_leading_toolbar_ownership () =
+  let st = Option.get (Sidebar_state.current ()) in
+  let viewport = Runtime.signal_get st.Sidebar_state.viewport_w in
+  let controls id = find_attr "id" id in
+  let rec inside cls node =
+    has_tok node cls ||
+    match node.M.parent with
+    | None -> false
+    | Some parent -> inside cls (Hashtbl.find (tree ()).M.nodes parent)
+  in
+  Fun.protect ~finally:(fun () ->
+    Runtime.signal_set st.viewport_w viewport;
+    if controls "left-menu" <> [] &&
+       List.exists (inside "left-sidebar-top") (controls "left-menu") then
+      click_sel "prop:accessibility-identifier=\"left-menu\"";
+    flush ()) (fun () ->
+      List.iter (fun viewport ->
+        Runtime.signal_set st.viewport_w viewport;
+        flush ();
+        List.iter (fun open_ ->
+          let docked = open_ && viewport >= 640. in
+          List.iter (fun (cls, expected) ->
+            let split = List.find (fun n -> has_tok n cls) (M.all_nodes (tree ())) in
+            check (cls ^ " reserves a divider only for an open dock")
+              (Hashtbl.find_opt split.M.props "gap" = Some (Wv.IntValue expected)))
+            ["cp__left-split", (if docked then Sidebar_state.divider_width else 0);
+             "cp__right-split", 0];
+          List.iter (fun id ->
+            let found = controls id in
+            eqi (id ^ " has one mounted interactive occurrence") 1 (List.length found);
+            List.iter (fun control ->
+              check (id ^ " belongs to the visible leading toolbar")
+                (if open_ then inside "left-sidebar-top" control
+                 else inside "cp__header" control);
+              check (id ^ " is absent from the other toolbar")
+                (if open_ then not (inside "cp__header" control)
+                 else not (inside "left-sidebar-top" control))) found)
+            ["left-menu"; "search-button"];
+          click_sel "prop:accessibility-identifier=\"left-menu\"";
+          flush ()) [false;true;false;true]) [1280.;500.;1280.])
+
 (* ---------------- event dispatch: header buttons ---------------- *)
 
 let test_left_menu_dispatch () = Shared_scenarios.sidebar (shared_host ())
@@ -1988,6 +2029,7 @@ let run ~finish =
   test_sidebar_content_bounds ();
   test_shell ();
   test_left_menu_dispatch ();
+  test_leading_toolbar_ownership ();
   test_block_tree ();
   test_block_edit ();
   let popup = Web_dom.create_element "div" in

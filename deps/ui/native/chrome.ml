@@ -43,10 +43,7 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ])
 
-(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar —
-   mounted twice (header .l when the sidebar is closed, the sidebar's
-   own top strip when open): the key must differ per site or the
-   reconciler folds the two mounted copies into one *)
+(* The shared leading toolbar mounts the sidebar toggle in its active owner. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
   icon_btn ~key ~acc:"left-menu" ~icon_name:"menu-2"
     ~label:(I18n.t "header/toggle-left-sidebar")
@@ -159,14 +156,9 @@ let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
-            a.left_sidebar_open = b.left_sidebar_open)
-          (fun (m : Model.t) ->
-            if m.left_sidebar_open then spacer ~key:"head-leading-space" []
-            else
-              row ~key:"head-inner" ~cross:`center ~margin_left:80
-                ~padding_horizontal:8 ~style_class:"cp__header-l"
-                [ left_menu_btn (); search_btn () ]) ms
+      [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
+          ~safe_area:80 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+          ~controls:(fun () -> [left_menu_btn (); search_btn ()])
       ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
           ~padding_horizontal:6 ~style_class:"cp__header-r"
           [ Ui_components.native_performance
@@ -285,18 +277,12 @@ let left_sidebar (ms : Model.t Signal.signal) =
                [ (* The sidebar's titlebar strip shares the system traffic
                     lights. Closing the dock moves these controls into the
                     detail header, with the same leading safe area. *)
-                 row ~key:"ls-top" ~height:48 ~cross:`center
+                 row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
                    ~style_class:"left-sidebar-top"
                    ~data_attrs:[ ("data-window-titlebar", "true") ]
-                   [ reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
-                         a.left_sidebar_open = b.left_sidebar_open)
-                       (fun (m : Model.t) ->
-                         if m.left_sidebar_open then
-                           row ~key:"sidebar-titlebar-controls" ~margin_left:80
-                             ~padding_horizontal:8 ~cross:`center
-                             [ left_menu_btn ~key:"left-menu-sidebar" ();
-                               search_btn ~key:"search-sidebar" () ]
-                         else spacer ~key:"sidebar-titlebar-empty" []) ms ]
+                   [ Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true
+                       ~safe_area:80 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+                       ~controls:(fun () -> [left_menu_btn (); search_btn ()]) ]
                ; column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
                    [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
                        ~style_class:"sidebar-header-container"
@@ -316,18 +302,22 @@ let left_sidebar (ms : Model.t Signal.signal) =
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1. ~gap:Sidebar_state.divider_width
+  Ui_parts.int_prop Lui_protocol.Gap ~value:(reactive (fun (m : Model.t) ->
+      if m.left_sidebar_open then Sidebar_state.divider_width else 0) ms)
+  (split ~key:"left-split" ~grow:1.
     ~first_width:
       (reactive
          (fun (m : Model.t) width -> if m.Model.left_sidebar_open then width else 0.)
          ms (Signal.value st.Sidebar_state.left_width))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content
+    (left_sidebar ms) content)
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1. ~gap:Sidebar_state.divider_width
+  Ui_parts.int_prop Lui_protocol.Gap ~value:(reactive (fun (m : Model.t) ->
+      if m.right_sidebar_open then Sidebar_state.divider_width else 0) ms)
+  (split ~key:"right-split" ~grow:1.
     ~value:
       (reactive
          (fun (m : Model.t) fraction viewport ->
@@ -335,7 +325,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
          ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
-    first second
+    first second)
 
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)

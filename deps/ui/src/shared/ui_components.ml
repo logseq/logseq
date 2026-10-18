@@ -132,6 +132,17 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
 let chrome_button element =
   with_props [Prop.opacity 0.7; Prop.hover_opacity 1.] element
 
+(* Exactly one leading toolbar is interactive: the open sidebar owns it,
+   otherwise the detail header does. Only the native host reserves traffic lights. *)
+let leading_toolbar ~key ~in_sidebar ~safe_area ~state ~is_open ~controls =
+  reactive
+    ~equal:(fun a b -> is_open a = is_open b)
+    (fun value ->
+      if is_open value = in_sidebar then
+        row ~key ~height:48 ~min_height:48 ~cross:`center
+          ~margin_left:safe_area ~padding_horizontal:8 (controls ())
+      else spacer ~key:(key ^ "-empty") []) state
+
 let native_performance ~label ~unavailable ~format_fps () : t =
  fun ctx parent ->
   match Ui_services.native_performance () with
