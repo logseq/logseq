@@ -9,6 +9,272 @@ let check message condition = if not condition then failwith message
 
 let icon_hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of}
 
+
+let () =
+  let module U = Lui_window.Ui in
+  let module I = Lui_window.Input in
+  let errors = ref [] in
+  let expect label condition =
+    if not condition then errors := label :: !errors
+  in
+  let caret_color = Lui_scene.color 9 18 27 255
+  and selection_color = Lui_scene.color 40 90 180 100 in
+  List.iter
+    (fun scale ->
+      List.iter
+        (fun kind ->
+          let store = Lui_store.create () in
+          List.iter (Lui_store.apply_op store)
+            [
+              CreateNode (1, Root);
+              CreateNode (2, kind);
+              CreateNode (3, Button);
+              InsertChild (1, 2, 0);
+              InsertChild (1, 3, 1);
+              SetProp (2, TextValue, StringValue "A中😀B");
+              SetProp (2, FontSize, StringValue "14px");
+              SetProp (2, LineHeight, StringValue "20px");
+              SetProp (2, PaddingHorizontal, IntValue 12);
+              SetProp (2, PaddingVertical, IntValue 0);
+              SetProp (2, BorderWidth, IntValue 1);
+              SetProp (2, BackgroundValue, StringValue "#ffffff");
+            ];
+          let ui = U.create () in
+          U.set_scale ui scale;
+          let rect =
+            Lui_scene.rect (20. *. scale) (20. *. scale) (120. *. scale)
+              (40. *. scale)
+          in
+          let rects = Lui_window.Rects.create () in
+          Hashtbl.replace rects 2 rect;
+          let scene =
+            Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512)
+          in
+          let engine =
+            Text_engine.create
+              ~scene:(fun () -> scene)
+              ~scale:(fun () -> scale)
+              ~store:(fun () -> store)
+          in
+          Text_engine.bind_input engine ui;
+          let paint now =
+            ignore (Text_engine.tick_input engine ui ~now);
+            Lui_paint.paint
+              {
+                Lui_paint.default_hooks with
+                layout = (fun _ -> Lui_paint.placement_of_rect rect);
+                state_of = U.state_of ui store;
+                text_ops =
+                  Text_engine.control_text_ops engine ~ui ~color_of:(function
+                    | "foreground" | "var(--ls-primary-text-color)" ->
+                        Some caret_color
+                    | "var(--ls-selection-background-color)" ->
+                        Some selection_color
+                    | _ -> failwith "Unexpected input palette lookup");
+              }
+              store scene ~width:400 ~height:200 ~scale
+              ~clear:(Lui_scene.color 0 0 0 0);
+            scene.Lui_scene.ops
+          in
+          let fills color ops =
+            List.filter_map
+              (function
+                | Lui_scene.Fill f when f.fcolor = color -> Some f.frect
+                | _ -> None)
+              ops
+          in
+          let key ?(mods = I.mods_none) key =
+            ignore (U.handle ui store rects (I.Key_down (key, mods, false)))
+          in
+          let name =
+            Printf.sprintf "kind=%s scale=%g " (Lui_store.kind store 2) scale
+          in
+          U.set_focused ui store 2;
+          let caret = fills caret_color (paint 0.) in
+          expect (name ^ "focused input has no caret") (List.length caret = 1);
+          expect
+            (name ^ "caret line height disagrees with its text")
+            (List.for_all
+               (fun (r : Lui_scene.rect) ->
+                 abs_float (r.h -. (20. *. scale)) < 0.01)
+               caret);
+          ignore (U.handle ui store rects (I.Caret rect));
+          expect
+            (name ^ "candidate anchor refresh restarts the caret clock")
+            (Text_engine.tick_input engine ui ~now:0.1 = None);
+          expect
+            (name ^ "caret disappears before its blink deadline")
+            (fills caret_color (paint 0.49) <> []);
+          expect
+            (name ^ "caret does not blink")
+            (fills caret_color (paint 0.5) = []);
+          key I.Home;
+          expect
+            (name ^ "moving the caret does not reset its blink")
+            (fills caret_color (paint 0.6) <> []);
+          key ~mods:{ I.mods_none with shift = true } I.Arrow_right;
+          let selected = fills selection_color (paint 0.7) in
+          expect (name ^ "input selection has no highlight") (selected <> []);
+          expect
+            (name ^ "selected text ignores the application selection foreground")
+            (List.exists
+               (function
+                 | Lui_scene.Glyphs glyphs -> glyphs.gcolor = caret_color
+                 | _ -> false)
+               scene.ops);
+          expect
+            (name ^ "selection blinks like a caret")
+            (Text_engine.input_deadline engine = None);
+          expect
+            (name ^ "caret remains visible over a selected range")
+            (fills caret_color scene.ops = []);
+          expect
+            (name ^ "selection begins before border and padding")
+            (List.for_all
+               (fun (r : Lui_scene.rect) -> r.x >= rect.x +. (13. *. scale))
+               selected);
+          let first_fill =
+            List.find_index
+              (function
+                | Lui_scene.Fill f -> f.fcolor = selection_color | _ -> false)
+              scene.ops
+          and glyph =
+            List.find_index
+              (function Lui_scene.Glyphs _ -> true | _ -> false)
+              scene.ops
+          in
+          expect
+            (name ^ "selection paints over its text")
+            (match (first_fill, glyph) with
+            | Some a, Some b -> a < b
+            | _ -> false);
+          U.set_focused ui store 3;
+          let blurred = paint 1. in
+          expect
+            (name ^ "blurred field retains edit paint")
+            (fills caret_color blurred = []
+            && fills selection_color blurred = []);
+          expect
+            (name ^ "blurred field keeps a blink timer")
+            (Text_engine.input_deadline engine = None);
+          List.iter
+            (fun placeholder ->
+              Lui_store.apply_op store (SetProp (2, TextValue, StringValue ""));
+              Lui_store.apply_op store
+                (SetProp (2, PlaceholderValue, StringValue placeholder));
+              U.set_focused ui store 3;
+              U.set_focused ui store 2;
+              let empty = fills caret_color (paint 2.) in
+              expect
+                (name ^ "empty field or placeholder hides its caret")
+                (List.length empty = 1);
+              expect
+                (name ^ "empty field caret uses placeholder width")
+                (List.for_all
+                   (fun (r : Lui_scene.rect) ->
+                     abs_float (r.x -. rect.x -. (13. *. scale)) < 0.01)
+                   empty))
+            [ ""; "Search" ];
+          Lui_store.apply_op store (SetProp (2, TextValue, StringValue "é👩🏽‍💻Z"));
+          U.set_focused ui store 3;
+          U.set_focused ui store 2;
+          key I.Home;
+          key I.Arrow_right;
+          expect
+            (name ^ "arrow splits a combining character")
+            (U.caret ui = String.length "é");
+          key I.Arrow_right;
+          expect
+            (name ^ "arrow splits an emoji grapheme")
+            (U.caret ui = String.length "é👩🏽‍💻");
+          let unicode = fills caret_color (paint 3.) in
+          let shown =
+            if kind = SecureField then Lui_paint.secure_mask "é👩🏽‍💻Z" else "é👩🏽‍💻Z"
+          in
+          let lay, x, y = Text_engine.text_layout engine 2 rect shown in
+          let offset = if kind = SecureField then 6 else U.caret ui in
+          let expected = Host_platform.Text.caret_rect lay offset in
+          expect
+            (name ^ "Unicode caret differs from the painted text")
+            (List.exists
+               (fun (r : Lui_scene.rect) ->
+                 abs_float (r.x -. x -. (expected.rx *. scale)) < 0.01
+                 && abs_float (r.y -. y -. (expected.ry *. scale)) < 0.01)
+               unicode);
+          if kind <> SecureField then begin
+            Lui_store.apply_op store
+              (SetProp (2, TextValue, StringValue (String.make 100 'W')));
+            U.set_focused ui store 3;
+            U.set_focused ui store 2;
+            let long_caret = fills caret_color (paint 4.) in
+            expect
+              (name ^ "long input loses its caret outside its viewport")
+              (List.length long_caret = 1
+              && List.for_all
+                   (fun (r : Lui_scene.rect) ->
+                     r.x >= rect.x +. (13. *. scale)
+                     && r.x +. r.w <= rect.x +. rect.w -. (13. *. scale))
+                   long_caret);
+            key I.Home;
+            let home = fills caret_color (paint 4.1) in
+            expect
+              (name ^ "Home does not reveal the first character")
+              (List.exists
+                 (fun (r : Lui_scene.rect) ->
+                   abs_float (r.x -. rect.x -. (13. *. scale)) < 0.01)
+                 home)
+          end;
+          Lui_store.apply_op store (SetProp (2, TextValue, StringValue "ab"));
+          U.set_focused ui store 3;
+          U.set_focused ui store 2;
+          key I.Home;
+          key I.Arrow_right;
+          ignore (U.handle ui store rects (I.Text_editing ("中", 1, 0)));
+          let marked = paint 5. in
+          expect
+            (name ^ "preedit mutates the committed input")
+            (U.shadow ui = "ab");
+          expect
+            (name ^ "preedit is missing its underline")
+            (List.exists
+               (function
+                 | Lui_scene.Fill f ->
+                     f.fcolor = caret_color && f.frect.h = scale
+                     && f.frect.w > scale
+                 | _ -> false)
+               marked);
+          expect
+            (name ^ "preedit glyphs are missing or duplicated")
+            (List.length scene.glyphs = 3);
+          ignore (U.handle ui store rects (I.Text_editing ("中", 0, 1)));
+          expect
+            (name ^ "preedit cursor changes do not invalidate input paint")
+            (Text_engine.tick_input engine ui ~now:5.05 = Some 2);
+          expect
+            (name ^ "preedit selection is not highlighted")
+            (fills selection_color (paint 5.05) <> []);
+          ignore (U.handle ui store rects (I.Text_input "中"));
+          ignore (paint 5.1);
+          expect
+            (name ^ "IME commit does not replace the preedit once")
+            (U.shadow ui = "a中b" && U.marked ui = "");
+          Lui_store.apply_op store (SetProp (2, Enabled, BoolValue false));
+          let disabled = paint 6. in
+          expect
+            (name ^ "disabled field draws an editing overlay")
+            (fills caret_color disabled = []
+            && fills selection_color disabled = []))
+        [ TextField; Input; SearchField; SecureField; Textarea; Combobox ])
+    [ 1.; 2. ];
+  List.iter prerr_endline (List.rev !errors);
+  check "Native ordinary input caret, selection, Unicode and composition paint"
+    (!errors = []);
+  print_endline
+    "native ordinary input caret, selection, Unicode and composition paint: OK"
+
+
 let () =
   Gc.full_major ();
   let before = Gc.allocated_bytes () in

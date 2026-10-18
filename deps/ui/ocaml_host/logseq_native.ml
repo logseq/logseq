@@ -31,18 +31,7 @@ external native_titlebar_blend : unit -> unit
 external native_register_fonts : string -> unit
   = "logseq_native_register_fonts"
 
-(* ocaml_host_stubs.c: an NSVisualEffectView with the .sidebar material
-   ordered below the content view in the window's frame view, tracking
-   the left sidebar column. x/y/w/h are window points in frame-view
-   coordinates (origin bottom-left, y already flipped); visible=false
-   hides it. *)
-external sidebar_vibrancy :
-  float -> float -> float -> float -> bool -> unit
-  = "logseq_native_sidebar_vibrancy"
-
-(* App theme → material appearance: the SDL window doesn't track the
-   app's own light/dark switch, so the host pushes it each frame. *)
-external sidebar_theme : bool -> unit = "logseq_native_sidebar_theme"
+external native_menu_theme : bool -> unit = "logseq_native_menu_theme"
 
 (* ocaml_host_stubs.c: installs the real NSMenu main menu. Every item
    carries a command tag forwarded to the "ocaml_host_menu_command"
@@ -414,10 +403,6 @@ let () =
   let paint_metrics = ref (fun (_ : Lui_scene.t) -> []) in
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
   let blit_cell = ref blit and gctx_cell = ref gctx in
-  (* Runs between the scene's seal and the active renderer, for
-     host-side display-list surgery — the sidebar vibrancy hook
-     installed further down is its only user. *)
-  let pre_render = ref (fun (_ : Lui_scene.t) -> ()) in
   let cached_overlay = ref None in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
@@ -455,7 +440,6 @@ let () =
                          s.Lui_scene.glyphs <- glyphs;
                          s.Lui_scene.width <- width
                      | _ ->
-                         !pre_render s;
                          s.Lui_scene.glyphs <- List.rev retained_glyphs;
                          s.Lui_scene.ops <- s.Lui_scene.ops @ caret @ !paint_metrics s;
                          Host_interaction.seal_overlay s;
@@ -540,7 +524,9 @@ let () =
                        Float.min 1. (cr.Lui_scene.h /. content) });
         text_ops =
           (fun id r fg s ->
-             let ops = Text_engine.text_ops text_engine id r fg s in
+             let ops = Text_engine.control_text_ops text_engine ~ui
+               ~color_of:Theme_vars.color_of
+               id r fg s in
              let ops =
                match !host_cell with
                | None -> ops
@@ -598,7 +584,8 @@ let () =
                             | _ -> None)))
              in
              let marked = Ui.marked ui in
-             if marked = "" || id <> Ui.focused ui then ops
+             if Text_engine.ordinary_input (store_of ()) id
+                || marked = "" || id <> Ui.focused ui then ops
              else begin
                let caret =
                  min (Ui.caret ui) (String.length (Ui.shadow ui))
@@ -930,54 +917,6 @@ let () =
   (* Values are sampled at the panel cadence; label fragments and the complete
      renderer overlay already have their own caches. *)
   paint_metrics := draw_metrics;
-  (* macOS sidebar vibrancy: the left sidebar column is the node
-     classed cp__sidebar-left-layout; populate_rects records its id so
-     the render hook below can keep an NSVisualEffectView under the
-     content view glued to its titlebar. The body retains its theme paint. *)
-  let sidebar_id_cell = ref (-1) in
-  let class_has cls tok =
-    List.exists (fun t -> t = tok) (String.split_on_char ' ' cls)
-  in
-  (* Splice a Hole covering [material] into the display list, right after the
-     last fill that backdrops the column (a fill inside [r] covering
-     most of it). The hole batch writes alpha 0 through everything
-     painted earlier, exposing the effect view below the content view;
-     ops after it — the sidebar's own content — repaint opaque on top.
-     With no backdrop found the hole goes first, which at least clears
-     the window background under the column. *)
-  let sidebar_hole (r : Lui_scene.rect) material ops =
-    let covers (f : Lui_scene.fill_op) =
-      let a = f.Lui_scene.frect in
-      a.Lui_scene.x >= r.Lui_scene.x -. 2.
-      && a.Lui_scene.y >= r.Lui_scene.y -. 2.
-      && a.Lui_scene.x +. a.Lui_scene.w
-         <= r.Lui_scene.x +. r.Lui_scene.w +. 2.
-      && a.Lui_scene.y +. a.Lui_scene.h
-         <= r.Lui_scene.y +. r.Lui_scene.h +. 2.
-      && a.Lui_scene.w *. a.Lui_scene.h
-         >= 0.7 *. r.Lui_scene.w *. r.Lui_scene.h
-    in
-    let hole =
-      Lui_scene.Hole
-        { hrect = material;
-          hradii = (0., 0., 0., 0.);
-          hcontinuous = false;
-          hopacity = 1. }
-    in
-    let rec last_backdrop i acc = function
-      | [] -> acc
-      | Lui_scene.Fill f :: tl ->
-        last_backdrop (i + 1) (if covers f then i else acc) tl
-      | _ :: tl -> last_backdrop (i + 1) acc tl
-    in
-    let cut = last_backdrop 0 (-1) ops + 1 in
-    let rec splice i = function
-      | [] -> [ hole ]
-      | op :: tl ->
-        if i = cut then hole :: op :: tl else op :: splice (i + 1) tl
-    in
-    splice 0 ops
-  in
   let populate_revision = ref (-1, -1, -1) in
   let hit_cache = Host_interaction.hit_cache () in
   let hit_epoch = ref 0 in
@@ -990,12 +929,7 @@ let () =
         ~scroll_x:(Ui.scroll_offset_x ui) ~scroll_y:(Ui.scroll_offset ui)
         rects;
       incr hit_epoch;
-      sidebar_id_cell := -1;
       Lui_store.iter_preorder store (fun id ->
-        if !sidebar_id_cell < 0 then
-          (match Lui_store.string_prop store id "style-class" with
-           | Some c when class_has c "cp__sidebar-left-layout" -> sidebar_id_cell := id
-           | _ -> ());
         if Ui.scrollable store id then begin
           let cr = engine_rect id in
           let _, _, right, bottom = content_box id in
@@ -1022,45 +956,6 @@ let () =
     | Input.Wheel _ | Input.Wheel_mods _ ->
       Ui.handle ~spatial:(spatial_index ()) ~on_component_input ui store rects input
     | _ -> Ui.handle ~on_component_input ui store rects input
-  in
-  (* Keep the macOS sidebar NSVisualEffectView frame
-     glued to its titlebar and splice the hole into the display
-     list each render. engine_rect reads the layout just computed by
-     the repaint this render belongs to, so the frame never lags. *)
-  let () =
-    if Host_platform.is_macos && (Option.is_some metal || use_cocoa) then
-      pre_render :=
-        (fun (s : Lui_scene.t) ->
-         match !host_cell with
-         | None -> ()
-         | Some _ -> (
-           let id = !sidebar_id_cell in
-           let cls =
-             if id < 0 then ""
-             else
-               Option.value ~default:""
-                 (Lui_store.string_prop (store_of ()) id "style-class")
-           in
-           let r =
-             if id < 0 then Lui_scene.rect 0. 0. 0. 0.
-             else engine_rect id
-           in
-           if
-             id >= 0 && class_has cls "is-open"
-             && r.Lui_scene.w >= 4. && r.Lui_scene.h >= 4.
-           then begin
-             let sc = !scale_cell in
-             let material = { r with h = min r.h (48. *. sc) } in
-             s.Lui_scene.ops <- sidebar_hole r material s.Lui_scene.ops;
-             sidebar_theme (!Theme_vars.mode = Lui_theme.Dark);
-             sidebar_vibrancy
-               (r.Lui_scene.x /. sc)
-               (float !win_h -. (material.y +. material.h) /. sc)
-               (material.w /. sc)
-               (material.h /. sc)
-               true
-           end
-           else sidebar_vibrancy 0. 0. 0. 0. false))
   in
   (* Swift spine contract stand-in: the Swift host fires "lazy-mount"
      on row spacers scrolling into view and "virt-end" when a virt list
@@ -1111,7 +1006,7 @@ let () =
   let text_entry kind =
     match kind with
     | "input" | "search-field" | "text-field" | "secure-field"
-    | "textarea" | "extension:logseq-editor" -> true
+    | "textarea" | "combobox" | "extension:logseq-editor" -> true
     | _ -> false
   in
   let set_ime_rect (r : Lui_scene.rect) =
@@ -1128,6 +1023,8 @@ let () =
     let id = Ui.focused ui in
     let r = Rects.get rects id in
     if Lui_scene.rect_empty r then r
+    else if Text_engine.ordinary_input store id then
+      Text_engine.input_caret_rect text_engine ui id r
     else begin
       let s = !scale_cell in
       let pad =
@@ -1874,12 +1771,12 @@ let () =
      draining the mailbox, so boot pumps are not each gated behind a
      full layout+shaping+render pass. *)
   populate_rects ();
-  Ui.set_measure ui
-    (fun _store id s -> Text_engine.measure_text text_engine id s);
+  Text_engine.bind_input text_engine ui;
   Ui.set_content_rect ui engine_rect;
   let a11y = Lui_a11y.of_store store in
   (* Host_requests env: the dom-op/platform-request sink. *)
   let host_req_repaint = ref false in
+  native_menu_theme (!Theme_vars.mode = Lui_theme.Dark);
   let theme_gen_seen = ref !Theme_vars.generation in
   Host_requests.install
     { Host_requests.store;
@@ -1940,7 +1837,7 @@ let () =
   (* (focused id, caret, shadow, rect x/y/w) of the last caret push.
      Unchanged frames skip Input.Caret so a focused field does not
      dirty the painter every tick. *)
-  let caret_key = ref (-1, -1, "", 0., 0., 0.) in
+  let caret_key = ref None in
   (* [last_busy] gates the idle sleep: any activity below refreshes
      it, so the 1ms fast poll persists through bursts (boot, typing)
      and the blocking wait only kicks in after sustained quiet. *)
@@ -2246,6 +2143,7 @@ let () =
     (* store_changed's dead-focus cleanup may have cleared Ui.focused
        for a remounted ed-sink with no batch pending to re-arm it *)
     if not (Keyboard_capture.active ()) then Host_requests.ensure_ed_focus ();
+    let input_change = Text_engine.tick_input text_engine ui ~now:(perf_s ()) in
     (* Caret geometry is text-entry only, and only when the anchor
        moved. A non-editable focus must not run this every frame. *)
     let fid = Ui.focused ui in
@@ -2253,12 +2151,14 @@ let () =
       (Ui.menu_input_active ui store
        || (fid <> 0 && text_entry (Lui_store.kind store fid)));
     if fid = 0 || not (text_entry (Lui_store.kind store fid)) then
-      caret_key := (-1, -1, "", 0., 0., 0.)
+      caret_key := None
     else begin
       let c = Ui.caret ui in
       let sh = Ui.shadow ui in
       let r = Rects.get rects fid in
-      let key = (fid, c, sh, r.Lui_scene.x, r.Lui_scene.y, r.Lui_scene.w) in
+      let ime = Ui.ime ui in
+      let key = Some (fid, c, sh, ime.Lui_ime.marked_text, ime.cursor, ime.sel_len,
+        r, !scale_cell, Lui_store.layout_rev store, Lui_host.invalidation_count host) in
       if key <> !caret_key then begin
         caret_key := key;
         apply_actions
@@ -2267,10 +2167,15 @@ let () =
     end;
     if !Theme_vars.generation <> !theme_gen_seen then begin
       theme_gen_seen := !Theme_vars.generation;
+      native_menu_theme (!Theme_vars.mode = Lui_theme.Dark);
       Lui_host.invalidate_paint host;
       Lui_host.invalidate_layout host;
       host_req_repaint := true
     end;
+    let ordinary_dirty = Ui.want_frame ui host || !host_req_repaint in
+    (match input_change with
+     | Some id -> Lui_host.note_paint host id; host_req_repaint := true
+     | None -> ());
     let can_present = Native_window.presentable (Sdl.get_window_id !win) in
     (* Exercise the real embedded app, its layout, and every viewport pixel
        while occluded. Visibility exports remain truthful; this diagnostic
@@ -2281,7 +2186,8 @@ let () =
     let retry = presentation.Host_interaction.pending in
     if dirty then begin
       paint_frame ();
-      last_busy := t0;
+      (* A caret blink must not keep the loop in its post-input fast poll. *)
+      if ordinary_dirty then last_busy := t0;
       last_render := perf_s ();
       if !debug then
         dbg "frame %d ops=%d" !frame
@@ -2370,6 +2276,10 @@ let () =
           if not Host_platform.is_macos || (can_present && presentation.pending) then 16
           else if metrics.panel_open then 250
           else timeout in
+        let timeout = match Text_engine.input_deadline text_engine with
+          | None -> timeout
+          | Some deadline -> min timeout
+              (max 1 (int_of_float (ceil ((deadline -. now) *. 1000.)))) in
         ignore (Sdl.wait_event_timeout None timeout)
     | None when not vsync ->
         frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;

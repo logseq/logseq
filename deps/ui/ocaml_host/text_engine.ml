@@ -45,15 +45,27 @@ type t = {
   layouts : Lui_text.Cache.t;
   editing_layouts : (int, int * Lui_text.Cache.t) Hashtbl.t;
   mutable layout_revision : int;
+  mutable input_node : int;
+  mutable input_session : int;
+  mutable input_caret : int;
+  mutable input_anchor : int;
+  mutable input_text : string;
+  mutable input_ime : Lui_ime.state;
+  mutable input_visible : bool;
+  mutable input_next : float option;
+  mutable input_pan : float;
 }
 
 let create ~scene ~scale ~store =
   { scene; scale; store; slots = Hashtbl.create 512; layouts = Lui_text.Cache.create 2048;
-    editing_layouts = Hashtbl.create 4; layout_revision = -1 }
+    editing_layouts = Hashtbl.create 4; layout_revision = -1;
+    input_node = 0; input_session = 0; input_caret = 0; input_anchor = 0;
+    input_text = ""; input_ime = Lui_ime.initial; input_visible = false;
+    input_next = None; input_pan = 0. }
 
 let editable_text store id =
   match Lui_store.kind store id with
-  | "input" | "text-field" | "secure-field" | "search-field" | "textarea"
+  | "input" | "text-field" | "secure-field" | "search-field" | "textarea" | "combobox"
   | "number-stepper" | "extension:logseq-editor" -> true
   | _ ->
     match Lui_store.string_prop store id "style-class" with
@@ -495,3 +507,316 @@ let measure_text ?(width = 0.) t id s =
     let w, h = Lui_text.Cache.measure (layout_cache t id) ~width
       ?line_height:(line_height_of store id) (font_of store id) s in
     (w *. scale, h *. scale)
+
+(* Native input and paint use the same shaped text, including password masks. *)
+let ordinary_input store id =
+  Lui_store.is_editable_text_kind (Lui_store.kind store id)
+  || Lui_store.kind store id = "combobox"
+
+let active_input store ui id =
+  id <> 0 && ordinary_input store id
+  && Lui_window.Ui.focused ui = id
+  && Lui_store.prop store id "enabled" <> Some (Lui_protocol.BoolValue false)
+  && not (Lui_store.inert_in_chain store id)
+
+type input_layout = {
+  shaped : Lui_text.layout;
+  origin_x : float;
+  origin_y : float;
+  inner : Lui_scene.rect;
+  alignment : Lui_paint.text_align;
+  to_shown : int -> int;
+  from_shown : int -> int;
+}
+
+let input_layout t id r text =
+  let store = t.store () and scale = t.scale () in
+  let secure = Lui_store.kind store id = "secure-field" in
+  let shown = if secure then Lui_paint.secure_mask text else text in
+  let shaped, origin_x, origin_y = text_layout t id r shown in
+  let p = Lui_paint.text_placement_of store id in
+  let inner =
+    rect
+      (r.x +. (p.tp_pad_left *. scale))
+      (r.y +. (p.tp_pad_top *. scale))
+      (Float.max 0. (r.w -. ((p.tp_pad_left +. p.tp_pad_right) *. scale)))
+      (Float.max 0. (r.h -. ((p.tp_pad_top +. p.tp_pad_bottom) *. scale)))
+  in
+  {
+    shaped;
+    origin_x;
+    origin_y;
+    inner;
+    alignment = p.tp_align;
+    to_shown = (if secure then Lui_paint.secure_masked_of_byte text else Fun.id);
+    from_shown =
+      (if secure then Lui_paint.secure_byte_of_masked text else Fun.id);
+  }
+
+let input_line_offset g y scale =
+  let lines = g.shaped.Lui_text.lay_lines in
+  let rec find k =
+    if k >= Array.length lines - 1 then max 0 k
+    else if y < lines.(k + 1).Lui_text.ll_top then k
+    else find (k + 1)
+  in
+  if Array.length lines = 0 then 0.
+  else
+    let width = lines.(find 0).Lui_text.ll_line.width *. scale in
+    match g.alignment with
+    | Lui_paint.Ta_start -> 0.
+    | Ta_center -> Float.max 0. ((g.inner.w -. width) /. 2.)
+    | Ta_end -> Float.max 0. (g.inner.w -. width)
+
+let input_rect t g (r : Lui_text.rect) =
+  let scale = t.scale () in
+  rect
+    (g.origin_x +. input_line_offset g r.ry scale +. (r.rx *. scale))
+    (g.origin_y +. (r.ry *. scale))
+    (r.rw *. scale) (r.rh *. scale)
+
+let input_caret t g offset =
+  input_rect t g (Lui_text.caret_rect g.shaped (g.to_shown offset))
+
+let input_selection t g first last =
+  List.map (input_rect t g)
+    (Lui_text.selection_rects g.shaped (g.to_shown first, g.to_shown last))
+
+let input_offset t id = if t.input_node = id then t.input_pan else 0.
+
+let bind_input t ui =
+  Lui_window.Ui.set_measure ui (fun store id text ->
+      let text =
+        if Lui_store.kind store id = "secure-field" then
+          Lui_paint.secure_mask text
+        else text
+      in
+      measure_text t id text);
+  Lui_window.Ui.set_caret_ops ui (fun _store id text ~lw ~lh ->
+      let g = input_layout t id (rect 0. 0. lw lh) text in
+      let map move offset = g.from_shown (move g.shaped (g.to_shown offset)) in
+      {
+        Lui_window.Ui.c_before = map Lui_text.caret_before;
+        c_after = map Lui_text.caret_after;
+        c_up = map Lui_text.caret_up;
+        c_down = map Lui_text.caret_down;
+        c_rect =
+          (fun offset ->
+            let r = input_caret t g offset in
+            (r.x -. input_offset t id, r.y, r.h));
+      });
+  Lui_window.Ui.set_hit_text ui (fun _store id text ~lx ~ly ~lw ~lh ->
+      let g = input_layout t id (rect 0. 0. lw lh) text in
+      let scale = t.scale () in
+      let y = (ly -. g.origin_y) /. scale in
+      let x =
+        (lx -. g.origin_x +. input_offset t id -. input_line_offset g y scale)
+        /. scale
+      in
+      g.from_shown (Lui_text.hit_test g.shaped (x, y)))
+
+let tick_input t ui ~now =
+  let id = Lui_window.Ui.focused ui in
+  if not (active_input (t.store ()) ui id) then begin
+    let old = t.input_node in
+    t.input_node <- 0;
+    t.input_next <- None;
+    t.input_visible <- false;
+    t.input_text <- "";
+    t.input_ime <- Lui_ime.initial;
+    t.input_pan <- 0.;
+    if old = 0 then None else Some old
+  end
+  else
+    let session, _, _ = Lui_window.Ui.text_revisions ui in
+    let caret = Lui_window.Ui.caret ui
+    and anchor = Lui_window.Ui.sel_anchor ui
+    and text = Lui_window.Ui.shadow ui
+    and ime = Lui_window.Ui.ime ui in
+    let marked = ime.Lui_ime.marked_text in
+    let composition_changed =
+      marked != t.input_ime.marked_text
+      || ime.cursor <> t.input_ime.cursor
+      || ime.sel_len <> t.input_ime.sel_len
+      || ime.active <> t.input_ime.active
+    in
+    if
+      id <> t.input_node || session <> t.input_session || caret <> t.input_caret
+      || anchor <> t.input_anchor || text != t.input_text || composition_changed
+    then begin
+      if id <> t.input_node || session <> t.input_session then t.input_pan <- 0.;
+      t.input_node <- id;
+      t.input_session <- session;
+      t.input_caret <- caret;
+      t.input_anchor <- anchor;
+      t.input_text <- text;
+      t.input_ime <- ime;
+      t.input_visible <- caret = anchor || marked <> "";
+      t.input_next <-
+        (if caret = anchor && marked = "" then Some (now +. 0.5) else None);
+      Some id
+    end
+    else
+      match t.input_next with
+      | Some next when now >= next ->
+          let periods = 1 + int_of_float (floor ((now -. next) /. 0.5)) in
+          if periods mod 2 = 1 then t.input_visible <- not t.input_visible;
+          t.input_next <- Some (next +. (float periods *. 0.5));
+          Some id
+      | _ -> None
+
+let input_deadline t = t.input_next
+
+let utf8_cursor text count =
+  let rec loop offset remaining =
+    if remaining <= 0 || offset >= String.length text then offset
+    else loop (Lui_query.utf8_next text offset) (remaining - 1)
+  in
+  loop 0 count
+
+let input_display ui =
+  let text = Lui_window.Ui.shadow ui in
+  let caret = Lui_window.Ui.caret ui and anchor = Lui_window.Ui.sel_anchor ui in
+  let first = min caret anchor and last = max caret anchor in
+  let marked = Lui_window.Ui.marked ui in
+  if marked = "" then (text, caret, first, last, None)
+  else
+    let display =
+      String.sub text 0 first ^ marked
+      ^ String.sub text last (String.length text - last)
+    in
+    let ime = Lui_window.Ui.ime ui in
+    let offset = first + utf8_cursor marked ime.Lui_ime.cursor in
+    let stop = first + utf8_cursor marked (ime.cursor + ime.sel_len) in
+    (display, offset, offset, stop, Some (first, first + String.length marked))
+
+let pan_input t g caret =
+  let scale = t.scale () in
+  let maximum =
+    Float.max 0. ((g.shaped.lay_width *. scale) +. scale -. g.inner.w)
+  in
+  let pan = Float.min maximum t.input_pan in
+  let pan =
+    if caret.x -. pan < g.inner.x then caret.x -. g.inner.x
+    else if caret.x +. scale -. pan > g.inner.x +. g.inner.w then
+      caret.x +. scale -. g.inner.x -. g.inner.w
+    else pan
+  in
+  t.input_pan <- Float.max 0. (Float.min maximum pan)
+
+let input_caret_rect t ui id r =
+  let text, offset, _, _, _ = input_display ui in
+  let g = input_layout t id r text in
+  let caret = input_caret t g offset in
+  pan_input t g caret;
+  { caret with x = caret.x -. t.input_pan; w = t.scale () }
+
+let input_fill color region =
+  Fill
+    {
+      frect = region;
+      fradii = (0., 0., 0., 0.);
+      fcontinuous = false;
+      fcolor = color;
+      fpaint = Solid;
+      fcolor2 = color;
+      fgradient = (0., 0., 0., 0.);
+      fborder = (0., 0., 0., 0.);
+      fborder_color = Lui_scene.color 0 0 0 0;
+      fdashed = false;
+      fwide = 0;
+      fopacity = 1.;
+    }
+
+let control_text_ops t ~ui ~color_of id region foreground text =
+  if not (active_input (t.store ()) ui id) then
+    text_ops t id region foreground text
+  else
+    let store = t.store () in
+    let hooks =
+      {
+        Lui_paint.default_hooks with
+        color_of;
+        state_of = Lui_window.Ui.state_of ui store;
+      }
+    in
+    let caret_color =
+      match Lui_paint.declared_foreground hooks store id with
+      | Some color -> color
+      | None -> Option.get (color_of "foreground")
+    in
+    let selection_foreground =
+      Option.get (color_of "var(--ls-primary-text-color)")
+    and selection_color =
+      Option.get (color_of "var(--ls-selection-background-color)")
+    in
+    let display, offset, first, last, marked = input_display ui in
+    let g = input_layout t id region display in
+    let caret = input_caret t g offset in
+    pan_input t g caret;
+    let shift (r : Lui_scene.rect) = { r with x = r.x -. t.input_pan } in
+    let clip =
+      rect_intersect g.inner
+        (rect 0. 0. (float (t.scene ()).width) (float (t.scene ()).height))
+    in
+    let selected_regions =
+      List.filter_map
+        (fun r ->
+          let r = rect_intersect (shift r) clip in
+          if rect_empty r then None else Some r)
+        (input_selection t g first last)
+    in
+    let selected = List.map (input_fill selection_color) selected_regions in
+    let ink =
+      if display = "" && marked = None then text
+      else if Lui_store.kind (t.store ()) id = "secure-field" then
+        Lui_paint.secure_mask display
+      else display
+    in
+    let glyphs =
+      text_ops t id { region with x = region.x -. t.input_pan } foreground ink
+    in
+    (* Reuse glyph masks with constant selection ink. Clipping preserves
+       partial ligatures and bidi gaps without reshaping the selected text. *)
+    let selected_glyphs =
+      List.map
+        (function
+          | Glyphs op ->
+              Glyphs
+                {
+                  op with
+                  gpaint = Linear;
+                  gcolor = selection_foreground;
+                  gcolor2 = selection_foreground;
+                  ggradient = (0., 0., 1., 0.);
+                }
+          | op -> op)
+        glyphs
+    in
+    let selection_ink =
+      List.concat_map
+        (fun region ->
+          Push_clip
+            { crect = region; cradii = (0., 0., 0., 0.); ccontinuous = false }
+          :: (selected_glyphs @ [ Pop_clip ]))
+        selected_regions
+    in
+    let underline =
+      match marked with
+      | None -> []
+      | Some (start, stop) ->
+          List.map
+            (fun r ->
+              let r = shift r in
+              input_fill caret_color
+                (rect r.x (r.y +. r.h -. t.scale ()) r.w (t.scale ())))
+            (input_selection t g start stop)
+    in
+    let cursor =
+      if t.input_visible && first = last then
+        [ input_fill caret_color { (shift caret) with w = t.scale () } ]
+      else []
+    in
+    Push_clip
+      { crect = g.inner; cradii = (0., 0., 0., 0.); ccontinuous = false }
+    :: (selected @ glyphs @ selection_ink @ underline @ cursor @ [ Pop_clip ])

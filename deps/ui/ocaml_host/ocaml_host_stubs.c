@@ -591,26 +591,6 @@ CAMLprim value logseq_native_input_chain(value id_v) {
   id window_next = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("nextResponder"));
   return Val_bool(next == listener && window_next == listener);
 }
-CAMLprim value logseq_native_sidebar_hit(value id_v) {
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
-  id window = (id)info.info.cocoa.window;
-  id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
-  id frame = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("superview"));
-  id children = ((id (*)(id, SEL))objc_msgSend)(frame, sel_registerName("subviews"));
-  unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(children, sel_registerName("count"));
-  for (unsigned long index = 0; index < count; index++) {
-    id view = ((id (*)(id, SEL, unsigned long))objc_msgSend)(children, sel_registerName("objectAtIndex:"), index);
-    if (((int (*)(id, SEL, Class))objc_msgSend)(view, sel_registerName("isKindOfClass:"), objc_getClass("NSVisualEffectView"))) {
-      typedef struct { double x,y; } Point;
-      Point point = {20.,20.};
-      id hit = ((id (*)(id, SEL, Point))objc_msgSend)(view, sel_registerName("hitTest:"), point);
-      return Val_bool(hit != nil);
-    }
-  }
-  caml_failwith("Sidebar material is missing");
-}
-
 CAMLprim value logseq_native_window_opaque(value id_v) {
   SDL_SysWMinfo info; SDL_VERSION(&info.version);
   if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
@@ -700,64 +680,17 @@ typedef struct {
   double x, y, w, h;
 } ls_nsrect;
 
-/* Only the visible sidebar needs transparent composition. Restore
-   opaque layers when it closes so the complete window does not keep
-   paying for alpha composition and material backing surfaces. */
-static void set_layers_transparency(id layer, int transparent) {
-  if (layer == nil) return;
-  const char *name = object_getClassName(layer);
-  if (name != NULL) {
-    ((void (*)(id, SEL, int))objc_msgSend)(
-        layer, sel_registerName("setOpaque:"), !transparent);
-    /* setOpaque:NO still leaves an opaque backgroundColor fill that
-       shows through the hole — NULL it too. */
-    if (transparent) ((void (*)(id, SEL, void *))objc_msgSend)(
-        layer, sel_registerName("setBackgroundColor:"), NULL);
-  }
-  id sub = ((id (*)(id, SEL))objc_msgSend)(
-      layer, sel_registerName("sublayers"));
-  if (sub == nil) return;
-  unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(
-      sub, sel_registerName("count"));
-  for (unsigned long i = 0; i < count; i++) {
-    id l = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
-        sub, sel_registerName("objectAtIndex:"), i);
-    if (l == nil) continue;
-    const char *ln = object_getClassName(l);
-    if (ln != NULL && strstr(ln, "CAMetalLayer") != NULL) {
-      ((void (*)(id, SEL, int))objc_msgSend)(
-          l, sel_registerName("setOpaque:"), !transparent);
-      if (transparent) ((void (*)(id, SEL, void *))objc_msgSend)(
-          l, sel_registerName("setBackgroundColor:"), NULL);
-    }
-  }
-}
-
-/* App theme (light/dark) drives the material's appearance pin — set
-   once per frame alongside sidebar_vibrancy. */
-static int vib_dark = 0;
-CAMLprim value logseq_native_sidebar_theme(value vdark) {
-  CAMLparam1(vdark);
-  vib_dark = Bool_val(vdark);
-  CAMLreturn(Val_unit);
-}
-
 typedef struct { double x,y; } LogseqPoint;
-static id logseq_material_hit_test(id view, SEL selector, LogseqPoint point) {
+static id logseq_software_hit_test(id view, SEL selector, LogseqPoint point) {
   (void)view; (void)selector; (void)point;
   return nil;
 }
 
-static Class logseq_material_class(void) {
-  Class cls = objc_getClass("LogseqSidebarMaterial");
-  if (!cls) {
-    cls = objc_allocateClassPair(objc_getClass("NSVisualEffectView"), "LogseqSidebarMaterial", 0);
-    class_addMethod(cls, sel_registerName("hitTest:"), (IMP)logseq_material_hit_test, "@@:{CGPoint=dd}");
-    objc_registerClassPair(cls);
-  }
-  return cls;
+static int menu_dark = 0;
+CAMLprim value logseq_native_menu_theme(value dark) {
+  menu_dark = Bool_val(dark);
+  return Val_unit;
 }
-
 
 /* Immutable IOSurface bands go directly to the window compositor. The
    renderer can reuse its staging pixels as soon as the copy completes. */
@@ -808,7 +741,7 @@ static Class logseq_software_class(void) {
     class_addMethod(cls, sel_registerName("wantsUpdateLayer"), (IMP)logseq_software_flipped, "B@:");
     class_addMethod(cls, sel_registerName("updateLayer"), (IMP)logseq_software_update, "v@:");
     class_addMethod(cls, sel_registerName("isOpaque"), (IMP)logseq_software_opaque, "B@:");
-    class_addMethod(cls, sel_registerName("hitTest:"), (IMP)logseq_material_hit_test,
+    class_addMethod(cls, sel_registerName("hitTest:"), (IMP)logseq_software_hit_test,
                     "@@:{CGPoint=dd}");
     objc_registerClassPair(cls);
   }
@@ -1206,130 +1139,6 @@ CAMLprim value logseq_native_software_dispose(value id_v) {
     free(surface);
   }
   return Val_unit;
-}
-
-/* macOS sidebar vibrancy: an NSVisualEffectView with the .sidebar
-   material composited BEHIND the SDL content view. SDL assumes the
-   content view IS its metal view (a subview inside it would draw above
-   the drawable), so the effect view goes into the window's frame view
-   as a sibling ordered below the content view, and the framebuffer
-   punches a transparent hole over the sidebar column so the material
-   shows through.
-
-   The host calls this once per layout while the metal renderer is
-   active. x/y/w/h are window points in the frame view's coordinate
-   space (origin bottom-left; the caller already flipped y).
-   Collapsing the sidebar releases its material and restores opaque
-   window composition. */
-CAMLprim value logseq_native_sidebar_vibrancy(value vx, value vy,
-                                              value vw, value vh,
-                                              value vvisible) {
-  CAMLparam5(vx, vy, vw, vh, vvisible);
-  static id effect = nil;
-  static int frame_init = 0;
-  static double lx = 0, ly = 0, lw = 0, lh = 0;
-  double x = Double_val(vx), y = Double_val(vy);
-  double w = Double_val(vw), h = Double_val(vh);
-  int visible = Int_val(vvisible) != 0;
-  /* Called once per layout — the windows/layer walks below hand out
-     autoreleased NSArrays, and this host has no Cocoa run loop
-     draining a pool per turn, so drain them ourselves. */
-  extern void *objc_autoreleasePoolPush(void);
-  extern void objc_autoreleasePoolPop(void *);
-  void *pool = objc_autoreleasePoolPush();
-  Class cls = objc_getClass("NSApplication");
-  if (cls == Nil) goto done;
-  id app = ((id (*)(Class, SEL))objc_msgSend)(
-      cls, sel_registerName("sharedApplication"));
-  if (app == nil) goto done;
-  id windows =
-      ((id (*)(id, SEL))objc_msgSend)(app, sel_registerName("windows"));
-  if (windows == nil) goto done;
-  unsigned long count =
-      ((unsigned long (*)(id, SEL))objc_msgSend)(
-          windows, sel_registerName("count"));
-  for (unsigned long i = 0; i < count; i++) {
-    id win = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
-        windows, sel_registerName("objectAtIndex:"), i);
-    if (win == nil) continue;
-    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(
-        win, sel_registerName("styleMask"));
-    if (!(mask & 1L /* NSWindowStyleMaskTitled */)) continue;
-    id cv = ((id (*)(id, SEL))objc_msgSend)(
-        win, sel_registerName("contentView"));
-    if (cv == nil) continue;
-    id frame = ((id (*)(id, SEL))objc_msgSend)(
-        cv, sel_registerName("superview"));
-    if (frame == nil) continue;
-    ((void (*)(id, SEL, int))objc_msgSend)(
-        win, sel_registerName("setOpaque:"), !visible);
-    Class nscolor = objc_getClass("NSColor");
-    if (nscolor != Nil) {
-      id background = ((id (*)(Class, SEL))objc_msgSend)(
-          nscolor, sel_registerName(visible ? "clearColor" : "windowBackgroundColor"));
-      ((void (*)(id, SEL, id))objc_msgSend)(
-          win, sel_registerName("setBackgroundColor:"), background);
-    }
-    id layer = ((id (*)(id, SEL))objc_msgSend)(cv, sel_registerName("layer"));
-    set_layers_transparency(layer, visible);
-    id appearance = nil;
-    Class appcls = objc_getClass("NSAppearance");
-    if (appcls != Nil) {
-      appearance = ((id (*)(Class, SEL, id))objc_msgSend)(
-          appcls, sel_registerName("appearanceNamed:"),
-          menu_nsstr(vib_dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua"));
-      if (appearance != nil) ((void (*)(id, SEL, id))objc_msgSend)(
-          win, sel_registerName("setAppearance:"), appearance);
-    }
-    if (!visible) {
-      if (effect != nil) {
-        ((void (*)(id, SEL))objc_msgSend)(effect, sel_registerName("removeFromSuperview"));
-        ((void (*)(id, SEL))objc_msgSend)(effect, sel_registerName("release"));
-        effect = nil;
-        frame_init = 0;
-      }
-      break;
-    }
-    if (effect == nil) {
-      Class effcls = logseq_material_class();
-      if (effcls == Nil) break;
-      ls_nsrect r = {x, y, w, h};
-      effect = ((id (*)(id, SEL, ls_nsrect))objc_msgSend)(
-          ((id (*)(Class, SEL))objc_msgSend)(
-              effcls, sel_registerName("alloc")),
-          sel_registerName("initWithFrame:"), r);
-      if (effect == nil) break;
-      /* NSVisualEffectMaterialSidebar, BehindWindow, Active. */
-      ((void (*)(id, SEL, long))objc_msgSend)(
-          effect, sel_registerName("setMaterial:"), 7L);
-      ((void (*)(id, SEL, long))objc_msgSend)(
-          effect, sel_registerName("setBlendingMode:"), 0L);
-      ((void (*)(id, SEL, long))objc_msgSend)(
-          effect, sel_registerName("setState:"), 1L);
-      /* width+height sizable keeps it glued between layout updates. */
-      ((void (*)(id, SEL, long))objc_msgSend)(
-          effect, sel_registerName("setAutoresizingMask:"),
-          2L | 16L);
-      ((void (*)(id, SEL, id, long, id))objc_msgSend)(
-          frame, sel_registerName("addSubview:positioned:relativeTo:"),
-          effect, -1L /* NSWindowBelow */, cv);
-    }
-    if (appearance != nil) ((void (*)(id, SEL, id))objc_msgSend)(
-        effect, sel_registerName("setAppearance:"), appearance);
-    if (visible && (!frame_init || x != lx || y != ly || w != lw ||
-                    h != lh)) {
-      ls_nsrect r = {x, y, w, h};
-      ((void (*)(id, SEL, ls_nsrect))objc_msgSend)(
-          effect, sel_registerName("setFrame:"), r);
-      lx = x; ly = y; lw = w; lh = h; frame_init = 1;
-    }
-    ((void (*)(id, SEL, int))objc_msgSend)(
-        effect, sel_registerName("setHidden:"), visible ? 0 : 1);
-    break;
-  }
-done:
-  objc_autoreleasePoolPop(pool);
-  CAMLreturn(Val_unit);
 }
 
 /* ============ in-app native NSMenu popup (experiment) ============
@@ -1984,7 +1793,7 @@ static void row_drawRect(id self, SEL _cmd, ls_nsrect dirty) {
       hl = ((int (*)(id, SEL))objc_msgSend)(
           item, sel_registerName("isHighlighted"));
   }
-  id dark_bg = mp_white(vib_dark ? 1.0 : 0.0, vib_dark ? 0.10 : 0.06);
+  id dark_bg = mp_white(menu_dark ? 1.0 : 0.0, menu_dark ? 0.10 : 0.06);
 
   if (!strcmp(kind, "h")) {
     /* group header: dimmed 11pt label at left inset */
@@ -1996,7 +1805,7 @@ static void row_drawRect(id self, SEL _cmd, ls_nsrect dirty) {
   }
   if (!strcmp(kind, "l")) {
     /* separator line */
-    id c = mp_white(vib_dark ? 1.0 : 0.0, vib_dark ? 0.14 : 0.10);
+    id c = mp_white(menu_dark ? 1.0 : 0.0, menu_dark ? 0.14 : 0.10);
     mp_fill_round(c, 12.0, b.h / 2.0 - 0.5, b.w - 24.0, 1.0, 0);
     return;
   }
@@ -2121,8 +1930,8 @@ static void row_drawRect(id self, SEL _cmd, ls_nsrect dirty) {
         id cap = ((id(*)(id, SEL, unsigned long))objc_msgSend)(
             caps, sel_registerName("objectAtIndex:"), i);
         double ch = 18.0, cy = (b.h - ch) / 2.0;
-        mp_fill_round(mp_white(vib_dark ? 1.0 : 0.0,
-                               vib_dark ? 0.10 : 0.04),
+        mp_fill_round(mp_white(menu_dark ? 1.0 : 0.0,
+                               menu_dark ? 0.10 : 0.04),
                       x, cy, widths[i], ch, 3.0);
         mp_draw(cap, x + 4.0, cy + 2.5, attrs);
         x += widths[i] + 3.0;
@@ -2392,7 +2201,7 @@ static void mp_pin_appearance(id view) {
   if (appcls == Nil) return;
   id ap = ((id(*)(Class, SEL, id))objc_msgSend)(
       appcls, sel_registerName("appearanceNamed:"),
-      mp_str(vib_dark ? "NSAppearanceNameDarkAqua"
+      mp_str(menu_dark ? "NSAppearanceNameDarkAqua"
                       : "NSAppearanceNameAqua"));
   if (ap != nil)
     ((void (*)(id, SEL, id))objc_msgSend)(
@@ -2613,11 +2422,6 @@ CAMLprim value logseq_native_window_presentable(value id_v) {
   return Val_bool(!(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)));
 }
 
-CAMLprim value logseq_native_sidebar_hit(value id_v) {
-  (void)id_v;
-  caml_failwith("logseq_native: AppKit material inspection requires macOS");
-}
-
 CAMLprim value logseq_native_input_chain(value id_v) {
   (void)id_v;
   caml_failwith("logseq_native: AppKit responder inspection requires macOS");
@@ -2677,21 +2481,6 @@ CAMLprim value logseq_native_register_fonts(value directory) {
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value logseq_native_sidebar_theme(value dark) {
-  (void)dark;
-  return Val_unit;
-}
-
-CAMLprim value logseq_native_sidebar_vibrancy(value x, value y, value w,
-                                            value h, value visible) {
-  (void)x;
-  (void)y;
-  (void)w;
-  (void)h;
-  (void)visible;
-  return Val_unit;
-}
-
 CAMLprim value logseq_native_window_opaque(value window) {
   (void)window;
   caml_failwith("logseq_native: AppKit window inspection requires macOS");
@@ -2700,6 +2489,11 @@ CAMLprim value logseq_native_window_opaque(value window) {
 CAMLprim value logseq_native_has_sidebar_material(value window) {
   (void)window;
   caml_failwith("logseq_native: AppKit material inspection requires macOS");
+}
+
+CAMLprim value logseq_native_menu_theme(value dark) {
+  (void)dark;
+  return Val_unit;
 }
 
 /* Linux renders menus through LUI. These entry points must never be

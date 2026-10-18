@@ -54,8 +54,6 @@ let physical_footprint () =
     (footprint > 0 && rss > 0 && peak >= footprint);
   footprint
 
-external sidebar_vibrancy : float -> float -> float -> float -> bool -> unit = "logseq_native_sidebar_vibrancy"
-external sidebar_hit : int -> bool = "logseq_native_sidebar_hit"
 external window_opaque : int -> bool = "logseq_native_window_opaque"
 external software_composite : int -> bytes = "logseq_native_software_composite"
 external software_image_ids : int -> int array = "logseq_native_software_image_ids"
@@ -561,22 +559,10 @@ let () =
     check "Titlebar customization detached SDL's mouse event responder"
       (input_chain (Tsdl.Sdl.get_window_id window));
     let window_id = Tsdl.Sdl.get_window_id window in
-    sidebar_vibrancy 0. 0. 0. 300. false;
-    check "Collapsed startup created an unused sidebar material"
+    check "Titlebar customization must preserve opaque window composition"
+      (window_opaque window_id);
+    check "Titlebar customization must preserve the application sidebar surface"
       (not (has_sidebar_material window_id));
-    check "Collapsed startup enabled transparent window composition" (window_opaque window_id);
-    sidebar_vibrancy 0. 0. 100. 300. true;
-    check "Opening the sidebar did not create its material" (has_sidebar_material window_id);
-    check "Visible sidebar lost transparent material composition" (not (window_opaque window_id));
-    check "Decorative sidebar material intercepts mouse gestures"
-      (not (sidebar_hit (Tsdl.Sdl.get_window_id window)));
-    sidebar_vibrancy 0. 0. 0. 300. false;
-    check "Closing the sidebar left the complete window transparent" (window_opaque window_id);
-    check "Closing the sidebar retained unused material resources"
-      (not (has_sidebar_material window_id));
-    sidebar_vibrancy 0. 0. 100. 300. true;
-    check "Reopening the sidebar did not restore transparent composition"
-      (not (window_opaque window_id));
     software_band_compression_regression window_id;
     software_band_reuse_regression window_id;
     Native_window.software_begin window_id (17,131,64);
