@@ -5791,7 +5791,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           expect "Property selection paints an accent instead of the neutral reference fill"
             (List.exists (function Lui_scene.Fill f -> f.frect=rect row
               && Some f.fcolor=Theme_vars.color_of "var(--lx-gray-04)" | _ -> false) paint_scene.ops);
-          expect "Property titles do not use the reference secondary foreground"
+          expect "Highlighted property titles do not use the reference secondary foreground"
             (List.exists (fun (id,color) -> id=title
               && Some color=Theme_vars.color_of "var(--ls-secondary-text-color)") !colors);
           let input = rect field in
@@ -5807,7 +5807,9 @@ let () = Native_embed.with_entry_lock (fun () ->
               | _ -> false) paint_scene.ops);
           let row_ids () = List.filter (fun id -> Lui_store.kind store id="list-item") (ids ()) in
           let original_rows = row_ids () in
-          let selected_keys () = row_ids () |> List.filter (fun id -> Lui_store.bool_prop store id "selected")
+          let selected_keys () = row_ids () |> List.filter (fun id ->
+              Lui_store.string_prop store id "background"=
+                Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))")
             |> List.filter_map (fun id -> Lui_store.string_prop store id "key") in
           let key key mods = apply (A.handle surface (W.Input.Key_down (key,mods,false))) in
           key W.Input.Arrow_up W.Input.mods_none;
@@ -8165,3 +8167,68 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native repeat persistence, layout and keyboard selection" (!failures=[]);
   print_endline "native repeat persistence, layout and keyboard selection: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_mode = !Theme_vars.mode and previous_accent = !Theme_vars.accent in
+  let previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Runtime.app_flush := previous_flush;
+    Theme_vars.set_accent previous_accent;
+    Theme_vars.set_dark (previous_mode = Lui_theme.Dark)) (fun () ->
+    List.iter (fun compact ->
+      let store = Lui_store.create () in
+      let backend = {backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+        Properties_select.view ~compact ~placeholder:"Appearance fixture"
+          [Properties_select.item "Alpha" ignore;Properties_select.item "Beta" ignore]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+        let rows = List.filter (fun id -> Lui_store.kind store id="list-item") (Lui_store.preorder store) in
+        let first = List.nth rows 0 and second = List.nth rows 1 in
+        List.iter (fun (mode,accent) ->
+          let snapshot = Ui_theme.snapshot mode in
+          Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+            ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+             "vars",`Assoc (List.map (fun (key,value) -> key,`String value) snapshot.vars)]));
+          Theme_vars.set_dark (mode=Ui_theme.Dark);Theme_vars.set_accent accent;
+          List.iter (fun scale ->
+            let layout = Lui_layout.create () in
+            Lui_layout.sync ~scale ~width:(400.*.scale) ~height:(500.*.scale) layout store;
+            let scene = Lui_scene.create
+              ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+              ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+            let ink = ref [] in
+            let paint hovered =
+              ink:=[];
+              Lui_paint.paint
+                {Lui_paint.default_hooks with layout=Lui_layout.layout_hook layout;
+                 color_of=Theme_vars.color_of;
+                 state_of=(fun id -> {Lui_paint.state_neutral with hovered=id=hovered});
+                 text_ops=(fun _ _ color value -> ink:=(value,color)::!ink;[])}
+                store scene ~width:(int_of_float (400.*.scale)) ~height:(int_of_float (500.*.scale))
+                ~scale ~clear:(Lui_scene.color 255 255 255 255) in
+            let color value = match Theme_vars.color_of value with
+              | Some color -> color
+              | None -> failwith (Printf.sprintf "Unresolved selector color %s (%s, %s)"
+                  value accent (Option.value (Theme_vars.resolve_value value) ~default:"unbound")) in
+            let highlighted_ink = color
+              (if accent="" || accent="none" then "hsl(var(--popover-foreground))"
+               else "var(--ls-secondary-text-color)") in
+            paint 0;
+            check "Native highlighted property results use the reference secondary foreground"
+              (List.assoc_opt "Alpha" !ink=Some highlighted_ink);
+            check "Native inactive property results use the reference foreground opacity"
+              (List.assoc_opt "Beta" !ink=Some (color "hsl(var(--popover-foreground) / 0.75)"));
+            let region = Option.get (Lui_layout.rect layout first) in
+            check "Native keyboard highlight paints the active theme surface"
+              (List.exists (function Lui_scene.Fill fill -> fill.frect=region
+                && fill.fcolor=color "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))"
+                | _ -> false) scene.ops);
+            paint second;
+            check "Native hovered property results use the reference secondary foreground"
+              (List.assoc_opt "Beta" !ink=Some highlighted_ink)) [1.;2.])
+          (List.concat_map (fun accent -> [Ui_theme.Light,accent;Ui_theme.Dark,accent]) Ui_theme_css.accents)))
+      [false;true]);
+  print_endline "native property result theme and highlight paint: OK")

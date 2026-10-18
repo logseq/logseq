@@ -512,9 +512,19 @@ let run_views ~registry ~profile ~finish =
       |> List.sort (fun a b -> Int.compare a.M.id b.M.id) in
     let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
     let original_rows = List.map (fun n -> n.M.id) (rows ()) in
-    let selected () = rows () |> List.filter (fun n -> Hashtbl.find_opt n.M.props "selected"=Some (P.BoolValue true))
+    let selected () = rows () |> List.filter (fun n -> M.string_prop n "background"=
+        Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))")
       |> List.map (fun n -> M.string_prop n "key") in
     check "property selector starts on the first result" (selected ()=[Some "Alpha"]);
+    check "Search-result highlighting must not expose a pressed control"
+      (List.for_all (fun n -> not (Hashtbl.mem n.M.props "selected")) (rows ()));
+    check "Property results share the reference foreground and hover recipe"
+      (List.for_all (fun n ->
+        M.string_prop n "foreground"=Some (if M.string_prop n "key"=Some "Alpha"
+          then "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))" else "hsl(var(--popover-foreground) / 0.75)")
+        && M.string_prop n "hover-foreground"=Some "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))"
+        && M.string_prop n "hover-background"=
+          Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))") (rows ()));
     check "property selector opts into input navigation"
       (Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true));
     navigate selector input (P.NavigatePrevious input.M.id);
@@ -589,7 +599,8 @@ let run_views ~registry ~profile ~finish =
         check "property selector accepts the latest async result" (titles ()=["Fresh"]);
         let row = List.find (fun n -> n.M.kind="list-item") (nodes selector) in
         check "property selector async results start selected"
-          (Hashtbl.find_opt row.M.props "selected"=Some (P.BoolValue true));
+          (M.string_prop row "background"=
+            Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))");
         S.text_changed selector input.M.id "B";
         ignore (Lui_app.dispose selector.S.app);
         resolve 3 "Disposed";

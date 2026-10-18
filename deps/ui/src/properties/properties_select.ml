@@ -78,6 +78,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
   let sched = context.Lui_ui.ui_scheduler in
   let st = Signal.state sched { q = ""; searched = None; active = 0; scroll_token = 0 } in
   let request = Ui_effect.request () in
+  let highlight_background = "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))" in
   let visible () =
     let s = Runtime.signal_get st in
     visible_items ~items ~filter:s.q ~searched:s.searched ~new_option ~new_case_sensitive
@@ -134,30 +135,29 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
               (fun index it ->
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
                  let on_press _ = it.on_choose () in
-                 if compact then
-                   Ui_components.with_props
-                     [Ui_components.Prop.selected_background "var(--lx-gray-04)";
-                      Ui_components.Prop.hover_background "var(--lx-gray-04)"]
+                 Ui_components.with_props
+                   [Ui_components.Prop.hover_background highlight_background;
+                    Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))"]
                    (list_item ~key:(item_key it)
-                     ~height:32 ~min_height:32 ~padding_horizontal:8 ~padding_vertical:4
-                     ~foreground:"var(--ls-secondary-text-color)"
-                     ~corner_radius:4
-                     ~selected:(reactive (fun state -> state.active = index) (Signal.value st))
+                     ?height:(if compact then Some 32 else None)
+                     ?min_height:(if compact then Some 32 else None)
+                     ?padding_horizontal:(if compact then Some 8 else None)
+                     ?padding_vertical:(if compact then Some 4 else None)
+                     ?corner_radius:(if compact then Some 4 else None)
+                     ~background:(reactive (fun state ->
+                       if state.active=index then highlight_background else "transparent") (Signal.value st))
+                     ~foreground:(reactive (fun state ->
+                       if state.active=index then "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))"
+                       else "hsl(var(--popover-foreground) / 0.75)") (Signal.value st))
+                     ?text:(if compact then None else Some title)
+                     ?icon:(if compact || it.it_icon="" then None else Some (Icons.name_ref it.it_icon))
                      ~on_pointer_enter:(fun _ -> select index) ~on_press
-                     [ row ~gap:0 ~cross:`center ~grow:1.0
+                     (if compact then [ row ~gap:0 ~cross:`center ~grow:1.0
                          ((if it.it_icon = "" then [] else
                              [ Ui_components.with_props [Ui_components.Prop.margin_right 4]
                                  (Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon) ])
                           @ [ text ~value:title ~grow:1.0 [] ]
-                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ])
-                 else
-                   list_item
-                     ~key:(item_key it)
-                     ~text:title
-                     ~selected:(reactive (fun state -> state.active = index) (Signal.value st))
-                     ~on_pointer_enter:(fun _ -> select index)
-                     ?icon:(if it.it_icon = "" then None else Some (Icons.name_ref it.it_icon))
-                     ~on_press [])
+                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ] else [])))
               vis) ]
             @ if compact then [box ~height:4 []] else []))
       (Signal.value st)

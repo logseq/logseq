@@ -2217,8 +2217,6 @@ html[data-theme=light] {
 /* Icon-only property controls retain their accessible labels. */
 .pv-closed-value .lui-button-label:empty { display: none; }
 
-.ls-property-select-popup { color: hsl(var(--popover-foreground) / 0.75); }
-
 .ls-property-select-input::placeholder {
   color: hsl(var(--muted-foreground));
   opacity: 1;
