@@ -653,6 +653,8 @@ let test_appearance () =
      && not (Hashtbl.mem appearance.M.props "popup-x"));
   check "Appearance uses the reference 622-point surface width"
     (Hashtbl.find_opt appearance.M.props "width"=Some (Wv.IntValue 622));
+  check "Appearance matches the reference point-anchor end alignment"
+    (Hashtbl.find_opt appearance.M.props "anchor-alignment-offset"=Some (Wv.FloatValue (-5.5)));
   let forms = find_where (fun n -> has_tok n "it") in
   check "Appearance forms use the compact 16-point column spacing"
     (List.length forms=5 && List.for_all (fun n ->

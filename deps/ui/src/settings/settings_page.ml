@@ -1185,6 +1185,9 @@ let appearance_body () : t =
     Ui_components.menu_surface
       (popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
           ~anchor:`below ~anchor_target:"toolbar-dots-btn" ~anchor_alignment:`end_
+          (* The reference point anchor's one-pixel width and five-pixel
+             arrow inset put its end edge 5.5 points beyond the trigger. *)
+          ~anchor_alignment_offset:(-5.5)
           ~anchor_offset:0. ~width:622 ~role:`dialog
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set false))
