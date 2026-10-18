@@ -2311,51 +2311,6 @@ html[data-theme=light] {
   margin: 0.2em 0;
 }
 
-/* date picker (cljs ui/datepicker): month grid inside the value popover —
-   selected day = accent fill, adjacent-month cells dim; can't be
-   expressed via typed props */
-.ls-cal-hd {
-  justify-content: space-between;
-}
-.ls-cal-fields {
-  gap: 6px;
-  justify-content: center;
-}
-.ls-cal-field {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--ls-primary-text-color);
-  border: 1px solid var(--ls-border-color);
-  border-radius: 6px;
-  padding: 3px 10px;
-  background: var(--ls-secondary-background-color);
-}
-.ls-cal-grid .lui-row {
-  gap: 0;
-}
-.ls-cal-day.lui-button {
-  width: 36px;
-  min-width: 36px;
-  height: 32px;
-  padding: 0;
-  justify-content: center;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  font-weight: 400;
-}
-.ls-cal-day[data-dim="1"] {
-  color: var(--ls-secondary-text-color);
-  opacity: 0.45;
-}
-.ls-cal-day[data-sel="1"] {
-  background: var(--lx-accent-09, var(--ls-link-text-color));
-  color: #fff;
-}
-.ls-cal-day[data-sel="1"]:hover {
-  background: var(--lx-accent-09, var(--ls-link-text-color));
-  color: #fff;
-}
-
 /* menu labels must size to content and only shrink into ellipsis when
    the row truly overflows — the kind's flex:1 1 0% basis-0 truncates
    "Go to #tag" beside its shortcut chips */
@@ -2370,45 +2325,4 @@ html[data-theme=light] {
 .lui-menu-item > .lui-menu-item-icon:empty:not([data-name]),
 .lui-menu-item:not([data-selection-placement]) > .lui-menu-item-check:empty {
   display: none;
-}
-
-/* cljs datepicker renders light chrome even under dark theme (the
-   popover is a fixed white card) — pin the calendar popover to the
-   light palette so day text/dim/chips don't follow dark vars */
-.lui-popover:has(.ls-cal) {
-  --ls-primary-text-color: #1f2937;
-  --ls-secondary-text-color: #9ca3af;
-  --ls-secondary-background-color: #f3f4f6;
-  --ls-border-color: #e5e7eb;
-  background: #fff;
-  color: #1f2937;
-}
-
-/* datepicker repeat column (cljs repeat-setting: w-64 p-4 gap-4
-   text-sm, muted labels, h-8 controls) */
-.ls-repeat-col {
-  font-size: 0.875rem;
-  min-width: 256px;
-}
-.ls-rep-num.lui-text-field input,
-.ls-rep-num input {
-  height: 32px;
-  padding: 0 8px;
-  font-size: 0.875rem;
-}
-.ls-rep-trigger {
-  height: 32px;
-  width: 100%;
-  font-size: 0.875rem;
-}
-
-.ls-repeat-col .ls-rep-muted {
-  white-space: nowrap;
-  flex: none;
-}
-.ls-rep-trigger .lui-select-value,
-.ls-rep-trigger > * {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }

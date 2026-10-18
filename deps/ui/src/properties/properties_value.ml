@@ -805,7 +805,7 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
         on_value (W.Int id);on_dismiss ());
       Js.Promise.resolve ())
   in
-  (row ~key:"property-date-content" ~width:556 ~cross:`start
+  (row ~key:"property-date-content" ~width:556 ~gap:0 ~cross:`start
      ~style_class:"ls-property-date-picker"
      [ Ui_components.calendar ~initial ~datetime:is_datetime ~initial_focus_day:true
          ~translate:I18n.t ~on_pick:pick
