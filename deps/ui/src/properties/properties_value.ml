@@ -503,7 +503,8 @@ let checkbox_view ctx row : t =
    recur-frequency int, recur-unit / repeat-type / checked-property
    refs to closed-value or property entities, temporal-property ref
    to this date property's entity while repeating is on. *)
-type rep_choice = { c_id : int; c_title : string; c_ident : string }
+type rep_choice =
+  { c_id : int; c_title : string; c_ident : string; c_done_title : string option }
 
 type rep =
   { repeated : bool
@@ -516,24 +517,37 @@ type rep =
   ; types : rep_choice list
   ; whens : rep_choice list
   ; done_title : string
+  ; status_done_title : string
   }
 
-let choice_of_w w =
-  let open D in
-  let id = entity_id_of w in
-  let title = entity_title_of w in
-  let ident =
-    match getf w "db/ident" with
-    | Some kw ->
-        (match W.as_keyword kw with
-         | Some k -> k
-         | None -> Option.value (W.as_string kw) ~default:"")
-    | None -> ""
+let repeat_choice_title ident title =
+  let translated prefix namespace =
+    let suffix=String.sub ident (String.length prefix) (String.length ident-String.length prefix) in
+    I18n.t (namespace ^ suffix)
   in
-  match id, title with
-  | Some i, Some t -> Some { c_id = i; c_title = t; c_ident = ident }
-  | Some i, None -> Some { c_id = i; c_title = ident; c_ident = ident }
-  | _ -> None
+  if String.starts_with ~prefix:"logseq.property.repeat/recur-unit." ident then
+    translated "logseq.property.repeat/recur-unit." "property.repeat-recur-unit/"
+  else if String.starts_with ~prefix:"logseq.property.repeat/repeat-type." ident then
+    translated "logseq.property.repeat/repeat-type." "property.repeat-repeat-type/"
+  else if ident="logseq.property/status.done" then I18n.t "property.status/done"
+  else title
+
+let repeat_done_title values =
+  List.find_map (fun value ->
+    let value=D.untag value in
+    if D.getb value "logseq.property/choice-checkbox-state" then
+      Option.map (repeat_choice_title (Option.value (D.getk value "db/ident") ~default:""))
+        (D.entity_title_of value)
+    else None) values
+
+let choice_of_w wire =
+  let value=D.untag wire in
+  let ident=Option.value (D.getk value "db/ident") ~default:"" in
+  Option.map (fun id ->
+    let title=Option.value (D.entity_title_of value) ~default:ident in
+    {c_id=id;c_title=repeat_choice_title ident title;c_ident=ident;
+     c_done_title=Option.bind (D.getf value "property/closed-values")
+       (fun values -> repeat_done_title (W.elems values))}) (D.entity_id_of value)
 
 let builtin_prop_p ident =
   String.length ident > 7 && String.sub ident 0 7 = "logseq."
@@ -545,7 +559,7 @@ let rep_set ctx ~ident ~value =
 let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
   let arr_p =
     Js.Promise.all
-      [| D.entity_by_uuid ctx.block_uuid
+      [| Sdk_util.get_by_id (W.Uuid ctx.block_uuid)
        ; D.closed_values (W.Keyword "logseq.property.repeat/recur-unit")
        ; D.closed_values (W.Keyword "logseq.property.repeat/repeat-type")
        ; D.closed_values (W.Keyword "logseq.property/status")
@@ -558,6 +572,13 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
   ignore
     (let* arr = arr_p in
      let blk = arr.(0) in
+     (* The block endpoint resolves property refs to display summaries;
+        numeric and checkbox scalars live inside their value entities. *)
+     let scalar key = Option.map (fun value ->
+       Option.value (D.getf value "logseq.property/value") ~default:value)
+       (D.getf blk key) in
+     let ref_id key = Option.bind (D.getf blk key) D.entity_id_of |> Option.value ~default:0 in
+     let current_unit=ref_id "logseq.property.repeat/recur-unit" in
      let units_all = List.filter_map choice_of_w (W.elems arr.(1)) in
      let units =
        (* :date props drop the sub-day units (cljs removes
@@ -566,12 +587,11 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
        else
          List.filter
            (fun c ->
-             c.c_ident <> "logseq.property.repeat/recur-unit.minute"
-             && c.c_ident <> "logseq.property.repeat/recur-unit.hour")
+             c.c_id=current_unit || (c.c_ident <> "logseq.property.repeat/recur-unit.minute"
+             && c.c_ident <> "logseq.property.repeat/recur-unit.hour"))
            units_all
      in
      let types = List.filter_map choice_of_w (W.elems arr.(2)) in
-     let status_choices = List.filter_map choice_of_w (W.elems arr.(3)) in
      let prop_dbid = Option.value (D.entity_id_of arr.(4)) ~default:0 in
      let status_id = Option.value (D.entity_id_of arr.(5)) ~default:0 in
      (* "When" options: the status property plus every non-built-in
@@ -600,49 +620,29 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
           | Some c -> c :: whens
           | None -> whens)
      in
-     let ref_id key =
-       match D.getf blk key with
-       | Some w -> Option.value (D.entity_id_of w) ~default:0
-       | None -> 0
-     in
      let find_ident suffix cs =
        match List.find_opt (fun c -> c.c_ident = suffix) cs with
        | Some c -> c.c_id
        | None -> ( match cs with c :: _ -> c.c_id | [] -> 0 )
      in
      let freq =
-       match D.getf blk "logseq.property.repeat/recur-frequency" with
+       match scalar "logseq.property.repeat/recur-frequency" with
        | Some w -> (
            match w with
            | W.Float f -> int_of_float f
            | _ -> Option.value (W.as_int w) ~default:1)
        | None -> 1
      in
-     let status_ws = W.elems arr.(3) in
-     let done_title =
-       (match
-          List.find_opt
-            (fun c ->
-              match D.getf c "logseq.property/choice-checkbox-state" with
-              | Some w -> Option.value (W.as_bool w) ~default:false
-              | None -> false)
-            status_ws
-        with
-       | Some c -> Option.value (D.entity_title_of c) ~default:"Done"
-       | None ->
-           (match
-              List.find_opt
-                (fun c ->
-                  let n = String.length c.c_ident in
-                  n >= 5 && String.sub c.c_ident (n - 5) 5 = ".done")
-                status_choices
-            with
-           | Some c -> c.c_title
-           | None -> "Done"))
-     in
+     let status_done_title=Option.value (repeat_done_title (W.elems arr.(3)))
+       ~default:(I18n.t "property.status/done") in
+     let when_id=let selected=ref_id "logseq.property.repeat/checked-property" in
+       if selected=0 then status_id else selected in
+     let done_title=List.find_map (fun choice ->
+       if choice.c_id=when_id then choice.c_done_title else None) whens
+       |> Option.value ~default:status_done_title in
      k
        { repeated =
-           (match D.getf blk "logseq.property.repeat/repeated?" with
+           (match scalar "logseq.property.repeat/repeated?" with
             | Some w -> Option.value (W.as_bool w) ~default:false
             | None -> false)
        ; freq
@@ -651,143 +651,135 @@ let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
             if u <> 0 then u
             else find_ident "logseq.property.repeat/recur-unit.day" units)
        ; type_id = ref_id "logseq.property.repeat/repeat-type"
-       ; when_id =
-           (let w_ = ref_id "logseq.property.repeat/checked-property" in
-            if w_ <> 0 then w_ else status_id)
+       ; when_id
        ; prop_dbid
        ; units
        ; types
        ; whens
-       ; done_title };
+       ; done_title;status_done_title };
      Js.Promise.resolve ())
 
-(* compact select: trigger + anchored menu popover (same structure as
-   the settings language select) *)
-let rep_select ~key ~value ~options ~on_pick : t =
+(* Repeat controls use the same bounded menu recipe as other application selects. *)
+let rep_select ~key ~label ~selected_signal ~options ~on_pick ~cell : t =
  fun context parent ->
-  let sched = context.Lui_ui.ui_scheduler in
-  let open_ = Signal.state sched false in
-  box ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1.0 ~min_width:0
-    [ select ~key:"s" ~text:value ~container_relative_frame:`horizontal
-        ~style_class:"ls-select-trigger ls-rep-trigger"
-        ~on_press:(fun _ ->
-          Runtime.signal_set open_ (not (Runtime.signal_get open_)))
-        []
-    ; if_ ~test:(Signal.value open_)
-        (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-           ~anchor_offset:2.0
-           ~transition:Ui_components.popover_transition
-           ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-           [ column ~key:"opts" ~style_class:"ls-rep-menu" ~padding:4
-               (List.mapi
-                  (fun i (id, label) ->
-                    menu_item ~key:("o" ^ string_of_int i)
-                      ~style_class:"ui__dropdown-menu-item"
-                      ~data_attrs:[ ("role", "menuitem") ] ~text:label
-                      ~on_press:(fun _ ->
-                        on_pick id;
-                        Runtime.signal_set open_ false)
-                      [])
-                  options) ]) ]
-    context parent
+  let open_ = Signal.state context.Lui_ui.ui_scheduler false in
+  let title id =
+    if id=0 then I18n.t "ui/empty"
+    else match List.assoc_opt id options with
+      | Some title -> title
+      | None -> invalid_arg "Repeat selection is missing from its choices"
+  in
+  let toggle _ = Runtime.signal_set open_ (not (Signal.get_state open_)) in
+  let trigger =
+    if cell then
+      Ui_components.with_props
+        [Ui_components.Prop.white_space `normal;Ui_components.Prop.font_weight 400;
+         Ui_components.Prop.cursor `pointer]
+        (button ~key:(key ^ "-trigger") ~variant:`ghost ~label
+          ~text:(reactive title selected_signal) ~grow:1. ~min_width:0 ~min_height:0
+          ~padding_horizontal:8 ~padding_vertical:4 ~main:`start ~text_alignment:`start
+          ~background:"transparent" ~foreground:"hsl(var(--foreground))"
+          ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+          ~style_class:"ls-rep-trigger" ~on_press:toggle [])
+    else
+      select ~key:(key ^ "-trigger") ~label ~text:(reactive title selected_signal)
+        ~container_relative_frame:`horizontal ~min_width:0 ~height:32
+        ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:6
+        ~background:"hsl(var(--background))" ~border_width:1
+        ~border_color:"hsl(var(--border))" ~style_class:"ls-select-trigger ls-rep-trigger"
+        ~on_press:toggle []
+  in
+  (column ~key ~style_class:"ls-select-wrap ls-rep-wrap" ~grow:1. ~min_width:0
+    [Ui_components.with_props
+       [Ui_components.Prop.font_size "0.875rem";
+        Ui_components.Prop.line_height (if cell then "1.375" else "1.25rem")] trigger;
+     if_ ~test:(Signal.value open_)
+       (Ui_components.menu_card ~key:(key ^ "-options") ~max_height:288
+          ~cls:"ls-select-content ls-rep-menu" ~anchor:`below ~anchor_alignment:`start
+          ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
+          (List.map (fun (id,title) ->
+            Ui_components.menu_item_chrome
+              (menu_item ~key:(string_of_int id) ~text:title ~selection_placement:`leading
+                 ~selected:(reactive ((=) id) selected_signal) ~min_height:32
+                 ~padding_horizontal:8 ~padding_vertical:6 ~gap:8 ~corner_radius:4
+                 ~on_press:(fun _ -> on_pick id;Runtime.signal_set open_ false) [])) options))]) context parent
 
-let title_of_id cs id =
-  match List.find_opt (fun c -> c.c_id = id) cs with
-  | Some c -> c.c_title
-  | None -> ( match cs with c :: _ -> c.c_title | [] -> "" )
-
-(* w-64 p-4 gap-4 column (cljs repeat-setting); renders once the
-   repeat data resolves like prod's async use-effect *)
 let repeat_column ctx ~ident ~is_datetime ~rep : t =
-  reactive
-    (fun (r : rep option) ->
-      match r with
+  reactive ~equal:(fun before after -> Option.is_some before=Option.is_some after)
+    (function
       | None -> box ~key:"rep-x" []
-      | Some r ->
-          column ~key:"rep" ~style_class:"ls-repeat-col" ~gap:16
-            ~padding:16 ~width:256
-            [ row ~key:"rpt" ~cross:`center ~gap:4
-                [ checkbox ~key:"cb" ~checked:r.repeated ~width:16
-                    ~style_class:"ls-rep-cb" ~min_width:16
-                    ~on_toggle:(fun _ev ->
-                      let on = not r.repeated in
-                      Signal.set rep (Some { r with repeated = on });
-                      rep_set ctx
-                        ~ident:"logseq.property.repeat/repeated?"
-                        ~value:(W.Bool on);
-                      if on then
-                        rep_set ctx
-                          ~ident:"logseq.property.repeat/temporal-property"
-                          ~value:(W.Int r.prop_dbid)
-                      else
-                        (D.remove_block_property
-                           ~block_uuid:ctx.block_uuid
-                           ~ident:"logseq.property.repeat/temporal-property"
-                         |> ignore;
-                         S.refresh_all ()))
-                    []
-                ; text ~key:"lb" ~style_class:"ls-rep-lbl"
-                    ~value:
-                      (I18n.t
-                         (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"]
-                          then "property.repeat/task"
-                          else if is_datetime then "property.repeat/datetime"
-                          else "property.repeat/date"))
-                    [] ]
-            ; row ~key:"evr" ~cross:`center ~gap:8
-                [ text ~key:"evl" ~style_class:"ls-rep-muted"
-                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
-                    ~value:(I18n.t "property.repeat/every") []
-                ; Ui_components.text_field ~key:"evi" ~width:56 ~height:32
-                    ~style_class:"ls-rep-num"
-                    ~text:(string_of_int r.freq)
-                    ~on_input:(fun ev ->
-                      match ev with
-                      | Lui_protocol.TextChanged (_, t) -> (
-                          match int_of_string_opt (String.trim t) with
-                          | Some n when n > 0 ->
-                              rep_set ctx
-                                ~ident:"logseq.property.repeat/recur-frequency"
-                                ~value:(W.Int n)
-                          | _ -> ())
-                      | _ -> ())
-                    []
-                ; rep_select ~key:"un" ~value:(title_of_id r.units r.unit_id)
-                    ~options:
-                      (List.map (fun c -> c.c_id, c.c_title) r.units)
-                    ~on_pick:(fun id ->
-                      rep_set ctx ~ident:"logseq.property.repeat/recur-unit"
-                        ~value:(W.Int id)) ]
-            ; column ~key:"nxt" ~gap:4
-                [ text ~key:"nxl" ~style_class:"ls-rep-muted"
-                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
-                    ~value:(I18n.t "property.repeat/next-date") []
-                ; rep_select ~key:"nxs"
-                    ~value:
-                      (if r.type_id = 0 then I18n.t "ui/empty"
-                       else title_of_id r.types r.type_id)
-                    ~options:
-                      (List.map (fun c -> c.c_id, c.c_title) r.types)
-                    ~on_pick:(fun id ->
-                      rep_set ctx ~ident:"logseq.property.repeat/repeat-type"
-                        ~value:(W.Int id)) ]
-            ; column ~key:"whn" ~gap:8
-                [ text ~key:"whl" ~style_class:"ls-rep-muted"
-                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
-                    ~value:(I18n.t "property.repeat/when") []
-                ; rep_select ~key:"whs"
-                    ~value:(title_of_id r.whens r.when_id)
-                    ~options:
-                      (List.map (fun c -> c.c_id, c.c_title) r.whens)
-                    ~on_pick:(fun id ->
-                      rep_set ctx
-                        ~ident:"logseq.property.repeat/checked-property"
-                        ~value:(W.Int id)) ]
-            ; row ~key:"is" ~gap:4
-                [ text ~key:"isl" ~style_class:"ls-rep-muted"
-                    ~foreground:"var(--ls-secondary-text-color, #6b7280)"
-                    ~value:(I18n.t "property.repeat/is-label") []
-                ; text ~key:"isv" ~value:r.done_title [] ] ])
+      | Some initial -> fun context parent ->
+          let buffer=Signal.state context.Lui_ui.ui_scheduler (string_of_int initial.freq) in
+          let current ()=Option.get (Signal.get_state rep) in
+          let update change=Signal.set rep (Some (change (current ()))) in
+          let save property value=rep_set ctx ~ident:property ~value in
+          let commit_frequency ()=
+            let raw=String.trim (Signal.get_state buffer) in
+            let digits=String.length raw>0 && String.for_all (fun c -> c>='0' && c<='9') raw in
+            let parsed=if digits then int_of_string_opt raw else None in
+            match parsed with
+            | Some frequency when frequency>0 ->
+                Signal.set buffer (string_of_int frequency);
+                if frequency<>(current ()).freq then (
+                  update (fun value -> {value with freq=frequency});
+                  save "logseq.property.repeat/recur-frequency" (W.Int frequency))
+            | _ -> Signal.set buffer (string_of_int (current ()).freq)
+          in
+          let choices values=List.map (fun value -> value.c_id,value.c_title) values in
+          let when_changed id =
+            let selected=List.find (fun choice -> choice.c_id=id) initial.whens in
+            update (fun value -> {value with when_id=id;
+              done_title=Option.value selected.c_done_title ~default:value.status_done_title});
+            save "logseq.property.repeat/checked-property" (W.Int id)
+          in
+          (Ui_components.with_props
+             [Ui_components.Prop.font_size "0.875rem";Ui_components.Prop.line_height "1.25rem"]
+             (column ~key:"rep" ~style_class:"ls-repeat-col" ~gap:16 ~padding:16 ~width:256
+               [row ~key:"rpt" ~cross:`center ~gap:4 ~margin_bottom:16
+                  [checkbox ~key:"repeat" ~width:16 ~min_width:16 ~height:16
+                     ~style_class:"ls-rep-cb" ~label:(I18n.t
+                       (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"] then "property.repeat/task"
+                        else if is_datetime then "property.repeat/datetime" else "property.repeat/date"))
+                     ~checked:(reactive (fun value -> (Option.get value).repeated) (Signal.value rep))
+                     ~on_toggle:(function
+                       | Lui_protocol.ToggleChanged (_,checked) ->
+                           update (fun value -> {value with repeated=checked});
+                           save "logseq.property.repeat/repeated?" (W.Bool checked);
+                           if checked then save "logseq.property.repeat/temporal-property" (W.Int initial.prop_dbid)
+                           else (D.remove_block_property ~block_uuid:ctx.block_uuid
+                             ~ident:"logseq.property.repeat/temporal-property" |> ignore;S.refresh_all ())
+                       | _ -> ()) [];
+                   text ~value:(I18n.t
+                     (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"] then "property.repeat/task"
+                      else if is_datetime then "property.repeat/datetime" else "property.repeat/date")) []];
+                row ~key:"every" ~cross:`center ~gap:8
+                  [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/every") [];
+                   Ui_components.text_field ~key:"frequency" ~width:56 ~min_width:56 ~height:32
+                     ~padding_horizontal:8 ~padding_vertical:0 ~style_class:"ls-rep-num"
+                     ~label:(I18n.t "property.repeat/every") ~submit_on_blur:true
+                     ~text:(reactive Fun.id (Signal.value buffer))
+                     ~on_input:(function Lui_protocol.TextChanged (_,value) -> Signal.set buffer value | _ -> ())
+                     ~on_submit:(fun _ -> commit_frequency ()) [];
+                   rep_select ~key:"repeat-unit" ~cell:false ~label:(I18n.t "property.repeat/every")
+                     ~selected:(reactive (fun value -> (Option.get value).unit_id) (Signal.value rep))
+                     ~options:(choices initial.units) ~on_pick:(fun id ->
+                       update (fun value -> {value with unit_id=id});
+                       save "logseq.property.repeat/recur-unit" (W.Int id))];
+                column ~key:"next" ~gap:4
+                  [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/next-date") [];
+                   rep_select ~key:"repeat-type" ~cell:true ~label:(I18n.t "property.repeat/next-date")
+                     ~selected:(reactive (fun value -> (Option.get value).type_id) (Signal.value rep))
+                     ~options:(choices initial.types) ~on_pick:(fun id ->
+                       update (fun value -> {value with type_id=id});
+                       save "logseq.property.repeat/repeat-type" (W.Int id))];
+                column ~key:"when" ~gap:8
+                  [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/when") [];
+                   rep_select ~key:"repeat-when" ~cell:false ~label:(I18n.t "property.repeat/when")
+                     ~selected:(reactive (fun value -> (Option.get value).when_id) (Signal.value rep))
+                     ~options:(choices initial.whens) ~on_pick:when_changed;
+                   row ~key:"is" ~gap:4
+                     [text ~foreground:"hsl(var(--muted-foreground))" ~value:(I18n.t "property.repeat/is-label") [];
+                      text ~value:(reactive (fun value -> (Option.get value).done_title) (Signal.value rep)) []]]])) context parent)
     (Signal.value rep)
 
 (* Property entry points share the same calendar, time input and commit rules. *)

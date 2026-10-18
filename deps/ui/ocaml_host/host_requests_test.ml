@@ -7771,6 +7771,8 @@ let () = Native_embed.with_entry_lock (fun () ->
         Js.Promise.resolve (match name,args with
           | "thread-api/entity",[_; W.Int 901] -> selected
           | "thread-api/entity",[_; W.List [W.Keyword "block/uuid";_]] -> block
+          | "thread-api/get-blocks",[_;W.Array [request]] ->
+              W.Array [map ["id",Option.get (Properties_data.getf request "id");"block",block]]
           | "thread-api/entity",[_; W.List [W.Keyword "db/ident";W.Keyword id]] when id=ident -> prop
           | "thread-api/entity",_ -> map ["db/id",W.Int 102;"db/ident",W.Keyword "logseq.property/status";
               "block/title",W.String "Status"]
@@ -7909,3 +7911,186 @@ let () = Native_embed.with_entry_lock (fun () ->
         f.year=2024 && f.month=2 && f.day=2
         && List.mem (f.hours,f.minutes) [before.hours,before.minutes;after.hours,after.minutes] | _ -> false));
   print_endline "native calendar natural datetime and current time: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A=Lui_window.Assembly in
+  let module W=Lui_window in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  let failures=ref [] in
+  let expect message value=if not value then failures:=message::!failures in
+  let map pairs=Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) pairs) in
+  let tagged value=Wire.Tagged("datascript/Entity",value) in
+  let ref_id id=tagged (map ["db/id",Wire.Int id]) in
+  let choice id ident title=tagged (map ["db/id",Wire.Int id;"db/ident",Wire.Keyword ident;
+    "block/title",Wire.String title]) in
+  let done_choice title=map ["db/id",Wire.Int 501;"block/title",Wire.String title;
+    "logseq.property/choice-checkbox-state",Wire.Bool true] in
+  let units=[choice 1 "logseq.property.repeat/recur-unit.day" "Day";
+    choice 2 "logseq.property.repeat/recur-unit.week" "Week";
+    choice 6 "logseq.property.repeat/recur-unit.minute" "Minute";
+    choice 7 "logseq.property.repeat/recur-unit.hour" "Hour"] in
+  let types=[choice 3 "logseq.property.repeat/repeat-type.plus" "After today";
+    choice 4 "logseq.property.repeat/repeat-type.double-plus" "After completion"] in
+  let status=map ["db/id",Wire.Int 5;"db/ident",Wire.Keyword "logseq.property/status";
+    "block/title",Wire.String "Status"] in
+  let properties=List.init 40 (fun index -> map ["db/id",Wire.Int (55+index);
+    "db/ident",Wire.Keyword ("user.property/approval-"^string_of_int index);
+    "block/title",Wire.String ("Approval "^string_of_int index);
+    "property/closed-values",Wire.List [done_choice ("Approved "^string_of_int index);map ["db/id",Wire.Int 502]]]) in
+  let current_unit=ref 2 and current_frequency=ref 7 and current_when=ref 55
+  and current_type=ref 3 and current_repeated=ref true and writes=ref [] in
+  let block ()=tagged (map ["db/id",Wire.Int 100;
+    "logseq.property.repeat/repeated?",Wire.Int 195;
+    "logseq.property.repeat/recur-frequency",Wire.Int 196;
+    "logseq.property.repeat/recur-unit",Wire.Int !current_unit;
+    "logseq.property.repeat/repeat-type",Wire.Int !current_type;
+    "logseq.property.repeat/checked-property",Wire.Int !current_when]) in
+  let scalar id value=map ["db/id",Wire.Int id;"logseq.property/value",value] in
+  let display_block ()=map ["db/id",Wire.Int 100;
+    "logseq.property.repeat/repeated?",scalar 195 (Wire.Bool !current_repeated);
+    "logseq.property.repeat/recur-frequency",scalar 196 (Wire.Int !current_frequency);
+    "logseq.property.repeat/recur-unit",ref_id !current_unit;
+    "logseq.property.repeat/repeat-type",ref_id !current_type;
+    "logseq.property.repeat/checked-property",ref_id !current_when] in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+    Js.Promise.resolve (match method_,args with
+      | "thread-api/entity",[_;Wire.List [Wire.Keyword "block/uuid";_]] -> block ()
+      | "thread-api/get-blocks",[_;Wire.Array [request]] ->
+          Wire.Array [map ["id",Option.get (Properties_data.getf request "id");"block",display_block ()]]
+      | "thread-api/entity",[_;Wire.List [Wire.Keyword "db/ident";Wire.Keyword "logseq.property/status"]] -> tagged status
+      | "thread-api/entity",_ -> tagged (map ["db/id",Wire.Int 101])
+      | "thread-api/get-property-closed-values",[_;Wire.Keyword "logseq.property.repeat/recur-unit"] -> Wire.List units
+      | "thread-api/get-property-closed-values",[_;Wire.Keyword "logseq.property.repeat/repeat-type"] -> Wire.List types
+      | "thread-api/get-property-closed-values",[_;Wire.Keyword "logseq.property/status"] -> Wire.List [done_choice "Done"]
+      | "thread-api/get-property-closed-values",[_;Wire.Int id] ->
+          Wire.List [done_choice (if id=5 then "Done" else "Approved "^string_of_int (id-55))]
+      | "thread-api/get-all-properties",_ -> Wire.List (status::properties)
+      | "thread-api/apply-outliner-ops",[_;Wire.Array ops;_] ->
+          writes:=args::!writes;
+          List.iter (function
+            | Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;Wire.Keyword ident;value]] ->
+                (match ident,value with
+                 | "logseq.property.repeat/recur-frequency",Wire.Int n -> current_frequency:=n
+                 | "logseq.property.repeat/recur-unit",Wire.Int n -> current_unit:=n
+                 | "logseq.property.repeat/repeat-type",Wire.Int n -> current_type:=n
+                 | "logseq.property.repeat/checked-property",Wire.Int n -> current_when:=n
+                 | "logseq.property.repeat/repeated?",Wire.Bool b -> current_repeated:=b
+                 | _ -> ())
+            | _ -> ()) ops;
+          Wire.Nil
+      | _ -> failwith ("Unexpected repeat fixture request: "^method_)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "repeat-fixture"});
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    let ctx : Properties_value.ctx={owner_key="repeat-fixture";block_uuid="repeat-owner";
+      block_id=Some 100;refresh=(fun () -> ());is_page=false;class_schema=false} in
+    let loaded=ref None in
+    Properties_value.fetch_repeat ctx ~ident:"logseq.property/deadline" ~is_datetime:true
+      (fun value -> loaded:=Some value);
+    for _=1 to 12 do Host.drain () done;
+    let initial=Option.get !loaded in
+    expect "Repeat fields resolve stored scalar entities instead of displaying their IDs"
+      (initial.repeated && initial.freq=7 && initial.unit_id=2 && initial.type_id=3 && initial.when_id=55);
+    expect "The persisted checked property determines its completion caption"
+      (initial.done_title="Approved 0");
+    let date_units selected =
+      current_unit:=selected;loaded:=None;
+      Properties_value.fetch_repeat ctx ~ident:"user.property/date" ~is_datetime:false
+        (fun value -> loaded:=Some value);
+      for _=1 to 12 do Host.drain () done;
+      List.map (fun value -> value.Properties_value.c_id) (Option.get !loaded).units in
+    expect "Date repetition hides unselected sub-day units" (date_units 2=[1;2]);
+    expect "Date repetition retains an already selected sub-day unit" (date_units 6=[1;2;6]);
+    current_unit:=2;
+    let surface=A.create ~layout:(module Lui_layout) ~scale_cell:(ref 1.)
+      ~text:{measure=(fun _ text -> float_of_int (String.length text)*.7.,20.);
+        text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+        caret_ops=(fun _ _ ~lw:_ ~lh:_ -> {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+          c_rect=(fun _ -> 0.,0.,20.)})}
+      ~renderer:{Lui_host.name="repeat-picker-test";render=(fun _ -> Bytes.empty)} ~width:1000 ~height:900 () in
+    Lui_host.set_reduced_motion (A.host surface) true;
+    let rep_state=ref None in
+    let app=Lui_app.create (A.backend surface (profile MacOS GenericHost)) () (fun () () -> ())
+      (fun context _ _ ->
+        let rep=Signal.state context.Lui_ui.ui_scheduler (Some initial) in
+        rep_state:=Some rep;
+        Lui_elements.column ~cross:`start
+          [Properties_value.repeat_column ctx ~ident:"logseq.property/deadline" ~is_datetime:true ~rep]) in
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);
+      let store=A.store surface in
+      let refresh ()=for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        ignore (A.store_changed surface);ignore (A.repaint surface) in
+      let send event=ignore (Lui_app.dispatch_event app event);refresh () in
+      let apply actions=List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;refresh () in
+      refresh ();
+      let ids ()=Lui_store.preorder store in
+      let has_class id cls=List.mem cls (String.split_on_char ' '
+        (Option.value (Lui_store.string_prop store id "style-class") ~default:"")) in
+      let triggers ()=List.filter (fun id -> has_class id "ls-rep-trigger") (ids ()) in
+      let get ()=Option.get (Signal.get_state (Option.get !rep_state)) in
+      let frequency=List.find (fun id -> has_class id "ls-rep-num") (ids ()) in
+      let panel=List.find (fun id -> has_class id "ls-repeat-col") (ids ()) in
+      let rect id=W.Rects.get (A.rects surface) id in
+      List.iter (fun trigger -> expect "Repeat triggers must fit inside the padded 256-point column"
+        ((rect trigger).x+.(rect trigger).w<=(rect panel).x+.(rect panel).w-.16.+.0.1)) (triggers ());
+      let next=List.nth (triggers ()) 1 and when_trigger=List.nth (triggers ()) 2 in
+      expect "Next date retains property-cell padding and intrinsic text height"
+        ((rect next).h=30. && Lui_store.int_prop store next "padding-horizontal"=Some 8
+         && Lui_store.int_prop store next "padding-vertical"=Some 4);
+      expect "When follows the complete Next date property cell"
+        ((rect when_trigger).y-.(rect next).y=74.);
+      expect "Repeat frequency commits on blur" (Lui_store.bool_prop store frequency "submit-on-blur");
+      send (TextChanged(frequency,"12"));
+      expect "Typing repeat frequency must not transact before commit" (!writes=[]);
+      send (Submit frequency);
+      expect "Committed repeat frequency updates retained view state" ((get ()).freq=12);
+      let write_count=List.length !writes in
+      send (Submit frequency);
+      expect "Enter followed by blur must not save repeat frequency twice" (List.length !writes=write_count);
+      send (TextChanged(frequency,"0"));send (Submit frequency);
+      expect "Invalid repeat frequency restores its last committed value"
+        ((get ()).freq=12 && Lui_store.string_prop store frequency "text"=Some "12");
+      let unit=List.nth (triggers ()) 0 in
+      send (Press unit);
+      let items ()=List.filter (fun id -> Lui_store.kind store id="menu-item") (ids ()) in
+      expect "The current repeat unit has a selected menu marker"
+        (List.exists (fun id -> Lui_store.string_prop store id "text"=Some "Week"
+          && Lui_store.bool_prop store id "selected") (items ()));
+      apply (A.handle surface (W.Input.Key_down(W.Input.Arrow_up,W.Input.mods_none,false)));
+      apply (A.handle surface (W.Input.Key_down(W.Input.Return,W.Input.mods_none,false)));
+      expect "Repeat unit keyboard selection updates the trigger and state"
+        ((get ()).unit_id=1 && Lui_store.string_prop store unit "text"=Some "Day" && items ()=[]);
+      let when_=List.nth (triggers ()) 2 in
+      send (Press when_);
+      let menus=List.filter (fun id -> List.mem (Lui_store.kind store id) ["dropdown-menu";"popover"]
+        && Lui_store.parent store id<>None) (ids ()) in
+      expect "Long repeat menus must have a bounded scrolling viewport"
+        (menus<>[] && List.exists (fun id -> (rect id).h<=288.1 && Lui_store.int_prop store id "max-height"=Some 288) menus);
+      Option.iter (fun id -> send (Press id)) (List.find_opt (fun id ->
+        Lui_store.string_prop store id "text"=Some "Status") (items ()));
+      expect "Changing the checked property updates both its label and completion caption"
+        ((get ()).when_id=5 && (get ()).done_title="Done" && Lui_store.string_prop store when_ "text"=Some "Status");
+      let choose_when title =
+        send (Press when_);
+        Option.iter (fun id -> send (Press id)) (List.find_opt (fun id ->
+          Lui_store.string_prop store id "text"=Some title) (items ())) in
+      choose_when "Approval 1";choose_when "Approval 2";
+      expect "Rapid checked-property changes use the latest supplied completion choice"
+        ((get ()).when_id=57 && (get ()).done_title="Approved 2");
+      expect "Repeat changes retain the frequency input node" (Lui_store.mem store frequency);
+      loaded:=None;
+      Properties_value.fetch_repeat ctx ~ident:"logseq.property/deadline" ~is_datetime:true
+        (fun value -> loaded:=Some value);
+      for _=1 to 12 do Host.drain () done;
+      let reopened=Option.get !loaded in
+      expect "Reopening repeat settings reads committed values through stored value entities"
+        (reopened.freq=12 && reopened.unit_id=1 && reopened.when_id=57
+         && reopened.done_title="Approved 2" && reopened.repeated)));
+
+  List.iter prerr_endline (List.rev !failures);
+  check "Native repeat persistence, layout and keyboard selection" (!failures=[]);
+  print_endline "native repeat persistence, layout and keyboard selection: OK")
