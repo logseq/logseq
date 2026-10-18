@@ -1957,6 +1957,7 @@
 
  :view/add-new-view "添加新视图"
  :view/all "全部"
+ :view/error "视图错误："
  :view/export-edn "导出 EDN"
  :view/linked-references "已链接的引用"
  :view/new "新建"

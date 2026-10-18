@@ -66,14 +66,26 @@
           (when (valid-type-for-sort? v)
             v))))))
 
+(defn- sort-comparable
+  "Keywords like :logseq.property/empty-placeholder are not comparable to
+  numbers/strings. Treat anything cljs compare cannot handle as missing."
+  [v]
+  (when (valid-type-for-sort? v)
+    v))
+
 (defn- compare-sort-values
   [va vb asc?]
-  (cond
-    (and (nil? va) (nil? vb)) 0
-    (nil? va) 1
-    (nil? vb) -1
-    :else (let [c (compare va vb)]
-            (if asc? c (- c)))))
+  (let [va (sort-comparable va)
+        vb (sort-comparable vb)]
+    (cond
+      (and (nil? va) (nil? vb)) 0
+      (nil? va) 1
+      (nil? vb) -1
+      :else (try
+              (let [c (compare va vb)]
+                (if asc? c (- c)))
+              (catch :default _
+                0)))))
 
 (defn- by-sorting
   [sorting]
@@ -175,12 +187,19 @@
   (or (:db/ident property-value-entity)
       (not (contains? db-property-type/closed-value-property-types (:logseq.property/type property-entity)))))
 
+(defn- empty-placeholder-value?
+  [v]
+  (or (= :logseq.property/empty-placeholder v)
+      (and (or (de/entity? v) (map? v))
+           (= :logseq.property/empty-placeholder (:db/ident v)))))
+
 (defn- empty-value?
   [v]
   (or (nil? v)
-      (= :logseq.property/empty-placeholder v)
+      (empty-placeholder-value? v)
       (and (string? v) (string/blank? v))
-      (and (coll? v) (empty? v))))
+      (and (coll? v) (not (map? v)) (not (string? v))
+           (or (empty? v) (every? empty-placeholder-value? v)))))
 
 (defn- text-contains?
   [value match]
@@ -464,8 +483,12 @@
 (defn- comparable-sort-value
   [db value]
   (cond
+    (empty-placeholder-value? value)
+    nil
+
     (and (coll? value) (not (string? value)) (not (map? value)))
     (->> value
+         (remove empty-placeholder-value?)
          (map #(comparable-ref-content db %))
          (remove nil?)
          (sort-by str)
@@ -549,15 +572,25 @@
                 (= cardinality :db.cardinality/many))
      :closed-order closed-order}))
 
+(defn- placeholder-raw-value?
+  "empty-placeholder is a keyword on scalar attrs and a ref to the
+  built-in entity on ref attrs. Do not treat a scalar number that
+  happens to equal that entity id as empty."
+  [v empty-id ref?]
+  (or (= :logseq.property/empty-placeholder v)
+      (and ref? empty-id (= v empty-id))))
+
 (defn- eid-sort-value
   [db {:keys [ident ref? many? closed-order] :as schema} eid]
-  (let [prop-type (:type schema)]
-  (cond
+  (let [prop-type (:type schema)
+        empty-id (ident-eid db :logseq.property/empty-placeholder)]
+    (cond
     (= ident :block.temp/refs-count)
     (common-initial-data/get-block-refs-count db eid)
 
     :else
-    (let [vs (indexed-attr-values db eid ident)]
+    (let [vs (into [] (remove #(placeholder-raw-value? % empty-id ref?))
+                   (indexed-attr-values db eid ident))]
       (cond
         (empty? vs)
         nil
@@ -769,6 +802,7 @@
       (every? (fn [v]
                 (or (nil? v)
                     (= v empty-id)
+                    (= :logseq.property/empty-placeholder v)
                     (and (string? v) (string/blank? v))
                     (and (coll? v) (empty? v))))
               raw)))
@@ -1287,13 +1321,14 @@
                                 [pvalue])]
                    (or
                     (seq
-                     (map
+                     (keep
                        (fn [value]
-                         (if (de/entity? value)
-                           (if (match-property-value-as-entity? value group-by-property)
-                             value
-                             (db-property/property-value-content value))
-                           value))
+                         (when-not (empty-value? value)
+                           (if (de/entity? value)
+                             (if (match-property-value-as-entity? value group-by-property)
+                               value
+                               (db-property/property-value-content value))
+                             value)))
                        values))
                     [nil])))
                result (if linked-references-page-list-fast-path?
