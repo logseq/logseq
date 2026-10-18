@@ -62,13 +62,17 @@ let run_views ~registry ~profile ~finish =
     then S.dispatch selector event
   in
   let picked_date = ref None in
-  let calendar = mount (fun _ -> Ui_components.date_picker ~translate:I18n.t
+  let calendar = mount (fun _ -> Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t
       ~on_pick:(fun date -> picked_date:=Some date)) in
   let today = Dates.fields (Dates.date_now ()) in
   let day_name y m d = Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d in
   let find_day session y m d = List.find (fun n -> M.string_prop n "accessibility-identifier"
       =Some (day_name y m d)) (nodes session) in
   let day = find_day calendar today.year today.month today.day in
+  check "Calendar today labels include the current-day context"
+    (match M.string_prop day "accessibility-label" with
+     | Some label -> String.starts_with ~prefix:"Today, " label
+     | None -> false);
   let header_names = ["calendar-prev";"calendar-next";"calendar-month";"calendar-year"] in
   let header = List.filter_map (fun n -> match M.string_prop n "accessibility-identifier" with
     | Some name when List.mem name header_names -> Some name | _ -> None) (nodes calendar) in
@@ -94,6 +98,22 @@ let run_views ~registry ~profile ~finish =
   check "Calendar activation commits the navigated date"
     (Option.map Dates.journal_day_of !picked_date=Some (next.year*10000+next.month*100+next.day));
   ignore (Lui_app.dispose calendar.S.app);
+  let labelled_calendar = mount (fun _ -> Ui_components.calendar ~day_label:I18n.calendar_day_label
+      ~initial:(Dates.make ~year:2024 ~month:2 ~day:29 ()) ~translate:I18n.t
+      ~on_pick:(fun _ -> ()) ()) in
+  List.iter (fun (y,m,d,label) ->
+    let button = find_day labelled_calendar y m d in
+    check "Calendar date labels distinguish weekdays, months and years"
+      (M.string_prop button "accessibility-label"=Some label);
+    check "Full calendar labels do not replace visible day numbers"
+      (M.string_prop button "text"=Some (string_of_int d)))
+    [2024,1,28,"Sunday, January 28th, 2024";
+     2024,2,1,"Thursday, February 1st, 2024";
+     2024,2,11,"Sunday, February 11th, 2024";
+     2024,2,22,"Thursday, February 22nd, 2024";
+     2024,2,29,"Thursday, February 29th, 2024";
+     2024,3,2,"Saturday, March 2nd, 2024"];
+  ignore (Lui_app.dispose labelled_calendar.S.app);
   let old_calendar = !Editor_commands.active and old_calendar_signal = !Editor_commands.popup_vs in
   let popup : Editor_commands.popup =
     {kind=Cal_insert;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
@@ -123,6 +143,8 @@ let run_views ~registry ~profile ~finish =
   check "The editor key router leaves calendar navigation to the focused button"
     (!Editor_commands.active=Some popup && not !prevented);
   let day = find_day editor_calendar 2024 1 31 in
+  check "Editor calendars share complete date labels"
+    (M.string_prop day "accessibility-label"=Some "Wednesday, January 31st, 2024");
   navigate editor_calendar day (P.NavigationKey (day.M.id,"ArrowRight",false));
   check "Editor calendar navigation updates the day exactly once"
     (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=1 | None -> false);

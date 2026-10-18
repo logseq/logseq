@@ -372,6 +372,8 @@ always_used_key_patterns = [
   "^:storage.recycle/restored-feedback$",
   "^:storage/db-worker-crashed-error$",
   "^:ui/save-changes-error$",
+  "^:ui\\.calendar/(day-label|today-day-label)$",
+  "^:format\\.weekday/",
   "^:view.filter/operator-number-gt$",
   "^:view.filter/operator-number-gte$",
   "^:view.filter/operator-number-lt$",

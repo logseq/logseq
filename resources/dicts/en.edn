@@ -756,6 +756,14 @@
  :format.month/october "October"
  :format.month/september "September"
 
+ :format.weekday/friday "Friday"
+ :format.weekday/monday "Monday"
+ :format.weekday/saturday "Saturday"
+ :format.weekday/sunday "Sunday"
+ :format.weekday/thursday "Thursday"
+ :format.weekday/tuesday "Tuesday"
+ :format.weekday/wednesday "Wednesday"
+
  :graph/all-graphs "All graphs"
  :graph/already-exists-error "The graph '{1}' already exists. Please try again with another name."
  :graph/build-error "Graph failed to load."
@@ -1986,7 +1994,9 @@
  :ui/use-current-time "Use current time"
  :ui/yes "Yes"
 
+ :ui.calendar/day-label "{1}, {2} {3}, {4}"
  :ui.calendar/time-label "Time"
+ :ui.calendar/today-day-label "Today, {1}"
 
  :updater/checking-for-updates "Checking for updates"
  :updater/downloading-progress "Downloading update ({1}%)"

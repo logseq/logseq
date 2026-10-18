@@ -239,7 +239,7 @@ let commit_cal p =
   | Link_form _ -> ()
 
 let cal_table (p : popup) : t =
-  Ui_components.calendar_grid ~year:p.cy ~month:p.cm ~day:(Some p.cd)
+  Ui_components.calendar_grid ~day_label:I18n.calendar_day_label ~year:p.cy ~month:p.cm ~day:(Some p.cd)
     ~tab_day:p.cd
     ~on_navigate:(fun cy cm cd -> update_p (fun p -> {p with cy;cm;cd}))
     ~on_pick:(fun y m d ->

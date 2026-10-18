@@ -627,6 +627,20 @@ let t (key : string) : string =
 
 let tf (key : string) (args : string list) : string = sub (t key) args
 
+let calendar_day_label ~today ~year ~month ~day =
+  let weekday = (Dates.fields (Dates.make ~year ~month ~day ())).wday in
+  let weekday_keys =
+    [| "format.weekday/sunday"; "format.weekday/monday"; "format.weekday/tuesday";
+       "format.weekday/wednesday"; "format.weekday/thursday";
+       "format.weekday/friday"; "format.weekday/saturday" |] in
+  let language = current_lang () in
+  let number = string_of_int day in
+  let number = if language="en" || String.starts_with ~prefix:"en-" language
+    then number ^ Dates.ordinal_suffix day else number in
+  let label = tf "ui.calendar/day-label"
+    [t weekday_keys.(weekday);t Dates.month_keys.(month-1);number;string_of_int year] in
+  if today then tf "ui.calendar/today-day-label" [label] else label
+
 let t1 key arg = replace_all (t key) "{1}" arg
 
 let delete_page = t "page/delete"

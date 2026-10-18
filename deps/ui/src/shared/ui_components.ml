@@ -1168,7 +1168,7 @@ let alert_dialog_footer ~key children =
 
 
 (* One day grid for editor calendars and standalone date selection. *)
-let calendar_grid ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
+let calendar_grid ~day_label ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
   let today = Dates.today_journal_day () in
   let cell ~outside y m d =
     let focused = (not outside) && day = Some d in
@@ -1199,7 +1199,8 @@ let calendar_grid ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
             else if focused then "#fff"
             else if is_today then "var(--lx-calendar-today-foreground)"
             else "inherit")
-         ~text:(string_of_int d) ~label:(string_of_int d)
+         ~text:(string_of_int d)
+         ~label:(day_label ~today:is_today ~year:y ~month:m ~day:d)
          ~data_attrs:
            ([ ("tabindex", if not outside && d=tab_day then "0" else "-1") ]
            @ if focused then [ ("data-focused", "true") ] else [])
@@ -1226,21 +1227,7 @@ let calendar_grid ~year ~month ~day ~tab_day ~on_navigate ~on_pick : t =
          else cell ~outside:false year month d))
 
 let calendar_month_names translate =
-  Array.map translate
-    [|
-      "format.month/january";
-      "format.month/february";
-      "format.month/march";
-      "format.month/april";
-      "format.month/may";
-      "format.month/june";
-      "format.month/july";
-      "format.month/august";
-      "format.month/september";
-      "format.month/october";
-      "format.month/november";
-      "format.month/december";
-    |]
+  Array.map translate Dates.month_keys
 
 let calendar_header ~clear ~previous ~next ~month ~year : t =
  fun context parent ->
@@ -1258,7 +1245,7 @@ let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
        ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
 let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
-    ~translate ~on_pick () : t =
+    ~day_label ~translate ~on_pick () : t =
  fun context parent ->
   let initial = Dates.fields (Option.value initial ~default:(Dates.date_now ())) in
   let date =
@@ -1395,7 +1382,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                     []);
               reactive
                 (fun (year, month, d) focused ->
-                  calendar_grid ~year ~month ~day:(if focused then Some d else None)
+                  calendar_grid ~day_label ~year ~month ~day:(if focused then Some d else None)
                     ~tab_day:d ~on_navigate:(fun y m d ->
                       Signal.set date (y,m,d);
                       Signal.set day_focused true)
@@ -1432,4 +1419,4 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
         ]))
     context parent
 
-let date_picker ~translate ~on_pick = calendar ~translate ~on_pick ()
+let date_picker ~day_label ~translate ~on_pick = calendar ~day_label ~translate ~on_pick ()

@@ -7090,7 +7090,7 @@ let () =
           (fun () () -> ())
           (fun _ _ _ ->
             Lui_elements.column ~foreground:"var(--rx-gray-12)"
-              [ Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore ])
+              [ Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ])
       in
       ignore (Lui_app.start app);
       ignore (Lui_app.flush app);
@@ -7253,7 +7253,7 @@ let () =
                        ("focus-sample-" ^ string_of_int index)
                      [])
                  variants
-              @ [ Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore ]
+              @ [ Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ]
               ))
       in
       ignore (Lui_app.start app);
@@ -7415,7 +7415,7 @@ let () =
           (fun _ value _ ->
             Lui_elements.column ~gap:12
               [
-                Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore;
+                Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore;
                 Properties_menu.text_form_view ~title_v:"Title"
                   ~desc_v:"Description" ~title_placeholder:"Title"
                   ~desc_placeholder:"Description" (fun _ _ -> ());
@@ -7788,7 +7788,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
       let picked = ref [] in
       let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-        Ui_components.date_picker ~translate:I18n.t ~on_pick:(fun date -> picked:=date::!picked)) in
+        Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date -> picked:=date::!picked)) in
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
         let ui = Lui_window.Ui.create () and rects = Lui_window.Rects.create () in
@@ -7803,6 +7803,10 @@ let () = Native_embed.with_entry_lock (fun () ->
         let month = List.find (fun id -> Lui_store.kind store id="menu-item"
           && Lui_store.string_prop store id "text"=Some month_name) (ids ()) in
         send (Press month);
+        if y=2024 && m=1 then
+          expect "Native date buttons must expose complete calendar dates"
+            (Lui_store.string_prop store (find (day_name 2024 1 31))
+              "accessibility-label"=Some "Wednesday, January 31st, 2024");
         ignore (Lui_window.Ui.store_changed ui store);
         let roving () = List.filter (fun id ->
           Lui_store.string_prop store id "style-class"=Some "ui__calendar-day"
@@ -7844,7 +7848,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-    Ui_components.date_picker ~translate:I18n.t ~on_pick:ignore) in
+    Ui_components.date_picker ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     let ids = Lui_store.preorder store in
@@ -8028,7 +8032,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let backend={backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-    Ui_components.calendar ~initial ~datetime:true ~translate:I18n.t
+    Ui_components.calendar ~day_label:I18n.calendar_day_label ~initial ~datetime:true ~translate:I18n.t
       ~on_pick:(fun value -> values:=value::!values) ()) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);

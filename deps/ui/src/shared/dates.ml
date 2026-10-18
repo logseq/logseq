@@ -105,6 +105,12 @@ let calendar_navigate ~year ~month ~day ~key ~shift =
   let f = fields target in
   f.year, f.month, f.day
 
+let month_keys =
+  [| "format.month/january"; "format.month/february"; "format.month/march";
+     "format.month/april"; "format.month/may"; "format.month/june";
+     "format.month/july"; "format.month/august"; "format.month/september";
+     "format.month/october"; "format.month/november"; "format.month/december" |]
+
 let month_abbr =
   [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"
    ; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec" |]

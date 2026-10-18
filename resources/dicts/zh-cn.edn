@@ -756,6 +756,14 @@
  :format.month/october "十月"
  :format.month/september "九月"
 
+ :format.weekday/friday "星期五"
+ :format.weekday/monday "星期一"
+ :format.weekday/saturday "星期六"
+ :format.weekday/sunday "星期日"
+ :format.weekday/thursday "星期四"
+ :format.weekday/tuesday "星期二"
+ :format.weekday/wednesday "星期三"
+
  :graph/all-graphs "所有图谱"
  :graph/already-exists-error "知识库 '{1}' 已存在。请使用其他名称重试。"
  :graph/build-error "图谱加载失败。"
@@ -1981,7 +1989,9 @@
  :ui/use-current-time "使用当前时间"
  :ui/yes "是"
 
+ :ui.calendar/day-label "{4}年{2}{3}日{1}"
  :ui.calendar/time-label "时间"
+ :ui.calendar/today-day-label "今天，{1}"
 
  :updater/checking-for-updates "正在检查更新"
  :updater/downloading-progress "正在下载更新（{1}%）"
