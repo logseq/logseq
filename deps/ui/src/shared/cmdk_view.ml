@@ -656,9 +656,9 @@ let input_row svs st : t =
 
 (* -- hints ------------------------------------------------------------- *)
 
-let hint_button svs label keys =
+let hint_button svs label keys on_press =
   Ui_components.cmdk_hint_button ~key:("hb-" ^ label) ~label
-    ~on_press:(fun _ -> ())
+    ~on_press:(fun _ -> on_press ())
     [ Ui_components.with_props
         [ Ui_components.Prop.opacity 0.6 ]
         (text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label [])
@@ -696,7 +696,7 @@ let hint_action_of (it : S.item) =
   | S.Create_page _ | S.Create_tag _ -> (`create, false)
   | S.Set_filter _ -> (`filter, false)
   | S.Run _ -> (`trigger, false)
-  | S.Open_page _ -> (`open_, false)
+  | S.Open_page _ -> (`open_, true)
   | S.Open_block _ -> (`open_, true)
   | S.Open_file _ -> (`open_, false)
 
@@ -705,34 +705,39 @@ let hint_variant (it : S.item option) : int =
   | None -> 0
   | Some it -> (
       match hint_action_of it with
-      | `open_, has_block -> if has_block then 1 else 2
+      | `open_, has_ref -> if has_ref then 1 else 2
       | `create, _ -> 3
       | `filter, _ -> 4
       | `trigger, _ -> 5)
 
-let action_hints svs (it : S.item option) =
+let action_hints svs st (it : S.item option) =
+  let primary label =
+    hint_button svs (svs.Svs.i18n label) [ "return" ]
+      (fun () -> S.run_highlighted st)
+  in
   let btns =
     match it with
-    | None ->
-        (* no selection: return runs the filter-search action *)
-        [ hint_button svs (svs.Svs.i18n "cmdk.action/filter") [ "return" ] ]
+    | None -> []
     | Some it -> (
         match hint_action_of it with
-        | `open_, _has_block ->
-            (* cljs shows copy-ref for pages too — [[page]] refs copy *)
-            [ hint_button svs (svs.Svs.i18n "cmdk.action/open") [ "return" ]
+        | `open_, has_ref ->
+            [ primary "cmdk.action/open"
             ; hint_button svs
                 (svs.Svs.i18n "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
-            ; hint_button svs (svs.Svs.i18n "cmdk.action/copy-ref")
-                [ "cmd"; "c" ]
+                (fun () -> S.run_highlighted_sidebar st)
             ]
+            @ (if has_ref then
+                 [ hint_button svs (svs.Svs.i18n "cmdk.action/copy-ref")
+                     [ "mod"; "c" ]
+                     (fun () -> ignore (S.copy_highlighted_ref st)) ]
+               else [])
         | `create, _ ->
-            [ hint_button svs (svs.Svs.i18n "cmdk.action/create") [ "return" ] ]
+            [ primary "cmdk.action/create" ]
         | `filter, _ ->
-            [ hint_button svs (svs.Svs.i18n "cmdk.action/filter") [ "return" ] ]
+            [ primary "cmdk.action/filter" ]
         | `trigger, _ ->
-            [ hint_button svs (svs.Svs.i18n "cmdk.action/trigger") [ "return" ] ]
+            [ primary "cmdk.action/trigger" ]
         )
   in
   Ui_components.cmdk_hints_group ~key:"actions" btns
@@ -757,7 +762,7 @@ let hints svs st : t =
       reactive
         ~equal:(fun (a : S.item option) b ->
           hint_variant a = hint_variant b)
-        (action_hints svs)
+        (action_hints svs st)
         (Signal.map
            (fun (v : S.view) -> S.item_at v v.S.hl)
            (Signal.value (st.S.vs)))
@@ -812,6 +817,9 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
         else if ev.Svs.shift then S.run_highlighted_sidebar st
         else S.run_highlighted st;
         { Svs.prevent = true; stop = true }
+    | "c" when (ev.Svs.meta || ev.Svs.ctrl) && not (ev.Svs.shift || ev.Svs.alt) ->
+        if S.copy_highlighted_ref st then { Svs.prevent = true; stop = true }
+        else no
     | "k" when ev.Svs.meta || ev.Svs.ctrl ->
         S.close st;
         { Svs.prevent = true; stop = false }

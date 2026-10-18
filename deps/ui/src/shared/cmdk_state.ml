@@ -1506,6 +1506,15 @@ let run_highlighted st =
   let v = get st in
   match item_at v v.hl with Some it -> run_item st it | None -> ()
 
+let copy_highlighted_ref st =
+  let v = get st in
+  match item_at v v.hl with
+  | Some { act = Open_page uuid | Open_block uuid; _ } ->
+      Ui_services.clipboard_copy ("[[" ^ uuid ^ "]]");
+      close st;
+      true
+  | _ -> false
+
 (* keyboard-shortcut entry point: run a command id exactly as the
    palette would. Palette-shaped commands open the palette in the right
    mode first; everything else dispatches straight through run_command *)

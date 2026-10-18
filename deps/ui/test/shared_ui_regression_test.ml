@@ -1028,6 +1028,135 @@ let run_views ~registry ~profile ~finish =
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
+  let footer_effects = ref [] in
+  let record_effect value = footer_effects := value :: !footer_effects in
+  let footer_services =
+    { services with
+      repo = (fun () -> Some "footer-fixture")
+    ; invoke = (fun name _ -> record_effect name;
+        Ui_task.create (fun ~resolve:_ ~reject:_ -> ()))
+    ; create_page_op = (fun title -> record_effect ("page:" ^ title); Wire.Nil)
+    ; create_class_op = (fun title -> record_effect ("tag:" ^ title); Wire.Nil)
+    ; nav_hash = (fun hash -> record_effect hash; hash)
+    ; sidebar_open_uuid = (fun uuid -> record_effect ("sidebar:" ^ uuid))
+    ; toggle_left_sidebar = (fun () -> record_effect "toggle-sidebar")
+    ; editor_ready = (fun () -> true)
+    ; selected_uuids = (fun () -> ["moving-block"])
+    ; editing_uuid = (fun () -> None)
+    ; clear_selection = (fun () -> ())
+    ; move_blocks_bottom_op = (fun uuids target ->
+        record_effect (String.concat "," uuids ^ "->" ^ target); Wire.Nil)
+    ; apply_ops = (fun _ -> Ui_task.resolve ())
+    ; exit_edit = (fun () -> ())
+    ; mark_nav = (fun () -> ())
+    }
+  in
+  let footer_state = ref None in
+  let footer = mount (fun _ ctx parent ->
+    let st = Cmdk_state.make ~register:false ctx.Lui_ui.ui_scheduler footer_services in
+    footer_state := Some st;
+    Cmdk_view.hints footer_services st ctx parent) in
+  let footer_st = Option.get !footer_state in
+  let item index action : Cmdk_state.item =
+    { ikey = string_of_int index; idx = index; gid = G_nodes;
+      ititle = "Footer result"; info = None; header = None; iicon = "";
+      isc = ""; ibadge = No_badge; act = action; ihl = false;
+      imouse = false; iq = "" }
+  in
+  let select ?(move = false) items index =
+    Cmdk_state.set footer_st
+      { Cmdk_state.initial_view with open_ = true; hl = index; move_mode = move;
+        groups = [{ gid = G_nodes; gtitle = "Results"; gitems = items;
+          gtotal = List.length items; glimit = 10; gexpanded = false;
+          gfilter_active = false }] };
+    S.flush footer;
+    footer_effects := []
+  in
+  let footer_button key = List.find (fun n ->
+    M.string_prop n "accessibility-label" = Some (I18n.t key)) (nodes footer) in
+  let press_footer key = S.press footer (footer_button key).M.id in
+  List.iter (fun (action, expected) ->
+    select [item 0 action] 0;
+    press_footer "cmdk.action/create";
+    check ("footer Create dispatches " ^ expected)
+      (List.mem expected !footer_effects
+       && List.mem "thread-api/apply-outliner-ops" !footer_effects
+       && not (Cmdk_state.get footer_st).open_))
+    [Create_page "Page title", "page:Page title";
+     Create_tag "Tag", "tag:Tag"];
+  select [item 0 (Run "ui/toggle-left-sidebar")] 0;
+  press_footer "cmdk.action/trigger";
+  check "footer Trigger executes its command once"
+    (List.filter ((=) "toggle-sidebar") !footer_effects = ["toggle-sidebar"]);
+  select [item 0 (Set_filter G_commands)] 0;
+  press_footer "cmdk.action/filter";
+  check "footer Filter applies the selected filter without closing"
+    ((Cmdk_state.get footer_st).filter = Some G_commands
+     && (Cmdk_state.get footer_st).open_);
+  let pages = [item 0 (Open_page "first-page"); item 1 (Open_page "second-page")] in
+  select pages 0;
+  let open_id = (footer_button "cmdk.action/open").M.id in
+  select pages 1;
+  check "changing between page results retains the footer button"
+    ((footer_button "cmdk.action/open").M.id = open_id);
+  press_footer "cmdk.action/open";
+  check "retained Open reads the latest highlighted page"
+    (List.mem "#/page/second-page" !footer_effects
+     && not (List.mem "#/page/first-page" !footer_effects)
+     && not (Cmdk_state.get footer_st).open_);
+  select ~move:true pages 1;
+  press_footer "cmdk.action/open";
+  check "footer primary action preserves move-block mode"
+    (!footer_effects = ["moving-block->second-page"]
+     && not (Cmdk_state.get footer_st).open_);
+  List.iter (fun action ->
+    select [item 0 action] 0;
+    press_footer "cmdk.action/open-in-sidebar";
+    check "footer sidebar action opens the selected page or block once"
+      (!footer_effects = ["sidebar:sidebar-target"]
+       && not (Cmdk_state.get footer_st).open_))
+    [Open_page "sidebar-target"; Open_block "sidebar-target"];
+  select [item 0 (Open_block "block-target")] 0;
+  press_footer "cmdk.action/open";
+  check "footer Open resolves a selected block through the existing navigation action"
+    (List.mem "thread-api/get-block-page-info" !footer_effects);
+  let document = !Stub_dom.document_ref in
+  let previous_copy : Js.Json.t = Stub_dom.get_field document "execCommand" in
+  Stub_dom.set_field document "execCommand" (fun (_ : string) ->
+    let body = Stub_dom.get_field document "body" in
+    let children = (Stub_dom.rec_r body).kids in
+    let textarea = Stub_dom.arr_at children (Stub_dom.arr_len children - 1) in
+    record_effect ("legacy-copy:" ^ Stub_dom.get_field textarea "value");
+    true);
+  let navigator : Js.Json.t = Stub_dom.get_field Stub_dom.global "navigator" in
+  let previous_clipboard : Js.Json.t = Stub_dom.get_field navigator "clipboard" in
+  let clipboard = Js.Json.object_ (Js.Dict.empty ()) in
+  Stub_dom.set_field clipboard "writeText" (fun text ->
+    record_effect ("copy:" ^ text); Js.Promise.resolve ());
+  Stub_dom.set_field navigator "clipboard" clipboard;
+  List.iter (fun action ->
+    select [item 0 action] 0;
+    press_footer "cmdk.action/copy-ref";
+    check "footer Copy ref writes the selected UUID and closes"
+      (!footer_effects = ["copy:[[ref-target]]"]
+       && not (Cmdk_state.get footer_st).open_))
+    [Open_page "ref-target"; Open_block "ref-target"];
+  select pages 1;
+  ignore (Cmdk_view.handle_keydown footer_st
+    {key="c"; meta=true; ctrl=false; shift=false; alt=false});
+  check "palette copy shortcut shares the selected-result copy action"
+    (!footer_effects = ["copy:[[second-page]]"]
+     && not (Cmdk_state.get footer_st).open_);
+  Stub_dom.set_field document "execCommand" previous_copy;
+  Stub_dom.set_field navigator "clipboard" previous_clipboard;
+  select [] (-1);
+  check "an empty selection exposes no inert action buttons"
+    (not (List.exists (fun n -> class_has n "cp__cmdk-hint") (nodes footer)));
+  select [item 0 (Open_file "logseq/config.edn")] 0;
+  check "file results do not advertise a block-reference copy action"
+    (not (List.exists (fun n -> M.string_prop n "accessibility-label"
+      = Some (I18n.t "cmdk.action/copy-ref")) (nodes footer)));
+  ignore (Lui_app.dispose footer.S.app);
   let stroke key = Editor_keys.on_global_key (key_event key) in
   stroke "t"; stroke "l";
   eqi "default global sequence dispatches once" 1 !shortcut_actions;

@@ -402,6 +402,10 @@ and install_methods el r =
     (fun s -> with_item_fn (arr_of (Array.of_list (query_selector_all el ("." ^ s)))));
   set "getBoundingClientRect" (fun () -> rect_obj ());
   set "focus" (fun () -> set_field !document_ref "activeElement" el);
+  set "select" (fun () ->
+    set_field !document_ref "activeElement" el;
+    set_field el "selectionStart" 0;
+    set_field el "selectionEnd" (String.length (get_field el "value")));
   set "blur" (fun () -> set_field !document_ref "activeElement" Js.null);
   set "click" (fun () -> ignore (dispatch_el el (make_event ~target:el "click")));
   set "remove" (fun () -> detach el);
