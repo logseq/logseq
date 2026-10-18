@@ -144,6 +144,22 @@ jobs:
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Root pnpm deps
+        # dune runs scripts/generate-ui-*.mjs, which import postcss from this install
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
