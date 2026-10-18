@@ -811,13 +811,6 @@
 
 /* ---- calendar / date picker -------------------------------------------- */
 
-.ui__calendar {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  box-sizing: border-box;
-}
-
 .ls-property-date-picker,
 .ls-editor-date-picker {
   box-sizing: border-box;
@@ -839,11 +832,6 @@
   border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
   border-radius: 0.5rem;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
-}
-
-.ls-editor-date-picker .ui__calendar {
-  display: flex;
-  flex-direction: column;
 }
 
 .ls-editor-date-picker .ls-date-month-select {

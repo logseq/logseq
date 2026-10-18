@@ -927,6 +927,10 @@ body {
     @apply inline-flex h-10 min-w-40 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background;
   }
 
+  .lui-select-value {
+    @apply min-w-0 truncate;
+  }
+
   .lui-select::after,
   .lui-combobox-trigger::after {
     @apply size-4 shrink-0 bg-current;

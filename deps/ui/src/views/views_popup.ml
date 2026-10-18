@@ -160,15 +160,16 @@ let placement_style pl =
 (* a caller-anchored popover positioned by the placement signal.
    [card] paints the .ui__dropdown-menu-content card chrome as props
    (menu surfaces); select/custom popups keep caller-driven classes. *)
-let anchored_popover ~key ~id ~place ~cls ~card ~on_dismiss children : t =
+let anchored_popover ~key ~id ~place ~cls ~card ?role ~on_dismiss children : t =
   Ui_components.with_props
     (if card then [ Ui_components.card_shadow ] else [])
-    (popover ~key ~role:`menu ~accessibility_identifier:id
+    (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
        ~at_signal:
          (map (fun (pl : placement) -> (pl.px, pl.py))
             (Signal.value (place)))
        ?background:(if card then Some "hsl(var(--popover))" else None)
+       ?foreground:(if card then Some "inherit" else None)
        ?border_color:(if card then Some "hsl(var(--border))" else None)
        ?border_width:(if card then Some 1 else None)
        ?corner_radius:(if card then Some 6 else None)
@@ -377,7 +378,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
     (push
        (fun context parent ->
          let place = placement_state context anchor ~align_end in
-         anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id)
+         anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
            ~id:(Printf.sprintf "vp-menu-%d" id) ~place ~card:true
            ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
            ~on_dismiss:(fun _ -> close_entry id)
@@ -516,7 +517,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             | None -> [])
            @ [ select_col ])
     in
-    anchored_popover ~key:("vpsel-p" ^ string_of_int id)
+    anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
       ~id:("vpsel-p" ^ string_of_int id) ~place ~card:true
       ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)

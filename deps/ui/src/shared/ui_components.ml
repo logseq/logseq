@@ -1129,6 +1129,7 @@ let calendar_grid ~year ~month ~day ~on_pick : t =
     with_props
       ([
          Prop.font_size "0.875rem";
+         Prop.font_weight 400;
          Prop.hover_background
            "var(--lx-gray-03, var(--ls-menu-hover-color, hsl(var(--muted))))";
        ]
@@ -1149,6 +1150,7 @@ let calendar_grid ~year ~month ~day ~on_pick : t =
          ~foreground:
            (if outside then "var(--lx-gray-07, var(--ls-secondary-text-color))"
             else if focused then "#fff"
+            else if is_today then "hsl(var(--accent-foreground))"
             else "inherit")
          ~text:(string_of_int d) ~label:(string_of_int d)
          ~data_attrs:
@@ -1241,71 +1243,81 @@ let date_picker ~translate ~on_pick : t =
     in
     match parsed with Some (y, m, d) -> pick y m d | None -> ()
   in
-  (with_props [Prop.font_size "0.875rem"; Prop.line_height "1.25rem"]
-   (column ~accessibility_identifier:"date-time-picker"
-     ~style_class:"ui__calendar" ~width:300 ~padding:12 ~gap:8
-     ~foreground:"hsl(var(--popover-foreground))"
-     [
-       row ~cross:`center ~gap:4
-         [
-           column ~min_width:0
-             [
-               select ~accessibility_identifier:"calendar-month" ~width:96 ~min_width:0
-                 ~height:32
-                 ~text:
-                   (reactive
-                      (fun (_, m, _) ->
-                        (calendar_month_names translate).(m - 1))
-                      (Signal.value date))
-                 ~on_press:(fun _ ->
-                   Signal.set month_open (not (Signal.get_state month_open)))
-                 [];
-               if_ ~test:(Signal.value month_open)
-                 (menu_card ~key:"calendar-months" ~max_height:256
-                    ~anchor:`below ~anchor_alignment:`start
-                    ~on_dismiss:(fun _ -> Signal.set month_open false)
-                    (Array.to_list
-                       (Array.mapi
-                          (fun index name ->
-                            menu_item ~text:name
-                              ~on_press:(fun _ ->
-                                let y, _, _ = Signal.get_state date in
-                                set_month y (index + 1);
-                                Signal.set month_open false)
-                              [])
-                          (calendar_month_names translate))));
-             ];
-           input ~accessibility_identifier:"calendar-year" ~width:52 ~height:32
-             ~padding_horizontal:8
-             ~text:
-               (reactive (fun (y, _, _) -> string_of_int y) (Signal.value date))
-             ~on_input:(function
-               | P.TextChanged (_, value) -> (
-                   match int_of_string_opt value with
-                   | Some y when y >= 1000 && y <= 9999 ->
-                       let _, m, _ = Signal.get_state date in
-                       set_month y m
-                   | _ -> ())
-               | _ -> ())
-             [];
-           spacer ~grow:1. [];
-           calendar_nav_button ~id:"calendar-prev"
-             ~label:(translate "editor.date-picker/previous-month")
-             ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1));
-           calendar_nav_button ~id:"calendar-next"
-             ~label:(translate "editor.date-picker/next-month")
-             ~icon:(`app "chevron-right") ~on_press:(fun _ -> move 1);
-         ];
-       reactive
-         (fun (year, month, _) ->
-           calendar_grid ~year ~month ~day:None ~on_pick:pick)
-         (Signal.value date);
-       input ~accessibility_identifier:"calendar-date-input" ~height:32
-         ~padding_horizontal:8
-         ~placeholder:(translate "ui/date-natural-language-placeholder")
-         ~on_input:(function
-           | P.TextChanged (_, value) -> Signal.set buffer value | _ -> ())
-         ~on_submit:(fun _ -> submit ())
-         [];
-     ]))
+  (with_props
+     [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem" ]
+     (column ~accessibility_identifier:"date-time-picker" ~width:300 ~gap:8
+        [
+          column ~style_class:"ui__calendar" ~padding:12 ~gap:16
+            [
+              row ~cross:`center ~gap:4 ~margin_top:4
+                [
+                  column ~min_width:0
+                    [
+                      button ~variant:`ghost
+                        ~accessibility_identifier:"calendar-month" ~width:96
+                        ~min_width:0 ~height:32 ~main:`start
+                        ~text_alignment:`start ~padding_horizontal:12
+                        ~padding_vertical:0 ~border_width:1
+                        ~border_color:"hsl(var(--input))"
+                        ~text:
+                          (reactive
+                             (fun (_, m, _) ->
+                               (calendar_month_names translate).(m - 1))
+                             (Signal.value date))
+                        ~on_press:(fun _ ->
+                          Signal.set month_open
+                            (not (Signal.get_state month_open)))
+                        [];
+                      if_ ~test:(Signal.value month_open)
+                        (menu_card ~key:"calendar-months" ~max_height:256
+                           ~anchor:`below ~anchor_alignment:`start
+                           ~on_dismiss:(fun _ -> Signal.set month_open false)
+                           (Array.to_list
+                              (Array.mapi
+                                 (fun index name ->
+                                   menu_item ~text:name
+                                     ~on_press:(fun _ ->
+                                       let y, _, _ = Signal.get_state date in
+                                       set_month y (index + 1);
+                                       Signal.set month_open false)
+                                     [])
+                                 (calendar_month_names translate))));
+                    ];
+                  input ~accessibility_identifier:"calendar-year" ~width:52
+                    ~height:32 ~padding_horizontal:8
+                    ~text:
+                      (reactive
+                         (fun (y, _, _) -> string_of_int y)
+                         (Signal.value date))
+                    ~on_input:(function
+                      | P.TextChanged (_, value) -> (
+                          match int_of_string_opt value with
+                          | Some y when y >= 1000 && y <= 9999 ->
+                              let _, m, _ = Signal.get_state date in
+                              set_month y m
+                          | _ -> ())
+                      | _ -> ())
+                    [];
+                  spacer ~grow:1. [];
+                  calendar_nav_button ~id:"calendar-prev"
+                    ~label:(translate "editor.date-picker/previous-month")
+                    ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1));
+                  calendar_nav_button ~id:"calendar-next"
+                    ~label:(translate "editor.date-picker/next-month")
+                    ~icon:(`app "chevron-right") ~on_press:(fun _ -> move 1);
+                ];
+              reactive
+                (fun (year, month, _) ->
+                  calendar_grid ~year ~month ~day:None ~on_pick:pick)
+                (Signal.value date);
+            ];
+          column ~padding_horizontal:12
+            [ input ~accessibility_identifier:"calendar-date-input" ~height:40
+                ~padding_horizontal:8 ~margin_bottom:12
+                ~placeholder:(translate "ui/date-natural-language-placeholder")
+                ~on_input:(function
+                  | P.TextChanged (_, value) -> Signal.set buffer value | _ -> ())
+                ~on_submit:(fun _ -> submit ())
+                [] ];
+        ]))
     context parent
