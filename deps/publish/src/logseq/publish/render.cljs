@@ -901,7 +901,7 @@
                       (string/join ", ")))]
     (when asset-url'
       (cond
-        (contains? #{"png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "avif"} ext)
+        (contains? #{"png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "avif" "jxl"} ext)
         [:img.asset-image (cond-> {:src asset-url' :alt title}
                             srcset (assoc :srcset srcset :sizes publish-image-sizes-attr))]
 

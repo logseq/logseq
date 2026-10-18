@@ -1,0 +1,244 @@
+(* ocaml-sqlite3 backend. *)
+type db =
+  { handle : Sqlite3.db
+  ; filename : string
+  ; mutable tx_depth : int
+  ; mutable savepoint_seq : int
+  }
+
+type bind =
+  | Null
+  | Integer of int64
+  | Float of float
+  | Text of string
+  | Blob of string
+
+type row = bind array
+
+exception Sqlite_error of string
+
+let data_of_bind = function
+  | Null -> Sqlite3.Data.NULL
+  | Integer n -> Sqlite3.Data.INT n
+  | Float f -> Sqlite3.Data.FLOAT f
+  | Text s -> Sqlite3.Data.TEXT s
+  | Blob s -> Sqlite3.Data.BLOB s
+
+let bind_of_data = function
+  | Sqlite3.Data.NONE | Sqlite3.Data.NULL -> Null
+  | Sqlite3.Data.INT n -> Integer n
+  | Sqlite3.Data.FLOAT f -> Float f
+  | Sqlite3.Data.TEXT s -> Text s
+  | Sqlite3.Data.BLOB s -> Blob s
+
+let check rc context =
+  match rc with
+  | Sqlite3.Rc.OK | Sqlite3.Rc.DONE | Sqlite3.Rc.ROW -> ()
+  | rc -> raise (Sqlite_error (context ^ ": " ^ Sqlite3.Rc.to_string rc))
+
+let open_db ~path =
+  let handle = Sqlite3.db_open path in
+  { handle; filename = path; tx_depth = 0; savepoint_seq = 0 }
+
+let prepare_pool ~name:_ = Db_worker_effect.pure ()
+
+(* OPFS-pool parity: conns opened through the same pool name share one
+   conn per filename, like cljs pool.open sharing the VFS — a second
+   open_db_pool on the same path reuses the live conn instead of opening
+   a competing file handle (locking_mode=exclusive would BUSY it). *)
+let pool_conns : (string, (string, db) Hashtbl.t) Hashtbl.t = Hashtbl.create 7
+
+let open_db_pool ~name ~path =
+  let by_path =
+    match Hashtbl.find_opt pool_conns name with
+    | Some by_path -> by_path
+    | None ->
+        let by_path = Hashtbl.create 7 in
+        Hashtbl.replace pool_conns name by_path;
+        by_path
+  in
+  match Hashtbl.find_opt by_path path with
+  | Some db -> db
+  | None ->
+      let db = open_db ~path in
+      Hashtbl.replace by_path path db;
+      db
+
+let close t =
+  ignore (Sqlite3.db_close t.handle);
+  let empty_names = ref [] in
+  Hashtbl.iter
+    (fun name by_path ->
+       Hashtbl.filter_map_inplace
+         (fun _ db -> if db == t then None else Some db)
+         by_path;
+       if Hashtbl.length by_path = 0 then empty_names := name :: !empty_names)
+    pool_conns;
+  List.iter (Hashtbl.remove pool_conns) !empty_names
+
+let exec t ~sql ~bind =
+  if Array.length bind = 0 then begin
+    check (Sqlite3.exec t.handle sql) sql
+  end else begin
+    let stmt = Sqlite3.prepare t.handle sql in
+    (try
+       Array.iteri (fun i b -> check (Sqlite3.bind stmt (i + 1) (data_of_bind b)) sql) bind;
+       let rec loop () =
+         match Sqlite3.step stmt with
+         | Sqlite3.Rc.DONE -> ()
+         | Sqlite3.Rc.ROW -> loop ()
+         | rc -> raise (Sqlite_error (sql ^ ": " ^ Sqlite3.Rc.to_string rc))
+       in
+       loop ()
+     with exn ->
+       ignore (Sqlite3.finalize stmt);
+       raise exn);
+    ignore (Sqlite3.finalize stmt)
+  end
+
+let query t ~sql ~bind =
+  let stmt = Sqlite3.prepare t.handle sql in
+  let rows = ref [] in
+  (try
+     Array.iteri (fun i b -> check (Sqlite3.bind stmt (i + 1) (data_of_bind b)) sql) bind;
+     let ncols = Sqlite3.column_count stmt in
+     let rec loop () =
+       match Sqlite3.step stmt with
+       | Sqlite3.Rc.DONE -> ()
+       | Sqlite3.Rc.ROW ->
+           let row = Array.init ncols (fun i -> bind_of_data (Sqlite3.column stmt i)) in
+           rows := row :: !rows;
+           loop ()
+       | rc -> raise (Sqlite_error (sql ^ ": " ^ Sqlite3.Rc.to_string rc))
+     in
+     loop ()
+   with exn ->
+     ignore (Sqlite3.finalize stmt);
+     raise exn);
+  ignore (Sqlite3.finalize stmt);
+  List.rev !rows
+
+(* cljs platform/node.cljs with-transaction: BEGIN at depth 0,
+   SAVEPOINT __logseq_tx_N when nested. *)
+let transaction t f =
+  let outermost = t.tx_depth = 0 in
+  let savepoint =
+    if outermost then ""
+    else begin
+      t.savepoint_seq <- t.savepoint_seq + 1;
+      Printf.sprintf "__logseq_tx_%d" t.savepoint_seq
+    end
+  in
+  exec t ~sql:(if outermost then "begin" else "SAVEPOINT " ^ savepoint)
+    ~bind:[||];
+  t.tx_depth <- t.tx_depth + 1;
+  Fun.protect
+    ~finally:(fun () -> t.tx_depth <- t.tx_depth - 1)
+    (fun () ->
+      try
+        let result = f () in
+        exec t
+          ~sql:
+            (if outermost then "commit" else "RELEASE SAVEPOINT " ^ savepoint)
+          ~bind:[||];
+        result
+      with exn ->
+        (if outermost then
+           (try exec t ~sql:"rollback" ~bind:[||] with _ -> ())
+         else begin
+           (try
+              exec t ~sql:("ROLLBACK TO SAVEPOINT " ^ savepoint) ~bind:[||]
+            with _ -> ());
+           (try exec t ~sql:("RELEASE SAVEPOINT " ^ savepoint) ~bind:[||]
+            with _ -> ())
+         end);
+        raise exn)
+
+let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
+
+let backup t ~dst_path =
+  let escaped = String.concat "''" (String.split_on_char '\'' dst_path) in
+  exec t ~sql:(Printf.sprintf "vacuum into '%s'" escaped) ~bind:[||]
+
+let filename t = t.filename
+
+let pooled_runtime () = false
+
+(* --- raw db-file ops (cljs storage :export-file/:import-db) --- *)
+
+let native_pool_path dir path =
+  let stripped =
+    if String.length path > 0 && path.[0] = '/'
+    then String.sub path 1 (String.length path - 1)
+    else path
+  in
+  Filename.concat dir stripped
+
+let export_file ~name:_ ~dir ~path =
+  let full = native_pool_path dir path in
+  if Sys.file_exists full then
+    let ic = open_in_bin full in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr ic)
+      (fun () -> Db_worker_effect.pure (In_channel.input_all ic))
+  else
+    Db_worker_effect.error
+      (Failure ("sqlite export_file: file not found: " ^ full))
+
+let import_db ~name:_ ~dir ~path contents =
+  let full = native_pool_path dir path in
+  Db_worker_effect.bind
+    (File_sys.mkdir_p (Filename.dirname full))
+    (fun () ->
+      let oc = open_out_bin full in
+      Fun.protect
+        ~finally:(fun () -> close_out_noerr oc)
+        (fun () -> Out_channel.output_string oc contents);
+      Db_worker_effect.pure ())
+
+let init () = Db_worker_effect.pure ()
+
+(* node.cljs storage ops — <data-dir>/<encoded-graph>/db.sqlite. *)
+let data_dir () =
+  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+  | Some dir -> dir
+  | None -> "."
+
+let repo_dir repo =
+  match Graph_dir.repo_to_encoded_graph_dir_name repo with
+  | Some dir -> Filename.concat (data_dir ()) dir
+  | None -> raise (Sqlite_error ("cannot encode graph name: " ^ repo))
+
+let list_graphs () =
+  let base = data_dir () in
+  Db_worker_effect.bind (File_sys.readdir base) (fun entries ->
+      Db_worker_effect.pure
+        (List.filter_map
+           (fun entry ->
+             let dir = Filename.concat base entry in
+             if (try Sys.is_directory dir with Sys_error _ -> false) then
+               match Graph_dir.decode_canonical_graph_dir_key entry with
+               | Some name
+                 when not
+                        (String.equal name "Unlinked graphs"
+                         || String.equal name "backup") ->
+                   Some name
+               | _ -> None
+             else None)
+           entries))
+
+let db_exists ~repo =
+  File_sys.exists (Filename.concat (repo_dir repo) "db.sqlite")
+
+let remove_vfs ~repo =
+  let dir = repo_dir repo in
+  Db_worker_effect.bind (File_sys.readdir dir) (fun entries ->
+      Db_worker_effect.map (fun _ -> ())
+        (Db_worker_effect.all
+           (List.map (fun entry -> File_sys.remove (Filename.concat dir entry)) entries)))
+
+(* no SAH pools natively *)
+let pause_vfs ~repo:_ = ()
+let unpause_vfs ~repo:_ = ()
+let pool_capacity ~repo:_ = 0
+let drop_pool ~repo:_ = ()

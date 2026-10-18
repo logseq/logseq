@@ -14,6 +14,8 @@ type option_meta = {
   required : bool;
   repeatable : bool;
   choices : string Rrbvec.t;
+  (* value is a comma-separated list; choices complete each list element *)
+  multi : bool;
   default : string option;
 }
 
@@ -43,24 +45,27 @@ type t = { commands : command_meta Rrbvec.t; groups : group_meta Rrbvec.t }
 let append_all values = Array.fold_left Vec.append Vec.empty values
 
 let option ?(required = false) ?(repeatable = false) ?(choices = Vec.empty)
-    ?default names arity doc =
-  { names; arity; doc; required; repeatable; choices; default }
+    ?(multi = false) ?default names arity doc =
+  { names; arity; doc; required; repeatable; choices; multi; default }
 
-let option_of_array ?required ?repeatable ?choices ?default names arity doc =
-  option ?required ?repeatable ?choices ?default (Vec.of_array names) arity doc
+let option_of_array ?required ?repeatable ?choices ?multi ?default names arity
+    doc =
+  option ?required ?repeatable ?choices ?multi ?default (Vec.of_array names)
+    arity doc
 
-let flag ?required ?repeatable ?choices ?default name doc =
-  option ?required ?repeatable ?choices ?default
+let flag ?required ?repeatable ?choices ?multi ?default name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     Flag doc
 
-let value ?required ?repeatable ?choices ?default name value_name doc =
-  option ?required ?repeatable ?choices ?default
+let value ?required ?repeatable ?choices ?multi ?default name value_name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     (Required_value value_name) doc
 
-let optional_value ?required ?repeatable ?choices ?default name value_name doc =
-  option ?required ?repeatable ?choices ?default
+let optional_value ?required ?repeatable ?choices ?multi ?default name
+    value_name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     (Optional_value value_name) doc
 
@@ -181,7 +186,7 @@ let common_list_options sort_choices =
   Vec.of_array
     [|
       value "fields" "fields" "Comma-separated fields to include"
-        ~choices:sort_choices;
+        ~choices:sort_choices ~multi:true;
       value "limit" "n" "Maximum result count";
       value "offset" "n" "Result offset";
       value "sort" "field" "Sort field" ~choices:sort_choices;
@@ -211,7 +216,11 @@ let property_update_options =
     |]
 
 let content_search_options =
-  Vec.singleton (value "content" "text" "Content search text")
+  Vec.of_array
+    [|
+      value "content" "text" "Content search text";
+      flag "include-hidden" "Include hidden results";
+    |]
 
 let e2ee_password_option = value "e2ee-password" "password" "E2EE password"
 
@@ -224,11 +233,8 @@ let options_for_command =
   | Graph_create ->
       Vec.of_array [| flag "enable-sync" "Enable sync"; e2ee_password_option |]
   | Graph_validate ->
-      Vec.of_array
-        [|
-          option_of_array [| "-f"; "--fix" |] Flag "Fix validation problems";
-          value "fields" "fields" "Fields to include";
-        |]
+      Vec.singleton
+        (option_of_array [| "-f"; "--fix" |] Flag "Fix validation problems")
   | Graph_backup_create -> Vec.singleton (value "name" "name" "Backup name")
   | Graph_backup_restore ->
       Vec.of_array
@@ -242,12 +248,14 @@ let options_for_command =
       Vec.of_array
         [|
           value "type" "type" "Export type" ~choices:graph_data_choices;
-          value "file" "path" "Output file";
+          option_of_array [| "-f"; "--file" |] (Required_value "path")
+            "Output file";
           option_of_array
             [| "-e"; "--edn-options" |]
             (Required_value "edn")
-            "EDN map of export options; :export-type overrides the default \
-             :graph";
+            "EDN export options; :export-type defaults to :graph. Nest graph \
+             content controls under :graph-options with :export-type \
+             :graph-human. Unknown or inapplicable keys are rejected";
           option_of_array
             [| "-p"; "--pretty-print" |]
             Flag "Pretty-print the exported EDN file";
@@ -263,7 +271,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_page_sort_choices)
         [|
-          flag "expand" "Expand page data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand page data";
           optional_value "include-built-in" "bool" "Include built-in pages";
           optional_value "include-journal" "bool" "Include journal pages";
           flag "journal-only" "Only include journal pages";
@@ -277,7 +285,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_tag_sort_choices)
         [|
-          flag "expand" "Expand tag data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand tag data";
           optional_value "include-built-in" "bool" "Include built-in tags";
           flag "with-properties" "Include properties";
           flag "with-extends" "Include extends data";
@@ -286,7 +294,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_property_sort_choices)
         [|
-          flag "expand" "Expand property data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand property data";
           optional_value "include-built-in" "bool" "Include built-in properties";
           flag "with-classes" "Include classes";
           flag "with-type" "Include property type";
@@ -303,14 +311,20 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_node_sort_choices)
         [|
-          value "tags" "tags" "Comma-separated tag filters";
-          value "properties" "properties" "Comma-separated property filters";
+          value "tags" "tags" "Comma-separated tag filters" ~multi:true;
+          value "properties" "properties" "Comma-separated property filters"
+            ~multi:true;
         |]
   | List_asset -> common_list_options list_asset_sort_choices
   | Remove_block -> selector_options
   | Remove_page ->
       Vec.of_array
-        [| value "id" "id" "Page id"; value "page" "page" "Page name" |]
+        [|
+          value "id" "id" "Page id";
+          value "page" "page" "Page name";
+          option_of_array [| "-f"; "--force" |] Flag
+            "Permanently delete instead of recycling";
+        |]
   | Remove_tag | Remove_property ->
       Vec.of_array
         [| value "id" "id" "Entity id"; value "name" "name" "Entity name" |]
@@ -322,8 +336,9 @@ let options_for_command =
           Vec.of_array
             [|
               value "content" "text" "Block content";
-              value "blocks" "edn" "Blocks EDN";
-              value "blocks-file" "path" "Path to blocks EDN file";
+              value "blocks" "markdown" "Blocks markdown";
+              value "blocks-file" "path" "Path to blocks markdown file";
+              flag "dry-run" "Print the planned outliner ops without writing";
             |];
           property_update_options;
         |]
@@ -408,10 +423,17 @@ let options_for_command =
           optional_value "ref-id-footer" "bool" "Show reference id footer";
           value "level" "n" "Tree depth";
         |]
+  | Login ->
+      Vec.of_array
+        [|
+          value "username" "username"
+            "Cognito sign-in identifier (requires --password)";
+          value "password" "password" "Account password (requires --username)";
+        |]
   | Server_list | Server_cleanup | Server_start | Server_stop | Server_restart
   | Sync_status | Sync_stop | Sync_remote_graphs | Sync_config_get
-  | Sync_config_unset | Sync_config_set | Login | Logout | Agent_bridge
-  | Example | Skill_show ->
+  | Sync_config_unset | Sync_config_set | Logout | Agent_bridge | Example
+  | Skill_show ->
       empty
   | Sync_start | Sync_upload -> Vec.singleton e2ee_password_option
   | Sync_download ->

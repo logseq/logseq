@@ -70,7 +70,19 @@
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw args)))
+    (p/let [result (apply worker qkw args)]
+      (if (or (instance? ExceptionInfo result)
+              (instance? js/Error result))
+        (p/rejected result)
+        result))))
+
+(defn <invoke-db-worker-when-ready
+  "Skip the thread-api request when db-worker is not initialized.
+  Returns nil in that case. UI effects that need the result should
+  depend on `db-worker-ready?` so they re-run after the worker starts."
+  [qkw & args]
+  (when @db-worker-ready?
+    (apply <invoke-db-worker qkw args)))
 
 (def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
 
@@ -153,6 +165,9 @@
       ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
+      ;; block uuids whose lazy children must mount regardless of viewport
+      ;; distance (set while scrolling to an anchor target inside them)
+      :ui/anchor-mount                       {}
       :ui/file-component                     nil
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)
@@ -684,8 +699,7 @@ should be done through this fn in order to get global config and config defaults
   [blocks]
   (->> blocks
        (remove nil?)
-       (keep #(when-let [id (dom/attr % "blockid")]
-                (uuid id)))
+       (keep util/selection-node-block-id)
        (distinct)))
 
 (defn block-content-max-length
@@ -1044,6 +1058,15 @@ should be done through this fn in order to get global config and config defaults
 (defn clear-editor-action!
   []
   (set-state! :editor/action nil))
+
+(defn clear-editor-action-if-switching-block!
+  "Slash commands and other editor popups belong to the current edit block.
+   Entering edit on a different block closes them. Re-editing the same block
+   keeps the current action."
+  [new-block]
+  (when (not= (:block/uuid new-block)
+              (:block/uuid (get-edit-block)))
+    (clear-editor-action!)))
 
 (defn get-edit-pos
   []
@@ -1813,6 +1836,9 @@ should be done through this fn in order to get global config and config defaults
 (defn set-editing!
   [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
+  ;; Click-to-edit uses pointerdown -> set-editing!, not editor-on-hide.
+  ;; Close slash/commands when the edit target changes; same-block re-edit keeps them.
+  (clear-editor-action-if-switching-block! block)
   (when-not (exists? js/process)
     (when (and edit-input-id block
                (or
@@ -1864,10 +1890,6 @@ should be done through this fn in order to get global config and config defaults
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))
-
-(defn get-last-key-code
-  []
-  (get-state :editor/last-key-code))
 
 (defn set-ui-last-key-code!
   [key-code]

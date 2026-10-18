@@ -358,7 +358,7 @@ let graph_string graph = Cli_primitive.string_of_graph graph
 
 let graph_e2ee_query =
   Cli_primitive.make_datascript_query
-    ~find:(Vec.of_array [| sym "?v"; kw "." |])
+    ~find:(Vec.of_array [| sym "?v"; sym "." |])
     ~where:
       (Vec.of_array
          [|
@@ -377,7 +377,7 @@ let sync_download_non_empty_query =
     ~find:
       (Vec.of_array
          [|
-           Edn_util.list_vec (Vec.of_array [| sym "count"; sym "?e" |]); kw ".";
+           Edn_util.list_vec (Vec.of_array [| sym "count"; sym "?e" |]); sym ".";
          |])
     ~where:
       (Vec.of_array
@@ -1146,7 +1146,13 @@ let execute_download mode config repo graph progress progress_explicit
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_download mode err)
   | Ok config -> (
-      invoke_global_config config ~create_empty_db:true >>= function
+      ( Server_runtime.create_graph config repo >>= function
+        | Error err -> Cli_effect.pure (Error err)
+        | Ok generation ->
+            invoke_global_config
+              { config with graph_generation = Some generation }
+              ~create_empty_db:true )
+      >>= function
       | Error err ->
           Cli_effect.pure
             (Cli_result.error ~command:Command_id.Sync_download mode err)

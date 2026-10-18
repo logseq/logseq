@@ -96,6 +96,37 @@
   (and (exists? js/Element)
        (instance? js/Element target)))
 
+(defn- element-anchor-position
+  "Anchor a popup to a live trigger rect. Re-measured after open so first
+  paint is not stuck at (0, 0) when the trigger layout was not ready."
+  [^js target align as-mask?]
+  (let [rect (.getBoundingClientRect target)
+        left (.-left rect)
+        width (.-width rect)
+        height (.-height rect)
+        bottom (.-bottom rect)]
+    [(+ left (case (keyword align)
+               :start 0
+               :end width
+               (/ width 2)))
+     (- (- bottom height)
+        (if as-mask? 6 0))
+     width (if as-mask? 1 height)]))
+
+(defn- refresh-anchor-position!
+  [id target align as-mask?]
+  (when (and (get-popup id) (element? target) (.-isConnected target))
+    (update-popup! id :position (element-anchor-position target align as-mask?))))
+
+(defn- schedule-anchor-position-refresh!
+  [id target align as-mask?]
+  (when (element? target)
+    (js/requestAnimationFrame
+     (fn []
+       (refresh-anchor-position! id target align as-mask?)
+       (js/requestAnimationFrame
+        #(refresh-anchor-position! id target align as-mask?))))))
+
 (defn- native-event [^js event]
   (or (some-> event (.-nativeEvent)) event))
 
@@ -130,6 +161,24 @@
                      (event-related-target event)
                      (event-target event)]
                     (event-composed-path event)))))
+
+(defn- focus-guard-target?
+  [target]
+  (and (element? target)
+       (some? (.closest target "[data-base-ui-focus-guard]"))))
+
+(defn- popup-content-target?
+  [target]
+  (and (element? target)
+       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content, .ui__context-menu-sub-content"))))
+
+(defn- retain-focus-out?
+  "Retain (cancel) a focus-out close only when focus lands inside popup
+  content — e.g. a stacked popup opened from a menu — and no Base UI focus
+  guard is involved in the close."
+  [^js event-details targets]
+  (and (popup-content-target? (event-related-target (some-> event-details (.-event))))
+       (not (some focus-guard-target? targets))))
 
 (def ^:private menu-transition-close-reasons
   #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
@@ -180,7 +229,10 @@
   (let [native-event (some-> event-details (.-event))
         result (when (fn? handler) (handler native-event))]
     (when (or (false? result)
-              (some-> native-event (.-defaultPrevented))
+              ;; A prevented close event is a veto only when it could come from
+              ;; the content handler; Base UI also preventDefaults the Shift+Tab
+              ;; keydown it uses to carry a focus-out close.
+              (and (fn? handler) (some-> native-event (.-defaultPrevented)))
               (some-> event-details (.-isCanceled)))
       (some-> event-details (.cancel))
       true)))
@@ -211,20 +263,9 @@
 
                    (and (exists? js/Element)
                         (instance? js/Element event))
-                   (let [^js rect (.getBoundingClientRect event)
-                         left (.-left rect)
-                         width (.-width rect)
-                         height (.-height rect)
-                         bottom (.-bottom rect)]
+                   (do
                      (vreset! *target event)
-                     [(+ left (case (keyword align)
-                                :start 0
-                                :end width
-                                (/ width 2)))
-                      (- (- bottom height)
-                        ;; minus default offset
-                         (if as-mask? 6 0))
-                      width (if as-mask? 1 height)])
+                     (element-anchor-position event align as-mask?))
                    (and (vector event) (= (count event) 2) (every? integer? event))
                    event
                    :else [0 0])
@@ -269,6 +310,7 @@
                  :content-props (cond-> content-props
                                   (not (nil? align))
                                   (assoc :align (name align)))}))
+        (schedule-anchor-position-refresh! id target align as-mask?)
         id))))
 
 (defn hide!
@@ -358,7 +400,12 @@
                                           opening-outside-press? (and (= reason "outside-press")
                                                                       (number? ignore-opening-outside-press-until)
                                                                       (< (js/Date.now) ignore-opening-outside-press-until))
-                                          focus-transition? (= reason "focus-out")
+                                          ;; Keep internal focus-out cancels, but let Tab/Shift+Tab
+                                          ;; and trigger-guard focus-out close. Canceling those
+                                          ;; leaves Base UI guards mounted and they re-focus each
+                                          ;; other until the stack overflows.
+                                          focus-transition? (and (= reason "focus-out")
+                                                                 (retain-focus-out? e targets))
                                           menu-transition? (and use-menu?
                                                                 (contains? menu-transition-close-reasons reason))
                                           handler (case reason

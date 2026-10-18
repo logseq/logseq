@@ -1,0 +1,24 @@
+val press : Env.t -> ?delay:float -> string -> unit Js.Promise.t
+val press_all : Env.t -> ?delay:float -> string list -> unit Js.Promise.t
+val press_in_editor :
+  Env.t -> ?delay:float -> ?timeout:float -> string -> unit Js.Promise.t
+val press_in_editor_expect :
+  Env.t -> string -> string -> unit Js.Promise.t
+val live_editor_value : Env.t -> string option Js.Promise.t
+val type_in_editor : Env.t -> ?delay:float -> string -> unit Js.Promise.t
+val enter : Env.t -> unit Js.Promise.t
+val enter_in_editor : Env.t -> unit Js.Promise.t
+val esc : Env.t -> unit Js.Promise.t
+val backspace : Env.t -> unit Js.Promise.t
+val delete : Env.t -> unit Js.Promise.t
+val tab : Env.t -> unit Js.Promise.t
+val shift_tab : Env.t -> unit Js.Promise.t
+val shift_enter : Env.t -> unit Js.Promise.t
+val shift_arrow_up : Env.t -> unit Js.Promise.t
+val shift_arrow_down : Env.t -> unit Js.Promise.t
+val arrow_up : Env.t -> unit Js.Promise.t
+val arrow_down : Env.t -> unit Js.Promise.t
+val arrow_left : Env.t -> unit Js.Promise.t
+val arrow_right : Env.t -> unit Js.Promise.t
+val meta_shift_arrow_up : Env.t -> unit Js.Promise.t
+val meta_shift_arrow_down : Env.t -> unit Js.Promise.t

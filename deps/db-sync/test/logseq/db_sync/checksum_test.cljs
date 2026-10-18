@@ -527,6 +527,18 @@
           incremental (checksum/update-checksum checksum-before tx-report)]
       (is (= full incremental)))))
 
+(deftest incremental-checksum-matches-recompute-for-entity-with-two-block-uuids-test
+  (testing "an edit of an entity whose stored datoms hold 2 :block/uuid values (init-db does not check cardinality) keeps the incremental checksum equal to the recompute, which counts the entity once per uuid datom"
+    (let [db (d/init-db (map (fn [[e a v]] (d/datom e a v))
+                             [[1 :block/uuid (random-uuid)] [1 :block/name "page-a"]
+                              [2 :block/uuid (random-uuid)] [2 :block/uuid (random-uuid)]
+                              [2 :block/title "Block"] [2 :block/page 1]])
+                        db-schema/schema)
+          tx-report (d/with db [[:db/add 2 :block/title "Block edited"]])
+          checksum-before (checksum/recompute-checksum (:db-before tx-report))]
+      (is (= (checksum/recompute-checksum (:db-after tx-report))
+             (checksum/update-checksum checksum-before tx-report))))))
+
 (deftest checksum-ignores-non-page-non-block-entities-test
   (testing "entities with uuid but without page semantics do not affect checksum"
     (let [db0 (sample-db)
@@ -545,3 +557,26 @@
       (is (= checksum0 incremental1))
       (is (= checksum0 full2))
       (is (= full2 incremental2)))))
+
+(deftest derived-import-attributes-do-not-rescan-entities
+  (let [db (sample-db)
+        checksum-before (checksum/recompute-checksum db)
+        tx [[:db/add 3 :block/tx-id 100]
+            [:db/add 3 :block/refs 2]
+            [:db/add 4 :block/tx-id 100]]
+        report (d/with db tx)
+        entity-fn d/entity]
+    (doseq [tx-data [(:tx-data report) tx]]
+      (let [entity-reads (atom 0)
+            actual (with-redefs [d/entity (fn [db eid]
+                                            (when (int? eid) (swap! entity-reads inc))
+                                            (entity-fn db eid))]
+                     (checksum/update-checksum checksum-before (assoc report :tx-data tx-data)))]
+        (is (= checksum-before actual))
+        (is (zero? @entity-reads)
+            "Derived import attributes cannot change the checksum or require entity scans")))
+    (is (= (checksum/recompute-checksum (:db-after report))
+           (checksum/update-checksum nil report))
+        "An invalid initial checksum is still repaired")
+    (assert-incremental=full! db checksum-before
+                              (conj tx [:db/add 3 :block/title "Changed title"]))))

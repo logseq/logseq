@@ -6,7 +6,11 @@
 
 (defn get-content-config []
   {:export-bullet-indentation (state/get-export-bullet-indentation)
-   :date-formatter (state/get-date-formatter)})
+   :date-formatter (state/get-date-formatter)
+   ;; Encode block background-color highlights as ^^text^^ so they survive
+   ;; Text/OPML/HTML export instead of being silently dropped (the property
+   ;; is otherwise hidden from export like other :hide? true properties).
+   :encode-highlight-as-mark? true})
 
 (defn <export-blocks-as-format
   [repo root-block-uuids-or-page-uuid format-type options]

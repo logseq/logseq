@@ -86,14 +86,6 @@
                          (p/rejected error))))))
       (p/resolved nil))))
 
-(defn logseq-chat-access-token?
-  [claims env]
-  (let [expected-client-id (aget env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")]
-    (and (string? expected-client-id)
-         (seq expected-client-id)
-         (= "access" (aget claims "token_use"))
-         (= expected-client-id (aget claims "client_id")))))
-
 (defn personal-access-token?
   [token]
   (and (string? token)
@@ -116,28 +108,6 @@
     "both" "logseq/read logseq/write"
     nil))
 
-(defn- first-party-access-token?
-  [claims env]
-  (let [client-id (aget claims "client_id")]
-    (and (= "access" (aget claims "token_use"))
-         (string? client-id)
-         (contains? (->> [(aget env "COGNITO_CLIENT_ID")
-                          (aget env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")]
-                         (filter string?)
-                         (remove string/blank?)
-                         set)
-                    client-id))))
-
-(defn- grant-first-party-semantic-scopes
-  [claims env]
-  (if (first-party-access-token? claims env)
-    (let [copy (js/Object.assign #js {} claims)
-          scope (string/trim (str (or (aget claims "scope") "")
-                                  " logseq/read logseq/write"))]
-      (aset copy "scope" scope)
-      copy)
-    claims))
-
 (defn semantic-auth-claims
   [request env]
   (let [token (token-from-request request)]
@@ -154,5 +124,4 @@
                  "pat_id" (:id pat)
                  "pat_graph_id" (:graph-id pat)}))
         (p/resolved nil))
-      (p/let [claims (auth-claims request env)]
-        (some-> claims (grant-first-party-semantic-scopes env))))))
+      (auth-claims request env))))

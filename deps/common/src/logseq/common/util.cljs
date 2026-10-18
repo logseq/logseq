@@ -49,12 +49,17 @@
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
 (defn safe-subs
+  "Like `subs`, but clamps out-of-range indices and returns \"\" for a non-string
+  `s` instead of throwing. `subs` is a bare `.substring` passthrough, so a nil
+  `s` otherwise raises \"Cannot read properties of null\"."
   ([s start]
    (let [c (count s)]
      (safe-subs s start c)))
   ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
+   (if (string? s)
+     (let [c (count s)]
+       (subs s (min c start) (min c end)))
+     "")))
 
 (defn wrapped-by
   [v start end]
@@ -249,6 +254,17 @@
   "Current time in milliseconds"
   []
   (tc/to-long (t/now)))
+
+(defn timestamp-ms
+  "Coerce a Date or epoch-ms number to a positive ms timestamp.
+   Treats missing values and non-positive times (e.g. Linux epoch-0 birthtime) as absent."
+  [value]
+  (let [ms (cond
+             (number? value) value
+             (instance? js/Date value) (.getTime value)
+             :else nil)]
+    (when (and (number? ms) (pos? ms) (js/isFinite ms))
+      ms)))
 
 (defn get-page-title
   [page]

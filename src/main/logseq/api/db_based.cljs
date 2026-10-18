@@ -17,6 +17,7 @@
             [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
@@ -35,8 +36,8 @@
 
 (defn -get-property
   [^js plugin k]
-  (when-let [k' (and (string? k) (api-block/sanitize-user-property-name k))]
-    (let [property-ident (api-block/get-db-ident-from-property-name k' plugin)]
+  (when (and (string? k) (not (string/blank? (string/trim k))))
+    (let [property-ident (api-block/get-db-ident-from-property-name k plugin)]
       (<get-block property-ident))))
 
 (defn get-favorites
@@ -135,7 +136,7 @@
 (defn- upsert-property-aux
   [this k schema opts]
   (p/let [k' (api-block/sanitize-user-property-name k)
-          property-ident (api-block/get-db-ident-from-property-name k' this)
+          property-ident (api-block/get-db-ident-from-property-name k this)
           _ (api-block/ensure-property-upsert-control this property-ident k')
           schema (or (some-> schema
                              (update-keys #(if (contains? #{:public} %)
@@ -181,16 +182,20 @@
   (this-as
    this
    (p/let [property (-get-property this k)]
-     (when-let [uuid (and (api-block/plugin-property-key? (:db/ident property))
-                          (:block/uuid property))]
-       (page-common-handler/<delete! uuid nil nil)))))
+     (when property
+       (if (api-block/plugin-property-key? (:db/ident property))
+         (page-common-handler/<delete! (:block/uuid property) nil nil)
+         (throw (ex-info "Plugins can only remove their own properties"
+                         {:property k
+                          :property-ident (:db/ident property)})))))))
 
 (defn upsert-block-property
-  [this block key' value {:keys [schema reset-property-values]}]
+  [this block key' value {:keys [schema reset-property-values entity-id?]}]
   (let [opts {:plugin this
               :schema (when schema
                         {key schema})
-              :reset-property-values reset-property-values}]
+              :reset-property-values reset-property-values
+              :entity-id? entity-id?}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
 
 (defn get-all-tags
@@ -239,16 +244,18 @@
              (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
            (p/let [opts (bean/->clj opts)
                    class-ident-namespace (api-block/resolve-class-prefix-for-db this)
-                   opts' (assoc opts
-                                :redirect? false
-                                :class-ident-namespace class-ident-namespace)
+                   opts' (cond-> (assoc opts
+                                        :redirect? false
+                                        :class-ident-namespace class-ident-namespace)
+                           (and (string? (:uuid opts))
+                                (common-util/uuid-string? (:uuid opts)))
+                           (update :uuid uuid))
                    tag-properties (:tagProperties opts)
                    tag (db-page-handler/<create-class! title opts')
                    properties (when (seq tag-properties)
-                                (p/all (map
+                                 (p/all (map
                                            (fn [{:keys [name schema properties]}]
-                                             (let [name' (api-block/sanitize-user-property-name name)
-                                                   property-ident (api-block/get-db-ident-from-property-name name' this)]
+                                             (let [property-ident (api-block/get-db-ident-from-property-name name this)]
                                                (p/let [property-entity (<get-block property-ident)]
                                                  (or property-entity    ; property exists already
                                                      (upsert-property-aux this name schema {:properties properties})))))
@@ -405,10 +412,21 @@
     (db-property-handler/remove-block-property! (:block/uuid block)
                                                 :logseq.property/icon)))
 
+(defn- block-identity->uuid
+  [block-identity]
+  (let [block-uuid (if (map? block-identity)
+                     (:uuid block-identity)
+                     block-identity)]
+    (sdk-utils/uuid-or-throw-error block-uuid)))
+
 (defn add-property-value-choices [property-id ^js choices]
   (when-let [values (and property-id (bean/->clj choices))]
-    (db-property-handler/add-existing-values-to-closed-values!
-     property-id values)))
+    (p/let [property (<get-block (block-identity->uuid (bean/->clj property-id)))]
+      (when-not (entity/property? property)
+        (throw (ex-info "Not a valid property" {:property property-id})))
+      (db-property-handler/add-existing-values-to-closed-values!
+       (:db/ident property)
+       (mapv block-identity->uuid values)))))
 
 (defn set-property-node-tags [property-id ^js tag-ids]
   (let [tag-ids (and property-id (seq (bean/->clj tag-ids)))]

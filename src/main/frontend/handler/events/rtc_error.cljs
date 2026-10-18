@@ -1,6 +1,8 @@
 (ns frontend.handler.events.rtc-error
-  "RTC event error helpers."
-  (:require [clojure.string :as string]))
+  "RTC event error helpers.")
+
+(def ^:private e2ee-decrypt-error-codes
+  #{:db-sync/invalid-e2ee-password})
 
 (defn- throwable-message
   [error]
@@ -20,11 +22,17 @@
        (error-texts (:error data))
        (error-texts (ex-cause error))))))
 
-(defn download-decrypt-failed?
+(defn- error-codes
+  [error]
+  (when error
+    (let [data (ex-data error)]
+      (concat
+       [(:code data)]
+       (error-codes (:error data))
+       (error-codes (ex-cause error))))))
+
+(defn e2ee-decrypt-failed?
   [error]
   (boolean
-   (some (fn [text]
-           (and (string? text)
-                (or (string/includes? text "decrypt-aes-key")
-                    (string/includes? text "decrypt-private-key"))))
-         (error-texts error))))
+   (or (some e2ee-decrypt-error-codes (error-codes error))
+       (some #{"decrypt-aes-key"} (error-texts error)))))

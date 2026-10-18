@@ -17,14 +17,14 @@
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
      :assets-driver (or (env-value env "DB_SYNC_ASSETS_DRIVER") "filesystem")
      :log-level (or (env-value env "DB_SYNC_LOG_LEVEL") "info")
+     :asset-link-secret (env-value env "ASSET_LINK_SECRET")
      :cognito-issuer (env-value env "COGNITO_ISSUER")
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")
-     :logseq-chat-cognito-client-id (env-value env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :data-dir :storage-driver :assets-driver :log-level
-   :cognito-issuer :cognito-client-id :logseq-chat-cognito-client-id :cognito-jwks-url])
+  [:port :base-url :data-dir :storage-driver :assets-driver :log-level :asset-link-secret
+   :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
   (let [defaults {:port 8080

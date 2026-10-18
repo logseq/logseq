@@ -3,9 +3,9 @@
 ## Build, Test, and Development Commands
 - `bb dev:lint-and-test` runs linters and unit tests.
 - `bb dev:test -v <namespace/testcase-name>` runs a single unit test (example: `bb dev:test -v logseq.some-test/foo`).
-- App E2E tests live in `clj-e2e/`; run from that directory with `bb test` (or `bb -f clj-e2e/bb.edn test` from repo root).
+- App E2E tests live in `ocaml-e2e/` (Melange/node:test port of the old clj-e2e suite); serve the built app on :3002 (`python3 -m http.server 3002 -d static/` from repo root), then `cd ocaml-e2e && opam exec -- dune build && node parallel-runner.mjs` (or `node --test _build/default/test/test_node/test/<file>.js` for one file).
 - CLI E2E tests live in `cli-e2e/`; run with `bb -f cli-e2e/bb.edn test --skip-build` (or `bb -f cli-e2e/bb.edn build` first when needed).
-- If a request says only “e2e”, clarify whether it targets `clj-e2e/` or `cli-e2e/` before planning changes.
+- If a request says only “e2e”, clarify whether it targets `ocaml-e2e/` or `cli-e2e/` before planning changes.
 
 ## Error handling and compatibility
 - When modifying code, first consider removing compatibility layers rather than extending them.
@@ -44,8 +44,7 @@
 - Use repo-local skills discovered under `.agents/skills/`; load the matching `SKILL.md` before editing files or proposing changes.
 - **i18n (mandatory)**: Always load `.agents/skills/logseq-i18n/SKILL.md` before any change that adds, edits, or removes user-facing UI text, regardless of whether other skills also apply.
 - Review notes live in `prompts/review.md`; check them when preparing changes.
-- DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
-- DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
+- Runtime, sync, CLI, rendering, search, and Graph View engineering guidance is consolidated in `docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md`; current source and tests remain authoritative.
 - For db-sync D1 schema changes, add or update a Cloudflare worker SQL migration under `deps/db-sync/worker/migrations/`; do not rely on ad hoc runtime-only schema migration code.
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
@@ -53,3 +52,5 @@
 - Avoid using `js/Buffer` in browser related code.
 - Git commits should include a concise summary.
 - When deleting properties in db migration, those properties should be added to `logseq.db-sync.tx-sanitize/migration-deleted-attrs`
+- Use spec-dev-tool to manage agent decision documents; run `spec-dev-tool --help` and follow its AGENT WORKFLOW.
+- When asked to find simplifications, run `spec-dev-tool guide find-simplifications` from inside this Git worktree and follow the emitted workflow.

@@ -31,6 +31,13 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn- namespaced-page-for-property-convert?
+  "Same parent check as convert-page-to-tag!: namespace children and
+   Library-parented namespace roots cannot become properties."
+  [page]
+  (and (entity/internal-page? page)
+       (:block/parent page)))
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -42,23 +49,31 @@
           property? (entity/property? property)
           property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
-    (if property?
+    (cond
+      property?
       (do
         (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
           (notification/show! (t :property/private-built-in-not-usable) :error))
         property)
-      ;; new property entered or converting page to property
-      (if (db-property/valid-property-name? property-title)
-        (p/let [opts (cond-> {:property-name property-title}
-                       (and (not property?) (entity/internal-page? property))
-                       (assoc :properties {:db/id (:db/id property)}))
-                result (db-property-handler/upsert-property! nil schema opts)
-                property (db-async/<get-block repo (:db/id result) {:children? false})
-                _ (when add-class-property?
-                    (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
-          property)
-        (notification/show! (t :property.validation/invalid-name) :error)))))
+
+      (namespaced-page-for-property-convert? property)
+      (do
+        (notification/show! (t :page.convert/page-to-property-namespaced) :error false)
+        (p/rejected :namespaced-page))
+
+      (db-property/valid-property-name? property-title)
+      (p/let [opts (cond-> {:property-name property-title}
+                     (entity/internal-page? property)
+                     (assoc :properties {:db/id (:db/id property)}))
+              result (db-property-handler/upsert-property! nil schema opts)
+              property (db-async/<get-block repo (:db/id result) {:children? false})
+              _ (when add-class-property?
+                  (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
+        property)
+
+      :else
+      (notification/show! (t :property.validation/invalid-name) :error))))
 
 (defn- enable-block-properties-renderers?
   [{:keys [sidebar? sidebar-properties?]} class?]
@@ -230,7 +245,6 @@
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                          :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!
-                         :choose-first-on-enter? true
                          :transform-fn property-transform-fn}
                         select-opts))]])))
 
@@ -265,19 +279,24 @@
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property? view-parent]}]
   (fn [{:keys [value label convert-page-to-property?]
         selected-property :property}]
-    (p/let [property selected-property
-            _ (reset! *property-key (if property
-                                      (if convert-page-to-property? (:block/title property) label)
-                                      value))
-            batch? (pv/batch-operation?)]
-      (if (and property remove-property?)
-        (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
-          (property-handler/batch-remove-block-property!
-           block-ids
-           (:db/ident property)
-           {:preserve-task-tag? (= :logseq.class/Task (:db/ident view-parent))})
-          (shui/popup-hide!))
-        (do
+    (if (and convert-page-to-property?
+             (namespaced-page-for-property-convert? selected-property))
+      (do
+        (notification/show! (t :page.convert/page-to-property-namespaced) :error false)
+        (shui/popup-hide!))
+      (p/let [property selected-property
+              _ (reset! *property-key (if property
+                                        (if convert-page-to-property? (:block/title property) label)
+                                        value))
+              batch? (pv/batch-operation?)]
+        (if (and property remove-property?)
+          (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
+            (property-handler/batch-remove-block-property!
+             block-ids
+             (:db/ident property)
+             {:preserve-task-tag? (= :logseq.class/Task (:db/ident view-parent))})
+            (shui/popup-hide!))
+          (do
           (when (and *show-new-property-config? (not (entity/property? property)))
             (reset! *show-new-property-config? true))
           (reset! *property property)
@@ -310,7 +329,7 @@
 
                   (or (not= :default type)
                       (and (= :default type) (seq (:property/closed-values property))))
-                  (reset! *show-new-property-config? false))))))))))
+                  (reset! *show-new-property-config? false)))))))))))
 
 (defn- property-description-title
   [property]
@@ -424,7 +443,7 @@
        (icon-component/icon icon {:size 16 :color? true})])))
 
 (hsx/defc bidirectional-property-group
-  [value class-uuid entity-uuids]
+  [value class-uuid entity-uuids title]
   (let [class (db-hooks/use-block class-uuid)]
     (when class
       (shui/tabs-trigger
@@ -435,7 +454,7 @@
         :data-entity-count (count entity-uuids)}
        [:span.inline-flex.items-center.gap-1.5
         (bidirectional-tab-icon class)
-        [:span (:block/title class)]]))))
+        [:span.property-k title]]))))
 
 (hsx/defc bidirectional-properties-section
   [groups]
@@ -451,13 +470,14 @@
         (shui/tabs-list
          {:variant :line
           :class "h-8 gap-3"}
-         (for [{:keys [value class-uuid entity-uuids]} groups]
-           (bidirectional-property-group value class-uuid entity-uuids)))
+         (for [{:keys [value class-uuid entity-uuids title]} groups]
+           (bidirectional-property-group value class-uuid entity-uuids title)))
         (for [{:keys [value entity-uuids]} groups]
           (shui/tabs-content
            {:key (str "bidirectional-tab-content-" value)
             :value value}
-           (bidirectional-values-cp entity-uuids))))])))
+           [:div.property-value.w-full
+            (bidirectional-values-cp entity-uuids)])))])))
 
 (hsx/defc ^:large-vars/cleanup-todo property-input
   [block *property-key {:keys [class-schema?]
@@ -632,12 +652,45 @@
   [value entities]
   (letfn [(restore [item]
             (cond
-              (uuid? item) (get entities item item)
-              (set? item) (into #{} (map restore) item)
-              (vector? item) (mapv restore item)
-              (sequential? item) (map restore item)
-              :else item))]
+              (uuid? item)
+              (let [entity (get entities item ::missing)]
+                (if (= entity ::missing)
+                  item
+                  entity))
+
+              (set? item)
+              (into #{} (keep restore) item)
+
+              (vector? item)
+              (into [] (keep restore) item)
+
+              (sequential? item)
+              (keep restore item)
+
+              :else
+              item))]
     (restore value)))
+
+(defn- restore-closed-values
+  "Page property rows load the definition through use-block. Canonical
+  snapshots omit :property/closed-values, so select-type? fell through to
+  property-normal-block-value and mounted a 0-width nested ls-block."
+  [property closed-value-uuids closed-value-entities]
+  (cond
+    (seq (:property/closed-values property))
+    property
+
+    (seq closed-value-entities)
+    (assoc property :property/closed-values (vec closed-value-entities))
+
+    (seq closed-value-uuids)
+    (assoc property :property/closed-values
+           (mapv (fn [block-uuid]
+                   {:block/uuid block-uuid})
+                 closed-value-uuids))
+
+    :else
+    property))
 
 (hsx/defc class-schema-property-value
   [property description-property-uuid opts]
@@ -646,12 +699,15 @@
       (pv/property-value property description-property opts))))
 
 (hsx/defc property-cp
-  [block {:keys [property-uuid property-ident value]} {:keys [sortable-opts description-property-uuid] :as opts}]
+  [block {:keys [property-uuid property-ident value closed-value-uuids]} {:keys [sortable-opts description-property-uuid] :as opts}]
   (let [property (db-hooks/use-block property-uuid)
+        closed-value-uuids (vec closed-value-uuids)
         value-uuids (->> (entity-value-uuids value) distinct (sort-by str) vec)
+        closed-value-entities (db-hooks/use-blocks closed-value-uuids)
         value-entities (db-hooks/use-blocks value-uuids)
         value-ready? (or (empty? value-uuids) (some? value-entities))
-        entities-by-uuid (zipmap value-uuids value-entities)]
+        entities-by-uuid (zipmap value-uuids value-entities)
+        property (restore-closed-values property closed-value-uuids closed-value-entities)]
     (when (and (keyword? property-ident) property)
       (let [value (when value-ready?
                     (restore-resource-entity-values value entities-by-uuid))
@@ -819,6 +875,18 @@
         {:keys [hidden-properties]} (use-display-properties block opts enabled? show-empty-and-hidden?)]
     (boolean (seq hidden-properties))))
 
+(defn block-below-pill-owns-hidden-toggle?
+  "True when the block-below pill row already renders the hidden-properties
+  toggle: an outliner zoom-in root with block-below positioned properties.
+  The properties area must not render a second toggle in that case."
+  [block opts]
+  (boolean
+   (and (not config/publishing?)
+        (not (entity/page? block))
+        (:block? opts)
+        (= (:id opts) (str (:block/uuid block)))
+        (seq (get-in block [:block.temp/positioned-properties :block-below])))))
+
 (hsx/defc hidden-properties-toggle-button
   [block {:keys [icon-only? tab-index bottom-row-nav? bottom-pill?] :as _opts}]
   (let [block-uuid (:block/uuid block)
@@ -889,6 +957,12 @@
     (when property
       (property-key-cp block property {}))))
 
+(defn- page-title-property-surface?
+  "Add property belongs on the page itself (title, sidebar, tag dialog), not
+  on a page nested in an outline."
+  [{:keys [page-title? sidebar-properties? tag-dialog?]}]
+  (boolean (or page-title? sidebar-properties? tag-dialog?)))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
@@ -909,7 +983,8 @@
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
         show-hidden-properties-toggle-button? (and (seq hidden-properties)
                                                    (or current-route-page?
-                                                       root-block?))]
+                                                       root-block?)
+                                                   (not (block-below-pill-owns-hidden-toggle? target-block opts)))]
     [:<>
      (cond
        (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
@@ -931,10 +1006,7 @@
                                           (= property-ident :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity/page? block)
-               page-properties-area? (and page?
-                                          (or (:page-title? opts)
-                                              sidebar-properties?
-                                              tag-dialog?))
+               page-properties-area? (and page? (page-title-property-surface? opts))
                opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [{:keys [property-ident]}]
@@ -1004,7 +1076,7 @@
                                                    :description-property-uuid
                                                    description-property-uuid))])])
 
-                (when (and page? (not class?))
+                (when (and page-properties-area? (not class?))
                   ^{:key (str id "-add-property")}
                   [new-property block opts'])
 

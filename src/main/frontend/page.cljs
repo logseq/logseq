@@ -10,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.rfx :as rfx]
+            [frontend.routes :as routes]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -115,7 +116,7 @@
                 (interpolate-sentence
                  (t :page/open-issue-desc)
                  :links
-                 [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
+                 [{:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
      (shui-toaster/install-toaster)]))
 
 (hsx/defc not-found
@@ -127,6 +128,31 @@
    (shui/button {:on-click #(rfe/push-state :home)
                  :variant :outline}
                 (shui/tabler-icon "home") (t :page/go-back-home))])
+
+(defn route-view-key
+  "React key for the painted route view. Title and path strings change while
+   typing; the resolved page or zoomed-block uuid does not."
+  [route-match paint]
+  (or (some-> (get-in paint [:page :block/uuid]) str)
+      (:path route-match)
+      (get-in route-match [:data :name])))
+
+(hsx/defc route-view
+  "A route switch unmounts the previous view at once. Keep it on screen until
+   the next route can paint in a single commit instead of flashing an empty
+   main area while its snapshots load."
+  [route-match]
+  (let [paint (routes/use-route-paint route-match)
+        ready? (not= :loading (:status paint))
+        [held set-held!] (hooks/use-state nil)
+        current (when ready?
+                  {:route-match route-match
+                   :key (route-view-key route-match paint)})]
+    (when (and current (not= current held))
+      (set-held! current))
+    (when-let [painted (or current held)]
+      ^{:key (:key painted)}
+      [(:view (:data (:route-match painted))) (:route-match painted)])))
 
 (hsx/defc current-page
   []
@@ -140,14 +166,13 @@
      (setup-fns!))
    [])
   (if-let [route-match (rfx/use-sub [:route-match])]
-    (when-let [view (:view (:data route-match))]
+    (when (:view (:data route-match))
       (ui/catch-error-and-notify
        (helpful-default-error-screen)
        [:<>
         (container/root-container
          route-match
-         ^{:key (:path route-match)}
-         [view route-match])
+         (route-view route-match))
         (when config/lsp-enabled?
           (plugin/hook-daemon-renderers))]))
     (not-found)))

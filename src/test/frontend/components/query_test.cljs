@@ -1,6 +1,7 @@
 (ns frontend.components.query-test
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
+            [clojure.string :as string]
             [cljs.test :refer [deftest is]]
             [frontend.components.query :as query]
             [frontend.components.query.result :as query-result]
@@ -42,6 +43,16 @@
   (let [repo-config {:default-queries {:journals []}}]
     (is (true? (#'query/resolve-built-in-query? repo-config true {:title "TODO"})))
     (is (false? (#'query/resolve-built-in-query? repo-config false {:title "TODO"})))))
+
+(deftest scalar-custom-query-results-render-as-list-test
+  (let [html (render-static
+              (query/custom-query-inner
+               {:built-in-query? false}
+               {:query '[:find ?b]}
+               {:current-block {:block/uuid (random-uuid)}
+                :result [42]
+                :group-by-page? false}))]
+    (is (string/includes? html "<li>42</li>"))))
 
 (deftest built-in-block-query-preserves-default-page-grouping-test
   (let [captured-options (atom nil)

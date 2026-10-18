@@ -90,13 +90,14 @@
   ([db id hidden-eid?]
    (let [entity (d/entity db id)
          entity-ident (:db/ident entity)
+         page-ids (set (cons id (get-block-alias-ids db id)))
          class-ids (when (entity-util/class? entity)
                      (let [children (db-class/get-structured-children db id)]
                        (set (conj children id))))]
      (fn [ref-eid]
        (or
-        (= ref-eid id)
-        (= id (datom-v db ref-eid :block/page))
+        (contains? page-ids ref-eid)
+        (contains? page-ids (datom-v db ref-eid :block/page))
         (= id (datom-v db ref-eid :logseq.property/view-for))
         (hidden-eid? (datom-v db ref-eid :block/page))
         (hidden-eid? ref-eid)
@@ -226,13 +227,14 @@
   [db id]
   (let [entity (d/entity db id)
         entity-ident (:db/ident entity)
+        page-ids (set (cons id (get-block-alias db id)))
         class-ids (when (entity-util/class? entity)
                     (let [children (db-class/get-structured-children db id)]
                       (set (conj children id))))]
     (fn [ref-block]
       (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))
+       (contains? page-ids (:db/id ref-block))
+       (contains? page-ids (:db/id (:block/page ref-block)))
        (= id (:db/id (:logseq.property/view-for ref-block)))
        (entity-util/hidden? (:block/page ref-block))
        (entity-util/hidden? ref-block)
@@ -253,22 +255,31 @@
              (remove hidden-ref?*))))
 
 (defn get-block-refs-count
-  [db id]
-  (let [with-alias (->> (get-block-alias-ids db id)
-                        (cons id)
-                        distinct)
-        hidden-ref?* (hidden-ref-id-pred db id)]
-    (reduce
-     (fn [total alias-id]
-       (+ total
-          (reduce (fn [n datom]
-                    (if (hidden-ref?* (:e datom))
-                      n
-                      (inc n)))
-                  0
-                  (d/datoms db :avet :block/refs alias-id))))
-     0
-     with-alias)))
+  "Exact inbound refs count. With `limit`, returns nil once the count would
+   exceed it, so callers can defer heavy pages to an on-demand count instead
+   of scanning the block's whole inbound ref set during rendering."
+  ([db id]
+   (get-block-refs-count db id nil))
+  ([db id limit]
+   (let [with-alias (->> (get-block-alias-ids db id)
+                         (cons id)
+                         distinct)
+         hidden-ref?* (hidden-ref-id-pred db id)]
+     (reduce
+      (fn [total alias-id]
+        (let [n (reduce (fn [n datom]
+                          (if (and limit (> n limit))
+                            (reduced n)
+                            (if (hidden-ref?* (:e datom))
+                              n
+                              (inc n))))
+                        total
+                        (d/datoms db :avet :block/refs alias-id))]
+          (if (and limit (> n limit))
+            (reduced nil)
+            n)))
+      0
+      with-alias))))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]
@@ -329,11 +340,12 @@
           (assoc :children children))))))
 
 (defn get-latest-journals
+  "Returns journal entities ordered by journal-day descending, lazily.
+   Callers can `(take n)` to bound the work to the requested page size."
   [db]
   (let [today (date-time-util/date->int (js/Date.))]
-    (->> (d/datoms db :avet :block/journal-day)
-         vec
-         rseq
+    (->> (d/rseek-datoms db :avet :block/journal-day today)
+         (take-while #(= :block/journal-day (:a %)))
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]

@@ -8,6 +8,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -127,7 +128,7 @@
                               :in $ ?ref-id
                               :where [?e :logseq.property/asset ?ref-id]]
                             ref-id)]
-    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))
+    (let [highlights (some->> data (map first) (map #(:logseq.property.pdf/hl-value %)) (vec))
           extra {:page (:logseq.property.asset/last-visit-page block)}]
       {:highlights highlights
        :extra (when (some #(not (nil? (% extra))) [:page]) extra)})))
@@ -139,7 +140,7 @@
 (defn- db-based-persist-hl-area-image
   [repo png]
   (let [file (js/File. #js [png] "pdf area highlight.png")]
-    (editor-handler/db-based-save-assets! repo [file] {:pdf-area? true})))
+    (editor-assets/db-based-save-assets! repo [file] {:pdf-area? true})))
 
 (defn- persist-hl-area-image
   [repo-url _repo-dir _current _new-hl _old-hl png]

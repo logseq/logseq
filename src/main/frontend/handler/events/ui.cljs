@@ -321,7 +321,7 @@
                     editing-target
                     (assoc :editing-target editing-target))]
       (p/do!
-       (editor-handler/save-current-block!)
+       (editor-handler/save-current-block! {:flush-input? true})
        (editor-new-property block target opts')))))
 
 (defn- reaction-target-block-ids [blocks]

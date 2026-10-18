@@ -8,14 +8,14 @@ let uuid_ref_max_depth = 10
 let lower_uuid uuid = String.lowercase_ascii uuid
 
 let unique_preserve_order values =
-  let rec loop seen acc values =
-    match Vec.pop_front values with
-    | None -> acc
-    | Some (value, rest) ->
-        if Vec.mem value seen then loop seen acc rest
-        else loop (Vec.push_front seen value) (Vec.push_back acc value) rest
-  in
-  loop Vec.empty Vec.empty values
+  let seen = Hashtbl.create (Vec.length values) in
+  Vec.filter_map
+    (fun value ->
+      if Hashtbl.mem seen value then None
+      else (
+        Hashtbl.replace seen value ();
+        Some value))
+    values
 
 let find_substring_from ~needle haystack start =
   let needle_len = String.length needle in
@@ -154,45 +154,41 @@ let label_of_value value =
       | Some name when String.trim name <> "" -> Some name
       | _ -> value_uuid value)
 
-let fetch_uuid_entities config repo uuids =
+let fetch_uuid_entities invoke_config repo uuids =
   let uuids =
     uuids
     |> Vec.filter Cli_primitive.is_uuid_string
     |> Vec.map lower_uuid |> unique_preserve_order
   in
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-    (function
-    | Error _ -> pure Vec.empty
-    | Ok invoke_config ->
-        let rec pull acc uuids =
-          match Vec.pop_front uuids with
-          | None -> pure acc
-          | Some (uuid, rest) ->
-              bind
-                (Transport.thread_api_pull invoke_config ~repo
+  let rec pull acc uuids =
+    match Vec.pop_front uuids with
+    | None -> pure acc
+    | Some (uuid, rest) ->
+        bind
+          (Transport.thread_api_pull invoke_config ~repo
                    ~selector:
                      (Edn_util.expect_vector_t "uuid lookup selector"
                         uuid_lookup_selector)
                    ~lookup:(uuid_lookup uuid))
-                (fun value ->
-                  let acc =
-                    match value_uuid value with
-                    | None -> acc
-                    | Some uuid ->
-                        Vec.push_back acc
-                          {
-                            uuid;
-                            id = Edn_util.get_int64 value "db/id";
-                            label = label_of_value value;
-                          }
-                  in
-                  pull acc rest)
-        in
-        pull Vec.empty uuids)
+          (fun value ->
+            let acc =
+              match value_uuid value with
+              | None -> acc
+              | Some uuid ->
+                  Vec.push_back acc
+                    {
+                      uuid;
+                      id = Edn_util.get_int64 value "db/id";
+                      label = label_of_value value;
+                    }
+            in
+            pull acc rest)
+  in
+  pull Vec.empty uuids
 
-let fetch_uuid_labels config repo uuids =
+let fetch_uuid_labels invoke_config repo uuids =
   Cli_effect.map
     (Vec.filter_map (fun entry ->
          Option.map (fun label -> (entry.uuid, label)) entry.label))
-    (fetch_uuid_entities config repo uuids)
+    (fetch_uuid_entities invoke_config repo uuids)

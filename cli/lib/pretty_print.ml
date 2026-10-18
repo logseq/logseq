@@ -18,7 +18,7 @@ let rec flat_value (Melange_edn_melange.Any value as any) =
   | Melange_edn_melange.Set values -> flat_seq "#{" "}" (vec_of_array values)
   | Melange_edn_melange.Tagged (tag, value) ->
       "#" ^ tag ^ " " ^ flat_value value
-  | _ -> Melange_edn_melange.to_edn_string any
+  | _ -> Melange_edn_melange.to_edn_string (Edn_util.normalize_strings any)
 
 and flat_seq open_ close values =
   values |> Vec.map flat_value |> Vec.string_concat " " |> fun content ->

@@ -50,7 +50,12 @@
    {:commands ["sync upload" "sync download" "sync status"],
     :options {:global ["--config" "--graph" "--root-dir" "--output"]}}}}
  :cases
- [{:tags [:happy-path :bootstrap :create-enable-sync :a-to-b],
+ [{:id "sync-graph-deletion-closes-active-resources"
+   :graph "sync-e2e-graph-deletion"
+   :extends :sync/common
+   :tags [:lifecycle]
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/assert_active_graph_deletion.py' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --other-root '{{tmp-dir}}/graphs-b' --other-config '{{tmp-dir}}/cli-b.edn'"]}
+  {:tags [:happy-path :bootstrap :create-enable-sync :a-to-b],
    :extends :sync/create-enable-base,
    :setup
    ["{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} --enable-sync --e2ee-password {{e2ee-password-arg}}"

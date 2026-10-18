@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
@@ -22,7 +23,6 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.entity :as entity]
-            [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
@@ -40,17 +40,29 @@
   (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
 (defn filter-commands
-  [page? commands]
-  (if page?
-    (let [task-groups #{(t :editor.slash/group-task-status)
-                        (t :editor.slash/group-task-date)
-                        (t :editor.slash/group-priority)}]
-      (filter (fn [item]
-                (or
-                 (= (t :command.editor/add-property) (first item))
-                 (when (= (count item) 5)
-                   (contains? task-groups (last item))))) commands))
-    commands))
+  [page? has-heading? commands]
+  (seq
+   (if page?
+     (let [task-groups #{(t :editor.slash/group-task-status)
+                         (t :editor.slash/group-task-date)
+                         (t :editor.slash/group-priority)}]
+       (filter (fn [item]
+                 (or
+                  (= (t :command.editor/add-property) (first item))
+                  (when (= (count item) 5)
+                    (contains? task-groups (last item))))) commands))
+     (if has-heading?
+       commands
+       (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
+
+(defn slash-commands-search-filtered?
+  "True when the slash popup was narrowed by user search text.
+
+  Contextual filters such as hiding Clear heading on non-heading blocks
+  do not count as a search filter and must not hide group headings."
+  [search-matched initial-commands]
+  (not= search-matched initial-commands))
+
 
 (defn node-render
   [block q {:keys [db-tag?]}]
@@ -91,9 +103,12 @@
 (hsx/defc commands
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
-        page? (entity/page? (state/get-edit-block))
-        matched (or (filter-commands page? matched') no-matched-commands)
-        filtered? (not= matched @commands/*initial-commands)]
+        edit-block (state/get-edit-block)
+        page? (entity/page? edit-block)
+        has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
+        matched (or (filter-commands page? has-heading? matched') no-matched-commands)
+        filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
+
     (ui/auto-complete
      matched
      (cond->
@@ -211,6 +226,7 @@
                                 :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))
                              (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                    :built-in? true
                                                                     :page-only? false}))]
       (set-exact-page! block)
       (set-matched-pages! result))))
@@ -353,7 +369,7 @@
         q (or
            selected-text
            (when (>= (count edit-content) current-pos)
-             (subs edit-content pos current-pos)))]
+             (common-util/safe-subs edit-content pos current-pos)))]
     (when input
       (let [embed? (= action "Block embed")
             page (when embed? (page-ref/get-page-name edit-content))
@@ -392,7 +408,7 @@
       (let [current-pos (cursor/pos input)
             q (or
                (when (>= (count edit-content) current-pos)
-                 (subs edit-content pos current-pos))
+                 (common-util/safe-subs edit-content pos current-pos))
                "")]
         (template-search-aux id q)))))
 
@@ -499,7 +515,7 @@
      :type "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? false)))
+                    (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? false)))
      :hidden true}]])
 
 (def search-timeout (atom nil))
@@ -553,40 +569,27 @@
          (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
-(defn editor-row-height-unchanged?
-  "Check if the row height of editor textarea is changed, which happens when font-size changed"
-  []
-  ;; FIXME: assuming enter key is the only trigger of the height changing (under markdown editing of headlines)
-  ;; FIXME: looking for an elegant & robust way to track the change of font-size, or wait for our own WYSIWYG text area
-  (let [last-key (state/get-last-key-code)]
-    (and (not= keycode/enter (:key-code last-key))
-         (not= keycode/enter-code (:code last-key)))))
+(defn- update-heading-class!
+  "Sets the textarea's class (uniline/multiline, heading level) from its
+   current content. Called from the change handler on each keystroke; the box
+   passes the same class as a prop, so a render writes the current class too."
+  [^js el block format value]
+  (let [class' (get-editor-style-class block value format)]
+    (when (not= class' (.-className el))
+      (set! (.-className el) class'))))
 
-(hsx/defc mock-textarea
-  [content]
-  (hooks/use-effect!
-   (fn []
-     (when-not (state/get-state :editor/on-paste?)
-       (try (editor-handler/handle-last-input)
-            (catch :default _e
-              nil)))
-     (state/set-state! :editor/on-paste? false)))
-  [:div#mock-text
+(defn- mock-textarea
+  "The hidden mirror of the textarea that the caret-position helpers read.
+   Its spans are built on demand by frontend.util.cursor/build-mock-text!,
+   only when a caret position is needed."
+  []
+  [:div.mock-text
    {:style {:width "100%"
             :height "100%"
             :position "absolute"
             :visibility "hidden"
             :top 0
-            :left 0}}
-   (let [content (str content "0")
-         graphemes (util/split-graphemes content)
-         graphemes-char-index (reductions #(+ %1 (count %2)) 0 graphemes)]
-     (for [[idx c] (into (sorted-map) (zipmap graphemes-char-index graphemes))]
-       (if (= c "\n")
-         [:span {:id (str "mock-text_" idx)
-                 :key idx} "0" [:br]]
-         [:span {:id (str "mock-text_" idx)
-                 :key idx} c])))])
+            :left 0}}])
 
 (defn- open-editor-popup!
   [id content opts]
@@ -674,6 +677,9 @@
   (let [action (state/get-editor-action)
         config (:config state)]
     (cond
+      (and editing-another-block? action)
+      (state/clear-editor-action!)
+
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
 
@@ -711,11 +717,27 @@
         component-state {:opts opts
                          :id id
                          :config config}
-        content (rfx/use-sub [:editor/content (:block/uuid block)])
+        ;; Read from the store, never subscribed: every keystroke writes
+        ;; :editor/content, the editor popups subscribe to it, and this box
+        ;; renders only when its block or config changes.
+        content (get (state/get-state :editor/content) (:block/uuid block))
+        ;; The class is a prop so the autosize textarea measures the heading
+        ;; font when it mounts; the change handler keeps the class current
+        ;; between renders. A caller's :on-change (the comments editor)
+        ;; replaces the block handler, not the class update.
         heading-class (get-editor-style-class block content format)
+        editor-opts (:editor-opts config)
+        on-change (or (:on-change editor-opts)
+                      (editor-handler/editor-on-change! block id search-timeout))
         read-only? (editor-readonly? block)
         _ (lifecycle/use-did-mount! id config)
         _ (use-key-listeners! component-state id format)
+        ;; A paste that mounts a fresh editor (block paste, embed paste, file
+        ;; paste) fires no change event, so the flag is cleared here as well.
+        _ (hooks/use-effect!
+           (fn []
+             (state/set-state! :editor/on-paste? false))
+           [id])
         _ (hooks/use-layout-effect!
            (fn []
              (state/set-editor-args! [opts id config]))
@@ -741,11 +763,13 @@
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
-               :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
                :default-value     (or content "")
                :minRows           (if (state/enable-grammarly?) 2 1)
                :on-click          (editor-handler/editor-on-click! id)
-               :on-change         (editor-handler/editor-on-change! block id search-timeout)
+               :on-change         (fn [e]
+                                    (when-let [el (.-target e)]
+                                      (update-heading-class! el block format (util/evalue e)))
+                                    (on-change e))
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-key-down       (fn [e]
                                     (if-let [on-key-down (:on-key-down config)]
@@ -766,11 +790,11 @@
                (assoc :parentblockid (str (:block/uuid parent-block)))
 
                true
-               (merge (:editor-opts config)))]
+               (merge (dissoc editor-opts :on-change)))]
     [:div.editor-inner.flex.flex-1 {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea opts)
-     (mock-textarea content)
+     (mock-textarea)
      (command-popups id format)
 
      (when format

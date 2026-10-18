@@ -6,8 +6,10 @@
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]
+            [logseq.api.db-based :as db-based-api]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before #(test-helper/start-test-db! {:build-init-data? false})
@@ -118,6 +120,70 @@
               (is (= "grandchild"
                      (get-in (js->clj result :keywordize-keys true)
                              [:children 0 :children 0 :title])))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest add-property-value-choices-normalizes-block-identities
+  (async done
+    (let [property-uuid #uuid "4406f839-6410-43b5-87db-25e9b8f54cc0"
+          choice-uuid #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172"
+          calls (atom [])]
+      (-> (p/with-redefs [db-property-handler/add-existing-values-to-closed-values!
+                          (fn [property-id values]
+                            (swap! calls conj [property-id values])
+                            (p/resolved nil))
+                          db-async/<get-block
+                          (fn [_repo property-id options]
+                            (is (= property-uuid property-id))
+                            (is (= {:children? false} options))
+                            (p/resolved {:db/ident :user.property/status
+                                         :block/tags [{:db/ident :logseq.class/Property}]}))]
+            (p/let [_ (db-based-api/add-property-value-choices
+                       (str property-uuid)
+                       #js [(str choice-uuid)])
+                    _ (db-based-api/add-property-value-choices
+                       #js {:uuid (str property-uuid)}
+                       #js [#js {:uuid (str choice-uuid)}])]
+              (is (= [[:user.property/status [choice-uuid]]
+                      [:user.property/status [choice-uuid]]]
+                     @calls))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest add-property-value-choices-rejects-invalid-identities
+  (async done
+    (let [property-uuid #uuid "4406f839-6410-43b5-87db-25e9b8f54cc0"
+          choice-uuid #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172"
+          get-block-calls (atom 0)
+          handler-called? (atom false)]
+      (-> (p/with-redefs [db-property-handler/add-existing-values-to-closed-values!
+                          (fn [& _args]
+                            (reset! handler-called? true)
+                            (p/resolved nil))
+                          db-async/<get-block
+                          (fn [_repo _property-id _options]
+                            (p/resolved
+                             (if (= 1 (swap! get-block-calls inc))
+                               {:db/ident :user.property/status
+                                :block/tags [{:db/ident :logseq.class/Property}]}
+                               {:block/tags []})))]
+            (p/let [{invalid-choice-error :error}
+                    (p/catch
+                     (db-based-api/add-property-value-choices
+                      (str property-uuid)
+                      #js ["not-a-uuid"])
+                     (fn [error] {:error error}))
+                    {invalid-property-error :error}
+                    (p/catch
+                     (db-based-api/add-property-value-choices
+                      (str property-uuid)
+                      #js [(str choice-uuid)])
+                     (fn [error] {:error error}))]
+              (is (re-find #"not a valid UUID string" (ex-message invalid-choice-error)))
+              (is (re-find #"Not a valid property" (ex-message invalid-property-error)))
+              (is (false? @handler-called?))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))

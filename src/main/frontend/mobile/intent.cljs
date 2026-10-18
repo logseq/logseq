@@ -14,6 +14,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -117,7 +118,7 @@
           file-base64-str (some-> file (.-data))
           file (some-> file-base64-str (utils/base64ToUint8Array)
                        (vector) (clj->js) (js/File. basename #js {}))
-          result (editor-handler/db-based-save-assets!
+          result (editor-assets/db-based-save-assets!
                   (state/get-current-repo) [file] {})]
     (first result)))
 
@@ -148,7 +149,7 @@
                       (interpolate-rich-text-node
                        (t :mobile.share/unsupported-import-type)
                        [application-type
-                        [:a {:href "https://github.com/logseq/logseq/issues"
+                        [:a {:href "https://github.com/logseq/db-test/issues"
                              :target "_blank"} "GitHub"]])]
                      :warning false))]
     (when content
@@ -179,7 +180,7 @@
               file-base64-str (some-> file (.-data))
               file (some-> file-base64-str (utils/base64ToUint8Array)
                            (vector) (clj->js) (js/File. basename #js {}))
-              result (editor-handler/db-based-save-assets!
+              result (editor-assets/db-based-save-assets!
                       (state/get-current-repo) [file] {})]
         result)
       (p/catch (fn [error]
@@ -199,7 +200,7 @@
        [:div
         (interpolate-rich-text-node
          (t :mobile.share/unsupported-content-warning)
-         [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+         [[:a {:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
                :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))
 
@@ -212,7 +213,7 @@
        [:div
         (interpolate-rich-text-node
          (t :mobile.share/unsupported-content-warning)
-         [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+         [[:a {:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
                :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))))
 
@@ -286,7 +287,7 @@
          [:div
           (interpolate-rich-text-node
            (t :mobile.share/unsupported-content-warning)
-           [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+           [[:a {:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
                  :target "_blank"} "GitHub"]])
           [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))
 

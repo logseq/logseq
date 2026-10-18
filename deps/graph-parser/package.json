@@ -8,6 +8,7 @@
     "better-sqlite3": "^12.8.0"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "mldoc": "^1.5.9",
     "sanitize-filename": "1.6.4"
   },

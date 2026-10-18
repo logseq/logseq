@@ -7,7 +7,6 @@ create table if not exists personal_access_tokens (
   permission text not null,
   created_at integer not null,
   expires_at integer not null,
-  last_used_at integer,
   check (permission in ('read', 'write', 'both'))
 );
 

@@ -14,6 +14,8 @@ type option_meta = {
   required : bool;
   repeatable : bool;
   choices : string Rrbvec.t;
+  (* value is a comma-separated list; choices complete each list element *)
+  multi : bool;
   default : string option;
 }
 

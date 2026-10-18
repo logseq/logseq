@@ -1,18 +1,15 @@
 (ns logseq.db-sync.worker-auth-test
   (:require [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
             [logseq.common.authorization :as authorization]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
 
 (deftest cognito-client-id-allowlist-test
   (let [env #js {"COGNITO_CLIENT_ID" "web-client"
-                 "COGNITO_CLIENT_IDS" "chatgpt-client, admin-client"
-                 "LOGSEQ_CHAT_COGNITO_CLIENT_ID" "native-chat-client"}]
+                 "COGNITO_CLIENT_IDS" "chatgpt-client, admin-client"}]
     (is (authorization/client-id-allowed? env "web-client"))
     (is (authorization/client-id-allowed? env "chatgpt-client"))
     (is (authorization/client-id-allowed? env "admin-client"))
-    (is (authorization/client-id-allowed? env "native-chat-client"))
     (is (not (authorization/client-id-allowed? env "unknown-client")))))
 
 (deftest cognito-client-id-allowlist-fails-closed-test
@@ -21,17 +18,6 @@
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" ""} "")))
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_IDS" " , "} "chatgpt-client")))
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" "web-client"} nil))))
-
-(deftest cognito-token-client-id-uses-client-id-for-access-token-test
-  (is (= "native-chat-client"
-         (authorization/token-client-id
-          #js {"token_use" "access"
-               "client_id" "native-chat-client"
-               "aud" "https://api.logseq.com"})))
-  (is (= "web-client"
-         (authorization/token-client-id
-          #js {"token_use" "id" "aud" "web-client"})))
-  (is (nil? (authorization/token-client-id #js {"client_id" "untyped-token"}))))
 
 (deftest auth-claims-uses-jwt-verification-test
   (async done
@@ -42,25 +28,6 @@
                                  (js/Promise.resolve #js {"sub" (str "jwt:" token)}))]
                  (p/let [claims (auth/auth-claims request #js {})]
                    (is (= "jwt:dev-token" (aget claims "sub")))))
-               (p/then (fn [] (done)))
-               (p/catch (fn [error]
-                          (is false (str error))
-                          (done)))))))
-
-(deftest semantic-auth-grants-first-party-access-token-scopes-test
-  (async done
-         (let [request (js/Request. "http://localhost/api/v1/graphs")
-               claims #js {"sub" "user-1"
-                           "token_use" "access"
-                           "client_id" "native-client"
-                           "scope" "aws.cognito.signin.user.admin"}
-               env #js {"COGNITO_CLIENT_ID" "native-client"}]
-           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
-                 (p/let [semantic-claims (auth/semantic-auth-claims request env)
-                         scopes (set (string/split (aget semantic-claims "scope") #"\s+"))]
-                   (is (contains? scopes "aws.cognito.signin.user.admin"))
-                   (is (contains? scopes "logseq/read"))
-                   (is (contains? scopes "logseq/write"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))

@@ -2,6 +2,8 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.class :as class-component]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
@@ -138,6 +140,7 @@
   [page option document-mode?]
   (merge {:id (str (:block/uuid page))
           :db/id (:db/id page)
+          :current-page-title (:block/title page)
           :block? (not (entity/page? page))
           :editor-box editor/box
           :document/mode? document-mode?
@@ -153,13 +156,17 @@
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
-      [:div.page-blocks-inner.relative
-       (when (or (seq child-uuids) (:current-page? config))
-         (block/page-root-virtual-list config child-uuids))
-       (when (and (not config/publishing?)
-                  (or (empty? child-uuids)
-                      (not hide-add-button?)))
-         (add-button page child-uuids config))])))
+      (block/with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         [:div.page-blocks-inner.relative
+          (when (or (seq visible-uuids) (:current-page? config))
+            (block/page-root-virtual-list config visible-uuids))
+          (when (and (not config/publishing?)
+                     (or (empty? visible-uuids)
+                         (not hide-add-button?)))
+            (add-button page visible-uuids config))])))))
 
 (hsx/defc special-page-root
   [page-uuid membership-kind user-uuid config hide-add-button?]
@@ -175,12 +182,17 @@
                       (not hide-add-button?)))
          (add-button page child-uuids config))])))
 
+(defn- hide-block-route-add-button?
+  "Leaf property values are not containers; do not offer a create-sub-block control."
+  [block hide-add-button?]
+  (or hide-add-button? (entity/leaf-property-value? block)))
+
 (hsx/defc block-route-root
   [block-uuid block config hide-add-button?]
   (let [child-uuids (db-hooks/use-children block-uuid)]
     [:div.page-blocks-inner.relative
-     (block/plain-block-list config [block-uuid])
-     (when-not hide-add-button?
+     (block/page-root-virtual-list config [block-uuid])
+     (when-not (hide-block-route-add-button? block hide-add-button?)
        (add-button block child-uuids config))]))
 
 (hsx/defc page-blocks-cp
@@ -190,7 +202,12 @@
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
   (let [document-mode? (rfx/use-sub [:document/mode?])
-        config (page-render-config page option document-mode?)
+        config (cond-> (page-render-config page option document-mode?)
+                 ;; Only the standalone page route window-renders its outliner;
+                 ;; pages embedded in views, journals, sidebar, or previews
+                 ;; render their blocks in full.
+                 (:current-page? option)
+                 (assoc :virtualize? true))
         page-uuid (:block/uuid page)
         user-uuid-string (user-handler/user-uuid)
         user-uuid (when (and (string? user-uuid-string)
@@ -352,7 +369,7 @@
        (plugins/hook-ui-items :pagebar)])))
 
 (hsx/defc tabs
-  [page opts]
+  [page opts on-first-table-paint!]
   (let [class? (entity/class? page)
         property? (entity/property? page)
         both? (and class? property?)
@@ -387,7 +404,7 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (objects/class-objects page opts)))
+         (objects/class-objects page opts on-first-table-paint!)))
       (when property?
         (shui/tabs-content
          {:value "property"}
@@ -409,6 +426,48 @@
        [:<>
         (block/db-properties-cp config page {:sidebar-properties? true})
         [:hr.my-4]])]))
+
+(defn- defer-class-page-below-fold?
+  "Tags/class objects are the first paint. Children trees and linked
+  refs must not share that snapshot batch."
+  [page {:keys [sidebar? tag-dialog?]}]
+  (boolean
+   (and (entity/class? page)
+        (not sidebar?)
+        (not tag-dialog?))))
+
+(def ^:private class-page-below-fold-delay-ms 800)
+
+(defn- use-below-fold-ready
+  "A class page shows its body once the objects table reports its first
+  window. That window's view-data has answered by then, so the body's
+  snapshot requests queue behind it. The timer only caps the wait for a
+  table that never reports. The release callback keeps its identity, so
+  the memoized tabs do not re-render when the body is released."
+  [defer?]
+  (let [[released? set-released!] (hooks/use-state false)
+        ready? (or (not defer?) released?)
+        release! (hooks/use-callback #(set-released! true) [])]
+    (hooks/use-effect!
+     (fn []
+       (when-not ready?
+         (let [timeout-id (js/setTimeout release! class-page-below-fold-delay-ms)]
+           #(js/clearTimeout timeout-id))))
+     [ready?])
+    [ready? release!]))
+
+(defn- maybe-after-first-paint
+  [ready? content]
+  (when ready? content))
+
+(defn- page-inner-key
+  "React key for the page inner wrap, which owns the child block tree."
+  [page]
+  (str (:block/uuid page)))
+
+(defn- page-references-key
+  [page]
+  (str (:block/uuid page) "-refs"))
 
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
@@ -434,7 +493,9 @@
         recycled? (ldb/recycled? page)
         page-display-title (when (entity/page? page)
                              (route-handler/built-in-page-title (:block/title page)))
-        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))]
+        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
+        [body-ready? on-first-table-paint!] (use-below-fold-ready
+                                             (defer-class-page-below-fold? page option))]
     (if page
       (when (or title block?)
         (if recycled?
@@ -448,7 +509,7 @@
                         {:data-page-tags (text-util/build-data-value page-names)}))
                     {})
 
-                  {:key title
+                  {:key (page-inner-key page)
                    :class (util/classnames [{:is-journals (or journal? fmt-journal?)
                                              :is-today-page (and (not home?) (boolean today?))
                                              :is-node-page (or class-page? property-page?)}])})
@@ -471,10 +532,12 @@
                 (lsp-pagebar-slot)]
                (when (and (entity/page? page)
                           (not (ldb/library? page)))
-                 (property-component/bidirectional-properties-area page config))])
+                 (maybe-after-first-paint
+                  body-ready?
+                  (property-component/bidirectional-properties-area page config)))])
 
             (when (and block? (not sidebar?))
-              (block/breadcrumb {} repo (:block/uuid page) {:block page}))
+              (block-breadcrumb/breadcrumb {} repo (:block/uuid page) {:block page}))
 
             (when (ldb/library? page)
               (library/add-pages page))
@@ -485,51 +548,56 @@
 
             (when show-tabs?
               (tabs page {:current-page? option
-                          :sidebar? sidebar?}))
+                          :sidebar? sidebar?}
+                    on-first-table-paint!))
 
-            (when (not tag-dialog?)
-              (if recycle-page?
-                (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
-                [:div.ls-page-blocks
-                 {:style {:margin-left (if (util/mobile?) 0 -20)}
-                  :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
-                 (or (:page-blocks-content option)
-                     (page-blocks-cp
-                      page
-                      (merge option
-                             {:sidebar? sidebar?
-                              :on-page-blocks-rendered (:on-page-blocks-rendered option)
-                              :container-id container-id})))]))]
+            (maybe-after-first-paint
+             body-ready?
+             (when (not tag-dialog?)
+               (if recycle-page?
+                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
+                 [:div.ls-page-blocks
+                  {:style {:margin-left (if (util/mobile?) 0 -20)}
+                   :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
+                  (or (:page-blocks-content option)
+                      (page-blocks-cp
+                       page
+                       (merge option
+                              {:sidebar? sidebar?
+                               :on-page-blocks-rendered (:on-page-blocks-rendered option)
+                               :container-id container-id})))])))]
 
-           (when-not (or preview? recycle-page?)
-             [:div.flex.flex-col.gap-8
-              {:class (when-not (util/mobile?) "ml-1")}
-              (when today?
-                (today-queries repo page today? sidebar?))
+           (maybe-after-first-paint
+            body-ready?
+            (when-not (or preview? recycle-page?)
+              [:div.flex.flex-col.gap-8
+               {:class (when-not (util/mobile?) "ml-1")}
+               (when today?
+                 (today-queries repo page today? sidebar?))
 
-              (when today?
-                (scheduled/scheduled-and-deadlines title))
+               (when today?
+                 (scheduled/scheduled-and-deadlines title))
 
-              (when (entity/class? page)
-                (class-component/class-children page))
+               (when (entity/class? page)
+                 (class-component/class-children page))
 
               ;; referenced blocks
-              (when (and (not tag-dialog?)
-                         (not linked-refs?))
-                [:div.fade-in.delay {:key "page-references"}
-                 ^{:key (str title "-refs")}
-                 [reference/references (:block/uuid page) {:sidebar? sidebar?
-                                             :journals? journals?
-                                             :refs-count (:refs-count option)
-                                             :linked-refs-section? true}]])
+               (when (and (not tag-dialog?)
+                          (not linked-refs?))
+                 [:div.fade-in.delay {:key "page-references"}
+                  ^{:key (page-references-key page)}
+                  [reference/references (:block/uuid page) {:sidebar? sidebar?
+                                              :journals? journals?
+                                              :refs-count (:refs-count option)
+                                              :linked-refs-section? true}]])
 
-              (when-not (or unlinked-refs?
-                            sidebar?
-                            tag-dialog?
-                            home?
-                            class-page? property-page?)
-                [:div.fade-in.delay {:key "page-unlinked-references"}
-                 (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])])]))
+               (when-not (or unlinked-refs?
+                             sidebar?
+                             tag-dialog?
+                             home?
+                             class-page? property-page?)
+                 [:div.fade-in.delay {:key "page-unlinked-references"}
+                  (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])]))]))
       [:div.opacity-75 (t :page/not-found)])))
 
 (defn- page-resource-key
@@ -550,40 +618,89 @@
       :else nil)))
 
 (hsx/defc loaded-page
-  [option page-uuid]
-  (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
-        refs-count (db-hooks/use-resource [:block-ref-count page-uuid])]
-    (when page
-      (page-inner (assoc option
-                         :page page
-                         :refs-count refs-count)))))
+  [option page]
+  (let [class-page? (entity/class? page)
+        [refs-count-key set-refs-count-key!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (let [delay-ms (if class-page? class-page-below-fold-delay-ms 0)
+             timeout-id (js/setTimeout
+                         #(set-refs-count-key! [:block-ref-count (:block/uuid page)])
+                         delay-ms)]
+         #(js/clearTimeout timeout-id)))
+     [class-page?])
+    (let [refs-count (:value (db-hooks/use-resource-snapshot refs-count-key))]
+      (page-inner (assoc option :page page :refs-count refs-count)))))
 
-(hsx/defc page-resource
-  [option resource-key]
-  (let [{:keys [status value error]}
-        (db-hooks/use-resource-snapshot resource-key)]
-    (case status
-      :loading nil
-      :ready (if value
-               (loaded-page option value)
-               [:div.opacity-75 (t :page/not-found)])
-      :error (throw error)
-      nil)))
+(defn- ready-value
+  [{:keys [status value error]}]
+  (case status
+    :ready value
+    (:loading :missing) nil
+    :error (throw error)))
+
+(defn- page-cp-option
+  [option]
+  (assoc option :page-name (or (:page-name option)
+                               (get-page-name option))))
+
+(defn- page-component-key
+  "React key for the page tree. Prefer a stable entity id over the route title."
+  [option paint]
+  (str (state/get-current-repo)
+       "-"
+       (or (:block/uuid option)
+           (:db/id option)
+           (get-in paint [:page :block/uuid])
+           (:page-name option))))
+
+(defn use-page-paint
+  "Everything a page needs before its first paint: the resolved page uuid,
+   the page itself and, for a zoomed block, its breadcrumb ancestors.
+   Loading them inside the page tree painted the body first and remounted
+   the breadcrumb once its data arrived. A nil option reads as :empty so the
+   router can gate every route through the same hooks."
+  [option]
+  (let [resource-key (some-> option page-cp-option page-resource-key)
+        identity-snapshot (db-hooks/use-resource-snapshot resource-key)
+        page-uuid (ready-value identity-snapshot)
+        page-snapshot (db-hooks/use-block-projection-snapshot page-uuid render-stable-page)
+        page (ready-value page-snapshot)
+        breadcrumb-key (when (:block/page page)
+                         [:block-breadcrumb page-uuid 16])
+        breadcrumb-snapshot (db-hooks/use-resource-snapshot breadcrumb-key)
+        breadcrumb-data (ready-value breadcrumb-snapshot)]
+    (cond
+      (nil? resource-key)
+      {:status :empty}
+
+      (some #(= :loading (:status %))
+            [identity-snapshot page-snapshot breadcrumb-snapshot])
+      {:status :loading}
+
+      :else
+      {:status :ready
+       :page (cond-> page
+               breadcrumb-key
+               (assoc :block.temp/breadcrumb
+                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                      :block.temp/breadcrumb-ref-titles
+                      (:ref-titles breadcrumb-data)))})))
 
 (hsx/defc page-aux
-  [option]
-  (when-let [resource-key (page-resource-key option)]
-    (page-resource option resource-key)))
+  [option {:keys [status page]}]
+  (case status
+    (:empty :loading) nil
+    :ready (if page
+             (loaded-page option page)
+             [:div.opacity-75 (t :page/not-found)])))
 
 (hsx/defc page-cp
   [option]
-  (let [page-name (or (:page-name option)
-                      (get-page-name option))]
-    ^{:key (str
-            (state/get-current-repo)
-            "-"
-            (or (:block/uuid option) (:db/id option) page-name))}
-    [page-aux (assoc option :page-name page-name)]))
+  (let [option (page-cp-option option)
+        paint (use-page-paint option)]
+    ^{:key (page-component-key option paint)}
+    [page-aux option paint]))
 
 (hsx/defc page-container
   [page-m option]
@@ -657,7 +774,7 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (t :page.delete/batch-confirm-title)]]]
 
-     [:ol.p-2.pt-4
+     [:ol.p-2.pt-4.max-h-80.overflow-y-auto
       (for [page-item pages]
         [:li
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}

@@ -105,7 +105,6 @@ exclude_patterns = [
   "src/main/frontend/handler/export/html.cljs",                  # Raw HTML export — intentional
   "src/main/frontend/handler/shell.cljs",                        # Run shell command
   "src/main/frontend/undo_redo/debug_ui.cljs",                   # Developer undo/redo tool
-  "src/main/frontend/worker/commands.cljs",                      # Internal command identifier strings
   "src/main/frontend/**/plugin*",                                # Plugin namespaces — may contain hardcoded strings that are not
 ]
 
@@ -339,6 +338,13 @@ always_used_key_patterns = [
   # Default view title keys resolved dynamically via default-view-title-key-by-feature-type.
   "^:view/linked-references",
   "^:view/unlinked-references",
+  # Electron context-menu label used by the OCaml electron main
+  # (deps/db-worker/desktop/electron_context_menu.ml).
+  "^:editor/paste$",
+  # Emitted as :i18n-key payloads by the OCaml db-worker daemon
+  # (deps/db-worker/lib/endpoint_export.ml, worker_db_validate.ml).
+  "^:export/error-unexpected$",
+  "^:storage/invalid-data-writing$",
 ]
 
 # Key namespace prefixes excluded from unused-key checking.
@@ -359,6 +365,9 @@ ignore_key_namespaces = [
   "graph.validation",
   # Left sidebar nav keys derived from tag nav entries.
   "nav",
+  # Electron main-process keys consumed by the OCaml electron main
+  # (deps/db-worker/desktop/electron_i18n.ml), outside cljs scan scope.
+  "electron",
 ]
 
 # Map attribute keys whose keyword values are translation key references.

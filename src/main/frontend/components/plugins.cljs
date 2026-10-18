@@ -1784,13 +1784,15 @@
 
 (hsx/defc custom-js-installer
   [{:keys [t current-repo db-restoring?]}]
-  (hooks/use-effect!
-   (fn []
-     (when (and (not db-restoring?)
-                (not util/nfs?))
-       (ui-handler/exec-js-if-exists-&-allowed! t)))
-   [current-repo db-restoring?])
-  nil)
+  (let [db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)]
+    (hooks/use-effect!
+     (fn []
+       (when (and (not db-restoring?)
+                  db-worker-ready?
+                  (not util/nfs?))
+         (ui-handler/exec-js-if-exists-&-allowed! t)))
+     [current-repo db-restoring? db-worker-ready?])
+    nil))
 
 (hsx/defc perf-tip-content
   [pid name url]

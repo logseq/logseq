@@ -10,6 +10,7 @@
 
 (def tx-log-entry-schema
   [:map
+   [:tx-id {:optional true} :uuid]
    [:t :int]
    [:tx :string]
    [:outliner-op {:optional true} [:maybe :keyword]]])
@@ -60,6 +61,7 @@
    [:t {:optional true} :int]
    [:success-tx-ids {:optional true} [:sequential :uuid]]
    [:failed-tx-id {:optional true} :uuid]
+   [:retryable {:optional true} :boolean]
    [:missing-block-uuids {:optional true} [:sequential :uuid]]
    [:error-detail {:optional true} :string]
    [:data {:optional true} :string]])
@@ -86,8 +88,10 @@
 (def tx-batch-ok-schema
   [:map
    [:type [:= "tx/batch/ok"]]
+   [:t-before :int]
    [:t :int]
-   [:checksum {:optional true} :string]])
+   [:checksum {:optional true} :string]
+   [:txs [:sequential tx-log-entry-schema]]])
 
 (def ws-server-message-schema
   [:multi {:dispatch :type}
@@ -227,7 +231,10 @@
 
 (def e2ee-graph-aes-key-response-schema
   [:map
-   [:encrypted-aes-key {:optional true} [:maybe :string]]])
+   [:encrypted-aes-key {:optional true} [:maybe :string]]
+   ;; base64 of the raw RSA-OAEP wrapped AES key, for agents that unwrap
+   ;; client-side with their RSA private key (no transit parsing needed)
+   [:encrypted-aes-key-base64 {:optional true} [:maybe :string]]])
 
 (def e2ee-grant-access-entry-schema
   [:map

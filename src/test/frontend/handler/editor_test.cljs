@@ -13,11 +13,15 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.autopair :as editor-autopair]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as frontend-outliner-op]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -179,6 +183,32 @@
              @captured-state)
           "Enter must use the textarea that received the keydown event."))))
 
+(deftest enter-on-page-title-saves-and-exits-instead-of-splitting-test
+  (let [target #js {:value "Alpha Beta Gamma"
+                    :selectionStart 5}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block {:db/id 1
+                                                        :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                                        :block/title "Alpha Beta Gamma"}
+                                                :config {:page-title? true}
+                                                :node target
+                                                :value "Alpha Beta Gamma"
+                                                :pos 5})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a page title must save and exit without splitting the page entity."))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -220,6 +250,7 @@
            (fn []
              (is (= [inserted-block 0 {:container-id 7
                                        :save-code-editor? false
+                                       :save-current-block? false
                                        :skip-load? true}]
                     @calls))))
           (p/catch
@@ -312,6 +343,76 @@
              @tx-calls)
           "Content that differs from the persisted block must still be saved"))))
 
+(defn- save-current-block-while-editor-action
+  [{:keys [saved-title input-value editor-action flush-input?]}]
+  (let [block-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title saved-title}
+        input #js {:value input-value}
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly editor-action)
+                  state/get-current-repo (constantly "flush-input-repo")
+                  state/get-edit-input-id (constantly "editor")
+                  state/get-edit-block (constantly block)
+                  gdom/getElement (constantly input)
+                  db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [block' opts]
+                                                     (swap! save-calls conj [block' opts]))
+                  db-transact/apply-outliner-ops
+                  (fn [db ops opts]
+                    (swap! tx-calls conj [db ops opts])
+                    :tx)]
+      (if flush-input?
+        (editor/save-current-block! {:flush-input? true})
+        (editor/save-current-block!)))
+    {:save-calls @save-calls
+     :tx-calls @tx-calls}))
+
+(deftest save-current-block-flushes-input-while-editor-action-is-active-test
+  (testing "new unsaved block title"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "plain draft text"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands
+             :flush-input? true}))
+        "Flushing the input persists a new block's unsaved title while a slash action is active"))
+
+  (testing "existing title with unsaved suffix"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "baseline draft suffix"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input
+             :flush-input? true}))
+        "Flushing the input persists an unsaved suffix while the property/date picker is active")))
+
 (deftest save-block-does-not-drop-a-revert-while-the-previous-save-is-pending-test
   (let [block-uuid #uuid "22222222-2222-2222-2222-222222222222"
         block {:db/id 1
@@ -361,8 +462,8 @@
             (fn [& args]
               (swap! sidebar-calls conj (vec args))))
       (-> (p/do!
-           (editor/open-block-in-sidebar! page-id)
-           (editor/open-block-in-sidebar! block-id))
+           (editor-format/open-block-in-sidebar! page-id)
+           (editor-format/open-block-in-sidebar! block-id))
           (p/then
            (fn []
              (is (= [[:thread-api/pull "test" [:db/id {:block/page [:db/id]}] [:block/uuid page-id]]
@@ -563,35 +664,55 @@
         (#'editor/edit-last-block-after-inserted! {:blocks [inserted-block]})
         (is (= [[:schedule]
                 [:clear-when-saved]
-                [:edit-block inserted-block :max]]
+                [:edit-block inserted-block :max {:save-current-block? false}]]
                @calls))
         (catch :default error
           (is false (str error)))))))
 
 (deftest cycle-todo-uses-current-edit-block-test
-  (let [edit-block {:db/id 1
-                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                    :logseq.property/status {:db/ident :logseq.property/status.todo}}
-        tx-calls (atom [])
-        cycle-calls (atom [])]
-    (with-redefs [state/get-editor-action (constantly nil)
-                  editor/get-selected-blocks (constantly nil)
-                  state/get-edit-block (constantly edit-block)
-                  state/get-edit-input-id (constantly "edit-block-test")
-                  gdom/getElement (constantly #js {})
-                  state/get-edit-pos (constantly 0)
-                  conn/get-db (constantly :test-db)
-                  db-transact/apply-outliner-ops (fn [db ops opts]
-                                                   (reset! tx-calls [db ops opts])
-                                                   :tx)
-                  editor/db-based-cycle-todo! (fn [block]
-                                                (swap! cycle-calls conj block))]
-      (editor/cycle-todo!)
-      (is (= [edit-block] @cycle-calls))
-      (is (= [nil
-              []
-              {:outliner-op :cycle-todos}]
-             @tx-calls)))))
+  ;; cycle-todo! re-fetches the block before cycling (see db-test#1177), so
+  ;; this now exercises the same async pattern as the move-selected-blocks
+  ;; tests above instead of asserting synchronously right after the call.
+  (async done
+    (let [edit-block {:db/id 1
+                      :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                      :logseq.property/status {:db/ident :logseq.property/status.todo}}
+          tx-calls (atom [])
+          cycle-calls (atom [])
+          get-block-calls (atom [])]
+      (-> (p/with-redefs [state/get-editor-action (constantly nil)
+                          editor/get-selected-blocks (constantly nil)
+                          state/get-edit-block (constantly edit-block)
+                          state/get-edit-input-id (constantly "edit-block-test")
+                          state/get-current-repo (constantly "test")
+                          gdom/getElement (constantly #js {})
+                          state/get-edit-pos (constantly 0)
+                          conn/get-db (constantly :test-db)
+                          db-async/<get-block (fn [repo id-or-uuid opts]
+                                                (swap! get-block-calls conj [repo id-or-uuid opts])
+                                                (p/resolved edit-block))
+                          db-transact/apply-outliner-ops (fn [db ops opts]
+                                                            (reset! tx-calls [db ops opts])
+                                                            :tx)
+                          editor/db-based-cycle-todo! (fn [block]
+                                                        (swap! cycle-calls conj block))]
+            (-> (try
+                  (editor/cycle-todo!)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [["test" (:block/uuid edit-block) {:children? false}]]
+                          @get-block-calls))
+                   (is (= [edit-block] @cycle-calls))
+                   (is (= [nil
+                           []
+                           {:outliner-op :cycle-todos}]
+                          @tx-calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
 
 (deftest delete-block-aux-uses-passed-block-test
   (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -871,14 +992,15 @@
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
-  [{:keys [value cursor-pos action commands]
+  [{:keys [value cursor-pos action commands event-key]
     ;; Default to some commands matching which matches default behavior for most
     ;; completion scenarios
     :or {commands [:fake-command]}}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! action)
-  ;; Default cursor pos to end of line
+  ;; Default cursor pos to end of line and released key to last char of value
   (let [pos (or cursor-pos (count value))
+        event-key (or event-key (subs value (dec (count value))))
         input #js {:value value}
         command (subs value 1)]
     (with-redefs [editor/get-last-command (constantly command)
@@ -887,7 +1009,7 @@
                   editor/default-case-for-keyup-handler (constantly nil)
                   cursor/pos (constantly pos)]
       ((editor/keyup-handler nil input)
-       #js {:key (subs value (dec (count value)))}
+       #js {:key event-key}
        nil))))
 
 (deftest keyup-handler-test
@@ -937,6 +1059,34 @@
         "Completion stays open when typing tag before another tag"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest keyup-handler-converts-backticks-to-code-block-test
+  (doseq [[value event-key] [["```" "`"]
+                             ["``````" "`"]
+                             ;; dead-key commits the backtick via space or a
+                             ;; repeated Dead key release
+                             ["```" " "]
+                             ["```" "Dead"]
+                             ;; IME process/unidentified key releases
+                             ["```" "Process"]
+                             ["```" "Unidentified"]]]
+    (let [events (atom [])]
+      (with-redefs [state/set-edit-content! (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/pub-event! (fn [event] (swap! events conj event))]
+        (keyup-handler {:value value :event-key event-key}))
+      (is (= [[:editor/upsert-type-block :code]]
+             (map (fn [[event-name {:keys [type]}]] [event-name type]) @events))
+          (str value " with key " (pr-str event-key))))))
+
+(deftest keyup-handler-ignores-backticks-on-non-typing-keyup-test
+  (doseq [event-key ["ArrowLeft" "ArrowRight" "Shift" "Escape"]]
+    (let [events (atom [])]
+      (with-redefs [state/set-edit-content! (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/pub-event! (fn [event] (swap! events conj event))]
+        (keyup-handler {:value "```" :event-key event-key}))
+      (is (empty? @events) event-key))))
 
 (defn- create-tag-with-alias!
   []
@@ -1022,6 +1172,36 @@
                        (set! db-async/<get-all-classes original-<get-all-classes)
                        (state/set-state! :editor/block nil)
                        (done)))))))
+
+(deftest page-search-includes-public-built-ins
+  (async done
+    (let [matched-pages (atom nil)
+          search-options (atom nil)
+          task {:db/id 1
+                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                :block/title "Task"
+                :logseq.property/built-in? true}
+          original-<get-block db-async/<get-block
+          original-block-search search/block-search]
+      (set! db-async/<get-block (fn [& _args] (p/resolved nil)))
+      (set! search/block-search
+            (fn [_repo _query options]
+              (reset! search-options options)
+              (p/resolved [task])))
+      (-> (#'editor-component/search-pages "Ta" false #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (true? (:built-in? @search-options))
+                 "Page reference search should request the same public built-ins as Cmd+K")
+             (is (some #(= "Task" (:block/title %)) @matched-pages))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-<get-block)
+             (set! search/block-search original-block-search)
+             (done)))))))
 
 (deftest tag-search-does-not-convert-class-aliases
   (async done
@@ -1235,8 +1415,31 @@
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
 
+(defn- keydown-backtick-autopaired?
+  [event]
+  (let [autopaired? (atom false)
+        input #js {:id "edit-block-test"
+                   :value ""}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 0)
+                  editor-autopair/autopair (fn [& _] (reset! autopaired? true))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      @autopaired?)))
+
+(deftest keydown-not-matched-handler-skips-autopair-during-composition
+  (is (keydown-backtick-autopaired? #js {:key "`"
+                                         :isComposing false}))
+  (is (not (keydown-backtick-autopaired? #js {:key "`"
+                                              :isComposing true
+                                              :keyCode 229}))))
+
 (defn- delete-block-at-zero-pos-result
-  [block]
+  [block & {:keys [left-sibling]}]
   (let [deleted? (atom false)
         stopped? (atom false)
         input #js {:value ""}
@@ -1259,7 +1462,7 @@
     (set! util/stop (fn [_] (reset! stopped? true)))
     (set! state/get-current-repo (constantly test-helper/test-db))
     (set! state/get-edit-block (constantly block))
-    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved left-sibling)))
     (set! editor/get-state (constantly {:config {}}))
     (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
     (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
@@ -1300,6 +1503,32 @@
                          :block/page {:db/id 10}})]
           (is (= {:deleted? true :stopped? true} result)))
         (p/finally done))))
+
+(deftest first-empty-journal-block-backspace-does-not-edit-the-journal-title-test
+  (async done
+    (let [journal {:db/id 10
+                   :block/uuid #uuid "00000000-0000-0000-0000-000000000010"
+                   :block/name "aug 20th, 2026"
+                   :block/title "Aug 20th, 2026"
+                   :block/tags [{:db/ident :logseq.class/Journal}]}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/title "previous"
+                    :block/parent journal
+                    :block/page journal}
+          empty-block {:db/id 2
+                       :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                       :block/title ""
+                       :block/parent journal
+                       :block/page journal}]
+      (-> (p/let [first-result (delete-block-at-zero-pos-result empty-block)
+                  later-result (delete-block-at-zero-pos-result
+                                empty-block :left-sibling previous)]
+            (is (= {:deleted? false :stopped? true} first-result)
+                "Backspace must not move editing from the first empty block to a journal title.")
+            (is (= {:deleted? true :stopped? true} later-result)
+                "Backspace must preserve normal joins when a journal block has a previous block."))
+          (p/finally done)))))
 
 (deftest delete-block-when-zero-pos-keeps-the-keydown-editor-state-test
   (async done
@@ -1343,6 +1572,108 @@
                     (is (= editor-state @*deleted-editor-state)
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
+
+(deftest editor-delete-guards-nil-input-test
+  (testing "stale editing state without a textarea is a no-op"
+    (let [deleted (atom [])]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title ""})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [& args]
+                                               (swap! deleted conj args))]
+        (editor/editor-delete #js {})
+        (editor/keydown-delete-handler #js {})
+        (is (empty? @deleted)
+            "Delete must not mutate content when the edit textarea is gone"))))
+
+  (testing "Delete in a real editor still deletes the next character"
+    (let [input #js {:value "abc"
+                     :selectionStart 1
+                     :selectionEnd 1}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 1 2] @deleted)
+            "Delete in an open editor still removes the character after the cursor"))))
+
+  (testing "Delete with a selection still deletes the selected range"
+    (let [input #js {:value "abc"
+                     :selectionStart 0
+                     :selectionEnd 2}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 0 2] @deleted)
+            "Delete with a selection still removes the selected text")))))
+
+(deftest repeated-backspace-does-not-restore-erased-current-title-test
+  (let [current {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "Foo"
+                 :block/raw-title "Foo"
+                 :block/parent {:db/id 10}}
+        previous {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title ""
+                  :block/parent {:db/id 20}}
+        tx-meta (atom nil)
+        edited (atom nil)]
+    (with-redefs [db-transact/apply-outliner-ops (fn [_ _ opts]
+                                                    (reset! tx-meta opts))
+                  frontend-outliner-op/move-blocks! (fn [& _] :move)
+                  editor/delete-block-aux! (fn [& _] :delete)
+                  editor/edit-block! (fn [block pos opts]
+                                       (reset! edited [block pos opts]))]
+      (#'editor/delete-block-with-previous!
+       {:block current
+        :current-block current
+        :prev-block previous
+        :new-content ""
+        :input-empty? true
+        :delete-concat? false})
+      ((:editor/edit-block-fn @tx-meta) [])
+      (is (= [(assoc current :block/title "" :block/raw-title "")
+              0
+              {:save-code-editor? false
+               :save-current-block? false
+               :skip-load? true}]
+             @edited)
+          "Deleting an empty predecessor must not restore the erased mounted title."))))
+
+(deftest library-enter-inserts-sibling-for-page-blocks-test
+  (let [library-page {:db/id 10
+                      :block/title "Library"
+                      :logseq.property/built-in? true
+                      :block/children [{:db/id 1}]}
+        library-page-block {:db/id 1
+                            :block/title "Library Parent"
+                            :block/children [{:db/id 2 :block/title "nested"}]}
+        tagged-page-block (assoc library-page-block
+                                 :block/tags [{:db/ident :logseq.class/Page}])]
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block nil))
+        "Enter on a Library page block creates a sibling even after tags are retracted")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} tagged-page-block nil))
+        "Enter on a tagged Library page block still creates a sibling")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block false))
+        "Library page blocks stay siblings even when the caller passes sibling? false")
+    (is (false? (#'editor/insert-as-sibling? {:library? true} library-page nil))
+        "Inserting against the Library page itself still nests a child")
+    (is (false? (#'editor/insert-as-sibling? {} library-page-block nil))
+        "Outside Library, an expanded block with children still nests")))
 
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -1391,6 +1722,48 @@
                @calls)
             "Insert metadata and operations must use one transaction."))))
 
+(deftest create-view-insert-skips-pending-editor-save-test
+  (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
+        next-id #uuid "22222222-2222-2222-2222-222222222222"
+        page-block {:db/id 1
+                    :block/uuid current-id
+                    :block/title "Slash Test"
+                    :block/page {:db/id 10}}
+        view-block {:block/uuid next-id
+                    :block/title "Unlinked references"}
+        calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly "test")
+                  state/get-editor-args (constantly [nil nil {}])
+                  state/get-edit-block (constantly (assoc page-block :block/title "Slash Test/x"))
+                  state/get-edit-input-id (constantly "edit-block-test")
+                  gdom/getElement (constantly #js {:value "Slash Test/x"})
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [& _]
+                                                     (swap! calls conj :save-block))
+                  frontend-outliner-op/insert-blocks! (fn [& _]
+                                                        (swap! calls conj :insert-blocks))
+                  db-transact/apply-outliner-ops (fn [_ ops opts]
+                                                   (swap! calls conj [:apply ops opts])
+                                                   :tx)]
+      (editor/outliner-insert-block!
+       {:edit-block? false}
+       page-block
+       view-block
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :create-view
+        :skip-save-current-block? true})
+      (is (= [:insert-blocks
+              [:apply
+               []
+               {:outliner-op :insert-blocks
+                :source-outliner-op :create-view
+                :ui/page-id 10}]]
+             @calls)
+          "Auto view inserts must not carry a refused page-title save."))))
+
 (deftest split-current-block-keeps-rendered-title-in-sync-test
   (let [block {:block/title "Performance row 2"
                :block/raw-title "Performance row 2"}]
@@ -1408,6 +1781,141 @@
               {:block {:db/id 3} :children []})]
     (is (#'editor/block-map-has-children? parent))
     (is (not (#'editor/block-map-has-children? leaf)))))
+
+(deftest enter-on-url-property-value-saves-and-exits-instead-of-inserting-test
+  (let [url-block {:db/id 1
+                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                   :block/title "https://example.com/path"
+                   :logseq.property/created-from-property {:logseq.property/type :url}}
+        target #js {:value "https://example.com/path"
+                    :selectionStart 19}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block url-block
+                                                :config {:id (str (:block/uuid url-block))}
+                                                :node target
+                                                :value "https://example.com/path"
+                                                :pos 19})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))
+                  editor/insert-new-block! (fn [& _args]
+                                             (swap! calls conj :insert-new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a URL property value must save and exit without creating a child or sibling."))))
+
+(deftest enter-on-multiple-url-property-value-allows-siblings-only-test
+  (doseq [zoomed? [false true]]
+    (let [block-uuid (random-uuid)
+          url-block {:block/uuid block-uuid
+                     :logseq.property/created-from-property
+                     {:logseq.property/type :url
+                      :db/cardinality :db.cardinality/many}}
+          target #js {:value "https://example.com" :selectionStart 19}
+          calls (atom [])]
+      (with-redefs [editor/get-state
+                    (constantly {:block url-block
+                                 :config {:id (str (if zoomed? block-uuid (random-uuid)))}
+                                 :node target})
+                    editor/inside-of-editor-block (constantly true)
+                    editor/pending-new-block? (constantly false)
+                    state/doc-mode-enter-for-new-line? (constantly false)
+                    editor/inside-of-single-block (constantly false)
+                    editor/escape-editing #(swap! calls conj :escape)
+                    editor/keydown-new-block (fn [_] (swap! calls conj :insert))]
+        (editor/keydown-new-block-handler
+         #js {:target target :preventDefault (fn [])})
+        (is (= [(if zoomed? :escape :insert)] @calls))))))
+
+(deftest insert-new-block-aux-does-not-split-url-property-value-test
+  (async done
+    (let [url "https://example.com/path"
+          url-block {:db/id 1
+                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                     :block/title url
+                     :logseq.property/created-from-property {:logseq.property/type :url}}
+          calls (atom [])]
+      (-> (p/with-redefs [editor/escape-editing (fn [& _args]
+                                                  (swap! calls conj :escape-editing))
+                          editor/outliner-insert-block!
+                          (fn [& _args]
+                            (swap! calls conj :insert)
+                            (p/resolved nil))
+                          db-async/<get-block-with-children
+                          (fn [& _]
+                            (swap! calls conj :load-children)
+                            (p/resolved {:block url-block :children []}))]
+            (editor/insert-new-block-aux! {:id (str (:block/uuid url-block))} url-block url))
+          (p/then
+           (fn [result]
+             (is (= [:escape-editing] @calls)
+                 "Enter must not save a truncated title or insert around a URL value")
+             (is (= [nil nil nil] result))
+             (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
+(deftest insert-new-block-skips-url-property-value-test
+  (let [url-block {:db/id 1
+                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                   :block/title "https://logseq.com"
+                   :logseq.property/created-from-property {:logseq.property/type :url}}
+        calls (atom [])]
+    (with-redefs [editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/start-pending-new-block! (fn [& _args]
+                                                    (swap! calls conj :pending))
+                  editor/insert-new-block-aux! (fn [& _args]
+                                                 (swap! calls conj :insert-aux)
+                                                 (p/resolved [nil nil nil]))]
+      (editor/insert-new-block! {:block url-block
+                                 :value "https://logseq.com"
+                                 :config {:id (str (:block/uuid url-block))}}
+                                "https://logseq.com"
+                                nil)
+      (is (= [:escape-editing] @calls)
+          "insert-new-block! must not create a next block from a URL value."))))
+
+(deftest enter-on-default-value-block-saves-and-exits-instead-of-inserting-test
+  (let [default-block {:db/id 10
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "hello world"
+                       :block/parent {:db/id 5
+                                      :block/tags [:logseq.class/Property]
+                                      :logseq.property/default-value {:db/id 10}}}
+        target #js {:value "hello world"
+                    :selectionStart 11}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block default-block
+                                                :config {:id (str (:block/uuid default-block))}
+                                                :node target
+                                                :value "hello world"
+                                                :pos 11})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))
+                  editor/insert-new-block! (fn [& _args]
+                                             (swap! calls conj :insert-new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a default-value block must save and exit without creating a child."))))
 
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
@@ -1429,6 +1937,7 @@
                              :tail-len 0
                              :container-id 7
                              :save-code-editor? false
+                             :save-current-block? false
                              :skip-load? true}]]
                @calls))))))
 
@@ -1700,14 +2209,14 @@
               (p/let [_ (p/delay 0)
                       _ (is (= [:selection-captured
                                 [:copy-started
-                                 [true :selected-ids selected-ids]]]
+                                 [true :selected-ids selected-ids :op :cut]]]
                                @calls)
                             "Cut must not delete blocks while the structured copy is pending.")
                       _ (p/resolve! copy-finished nil)
                       _ cut-request]
                 (is (= [:selection-captured
                         [:copy-started
-                         [true :selected-ids selected-ids]]
+                         [true :selected-ids selected-ids :op :cut]]
                         :cut]
                        @calls)))))
           (p/finally done)))))
@@ -1728,6 +2237,129 @@
     (is (= #{:db/id :block/uuid :block/title :block/parent}
            (set (keys block))))
     (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
+
+(defn- mock-ls-block
+  [{:keys [blockid class-name inner]}]
+  (let [class-name (or class-name "ls-block")
+        classes (set (.split class-name " "))]
+    #js {:className class-name
+         :classList #js {:contains (fn [class] (contains? classes class))}
+         :getAttribute (fn [attr]
+                         (case attr
+                           "blockid" blockid
+                           "id" (when blockid (str "ls-block-" blockid))
+                           "data-query" nil
+                           "data-transclude" nil
+                           nil))
+         :querySelector (fn [_] inner)}))
+
+(deftest selection-node-block-id-accepts-block-id-strings-test
+  (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        inner (mock-ls-block {:blockid (str value-uuid)})]
+    (is (= value-uuid (#'editor/selection-node-block-id inner)))
+    (is (= value-uuid (#'editor/selection-node-block-id (str "ls-block-" value-uuid)))
+        "Selection nodes may be \"ls-block-<uuid>\" id strings from get-selection-start-block-or-first")
+    (is (= value-uuid (#'editor/selection-node-block-id (str value-uuid)))
+        "Virtualized selection passes bare uuid strings for unmounted blocks")))
+
+(deftest cut-selection-blocks-uses-inner-text-property-value-test
+  (async done
+    (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          value-block {:db/id 1
+                       :block/uuid value-uuid
+                       :block/title "value"}
+          inner (mock-ls-block {:blockid (str value-uuid)})
+          wrapper (mock-ls-block {:class-name "ls-block property-value-container"
+                                  :inner inner})
+          requested-ids (atom nil)
+          deleted-uuids (atom nil)]
+      (-> (p/with-redefs [editor/copy-selection-blocks
+                          (fn [& _] (p/resolved nil))
+                          editor/get-selected-blocks (constantly [wrapper])
+                          state/get-selection-block-ids (constantly [value-uuid])
+                          state/set-block-op-type! (fn [_])
+                          db-async/<get-blocks
+                          (fn [_repo ids _opts]
+                            (reset! requested-ids ids)
+                            (p/resolved [{:block value-block}]))
+                          db-async/<get-block-with-children
+                          (fn [_repo _id _opts]
+                            (p/resolved {:block value-block :children []}))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
+            (editor/cut-selection-blocks true))
+          (p/then (fn [_]
+                    (is (= [value-uuid] @requested-ids)
+                        "Cut must load the inner text property-value block, not drop the wrapper.")
+                    (is (= [value-uuid] @deleted-uuids)
+                        "Cut must delete the inner text property-value block.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest selection-copy-ids-use-view-row-uuids-test
+  (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        editor-ids [#uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]]
+    (with-redefs [state/get-selection-block-ids (constantly editor-ids)]
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [page-a page-b] nil))
+          "All pages rows are UUIDs; copy must use those instead of editor selection.")
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [{:block/uuid page-a} {:uuid page-b}] nil))
+          "Toolbar rows wrapped as block maps still copy their UUIDs.")
+      (is (= [page-a]
+             (#'editor/selection-copy-ids nil [page-a]))
+          ":selected-ids still work for cut and other callers.")
+      (is (= editor-ids
+             (#'editor/selection-copy-ids nil nil))
+          "Editor selection is used when the toolbar has no selected-blocks."))))
+
+(deftest top-level-blocks-include-pages-without-parent-test
+  (let [page-a (random-uuid)
+        page-b (random-uuid)
+        summaries [{:db/id 1
+                    :block/uuid page-a
+                    :block/title "Sep 15th, 2026"}
+                   {:db/id 2
+                    :block/uuid page-b
+                    :block/title "Apr 15th, 2027"}]]
+    (is (= [page-a page-b]
+           (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
+        "Pages and journals have no :block/parent; copy still treats them as top-level.")))
+
+(deftest compose-copied-blocks-contents-skips-empty-summaries-test
+  (async done
+         (-> (p/with-redefs [db-async/<get-block-summaries
+                             (fn [_repo _ids]
+                               (p/resolved []))]
+               (#'editor/compose-copied-blocks-contents "repo" [(random-uuid)]))
+             (p/then (fn [result]
+                       (is (= [[] "" []] result))))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
+
+(deftest copy-selection-blocks-loads-summaries-for-view-uuids-test
+  (async done
+         (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+               seen-ids (atom nil)]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [(random-uuid)])
+                               db-subs/block-snapshot (constantly {:status :missing})
+                               db-async/<get-block-summaries
+                               (fn [_repo ids]
+                                 (reset! seen-ids ids)
+                                 (p/resolved []))]
+                 (editor/copy-selection-blocks true :selected-blocks [page-a page-b]))
+               (p/then (fn [_]
+                         (is (= [page-a page-b] @seen-ids)
+                             "Copy from All pages must load the selected page UUIDs.")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
@@ -1762,6 +2394,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
@@ -1810,6 +2443,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
@@ -1843,9 +2477,9 @@
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
-  [{:keys [value cursor-pos editor-config]}]
+  [{:keys [value cursor-pos editor-config action]}]
   ;; Reset editor action in order to test result
-  (state/set-editor-action! nil)
+  (state/set-editor-action! action)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))]
     (with-redefs [state/get-input (constantly #js {:value value})
@@ -1930,6 +2564,103 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest handle-last-input-org-directive-test
+  (handle-last-input-handler {:value "#+"
+                              :cursor-pos 2})
+  (is (= nil (state/get-editor-action))
+      "No page search for org keyword prefix #+")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+BEGIN_NOTE directive")
+
+  (handle-last-input-handler {:value "#+END_QUOTE"
+                              :cursor-pos (count "#+END_QUOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+END_QUOTE directive")
+
+  (handle-last-input-handler {:value "foo #+"
+                              :cursor-pos 6})
+  (is (= nil (state/get-editor-action))
+      "No page search when #+ is typed after a word")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")
+                              :action :page-search-hashtag})
+  (is (= nil (state/get-editor-action))
+      "Closes hashtag search when # is part of an org directive")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos 1})
+  (is (= nil (state/get-editor-action))
+      "Does not open hashtag search when inserting # before + in an org directive")
+  (state/set-editor-action! nil))
+
+(deftest org-directive-hashtag-query-test
+  (is (true? (editor/org-directive-hashtag-query? "+BEGIN_NOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "#+END_QUOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "+TITLE")))
+  (is (false? (editor/org-directive-hashtag-query? "BEGIN_NOTE")))
+  (is (false? (editor/org-directive-hashtag-query? "foo")))
+  (is (false? (editor/org-directive-hashtag-query? "#foo")))
+  (is (false? (editor/org-directive-hashtag-query? nil))))
+
+(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event true)
+      (is (nil? (state/get-editor-action))
+          "Slash commands should close when leaving the original block to edit another")
+      (finally
+        (state/set-editor-action! prev-action)))))
+
+(deftest set-editing-clears-slash-commands-when-switching-blocks-test
+  ;; Click-to-edit goes through set-editing! on pointerdown, not editor-on-hide.
+  (let [block-a {:block/uuid (random-uuid) :block/title "/"}
+        block-b {:block/uuid (random-uuid) :block/title "other"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / in the current block opens slash commands")
+      (state/set-editing! (str "edit-block-" (:block/uuid block-b))
+                          (:block/title block-b)
+                          block-b
+                          ""
+                          {:container-id :test-container})
+      (is (nil? (state/get-editor-action))
+          "Slash commands close when entering edit on a different block")
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / after the switch still opens slash commands")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
+(deftest set-editing-keeps-slash-commands-when-re-editing-same-block-test
+  (let [block {:block/uuid (random-uuid) :block/title "/"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block)
+      (state/set-editor-action! :commands)
+      (state/set-editing! (str "edit-block-" (:block/uuid block))
+                          (:block/title block)
+                          block
+                          "/"
+                          {:container-id :test-container})
+      (is (= :commands (state/get-editor-action))
+          "Same-block re-edit keeps slash commands open")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
                    :value ">"}
@@ -1973,6 +2704,109 @@
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
+(deftest toggle-collapse-does-not-throw-on-property-value-row-only-selection
+  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+        threw (atom nil)]
+    (with-redefs [util/stop (constantly nil)
+                  state/editing? (constantly false)
+                  state/selection? (constantly true)
+                  editor/get-selected-blocks (constantly [empty-row])]
+      (try
+        (editor/toggle-collapse! nil)
+        (catch :default e
+          (reset! threw e)))
+      (is (nil? @threw)
+          "A property-value row with no blockid must be skipped, not passed to uuid"))))
+
+(deftest toggle-collapse-skips-property-value-rows-without-blockid
+  (async done
+         (let [real-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               real-block (mock-ls-block {:blockid (str real-uuid)})
+               empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+               collapsed (atom [])
+               expanded (atom [])
+               loaded (atom [])]
+           (-> (try
+                 (p/with-redefs [util/stop (constantly nil)
+                                 state/editing? (constantly false)
+                                 state/selection? (constantly true)
+                                 state/get-current-repo (constantly "test")
+                                 editor/get-selected-blocks (constantly [empty-row real-block])
+                                 db-async/<get-block
+                                 (fn [_repo block-id _opts]
+                                   (swap! loaded conj block-id)
+                                   (p/resolved {:block/uuid block-id
+                                                :block/collapsed? false}))
+                                 editor/collapse-block! (fn [block-id & _]
+                                                          (swap! collapsed conj block-id))
+                                 editor/expand-block! (fn [block-id & _]
+                                                        (swap! expanded conj block-id))]
+                   (editor/toggle-collapse! nil)
+                   (p/delay 20))
+                 (catch :default e
+                   (p/rejected e)))
+               (p/then (fn [_]
+                         (is (= [real-uuid] @loaded)
+                             "First real selected block decides collapse vs expand")
+                         (is (= [real-uuid] @collapsed)
+                             "Property rows without blockid are skipped; real selected blocks collapse")
+                         (is (empty? @expanded))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
+(defn- <expand-unselected-block-ids
+  [blocks]
+  (let [expanded (atom [])]
+    (-> (p/with-redefs [util/stop (constantly nil)
+                        state/editing? (constantly false)
+                        state/selection? (constantly false)
+                        editor/<all-blocks-with-level (fn [_]
+                                                        (p/resolved blocks))
+                        editor/expand-block! (fn [block-id & _]
+                                               (swap! expanded conj block-id))]
+          (editor/expand! nil))
+        (p/then (fn [_] @expanded)))))
+
+(deftest expand-without-selection-expands-shallowest-collapsed-level
+  (async done
+         (let [root-id #uuid "11111111-1111-1111-1111-111111111111"
+               parent-id #uuid "22222222-2222-2222-2222-222222222222"
+               deep-a-id #uuid "33333333-3333-3333-3333-333333333333"
+               shallow-a-id #uuid "44444444-4444-4444-4444-444444444444"
+               deep-b-id #uuid "55555555-5555-5555-5555-555555555555"
+               shallow-b-id #uuid "66666666-6666-6666-6666-666666666666"
+               ignored-root {:block/uuid root-id
+                             :block/collapsed? true}
+               uncollapsed-parent {:block/uuid parent-id
+                                   :block/level 1}
+               deep-a {:block/uuid deep-a-id
+                       :block/level 2
+                       :block/collapsed? true}
+               shallow-a {:block/uuid shallow-a-id
+                          :block/level 1
+                          :block/collapsed? true}
+               deep-b {:block/uuid deep-b-id
+                       :block/level 2
+                       :block/collapsed? true}
+               shallow-b {:block/uuid shallow-b-id
+                          :block/level 1
+                          :block/collapsed? true}]
+           (-> (p/let [mixed-expanded (<expand-unselected-block-ids
+                                       [ignored-root uncollapsed-parent
+                                        deep-a shallow-a deep-b shallow-b])
+                       remaining-deep-expanded (<expand-unselected-block-ids
+                                                [ignored-root uncollapsed-parent
+                                                 deep-a deep-b])]
+                 (is (= [shallow-a-id shallow-b-id] mixed-expanded)
+                     "Mixed levels expand only the shallowest collapsed blocks in input order")
+                 (is (= [deep-a-id deep-b-id] remaining-deep-expanded)
+                     "When no shallower collapsed level remains, expand the remaining deep level in input order"))
+               (p/catch
+                (fn [error]
+                  (is false (str error))))
+               (p/finally done)))))
+
 (deftest db-based-save-assets-honors-explicit-target-block
   (async done
     (let [draft-uuid #uuid "8789a99e-5147-41a1-a836-4e0a6f03fe9e"
@@ -1984,7 +2818,8 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-<invoke-db-worker db-async/<invoke-db-worker
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -1998,7 +2833,8 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2013,7 +2849,7 @@
       (set! state/get-edit-content (constantly ""))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block target-block}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
                                         :target-block target-block)
           (p/then (fn [_]
                     (is (= target-block (:target @inserted)))
@@ -2030,7 +2866,8 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
@@ -2050,7 +2887,8 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-<invoke-db-worker db-async/<invoke-db-worker
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -2064,7 +2902,8 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2078,7 +2917,7 @@
       (set! state/get-edit-content (constantly "Current block"))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block stale-comment-target}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
           (p/then (fn [_]
                     (is (= edit-block (:target @inserted)))
                     (is (= {:bottom? true
@@ -2094,7 +2933,8 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
@@ -2166,6 +3006,23 @@
               {:ignore-block-collapsed? true
                :default-collapsed? true}))
       "Ignore flag should not disable other default-collapsed rules"))
+
+(deftest block-default-collapsed-nested-pages
+  (let [child-page {:block/tags [{:db/ident :logseq.class/Page}]}]
+    (is (true? (editor/block-default-collapsed? child-page {}))
+        "Child pages are collapsed by default on a parent page")
+    (is (not (editor/block-default-collapsed? child-page {:library? true}))
+        "Library keeps child pages expanded so the page tree is visible")
+    (is (not (editor/block-default-collapsed? child-page {:page-title? true}))
+        "The current page title is not collapsed")
+    (is (not (editor/block-default-collapsed?
+              child-page
+              {:original-block {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}))
+        "Embedded pages stay expanded so their blocks remain visible")
+    (is (not (editor/block-default-collapsed? child-page {:embed? true}))
+        "Embed config keeps the target page expanded")
+    (is (not (editor/block-default-collapsed? {:block/title "hello"} {}))
+        "Normal blocks stay expanded by default")))
 
 (deftest load-children-respects-ignore-block-collapsed-flag
   (is (false? (#'editor/load-children?
@@ -2381,21 +3238,33 @@
     (is (= comments-node (#'editor/navigable-sibling-block current-node sibling-f {:up-down? true}))
         "Up/down navigation should enter comments instead of skipping the comments area")))
 
+(defn- this-sensitive-contains
+  "Mirrors Node.contains: throws Illegal invocation when called without its receiver."
+  [owner contained]
+  (fn [node]
+    (this-as this
+      (when-not (identical? this owner)
+        (throw (js/TypeError. "Illegal invocation")))
+      (= node contained))))
+
 (deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment" "nodeType" 1)
         comments-node (js-obj "id" "comments"
                               "data-comments-area" "true"
-                              "nodeType" 1
-                              "contains" (fn [node] (= node comment-node)))
-        target-node (js-obj "id" "target")
+                              "nodeType" 1)
+        target-node (js-obj "id" "target" "nodeType" 1)
         sibling-f (fn [node _opts]
                     (cond
                       (= node current-node) comments-node
                       (= node comments-node) comment-node))]
+    (aset comments-node "contains" (this-sensitive-contains comments-node comment-node))
     (with-redefs [util/get-blocks-noncollapse (fn [] [current-node comments-node comment-node target-node])]
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
-          "Left/right navigation should skip the whole open comments subtree"))))
+          "Right navigation should skip the whole open comments subtree without throwing"))
+    (with-redefs [util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
+          "Left navigation should skip the whole open comments subtree without throwing"))))
 
 (deftest navigable-sibling-block-skips-comment-item-before-block-below-comments-test
   (let [target-node (js-obj "id" "target")
@@ -2459,3 +3328,69 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(deftest bottom-properties-row-in-block-matches-owned-row-only-test
+  (let [parent-id (str #uuid "11111111-1111-1111-1111-111111111111")
+        child-id (str #uuid "22222222-2222-2222-2222-222222222222")
+        child-row (js-obj "id" "child-row"
+                          "data-bottom-properties-row" child-id)
+        parent-row (js-obj "id" "parent-row"
+                           "data-bottom-properties-row" parent-id)
+        descendant-selector (str "[data-bottom-properties-row=\"" parent-id "\"]")
+        parent-without-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) nil
+                                    :else nil)))
+        parent-with-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) parent-row
+                                    :else nil)))]
+    (is (nil? (#'editor/bottom-properties-row-in-block parent-without-own-row))
+        "A parent must not treat a child icon/bottom row as its own navigation stop")
+    (is (identical? parent-row (#'editor/bottom-properties-row-in-block parent-with-own-row))
+        "A parent still resolves the bottom-properties row it owns")))
+
+(deftest db-collapsable-uses-property-keys-and-class-properties-test
+  (testing "own property-keys make a childless node collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "class-provided property-keys are collapsable even without a value"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block/tags [{:db/ident :user.class/c1}]
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "property idents on the worker map are used when property-keys is absent"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :user.property/p1 "filled"})))
+
+  (testing "query blocks stay collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "query"
+          :logseq.property/query {:block/title "q"}})))
+
+  (testing "tags or titles alone do not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :user.class/c1}]
+               :block.temp/property-keys [:block/tags]})))
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :logseq.class/Page}]}))))
+
+  (testing "created-from-property metadata does not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "hello"
+               :block.temp/property-keys [:logseq.property/created-from-property]})))
+    (is (not (editor/db-collapsable?
+              {:block/title "hello"
+               :logseq.property/created-from-property {:db/ident :user.property/p1}})))))

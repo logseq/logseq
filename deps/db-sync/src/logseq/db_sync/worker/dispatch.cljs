@@ -7,6 +7,7 @@
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.handler.personal-access-token :as pat-handler]
             [logseq.db-sync.worker.http :as http]
@@ -51,7 +52,10 @@
                         path-params)
         target (js/URL. (str (.-origin url) path (.-search url)))]
     (.set (.-searchParams target) "graph-id" graph-id)
-    (.set (.-searchParams target) "graph-e2ee" (str (true? e2ee?)))
+    ;; The graph DB's :logseq.kv/graph-rtc-e2ee? is only set at RTC upload; the
+    ;; index flag is authoritative, so pass it down for DO-side write gating.
+    (when e2ee?
+      (.set (.-searchParams target) "graph-e2ee" "true"))
     (forward-sync-request request env graph-id target)))
 
 (defn- rate-limit-response []
@@ -127,8 +131,8 @@
             (p/let [e2ee? (index/<graph-e2ee? (aget env "DB") graph-id)]
               (cond
                 (nil? e2ee?) (http/not-found)
-                (and e2ee? (not (:e2ee-safe-write? operation)))
-                (http/error-response "semantic-api-unavailable-for-e2ee" 409)
+                (and (:edge? operation) (not e2ee?))
+                (http/bad-request "operation requires an E2EE graph")
                 :else
                 (let [binding-name (if (= :read (:rate-class operation))
                                      "SEMANTIC_READ_RATE_LIMITER"
@@ -138,8 +142,13 @@
                     (http/error-response "rate limiter unavailable" 503)
                     (p/let [result (.limit limiter #js {:key (str (rate-limit-subject claims) ":"
                                                                (:operation-id operation) ":" graph-id)})]
-                      (if (false? (aget result "success"))
-                        (rate-limit-response)
+                      (cond
+                        (false? (aget result "success")) (rate-limit-response)
+                        (:edge? operation)
+                        (e2ee-handler/handle {:request request :env env
+                                              :handler (:handler operation)
+                                              :graph-id graph-id})
+                        :else
                         (forward-semantic-request request env operation url e2ee?)))))))))))))
 
 (defn- request-user-id

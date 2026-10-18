@@ -7,7 +7,8 @@
             [dommy.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
-            [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.email :as email-component]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
@@ -66,16 +67,29 @@
               graph))
           (state/get-repos))))
 
+(defn <load-rtc-graph-uuid
+  [repo db-worker-ready?]
+  (when (and repo db-worker-ready?)
+    (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)))
+
 (defn- use-db-rtc-uuid
   [repo]
-  (let [[db-rtc-uuid set-db-rtc-uuid!] (hooks/use-state nil)]
+  (let [[db-rtc-uuid set-db-rtc-uuid!] (hooks/use-state nil)
+        db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)]
     (hooks/use-effect!
      (fn []
-       (when repo
-         (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
-           (set-db-rtc-uuid! graph-uuid)))
-       nil)
-     [repo])
+       (if-let [rtc-graph-uuid-request (<load-rtc-graph-uuid repo db-worker-ready?)]
+         (let [cancelled? (atom false)]
+           (-> rtc-graph-uuid-request
+               (p/then (fn [graph-uuid]
+                         (when-not @cancelled?
+                           (set-db-rtc-uuid! graph-uuid))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         (do
+           (set-db-rtc-uuid! nil)
+           nil)))
+     [repo db-worker-ready?])
     db-rtc-uuid))
 
 (defn- current-remote-rtc-graph
@@ -156,7 +170,7 @@
                       "Plugins: " (string/join ", " (map (fn [[k v]]
                                                            (str (name k) " (" (:version v) ")"))
                                                          installed-plugins)))]
-    (str "https://github.com/logseq/logseq/issues/new?"
+    (str "https://github.com/logseq/db-test/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
          "labels=from:in-app&"
@@ -393,34 +407,34 @@
        (when thumb-ref
          (.focus ^js thumb-ref)))
      [thumb-ref])
-	    (hooks/use-effect!
-	     (fn []
-	       (let [all-nodes (d/by-class "ls-block")
-	             node-ids (->> all-nodes
-	                           (keep #(some-> (d/attr % "blockid") uuid))
-	                           vec)]
-	         (p/let [results (db-async/<get-blocks (state/get-current-repo) node-ids {:children? false})
-	                 id->block (into {} (keep (fn [{:keys [block]}]
-	                                            (when-let [id (:block/uuid block)]
-	                                              [id block]))
-	                                          results))
-	                 recent-node (fn [node]
-	                               (let [id (some-> (d/attr node "blockid") uuid)
-	                                     block (get id->block id)]
-	                                 (when block
-	                                   (t/after?
-	                                    (tc/from-long (:block/updated-at block))
-	                                    (t/ago (t/days recent-days))))))
-	                 recent-nodes (filter recent-node all-nodes)
-	                 old-nodes (remove recent-node all-nodes)]
-	           (when (seq recent-nodes)
-	             (doseq [node recent-nodes]
-	               (d/add-class! node "recent-block")))
-	           (when (seq old-nodes)
-	             (doseq [node old-nodes]
-	               (d/remove-class! node "recent-block")))))
-	       nil)
-	     [recent-days])
+            (hooks/use-effect!
+             (fn []
+               (let [all-nodes (d/by-class "ls-block")
+                     node-ids (->> all-nodes
+                                   (keep #(some-> (d/attr % "blockid") uuid))
+                                   vec)]
+                 (p/let [results (db-async/<get-blocks (state/get-current-repo) node-ids {:children? false})
+                         id->block (into {} (keep (fn [{:keys [block]}]
+                                                    (when-let [id (:block/uuid block)]
+                                                      [id block]))
+                                                  results))
+                         recent-node (fn [node]
+                                       (let [id (some-> (d/attr node "blockid") uuid)
+                                             block (get id->block id)]
+                                         (when block
+                                           (t/after?
+                                            (tc/from-long (:block/updated-at block))
+                                            (t/ago (t/days recent-days))))))
+                         recent-nodes (filter recent-node all-nodes)
+                         old-nodes (remove recent-node all-nodes)]
+                   (when (seq recent-nodes)
+                     (doseq [node recent-nodes]
+                       (d/add-class! node "recent-block")))
+                   (when (seq old-nodes)
+                     (doseq [node old-nodes]
+                       (d/remove-class! node "recent-block")))))
+               nil)
+             [recent-days])
     [:div.recent-slider.flex.flex-row.gap-1.items-center
      {:class "w-[32%]"}
      (shui/slider
@@ -466,16 +480,24 @@
 
 (hsx/defc ready-block-breadcrumb
   [page-uuid]
-  (let [page (db-hooks/use-block page-uuid)]
-    (when page
-      (when (and (entity/page? page) (:block/parent page))
-        [:div.ls-block-breadcrumb
-         [:div.text-sm
-          (component-block/breadcrumb {}
-                                      (state/get-current-repo)
-                                      (:block/uuid page)
-                                      {:header? true
-                                       :block page})]]))))
+  (let [page (db-hooks/use-block page-uuid)
+        breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
+        page-with-breadcrumb (when (and page breadcrumb-data)
+                               (assoc page
+                                      :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                                      :block.temp/breadcrumb-ref-titles
+                                      (:ref-titles breadcrumb-data)))]
+    (when (and page-with-breadcrumb
+               (entity/page? page-with-breadcrumb)
+               (:block/parent page-with-breadcrumb))
+      [:div.ls-block-breadcrumb
+       [:div.text-sm
+        (block-breadcrumb/breadcrumb {}
+                                    (state/get-current-repo)
+                                    (:block/uuid page-with-breadcrumb)
+                                    {:header? true
+                                     :block page-with-breadcrumb})]])))
 
 (hsx/defc block-breadcrumb
   [page-name]

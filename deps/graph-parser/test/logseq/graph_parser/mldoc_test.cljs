@@ -74,10 +74,9 @@
       "{{foo Ca^{ +2} ions, [[a, b]], \"c, d\"}}"
       [["Macro" {:name "foo" :arguments ["Ca^{ +2} ions" "[[a, b]]" "\"c, d\""]}]]
 
-      ;; page ref inside a macro that also has script markup — exercises
-      ;; the Nested_link case in inline-ast->source
-      "{{cloze Ca^{ +2} [[water]]}}"
-      [["Macro" {:name "cloze" :arguments ["Ca^{ +2} [[water]]"]}]]))
+      ;; Nested page references retain their brackets during macro recovery.
+      "{{cloze Ca^{ +2} [[outer [[inner]]]]}}"
+      [["Macro" {:name "cloze" :arguments ["Ca^{ +2} [[outer [[inner]]]]"]}]]))
 
   (testing "normal macros without script markup are not modified"
     (are [content ast] (= ast (gp-mldoc/inline->edn content md-config))

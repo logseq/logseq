@@ -12,7 +12,7 @@ pom.xml.asc
 .hg/
 .nbb/
 
-node_modules/
+node_modules
 static/**
 tmp
 cljs-test-runner-out
@@ -28,6 +28,14 @@ cljs-test-runner-out
 .lein-*
 .nrepl-*
 .DS_Store
+__pycache__/
+*.pyc
+*.pyo
+nul
+.Rhistory
+.RData
+.Rproj.user/
+.ipynb_checkpoints/
 report.html
 strings.csv
 ssl/
@@ -52,6 +60,7 @@ docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
 ios/App/App/public
+ios/App/.bundle/
 
 startup.png
 
@@ -77,13 +86,12 @@ deps/db-sync/worker/.localflare
 
 
 tx-log*
-clj-e2e/.wally
-clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
 deps/db-sync/data
 *.map
 /dist/db-worker-node.js
+/static/js/db-worker.js
 /dist/build/
 /dist/cli-package/
 /dist/db-worker-node-assets.json
@@ -91,8 +99,8 @@ deps/db-sync/data
 /dist/cljs-runtime/
 /.agent-shell/
 
-clj-e2e/.clj-kondo/imports
-/cli/_build/
+_build/
+ocaml-e2e/.parallel-logs/
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root

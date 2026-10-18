@@ -12,11 +12,31 @@
   [sqlite-db]
   (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)"))
 
+(defn- tail-max-tx
+  "The largest tx among the datoms of the stored tail restore-conn replayed."
+  [conn]
+  (reduce (fn [max-tx datoms]
+            (reduce (fn [max-tx datom] (max max-tx (:tx datom))) max-tx datoms))
+          0
+          (:tx-tail @(:atom conn))))
+
 (defn get-storage-conn
-  "Given a datascript storage, returns a datascript connection for it"
+  "Given a datascript storage, returns a datascript connection for it.
+  A restore replays each stored tail entry (the datoms of 1 transact!) and
+  sets :max-tx to the tx of its first datom. A transaction the worker
+  pipeline extends spans several tx ids (1 d/with each) in 1 entry, and the
+  replayed datoms keep their own tx ids, so the restored :max-tx fell short
+  of the one the graph had: the next transaction took a tx id the graph's
+  datoms already carried, and the checksum, stored with the :max-tx it
+  covers, was recomputed on every such reopen. Take the largest tx of the
+  tail's datoms."
   [storage schema]
-  (or (d/restore-conn storage)
-      (d/create-conn schema {:storage storage})))
+  (if-let [conn (d/restore-conn storage)]
+    (let [max-tx (tail-max-tx conn)]
+      (when (> max-tx (:max-tx @conn))
+        (swap! conn assoc :max-tx max-tx))
+      conn)
+    (d/create-conn schema {:storage storage})))
 
 (defn sanitize-db-name
   [db-name]

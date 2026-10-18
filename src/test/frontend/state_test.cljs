@@ -261,6 +261,26 @@
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
+(deftest clear-editor-action-if-switching-block-test
+  (let [block-a {:block/uuid (random-uuid)}
+        block-b {:block/uuid (random-uuid)}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (state/set-editor-action! :commands)
+      (state/clear-editor-action-if-switching-block! block-b)
+      (is (nil? (state/get-editor-action))
+          "Switching the edit target to another block closes slash commands")
+
+      (state/set-editor-action! :commands)
+      (state/clear-editor-action-if-switching-block! block-a)
+      (is (= :commands (state/get-editor-action))
+          "Re-editing the same block keeps slash commands open")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
 (deftest get-editor-info-includes-selection-when-not-editing-test
   (let [selected-ids [(random-uuid) (random-uuid)]]
     (with-redefs [state/get-edit-block (constantly nil)
@@ -275,3 +295,15 @@
                 state/get-selection-block-ids (constantly nil)
                 state/get-selection-direction (constantly nil)]
     (is (nil? (state/get-editor-info)))))
+
+(deftest invoke-db-worker-when-ready-skips-uninitialized-worker-test
+  (let [previous @state/*db-worker]
+    (try
+      (reset! state/*db-worker nil)
+      (is (false? @state/db-worker-ready?))
+      (is (nil? (state/<invoke-db-worker-when-ready :thread-api/pull "repo")))
+      (reset! state/*db-worker (fn [& _] :ok))
+      (is (true? @state/db-worker-ready?))
+      (is (some? (state/<invoke-db-worker-when-ready :thread-api/pull "repo" [:db/id] 1)))
+      (finally
+        (reset! state/*db-worker previous)))))

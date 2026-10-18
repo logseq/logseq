@@ -455,37 +455,14 @@ let pull_asset_tag config repo =
     ~lookup:
       (vector_vec (Vec.of_array [| kw "db/ident"; kw "logseq.class/Asset" |]))
 
-let first_entity value =
-  let map_value value =
-    match Edn_util.as_map value with Some _ -> Some value | None -> None
-  in
-  match
-    (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
-  with
-  | Some values, _, _ when not (Vec.is_empty values) -> (
-      let first = Vec.peek_front values in
-      match map_value first with
-      | Some _ as result -> result
-      | None -> (
-          match (Edn_util.as_vector first, Edn_util.as_list first) with
-          | Some nested_values, _ when not (Vec.is_empty nested_values) ->
-              map_value (Vec.peek_front nested_values)
-          | _, Some nested_values when not (Vec.is_empty nested_values) ->
-              map_value (Vec.peek_front nested_values)
-          | _ -> None))
-  | _, Some values, _ when not (Vec.is_empty values) -> (
-      let first = Vec.peek_front values in
-      match map_value first with
-      | Some _ as result -> result
-      | None -> (
-          match (Edn_util.as_vector first, Edn_util.as_list first) with
-          | Some nested_values, _ when not (Vec.is_empty nested_values) ->
-              map_value (Vec.peek_front nested_values)
-          | _, Some nested_values when not (Vec.is_empty nested_values) ->
-              map_value (Vec.peek_front nested_values)
-          | _ -> None))
-  | _, _, Some _ -> Some value
-  | _ -> None
+let rec first_entity value =
+  match Edn_util.as_seq value with
+  | Some values when not (Vec.is_empty values) ->
+      first_entity (Vec.peek_front values)
+  | _ -> (
+      match Edn_util.as_map value with
+      | Some _ -> Some value
+      | None -> None)
 
 let id_of_entity value = Edn_util.get_int64 value "db/id"
 
@@ -644,8 +621,8 @@ let normalize_task_options invoke_config repo options =
   | Some status_input ->
       bind (status_query invoke_config repo) (fun result ->
           let values =
-            match (Edn_util.as_vector result, Edn_util.as_list result) with
-            | Some values, _ | _, Some values -> values
+            match Edn_util.as_seq result with
+            | Some values -> Vec.map Edn_util.unwrap_row values
             | _ -> Vec.empty
           in
           let statuses = Task_status.normalize_available_statuses values in
@@ -782,7 +759,7 @@ let visible_title_fields = function
   | Page | Tag | Property | Task | Asset ->
       Vec.singleton (Edn_util.keyword_t "block/title")
 
-let normalize_visible_title_fields config repo kind items =
+let normalize_visible_title_fields invoke_config repo kind items =
   let fields = visible_title_fields kind in
   let entities = Vec.map Entity.of_value items in
   let uuids = Uuid_refs_types.collect_uuid_refs_from_items entities fields in
@@ -792,7 +769,7 @@ let normalize_visible_title_fields config repo kind items =
       (fun labels ->
         Uuid_refs_types.normalize_item_string_fields entities fields labels
         |> Vec.map (fun item -> item.Entity.raw))
-      (Uuid_refs_types.fetch_uuid_labels config repo uuids)
+      (Uuid_refs_types.fetch_uuid_labels invoke_config repo uuids)
 
 let add_optional key value fields =
   match value with
@@ -945,7 +922,7 @@ let execute_with_mode action config mode =
                     postprocess_items action.kind action.options items
                   in
                   bind
-                    (normalize_visible_title_fields config action.repo
+                    (normalize_visible_title_fields invoke_config action.repo
                        action.kind items) (fun items ->
                       let data = Edn_util.any (items_value items) in
                       pure

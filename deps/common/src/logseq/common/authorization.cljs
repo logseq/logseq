@@ -8,36 +8,49 @@
 
 (def ^:private jwks-ttl-ms (* 6 60 60 1000))
 (def ^:private token-ttl-ms (* 60 60 1000))
-(def ^:private token-capacity 200)
 
 (defonce ^:private *jwks-cache (atom {:url nil :keys nil :fetched-at 0}))
-(defonce ^:private *token-cache (atom {}))
+(defonce ^:private *token-cache-state
+  (atom {:tokens {}
+         :expiry-queue cljs.core/PersistentQueue.EMPTY}))
 
 (defn- get-now-ms []
   (.now js/Date))
 
 (defn- cached-token
   [token now-s now-ms]
-  (when-let [{:keys [payload exp cached-at]} (get @*token-cache token)]
+  (when-let [{:keys [payload exp cached-at]} (get-in @*token-cache-state [:tokens token])]
     (when (and (number? exp)
                (> exp now-s)
                (< (- now-ms cached-at) token-ttl-ms))
       payload)))
 
+(defn- remove-expired-tokens
+  [{:keys [tokens expiry-queue]} now-ms]
+  (loop [tokens tokens
+         expiry-queue expiry-queue]
+    (if-let [{:keys [token cached-at]} (peek expiry-queue)]
+      (if (>= (- now-ms cached-at) token-ttl-ms)
+        (recur (if (= cached-at (get-in tokens [token :cached-at]))
+                 (dissoc tokens token)
+                 tokens)
+               (pop expiry-queue))
+        {:tokens tokens :expiry-queue expiry-queue})
+      {:tokens tokens :expiry-queue expiry-queue})))
+
 (defn- cache-token!
-  [token payload now-ms]
+  [token payload]
   (let [exp (aget payload "exp")]
     (when (number? exp)
-      (swap! *token-cache assoc token {:payload payload :exp exp :cached-at now-ms}))
-    (when (> (count @*token-cache) token-capacity)
-      (swap! *token-cache
-             (fn [cache]
-               (into {}
-                     (remove (fn [[_ {:keys [exp cached-at]}]]
-                               (or (not (number? exp))
-                                   (<= exp (js/Math.floor (/ now-ms 1000)))
-                                   (>= (- now-ms cached-at) token-ttl-ms))))
-                     cache))))))
+      (let [cached-at (get-now-ms)]
+        (swap! *token-cache-state
+               (fn [cache]
+                 (-> (remove-expired-tokens cache cached-at)
+                     (assoc-in [:tokens token] {:payload payload
+                                                :exp exp
+                                                :cached-at cached-at})
+                     (update :expiry-queue conj {:token token
+                                                 :cached-at cached-at}))))))))
 
 (defn- get-jwks-keys
   [url & {:keys [force?]}]
@@ -78,25 +91,15 @@
 
 (defn client-id-allowed? [env client-id]
   (let [primary-client-id (aget env "COGNITO_CLIENT_ID")
-        logseq-chat-client-id (aget env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")
         additional-client-ids (->> (string/split (or (aget env "COGNITO_CLIENT_IDS") "") #",")
                                    (map string/trim)
                                    (remove string/blank?))
         allowed-client-ids (cond-> (set additional-client-ids)
                              (and (string? primary-client-id) (not (string/blank? primary-client-id)))
-                             (conj primary-client-id)
-                             (and (string? logseq-chat-client-id)
-                                  (not (string/blank? logseq-chat-client-id)))
-                             (conj logseq-chat-client-id))]
+                             (conj primary-client-id))]
     (and (string? client-id)
          (not (string/blank? client-id))
          (contains? allowed-client-ids client-id))))
-
-(defn token-client-id [payload]
-  (case (aget payload "token_use")
-    "access" (aget payload "client_id")
-    "id" (aget payload "aud")
-    nil))
 
 (defn- import-rsa-key [jwk]
   (.importKey js/crypto.subtle
@@ -108,39 +111,41 @@
 
 (defn verify-jwt [token env]
   (let [parts (string/split token #"\.")]
-    (when (not= 3 (count parts)) (throw (ex-info "invalid" {})))
-    (let [header-part (nth parts 0)
-          payload-part (nth parts 1)
-          signature-part (nth parts 2)
-          now-ms (get-now-ms)
-          now-s (js/Math.floor (/ now-ms 1000))]
-      (if-let [cached (cached-token token now-s now-ms)]
-        (p/resolved cached)
-        (p/let [header (decode-jwt-part header-part)
-                payload (decode-jwt-part payload-part)
-                issuer (aget env "COGNITO_ISSUER")
-                client-id-claim (token-client-id payload)
-                _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
-                _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
-                _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))
-                    (throw (ex-info "exp" {})))
-                jwks-url (aget env "COGNITO_JWKS_URL")
-                jwks-keys (get-jwks-keys jwks-url)
-                matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))
-                matching-key (if matching-key
-                               matching-key
-                               (p/let [jwks-keys (get-jwks-keys jwks-url :force? true)
-                                       matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))]
-                                 matching-key))
-                _ (when-not matching-key (throw (ex-info "kid" {})))
-                crypto-key (import-rsa-key matching-key)
-                data (.encode text-encoder (str header-part "." payload-part))
-                signature (base64url->uint8array signature-part)
-                ok (.verify js/crypto.subtle
-                            "RSASSA-PKCS1-v1_5"
-                            crypto-key
-                            signature
-                            data)]
-          (when ok
-            (cache-token! token payload now-ms)
-            payload))))))
+    (if (not= 3 (count parts))
+      (p/rejected (ex-info "invalid" {}))
+      (let [header-part (nth parts 0)
+            payload-part (nth parts 1)
+            signature-part (nth parts 2)
+            now-ms (get-now-ms)
+            now-s (js/Math.floor (/ now-ms 1000))]
+        (if-let [cached (cached-token token now-s now-ms)]
+          (p/resolved cached)
+          (p/let [header (decode-jwt-part header-part)
+                  payload (decode-jwt-part payload-part)
+                  issuer (aget env "COGNITO_ISSUER")
+                  client-id-claim (or (aget payload "aud")
+                                      (aget payload "client_id"))
+                  _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
+                  _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
+                  _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))
+                      (throw (ex-info "exp" {})))
+                  jwks-url (aget env "COGNITO_JWKS_URL")
+                  jwks-keys (get-jwks-keys jwks-url)
+                  matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))
+                  matching-key (if matching-key
+                                 matching-key
+                                 (p/let [jwks-keys (get-jwks-keys jwks-url :force? true)
+                                         matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))]
+                                   matching-key))
+                  _ (when-not matching-key (throw (ex-info "kid" {})))
+                  crypto-key (import-rsa-key matching-key)
+                  data (.encode text-encoder (str header-part "." payload-part))
+                  signature (base64url->uint8array signature-part)
+                  ok (.verify js/crypto.subtle
+                              "RSASSA-PKCS1-v1_5"
+                              crypto-key
+                              signature
+                              data)]
+            (when ok
+              (cache-token! token payload)
+              payload)))))))

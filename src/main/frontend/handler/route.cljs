@@ -1,6 +1,7 @@
 (ns frontend.handler.route
   "Provides fns used for routing throughout the app"
   (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -37,6 +38,22 @@
   ([pub-event?]
    (when pub-event? (state/pub-event! [:redirect-to-home]))
    (redirect! {:to :home})))
+
+(defn- history-length
+  []
+  (.-length js/window.history))
+
+(defn- history-go-back!
+  []
+  (.back js/window.history))
+
+(defn redirect-to-previous!
+  "Leave the current history entry by going back to the previous page/block.
+   Replaces the current entry with home when there is no previous history entry."
+  []
+  (if (> (history-length) 1)
+    (history-go-back!)
+    (redirect! {:to :home :push false})))
 
 (defn redirect-to-all-pages!
   []
@@ -206,12 +223,30 @@
     (<page-route-title (:name path-params))
     (p/resolved (static-title name path-params))))
 
+(defonce ^:private *page-title-update-id (atom 0))
+
+(defn- apply-page-title!
+  [title]
+  (util/set-title! title)
+  (ipc/ipc :set-window-title title))
+
 (defn update-page-title!
   [route]
-  (let [{:keys [data path-params]} route]
+  (let [update-id (swap! *page-title-update-id inc)
+        {:keys [data path-params]} route]
     (p/let [title (get-title (:name data) path-params)
-            hls? (pdf-utils/hls-file? title)]
-      (util/set-title! (if hls? (pdf-utils/fix-local-asset-pagename title) title)))))
+            hls? (pdf-utils/hls-file? title)
+            title (if hls? (pdf-utils/fix-local-asset-pagename title) title)]
+      (when (= update-id @*page-title-update-id)
+        (apply-page-title! title)
+        ;; Chromium can restore the history-entry title after popstate and
+        ;; overwrite a same-turn document.title write. Re-apply on the next
+        ;; tick so Back/Forward keep the current page title.
+        (js/setTimeout
+         (fn []
+           (when (= update-id @*page-title-update-id)
+             (apply-page-title! title)))
+         0)))))
 
 (defn update-page-label!
   [route]
@@ -229,6 +264,12 @@
 
 (defn set-route-match!
   [route]
+  ;; The selection holds rendered block DOM nodes; a path change remounts the
+  ;; view and detaches them, so stale nodes must be dropped here — otherwise
+  ;; selection-driven ops (e.g. move up/down) silently apply on the old page.
+  (when (not= (:path route)
+              (:path (state/get-route-match)))
+    (state/clear-selection!))
   (state/swap-state! assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)

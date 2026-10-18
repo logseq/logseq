@@ -2,7 +2,9 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
+            [frontend.common.crypt :as crypt]
             [frontend.components.assets :as assets]
+            [frontend.components.e2ee :as e2ee]
             [frontend.components.email :as email-component]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
@@ -31,6 +33,7 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -288,7 +291,8 @@
 
 (hsx/defc switch-spell-check-row
   [t]
-  (let [enabled? (rfx/use-sub [:electron/user-cfgs :spell-check])]
+  ;; Match electron.spell-check/session-spellcheck-enabled?: nil defaults to on.
+  (let [enabled? (not= false (rfx/use-sub [:electron/user-cfgs :spell-check]))]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -312,6 +316,20 @@
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
+(defn language-select-content-props
+  "Keep the language popup clickable over Electron's custom title-bar drag region."
+  ([]
+   (language-select-content-props nil))
+  ([container]
+   (let [no-drag-style {:app-region "no-drag"
+                        :-webkit-app-region "no-drag"}]
+     (cond-> {:class "z-[99999] ls-app-no-drag"
+              :style no-drag-style
+              :positioner-props {:className "ls-app-no-drag"
+                                 :style (assoc no-drag-style :z-index 99999)}}
+       (some? container)
+       (assoc :container container)))))
+
 (defn language-row [t preferred-language]
   (let [selected-language (some-> preferred-language name)
         language-items (mapv (fn [language]
@@ -334,9 +352,7 @@
                   (fn [value]
                     (get language-labels value value))))
                 (shui/select-content
-                 {:container (.-body js/document)
-                  :class "z-[99999]"
-                  :positioner-props {:style {:z-index 99999}}}
+                 (language-select-content-props (.-body js/document))
                  (shui/select-group
                   (for [{:keys [value label]} language-items]
                     (shui/select-item {:key value :value value} label)))))]
@@ -346,7 +362,8 @@
 
 (hsx/defc theme-modes-row
   [t]
-  (let [theme (rfx/use-sub [:ui/theme])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        theme (rfx/use-sub [:ui/theme])
         dark? (= "dark" theme)
         system-theme? (rfx/use-sub [:ui/system-theme?])
         switch-theme (if dark? "light" "dark")
@@ -371,7 +388,8 @@
 
 (hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (rfx/use-sub [:ui/radix-color])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        color-accent (rfx/use-sub [:ui/radix-color])
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -1274,10 +1292,18 @@
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
+(def ^:private pat-one-year-ms (* 365 24 60 60 1000))
+
+(defn- local-date-str
+  [^js date]
+  (let [pad (fn [n] (.padStart (str n) 2 "0"))]
+    (str (.getFullYear date) "-"
+         (pad (inc (.getMonth date))) "-"
+         (pad (.getDate date)))))
+
 (defn- default-pat-expiration-date
   []
-  (let [date (js/Date. (+ (.now js/Date) (* 365 24 60 60 1000)))]
-    (subs (.toISOString date) 0 10)))
+  (local-date-str (js/Date. (+ (.now js/Date) pat-one-year-ms))))
 
 (defn- pat-expiration-ms
   [date]
@@ -1320,21 +1346,24 @@
         permission-items [{:value "read" :label (pat-permission-label "read")}
                           {:value "write" :label (pat-permission-label "write")}
                           {:value "both" :label (pat-permission-label "both")}]
+        expires-at (pat-expiration-ms expiration)
+        form-valid? (and (some? selected-graph)
+                         expires-at
+                         (> expires-at (.now js/Date)))
         create! (fn []
-                  (let [expires-at (pat-expiration-ms expiration)]
-                    (when (and selected-graph expires-at (> expires-at (.now js/Date)))
-                      (set-pending! true)
-                      (-> (rtc-handler/<create-personal-access-token!
-                           {:graph-id selected-graph
-                            :permission permission
-                            :expires-at expires-at})
-                          (p/then on-created!)
-                          (p/catch (fn [error]
-                                     (notification/show!
-                                      (t :sync.personal-access-token/request-error)
-                                      :error)
-                                     (log/error :db-sync/pat-create-failed {:error error})))
-                          (p/finally #(set-pending! false))))))]
+                  (when form-valid?
+                    (set-pending! true)
+                    (-> (rtc-handler/<create-personal-access-token!
+                         {:graph-id selected-graph
+                          :permission permission
+                          :expires-at expires-at})
+                        (p/then on-created!)
+                        (p/catch (fn [error]
+                                   (notification/show!
+                                    (t :sync.personal-access-token/request-error)
+                                    :error)
+                                   (log/error :db-sync/pat-create-failed {:error error})))
+                        (p/finally #(set-pending! false)))))]
     (hooks/use-effect!
      (fn []
        (when (and (nil? selected-graph) (seq graph-items))
@@ -1356,12 +1385,13 @@
          (shui/input
           {:type "date"
            :value expiration
-           :min (subs (.toISOString (js/Date.)) 0 10)
+           :min (local-date-str (js/Date.))
+           :max (local-date-str (js/Date. (+ (.now js/Date) pat-one-year-ms)))
            :on-change #(set-expiration! (util/evalue %))})]]
        [:p.text-sm.opacity-70 (t :sync.personal-access-token/no-graphs)])
      (shui/button
       {:class "self-start"
-       :disabled (or pending? (empty? graph-items))
+       :disabled (or pending? (empty? graph-items) (not form-valid?))
        :on-click create!}
       (ui/icon "key" {:size 16})
       (t :sync.personal-access-token/create))]))
@@ -1429,11 +1459,13 @@
         [pending? set-pending!] (hooks/use-state false)
         [load-error? set-load-error!] (hooks/use-state false)
         graph-items (->> graphs
-                         (filter (fn [{:keys [graph-e2ee? graph-ready-for-use?]}]
-                                   (and (false? graph-e2ee?)
-                                        (not= false graph-ready-for-use?))))
-                         (mapv (fn [{:keys [GraphName GraphUUID]}]
-                                 {:value (str GraphUUID) :label GraphName})))
+                         (filter (fn [{:keys [graph-ready-for-use?]}]
+                                   (not= false graph-ready-for-use?)))
+                         (mapv (fn [{:keys [GraphName GraphUUID graph-e2ee?]}]
+                                 {:value (str GraphUUID)
+                                  :label (if graph-e2ee?
+                                           (str GraphName " (E2EE)")
+                                           GraphName)})))
         load-tokens! (fn []
                        (set-load-error! false)
                        (-> (rtc-handler/<personal-access-tokens)
@@ -1539,6 +1571,62 @@
       [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
        (t :encryption/reset-password)])))
 
+(defn- exported-key->base64 [^js u8]
+  (when (instance? js/Uint8Array u8)
+    (js/btoa (.join (js/Array.from u8 (fn [b] (js/String.fromCharCode b))) ""))))
+
+(defn- transit->exported-key-base64 [value]
+  (when (string? value)
+    (try (exported-key->base64 (ldb/read-transit-str value))
+         (catch :default _ nil))))
+
+(hsx/defc encryption-key-display
+  [rsa-key-pair]
+  (let [public-key-base64 (transit->exported-key-base64 (:public-key rsa-key-pair))
+        [private-key set-private-key!] (hooks/use-state nil)
+        reveal-private-key!
+        (fn []
+          (let [private-key-promise (p/deferred)
+                encrypted-private-key (ldb/read-transit-str (:encrypted-private-key rsa-key-pair))]
+            (shui/dialog-open!
+             #(e2ee/e2ee-password-to-decrypt-private-key
+               encrypted-private-key private-key-promise)
+             {:auto-width? true
+              :on-close (fn []
+                          (p/reject! private-key-promise (ex-info "cancelled" {}))
+                          (shui/dialog-close!))})
+            (-> (p/let [private-key' private-key-promise
+                        exported (crypt/<export-private-key private-key')]
+                  (set-private-key! (exported-key->base64 exported)))
+                (p/catch (fn [_] nil)))))]
+    [:div.flex.flex-col.gap-3
+     [:div.flex.flex-col.gap-1
+      [:p.text-sm.opacity-70 (t :encryption/public-key)]
+      (if (string? public-key-base64)
+        [:div.flex.items-start.gap-2
+         [:code.text-xs.break-all.flex-1.select-all public-key-base64]
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :on-click #(util/copy-to-clipboard! public-key-base64)}
+          (t :encryption/copy-key))]
+        [:p.text-sm.opacity-70 (t :encryption/key-unavailable)])]
+     [:div.flex.flex-col.gap-1
+      [:p.text-sm.opacity-70 (t :encryption/private-key)]
+      (if (string? private-key)
+        [:div.flex.items-start.gap-2
+         [:code.text-xs.break-all.flex-1.select-all private-key]
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :on-click #(util/copy-to-clipboard! private-key)}
+          (t :encryption/copy-key))]
+        (shui/button
+         {:variant "outline"
+          :size :sm
+          :on-click reveal-private-key!}
+         (t :encryption/show-private-key)))]]))
+
 (hsx/defc encryption
   []
   (let [user-uuid (user-handler/user-uuid)
@@ -1595,6 +1683,7 @@
                                            (set-reset-password-status! (t :encryption/failed-to-update-password))))))]
             [:div.flex.flex-col.gap-4
              ;; [:p "E2EE key-pair already generated!"]
+             (encryption-key-display rsa-key-pair)
              (when-not forgot?
                [:div.flex.flex-col
                 [:p (t :encryption/remember-password-rich)]
@@ -1649,6 +1738,7 @@
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
   (let [current-repo (rfx/use-sub [:git/current-repo])
+        _preferred-language (rfx/use-sub [:preferred-language])
         _installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])

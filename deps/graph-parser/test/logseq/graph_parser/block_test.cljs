@@ -16,6 +16,21 @@
     properties)
    user-config))
 
+(deftest with-parent-and-order-normalizes-irregular-outdent
+  (let [blocks (mapv (fn [id level]
+                       {:block/uuid id
+                        :block/level level})
+                     [:a :b :c :d :e]
+                     [1 3 5 2 3])
+        result (mapv #(select-keys % [:block/uuid :block/parent :block/level])
+                     (gp-block/with-parent-and-order :page blocks))]
+    (is (= [{:block/uuid :a :block/parent :page :block/level 1}
+            {:block/uuid :b :block/parent [:block/uuid :a] :block/level 2}
+            {:block/uuid :c :block/parent [:block/uuid :b] :block/level 3}
+            {:block/uuid :d :block/parent [:block/uuid :a] :block/level 2}
+            {:block/uuid :e :block/parent [:block/uuid :a] :block/level 2}]
+           result))))
+
 (deftest test-fix-duplicate-id
   (are [x y]
        (let [result (gp-block/fix-duplicate-id (gp-block/block-keywordize x))]
@@ -169,3 +184,21 @@
             content)
        (map first)
        first))
+
+(defn- first-heading-link
+  [content]
+  (->> (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))
+       ffirst
+       second
+       :title
+       first))
+
+(deftest get-page-reference-file-link-formatted-labels
+  (testing "File-link labels yield a plain page-ref string"
+    (are [content page-ref]
+         (= page-ref
+            (gp-block/get-page-reference (first-heading-link content) :markdown))
+      "- [k](a.md)" "k"
+      "- [~~k~~](a.md)" "k"
+      "- [**k**](a.md)" "k"
+      "- [*k*](a.md)" "k")))

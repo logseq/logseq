@@ -160,12 +160,12 @@
                          graph-id (aget create-body "graph-id")
                          missing-resp (post-json
                                        (str base-url "/api/v1/graphs/missing-graph/capture")
-                                       {:blocks [{:title "should 404"}]})
+                                       {:blocks [{:title "Access denied"}]})
                          capture-resp (post-json
                                        (str base-url "/api/v1/graphs/" graph-id "/capture")
                                        {:blocks [{:title "Captured from Chat"}]})]
-                   (testing "unknown graphs stay not found"
-                     (is (= 404 (.-status missing-resp))))
+                   (testing "unknown graphs preserve dev graph-access authorization"
+                     (is (= 403 (.-status missing-resp))))
                    (testing "Chat semantic capture is routed instead of 404"
                      (is (not= 404 (.-status capture-resp)))
                      (is (not= 405 (.-status capture-resp))))))

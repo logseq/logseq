@@ -121,8 +121,7 @@ necessary db filtering"
         }
       }(window.location))"]
             ;; TODO: should make this configurable
-            [:script {:src "static/js/react.production.min.js"}]
-            [:script {:src "static/js/react-dom.production.min.js"}]
+            [:script {:src "static/js/magic_portal.js"}]
             [:script {:src "static/js/main.js"}]
             ;; Deferring scripts above results in errors
             [:script {:defer true :src "static/js/interact.min.js"}]
@@ -151,8 +150,11 @@ generated index.html string and assets used by the html"
 
         db-str (dt/write-transit-str db)
         ;; The repo-name is used by the client and thus determines whether
-        ;; it's a db graph or not
+        ;; it's a db graph or not. :git/current-repo must be in the published
+        ;; payload so restore can switch before first paint; do not rely only
+        ;; on (first (keys config)) at restore time.
         state (assoc app-state
+                     :git/current-repo repo
                      :config {repo repo-config})
         raw-html-str (publishing-html db-str state html-options)]
     {:html raw-html-str

@@ -31,6 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
+  graph_generation : string option;
   raw_file_config : Melange_edn_melange.any option;
   profile_session : Profile_types.session option;
 }
@@ -92,7 +93,7 @@ let read_config_file path =
     let content = read_file path in
     if String.trim content = "" then Ok None
     else
-      try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
+      try Ok (Some (Edn_util.of_edn_string content |> value_of_edn))
       with exn ->
         Error
           (Error.make Error.Invalid_config
@@ -441,6 +442,7 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
                   base_url;
                   owner_source = Cli_primitive.Cli;
                   project_dir = None;
+                  graph_generation = None;
                   raw_file_config;
                   profile_session = None;
                 }

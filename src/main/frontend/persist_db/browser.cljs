@@ -48,6 +48,11 @@
     (state/set-state! [:search/index-build-notify-repos repo] false)
     (notification/show! (t :search/indices-rebuilt-success) :success)))
 
+(def-thread-api :thread-api/set-ui-state
+  [path value]
+  (state/set-state! path value)
+  nil)
+
 (def-thread-api :thread-api/search-index-build-progress
   [repo {:keys [build-id status progress processed total]
          input-stage :stage}]
@@ -145,6 +150,7 @@
                  :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing (state/get-state))
+                 :web-platform? util/web-platform?
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]
@@ -201,14 +207,17 @@
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
            wrapped-worker (fn [qkw & args]
-                            (if (contains? #{:thread-api/export-db-binary
-                                             :thread-api/export-client-ops-db-binary
-                                             :thread-api/import-db-binary}
-                                           qkw)
+                            (cond
+                              (contains? #{:thread-api/export-db-binary
+                                           :thread-api/export-client-ops-db-binary
+                                           :thread-api/import-db-binary}
+                                         qkw)
                               (let [method (str (namespace qkw) "/" (name qkw))]
                                 (if (= :thread-api/import-db-binary qkw)
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
+
+                              :else
                               (-> (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                                  (str (namespace qkw) "/" (name qkw))
                                                                  (ldb/write-transit-str args))]

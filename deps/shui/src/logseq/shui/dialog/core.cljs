@@ -96,6 +96,20 @@
         result (when (fn? handler) (handler native-event))]
     (close-prevented? result event-details native-event)))
 
+(def ^:private opening-outside-press-ignore-ms
+  "Ignore the pointerup/click that completes a pointer-down that opened the
+  dialog. Matches popup/core."
+  150)
+
+(defn- opening-outside-press?
+  ([reason ignore-until]
+   (opening-outside-press? reason ignore-until (js/Date.now)))
+  ([reason ignore-until now]
+   (boolean
+    (and (= reason "outside-press")
+         (number? ignore-until)
+         (< now ignore-until)))))
+
 ;; apis
 (declare close!)
 
@@ -106,7 +120,11 @@
                  {:content content-or-config})
         content (:content config)
         generated-id (gen-id)
-        config (merge {:id generated-id :open? true} config (first config'))
+        config (merge {:id generated-id
+                       :open? true
+                       :ignore-opening-outside-press-until (+ (js/Date.now) opening-outside-press-ignore-ms)}
+                      config
+                      (first config'))
         id (:id config)
         config (cond-> config
                  (nil? (:close config))
@@ -148,6 +166,39 @@
   (some-> event-details (.cancel))
   true)
 
+(defn- prevent-dialog-dismiss-on-open-change?
+  [{:keys [id ignore-opening-outside-press-until content-props
+           onEscapeKeyDown onPointerDownOutside]} v ^js e]
+  (when (false? v)
+    (let [reason (some-> e (.-reason))
+          escape-handler (or (:onEscapeKeyDown content-props)
+                             onEscapeKeyDown)
+          pointer-handler (or (:onPointerDownOutside content-props)
+                              onPointerDownOutside)]
+      (cond
+        (and (contains? #{"escape-key" "outside-press"} reason)
+             (not (top-dialog? id)))
+        (prevent-dismiss! e)
+
+        (opening-outside-press? reason ignore-opening-outside-press-until)
+        (prevent-dismiss! e)
+
+        (= reason "escape-key")
+        (call-close-handler! escape-handler e)
+
+        (= reason "outside-press")
+        (call-close-handler! pointer-handler e)
+
+        :else false))))
+
+(defn- on-root-open-change
+  [{:keys [id on-open-change] :as config} v ^js e]
+  (let [set-open! #(update-dialog! id :open? %)]
+    (when-not (prevent-dialog-dismiss-on-open-change? config v e)
+      (if (fn? on-open-change)
+        (on-open-change {:value v :set-open! set-open!})
+        (set-open! v)))))
+
 (defn close!
   ([] (close! (get-last-dialog-id)))
   ([id] (update-dialog! id :open? false {:closing? true})))
@@ -159,13 +210,13 @@
 ;; components
 (hsx/defc dialog-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change align open?
-                auto-width? close-btn? root-props content-props
-                onEscapeKeyDown onPointerDownOutside]} config
+  (let [{:keys [id title description content footer align open?
+                auto-width? close-btn? root-props content-props]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
                       :close :align :on-open-change :open? :root-props :content-props
-                      :onEscapeKeyDown :onPointerDownOutside)
+                      :onEscapeKeyDown :onPointerDownOutside
+                      :ignore-opening-outside-press-until)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (hooks/use-effect!
@@ -179,29 +230,7 @@
             {:key (str "dialog-" id)
              :open open?
              :on-open-change (fn [v e]
-                               (let [set-open! #(update-dialog! id :open? %)
-                                     reason (some-> e (.-reason))
-                                     escape-handler (or (:onEscapeKeyDown content-props)
-                                                        onEscapeKeyDown)
-                                     pointer-handler (or (:onPointerDownOutside content-props)
-                                                         onPointerDownOutside)
-                                     prevented? (when (false? v)
-                                                  (cond
-                                                     (and (contains? #{"escape-key" "outside-press"} reason)
-                                                         (not (top-dialog? id)))
-                                                    (prevent-dismiss! e)
-
-                                                    (= reason "escape-key")
-                                                    (call-close-handler! escape-handler e)
-
-                                                    (= reason "outside-press")
-                                                    (call-close-handler! pointer-handler e)
-
-                                                    :else false))]
-                                 (when-not prevented?
-                                   (if (fn? on-open-change)
-                                     (on-open-change {:value v :set-open! set-open!})
-                                     (set-open! v)))))})
+                               (on-root-open-change config v e))})
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
            onEscapeKeyDown (:onEscapeKeyDown content-props)
            handle-key-escape! (fn [^js e]

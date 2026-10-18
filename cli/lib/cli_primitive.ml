@@ -28,12 +28,17 @@ let starts_with ~prefix value =
   let prefix_len = String.length prefix in
   String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
 
-let create_graph value = String.trim value
+let create_graph value = Js.String.trim value
 
 let create_repo value =
-  let value = String.trim value in
-  if starts_with ~prefix:db_version_prefix value then value
-  else db_version_prefix ^ value
+  let trimmed = Js.String.trim value in
+  let graph_name =
+    if starts_with ~prefix:db_version_prefix trimmed then
+      let prefix_len = String.length db_version_prefix in
+      String.sub trimmed prefix_len (String.length trimmed - prefix_len)
+    else trimmed
+  in
+  db_version_prefix ^ Js.String.trim graph_name
 
 let string_of_graph graph = graph
 let string_of_repo repo = repo

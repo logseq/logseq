@@ -1,0 +1,15 @@
+(version dev)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms
+  (ocaml js_of_ocaml melange)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/rrbvec.git#dd5ce904f91d53235b5136f7a771f3f074c3971d)))
+
+(dev)

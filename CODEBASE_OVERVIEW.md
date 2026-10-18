@@ -59,7 +59,7 @@ This is overview of this repository's most important directories and files.
   - `deps/graph-parser/` is a library that parses a Logseq graph and saves it to a database.
 
 - `scripts` - Dev scripts
-- `clj-e2e/` - end to end clj frontend tests
+- `ocaml-e2e/` - end to end frontend tests (OCaml/Melange port of the former clj-e2e suite)
 - `android/` -  Android app
 - `ios/` - iOS app
 

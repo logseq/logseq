@@ -6,6 +6,8 @@
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.paste :as paste-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
@@ -115,7 +117,7 @@
        [;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
-        editor-handler/get-selection-and-format
+        editor-format/get-selection-and-format
         (constantly {:selection-start 0 :selection-end (count selected-text)
                      :selection selected-text :format :markdown :value block-content})
         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
@@ -135,7 +137,7 @@
        [;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
-        editor-handler/get-selection-and-format
+        editor-format/get-selection-and-format
         (constantly {:selection-start 0 :selection-end (count selected-text)
                      :selection selected-text :format :markdown :value block-content})
         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
@@ -173,6 +175,44 @@
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
+
+(deftest-async editor-on-paste-copy-clipboard-does-not-keep-uuid-when-editor-op-is-cut
+  (let [pasted (atom nil)
+        expected-blocks [{:block/title "Copied parent"}]]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      state/get-block-op-type (constantly :cut)
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :op :copy
+                                                               :blocks expected-blocks}))
+      editor-handler/paste-blocks (fn [blocks opts]
+                                    (reset! pasted {:blocks blocks :opts opts}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "copied")}})]
+        (is (= expected-blocks (:blocks @pasted)))
+        (is (false? (get-in @pasted [:opts :keep-uuid?]))
+            "Clipboard copy payload must duplicate, even if this window last cut.")))))
+
+(deftest-async editor-on-paste-cut-clipboard-keeps-uuid
+  (let [pasted (atom nil)
+        expected-blocks [{:block/title "Cut parent"}]]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      state/get-block-op-type (constantly :copy)
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :op :cut
+                                                               :blocks expected-blocks}))
+      editor-handler/paste-blocks (fn [blocks opts]
+                                    (reset! pasted {:blocks blocks :opts opts}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "cut")}})]
+        (is (= expected-blocks (:blocks @pasted)))
+        (is (true? (get-in @pasted [:opts :keep-uuid?]))
+            "Clipboard cut payload must keep uuids even if this window last copied.")))))
 
 (deftest-async editor-on-paste-embed-block-uses-worker-loaded-link
   (let [linked-block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -401,7 +441,7 @@
     (p/with-redefs
      [state/preferred-pasting-file? (constantly true)
        ;; paste-file-if-exists mocks below
-      editor-handler/upload-asset! (fn [_id file & _]
+      editor-assets/upload-asset! (fn [_id file & _]
                                      (reset! pasted-file file))
       util/stop (constantly nil)
       state/get-edit-block (constantly {})]

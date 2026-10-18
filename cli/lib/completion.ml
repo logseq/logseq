@@ -97,19 +97,89 @@ let command_desc_for_path registry path =
 
 let zsh_quote_entry name desc = "'" ^ name ^ ":" ^ desc ^ "'"
 
+let zsh_escape_desc doc =
+  let buffer = Buffer.create (String.length doc) in
+  String.iter
+    (fun c ->
+      match c with
+      | '\'' -> Buffer.add_string buffer "'\\''"
+      | '[' -> Buffer.add_string buffer "\\["
+      | ']' -> Buffer.add_string buffer "\\]"
+      | c -> Buffer.add_char buffer c)
+    doc;
+  Buffer.contents buffer
+
+let zsh_option_action (option : Command_registry.option_meta) value_name =
+  if Vec.mem "--graph" option.names then "{_logseq_graphs}"
+  else if option.multi && not (Vec.is_empty option.choices) then
+    "{_values -s , " ^ value_name ^ " " ^ Vec.string_concat " " option.choices
+    ^ "}"
+  else if not (Vec.is_empty option.choices) then
+    "(" ^ Vec.string_concat " " option.choices ^ ")"
+  else if Vec.mem "--root-dir" option.names then "_files -/"
+  else if value_name = "path" then "_files"
+  else if value_name = "bool" then "(true false)"
+  else ""
+
+let zsh_option_spec (option : Command_registry.option_meta) =
+  let desc = "[" ^ zsh_escape_desc option.doc ^ "]" in
+  let value_spec =
+    match option.arity with
+    | Command_registry.Flag -> None
+    | Required_value name ->
+        Some (":" ^ name ^ ":" ^ zsh_option_action option name)
+    | Optional_value name ->
+        Some ("::" ^ name ^ ":" ^ zsh_option_action option name)
+  in
+  let name_suffix = if Option.is_some value_spec then "=" else "" in
+  let arg = Option.value value_spec ~default:"" in
+  let star = if option.repeatable then "*" else "" in
+  if Vec.length option.names = 1 then
+    "'" ^ star ^ Vec.nth option.names 0 ^ name_suffix ^ desc ^ arg ^ "'"
+  else
+    let exclusion =
+      if option.repeatable then "'" ^ star ^ "'"
+      else "'(" ^ Vec.string_concat " " option.names ^ ")'"
+    in
+    let alternatives =
+      option.names
+      |> Vec.map (fun name -> name ^ name_suffix)
+      |> Vec.string_concat ","
+    in
+    exclusion ^ "{" ^ alternatives ^ "}'" ^ desc ^ arg ^ "'"
+
+let global_option_named name =
+  Command_registry.global_options
+  |> Vec.find_opt (fun (option : Command_registry.option_meta) ->
+      Vec.mem name option.names)
+
+let zsh_global_specs names =
+  names |> Vec.filter_map global_option_named |> Vec.map zsh_option_spec
+
+let zsh_spec_lines specs = "    " ^ Vec.string_concat " \\\n    " specs
+
 let zsh_leaf_function command =
   let func_name = "_logseq_" ^ join_words command.Command_registry.path in
   let func_name = String.map (function ' ' -> '_' | c -> c) func_name in
+  let specs =
+    Vec.append
+      (zsh_global_specs (Vec.of_array [| "--help"; "--graph"; "--output" |]))
+      (Vec.map zsh_option_spec command.Command_registry.options)
+  in
   String.concat "\n"
-    [
-      func_name ^ "() {";
-      "  _arguments -s \\";
-      "    '--help[Show help]' \\";
-      "    '--graph=[Graph name]:value:{_logseq_graphs}' \\";
-      "    '--output=[Output format]:value:(human json edn)'";
-      "}";
-      "";
-    ]
+    [ func_name ^ "() {"; "  _arguments \\"; zsh_spec_lines specs; "}"; "" ]
+
+let zsh_group_specs registry path =
+  let own_option_specs =
+    match Command_registry.find_by_path path registry with
+    | Some command -> Vec.map zsh_option_spec command.Command_registry.options
+    | None -> Vec.empty
+  in
+  Vec.append
+    (Vec.append
+       (zsh_global_specs (Vec.of_array [| "--help"; "--graph" |]))
+       own_option_specs)
+    (Vec.of_array [| "'(-)1:subcommand:->subcmd'"; "'(-)*::args:->args'" |])
 
 let zsh_subgroup_function registry parent subgroup =
   let prefix = Vec.push_back parent subgroup in
@@ -136,11 +206,8 @@ let zsh_subgroup_function registry parent subgroup =
       "_logseq_" ^ Vec.string_concat "_" prefix ^ "() {";
       "  local curcontext=\"$curcontext\" state line";
       "  typeset -A opt_args";
-      "  _arguments -C -s \\";
-      "    '--help[Show help]' \\";
-      "    '--graph=[Graph name]:value:{_logseq_graphs}' \\";
-      "    '(-)1:subcommand:->subcmd' \\";
-      "    '(-)*::args:->args'";
+      "  _arguments -C \\";
+      zsh_spec_lines (zsh_group_specs registry prefix);
       "  case $state in";
       "    subcmd)";
       "      local -a subcmds";
@@ -198,11 +265,8 @@ let zsh_group_function registry group =
         "_logseq_" ^ group ^ "() {";
         "  local curcontext=\"$curcontext\" state line";
         "  typeset -A opt_args";
-        "  _arguments -C -s \\";
-        "    '--help[Show help]' \\";
-        "    '--graph=[Graph name]:value:{_logseq_graphs}' \\";
-        "    '(-)1:subcommand:->subcmd' \\";
-        "    '(-)*::args:->args'";
+        "  _arguments -C \\";
+        zsh_spec_lines (zsh_group_specs registry prefix);
         "  case $state in";
         "    subcmd)";
         "      local -a subcmds";
@@ -240,7 +304,10 @@ let generate_zsh_completion registry =
   in
   let leaf_functions =
     registry.Command_registry.commands
-    |> Vec.filter (fun command -> Vec.length command.Command_registry.path = 1)
+    |> Vec.filter (fun command ->
+        (* commands that are also groups (e.g. `query`) are completed by
+           their group dispatcher, which includes their options *)
+        not (is_group registry command.Command_registry.path))
     |> Vec.map zsh_leaf_function |> Vec.string_concat "\n"
   in
   let group_functions =
@@ -255,8 +322,14 @@ let generate_zsh_completion registry =
       "# Auto-generated by `logseq completion zsh` - do not edit manually.";
       "";
       "_logseq_graphs() {";
-      "  logseq graph list 2>/dev/null | sed -n 's/^[* ]*//p' | sed \
-       '/^Count:/d'";
+      "  local -a graphs";
+      "  graphs=( ${(f)\"$(logseq graph list --output json 2>/dev/null | node \
+       -e 'const fs = require(\"fs\"); const input = fs.readFileSync(0, \
+       \"utf8\"); if (!input.trim()) process.exit(0); const data = \
+       JSON.parse(input); const graphs = data && data.data && \
+       data.data.graphs; if (Array.isArray(graphs)) \
+       console.log(graphs.join(\"\\n\"));')\"} )";
+      "  compadd -a graphs";
       "}";
       "";
       "# --- per-command functions ---";
@@ -270,18 +343,12 @@ let generate_zsh_completion registry =
       "_logseq() {";
       "  local curcontext=\"$curcontext\" state line";
       "  typeset -A opt_args";
-      "  _arguments -C -s \\";
-      "    '--help[Show help]' \\";
-      "    '--version[Show version]' \\";
-      "    '--config=[Path to cli.edn]:file:_files' \\";
-      "    '--graph=[Graph name]:value:{_logseq_graphs}' \\";
-      "    '--root-dir=[Path to CLI root dir]:dir:_files -/' \\";
-      "    '--timeout-ms=[Request timeout in ms]:value:' \\";
-      "    '--output=[Output format]:value:(human json edn)' \\";
-      "    '--verbose[Enable verbose debug logging to stderr]' \\";
-      "    '--profile[Enable stage timing profile output to stderr]' \\";
-      "    '(-)1:command:->cmds' \\";
-      "    '(-)*::args:->args'";
+      "  _arguments -C \\";
+      zsh_spec_lines
+        (Vec.append
+           (Vec.map zsh_option_spec Command_registry.global_options)
+           (Vec.of_array
+              [| "'(-)1:command:->cmds'"; "'(-)*::args:->args'" |]));
       "  case $state in";
       "    cmds)";
       "      local -a cmds";

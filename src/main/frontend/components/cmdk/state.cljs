@@ -89,7 +89,7 @@
                     :include-breadcrumb? true
                     :include-matched-count? true}]
     (case filter-group
-      :code
+      :codes
       (assoc nodes-base
              :limit 20
              ;; larger limit for code search since most of the results will be filtered out

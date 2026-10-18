@@ -1,0 +1,19 @@
+(version 0.38.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml ocaml-compiler-libs ppx_derivers sexplib0 stdlib-shims)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml-ppx/ppxlib/releases/download/0.38.0/ppxlib-0.38.0.tbz)
+  (checksum
+   sha512=2fbbf124fc61e1f22242d13505e9af39d4a3c7cf03def1c33ee8bd915195be9b817636667302e9c6ceddc74a9a4a54926340e21c96fd770a2bc6752400315cfd)))

@@ -21,12 +21,30 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
+(def ^:private bookkeeping-attrs
+  #{:block/created-at :block/updated-at})
+
+(defn- changed-entity-ids
+  "Entities with a semantic change in tx-data. An entity whose only changed
+  attrs are bookkeeping timestamps didn't change semantically — validating it
+  would let latent invalid state block unrelated writes (e.g. every tx that
+  stamps :block/updated-at). Touches that leave a timestamp missing or
+  non-integer still count."
+  [db-after tx-data]
+  (->> (group-by :e tx-data)
+       (keep (fn [[e datoms]]
+               (when (or (some #(not (contains? bookkeeping-attrs (:a %)))
+                               datoms)
+                         (some #(not (int? (get (d/entity db-after e) (:a %))))
+                               datoms))
+                 e)))))
+
 (defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
   [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
-    (let [changed-ids (->> tx-data (keep :e) distinct)
+    (let [changed-ids (changed-entity-ids db-after tx-data)
           tx-datoms (mapcat (fn [id]
                               (d/datoms db-after :eavt id))
                             changed-ids)
@@ -123,11 +141,18 @@
      :objects (- (count (d/datoms db :avet :block/tags)) classes-count properties-count)
      :property-pairs (count (mapcat #(-> % db-property/properties (dissoc :block/tags)) entities))}))
 
+(defn- entity-datoms
+  [db entity-ids]
+  (into [] (mapcat #(d/datoms db :eavt %)) entity-ids))
+
 (defn validate-local-db!
   "Validates a local (non-RTC) DB like validate-db! but with default behavior,
-  options and logging specific to a local DB. Used by CLI, importer and tests"
-  [db & {:keys [db-name open-schema verbose]}]
-  (let [datoms (d/datoms db :eavt)
+  options and logging specific to a local DB. Used by CLI, importer and tests.
+   When :entity-ids is provided, only those entities are validated."
+  [db & {:keys [db-name open-schema verbose entity-ids]}]
+  (let [datoms (if entity-ids
+                 (entity-datoms db entity-ids)
+                 (d/datoms db :eavt))
         ent-maps* (db-malli-schema/datoms->entities datoms)
         _ (when verbose
             (println "Read graph" (str db-name " with counts: "

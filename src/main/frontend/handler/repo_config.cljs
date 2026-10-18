@@ -4,6 +4,8 @@
   logseq/config.edn. In the future it may manage more files. This component
   depends on a repo."
   (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -27,6 +29,15 @@
       ;; Rethrow so we know how long this is an issue and to prevent downstream errors
       (throw e))))
 
+(defn readable-config-content?
+  "True when file content parses into a config map. When parsing fails the user
+  is notified by read-repo-config."
+  [content]
+  (and (not (string/blank? content))
+       (try
+         (map? (read-repo-config content))
+         (catch :default _ false))))
+
 (defn set-repo-config-state!
   "Sets repo config state using given file content"
   [repo-url content]
@@ -40,7 +51,11 @@
    (p/let [content (get-repo-config-content repo-url)]
      (restore-repo-config! repo-url content)))
   ([repo-url config-content]
-   (set-repo-config-state! repo-url config-content)))
+   ;; A missing or unparsable config.edn is treated as the default config so
+   ;; `[:config repo]` state is always populated
+   (set-repo-config-state! repo-url (if (readable-config-content? config-content)
+                                      config-content
+                                      config/config-default-content))))
 
 (defn start
   "This component only has one responsibility on start, to manage db and ui state

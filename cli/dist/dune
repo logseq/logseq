@@ -2,6 +2,7 @@
  (alias bundle)
  (target logseq-cli.js)
  (deps
+  (env_var LOGSEQ_REVISION)
   (alias ../bin/melange)
   (:entrypoint ../bin/logseq_cli_melange/bin/main.js)
   (glob_files_rec ../bin/logseq_cli_melange/**)
@@ -14,7 +15,7 @@
    (run
     sh
     -c
-    "exec \"$DUNE_SOURCEROOT/node_modules/.bin/vite\" build --config vite.config.mjs --outDir dist --emptyOutDir false"))))
+    "out=\"$PWD/dist\"; cd \"$DUNE_SOURCEROOT/_build/default\" && exec \"$DUNE_SOURCEROOT/node_modules/.bin/vite\" build --config vite.config.mjs --outDir \"$out\" --emptyOutDir false"))))
 
 (rule
  (alias show-vars)

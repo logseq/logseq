@@ -2,8 +2,7 @@
   "Block code needed by app but not graph-parser. This should be the only frontend
    namespace that has references to legacy file attributes like :block/pre-block?
    as they are being removed from graph-parser output"
-  (:require [cljs.cache :as cache]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.common.cache :as common.cache]
             [frontend.context.i18n :refer [t]]
             [frontend.format :as format]
@@ -91,7 +90,7 @@ and handles unexpected failure."
           block (dissoc block :block.temp/ast-body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
-(defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
+(defonce *blocks-ast-cache (volatile! (common.cache/empty-lru 5000)))
 
 (defn- markdown-heading-level
   [content]

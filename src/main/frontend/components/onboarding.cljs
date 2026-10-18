@@ -27,7 +27,7 @@
 
           {:title (t :help/development-title)
            :children [[(t :help/roadmap) "https://discuss.logseq.com/t/logseq-product-roadmap/34267"]
-                      [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
+                      [(t :help/bug) "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"]
                       [(t :help/feature) "https://discuss.logseq.com/c/feedback/feature-requests/"]
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
 

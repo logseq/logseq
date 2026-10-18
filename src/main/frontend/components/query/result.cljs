@@ -1,7 +1,8 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
   (:require [clojure.string :as string]
-            [frontend.db.hooks :as db-hooks]))
+            [frontend.db.hooks :as db-hooks]
+            [logseq.shui.hooks :as hooks]))
 
 (defn get-group-by-page
   [{:keys [result-transform query] :as query-config}
@@ -12,6 +13,18 @@
          (and (not result-transform)
               (not (and (string? query)
                         (string/includes? query "(by-page false)")))))))
+
+(defn- uses-current-page?
+  [kind query]
+  (case kind
+    :dsl
+    (and (string? (:query query))
+         (boolean (re-find #"(?i)<%\s*current\s+page\s*%>" (:query query))))
+
+    :datalog
+    (boolean (some #{:current-page ":current-page"} (:inputs query)))
+
+    false))
 
 (defn- query-spec
   [config query]
@@ -33,7 +46,8 @@
       current-block-uuid
       (assoc :current-block-uuid current-block-uuid)
 
-      (:current-page-title config)
+      (and (:current-page-title config)
+           (uses-current-page? kind query))
       (assoc :current-page-title (:current-page-title config))
 
       (:today-day config)
@@ -47,5 +61,14 @@
 
 (defn use-query-result
   [config query]
-  (let [resource (db-hooks/use-resource [:query (query-spec config query)])]
-    (:rows resource)))
+  (let [resource (db-hooks/use-resource [:query (query-spec config query)])
+        result (:rows resource)
+        query-result (:query-result config)
+        error (:error resource)]
+    (hooks/use-effect! #(when query-result
+                          (reset! query-result result))
+                       [query-result result])
+    (when error
+      (throw (ex-info (or (:message error) "Query failed")
+                      (or (:data error) {}))))
+    result))

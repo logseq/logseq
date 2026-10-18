@@ -545,6 +545,17 @@
           }
         }
 
+        &.as-button {
+          > .form-control {
+            flex-direction: column;
+            align-items: flex-start;
+
+            > .ui__button {
+              width: 100%;
+            }
+          }
+        }
+
         &:hover {
           background: var(--ls-tertiary-background-color);
         }

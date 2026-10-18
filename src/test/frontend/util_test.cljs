@@ -1,6 +1,7 @@
 (ns frontend.util-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [goog.object :as gobj]))
 
 (deftest test-split-graphemes
   (testing "split-graphemes returns individual grapheme clusters"
@@ -71,3 +72,72 @@
       (is (= @actual-ops 4))
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
+
+(deftest goog-event-is-composing?-ignores-native-cmdk-events
+  (testing "native addEventListener IME Enter is invisible to goog-event-is-composing?"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 229)
+      (gobj/set event "isComposing" true)
+      (is (nil? (util/goog-event-is-composing? event)))
+      (is (nil? (util/goog-event-is-composing? event true))))))
+
+(deftest native-event-is-composing?-detects-ime-process-enter
+  (testing "plain native Enter is not composing"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 13)
+      (gobj/set event "isComposing" false)
+      (is (false? (boolean (util/native-event-is-composing? event))))))
+
+  (testing "macOS IME commit Enter uses keyCode 229"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 229)
+      (gobj/set event "isComposing" false)
+      (is (true? (util/native-event-is-composing? event)))))
+
+  (testing "IME Process key is composing"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Process")
+      (gobj/set event "keyCode" 229)
+      (gobj/set event "isComposing" false)
+      (is (true? (util/native-event-is-composing? event)))))
+
+  (testing "isComposing true is composing even with keyCode 13"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 13)
+      (gobj/set event "isComposing" true)
+      (is (true? (util/native-event-is-composing? event))))))
+
+(defn- mock-ls-block
+  [{:keys [blockid class-name inner]}]
+  (let [class-name (or class-name "ls-block")
+        classes (set (.split class-name " "))]
+    #js {:className class-name
+         :classList #js {:contains (fn [class] (contains? classes class))}
+         :getAttribute (fn [attr]
+                         (case attr
+                           "blockid" blockid
+                           "id" (when blockid (str "ls-block-" blockid))
+                           nil))
+         :querySelector (fn [_] inner)}))
+
+(deftest selection-node-block-id-resolves-property-value-container
+  (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        inner (mock-ls-block {:blockid (str value-uuid)})
+        wrapper (mock-ls-block {:class-name "ls-block property-value-container"
+                                :inner inner})
+        empty-wrapper (mock-ls-block {:class-name "ls-block property-value-container"})]
+    (is (= value-uuid (util/selection-node-block-id inner))
+        "Inner property-value blocks keep their own blockid")
+    (is (= value-uuid (util/selection-node-block-id wrapper))
+        "Selecting the wrapper still copies/cuts the inner text property value")
+    (is (nil? (util/selection-node-block-id empty-wrapper))
+        "Empty property-value wrappers have no block to copy")
+    (is (nil? (util/selection-node-block-id (str "ls-block-" value-uuid)))
+        "Non-element inputs such as block id strings return nil instead of throwing")
+    (is (nil? (util/selection-node-block-id nil)))
+    (is (= inner (util/unwrap-property-value-container wrapper)))
+    (is (= inner (util/unwrap-property-value-container inner)))))

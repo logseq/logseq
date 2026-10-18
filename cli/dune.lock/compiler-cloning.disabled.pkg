@@ -1,0 +1,10 @@
+(version disabled)
+
+(avoid)
+
+(enabled_on_platforms
+ (only
+  ((arch x86_64)
+   (os macos))
+  ((arch arm64)
+   (os macos))))

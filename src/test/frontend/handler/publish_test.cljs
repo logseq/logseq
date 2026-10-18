@@ -7,6 +7,10 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(deftest jpeg-xl-asset-content-type-test
+  (is (= "image/jxl" (#'publish-handler/asset-content-type "jxl")))
+  (is (= "image/jxl" (#'publish-handler/asset-content-type "JXL"))))
+
 (deftest upload-custom-publish-assets-reads-files-through-worker-test
   (async done
     (let [repo "logseq_db_publish_worker"

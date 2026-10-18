@@ -39,7 +39,7 @@
                 date-time-util/default-journal-title-formatter)
             " HH:mm")))))
 
-(declare property-value->string block-properties-content)
+(declare property-value->string block-properties-content block->content)
 
 (defn- property-value-sort-key
   [db property item context]
@@ -116,14 +116,31 @@
        {:replace-block-refs? (not (:preserve-block-refs? context))})
       (property-value->string db property v context))))
 
+(defn- property-value-children-content
+  [db value-entity spaces-tabs context]
+  (when-let [children (seq (ldb/sort-by-order (:block/_parent value-entity)))]
+    (let [indent (or (:export-bullet-indentation context) "  ")
+          child-level (+ 2 (quot (count spaces-tabs) (max 1 (count indent))))]
+      (->> children
+           (map (fn [child]
+                  (block->content db (:block/uuid child) {:init-level child-level} context)))
+           (string/join "\n")
+           not-empty))))
+
 (defn- default-property-value-block-content
   [db property v spaces-tabs context]
   (let [line (str spaces-tabs "- " (property-value-block-title db property v context))
-        properties-content (when-let [id (:db/id v)]
-                             (block-properties-content db (d/entity db id) (str spaces-tabs "  ") context))]
+        value-entity (when-let [id (:db/id v)]
+                       (d/entity db id))
+        properties-content (when value-entity
+                             (block-properties-content db value-entity (str spaces-tabs "  ") context))
+        children-content (when value-entity
+                           (property-value-children-content db value-entity spaces-tabs context))]
     (cond-> line
       properties-content
-      (str "\n" properties-content))))
+      (str "\n" properties-content)
+      children-content
+      (str "\n" children-content))))
 
 (defn- property-value-blocks-content
   [db property v spaces-tabs context]
@@ -266,6 +283,12 @@
         (str (apply str (repeat heading-level "#")) " " (strip-heading-prefix content))
         content))))
 
+(defn- highlighted-block?
+  "Whether a block has a background color set (the block-level highlight
+  feature, distinct from inline ^^text^^ highlighting)."
+  [db b]
+  (some? (:logseq.property/background-color (d/entity db (:db/id b)))))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -273,6 +296,17 @@
         ;; replace [[uuid]] with block's content
         title (block-title-content db b context)
         content (or title "")
+        ;; Encode the block's background-color highlight as inline ^^text^^
+        ;; markup so it round-trips through mldoc and renders as <mark> in
+        ;; HTML export (and stays as ^^text^^ in Text/OPML export). Only done
+        ;; for the explicit "Export page" feature (see :encode-highlight-as-mark?
+        ;; in get-content-config), not for markdown-mirror generation.
+        content (if (and (:encode-highlight-as-mark? context)
+                         (not (contains? #{:code :math} (:logseq.property.node/display-type b)))
+                         (not (string/blank? content))
+                         (highlighted-block? db b))
+                  (str "^^" content "^^")
+                  content)
         level (if (and heading-to-list? heading)
                 (if (> heading 1)
                   (dec heading)

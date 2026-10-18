@@ -53,50 +53,6 @@
   (is (= :semantic/pages-list
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages")))))
 
-(deftest semantic-block-api-exposes-timestamps-test
-  (let [document (semantic-routes/openapi-document "https://issuer.example")
-        block-properties (get-in document [:components :schemas :BlockResponse :properties])]
-    (is (= {:type "integer"} (:created-at block-properties)))
-    (is (= {:type "integer"} (:updated-at block-properties)))
-    (is (= {:type "array" :items {:$ref "#/components/schemas/EntitySummary"}}
-           (:tags block-properties)))
-    (is (= {:type "array" :items {:$ref "#/components/schemas/EntitySummary"}}
-           (:references block-properties)))
-    (is (= {:$ref "#/components/schemas/PropertyChoice"}
-           (:status block-properties)))
-    (is (= {:type "string"} (:asset-type block-properties)))
-    (is (= {:type "integer"} (:asset-size block-properties)))
-    (is (= {:type "string"} (:asset-checksum block-properties)))))
-
-(deftest semantic-create-operations-accept-client-uuids-test
-  (let [document (semantic-routes/openapi-document "https://issuer.example")
-        schemas (get-in document [:components :schemas])
-        create-task (get-in document [:paths "/api/v1/graphs/{graph-id}/tasks" :post])
-        task-schema (get-in create-task [:requestBody :content "application/json" :schema])
-        asset-parameters (get-in document [:paths "/api/v1/graphs/{graph-id}/assets" :post :parameters])]
-    (is (= {:type "string" :format "uuid"}
-           (get-in schemas [:BlockTree :properties :uuid])))
-    (is (= {:type "string" :format "uuid"}
-           (get-in task-schema [:properties :uuid])))
-    (is (= {:type "string" :format "uuid"}
-           (:schema (first (filter #(= "uuid" (:name %)) asset-parameters)))))))
-
-(deftest semantic-search-block-response-exposes-journal-context-test
-  (let [document (semantic-routes/openapi-document "https://issuer.example")
-        result-properties (get-in document [:components :schemas :SearchResultResponse :properties])]
-    (is (= {:type "string"} (:page-id result-properties)))
-    (is (= {:type "integer"} (:created-at result-properties)))
-    (is (= {:type "integer"} (:updated-at result-properties)))
-    (is (= {:type "integer"} (:journal-day result-properties)))
-    (is (= {:type "string"} (:journal-title result-properties)))))
-
-(deftest semantic-block-list-route-test
-  (let [public (semantic-routes/match-public "GET" "/api/v1/graphs/graph-1/blocks")
-        internal (semantic-routes/match-internal "GET" "/semantic/blocks")]
-    (is (= :semantic/blocks-list (:handler public)))
-    (is (= "graph-1" (get-in public [:path-params :graph-id])))
-    (is (= :semantic/blocks-list (:handler internal)))))
-
 (deftest semantic-move-blocks-route-test
   (is (= :semantic/blocks-move
          (:handler (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/block-moves"))))
@@ -116,14 +72,6 @@
   (is (= :semantic/pages-references
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages/page-1/references")))))
 
-(deftest semantic-block-reference-route-test
-  (is (= :semantic/blocks-references
-         (:handler (semantic-routes/match-public
-                    "GET" "/api/v1/graphs/graph-1/blocks/block-1/references"))))
-  (is (= :semantic/blocks-references
-         (:handler (semantic-routes/match-internal
-                    "GET" "/semantic/blocks/block-1/references")))))
-
 (deftest semantic-task-routes-test
   (doseq [[method handler] [["GET" :semantic/tasks-list]
                             ["POST" :semantic/tasks-create]]]
@@ -139,18 +87,3 @@
            (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/assets"))))
     (is (= handler
            (:handler (semantic-routes/match-internal method "/semantic/assets"))))))
-
-(deftest encrypted-semantic-write-allowlist-test
-  (doseq [[method path expected]
-          [["POST" "/api/v1/graphs/graph-1/capture" true]
-           ["POST" "/api/v1/graphs/graph-1/pages" true]
-           ["POST" "/api/v1/graphs/graph-1/tasks" true]
-           ["POST" "/api/v1/graphs/graph-1/assets" true]
-           ["PATCH" "/api/v1/graphs/graph-1/blocks/block-1" true]
-           ["PUT" "/api/v1/graphs/graph-1/blocks/block-1/properties/status-id" true]
-           ["GET" "/api/v1/graphs/graph-1/blocks" false]
-           ["DELETE" "/api/v1/graphs/graph-1/blocks/block-1" false]
-           ["DELETE" "/api/v1/graphs/graph-1/blocks/block-1/properties/status-id" false]]]
-    (is (= expected
-           (true? (:e2ee-safe-write? (semantic-routes/match-public method path))))
-        (str method " " path))))
