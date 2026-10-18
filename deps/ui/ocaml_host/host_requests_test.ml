@@ -453,6 +453,16 @@ let () =
   expect "Property lookup changed duplicate-key precedence"
     (Dom_ext.prop "class" element == shared);
   expect "Property lookup changed missing fields" (Dom_ext.prop "missing" element = Js.Json.JNull);
+  let retained = Js.Json.JObject
+    ["id",Js.Json.JString "retained-trigger";
+     "attrs",Js.Json.JObject ["aria-label",Js.Json.JString "Trigger"]] in
+  expect "Native attribute reads must expose the canonical retained identifier"
+    (Dom_ext.get_attribute retained "id" = Some "retained-trigger");
+  expect "Reading a retained identifier must preserve ordinary attributes"
+    (Dom_ext.get_attribute retained "aria-label" = Some "Trigger");
+  expect "An unauthored identifier must remain absent"
+    (Dom_ext.get_attribute (Js.Json.JObject
+      ["id",Js.Json.JString "";"attrs",Js.Json.JObject []]) "id" = None);
   List.iter (fun value ->
     expect "Property lookup accepts a nonobject as an object"
       (Dom_ext.prop "class" value = Js.Json.JNull))
@@ -5159,12 +5169,12 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~scale:(fun () -> scale) ~store:(fun () -> A.store (surface ()))) in
     let module Measured_layout = struct
       include Lui_layout
-      let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor ?vport ~width ~height layout store =
+      let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store =
         let measure id text offered_width _ =
           let measured = Text_engine.measure_text ~width:(Host_interaction.measure_width offered_width)
             (Lazy.force engine) id text in
           Some (Text_engine.pad_size store id ~scale measured) in
-        Lui_layout.sync ?scale:layout_scale ~measure ?hidden ?ctx_anchor ?vport ~width ~height layout store
+        Lui_layout.sync ?scale:layout_scale ~measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
     end in
     let surface = A.create ~layout:(module Measured_layout) ~scale_cell:(ref scale)
       ~text:{measure=(fun id text -> Text_engine.measure_text (Lazy.force engine) id text);

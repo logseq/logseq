@@ -194,6 +194,7 @@ let code_block_actions ~self lang =
     ~transition:"opacity 300ms ease-in"
     [ (if Ui_services.env_publishing () then text ~value:lang [] else Ui_components.button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
+        ~accessibility_identifier:("code-language-" ^ self)
         ~text:
           (if lang <> "" then lang
            else I18n.t "editor/code-language-placeholder")

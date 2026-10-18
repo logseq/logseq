@@ -3,10 +3,9 @@
    The public API stays imperative — show_menu / show_select /
    show_dialog / show_custom push entries onto the open stack — but
    every entry renders as a LUI popover/dialog through [layer], a view
-   the chrome mounts inside .cp__overlays. Anchor placement computes the
-   same below-or-above/align-end point the DOM twin did (the popover
-   kind takes ~at points; the flip/end alignment ride a translate in a
-   style data-attr), outside-press and Escape dismissal ride the
+   the chrome mounts inside .cp__overlays. Retained anchor targets leave
+   geometry, collision and scroll tracking to the host. Outside-press
+   and Escape dismissal ride the
    platform popup layers via ~on_dismiss (topmost layer only), and MSub
    menus nest a popover under their trigger node so the platform
    resolves the anchor/owner chain itself. *)
@@ -108,66 +107,23 @@ let register_key id f =
   | Some e -> e.p_key := f
   | None -> ()
 
-(* ---------- anchored placement ----------
+(* ---------- retained anchor placement ---------- *)
 
-   The DOM twin measured anchor rects and wrote fixed left/top itself;
-   the popover kind takes an ~at point instead, so the same math now
-   produces a point plus a translate style for the open-above /
-   align-end flips. Native rects resolve asynchronously (the host
-   measure can still read 0 when the popup mounts), so placement is a
-   signal with the same 32ms x4 retry the twin had. *)
+let anchor_identifier (anchor : U.el) =
+  match anchor.U.attr "id" with
+  | Some identifier when identifier <> "" -> identifier
+  | _ -> invalid_arg "Popup anchors require a retained accessibility identifier"
 
-type placement =
-  { px : float
-  ; py : float
-  ; p_above : bool
-  ; p_end : bool
-  }
-
-let placement_state (ctx : Lui_ui.ui_context) (anchor : U.el) ~align_end =
-  let st =
-    Signal.state ctx.Lui_ui.ui_scheduler
-      { px = 0.; py = 0.; p_above = false; p_end = false }
-  in
-  let rec place n =
-    if anchor.U.rect_pending () && n > 0 then
-      ignore
-        (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 32 (fun () ->
-             place (n - 1)))
-    else begin
-      let x, y, w, h = anchor.U.rect () in
-      let vh = U.dom_viewport_height () in
-      let below = vh -. (y +. h) in
-      let open_above = below < 280. && y > below in
-      Signal.set st
-        { px = (if align_end then x +. w else x)
-        ; py = (if open_above then y -. 4. else y +. h +. 4.)
-        ; p_above = open_above
-        ; p_end = align_end
-        }
-    end
-  in
-  place 4;
-  st
-
-let placement_style pl =
-  match pl.p_above, pl.p_end with
-  | true, true -> "transform:translate(-100%,-100%)"
-  | true, false -> "transform:translateY(-100%)"
-  | false, true -> "transform:translateX(-100%)"
-  | false, false -> ""
-
-(* a caller-anchored popover positioned by the placement signal.
+(* A caller-anchored popover positioned by the host.
    [card] paints the .ui__dropdown-menu-content card chrome as props
    (menu surfaces); select/custom popups keep caller-driven classes. *)
-let anchored_popover ~key ~id ~place ~cls ~card ?role ~on_dismiss children : t =
+let anchored_popover ~key ~id ~anchor_target ~align_end ~cls ~card ?role ~on_dismiss children : t =
   Ui_components.with_props
     (if card then [ Ui_components.card_shadow ] else [])
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
-       ~at_signal:
-         (map (fun (pl : placement) -> (pl.px, pl.py))
-            (Signal.value (place)))
+       ~anchor:`below ~anchor_target ~anchor_offset:4.
+       ~anchor_alignment:(if align_end then `end_ else `start)
        ?background:(if card then Some "hsl(var(--popover))" else None)
        ?foreground:(if card then Some "inherit" else None)
        ?border_color:(if card then Some "hsl(var(--border))" else None)
@@ -175,13 +131,7 @@ let anchored_popover ~key ~id ~place ~cls ~card ?role ~on_dismiss children : t =
        ?corner_radius:(if card then Some 6 else None)
        ?min_width:(if card then Some 128 else None)
        ?padding:(if card then Some 4 else None)
-       ~data_attrs_signal:
-         (map
-            (fun (pl : placement) ->
-              (if placement_style pl = "" then []
-               else [ ("style", placement_style pl) ])
-              @ [ ("data-keep-selection", ""); ("tabindex", "-1") ])
-            (Signal.value (place)))
+       ~data_attrs:[ ("data-keep-selection", ""); ("tabindex", "-1") ]
        ~style_class:cls ~on_dismiss children)
 
 (* ---------- menus ---------- *)
@@ -372,14 +322,14 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
 
 let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
     items =
+  let anchor_target = anchor_identifier anchor in
   close_all ();
   let id = !next_id + 1 in
   ignore
     (push
        (fun context parent ->
-         let place = placement_state context anchor ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
-           ~id:(Printf.sprintf "vp-menu-%d" id) ~place ~card:true
+           ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor_target ~align_end ~card:true
            ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
            ~on_dismiss:(fun _ -> close_entry id)
            [ menu_level ~pid:id ~cls:cls_prefix
@@ -394,12 +344,12 @@ let fixed_items items context =
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = []) ~on_chosen () =
+  let anchor_target = anchor_identifier anchor in
   close_all ();
   let id = !next_id + 1 in
   let view context parent =
     let sched = context.Lui_ui.ui_scheduler in
     let source = items context in
-    let place = placement_state context anchor ~align_end in
     let query = Signal.state sched "" in
     let chosen = Signal.state sched 0 in
     let sel_values = Signal.state sched [] in
@@ -525,7 +475,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            @ [ select_col ])
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
-      ~id:("vpsel-p" ^ string_of_int id) ~place ~card:true
+      ~id:("vpsel-p" ^ string_of_int id) ~anchor_target ~align_end ~card:true
       ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
@@ -602,14 +552,14 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = I.yes)
    rename boxes): renders [content] inside a caller-anchored popover so
    placement/dismissal stay consistent with the menu path. *)
 let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
+  let anchor_target = anchor_identifier anchor in
   close_all ();
   let id = !next_id + 1 in
   ignore
     (push
        (fun context parent ->
-         let place = placement_state context anchor ~align_end in
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
-           ~id:(Printf.sprintf "vp-c-%d" id) ~place ~cls ~card:true
+           ~id:(Printf.sprintf "vp-c-%d" id) ~anchor_target ~align_end ~cls ~card:true
            ~on_dismiss:(fun _ -> close_entry id)
            [ content ] context parent))
 

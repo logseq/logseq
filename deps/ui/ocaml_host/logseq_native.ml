@@ -701,7 +701,7 @@ let () =
   let layout_trace = Option.map open_out_bin (Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_TRACE") in
   let module Timed_layout = struct
     include Lui_layout
-    let sync ?scale ?measure ?hidden ?ctx_anchor ?vport ~width ~height t store =
+    let sync ?scale ?measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store =
       Option.iter (fun channel ->
         let hidden_ids = List.filter
           (fun id -> match hidden with Some predicate -> predicate id | None -> false)
@@ -710,7 +710,7 @@ let () =
           (store,width,height,Option.value scale ~default:1.,hidden_ids,ctx_anchor) [];
         flush channel) layout_trace;
       let started = perf_s () and before = stat_syncs t in
-      sync ?scale ?measure ?hidden ?ctx_anchor ?vport ~width ~height t store;
+      sync ?scale ?measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store;
       metrics.layout_ms <- (perf_s () -. started) *. 1000.;
       let runs = stat_syncs t - before in
       (match layout_capture_path with
@@ -763,6 +763,7 @@ let () =
   in
   host_cell := Some host;
   let store = Lui_host.store host in
+  Lui_host.set_anchor_shift host (Ui.anchor_shift ui store);
   Daemon_client.boot_mark "host ready";
   List.iter (fun property ->
     Lui_store.set_extension_prop_mask store ~identifier:"logseq-editor" ~property

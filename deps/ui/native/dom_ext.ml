@@ -494,7 +494,11 @@ let live_field (el : element) : (string * int * int) option =
   | None -> None
 
 let get_attribute_raw (el : element) (name : string) : string option =
-  match prop "attrs" el with
+  if name = "id" then
+    match str_prop "id" el with
+    | Some identifier when identifier <> "" -> Some identifier
+    | _ -> None
+  else match prop "attrs" el with
   | Js.Json.JObject kvs ->
       Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
   | _ -> str_prop ("attr-" ^ name) el

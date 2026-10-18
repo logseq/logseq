@@ -61,6 +61,43 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let popup_anchor () =
+    let body = Ui_services.dom_body () in
+    {body with Ui_services.attr=(fun name ->
+      if name="id" then Some "shared-popup-trigger" else body.attr name)} in
+  let popup_layer = Lui_elements.column
+    [Lui_elements.button ~accessibility_identifier:"shared-popup-trigger"
+       ~text:"Trigger" []; Views_popup.layer] in
+  let previous_popup_stack = !Views_popup.stack_st in
+  Views_popup.stack_st := None;
+  let anchored = mount (fun _ -> Lui_elements.column
+    [Lui_elements.button ~accessibility_identifier:"retained-popup-trigger"
+       ~text:"Trigger" []; Views_popup.layer]) in
+  let body = Ui_services.dom_body () in
+  let trigger = {body with Ui_services.attr=(fun name ->
+    if name="id" then Some "retained-popup-trigger" else body.attr name)} in
+  let assert_anchored label =
+    let surface = List.find (fun n -> n.M.kind="popover") (nodes anchored) in
+    check (label ^ " uses the retained trigger")
+      (M.string_prop surface "anchor-target"=Some "retained-popup-trigger");
+    check (label ^ " delegates side and alignment to the host")
+      (M.string_prop surface "anchor"=Some "below"
+       && M.string_prop surface "anchor-alignment"=Some "end");
+    check (label ^ " has no competing point coordinates")
+      (not (Hashtbl.mem surface.M.props "x" || Hashtbl.mem surface.M.props "y"));
+    Views_popup.close_all () in
+  Views_popup.show_menu ~anchor:trigger ~align_end:true
+    [Views_popup.MItem ("Item",fun () -> ())];
+  assert_anchored "View menu";
+  Views_popup.show_select ~anchor:trigger ~align_end:true
+    ~items:(Views_popup.fixed_items []) ~placeholder:"Choice"
+    ~on_chosen:(fun _ _ -> ()) ();
+  assert_anchored "View select";
+  Views_popup.show_custom ~anchor:trigger ~align_end:true ~cls:"popup-fixture"
+    (Lui_elements.text ~value:"Content" []);
+  assert_anchored "Custom popup";
+  ignore (Lui_app.dispose anchored.S.app);
+  Views_popup.stack_st := previous_popup_stack;
   let previous_property = !Properties_dialog.current
   and previous_property_signal = !Properties_dialog.current_sig
   and previous_worker = !Runtime.worker in
@@ -113,7 +150,7 @@ let run_views ~registry ~profile ~finish =
           ~kind:Views_state.KAllPages ~feature:"delayed-filter-columns"
           ~owner:Wire.Nil in
       filter_instance := Some inst;
-      Views_popup.layer context parent) in
+      popup_layer context parent) in
   let filter_inst = Option.get !filter_instance in
   let options () = List.filter (fun n -> class_has n "ls-view-select-option")
       (nodes delayed_filter) in
@@ -121,7 +158,7 @@ let run_views ~registry ~profile ~finish =
     | Some text -> Some text
     | None -> List.find_map caption (M.children delayed_filter.S.tree node.M.id) in
   let option_labels () = List.filter_map caption (options ()) in
-  Views_head.filter_popup filter_inst (Ui_services.dom_body ());
+  Views_head.filter_popup filter_inst (popup_anchor ());
   let filter_input = List.find (fun n -> n.M.kind="input") (nodes delayed_filter) in
   S.text_changed delayed_filter filter_input.M.id "Later";
   let column id name =
@@ -185,9 +222,9 @@ let run_views ~registry ~profile ~finish =
           let selector = mount (fun _ context parent ->
             let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
               ~kind:Views_state.KAllPages ~feature:"filter-value-fixture" ~owner:Wire.Nil in
-            instance:=Some inst;Views_popup.layer context parent) in
+            instance:=Some inst;popup_layer context parent) in
           let inst=Option.get !instance in
-          Views_head.filter_value_phase inst ~anchor:(Ui_services.dom_body ()) column;
+          Views_head.filter_value_phase inst ~anchor:(popup_anchor ()) column;
           ignore (Js.Promise.then_ (fun () ->
             let rendered = List.exists (fun n -> n.M.kind="input") (nodes selector) in
             check "asynchronous view popups publish their own frame without another input event" rendered;
@@ -239,9 +276,9 @@ let run_views ~registry ~profile ~finish =
             let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
               ~kind:Views_state.KAllPages ~feature:"custom-date-fixture" ~owner:Wire.Nil in
             Views_state.update inst (fun st -> {st with filters_or=true});
-            instance:=Some inst;Views_popup.layer context parent) in
+            instance:=Some inst;popup_layer context parent) in
           let inst=Option.get !instance in
-          Views_head.filter_value_phase inst ~anchor:(Ui_services.dom_body ()) Views_table.created_column;
+          Views_head.filter_value_phase inst ~anchor:(popup_anchor ()) Views_table.created_column;
           ignore (Js.Promise.then_ (fun () ->
             let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
             S.text_changed selector input.M.id I18n.(t "view.filter/custom-date");
@@ -1134,13 +1171,13 @@ let run_views ~registry ~profile ~finish =
          o_create_view=(fun _ -> ()); o_rename_box=(fun _ _ -> Lui_elements.spacer []);
          o_export=(fun _ -> ()); o_add_object=(fun _ -> ());
          o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
-      Views_head.sorting_popup inst (Ui_services.dom_body ());
+      Views_head.sorting_popup inst (popup_anchor ());
       Lui_elements.column
         [Views_table.foldable inst ~key:"tab-fixture"
            ~title:(Views_head.render_head inst)
            ~body:(Lui_elements.spacer []);
          Page.fold_arrow ~on_click:(fun () -> incr fold_presses) "page-fold-fixture";
-         Views_popup.layer]
+         popup_layer]
         context parent) in
   let inst = Option.get !sorting_inst in
   let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
@@ -1307,7 +1344,7 @@ let run_views ~registry ~profile ~finish =
      && not (List.exists (fun n -> class_has n "ls-sort-order") (nodes sorting)));
   Views_state.update inst (fun s -> {s with sorting=
     [{Views_state.s_id="block/updated-at"; s_asc=false}]});
-  Views_head.sorting_popup inst (Ui_services.dom_body ());
+  Views_head.sorting_popup inst (popup_anchor ());
   S.flush sorting;
   let delete = List.find (fun n -> class_has n "ls-sort-delete") (nodes sorting) in
   check "Delete sort closes the complete sorting configuration safely"
@@ -1320,7 +1357,7 @@ let run_views ~registry ~profile ~finish =
     {Views_popup.si_label=Printf.sprintf "Choice %02d" i;
      si_value=string_of_int i;si_extra=None}) in
   let open_choices ?(multiple=false) items =
-    Views_popup.show_select ~anchor:(Ui_services.dom_body ()) ~items:(Views_popup.fixed_items items)
+    Views_popup.show_select ~anchor:(popup_anchor ()) ~items:(Views_popup.fixed_items items)
       ~placeholder:"Choice" ~multiple
       ~on_chosen:(fun item checked -> selected_items := !selected_items @ [item.Views_popup.si_value, checked])
       ~on_apply:(fun items -> applied_items := items) ();
@@ -1391,7 +1428,7 @@ let run_views ~registry ~profile ~finish =
       (List.exists (fun n -> n.M.id=input.M.id) (nodes editor));
     ignore (Lui_app.dispose editor.S.app)) rename;
   Views_builder.full_text_picker inst ~tree:(ref (Views_builder.COp ("and",[])))
-    ~loc:[] ~anchor:(Ui_services.dom_body ());
+    ~loc:[] ~anchor:(popup_anchor ());
   let full_text_rendered = try S.flush sorting;true with Invalid_argument _ -> false in
   check "query builder full-text input only uses supported component properties" full_text_rendered;
   Views_popup.close_all ();
