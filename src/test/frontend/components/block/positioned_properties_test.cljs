@@ -195,16 +195,47 @@
     (is (string/includes? root-markup "bottom-property-hidden-toggle-btn")
         "Zoom-in root still renders Show hidden properties")))
 
+(defn- render-tags
+  [block]
+  (with-redefs [db-hooks/use-block (fn [_] nil)
+                block/page-inner (fn [_ page _children _label] [:span (:block/title page)])
+                hooks/use-memo (fn [f _] (f))
+                hooks/use-atom (fn [a] [@a (fn [_])])]
+    (render-static (block/tags-cp {} block))))
+
 (deftest tags-render-on-first-paint-without-loading-tag-blocks-test
   (let [tag {:db/id 1 :block/uuid (random-uuid) :db/ident :user.class/Visible
              :block/title "Visible tag" :block/name "visible tag"}
         hidden (assoc tag :db/id 2 :block/uuid (random-uuid)
-                      :block/title "Hidden tag" :logseq.property.class/hide-from-node true)]
-    (with-redefs [db-hooks/use-block (fn [_] nil)
-                  block/page-inner (fn [_ page _children _label] [:span (:block/title page)])
-                  hooks/use-memo (fn [f _] (f))
-                  hooks/use-atom (fn [a] [@a (fn [_])])]
-      (let [markup (render-static (block/tags-cp {} {:block/raw-title "Block"
-                                                    :block/tags [tag hidden]}))]
-        (is (string/includes? markup "Visible tag"))
-        (is (not (string/includes? markup "Hidden tag")))))))
+                      :block/title "Hidden tag" :logseq.property.class/hide-from-node true)
+        markup (render-tags {:block/raw-title "Block"
+                             :block/tags [tag hidden]})]
+    (is (string/includes? markup "Visible tag"))
+    (is (not (string/includes? markup "Hidden tag")))))
+
+(deftest asset-tag-respects-hide-from-node-test
+  (let [asset {:db/id 10 :block/uuid (random-uuid) :db/ident :logseq.class/Asset
+               :block/title "Asset" :block/name "asset"}
+        page {:db/id 11 :block/uuid (random-uuid) :db/ident :logseq.class/Page
+              :block/title "Page" :block/name "page"}
+        photo {:db/id 12 :block/uuid (random-uuid) :db/ident :user.class/Photo
+               :block/title "Photo" :block/name "photo"}]
+    (let [markup (render-tags {:block/raw-title "icon.png"
+                               :block/tags [(assoc asset :logseq.property.class/hide-from-node true)]})]
+      (is (not (string/includes? markup "Asset"))
+          "Default hide-from-node true keeps #Asset hidden"))
+    (let [markup (render-tags {:block/raw-title "icon.png"
+                               :block/tags [(assoc asset :logseq.property.class/hide-from-node false)]})]
+      (is (string/includes? markup "block-tags")
+          "Disabling hide-from-node mounts the node tag row")
+      (is (string/includes? markup "Asset")
+          "Disabling hide-from-node shows #Asset on the asset node"))
+    (let [markup (render-tags {:block/raw-title "a page"
+                               :block/tags [page]})]
+      (is (not (string/includes? markup "Page"))
+          "Other internal tags stay hidden even without hide-from-node"))
+    (let [markup (render-tags {:block/raw-title "photo"
+                               :block/tags [photo (assoc asset :logseq.property.class/hide-from-node false)]})]
+      (is (string/includes? markup "Photo"))
+      (is (string/includes? markup "Asset")
+          "A visible user tag does not keep #Asset hidden"))))

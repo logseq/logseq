@@ -6,6 +6,7 @@
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.page :as page]
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
@@ -101,3 +102,50 @@
         (assert/assert-is-visible (w/get-by-text "Are you sure you want to delete this image?"))
         (w/click (w/get-by-text "Confirm"))
         (assert/assert-have-count ".ls-page-blocks .asset-container img" 0)))))
+
+(def ^:private asset-node-tag-q
+  ".ls-page-blocks .block-tag:has-text('Asset')")
+
+(defn- asset-hide-from-node
+  []
+  (get (ls-api-call! :editor.getTag "logseq.class/Asset")
+       ":logseq.property.class/hide-from-node"))
+
+(defn- set-asset-hide-from-node!
+  [hide?]
+  (ls-api-call! :editor.upsertBlockProperty
+                (get (ls-api-call! :editor.getTag "logseq.class/Asset") "uuid")
+                "logseq.property.class/hide-from-node"
+                hide?)
+  (let [stored (asset-hide-from-node)]
+    (if hide?
+      (is (true? stored) "Hide from Node stays enabled on #Asset")
+      (is (false? stored) "Hide from Node is stored as false on #Asset"))))
+
+(deftest asset-tag-hide-from-node-test
+  (testing "disabling Hide from Node shows #Asset on asset nodes"
+    (let [page (w/get-page)
+          chooser-handler (reify Consumer
+                            (accept [_ chooser]
+                              (.setFiles chooser
+                                         (into-array java.nio.file.Path
+                                                     [(asset-path "resources/img/checker.png")]))))]
+      (.onFileChooser page chooser-handler)
+      (b/new-block "asset hide-from-node")
+      (util/input-command "Upload an asset")
+      (assert/assert-have-count ".ls-page-blocks .asset-container img" 1)
+      (.offFileChooser page chooser-handler)
+      (util/exit-edit)
+      (assert/assert-is-hidden asset-node-tag-q)
+      (try
+        (set-asset-hide-from-node! false)
+        (assert/assert-is-visible asset-node-tag-q)
+        ;; Reopen the page without a full reload: refresh can drop OPFS asset
+        ;; bytes after earlier uploads in this shared graph.
+        (let [page-name (page/get-page-name)]
+          (page/new-page (str page-name "-other"))
+          (page/goto-page page-name)
+          (assert/assert-is-visible asset-node-tag-q))
+        (finally
+          (set-asset-hide-from-node! true)))
+      (assert/assert-is-hidden asset-node-tag-q))))
