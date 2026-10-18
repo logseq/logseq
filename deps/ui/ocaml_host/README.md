@@ -77,6 +77,12 @@ For a macOS Logseq bundle, copy [Info.plist](Info.plist) into
 `Contents/Resources/img/` for the Settings theme thumbnails. Keep the native
 libraries from the tested build.
 
+Copy `resources/dicts/*.edn` to `Contents/Resources/dicts/`, preserving their
+filenames. English remains embedded; the selected non-English dictionary loads
+from this directory before the first view is constructed. Missing or malformed
+packaged dictionaries fail startup instead of silently showing English. Only
+requested locales are parsed and retained in memory.
+
 Relative native image paths resolve under `Contents/Resources`. For a direct
 development executable, set `LOGSEQ_NATIVE_ASSET_DIR` to the repository's
 absolute `resources` directory. The host decodes PNGs with `imagelib`, already

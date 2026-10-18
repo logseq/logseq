@@ -62,9 +62,7 @@ let current_lang () = Ui_services.doc_preferred_lang ()
 let set_language code =
   Ui_services.doc_set_lang_pref code;
   Ui_services.doc_set_lang code;
-  (* fetch the new locale first so the reload boots straight into it;
-     `let x = t "..."` bindings freeze at module load so a full reload is
-     the honest swap — same as before lazy dicts *)
+  (* Load the requested dictionary before refreshing the interface. *)
   ignore
     (I18n.load code
      |> Js.Promise.then_ (fun () ->

@@ -186,17 +186,7 @@ let prune_file_images store =
       file_images
   end
 
-let asset_path path =
-  if not (Filename.is_relative path) then path
-  else
-    let root =
-      match Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR" with
-      | Some "" -> invalid_arg "LOGSEQ_NATIVE_ASSET_DIR must not be empty"
-      | Some path -> path
-      | None ->
-          Filename.concat (Filename.dirname Sys.executable_name) "../Resources"
-    in
-    Filename.concat root path
+let asset_path = Platform_native.asset_path
 
 let decode_png encoded =
   let decoded =

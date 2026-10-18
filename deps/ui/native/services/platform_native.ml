@@ -21,6 +21,18 @@ let native_system =
 
 let is_mac () = native_system = "Darwin"
 
+let asset_path path =
+  if not (Filename.is_relative path) then path
+  else
+    let root =
+      match Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR" with
+      | Some "" -> invalid_arg "LOGSEQ_NATIVE_ASSET_DIR must not be empty"
+      | Some path -> path
+      | None ->
+          Filename.concat (Filename.dirname Sys.executable_name) "../Resources"
+    in
+    Filename.concat root path
+
 (* ---------- host request channel ---------- *)
 
 (* Requests the OCaml side needs the native host to perform. Serialized

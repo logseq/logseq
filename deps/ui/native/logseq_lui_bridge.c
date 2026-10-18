@@ -428,9 +428,9 @@ LUI_EXPORT int64_t lui_ocaml_root_node(void) {
    needs the symbol:
 
    - atob: actually called (rtc_flows JWT decode) — real base64 decode.
-   - require / loadDictFile / loadIconNames: lazy-asset loaders; on
-     native all dicts and icon names are compiled in, so they must never
-     run — fail loudly if reached. */
+   - require / loadIconNames: browser lazy-asset loaders. Native icon
+     names are compiled in; native dictionaries use ordinary resource
+     files. These browser shims must never run on native. */
 
 static const char b64_alphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -478,11 +478,6 @@ value atob(value input) {
 
 value require(value arg) {
   caml_failwith("require: lazy-asset chunks are web-only on native");
-  return Val_unit;
-}
-
-value loadDictFile(value arg, value name) {
-  caml_failwith("loadDictFile: dicts are compiled in on native");
   return Val_unit;
 }
 

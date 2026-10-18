@@ -14,6 +14,13 @@ external published_state : string option = "logseq_state"
 
 let publishing () = published_db <> None
 
+external require_lazy_assets : string -> Js.Json.t = "require"
+external load_dict_chunk : Js.Json.t -> string -> string Js.Promise.t
+  = "loadDictFile" [@@mel.send]
+
+let load_dict_file file =
+  load_dict_chunk (require_lazy_assets "lui-shims/lazy-assets") file
+
 external location_obj : loc = "location"
 
 external hash_of : loc -> string = "hash" [@@mel.get]

@@ -17,6 +17,12 @@ open Promise_ext
 
 include Platform_native
 
+(* Native resources are local UTF-8 files and finish loading before any
+   view is constructed. Parsing and locale caching remain shared. *)
+let load_dict_file file =
+  let path = asset_path (Filename.concat "dicts" file) in
+  Js.Promise.resolve (In_channel.with_open_bin path In_channel.input_all)
+
 (* ---------- console / perf ---------- *)
 
 let console_log (_ : 'a) : unit = ()

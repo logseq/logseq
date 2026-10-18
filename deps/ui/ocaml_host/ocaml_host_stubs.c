@@ -5,7 +5,7 @@
    the wakeup and platform-request trampolines call back into OCaml
    through named values the Bridge module registers at startup. The
    js-name shims the linked library references (atob, require,
-   loadDictFile, loadIconNames) keep the same behavior as the bridge
+   loadIconNames) keep the same behavior as the bridge
    copy. */
 
 #include <caml/alloc.h>
@@ -225,11 +225,6 @@ CAMLprim value atob(value input) {
 
 CAMLprim value require(value arg) {
   caml_failwith("require: lazy-asset chunks are web-only on native");
-  return Val_unit;
-}
-
-CAMLprim value loadDictFile(value arg, value name) {
-  caml_failwith("loadDictFile: dicts are compiled in on native");
   return Val_unit;
 }
 

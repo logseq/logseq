@@ -372,7 +372,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_window native_window_test native_embed native_lifecycle_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
+ (modules (:standard \ logseq_native native_window native_window_test native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
@@ -470,6 +470,16 @@
 (test
  (name native_lifecycle_test)
  (modules native_lifecycle_test)
+ (libraries logseq_native_entry))
+
+(test
+ (name native_dictionary_test)
+ (modules native_dictionary_test)
+ (deps (universe))
+ (action
+  (run python3 -c
+   "import os, subprocess, sys, tempfile\nwith tempfile.TemporaryDirectory(prefix='native-dictionary-test-') as root:\n env = dict(os.environ, LOGSEQ_ROOT_DIR=root + '/graphs', LOGSEQ_UI_STATE_DIR=root + '/state', LOGSEQ_NO_LOGIN_DAEMON='1')\n dictionaries = os.path.join(os.environ['DUNE_SOURCEROOT'], '../../resources/dicts')\n sys.exit(subprocess.call([sys.argv[1], dictionaries], env=env))"
+   %{exe:native_dictionary_test.exe}))
  (libraries logseq_native_entry))
 
 (test

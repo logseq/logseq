@@ -41,7 +41,16 @@ let host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
   }
 
 let run () =
-  Shared_scenarios_sidebar.all (host ());
+  (* The recording host tests preferences and remounts without a bundler.
+     Supply a loaded dictionary instead of relying on a swallowed loader error. *)
+  let previous_dictionary=Hashtbl.find_opt I18n.locale_tbls "fr" in
+  Hashtbl.replace I18n.locale_tbls "fr"
+    (Some (I18n.tbl_of_text "sidebar-locale-fixture" "{:nav/journals \"Fixture journals\"}"));
+  Fun.protect ~finally:(fun () ->
+    match previous_dictionary with
+    | Some value -> Hashtbl.replace I18n.locale_tbls "fr" value
+    | None -> Hashtbl.remove I18n.locale_tbls "fr")
+    (fun () -> Shared_scenarios_sidebar.all (host ()));
   let was_open = (Runtime.model ()).Model.left_sidebar_open in
   let toggle () = Runtime.send Action.Toggle_left_sidebar; Runtime.flush () in
   if not was_open then toggle ();
