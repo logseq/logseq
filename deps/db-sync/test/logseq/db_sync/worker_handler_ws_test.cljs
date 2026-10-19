@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
-            [logseq.db-sync.common :as common]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
@@ -11,84 +10,6 @@
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
-
-(deftest entity-pull-message-returns-transit-graph-changes-test
-  (let [sql (test-sql/make-sql)
-        conn (storage/open-conn sql)
-        socket #js {:readyState 1}
-        sent (atom nil)
-        self #js {:conn conn
-                  :graph-id "graph-ws"
-                  :schema-ready true
-                  :sql sql}
-        block-id (random-uuid)]
-    (d/transact! conn [{:block/uuid block-id :block/title "Before"}])
-    (let [since (storage/get-t sql)]
-      (d/transact! conn [[:db/add [:block/uuid block-id] :block/title "After"]])
-      (with-redefs [ws/send! (fn [_target message] (reset! sent message))]
-        (ws-handler/handle-ws-message!
-         self socket (protocol/encode-message {:type "entity/pull" :since since})))
-      (let [message @sent
-            changes (common/read-transit (:data message))]
-        (is (= "graph-changes" (:type message)))
-        (is (= since (:t-before changes)))
-        (is (= (storage/get-t sql) (:t changes)))
-        (is (= "After" (get-in (first (:upserts changes)) [:attrs :block/title])))))))
-
-(deftest entity-pull-after-hibernation-preserves-graph-id-test
-  (let [sql (test-sql/make-sql)
-        conn (storage/open-conn sql)
-        socket #js {:readyState 1}
-        sent (atom nil)
-        self #js {:conn conn :schema-ready true :sql sql
-                  :state #js {:getTags (fn [_] #js ["graph-ws"])}}]
-    (with-redefs [ws/send! (fn [_ message] (reset! sent message))]
-      (ws-handler/handle-ws-message!
-       self socket (protocol/encode-message {:type "entity/pull" :since 0})))
-    (is (= "graph-ws" (:graph-id (common/read-transit (:data @sent)))))))
-
-(deftest entity-pull-message-returns-reset-for-expired-cursor-test
-  (let [sql (test-sql/make-sql)
-        conn (storage/open-conn sql)
-        socket #js {:readyState 1}
-        sent (atom nil)
-        self #js {:conn conn
-                  :graph-id "graph-ws"
-                  :schema-ready true
-                  :sql sql}
-        block-id (random-uuid)]
-    (d/transact! conn [{:block/uuid block-id :block/title "Before"}])
-    (let [since (storage/get-t sql)]
-      (d/transact! conn [[:db/add [:block/uuid block-id] :block/title "After"]])
-      (common/sql-exec sql "delete from tx_log where t = ?" (inc since))
-      (with-redefs [ws/send! (fn [_target message] (reset! sent message))]
-        (ws-handler/handle-ws-message!
-         self socket (protocol/encode-message {:type "entity/pull" :since since})))
-      (is (= "reset" (:type @sent)))
-      (is (= {:reason "cursor-expired" :snapshot-required true}
-             (common/read-transit (:data @sent)))))))
-
-(deftest entity-pull-message-rejects-invalid-cursor-test
-  (let [socket #js {:readyState 1}
-        sent (atom nil)
-        self #js {}]
-    (with-redefs [ws/send! (fn [_target message] (reset! sent message))]
-      (ws-handler/handle-ws-message!
-       self socket (protocol/encode-message {:type "entity/pull" :since -1})))
-    (is (= {:type "error" :message "invalid since"} @sent))))
-
-(deftest entity-pull-message-requires-snapshot-for-future-cursor-test
-  (let [sql (test-sql/make-sql)
-        conn (storage/open-conn sql)
-        socket #js {:readyState 1}
-        sent (atom nil)
-        self #js {:conn conn :graph-id "graph-ws" :sql sql}]
-    (with-redefs [ws/send! (fn [_target message] (reset! sent message))]
-      (ws-handler/handle-ws-message!
-       self socket (protocol/encode-message {:type "entity/pull" :since 1})))
-    (is (= "reset" (:type @sent)))
-    (is (= {:reason "cursor-ahead" :snapshot-required true}
-           (common/read-transit (:data @sent))))))
 
 (deftest presence-message-broadcast-excludes-source-client-test
   (let [source-ws #js {:readyState 1}
@@ -146,14 +67,14 @@
     (is (= "hello" (:type @sent)))
     (is (false? (contains? @sent :checksum)))))
 
-(deftest tx-batch-message-adds-graph-and-user-context-to-transact-meta-test
+(deftest tx-batch-after-hibernation-adds-graph-and-user-context-to-transact-meta-test
   (let [sql (test-sql/make-sql)
         conn (storage/open-conn sql)
         ws #js {:readyState 1}
         sent (atom nil)
         tx-metas (atom [])
         self #js {:conn conn
-                  :graph-id "graph-ws"
+                  :state #js {:getTags (fn [_socket] #js ["graph-ws"])}
                   :schema-ready true
                   :sql sql}
         raw (protocol/encode-message
@@ -282,3 +203,14 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest entity-pull-message-is-not-part-of-the-journal-protocol-test
+  (let [sql (test-sql/make-sql)
+        conn (storage/open-conn sql)
+        socket #js {:readyState 1}
+        self #js {:conn conn :schema-ready true :sql sql :graph-id "graph-ws"}
+        sent (atom nil)]
+    (with-redefs [ws/send! (fn [_ message] (reset! sent message))]
+      (ws-handler/handle-ws-message!
+       self socket (protocol/encode-message {:type "entity/pull" :since 0})))
+    (is (= {:type "error" :message "invalid request"} @sent))))

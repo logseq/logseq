@@ -16,7 +16,6 @@
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
@@ -311,130 +310,6 @@
              :t (t-now self)
              :txs txs}
       (string? checksum) (assoc :checksum checksum))))
-
-(def ^:private entity-identity-attrs
-  #{:block/uuid :db/ident :file/path})
-
-(defn- lookup-identity
-  [attr value]
-  (when (contains? entity-identity-attrs attr)
-    [attr value]))
-
-(defn- normalized-identity
-  [aliases entity-id]
-  (cond
-    (and (sequential? entity-id)
-         (contains? entity-identity-attrs (first entity-id)))
-    (vec entity-id)
-
-    (keyword? entity-id)
-    [:db/ident entity-id]
-
-    :else
-    (get aliases entity-id)))
-
-(defn- tx-entry-data
-  [{:keys [tx]}]
-  (protocol/transit->tx tx))
-
-(defn- identity-aliases
-  [tx-data]
-  (reduce
-   (fn [aliases item]
-     (if (and (= 5 (count item))
-              (= :db/add (first item)))
-       (let [[_op entity attr value] item]
-         (if-let [identity (lookup-identity attr value)]
-           (assoc aliases entity identity)
-           aliases))
-       aliases))
-   {}
-   tx-data))
-
-(defn- affected-identities
-  [tx-entries]
-  (let [tx-data (mapcat tx-entry-data tx-entries)
-        aliases (identity-aliases tx-data)]
-    (->> tx-data
-         (keep (fn [item]
-                 (case (count item)
-                   5 (normalized-identity aliases (second item))
-                   2 (when (= :db/retractEntity (first item))
-                       (normalized-identity aliases (second item)))
-                   nil)))
-         distinct
-         (sort-by pr-str)
-         vec)))
-
-(defn- entity-identity
-  [db entity-id]
-  (when-let [entity (d/entity db entity-id)]
-    (or (some->> (:block/uuid entity) (vector :block/uuid))
-        (some->> (:db/ident entity) (vector :db/ident))
-        (some->> (:file/path entity) (vector :file/path)))))
-
-(defn- ref-identity
-  [db value]
-  (or (entity-identity db value)
-      (throw (ex-info "reference has no stable identity"
-                      {:type :db-sync/unidentifiable-reference
-                       :entity-id value}))))
-
-(defn- ref-value?
-  [db attr]
-  (= :db.type/ref
-     (or (get-in (d/schema db) [attr :db/valueType])
-         (:db/valueType (d/entity db attr)))))
-
-(defn- cardinality-many?
-  [db attr]
-  (= :db.cardinality/many
-     (or (get-in (d/schema db) [attr :db/cardinality])
-         (:db/cardinality (d/entity db attr)))))
-
-(defn- complete-entity
-  [db identity]
-  (when-let [entity (d/entity db identity)]
-    (let [eid (:db/id entity)
-          attrs (reduce
-                 (fn [result datom]
-                   (let [attr (:a datom)
-                         value (cond->> (:v datom)
-                                 (ref-value? db attr) (ref-identity db))]
-                     (if (cardinality-many? db attr)
-                       (update result attr (fnil conj #{}) value)
-                       (assoc result attr value))))
-                 {}
-                 (d/datoms db :eavt eid))]
-      {:id identity
-       :attrs attrs})))
-
-(defn- contiguous-tx-log?
-  [since latest-t tx-entries]
-  (= (vec (range (inc since) (inc latest-t)))
-     (mapv :t tx-entries)))
-
-(defn latest-entity-changes
-  [^js self graph-id since]
-  (ensure-conn! self)
-  (let [sql (.-sql self)
-        db @(.-conn self)
-        latest-t (storage/get-t sql)
-        tx-entries (storage/fetch-tx-since sql since)]
-    (if-not (contiguous-tx-log? since latest-t tx-entries)
-      {:reason "cursor-expired"
-       :snapshot-required true}
-      (let [identities (affected-identities tx-entries)
-            upserts (into [] (keep #(complete-entity db %)) identities)
-            surviving (into #{} (map :id) upserts)
-            deleted (into [] (remove surviving) identities)]
-        {:format-version 1
-         :graph-id graph-id
-         :schema-version (db-schema/schema-version->string db-schema/version)
-         :t-before since
-         :t latest-t
-         :upserts upserts
-         :deleted deleted}))))
 
 (defn- block-uuid-lookup-ref
   [entity-id]
@@ -912,18 +787,13 @@
           (http/error-response "graph not ready" 409)
           (let [key (str "stream/" graph-id ".snapshot")
                 url (snapshot-stream-url request graph-id)
-                t (storage/get-t (.-sql self))
-                row-count (snapshot-row-count (.-sql self))
                 content-encoding (when (and (snapshot-stream-gzip-enabled? self)
                                             (exists? js/CompressionStream))
                                    snapshot-content-encoding)]
             (http/json-response :sync/snapshot-download
                                 (cond-> {:ok true
                                          :key key
-                                         :url url
-                                         :t t
-                                         :schema-version (db-schema/schema-version->string db-schema/version)
-                                         :row-count row-count}
+                                         :url url}
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 
@@ -959,29 +829,26 @@
 
 (defn- handle-sync-tx-batch
   [^js self request]
-  (.then
-   (common/read-json request)
-   (fn [result]
-     (if (nil? result)
-       (http/bad-request "missing body")
-       (let [body (http/coerce-http-request
-                   :sync/tx-batch
-                   (js->clj result :keywordize-keys true))
-             graph-id (graph-id-from-request request)]
-         (if (nil? body)
-           (http/bad-request "invalid tx")
-           (let [{:keys [client-revision txs t-before]} body
-                 t-before (parse-int t-before)]
-             (if-not (sequential? txs)
-               (http/bad-request "invalid tx")
-               (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
-                 (if-not ready-for-sync?
-                   (http/error-response "graph not ready" 409)
-                   (http/json-response
-                    :sync/tx-batch
-                    (handle-tx-batch! self nil txs t-before
-                                      {:graph-id graph-id
-                                       :client-revision client-revision}))))))))))))
+  (.then (common/read-json request)
+         (fn [result]
+           (if (nil? result)
+             (http/bad-request "missing body")
+             (let [body (js->clj result :keywordize-keys true)
+                   body (http/coerce-http-request :sync/tx-batch body)
+                   graph-id (graph-id-from-request request)]
+               (if (nil? body)
+                 (http/bad-request "invalid tx")
+                 (let [{:keys [client-revision txs t-before]} body
+                       t-before (parse-int t-before)]
+                   (if (sequential? txs)
+                     (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+                       (if-not ready-for-sync?
+                         (http/error-response "graph not ready" 409)
+                         (http/json-response :sync/tx-batch
+                                             (handle-tx-batch! self nil txs t-before
+                                                               {:graph-id graph-id
+                                                                :client-revision client-revision}))))
+                     (http/bad-request "invalid tx")))))))))
 
 (defn- parse-reset-param
   [value]

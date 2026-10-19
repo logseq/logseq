@@ -1732,9 +1732,7 @@
                  (is (= true (:ok body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
-                 (is (= 0 (:t body)))
-                 (is (= (db-schema/schema-version->string db-schema/version) (:schema-version body)))
-                 (is (= 0 (:row-count body)))
+                 (is (empty? (select-keys body [:t :schema-version :row-count])))
                  (is (= "gzip" (:content-encoding body))))
                (p/then (fn []
                          (restore!)
@@ -1761,9 +1759,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
-                 (is (= 0 (:t body)))
-                 (is (= (db-schema/schema-version->string db-schema/version) (:schema-version body)))
-                 (is (= 0 (:row-count body)))
+                 (is (empty? (select-keys body [:t :schema-version :row-count])))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []

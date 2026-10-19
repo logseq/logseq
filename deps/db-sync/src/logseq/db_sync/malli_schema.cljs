@@ -32,10 +32,6 @@
     [:map
      [:type [:= "pull"]]
      [:since {:optional true} :int]]]
-   ["entity/pull"
-    [:map
-     [:type [:= "entity/pull"]]
-     [:since :int]]]
    ["tx/batch"
     [:map
      [:type [:= "tx/batch"]]
@@ -112,14 +108,6 @@
     [:map
      [:type [:= "changed"]]
      [:t :int]]]
-   ["graph-changes"
-    [:map
-     [:type [:= "graph-changes"]]
-     [:data :string]]]
-   ["reset"
-    [:map
-     [:type [:= "reset"]]
-     [:data :string]]]
    ["tx/reject" tx-reject-schema]
    ["pong"
     [:map
@@ -255,9 +243,6 @@
    [:ok :boolean]
    [:key :string]
    [:url :string]
-   [:t :int]
-   [:schema-version :string]
-   [:row-count :int]
    [:content-encoding {:optional true} [:maybe :string]]])
 
 (def snapshot-upload-response-schema

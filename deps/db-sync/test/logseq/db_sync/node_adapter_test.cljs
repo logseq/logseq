@@ -4,7 +4,6 @@
   (:require ["fs" :as fs]
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
-            [logseq.db-sync.common :as common]
             [logseq.db-sync.node.server :as node-server]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.worker.auth :as auth]
@@ -65,7 +64,7 @@
     (.send client (protocol/encode-message message))
     response))
 
-(deftest node-adapter-websocket-entity-replay-test
+(deftest node-adapter-websocket-journal-replay-test
   (async done
          (let [server* (atom nil)
                client* (atom nil)
@@ -77,7 +76,7 @@
                          base-url (:base-url server)
                          create-resp (post-json
                                       (str base-url "/graphs")
-                                      {:graph-name "WebSocket Entity Replay"
+                                      {:graph-name "WebSocket Journal Replay"
                                        :graph-e2ee? false})
                          create-body (parse-json create-resp)
                          graph-id (aget create-body "graph-id")
@@ -87,8 +86,8 @@
                                       "/sync/" graph-id))
                          _ (reset! client* client)
                          initial-message (send-and-wait
-                                          client {:type "entity/pull" :since 0}
-                                          "graph-changes")
+                                          client {:type "pull" :since 0}
+                                          "pull/ok")
                          page-id (random-uuid)
                          block-id (random-uuid)
                          tx-results (p/all
@@ -103,7 +102,7 @@
                                                       :block/title "WebSocket Page"}
                                                      {:db/id -2
                                                       :block/uuid block-id
-                                                      :block/title "WebSocket Entity"
+                                                      :block/title "WebSocket Journal"
                                                       :block/order "a0"
                                                       :block/parent [:block/uuid page-id]
                                                       :block/page [:block/uuid page-id]}])
@@ -112,29 +111,31 @@
                          tx-response (nth tx-results 1)
                          tx-body (parse-json tx-response)
                          replay-message (send-and-wait
-                                         client {:type "entity/pull" :since 0}
-                                         "graph-changes")]
+                                         client {:type "pull" :since 0}
+                                         "pull/ok")]
                    (testing "the removed event-stream route is unavailable"
                      (is (= 404 (.-status events-resp))))
-                   (testing "the existing WebSocket accepts entity replay"
-                     (is (= 0 (:t (common/read-transit (aget initial-message "data")))))
+                   (testing "the existing WebSocket replays the canonical journal"
+                     (is (= 0 (aget initial-message "t")))
+                     (is (empty? (array-seq (aget initial-message "txs"))))
                      (is (.-ok tx-response))
                      (is (= "tx/batch/ok" (aget tx-body "type")))
                      (is (pos? (aget changed-message "t")))
-                     (let [changes (common/read-transit (aget replay-message "data"))]
-                       (is (= 0 (:t-before changes)))
-                       (is (= (aget changed-message "t") (:t changes)))
-                       (is (some #(= "WebSocket Entity"
-                                     (get-in % [:attrs :block/title]))
-                                 (:upserts changes)))))))
+                     (let [txs (array-seq (aget replay-message "txs"))
+                           tx-data (mapcat #(protocol/transit->tx (aget % "tx")) txs)]
+                       (is (= (aget changed-message "t") (aget replay-message "t")))
+                       (is (= 1 (count txs)))
+                       (is (some #(= [:db/add (str block-id) :block/title "WebSocket Journal"]
+                                     (vec (take 4 %)))
+                                 tx-data))))))
                (p/finally
                  (fn []
                    (when-let [client @client*]
                      (.close client))
-                  (if-let [server @server*]
-                    (p/let [_ ((:stop! server))]
-                      (.rmSync fs (:data-dir server) #js {:recursive true :force true}))
-                    (p/resolved nil))))
+                   (if-let [server @server*]
+                     (p/let [_ ((:stop! server))]
+                       (.rmSync fs (:data-dir server) #js {:recursive true :force true}))
+                     (p/resolved nil))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
