@@ -2110,6 +2110,11 @@ let run_views ~registry ~profile ~finish =
   in
   toggle_search ();
   check "search shortcut mounts its input" (search_inputs () <> []);
+  List.iter (fun input ->
+    let attrs=P.data_attrs_decode (Option.value (M.string_prop input "data-attrs") ~default:"") in
+    check "search focus chrome uses typed properties instead of inline CSS" (List.assoc_opt "style" attrs=None);
+    check "search field retains its typed focus override" (M.string_prop input "focus-shadow"=Some "none");
+    check "search field uses typed automatic height" (M.string_prop input "height"=Some "auto")) (search_inputs ());
   (match List.find_opt (fun n -> n.M.kind = "dialog") (nodes search) with
    | None -> check "search exposes a host-owned dismissible modal" false
    | Some modal ->

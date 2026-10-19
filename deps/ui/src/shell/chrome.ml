@@ -796,7 +796,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
    sidebar's own top row hosts the toggle + search buttons while
    docked-open (the header only mounts its copies when closed). *)
 let left_inner_width width viewport =
-  int_of_float (Float.round (if viewport < 640. then viewport *. 0.74 else width)) - 1
+  max 0 (int_of_float (Float.round (if viewport < 640. then viewport *. 0.74 else width)) - 1)
 
 let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms

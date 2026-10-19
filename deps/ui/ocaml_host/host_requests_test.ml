@@ -9163,6 +9163,17 @@ let () = Native_embed.with_entry_lock (fun () ->
     let press id=ignore (Lui_app.dispatch_event app (Press (find id)));ignore (Lui_app.flush app) in
     press "handbook-test-open";Host.drain ();ignore (Lui_app.flush app);
     check "Native Handbook loads through its mounted control" (Lui_store.mem store (find "handbook-panel"));
+    let retained_panel=find "handbook-panel" in
+    List.iter (fun width ->
+      let valid=try
+        Host.set_window_size width 720.;
+        Platform.emit_event "resize" (Js.Json.JObject []);ignore (Lui_app.flush app);
+        Lui_store.int_prop store retained_panel "max-width"=Some (max 0 (int_of_float (width-.64.)))
+        && Lui_store.int_prop store retained_panel "width"=Some (min 420 (max 0 (int_of_float (width-.64.))))
+        && find "handbook-panel"=retained_panel
+      with Invalid_argument _ -> false in
+      check (Printf.sprintf "Native Handbook survives viewport width %.0f without invalid constraints" width) valid)
+      [0.;32.;63.;64.;80.;1280.];
     let layout=Lui_layout.create () in
     List.iter (fun scale ->
       let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)

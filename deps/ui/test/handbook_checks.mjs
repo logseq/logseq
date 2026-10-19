@@ -80,6 +80,54 @@ export function assertHandbookCleared(actual) {
   assert.equal(actual.input.focused,true,'clear restores input focus');
 }
 
+export function measureHandbookSearchPaint(root) {
+  const input=root.querySelector('.cp__handbooks-popup input'),wrapper=input.parentElement;
+  const style=getComputedStyle(input),group=getComputedStyle(wrapper);
+  const canvas=input.ownerDocument.createElement('canvas');canvas.width=canvas.height=1;
+  const context=canvas.getContext('2d');
+  const color=value=>{context.clearRect(0,0,1,1);context.fillStyle=value;context.fillRect(0,0,1,1);
+    return [...context.getImageData(0,0,1,1).data];};
+  const shadows=[];let depth=0,start=0;
+  for(let index=0;index<=style.boxShadow.length;index++) {
+    const char=style.boxShadow[index];
+    if(char==='(')depth++;else if(char===')')depth--;
+    if(index===style.boxShadow.length || char===',' && depth===0) {
+      const segment=style.boxShadow.slice(start,index).trim();start=index+1;
+      const lengths=[...segment.matchAll(/(-?[\d.]+)px/g)].map(match=>Number(match[1]));
+      if(lengths.some(value=>value!==0))shadows.push({lengths,
+        color:color(segment.replace(/\s-?[\d.]+px/g,'').replace('inset','').trim())});
+    }
+  }
+  return {focused:wrapper.contains(input.ownerDocument.activeElement),background:color(group.backgroundColor),
+    border:color(group.borderColor),foreground:color(style.color),borderWidth:group.borderWidth,shadows};
+}
+
+export function assertHandbookSearchPaint(actual,reference) {
+  for(const key of ['focused','borderWidth'])
+    assert.equal(actual[key],reference[key],`search group ${key}`);
+  for(const key of ['background','border','foreground'])
+    for(let channel=0;channel<4;channel++)assert.equal(actual[key][channel],reference[key][channel],`search ${key} channel ${channel}`);
+  assert.equal(actual.shadows.length,reference.shadows.length,'search focus ring count');
+  for(const [index,shadow] of actual.shadows.entries())
+    for(const key of ['lengths','color']) {
+      assert.equal(shadow[key].length,reference.shadows[index][key].length,`search ring ${index} ${key} count`);
+      shadow[key].forEach((value,channel)=>assert.equal(value,reference.shadows[index][key][channel],`search ring ${index} ${key} ${channel}`));
+    }
+}
+
+export const handbookSearchPaintReference={
+  light:{
+    focused:{focused:true,background:[0,0,0,0],border:[226,226,226,255],foreground:[23,23,23,255],borderWidth:'3px',
+      shadows:[{color:[21,93,252,255],lengths:[0,0,0,1]}]},
+    blurred:{focused:false,background:[241,241,241,255],border:[255,255,255,255],foreground:[23,23,23,255],borderWidth:'3px',shadows:[]}
+  },
+  dark:{
+    focused:{focused:true,background:[0,43,54,255],border:[18,98,119,255],foreground:[243,244,246,255],borderWidth:'3px',
+      shadows:[{color:[21,93,252,255],lengths:[0,0,0,1]}]},
+    blurred:{focused:false,background:[0,43,54,255],border:[0,43,54,255],foreground:[243,244,246,255],borderWidth:'3px',shadows:[]}
+  }
+};
+
 export function measureHandbookArticle(root) {
   const panel=root.querySelector('.cp__handbooks-popup');
   const scroll=panel.querySelector('#handbook-scroll,.cp__handbooks-content');

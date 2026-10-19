@@ -12,7 +12,7 @@ import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
 import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
-import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference, measureHandbookArticle, assertHandbookArticle, handbookIntroductionArticleReference, handbookJournalsArticleReference} from './handbook_checks.mjs';
+import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference, measureHandbookArticle, assertHandbookArticle, handbookIntroductionArticleReference, handbookJournalsArticleReference, measureHandbookSearchPaint, assertHandbookSearchPaint, handbookSearchPaintReference} from './handbook_checks.mjs';
 import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
 
 const session = 'logseq-ui-regressions';
@@ -90,9 +90,26 @@ test('Handbook preserves dashboard geometry, search focus and published article 
   assertHandbook(actual, handbookDesktopReference);
   assertHandbookSearch(actual, handbookDesktopReference);
   assertHandbookImages(actual, handbookDesktopReference);
+  const paint = () => evaluate(`(${measureHandbookSearchPaint.toString()})(document)`);
+  browser('click', '#handbook-search');
+  assertHandbookSearchPaint(paint(), handbookSearchPaintReference.light.focused);
   browser('fill', '#handbook-search', 'sync');
-  button('Clear search');
+  browser('press', 'Tab');
+  assertHandbookSearchPaint(paint(), {...handbookSearchPaintReference.light.focused,shadows:[]});
+  browser('press', 'Enter');
   assertHandbookCleared(measure());
+  for (const theme of ['dark','light']) {
+    browser('press', 'Tab');
+    browser('press', 't');browser('press', 't');
+    assertHandbookSearchPaint(paint(), handbookSearchPaintReference[theme].blurred);
+    browser('click', '#handbook-search');
+    assertHandbookSearchPaint(paint(), handbookSearchPaintReference[theme].focused);
+  }
+  for (const width of [1,32,63,64,80,1280]) {
+    browser('set', 'viewport', String(width), '720');
+    browser('wait', '--fn', `Number.parseFloat(document.querySelector('.cp__handbooks-popup').style.width) === ${Math.min(420,Math.max(0,width-64))}`);
+    assert.equal(evaluate("document.activeElement === document.querySelector('#handbook-search')"),true,'resize preserves search focus');
+  }
   browser('find','role','button','click','--name','The only features you need to get started with Logseq','--exact');
   browser('wait','--fn',"document.querySelectorAll('.cp__handbooks-popup video').length === 2 && [...document.querySelectorAll('.cp__handbooks-popup video')].every(video=>video.readyState>=1)");
   assertHandbookArticle(evaluate(`(${measureHandbookArticle.toString()})(document)`),handbookIntroductionArticleReference);

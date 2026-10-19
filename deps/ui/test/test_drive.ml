@@ -219,15 +219,17 @@ let test_sidebar_content_bounds () =
     Runtime.signal_set st.viewport_w viewport;flush ()) (fun () ->
       Runtime.signal_set st.left_width 246.;
       List.iter (fun (viewport,expected) ->
-        Runtime.signal_set st.viewport_w viewport;flush ();
-        let inner = List.find (fun n -> match M.string_prop n "style-class" with
-          | Some classes -> List.mem "left-sidebar-inner" (String.split_on_char ' ' classes)
-          | None -> false) (M.all_nodes (tree ())) in
+        let valid = try
+          Runtime.signal_set st.viewport_w viewport;flush ();
+          let inner = List.find (fun n -> match M.string_prop n "style-class" with
+            | Some classes -> List.mem "left-sidebar-inner" (String.split_on_char ' ' classes)
+            | None -> false) (M.all_nodes (tree ())) in
+          Hashtbl.find_opt inner.M.props "min-width"=Some (Wv.IntValue expected)
+          && Hashtbl.find_opt inner.M.props "max-width"=Some (Wv.IntValue expected)
+        with Invalid_argument message -> Js.log message;false in
         check (Printf.sprintf "sidebar content reserves the reference %.0f-point inset at viewport %.0f"
-          (float expected) viewport)
-          (Hashtbl.find_opt inner.M.props "min-width"=Some (Wv.IntValue expected)
-           && Hashtbl.find_opt inner.M.props "max-width"=Some (Wv.IntValue expected)))
-        [1440.,245;600.,443;320.,236;1280.,245])
+          (float expected) viewport) valid)
+        [1440.,245;600.,443;320.,236;0.,0;1.,0;32.,23;63.,46;64.,46;80.,58;1280.,245])
 
 let test_shell () =
   has "prop:accessibility-identifier=\"head\"";

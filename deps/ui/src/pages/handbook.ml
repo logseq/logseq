@@ -276,7 +276,9 @@ let panel ~loader ~close ~online context parent =
              Ui_components.with_props [Prop.opacity 0.7] (text ~font_size:"12px" ~line_height:"16px"
                ~value:("800+ " ^ t "help.handbook/monthly-posts") [])])]) in
     let search ()=Ui_components.with_props [Prop.padding_bottom 6] (column ~min_width:0
-      [Ui_components.with_props [Prop.position `relative]
+      [Ui_components.with_props [Prop.position `relative;
+         Prop.focus_within_background "var(--lx-handbook-search-focus-bg)";
+         Prop.focus_within_border "var(--ls-secondary-border-color, var(--rx-gray-06))"]
         (row ~margin_horizontal:16 ~margin_top:6 ~margin_bottom:8
           ~border_width:3 ~border_color:"var(--ls-primary-background-color)" ~corner_radius:8
           ~background:"var(--lx-handbook-search-bg)"
@@ -285,10 +287,11 @@ let panel ~loader ~close ~online context parent =
               Prop.pointer_enabled false;Prop.line_height "24px"]
              (box [Icons.icon ~size:12. "search"]);
            Ui_components.with_props
-             [Prop.height_auto]
+             [Prop.height_auto;Prop.focus_shadow "0 0 0 1px rgb(21 93 252)"]
              (typography "16px" "16px" 500
                (Ui_components.input ~grow:1. ~min_width:0 ~padding_horizontal:24 ~padding_vertical:7
                  ~background:"transparent" ~border_width:0 ~corner_radius:0
+                 ~foreground:"var(--lx-handbook-search-fg)"
                  ~placeholder:(t "help.handbook/search-placeholder") ~label:(t "help.handbook/search-placeholder")
                  ~autofocus:true ~accessibility_identifier:"handbook-search"
                  ~text:(reactive Fun.id (Signal.value query))
@@ -355,14 +358,16 @@ let panel ~loader ~close ~online context parent =
           (fun _ -> if !alive then Toast.error (t "help.handbook/copy-link-error");Ui_task.resolve ()))
     | _ -> () in
   let viewport=Ui_services.viewport_width_signal ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  Ui_components.with_props
+  Ui_parts.int_prop Lui_protocol.WidthValue
+    ~value:(reactive (fun width -> min 420 (max 0 (int_of_float (width-.64.)))) viewport)
+  (Ui_components.with_props
     [Prop.position `fixed;Prop.inset_right 32.;Prop.inset_bottom 58.;
      Prop.max_height_viewport 0.86;Prop.overflow `hidden;
      Prop.shadow "0 10px 30px rgb(0 0 0 / 0.16)";Prop.font_size "16px";Prop.line_height "24px"]
     (popover ~role:`dialog ~accessibility_identifier:"handbook-panel" ~style_class:"cp__handbooks-popup"
       ~on_dismiss:(fun _ -> close ())
-      ~transition:Ui_components.popover_transition ~width:420
-      ~max_width:(reactive (fun width -> int_of_float (width-.64.)) viewport)
+      ~transition:Ui_components.popover_transition
+      ~max_width:(reactive (fun width -> max 0 (int_of_float (width-.64.))) viewport)
       ~height:686 ~padding:0 ~gap:0 ~corner_radius:8 ~border_width:1 ~border_color:"var(--ls-border-color)"
       ~background ~foreground
       [Ui_components.with_props [Prop.padding_top 12;Prop.padding_bottom 8]
@@ -390,7 +395,7 @@ let panel ~loader ~close ~online context parent =
              (column ~cross:`center [text ~value:(t "ui/loading") []])
          | Failed -> column ~padding:18 [text ~accessibility_identifier:"handbook-load-error"
              ~value:(t "help.handbook/load-error") []]
-         | Loaded catalog -> loaded_view catalog) (Signal.value loaded)]]) context parent
+         | Loaded catalog -> loaded_view catalog) (Signal.value loaded)]])) context parent
 
 let host ?(loader=default_loader) ~controls () context parent =
   let visible=state context false and online=state context None in

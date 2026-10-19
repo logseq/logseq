@@ -286,18 +286,10 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
     ; Prop.line_height "1.75rem"
     ; Prop.border_width 0
     ; Prop.focus_shadow "none"
+    ; Prop.height_auto
     ]
-    ((* .lui-input ships h-10 + :focus-visible ring-2 that no typed prop
-        reaches (the channel lands on --lui-focus-shadow, consumed only
-        by a zero-specificity :where rule the kind rule beats). The
-        documented escape hatch is the data-attrs style pair — merged
-        per declaration, so it composes with the emitted style attr. *)
-     input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
-       ~data_attrs:
-         [ (* prod input sits 1px inset inside the 54px row *)
-           ("style", "box-shadow: none; outline: none; height: auto; \
-                      min-height: 0; margin: 1px") ]
-       ~min_width:256 ~padding:12 ~background:"transparent"
+    (input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
+       ~margin:1 ~min_height:0 ~min_width:256 ~padding:12 ~background:"transparent"
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
           var(--lui-c-foreground)))"

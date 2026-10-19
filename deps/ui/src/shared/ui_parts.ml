@@ -175,6 +175,8 @@ module Prop : sig
   val s_hover_shadow : string Signal.signal -> s
   val pressed_shadow : string -> t
   val focus_shadow : string -> t
+  val focus_within_background : string -> t
+  val focus_within_border : string -> t
   val selected_shadow : string -> t
   val selected_hover_shadow : string -> t
   val hover_background : string -> t
@@ -283,6 +285,8 @@ end = struct
   let s_hover_shadow v = sstr HoverShadow v
   let pressed_shadow v = str PressedShadow v
   let focus_shadow v = str FocusShadow v
+  let focus_within_background v = str FocusWithinBackground v
+  let focus_within_border v = str FocusWithinBorder v
   let selected_shadow v = str SelectedShadow v
   let selected_hover_shadow v = str SelectedHoverShadow v
   let hover_background v = str HoverBackground v
