@@ -341,7 +341,10 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         idx 0
       in
       let last_scroll = ref (scroll_top scroll_el) in
-      let publish v =
+      let phase=ref `Starting in
+      let publish v = match !phase with
+      | `Starting | `Disposed -> ()
+      | `Active ->
         let rows = rows_of v in
         let rows =
           match pin_key () with
@@ -377,7 +380,7 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         (* the last data row rendered — ask the owner for the next page
            (journals scroll-back pagination; a no-op hook on fixed-size
            lists) *)
-        (match List.rev rows with
+        (if !phase=`Active then match List.rev rows with
          | r :: _ when r.v_index >= Array.length !data - 1 -> on_end ()
          | _ -> ());
         (* cljs virtuoso items-rendered: while a block-range drag is in
@@ -386,23 +389,25 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
            it. Direction follows the scroll offset, not the rendered
            start — an overscan row appearing at the edge is not a
            scroll *)
-        let cur_scroll = scroll_top scroll_el in
-        let dir =
-          if cur_scroll > !last_scroll then Some `Down
-          else if cur_scroll < !last_scroll then Some `Up
-          else None
-        in
-        last_scroll := cur_scroll;
-        match dir, rows with
-        | Some `Down, _ :: _ ->
-            (match List.nth_opt rows (List.length rows - 1) with
-             | Some r when r.v_index < Array.length !data ->
-                 extend_drag (key_of !data.(r.v_index))
-             | _ -> ())
-        | Some `Up, first :: _ ->
-            if first.v_index < Array.length !data then
-              extend_drag (key_of !data.(first.v_index))
-        | _ -> ()
+        if !phase=`Active then begin
+          let cur_scroll = scroll_top scroll_el in
+          let dir =
+            if cur_scroll > !last_scroll then Some `Down
+            else if cur_scroll < !last_scroll then Some `Up
+            else None
+          in
+          last_scroll := cur_scroll;
+          match dir, rows with
+          | Some `Down, _ :: _ ->
+              (match List.nth_opt rows (List.length rows - 1) with
+               | Some r when r.v_index < Array.length !data ->
+                   extend_drag (key_of !data.(r.v_index))
+               | _ -> ())
+          | Some `Up, first :: _ ->
+              if first.v_index < Array.length !data then
+                extend_drag (key_of !data.(first.v_index))
+          | _ -> ()
+        end
       in
       let options () =
         V.options ~count:(Array.length !data)
@@ -448,8 +453,6 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                   (V.scroll_to_options ~align:"auto" ());
               true);
       let cleanup = V.did_mount v in
-      V.will_update v;
-      publish v;
       (* the pin target can change without a virtualizer onChange
          (editing moved to an off-window row — an insert below the
          rendered edge) — republish so its row mounts immediately *)
@@ -540,15 +543,21 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                 set_timeout_id (fun () -> measure_rows list_el v) 50))
       in
       observe obs list_el (observe_opts ~childList:true ~subtree:true);
-      measure_rows list_el v;
       Signal.on_dispose ctx.ui_scope (fun () ->
+          phase:=`Disposed;
           if !measure_timer >= 0 then clear_timeout !measure_timer;
           Hashtbl.remove instances list_id;
           Hashtbl.remove key_scrollers list_id;
           disconnect obs;
           Option.iter Signal.dispose_subscription pin_sub;
           Option.iter Signal.dispose_subscription data_sub;
-          cleanup ())
+          cleanup ());
+      (* Initial observer notifications are synchronous. Complete ownership
+         before publication can flush and dispose this list reentrantly. *)
+      V.will_update v;
+      measure_rows list_el v;
+      phase:=`Active;
+      publish v
   | _ -> ()
 
 (* -- web adapter --

@@ -17,9 +17,6 @@ module D = Logseq_el
 
 let keyed = Lui_elements.keyed
 
-external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
-  [@@mel.scope "window"]
-
 (* cljs gating (block.cljs use-virtual-list-opts): ?virtualized=true
    forces windowing; otherwise the standalone page outliner
    window-renders only when it has >=64 top-level rows. rtc-test mode
@@ -92,12 +89,13 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
          else box ~key:("vrx-" ^ row.v_key) [])
       ]
   in
-  set_timeout
+  let attach_timer=Logseq_virt.set_timeout_id
     (fun () ->
       Logseq_virt.attach ctx st margin list_id scroll_parent_id data
         versions key_of overscan estimate_size pin_key pin_sig data_sig
         same_item on_end)
-    0;
+    0 in
+  Signal.on_dispose ctx.ui_scope (fun () -> Logseq_virt.clear_timeout attach_timer);
   Logseq_virt.container ~key:("vl-" ^ list_id) ~id:list_id
     ~style_class:list_class ~data_attrs:list_attrs
     [ Logseq_virt.spacer ~key:("vs-" ^ list_id) ~height_s

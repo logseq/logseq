@@ -1222,6 +1222,82 @@ let journal_day ?(uuid = "jd1") blocks : Model.page =
   ; page_journal_day = Some 20261004
   ; page_title = "Oct 4th, 2026" }
 
+let track_virtualizer_timers : unit -> (unit -> int) * (unit -> unit) =
+  [%mel.raw "function(){
+    const set=window.setTimeout,clear=window.clearTimeout,pending=new Set();
+    window.setTimeout=(f,ms)=>{const id=set(()=>{pending.delete(id);f()},ms);pending.add(id);return id};
+    window.clearTimeout=id=>{pending.delete(id);clear(id)};
+    return [()=>pending.size,()=>{for(const id of pending)clear(id);window.setTimeout=set;window.clearTimeout=clear}];
+  }"]
+
+let virtualizer_test_dom : string -> string -> (unit -> unit) =
+  [%mel.raw "function(listId,scrollId){
+    const lookup=document.getElementById,view=document.defaultView;
+    const list=document.createElement('div'),scroll=document.createElement('div');
+    for(const element of [list,scroll]){
+      element.ownerDocument=document;element.offsetWidth=100;element.offsetHeight=0;
+      element.scrollTop=0;element.scrollLeft=0;element.scrollTo=()=>{};
+      element.getBoundingClientRect=()=>({x:0,y:0,left:0,top:0,right:100,bottom:0,width:100,height:0});
+    }
+    document.defaultView=window;
+    document.getElementById=id=>id===listId?list:id===scrollId?scroll:lookup.call(document,id);
+    return ()=>{document.getElementById=lookup;document.defaultView=view};
+  }"]
+
+let test_virtualizer_lifecycle () =
+  let pending,restore_timers=track_virtualizer_timers () in
+  Fun.protect ~finally:restore_timers (fun () ->
+    let session=S.mount ~registry:(Views_drive.registry ()) ~profile:Logseq_el.web_profile
+      ~initial:() ~reducer:(fun () () -> ())
+      ~view:(fun _ _ _ -> Virt_list.list ~key_of:Fun.id
+        ~render:(fun value -> Lui_elements.text ~value []) [|"row"|]) () in
+    check "a live virtual list has one deferred attachment" (pending ()=1);
+    ignore (Lui_app.dispose session.S.app);
+    check "disposing a virtual list cancels its pending attachment" (pending ()=0));
+  List.iter (fun dispose_during_publish ->
+    let previous_flush= !Runtime.app_flush and context=ref None and source=ref None in
+    let session=S.mount ~registry:(Views_drive.registry ()) ~profile:Logseq_el.web_profile
+      ~initial:() ~reducer:(fun () () -> ())
+      ~view:(fun ctx _ _ ->
+        context:=Some ctx;
+        let items=Signal.state ctx.Lui_ui.ui_scheduler [|"row"|] in
+        source:=Some items;
+        Lui_elements.column []) () in
+    let ctx=Option.get !context and items=Option.get !source in
+    let data_signal=Logseq_el.own ctx (Signal.map Fun.id (Signal.value items)) in
+    let list_id=Logseq_virt.fresh_id () and scroll_id="virtualizer-lifecycle-scroll" in
+    let restore_dom=virtualizer_test_dom list_id scroll_id in
+    let publications=ref 0 in
+    Runtime.app_flush:=(fun () ->
+      incr publications;
+      if dispose_during_publish then ignore (Lui_app.dispose session.S.app)
+      else S.flush session);
+    Fun.protect ~finally:(fun () ->
+      (match Logseq_virt.instance_of list_id with
+       | Some virtualizer -> Virtualizer.did_mount virtualizer ();
+           Hashtbl.remove Logseq_virt.instances list_id;Hashtbl.remove Logseq_virt.key_scrollers list_id
+       | None -> ());
+      ignore (Lui_app.dispose session.S.app);restore_dom ();Runtime.app_flush:=previous_flush)
+      (fun () ->
+        let state=Signal.state ctx.Lui_ui.ui_scheduler Logseq_virt.{v_rows=[];v_total=0.} in
+        let valid=try
+          Logseq_virt.attach ctx state (ref 0.) list_id scroll_id (ref [|"row"|])
+            (Hashtbl.create 4) Fun.id 5 (fun _ -> 32.) (fun () -> None) (fun () -> None)
+            (Some data_signal) String.equal (fun () -> ());true
+        with Invalid_argument message -> Js.log message;false in
+        check "initial virtualizer publication does not subscribe to a retired scope" valid;
+        check "virtualizer attachment publishes its initial window" (!publications>0);
+        if dispose_during_publish then
+          check "reentrant disposal retires the virtualizer registry" (Logseq_virt.instance_of list_id=None)
+        else begin
+          check "a live virtualizer remains registered" (Logseq_virt.instance_of list_id<>None);
+          let previous_publications= !publications in
+          Signal.set items [|"changed"|];S.flush session;
+          check "an attached virtual list publishes live source updates" (!publications>previous_publications);
+          ignore (Lui_app.dispose session.S.app);
+          check "normal disposal retires the virtualizer registry" (Logseq_virt.instance_of list_id=None)
+        end)) [true;false]
+
 let test_signal_rows_modes () =
   let location = Stub_dom.get_field Stub_dom.global "location" in
   let previous_search = Stub_dom.get_field location "search" in
@@ -2141,6 +2217,7 @@ let run ~finish =
   test_views_table ();
   test_render_libs_dom ();
   test_embed_parity ();
+  test_virtualizer_lifecycle ();
   test_signal_rows_modes ();
   test_journal_roundtrip ();
   test_journal_splice_row_level ();
