@@ -224,15 +224,18 @@ let panel ~loader ~close ~online context parent =
         Prop.font_size "16px";Prop.line_height "24px";Prop.font_weight 400;Prop.overflow `hidden;Prop.white_space `normal]
         (button ~accessibility_identifier:id ~label:(title ^ " " ^ subtitle) ~variant:`ghost
           ~padding:0 ~min_height:72 ~min_width:0 ~main:`start ~cross:`stretch ~gap:0
+          ~text_alignment:`start
           ~corner_radius:4 ~background:"var(--ls-secondary-background-color)" ~foreground
           ~on_press:(fun _ -> action ())
           [box ~width:4 ~min_width:4 ~background:color [];
-           row ~padding_horizontal:12 ~padding_vertical:8 ~gap:8 ~cross:`center ~grow:1. ~min_width:0
-             [Icons.icon ~size:20. icon;
-              column ~min_width:0 ~grow:1. ~gap:4
+           row ~padding_horizontal:8 ~padding_vertical:12 ~gap:8 ~cross:`end_ ~grow:1. ~min_width:0
+             [Ui_components.with_props [Prop.padding_bottom 2]
+                (row ~opacity:0.2 [Icons.icon ~size:20. icon]);
+              column ~min_width:0 ~min_height:48 ~grow:1. ~main:`end_ ~gap:0
                 [text ~font_size:"14px" ~line_height:"17.5px" ~font_weight:500 ~value:title [];
-                 text ~font_size:"12px" ~line_height:"16px" ~font_weight:400
-                  ~foreground:"var(--ls-primary-text-color)" ~value:subtitle []]]]) in
+                 Ui_components.with_props [Prop.padding_top 4]
+                   (text ~font_size:"12px" ~line_height:"16px" ~font_weight:400
+                     ~foreground:"var(--ls-primary-text-color)" ~value:subtitle [])]]]) in
     let section key=heading ~level:2 ~font_size:"16px" ~line_height:"24px" ~font_weight:500
       ~padding_vertical:8 ~foreground:"var(--lx-handbook-section-fg)" ~value:(t key) [] in
     let dashboard () = column ~padding_vertical:4 ~padding_horizontal:16 ~min_width:0

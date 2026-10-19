@@ -9206,7 +9206,22 @@ let () = Native_embed.with_entry_lock (fun () ->
         Printf.printf "native Handbook scroll rect=%.2f,%.2f %.2fx%.2f\n%!"
           (body.x/.scale) (body.y/.scale) (body.w/.scale) (body.h/.scale);
         check "Native Handbook has a bounded body below its fixed header"
-          (body.h>0. && body.h/.scale<=rect.h/.scale-.48.+.0.2)) [1280.;600.;400.]) [1.;2.];
+          (body.h>0. && body.h/.scale<=rect.h/.scale-.48.+.0.2);
+        List.iter (fun name ->
+          let category=find name in
+          let descendants=Lui_store.preorder ~root:category store in
+          let icon=List.find (fun id -> Lui_store.kind store id="icon") descendants in
+          let fields=List.filter (fun id -> Lui_store.kind store id="text") descendants in
+          let title=List.hd fields and subtitle=List.nth fields 1 in
+          let rect id=Option.get (Lui_layout.rect layout id) in
+          let card=rect category and symbol=rect icon and title=rect title and subtitle=rect subtitle in
+          let near a b=abs_float (a/.scale-.b)<=0.6 in
+          check "Native Handbook categories keep bottom-aligned icons and start-aligned labels"
+            (near (symbol.x-.card.x) 12. && near (symbol.y-.card.y) (card.h/.scale-.34.) &&
+             near (title.x-.card.x) 40. && near (subtitle.x-.card.x) 40. &&
+             near (subtitle.y-.card.y) (card.h/.scale-.32.) && near subtitle.h 20. &&
+             near (title.y+.title.h-.subtitle.y) 0.))
+          ["handbook-category-start";"handbook-shortcuts"]) [1280.;600.;400.]) [1.;2.];
     press "handbook-category-start";
     check "Native Handbook category mounts its final topic"
       (Option.is_some (Lui_store.find_identifier store "handbook-topic-start/topic29"));

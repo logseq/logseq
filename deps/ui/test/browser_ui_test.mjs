@@ -14,6 +14,7 @@ import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.m
 import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
 import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference, measureHandbookArticle, assertHandbookArticle, handbookIntroductionArticleReference, handbookJournalsArticleReference, measureHandbookSearchPaint, assertHandbookSearchPaint, handbookSearchPaintReference} from './handbook_checks.mjs';
 import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
+import {measureHandbookCategoryContent, assertHandbookCategoryContent, handbookCategoryContentReference} from './handbook_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -90,6 +91,7 @@ test('Handbook preserves dashboard geometry, search focus and published article 
   assertHandbook(actual, handbookDesktopReference);
   assertHandbookSearch(actual, handbookDesktopReference);
   assertHandbookImages(actual, handbookDesktopReference);
+  assertHandbookCategoryContent(evaluate(`(${measureHandbookCategoryContent.toString()})(document)`),handbookCategoryContentReference);
   const paint = () => evaluate(`(${measureHandbookSearchPaint.toString()})(document)`);
   browser('click', '#handbook-search');
   assertHandbookSearchPaint(paint(), handbookSearchPaintReference.light.focused);

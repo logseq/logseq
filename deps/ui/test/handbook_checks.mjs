@@ -80,6 +80,43 @@ export function assertHandbookCleared(actual) {
   assert.equal(actual.input.focused,true,'clear restores input focus');
 }
 
+export function measureHandbookCategoryContent(root,reference=false) {
+  return [...root.querySelectorAll(reference?'.category-card':'button[id^="handbook-category-"],#handbook-shortcuts')]
+    .filter(card=>card.getBoundingClientRect().height>0).map(card=>{
+      const bounds=card.getBoundingClientRect();
+      const label=card.querySelector(reference?'.text-wrap':'.lui-column');
+      const icon=card.querySelector(reference?'svg':'.ui__icon');
+      const measure=element=>{const rect=element.getBoundingClientRect(),style=getComputedStyle(element);
+        return {x:rect.x-bounds.x,y:rect.y-bounds.y,height:rect.height,
+          font:style.fontSize,line:style.lineHeight,align:style.textAlign==='start'?'left':style.textAlign};};
+      let opacity=1;for(let node=icon;node!==card;node=node.parentElement)opacity*=Number(getComputedStyle(node).opacity);
+      return {icon:{...measure(icon),opacity},fields:[...label.children].map(measure)};
+    });
+}
+
+export function assertHandbookCategoryContent(actual,reference) {
+  assert.equal(actual.length,reference.length,'visible category count');
+  for(const [index,card] of actual.entries()) {
+    const expected=reference[index];
+    assert.equal(card.fields.length,expected.fields.length,`category ${index} field count`);
+    assert.equal(card.icon.opacity,expected.icon.opacity,`category ${index} icon opacity`);
+    for(const [part,element] of [card.icon,...card.fields].entries()) {
+      const target=[expected.icon,...expected.fields][part];
+      for(const key of ['x','y','height'])assert.ok(Math.abs(element[key]-target[key])<.3,
+        `category ${index} part ${part} ${key}: ${element[key]} versus ${target[key]}`);
+      if(part>0)for(const key of ['font','line','align'])assert.equal(element[key],target[key],`category ${index} part ${part} ${key}`);
+    }
+  }
+}
+
+export const handbookCategoryContentReference=[0,1,2].map(()=>({
+  icon:{x:12,y:38,height:20,opacity:.2},
+  fields:[
+    {x:40,y:22.5078125,height:17.5,font:'14px',line:'17.5px',align:'left'},
+    {x:40,y:40.0078125,height:19.9921875,font:'12px',line:'16px',align:'left'}
+  ]
+}));
+
 export function measureHandbookSearchPaint(root) {
   const input=root.querySelector('.cp__handbooks-popup input'),wrapper=input.parentElement;
   const style=getComputedStyle(input),group=getComputedStyle(wrapper);
