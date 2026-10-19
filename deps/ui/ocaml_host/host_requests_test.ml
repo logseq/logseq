@@ -9242,6 +9242,8 @@ let () = Native_embed.with_entry_lock (fun () ->
         let title_id=List.find (fun id -> Lui_store.kind store id="text")
           (Lui_store.child_ids store (find "handbook-back")) in
         let title=Option.get (Lui_layout.rect layout title_id) in
+        check "Native Handbook title explicitly aligns its text to the start"
+          (Lui_store.string_prop store title_id "text-alignment"=Some "start");
         let near a b=abs_float (a/.scale-.b)<=0.5 in
         check "Native Handbook back control keeps the reference width and left alignment"
           (near (back.x-.panel.x) 13. && near back.w (min 292. (panel.w/.scale-.116.)) &&

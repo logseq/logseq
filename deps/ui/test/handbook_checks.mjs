@@ -201,16 +201,25 @@ export function measureHandbookArticleHeader(root,reference=false) {
   const panel=root.querySelector('.cp__handbooks-popup'),origin=panel.getBoundingClientRect();
   const header=panel.querySelector(reference?'.hd':'#handbook-header');
   const back=header.querySelector(reference?'h1 button':'#handbook-back');
+  const title=back.querySelector(reference?'.title':'.lui-text');
+  const range=title.ownerDocument.createRange();
+  range.selectNodeContents(title);
+  const style=getComputedStyle(title);
+  const titleAlign=style.textAlign==='start' ? (style.direction==='rtl'?'right':'left')
+    : style.textAlign==='end' ? (style.direction==='rtl'?'left':'right') : style.textAlign;
   const measure=element=>{
     const rect=element.getBoundingClientRect();
     return {x:rect.x-origin.x,y:rect.y-origin.y,width:rect.width,height:rect.height};
   };
-  return {back:measure(back),title:measure(back.querySelector(reference?'.title':'.lui-text')),
+  return {back:measure(back),title:measure(title),titleAlign,
+    titleInkOffset:range.getBoundingClientRect().x-title.getBoundingClientRect().x,
     icons:[...header.querySelectorAll(reference?'svg':'.ui__icon')].map(measure),
     actions:[...header.querySelectorAll(reference?'a':'#handbook-copy-link,#handbook-close')].map(measure)};
 }
 
 export function assertHandbookArticleHeader(actual,reference) {
+  assert.equal(actual.titleAlign,reference.titleAlign,'header title text alignment');
+  assert.ok(Math.abs(actual.titleInkOffset-reference.titleInkOffset)<.3,'header title ink starts at the reference inset');
   for(const key of ['back','title','icons','actions']) {
     const items=Array.isArray(actual[key])?actual[key]:[actual[key]];
     const expected=Array.isArray(reference[key])?reference[key]:[reference[key]];
@@ -223,6 +232,7 @@ export function assertHandbookArticleHeader(actual,reference) {
 }
 
 export const handbookArticleHeaderReference={
+  titleAlign:'left',titleInkOffset:0,
   back:{x:13,y:13,width:292,height:28},title:{x:39,y:13,width:266,height:28},
   icons:[{x:13,y:18,width:18,height:18},{x:359,y:18,width:18,height:18},{x:389,y:18,width:18,height:18}],
   actions:[{x:359,y:18,width:18,height:18},{x:389,y:18,width:18,height:18}]

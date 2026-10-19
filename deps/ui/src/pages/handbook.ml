@@ -385,6 +385,7 @@ let panel ~loader ~close ~online context parent =
                   ~grow:1. ~max_width:292 ~min_width:0 ~main:`start ~padding:0 ~gap:8 ~background:"transparent"
                   ~foreground:"var(--lx-handbook-heading-fg)" ~on_press:(fun _ -> back ())
                   [Icons.icon ~size:18. "chevron-left";text ~grow:1. ~min_width:0
+                    ~text_alignment:`start
                     ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:entry.title []]))
             (Signal.value current);
           row ~gap:12 ~cross:`center
