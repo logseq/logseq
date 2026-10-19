@@ -9063,7 +9063,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Logseq_el.register_all registry;
   Logseq_editor.register registry;Logseq_codemirror.register registry;
   let children=List.init 30 (fun index -> Printf.sprintf
-    {|{:key "start/topic%d" :title "Topic %d" :content "<p>One <strong>bold</strong></p>"}|} index index)
+    {|{:key "start/topic%d" :title "Topic %d" :content "<p>One <strong>bold</strong></p><p><video controls><source src='./assets/clip.mp4'><track src='./assets/captions.vtt'></video></p><p>After video &#91;&#91;café 中文 😀&#93;&#93;</p><p>Last paragraph</p>"}|} index index)
     |> String.concat " " in
   let catalog=Handbook_data.parse
     ({|{:title "Handbook" :children [{:key "start" :title "Getting started" :children [|} ^ children ^ "]}]}") in
@@ -9114,6 +9114,21 @@ let () = Native_embed.with_entry_lock (fun () ->
     press "handbook-topic-start/topic0";
     check "Native Handbook preserves nested rich content"
       (List.exists (fun id -> Lui_store.string_prop store id "text"=Some "bold") (Lui_store.preorder store));
+    let paragraphs=List.filter (fun id -> Lui_store.kind store id="paragraph") (Lui_store.preorder store) in
+    let rec paragraph_ancestor id = match Lui_store.parent store id with
+      | None -> false
+      | Some parent -> Lui_store.kind store parent="paragraph" || paragraph_ancestor parent in
+    check "Native Handbook media preserves sibling paragraph structure"
+      (List.length paragraphs=4 && not (List.exists paragraph_ancestor paragraphs));
+    check "Native Handbook media retains decoded following text"
+      (List.exists (fun id -> Lui_store.string_prop store id "text"=
+        Some {js|After video [[café 中文 😀]]|js}) (Lui_store.preorder store));
+    let previous_scroll=find "handbook-scroll" in
+    let next=List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=
+      Some (I18n.t "help.handbook/next-chapter")) (Lui_store.preorder store) in
+    ignore (Lui_app.dispatch_event app (Press next));ignore (Lui_app.flush app);
+    check "Native Handbook chapter navigation replaces the scroll owner"
+      (find "handbook-scroll"<>previous_scroll);
     press "handbook-close";
     check "Native Handbook closes its mounted surface" (Lui_store.find_identifier store "handbook-panel"=None);
     print_endline "native Handbook mount, responsive geometry and rich content: OK"))

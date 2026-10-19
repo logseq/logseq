@@ -91,7 +91,7 @@ let run ~finish =
     | [] -> cleanup ()
     | (_,resolve)::_ ->
       let source=Str_util.replace_all Handbook_scenarios.fixture ~pat:"</strong></p>"
-        ~rep:"</strong> <a href='2.Second-Topic.edn'>Next topic</a> <a href='https://example.test/handbook'>Website</a></p>" in
+        ~rep:{js|</strong></p><p><video controls><source src='./assets/clip.mp4'><track src='./assets/captions.vtt'></video></p><p>After video &#91;&#91;café 中文 😀&#93;&#93;</p><p>Last <a href='2.Second-Topic.edn'>Next topic</a> <a href='https://example.test/handbook'>Website</a></p>|js} in
       resolve (response true 200 source);
       later (fun () ->
         check "Handbook renders its populated dashboard" (text (I18n.t "help.handbook/popular-topics") &&
@@ -103,11 +103,24 @@ let run ~finish =
         check "Handbook remains a nonmodal standard panel" (panel.M.kind="popover" && (Dialogs_state.value ()).dialogs=initial_dialogs);
         press "handbook-topic-1.start/_1.first_topic";
         check "Handbook opens real rich topic content" (text "One " && text "bold" && not (has "handbook-search"));
+        let paragraphs=List.filter (fun node -> node.M.kind="paragraph") (nodes ()) in
+        let rec paragraph_ancestor node = match node.M.parent with
+          | None -> false
+          | Some id -> match List.find_opt (fun parent -> parent.M.id=id) (nodes ()) with
+            | None -> false
+            | Some parent -> parent.M.kind="paragraph" || paragraph_ancestor parent in
+        check "Handbook media keeps subsequent paragraphs as siblings"
+          (List.length paragraphs=4 && not (List.exists paragraph_ancestor paragraphs));
+        check "Handbook media retains decoded following text"
+          (text {js|After video [[café 中文 😀]]|js} && text "Last ");
         let press_link url=match List.find_opt (fun node -> node.M.kind="link" && M.string_prop node "url"=Some url) (nodes ()) with
           | None -> check ("Handbook link available: " ^ url) false | Some node -> S.press app node.M.id in
         press_link "https://example.test/handbook";
         check "Handbook external links reach their host action" (!external_urls=["https://example.test/handbook"]);
+        let first_scroll=(Option.get (find "handbook-scroll")).M.id in
         press_link "logseq://handbook/1.start/_2.second_topic";
+        check "Handbook links replace the previous article scroll owner"
+          ((Option.get (find "handbook-scroll")).M.id<>first_scroll);
         check "Handbook relative links navigate inside its panel" (text "Two");
         press_label "help.handbook/prev-chapter";
         press_label "help.handbook/next-chapter";

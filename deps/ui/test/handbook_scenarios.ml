@@ -14,7 +14,39 @@ let fixture = {js|{:title "Test Handbook"
  {:key "3.sync" :title "Sync" :children
  ({:key "3.sync/_1.setup" :title "Sync account" :content "<p>Account</p>"})})}|js}
 
+let html_scenarios ~check =
+  let open Render_html in
+  let parse source = fst (parse_nodes source 0 (String.length source) []) in
+  let element tag children = Elem (tag, [], children) in
+  List.iter (fun tag ->
+    check ("HTML void element " ^ tag ^ " preserves following content and siblings")
+      (parse ("<p><" ^ tag ^ ">after</p><p>last</p>") =
+        [element "p" [element tag [];Text "after"];element "p" [Text "last"]]))
+    ["area";"base";"br";"col";"embed";"hr";"img";"input";"link";"meta";"param";"source";"track";"wbr"];
+  check "HTML media sources and caption tracks stay siblings inside their media"
+    (parse "<p><video controls><source src='one.mp4'><source src='two.webm'/><track src='captions.vtt'></video></p><p>After</p>" =
+      [element "p" [Elem ("video", ["controls", ""],
+        [Elem ("source",["src","one.mp4"],[]);Elem ("source",["src","two.webm"],[]);
+         Elem ("track",["src","captions.vtt"],[])])];element "p" [Text "After"]]);
+  check "HTML void tag matching is case insensitive"
+    (parse "<AUDIO><SOURCE src='clip.mp3'><TRACK></AUDIO><p>After</p>" =
+      [element "audio" [Elem ("source",["src","clip.mp3"],[]);element "track" []];
+       element "p" [Text "After"]]);
+  List.iter (fun (source,expected) ->
+    check ("HTML entity decoding preserves host Unicode: " ^ source)
+      (decode_entities source=expected))
+    ["&#91;&#91;page&#93;&#93; &#40;block&#41;","[[page]] (block)";
+     "&#x4E2D;&#25991; &#X1F600;",{js|中文 😀|js};
+     "&#128512; &#x10FFFF;",{js|😀 􏿿|js};
+     "&#00000000000000000065;","A";
+     "&lt;&gt;&amp;&quot;&apos;&nbsp;",{js|<>&"' |js};
+     "&amp;#91; &#91;","&#91; [";
+     {js|café 中文 😀|js},{js|café 中文 😀|js};
+     "&#xD800; &#1114112; &#999999999999999999999999999;","&#xD800; &#1114112; &#999999999999999999999999999;";
+     "&unknown; &#xzz; &#-1; &#; &amp unfinished","&unknown; &#xzz; &#-1; &#; &amp unfinished"]
+
 let run ~check =
+  html_scenarios ~check;
   let catalog=Handbook_data.parse fixture in
   let key node=node.Handbook_data.key in
   let keys nodes=List.map key nodes in

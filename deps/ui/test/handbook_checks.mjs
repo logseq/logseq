@@ -80,6 +80,33 @@ export function assertHandbookCleared(actual) {
   assert.equal(actual.input.focused,true,'clear restores input focus');
 }
 
+export function measureHandbookArticle(root) {
+  const panel=root.querySelector('.cp__handbooks-popup');
+  const scroll=panel.querySelector('#handbook-scroll,.cp__handbooks-content');
+  return {scrollTop:scroll.scrollTop,nestedParagraphs:panel.querySelectorAll('p p').length,
+    codes:[...panel.querySelectorAll('code')].map(element=>element.textContent),
+    videoSources:[...panel.querySelectorAll('video')].map(video=>
+      video.getAttribute('src') || video.querySelector('source')?.getAttribute('src'))};
+}
+
+export function assertHandbookArticle(actual,reference) {
+  assert.equal(actual.scrollTop,0,'a newly opened article starts at the top');
+  assert.equal(actual.nestedParagraphs,0,'article paragraphs remain siblings after embedded media');
+  for (const key of ['videoSources','codes']) {
+    assert.equal(actual[key].length,reference[key].length,`article ${key} count`);
+    for (const [index,value] of actual[key].entries())
+      assert.equal(value,reference[key][index],`article ${key} ${index}`);
+  }
+}
+
+export const handbookIntroductionArticleReference={nestedParagraphs:0,codes:[],videoSources:[
+  'https://handbooks.pages.dev/assets/2_2_ClickPageRef.mp4',
+  'https://handbooks.pages.dev/assets/2_3_ClickBlockRef.mp4',
+]};
+
+export const handbookJournalsArticleReference={nestedParagraphs:0,videoSources:[],
+  codes:['#hashtag','[[double brackets]]']};
+
 // Measured reference dashboard at 1280x720, light/classic, with no hovered card.
 export const handbookDesktopReference = {
   "viewport": {

@@ -12,7 +12,7 @@ import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
 import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
-import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference} from './handbook_checks.mjs';
+import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference, measureHandbookArticle, assertHandbookArticle, handbookIntroductionArticleReference, handbookJournalsArticleReference} from './handbook_checks.mjs';
 import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
 
 const session = 'logseq-ui-regressions';
@@ -73,7 +73,7 @@ test('Help opens complete shortcut content and reopens collapsed panels', () => 
   assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
 });
 
-test('Handbook matches dashboard geometry and retains search focus after clearing', () => {
+test('Handbook preserves dashboard geometry, search focus and published article content', () => {
   browser('set', 'viewport', '1280', '720');
   open();
   button('More');
@@ -93,6 +93,14 @@ test('Handbook matches dashboard geometry and retains search focus after clearin
   browser('fill', '#handbook-search', 'sync');
   button('Clear search');
   assertHandbookCleared(measure());
+  browser('find','role','button','click','--name','The only features you need to get started with Logseq','--exact');
+  browser('wait','--fn',"document.querySelectorAll('.cp__handbooks-popup video').length === 2 && [...document.querySelectorAll('.cp__handbooks-popup video')].every(video=>video.readyState>=1)");
+  assertHandbookArticle(evaluate(`(${measureHandbookArticle.toString()})(document)`),handbookIntroductionArticleReference);
+  button('Next chapter');
+  browser('wait','--fn',"document.querySelector('.cp__handbooks-popup').textContent.includes('Fundamental 1:') && [...document.querySelectorAll('.cp__handbooks-popup video')].every(video=>video.readyState>=1)");
+  button('Next chapter');
+  browser('wait','--fn',"document.querySelectorAll('.cp__handbooks-popup code').length === 2");
+  assertHandbookArticle(evaluate(`(${measureHandbookArticle.toString()})(document)`),handbookJournalsArticleReference);
   button('Close');
   browser('wait', '--fn', "document.querySelector('#handbook-panel') === null");
 });

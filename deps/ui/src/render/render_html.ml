@@ -54,7 +54,8 @@ let read_attrs s i n =
   loop i []
 
 let void_tag = function
-  | "br" | "hr" | "img" | "input" | "meta" | "link" -> true
+  | "area" | "base" | "br" | "col" | "embed" | "hr" | "img"
+  | "input" | "link" | "meta" | "param" | "source" | "track" | "wbr" -> true
   | _ -> false
 
 let rec parse_nodes s i n acc =
@@ -98,6 +99,36 @@ let rec parse_nodes s i n acc =
 and starts_closing s i n =
   i + 1 < n && s.[i] = '<' && s.[i + 1] = '/'
 
+let numeric_entity entity =
+  let n = String.length entity in
+  if n < 2 || entity.[0] <> '#' then None else
+  let base, start =
+    if n > 2 && (entity.[1] = 'x' || entity.[1] = 'X') then 16, 2 else 10, 1 in
+  let rec parse i value =
+    if i = n then
+      if value <> 0 && Uchar.is_valid value then Some value else None
+    else
+      let digit = match entity.[i] with
+        | '0' .. '9' as c -> Char.code c - Char.code '0'
+        | 'a' .. 'f' as c -> Char.code c - Char.code 'a' + 10
+        | 'A' .. 'F' as c -> Char.code c - Char.code 'A' + 10
+        | _ -> -1 in
+      if digit < 0 || digit >= base || value > (0x10FFFF - digit) / base then None
+      else parse (i + 1) (value * base + digit)
+  in
+  if start = n then None else parse start 0
+
+let add_scalar buffer codepoint =
+  match Sys.backend_type with
+  | Native | Bytecode -> Buffer.add_utf_8_uchar buffer (Uchar.of_int codepoint)
+  | Other "Melange" ->
+      if codepoint <= 0xFFFF then Buffer.add_char buffer (Char.unsafe_chr codepoint)
+      else begin
+        Buffer.add_char buffer (Char.unsafe_chr (0xD800 + ((codepoint - 0x10000) lsr 10)));
+        Buffer.add_char buffer (Char.unsafe_chr (0xDC00 + ((codepoint - 0x10000) land 0x3FF)))
+      end
+  | Other backend -> invalid_arg ("HTML: unsupported text backend " ^ backend)
+
 let rec el_of_node = function
   | Text s ->
       if String.trim s = "" then [] else [ D.txt (decode_entities s) ]
@@ -109,23 +140,28 @@ let rec el_of_node = function
 and decode_entities s =
   let b = Buffer.create (String.length s) in
   let n = String.length s in
+  let add_entity entity =
+    match entity with
+    | "amp" -> Buffer.add_char b '&'; true
+    | "lt" -> Buffer.add_char b '<'; true
+    | "gt" -> Buffer.add_char b '>'; true
+    | "quot" -> Buffer.add_char b '"'; true
+    | "apos" -> Buffer.add_char b '\''; true
+    | "nbsp" -> add_scalar b 0xA0; true
+    | _ -> match numeric_entity entity with
+      | Some codepoint -> add_scalar b codepoint; true
+      | None -> false
+  in
   let rec go i =
     if i < n then begin
       if s.[i] = '&' then begin
         let rec find_semi j =
-          if j >= n || j - i > 8 then -1
+          if j >= n || is_ws s.[j] || s.[j] = '&' || s.[j] = '<' then -1
           else if s.[j] = ';' then j
           else find_semi (j + 1)
         in
         let j = find_semi (i + 1) in
-        if j > 0 then
-          match String.sub s (i + 1) (j - i - 1) with
-          | "amp" -> Buffer.add_char b '&'; go (j + 1)
-          | "lt" -> Buffer.add_char b '<'; go (j + 1)
-          | "gt" -> Buffer.add_char b '>'; go (j + 1)
-          | "quot" -> Buffer.add_char b '"'; go (j + 1)
-          | "nbsp" -> Buffer.add_string b {js| |js}; go (j + 1)
-          | _ -> Buffer.add_char b s.[i]; go (i + 1)
+        if j > 0 && add_entity (String.sub s (i + 1) (j - i - 1)) then go (j + 1)
         else begin Buffer.add_char b s.[i]; go (i + 1) end
       end else begin Buffer.add_char b s.[i]; go (i + 1) end
     end
