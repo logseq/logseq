@@ -14,7 +14,7 @@
    (run
     sh
     -c
-    "exec \"$DUNE_SOURCEROOT/node_modules/.bin/vite\" build --config vite.config.mjs --outDir dist --emptyOutDir false"))))
+    "out=\"$PWD/dist\"; cd \"$DUNE_SOURCEROOT/_build/default\" && exec \"$DUNE_SOURCEROOT/node_modules/.bin/vite\" build --config vite.config.mjs --outDir \"$out\" --emptyOutDir false"))))
 
 (rule
  (alias show-vars)

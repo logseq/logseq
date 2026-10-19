@@ -9,6 +9,12 @@
     (is (= "/tmp/home/logseq/graphs/foo~2Fbar"
            (config/get-local-dir (str common-config/db-version-prefix "foo/bar"))))))
 
+(deftest get-local-dir-uses-system-info-graphs-dir
+  (with-redefs [state/get-state (fn [] {:system/info {:home-dir "/tmp/home"
+                                                     :graphs-dir "/custom/graphs"}})]
+    (is (= "/custom/graphs/foo~2Fbar"
+           (config/get-local-dir (str common-config/db-version-prefix "foo/bar"))))))
+
 (deftest get-electron-backup-dir-uses-unified-backup-directory
   (with-redefs [state/get-state (fn [] {:system/info {:home-dir "/tmp/home"}})]
     (is (= "/tmp/home/logseq/graphs/foo~2Fbar/backup"
@@ -77,3 +83,16 @@
     (is (not (config/valid-sync-server-url? "not a url")))
     (is (not (config/valid-sync-server-url? "")))
     (is (not (config/valid-sync-server-url? nil)))))
+
+(deftest jpeg-xl-is-an-image-format
+  (is (contains? (common-config/img-formats) :jxl))
+  (is (contains? config/image-formats :jxl)))
+
+(deftest get-export-css-path-is-absolute-disk-path
+  (with-redefs [config/get-repo-dir (constantly "/graphs/demo")]
+    (is (= "/graphs/demo/logseq/export.css"
+           (config/get-export-css-path "logseq_db_demo")))))
+
+(deftest get-custom-css-path-is-relative-for-db-graphs
+  (is (= "logseq/custom.css"
+         (config/get-custom-css-path "logseq_db_demo"))))

@@ -9,7 +9,7 @@ description: Review Logseq code changes, PRs, patches, commit ranges, or impleme
 
 The main agent drives the review. It identifies scope, loads routing rules, launches independent read-only subagents for each review pass, collects candidate findings, validates the actionable ones, deduplicates overlap, and writes the final conclusion.
 
-Each pass subagent only collects issues. It must not edit files, stage changes, commit, push, or rewrite code. It returns candidate findings, evidence, checks already run, and unresolved questions to the main agent.
+Each pass subagent collects review evidence. It must not edit files, stage changes, commit, push, or rewrite code. It returns candidate findings, evidence, checks already run, and unresolved questions to the main agent. The System Additions pass also assesses necessity, maintenance cost, and simpler alternatives, returning an inventory with dispositions separate from findings.
 
 Review every pass through three layers:
 
@@ -108,8 +108,9 @@ Passes:
 | Performance | [`rules/passes/performance.md`](./rules/passes/performance.md) |
 | Test coverage | [`rules/passes/test-coverage.md`](./rules/passes/test-coverage.md) |
 | Repository convention | [`rules/passes/repository-convention.md`](./rules/passes/repository-convention.md) |
+| System Additions | [`rules/passes/system-additions.md`](./rules/passes/system-additions.md) |
 
-Ask each subagent to inspect only its assigned pass and return only candidate findings, supporting evidence, checks already run, and unresolved questions. While up to 4 subagents run in parallel, the main agent may prepare aggregation and validation steps but must keep launching pending passes as slots open and must wait for every pass report before the final review. If subagents are unavailable or concurrent launch is not possible, run each pass locally with the same rule files and state that delegation or concurrency was unavailable in the verification summary.
+Ask each subagent to inspect only its assigned pass and return candidate findings, supporting evidence, checks already run, and unresolved questions, plus the inventory and simplification assessments for System Additions. While up to 4 subagents run in parallel, the main agent may prepare aggregation and validation steps but must keep launching pending passes as slots open and must wait for every pass report before the final review. If subagents are unavailable or concurrent launch is not possible, run each pass locally with the same rule files and state that delegation or concurrency was unavailable in the verification summary.
 
 ### 4. Aggregate pass results
 
@@ -120,6 +121,7 @@ Wait for all pass subagents before writing the final review. Then:
 3. Discard findings without concrete evidence or turn them into questions.
 4. Preserve the originating pass name for each retained finding.
 5. Validate every actionable finding before including it.
+6. Preserve the System Additions inventory and its necessity assessments separately from findings. An addition alone is not an issue, but supported simplification findings must not be discarded merely because the code works or has no measured runtime regression.
 
 For executable behavior paths, validate with an appropriate Logseq interaction path:
    - `logseq-repl` for ClojureScript functions, DataScript state, importer/exporter behavior, renderer state, Electron, or worker runtime behavior.
@@ -156,7 +158,7 @@ Each finding should include:
 
 ```markdown
 - **Severity:** Blocking | Important | Minor | Question
-- **Category:** Correctness | Data contract | Regression | Failure mode | Migration validation | Performance | Test coverage | Repository convention
+- **Category:** Correctness | Data contract | Regression | Failure mode | Migration validation | Performance | Test coverage | Repository convention | System Additions
 - **Location:** `path/to/file.cljs:line`
 - **Issue:** What is wrong.
 - **Impact:** Concrete user, data, runtime, or maintenance impact.
@@ -167,6 +169,8 @@ Separate findings with a horizontal rule (`---`) when reporting more than one fi
 
 If there are no findings, say what was reviewed and which rule modules were applied.
 
+Include a compact System Additions inventory with Retain / Simplify / Question conclusions even when there are no findings, following the pass rule's output requirements. Report supported cleanup findings alongside other findings; explain rejected alternatives when no simplification is supported. State when no additions were found.
+
 Add a short verification summary after findings or after the no-findings statement. Include the CLI commands, REPL probes, Chrome/browser scenarios, Desktop UI actions, static evidence, and any relevant checks that could not be run.
 
 ## Review checklist before final response
@@ -174,7 +178,7 @@ Add a short verification summary after findings or after the no-findings stateme
 - Did you apply `rules/common.md`?
 - Did you route every touched library/module to its rule file?
 - Did you launch one read-only subagent for each independent pass with at most 4 running concurrently, starting new pass subagents as slots opened, or state why delegation or concurrency was unavailable?
-- Did each subagent only collect issues and avoid modifying code?
+- Did each subagent stay within its review pass and avoid modifying code?
 - Did you wait for all pass reports before writing the final review?
 - Did you deduplicate and validate actionable findings before including them?
 - Did you run targeted runtime verification after static inspection for every affected web-app, desktop-app, and Logseq CLI surface?
@@ -182,6 +186,7 @@ Add a short verification summary after findings or after the no-findings stateme
 - Did you distinguish proven issues from questions?
 - Did you check persisted data, migrations, or protocol compatibility when relevant?
 - Did you run the migration validation pass and explicitly decide whether the reviewed change requires `frontend.worker.db.migrate/schema-version->updates`, migration `migrate-updates`, a `logseq.db.frontend.schema/version` bump, or migration tests?
+- Did System Additions assess actual consumers, benefit versus maintenance cost, and simpler alternatives across all ten categories, with dispositions and actionable cleanup findings rather than only an inventory?
 - Did you check tests and name exact missing test coverage?
 - Did every actionable finding have applicable validation evidence, using `logseq-repl`, `logseq-cli`, `chrome`, or `computer-use` for executable behavior paths and static/protocol/build evidence for non-executable findings?
 - Did you avoid asking for broad rewrites when a targeted fix is enough?

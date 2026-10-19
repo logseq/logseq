@@ -118,7 +118,12 @@
   }
 
   a.item {
-    @apply flex items-center pl-1.5 pr-0.5 h-8 select-none;
+    /* Match the 16px nav icon: text-sm's 20px line-box sits 2px higher than the icon. */
+    @apply flex items-center pl-1.5 pr-0.5 h-8 select-none leading-4;
+
+    > .ui__icon {
+      @apply items-center h-4 shrink-0 leading-none;
+    }
 
     .graph-icon {
       @apply ml-[3px] mr-[11px];

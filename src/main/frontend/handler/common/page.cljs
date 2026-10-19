@@ -2,8 +2,7 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.config :as config-handler]
@@ -82,7 +81,21 @@
 (def ^:private page-for-create-selector
   '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
     {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+    :logseq.property/built-in?
     {:block/parent ...}])
+
+(defn- reusable-for-create?
+  "Return whether `page` is a journal or an ordinary page at the top level,
+  including a direct child of the Library."
+  [page]
+  (let [tag-idents (set (keep :db/ident (:block/tags page)))
+        parent (:block/parent page)]
+    (or (contains? tag-idents :logseq.class/Journal)
+        (and (contains? tag-idents :logseq.class/Page)
+             (not (contains? tag-idents :logseq.class/Tag))
+             (not (contains? tag-idents :logseq.class/Property))
+             (or (nil? parent)
+                 (ldb/library? parent))))))
 
 (defn- <page-for-create
   [page-id-or-title]
@@ -125,19 +138,23 @@
          (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
-              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+              (seq (filter ldb/private-create-page-tag? (:block/tags parsed-result))))
          (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
-                                (keep #(when (ldb/private-tags (:db/ident %))
+                                (keep #(when (ldb/private-create-page-tag? %)
                                          (pr-str (:block/title %)))
                                       (:block/tags parsed-result)))])
                              :error)
 
          :else
          (when-not (string/blank? title')
-           (p/let [existing-page (when-not class? (<page-for-create title'))]
-             (if (and existing-page (not (ldb/recycled? existing-page)))
+           ;; With explicit tags, the worker finds an existing page by title and tags
+           (p/let [existing-page (when-not (or class? (seq (:tags options)))
+                                   (<page-for-create title'))]
+             (if (and existing-page
+                      (not (ldb/recycled? existing-page))
+                      (reusable-for-create? existing-page))
                (do
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))

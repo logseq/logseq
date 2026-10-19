@@ -93,6 +93,7 @@ Custom queries are defined in `:custom-queries` of a config file. This config is
 Use `logseq login` to authenticate the current machine with Logseq cloud.
 
 - `logseq login` starts a temporary callback server at `http://localhost:8765/auth/callback`, opens a browser to the Logseq Cognito Hosted UI, exchanges the returned authorization code, and writes `~/logseq/auth.json`.
+- `logseq login --username <username> --password <password>` authenticates directly with Cognito without opening a browser or starting a callback server. Supply both non-empty values. The username is a Cognito sign-in identifier, not necessarily an email address.
 - `logseq logout` removes `~/logseq/auth.json`, opens a browser to the Cognito Hosted UI logout endpoint, and completes the browser logout flow at `http://localhost:8765/logout-complete`.
 - Sync commands still pass an in-memory runtime `:auth-token` to db-sync, but that token is now resolved from `auth.json` instead of `cli.edn`.
 
@@ -100,12 +101,21 @@ Default auth file: `~/logseq/auth.json`
 
 Auth file contents include the persisted Cognito `id-token`, `access-token`, `refresh-token`, `expires-at`, `sub`, `email`, and `updated-at` values needed for headless refresh.
 
+Password login:
+- Passwords are passed exactly as supplied, including leading and trailing spaces. Quote shell arguments; use `--password='<password>'` when a password starts with `-`.
+- Command-line passwords can appear in shell history and process listings. This mode does not read credentials from environment variables, stdin, prompts, or `cli.edn`.
+- The account password is separate from an E2EE password. MFA, forced password changes, and other Cognito challenges return an explicit error; challenge continuation and social-provider password login are not supported. You can run `logseq login` separately to use the browser flow.
+- Password authentication uses the us-east-1 Cognito IDP endpoint and the configured OAuth client ID. A custom sync `http-base` does not change that endpoint. The app client must enable `USER_PASSWORD_AUTH` and must not require a client secret.
+- Successful login writes the same private auth file (or configured `:auth-path`) and returns `auth-path`, `updated-at`, and available `email`/`sub`. Password mode omits `authorize-url` and `opened`. It never stores the username/password pair or includes tokens in command output.
+- Authentication, transport, timeout, and response-validation failures leave the existing auth file untouched and exit nonzero. There is no automatic browser retry.
+- The existing OAuth refresh path is retained. Password login, refresh, and read-only authenticated sync were verified against the default production client on 2026-09-17. Custom client and user-pool configurations require their own verification.
+
 Verbose logging:
 - `--verbose` enables structured debug logs to stderr for CLI option parsing and db-worker-node API calls.
 - `sync download` can stream realtime progress lines to stdout when progress is enabled; debug previews remain truncated.
 
 Timeouts:
-- `--timeout-ms` continues to control request timeout behavior for CLI transport.
+- `--timeout-ms` controls request timeout behavior for CLI transport and password authentication.
 - Login callback timeout is controlled separately by `:login-timeout-ms` / `LOGSEQ_CLI_LOGIN_TIMEOUT_MS` and defaults to 5 minutes.
 - Logout callback timeout is controlled separately by `:logout-timeout-ms` / `LOGSEQ_CLI_LOGOUT_TIMEOUT_MS` and defaults to 2 minutes.
 
@@ -123,10 +133,10 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
   - EDN export also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`
-  - `--edn-options` is an EDN map; `:export-type` (if present) overrides the default `:graph`, and every other key is forwarded to the worker as `:graph-options` (for example, `'{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}'`)
+  - `--edn-options` is an EDN map validated by the CLI before contacting the worker. `:export-type` defaults to `:graph` only when omitted. Selectors stay at the top level (for example, `'{:export-type :selected-nodes :node-ids [42]}'`); graph content controls require `:graph-human` and belong under `:graph-options` (for example, `'{:export-type :graph-human :graph-options {:include-timestamps? true}}'`). See the [EDN export option contract](#edn-export-option-contract) for supported keys, types, and required selectors.
   - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
-  - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected
+  - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected. Invalid EDN option maps return `invalid-options` and exit nonzero: non-map values, unknown or misplaced keys, keys inapplicable to the selected export type, invalid value types, and missing required selectors are rejected before worker setup or export file writes. These validation failures neither create nor overwrite the destination file.
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite; SQLite import requires a new graph, while EDN import may target an existing graph
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
@@ -284,8 +294,8 @@ Inspect and edit commands:
   - CSV tokens are trimmed and empty tokens are ignored; if a provided filter becomes empty after normalization, CLI returns `invalid-options`.
 - `list asset [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list nodes tagged with `#Asset` (`:logseq.class/Asset`; defaults to `--sort updated-at --order desc`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
-- `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
-- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
+- `upsert block --blocks <markdown> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - create a block tree from inline Markdown (see [Markdown block input](#markdown-block-input))
+- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - create a block tree from a Markdown file using the same rules
 - `upsert block --id <id>|--uuid <uuid> [--content <text>] [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
   - `--status` is not supported on `upsert block`; use `upsert task --status ...` for task status updates.
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
@@ -317,6 +327,35 @@ Inspect and edit commands:
   - Use `--page-hierarchy true` to display child pages connected through page hierarchy instead of normal page content blocks.
 - `show --uuid <uuid> [--level <n>]` - show block tree
 - `show --id <id> [--level <n>]` - show block tree by db/id
+
+### Markdown block input
+
+`--blocks` takes Markdown text; `--blocks-file` reads that text from a file. Supply one input source per command. Both flags create new blocks. They do not accept EDN block maps, and they cannot be used with `--id` or `--uuid` to update an existing block. Use `--content` for a literal single block. Each run of a Markdown insert creates a new tree, even when the input is unchanged.
+
+```bash
+logseq upsert block --graph demo --target-page Home \
+  --blocks $'- Parent\n  - Child\n- Sibling'
+```
+
+The equivalent `blocks.md` file is:
+
+```markdown
+- Parent
+  - Child
+- Sibling
+```
+
+```bash
+logseq upsert block --graph demo --target-page Home --blocks-file ./blocks.md
+```
+
+- Markdown bullets and headings become blocks; indentation makes child blocks. Code fences, quotes, tables, and other body lines stay in the containing block's title. An ordered list is not supported as block input.
+- `key:: value` on a block sets an existing graph property on that block and is removed from the stored title. Values are coerced to the property's schema type; unknown properties or invalid values fail. Property keys with spaces or colons cannot be written with this syntax. Create the property first with `upsert property` if needed.
+- `[[Page]]` in a title links to the page and creates it if missing. `#tag` associates an existing tag with the block and remains in the title; an unknown tag fails. References in code are treated as literal text.
+- `--target-page`, `--target-id`, and `--target-uuid` select one insertion target. Without a target, the blocks go on today's journal page. `--pos` defaults to `last-child`; `first-child` also works with a page or block target, while `sibling` requires `--target-id` or `--target-uuid`.
+- `--update-tags <edn-vector>` and `--update-properties <edn-map>` can be combined with either Markdown input flag; they apply to the top-level blocks only. Use Markdown `#tag` and `key:: value` for metadata on individual descendants. `--remove-tags` and `--remove-properties` are only for update mode.
+- `--dry-run` works in create mode with either Markdown input flag (and with `--content`). It resolves the input and prints planned outliner ops without writing. With `--output json` or `--output edn`, the response includes `dry-run`, `ops`, and `would-create-pages` under `data`.
+- The block tree and its metadata are written in one outliner transaction. Missing target or reference pages may be created before that transaction. JSON/EDN output lists the created block ids in tree preorder, including descendants.
 
 Help output:
 
@@ -392,6 +431,10 @@ JSON key migration (flat -> namespaced):
 | `data.items[].cardinality` | `data.items[].db/cardinality` |
 | `data.root.children[]` | `data.root.block/children[]` |
 - `upsert page`, `upsert block`, `upsert task`, and `upsert asset` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+  - In create mode, block/task/asset results contain only the requested entities. Insertion targets, references (including automatically created pages), tags, properties, and property values are excluded.
+  - Block trees return every requested descendant in input-tree preorder: root, its children and their descendants in sibling order, then the next root. UUIDs are deduplicated by first occurrence. For `[Root(Child(Grandchild)), Sibling]`, the result is `[Root-id Child-id Grandchild-id Sibling-id]`.
+  - The same contract applies to `--blocks` and `--blocks-file`. A requested UUID that cannot be resolved fails the command with `add-id-resolution-failed`; creation does not return a partial success list. Writes may already have completed when resolution fails.
+  - Command-level `--update-tags` and `--update-properties` in block create mode apply to the requested top-level blocks. Returning descendants does not make these updates recursive.
   - Human example:
     ```text
     Upserted page:
@@ -466,3 +509,57 @@ node ./dist/logseq.js --graph demo sync start --e2ee-password "my-secret"
 node ./dist/logseq.js --graph demo sync download --e2ee-password "my-secret"
 node ./dist/logseq.js logout
 ```
+
+## EDN export option contract
+
+Option keys must be EDN keywords, not strings. `:export-type` must be one of
+the keywords below; an explicit `nil` or string such as `"graph-human"` is
+invalid. Omitting it selects `:graph`, including when `:graph-options` is present.
+
+Every export type accepts an optional `:graph-options` map. The only other
+allowed top-level keys are those listed for the selected type:
+
+| `:export-type` | Required top-level selectors | Other top-level options |
+| --- | --- | --- |
+| `:graph` | None | None |
+| `:graph-human` | None | None |
+| `:graph-ontology` | None | None |
+| `:block` | `:block-id` | None |
+| `:page` | `:page-id` | None |
+| `:selected-nodes` | `:node-ids` | None |
+| `:view-nodes` | `:rows` | `:group-by?` (boolean) |
+
+`:block-id` and `:page-id` accept integer entity IDs, keyword idents, or
+two-element lookup refs expressed as vectors or lists. Lookup refs contain a
+keyword or string attribute and its lookup value, for example
+`[:block/uuid #uuid "13071000-0000-4000-8000-000000000001"]`. Entity existence,
+attribute uniqueness, and lookup-value resolution are checked by the worker.
+
+`:node-ids` and ungrouped `:rows` accept vectors, lists, or sets of those
+selectors. View rows also accept bare UUIDs. With `:group-by? true`, `:rows`
+must be a map from arbitrary group labels to node collections, or a collection
+of two-element `[group-label node-collection]` pairs. Group labels are data,
+not option maps. Empty selections are valid; missing or `nil` selectors are
+invalid.
+
+The allowed keys inside `:graph-options` are:
+
+| Key | Value type | Applicable export types | Effect |
+| --- | --- | --- | --- |
+| `:catch-validation-errors?` | Boolean | All seven types | Catch final export validation exceptions in the worker; never bypass CLI option validation |
+| `:include-timestamps?` | Boolean | `:graph-human` only | Include stored node and file-record timestamps |
+| `:exclude-namespaces` | Set of keywords or strings, such as `#{:schema "matrix"}` | `:graph-human` only | Exclude property/class definitions in matching parent namespaces |
+| `:exclude-built-in-pages?` | Boolean | `:graph-human` only | Exclude built-in pages |
+| `:exclude-files?` | Boolean | `:graph-human` only | Exclude database file records |
+
+Boolean values must be EDN `true` or `false`; `nil`, numbers, and strings are
+invalid. An empty `:graph-options` map and an empty namespace set are valid.
+Graph content controls are rejected for other export types even when their
+values are `false` or empty.
+
+All five graph option keys are invalid at the top level. Flat options are not
+converted to nested options; providing both forms is also rejected. Internal
+helper options such as `:include-uuid?`, `:shallow-copy?`, and
+`:include-children?` are not part of the public contract. Unknown, misplaced,
+or inapplicable keys and invalid values produce `invalid-options` diagnostics
+with their option paths and corrective guidance.

@@ -85,16 +85,19 @@
 
 (defn- canonical-replacements
   [{:keys [db-after tx-data]}]
-  (into {}
-        (comp
-         (filter (fn [datom]
-                   (and (:added datom)
-                        (= :block/tx-id (:a datom)))))
-         (keep (fn [datom]
-                 (when-let [entity (d/entity db-after (:e datom))]
-                   (let [block (block-handler/canonical-block db-after entity)]
-                     [(:block/uuid block) block])))))
-        tx-data))
+  (let [block-uuids (into []
+                          (comp
+                           (filter #(and (:added %) (= :block/tx-id (:a %))))
+                           (keep #(some-> (d/entity db-after (:e %)) :block/uuid)))
+                          tx-data)
+        ;; Parents of membership changes: their :block.temp/has-children?
+        ;; snapshot field must refresh even when their own datoms are untouched.
+        parent-uuids (into []
+                           (comp
+                            (filter #(= :block/parent (:a %)))
+                            (keep #(some-> (d/entity db-after (:v %)) :block/uuid)))
+                           tx-data)]
+    (:blocks (block-handler/canonical-blocks db-after (into block-uuids parent-uuids)))))
 
 (defn- build-render-delta
   [repo {:keys [db-after tx-meta] :as tx-report}

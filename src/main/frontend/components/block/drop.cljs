@@ -1,5 +1,6 @@
 (ns frontend.components.block.drop
   (:require [frontend.handler.editor :as editor-handler]
+ [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -11,7 +12,7 @@
 
 (defn- save-files!
   [files target-block]
-  (-> (editor-handler/db-based-save-assets! (state/get-current-repo) files
+  (-> (editor-assets/db-based-save-assets! (state/get-current-repo) files
                                             :last-edit-block target-block)
       (p/catch (fn [error]
                  (log/error :block/drop-files-failed {:error error}))))

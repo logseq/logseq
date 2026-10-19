@@ -12,7 +12,7 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
-   (com.microsoft.playwright Locator$DragToOptions)))
+   (com.microsoft.playwright Locator$DragToOptions Page)))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -77,13 +77,20 @@
 
 (defn move-up-down []
   (b/new-blocks ["b1" "b2" "b3" "b4"])
-  (util/repeat-keyboard 2 "Shift+ArrowUp")
+  (k/shift+arrow-up)
+  (assert/assert-non-editor-mode)
+  (k/shift+arrow-up)
+  (assert/assert-selected-block-text "b3")
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"])))
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowUp"))
+  (.waitForCondition ^Page (w/get-page)
+                     #(= ["b3" "b4" "b1" "b2"] (util/get-page-blocks-contents)))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b3" "b4" "b1" "b2"])))
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowDown"))
+  (.waitForCondition ^Page (w/get-page)
+                     #(= ["b1" "b2" "b3" "b4"] (util/get-page-blocks-contents)))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
 
@@ -133,9 +140,12 @@
   (testing "Delete blocks case 1"
     (b/new-blocks ["b1" "b2" "b3" "b4"])
     (b/delete-blocks)                        ; delete b4
+    ;; The delete puts b3 in editing only after a worker roundtrip; a
+    ;; Shift+ArrowUp pressed before b3's editor mounts is lost.
+    (util/wait-edit-content "b3")
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
     (b/delete-blocks)
-    (is (= "b1" (util/get-edit-content)))
+    (util/wait-edit-content "b1")
     (is (= 1 (util/page-blocks-count)))))
 
 (defn delete-end []
@@ -143,7 +153,7 @@
     (b/new-blocks ["b1" "b2" "b3"])
     (k/arrow-up)
     (k/delete)
-    (is (= "b2b3" (util/get-edit-content)))
+    (util/wait-edit-content "b2b3")
     (is (= 2 (util/page-blocks-count)))))
 
 (defn delete-test-with-children []
@@ -154,8 +164,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
-    (util/wait-editor-visible)
-    (is (= "b1" (util/get-edit-content)))
+    (util/wait-edit-content "b1")
     (is (= 1 (util/page-blocks-count)))))
 
 (deftest create-test-page-and-insert-blocks-test
@@ -167,8 +176,98 @@
 (deftest indent-outdent-embed-page-test
   (indent-outdent-embed-page))
 
+(defn- block-q
+  [title]
+  (format ".ls-block:has(> .block-main-container .block-title-wrap:text-is('%s'))" title))
+
+(defn- collapse-block-by-arrow!
+  [title]
+  (let [block (.first (w/-query (block-q title)))]
+    (.hover block)
+    (w/click (.first (.locator block ".block-control")))
+    (assert/assert-is-visible (str (block-q title) " > .block-main-container .bullet-closed"))))
+
+(defn- new-collapsed-parent-and-sibling!
+  "Creates `parent` with `child`, followed by `sibling`, then collapses `parent`."
+  [parent child sibling]
+  (b/new-blocks [parent child])
+  (b/indent)
+  (b/new-block sibling)
+  (b/outdent)
+  (util/exit-edit)
+  (collapse-block-by-arrow! parent))
+
+(defn- assert-expanded-parent!
+  [parent child]
+  (assert/assert-is-hidden (str (block-q parent) " > .block-main-container .bullet-closed"))
+  (assert/assert-is-visible (str (block-q parent) " .ls-block " (format ".block-title-wrap:text-is('%s')" child))))
+
+(defn- indent-into-collapsed-block-while-editing
+  []
+  (new-collapsed-parent-and-sibling! "collapsed parent" "hidden child" "indent me")
+  (b/jump-to-block "indent me")
+  (k/tab)
+  (assert-expanded-parent! "collapsed parent" "hidden child")
+  (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block .editor-wrapper textarea"))
+  (is (= "indent me" (util/get-edit-content))))
+
+(deftest indent-into-collapsed-block-expands-it-test
+  (testing "Tab under a collapsed sibling expands it and keeps editing the indented block"
+    (indent-into-collapsed-block-while-editing)))
+
+(deftest indent-into-collapsed-block-on-journals-expands-it-test
+  (testing "Same as above, on the journals view"
+    (util/goto-journals)
+    (w/wait-for "#journals .journal-item .ls-page-blocks")
+    (b/open-last-block)
+    (indent-into-collapsed-block-while-editing)))
+
+(deftest indent-selected-block-into-collapsed-block-expands-it-test
+  (testing "Tab on a selected block under a collapsed sibling expands it and keeps the selection visible"
+    (new-collapsed-parent-and-sibling! "collapsed parent" "hidden child" "select me")
+    (b/jump-to-block "select me")
+    (k/esc)
+    (assert/assert-selected-block-text "select me")
+    (k/tab)
+    (assert-expanded-parent! "collapsed parent" "hidden child")
+    (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block.selected :text('select me')"))))
+
+(deftest enter-then-tab-on-collapsed-block-expands-it-test
+  (testing "Enter at the end of a collapsed block then Tab nests the new block under it, expanded"
+    (b/new-blocks ["collapsed parent" "hidden child"])
+    (b/indent)
+    (util/exit-edit)
+    (collapse-block-by-arrow! "collapsed parent")
+    (b/jump-to-block "collapsed parent")
+    (util/move-cursor-to-end)
+    (k/enter)
+    (k/tab)
+    (util/press-seq "new child")
+    (assert-expanded-parent! "collapsed parent" "hidden child")
+    (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block .editor-wrapper textarea"))
+    (is (= "new child" (util/get-edit-content)))))
+
 (deftest move-up-down-test
   (move-up-down))
+
+(deftest move-across-parents-keeps-selection-test
+  (let [page-uuid (get (ls-api-call! :editor.getCurrentPage) "uuid")
+        blocks (ls-api-call! :editor.insertBatchBlock
+                            page-uuid
+                            [{:content "parent-a" :children [{:content "item"}]}
+                             {:content "parent-b"}
+                             {:content "parent-c"}
+                             {:content "parent-d" :children [{:content "tail"}]}])
+        item-uuid (get (some #(when (= "item" (get % "content")) %) blocks) "uuid")
+        parent-uuid (get (some #(when (= "parent-d" (get % "content")) %) blocks) "uuid")]
+    (b/jump-to-block "item")
+    (util/exit-edit)
+    (dotimes [_ 3]
+      (k/meta+shift+arrow-down))
+    (w/wait-for (str ".ls-block[blockid='" parent-uuid "'] .ls-block[blockid='" item-uuid "']"))
+    (k/shift+arrow-down)
+    (is (= ["item" "tail"]
+           (mapv #(get % "content") (ls-api-call! :editor.getSelectedBlocks))))))
 
 (deftest delete-test
   (delete))
@@ -185,8 +284,7 @@
     (b/indent)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (is (= ["b2"] (util/get-page-blocks-contents)))))
 
@@ -197,8 +295,7 @@
     (k/arrow-up)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (is (= ["b2" "b3"] (util/get-page-blocks-contents)))))
 
@@ -210,8 +307,7 @@
     (b/indent)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "" (util/get-edit-content)))
+    (util/wait-edit-content "")
     (is (= 3 (util/page-blocks-count)))))
 
 (deftest delete-concat-test-with-tag
@@ -221,8 +317,7 @@
     (util/set-tag "tag1")
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (assert/assert-is-visible
      ".ls-block a.tag:has-text('tag1')")
@@ -530,7 +625,7 @@
       (move-editor-cursor-to-start!)
       (k/backspace)
       (assert-tree! after-backspace)
-      (is (= "bc" (util/get-edit-content)))
+      (util/wait-edit-content "bc")
       (is (= 1
              (w/eval-js
               "document.querySelector('.editor-wrapper textarea').selectionStart")))

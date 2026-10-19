@@ -1,6 +1,8 @@
 (ns logseq.db-sync.node.assets
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            ["node:stream" :refer [Readable]]
+            ["node:stream/promises" :refer [pipeline]]
             [promesa.core :as p]))
 
 (defn- ensure-dir! [dir]
@@ -22,6 +24,19 @@
     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
     :else (js/Uint8Array. data)))
 
+(defn- write-body! [file-path body]
+  (let [staging-path (str file-path ".upload-" (random-uuid))]
+    (-> (p/let [_ (if (instance? js/ReadableStream body)
+                    (pipeline (.fromWeb Readable body)
+                              (.createWriteStream fs staging-path
+                                                  #js {:fd (.openSync fs staging-path "wx")}))
+                    (.writeFile (.-promises fs) staging-path (normalize-bytes body)))
+                _ (.rename (.-promises fs) staging-path file-path)]
+          nil)
+        (p/catch (fn [error]
+                   (p/let [_ (.rm (.-promises fs) staging-path #js {:force true})]
+                     (throw error)))))))
+
 (defn make-bucket [base-dir]
   (ensure-dir! base-dir)
   #js {:get (fn [key]
@@ -40,11 +55,10 @@
               (let [file-path (node-path/join base-dir key)
                     meta-file (meta-path file-path)
                     dir (node-path/dirname file-path)
-                    data (normalize-bytes body)
                     metadata (or (aget opts "httpMetadata") #js {})
                     custom (or (aget opts "customMetadata") #js {})]
                 (ensure-dir! dir)
-                (p/let [_ (.writeFile (.-promises fs) file-path data)
+                (p/let [_ (write-body! file-path body)
                         _ (write-meta! meta-file #js {:contentType (aget metadata "contentType")
                                                       :contentEncoding (aget metadata "contentEncoding")
                                                       :cacheControl (aget metadata "cacheControl")

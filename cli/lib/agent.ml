@@ -11,14 +11,6 @@ type routable_reason =
   | Already_routed
 
 type routable_decision = Routable | Not_routable of routable_reason
-type template_kind = Task | Comment
-
-type prompt_template = {
-  kind : template_kind;
-  body : string;
-  required_vars : string Rrbvec.t;
-  allowed_vars : string Rrbvec.t;
-}
 
 type bridge_result = {
   mode : Cli_primitive.keyword;
@@ -28,7 +20,6 @@ type bridge_result = {
 }
 
 type routed_task = { block : Melange_edn_melange.any; session : string option }
-type prompt_templates = { task : string; comment : string }
 type inherited_session = { parent_block_uuid : string; session_id : string }
 
 let routed_blocks : (string, unit) Hashtbl.t = Hashtbl.create 32
@@ -58,7 +49,6 @@ let default_master_prompt =
     ]
 
 let graph_scope_line = "Do not operate outside the target graph."
-let task_result_line = "Write task results back into the graph."
 
 let task_finish_reaction_line =
   "When the task or subagent finishes, remove the `eyes` reaction from the \
@@ -87,55 +77,6 @@ let comment_reply_instruction_lines =
        with [[block-uuid]], not ((block-uuid)).";
       "If the request is blocked or fails, make that clear in the reply.";
     |]
-
-let default_task_prompt_template =
-  Vec.string_concat "\n"
-    ( Vec.of_array
-        [|
-          "You are handling a Logseq AgentBridge task.";
-          "";
-          "Graph: {{graph}}";
-          "Block UUID: {{block-uuid}}";
-          "AgentBridge name: {{agent-name}}";
-          "";
-          graph_scope_line;
-          task_result_line;
-          task_finish_reaction_line;
-        |]
-    |> fun lines ->
-      Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append_array lines [| ""; "Task block tree:"; "{{task-block-tree}}" |]
-    )
-
-let default_comment_prompt_template =
-  Vec.string_concat "\n"
-    ( Vec.of_array
-        [|
-          "You are handling a Logseq AgentBridge comment request.";
-          "";
-          "Graph: {{graph}}";
-          "Comment UUID: {{comment-uuid}}";
-          "AgentBridge name: {{agent-name}}";
-          "";
-          graph_scope_line;
-          comment_completion_line;
-        |]
-    |> fun lines ->
-      Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append_array lines
-        [|
-          "";
-          "Comment target context:";
-          "{{comment-target-context}}";
-          "";
-          "Comment thread context:";
-          "{{comment-thread-context}}";
-          "";
-          "Requesting comment:";
-          "{{requesting-comment}}";
-          "";
-        |]
-      |> fun lines -> Vec.append lines comment_reply_instruction_lines )
 
 let trim_non_empty value =
   let value = String.trim value in
@@ -222,68 +163,6 @@ let routable_task_decision entity ~agent_name =
   else if Option.is_some (Edn_util.get raw "logseq.property.agent/session-id")
   then Not_routable Already_routed
   else Routable
-
-let is_var_char = function
-  | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' -> true
-  | _ -> false
-
-let valid_var_name value =
-  String.length value > 0 && String.for_all is_var_char value
-
-let unique values =
-  let rec loop seen remaining =
-    match Vec.pop_front remaining with
-    | None -> seen
-    | Some (value, rest) when Vec.mem value seen -> loop seen rest
-    | Some (value, rest) -> loop (Vec.push_back seen value) rest
-  in
-  loop Vec.empty values
-
-let template_vars body =
-  let len = String.length body in
-  let rec loop acc index =
-    if index + 3 >= len then unique acc
-    else if body.[index] = '{' && body.[index + 1] = '{' then
-      match String.index_from_opt body (index + 2) '}' with
-      | Some close when close + 1 < len && body.[close + 1] = '}' ->
-          let name = String.sub body (index + 2) (close - index - 2) in
-          let quoted =
-            index > 0
-            && body.[index - 1] = '\''
-            && close + 2 < len
-            && body.[close + 2] = '\''
-          in
-          let acc =
-            if (not quoted) && valid_var_name name then Vec.push_back acc name
-            else acc
-          in
-          loop acc (close + 2)
-      | _ -> loop acc (index + 2)
-    else loop acc (index + 1)
-  in
-  loop Vec.empty 0
-
-let list_diff xs ys = Vec.filter (fun x -> not (Vec.mem x ys)) xs
-
-let validate_prompt_template template =
-  if String.trim template.body = "" then
-    Error
-      (Error.make Error.Missing_template_code_block
-         "agent bridge prompt template code block is missing")
-  else
-    let vars = template_vars template.body in
-    let unknown_vars = list_diff vars template.allowed_vars in
-    if not (Vec.is_empty unknown_vars) then
-      Error
-        (Error.make Error.Unknown_template_vars
-           "agent bridge prompt template has unknown variables")
-    else
-      let missing_vars = list_diff template.required_vars vars in
-      if not (Vec.is_empty missing_vars) then
-        Error
-          (Error.make Error.Missing_template_vars
-             "agent bridge prompt template is missing required variables")
-      else Ok ()
 
 let raw_config_string config key =
   Option.bind config.Cli_config.raw_file_config (fun value ->
@@ -551,8 +430,6 @@ let query_call query args =
 let empty_rules = Edn_util.vector_vec Vec.empty
 let agent_bridge_registry_page = "AgentBridge"
 let master_prompt_wrapper_title = "AgentBridge master prompt"
-let task_prompt_template_title = "Task prompt template"
-let comment_prompt_template_title = "Comment prompt template"
 
 let page_name_sanity_lc value =
   value |> String.trim |> String.lowercase_ascii |> String.to_seq
@@ -589,117 +466,10 @@ let child_blocks block =
   values |> Vec.filter live_entity
   |> Vec.sort (fun a b -> String.compare (order_key a) (order_key b))
 
-let rec block_title_tree block =
-  let title =
-    Option.value (Edn_util.get_string block "block/title") ~default:""
-  in
-  Vec.push_front (Vec.concat_map block_title_tree (child_blocks block)) title
-
 let code_block_tag tag = ident_value tag = Some "logseq.class/Code-block"
 
 let block_has_code_tag block =
   value_list (Edn_util.get block "block/tags") |> Vec.exists code_block_tag
-
-let extract_code_blocks text =
-  let len = String.length text in
-  let rec loop acc index =
-    if index + 3 > len then acc
-    else if index + 3 <= len && String.sub text index 3 = "```" then
-      match String.index_from_opt text (index + 3) '\n' with
-      | None -> loop acc (index + 3)
-      | Some body_start -> (
-          let rec find_close i =
-            if i + 3 > len then None
-            else if String.sub text i 3 = "```" then Some i
-            else find_close (i + 1)
-          in
-          match find_close (body_start + 1) with
-          | None -> loop acc (body_start + 1)
-          | Some close ->
-              let body =
-                String.sub text (body_start + 1) (close - body_start - 1)
-              in
-              loop (Vec.push_back acc body) (close + 3))
-    else loop acc (index + 1)
-  in
-  loop Vec.empty 0
-
-let task_prompt_template body =
-  {
-    kind = Task;
-    body;
-    required_vars =
-      Vec.of_array [| "graph"; "block-uuid"; "agent-name"; "task-block-tree" |];
-    allowed_vars =
-      Vec.of_array [| "graph"; "block-uuid"; "agent-name"; "task-block-tree" |];
-  }
-
-let comment_prompt_template body =
-  {
-    kind = Comment;
-    body;
-    required_vars =
-      Vec.of_array
-        [|
-          "graph";
-          "comment-uuid";
-          "agent-name";
-          "comment-target-context";
-          "comment-thread-context";
-          "requesting-comment";
-        |];
-    allowed_vars =
-      Vec.of_array
-        [|
-          "graph";
-          "comment-uuid";
-          "agent-name";
-          "comment-target-context";
-          "comment-thread-context";
-          "requesting-comment";
-        |];
-  }
-
-let prompt_template_for_kind = function
-  | Task -> task_prompt_template
-  | Comment -> comment_prompt_template
-
-let prompt_template_title = function
-  | Task -> task_prompt_template_title
-  | Comment -> comment_prompt_template_title
-
-let default_prompt_template = function
-  | Task -> default_task_prompt_template
-  | Comment -> default_comment_prompt_template
-
-let prompt_template_from_block kind block =
-  let templates =
-    block_title_tree block |> Vec.concat_map extract_code_blocks
-  in
-  let renderable =
-    templates
-    |> Vec.filter (fun body ->
-        validate_prompt_template ((prompt_template_for_kind kind) body) = Ok ())
-  in
-  if Vec.length renderable = 1 then Ok (Vec.peek_front renderable)
-  else
-    match templates with
-    | templates when Vec.length templates = 1 -> (
-        let body = Vec.peek_front templates in
-        match
-          validate_prompt_template ((prompt_template_for_kind kind) body)
-        with
-        | Ok () -> Ok body
-        | Error err -> Error err)
-    | _ ->
-        Error
-          (Error.make Error.Agent_prompt_template_invalid
-             "agent bridge prompt template must contain one code block")
-
-let blocks_by_title blocks title =
-  Vec.find_opt
-    (fun block -> Edn_util.get_string block "block/title" = Some title)
-    blocks
 
 let agent_bridge_registry_page_query =
   query_call
@@ -832,74 +602,6 @@ let agent_master_prompt_blocks_query page_id =
                                                                      "block/name";
                                                                    kw
                                                                      "block/title";
-                                                                 |]) );
-                                                        |]);
-                                                 |]) );
-                                        |]);
-                                 |]);
-                          |]);
-                     sym "...";
-                   |]);
-            |])
-       ~in_:
-         (Vec.of_array
-            [|
-              Melange_edn_melange.symbol "$";
-              Melange_edn_melange.symbol "?page-id";
-            |])
-       ~where:
-         (Vec.singleton
-            (where_v
-               (Vec.of_array [| sym "?b"; kw "block/parent"; sym "?page-id" |])))
-       ())
-    (Vec.singleton (Edn_util.int64 page_id))
-
-let prompt_template_blocks_query page_id =
-  query_call
-    (Cli_primitive.make_datascript_query
-       ~find:
-         (Vec.of_array
-            [|
-              vector_vec
-                (Vec.of_array
-                   [|
-                     list_vec
-                       (Vec.of_array
-                          [|
-                            sym "pull";
-                            sym "?b";
-                            vector_vec
-                              (Vec.of_array
-                                 [|
-                                   kw "db/id";
-                                   kw "block/uuid";
-                                   kw "block/title";
-                                   kw "block/order";
-                                   Edn_util.map_vec
-                                     (Vec.of_array
-                                        [|
-                                          ( kw "block/_parent",
-                                            vector_vec
-                                              (Vec.of_array
-                                                 [|
-                                                   kw "db/id";
-                                                   kw "block/uuid";
-                                                   kw "block/title";
-                                                   kw "block/order";
-                                                   Edn_util.map_vec
-                                                     (Vec.of_array
-                                                        [|
-                                                          ( kw "block/_parent",
-                                                            vector_vec
-                                                              (Vec.of_array
-                                                                 [|
-                                                                   kw "db/id";
-                                                                   kw
-                                                                     "block/uuid";
-                                                                   kw
-                                                                     "block/title";
-                                                                   kw
-                                                                     "block/order";
                                                                  |]) );
                                                         |]);
                                                  |]) );
@@ -1521,36 +1223,6 @@ let ensure_agent_master_prompt invoke_config repo agent_name =
                       (insert_default_master_prompt invoke_config repo page_uuid)
                       (fun _ -> pure default_master_prompt))))
 
-let ensure_prompt_templates invoke_config repo =
-  let open Cli_effect in
-  bind (ensure_registry_page invoke_config repo) (fun page ->
-      match
-        (Edn_util.get_int64 page "db/id", Edn_util.get_string page "block/uuid")
-      with
-      | None, _ -> error (Failure "agent bridge registry page id not found")
-      | _, None -> error (Failure "agent bridge registry page uuid not found")
-      | Some page_id, _ ->
-          bind
-            (Transport.thread_api_q invoke_config ~repo
-               ~query:
-                 (Edn_util.expect_vector_t "prompt template query"
-                    (prompt_template_blocks_query page_id)))
-            (fun blocks ->
-              let blocks = values_of_query_result blocks in
-              let template_or_default kind =
-                match blocks_by_title blocks (prompt_template_title kind) with
-                | Some block -> (
-                    match prompt_template_from_block kind block with
-                    | Ok template -> template
-                    | Error _ -> default_prompt_template kind)
-                | None -> default_prompt_template kind
-              in
-              pure
-                {
-                  task = template_or_default Task;
-                  comment = template_or_default Comment;
-                }))
-
 let ensure_reaction invoke_config repo target_uuid emoji_id =
   let open Cli_effect in
   bind
@@ -2010,7 +1682,6 @@ let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config
       let* master_prompt =
         ensure_agent_master_prompt invoke_config repo agent_name
       in
-      let* _prompt_templates = ensure_prompt_templates invoke_config repo in
       match ensure_master_session config master_prompt with
       | Error err ->
           pure (Output_mode.error ~command:Command_id.Agent_bridge mode err)
@@ -2058,8 +1729,6 @@ let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
       let* master_prompt =
         ensure_agent_master_prompt invoke_config repo agent_name
       in
-      emit_bridge_log mode "checking prompt templates ...";
-      let* _prompt_templates = ensure_prompt_templates invoke_config repo in
       emit_bridge_log mode
         ("Codex master command prepared: "
         ^ command_preview (build_codex_command config master_prompt));

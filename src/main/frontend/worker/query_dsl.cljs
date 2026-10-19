@@ -414,7 +414,7 @@
                   (first (rest e))
                   (rest e))]
     (when (seq markers)
-      (let [markers' (set (map (comp common-util/capitalize-all name) markers))]
+      (let [markers' (set (map (comp string/lower-case name) markers))]
         {:query (list 'task '?b (set markers'))
          :rules [:task]}))))
 
@@ -424,7 +424,7 @@
                      (first (rest e))
                      (rest e))]
     (when (seq priorities)
-      (let [priorities (set (map (comp string/capitalize name) priorities))]
+      (let [priorities (set (map (comp string/lower-case name) priorities))]
         {:query (list 'priority '?b priorities)
          :rules [:priority]}))))
 
@@ -788,9 +788,10 @@ Some bindings in this fn:
   (when (and (string? query-string) (not= "\"\"" query-string))
     (let [{query* :query :keys [rules sample]} (parse-query query-string db opts)
           query* (if cards?
-                   (let [card-id (:db/id (d/entity db :logseq.class/Card))]
+                   (let [card-ids (set (db-class/card-class-ids db))]
                      (common-util/concat-without-nil
-                      [['?b :block/tags card-id]]
+                      [['?b :block/tags '?t]
+                       [(list 'contains? card-ids '?t)]]
                       (if (coll? (first query*)) query* [query*])))
                    query*)]
       (when-let [query' (some-> query* (query-wrapper {:blocks? true

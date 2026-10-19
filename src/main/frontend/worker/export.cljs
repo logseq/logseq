@@ -65,8 +65,8 @@
     (content->ast content)))
 
 (defn- block-children-ast
-  [db block-uuid content-config]
-  (content->ast (block-children-content db block-uuid nil content-config)))
+  [db block-uuid opts content-config]
+  (content->ast (block-children-content db block-uuid opts content-config)))
 
 (defn- page-ast
   [db page-name content-config]
@@ -116,7 +116,7 @@
                                          :include-properties? include-properties?}
                                         content-config)]
     (binding [common-impl/*block-ast-resolver* #(block-ast db % content-config)
-              common-impl/*block-children-ast-resolver* #(block-children-ast db % content-config)
+              common-impl/*block-children-ast-resolver* #(block-children-ast db % {:open-blocks-only? open-blocks-only?} content-config)
               common-impl/*page-ast-resolver* #(page-ast db % content-config)]
       (case format-type
         :markdown (export-text/export-helper content format options)

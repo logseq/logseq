@@ -1,5 +1,6 @@
 (ns frontend.handler.repo-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
             [frontend.db.subs :as db-subs]
             [frontend.handler.graph :as graph-handler]
@@ -12,6 +13,22 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest restore-date-formatter-loads-persisted-format-into-ui-state-test
+  (async done
+    (let [repo "logseq_db_restore_date_fmt"]
+      (-> (p/with-redefs [state/get-current-repo (constantly repo)
+                          db-async/<get-date-formatter
+                          (fn [graph]
+                            (is (= repo graph))
+                            (p/resolved "yyyy-MM-dd"))]
+            (p/let [formatter (repo-handler/<restore-date-formatter! repo)]
+              (is (= "yyyy-MM-dd" formatter))
+              (is (= "yyyy-MM-dd" (state/get-date-formatter)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
 
 (deftest create-db-does-not-start-renderer-db-conn-test
   (async done
@@ -47,10 +64,22 @@
                           graph-handler/settle-metadata-to-local!
                           (fn [metadata]
                             (swap! calls conj [:metadata (keys metadata)])
+                            (p/resolved nil))
+                          graph-handler/<upsert-current-graph-registry!
+                          (fn []
+                            (swap! calls conj [:registry])
+                            (p/resolved nil))
+                          graph-handler/remember-current-graph-id-in-tab!
+                          (fn []
+                            (swap! calls conj [:remember-in-tab])
                             (p/resolved nil))]
-            (p/let [created (#'repo-handler/create-db "logseq_db_created" {})
+            (p/let [created (repo-handler/new-db! "  created  " {})
                     _ (do
                         (is (= "logseq_db_created" created))
+                        ;; db-test #1361: a reload opens the tab's graph
+                        (is (some #{[:remember-in-tab]} @calls)
+                            "the tab remembers the new graph, as a switch does")
+                        (is (some #{[:registry]} @calls))
                         (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
                         (is (some #{[:redirect-home]} @calls))
                         (is (some #{[:rerender]} @calls))
@@ -59,7 +88,9 @@
               (is (= "logseq_db_imported" imported))
               (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %) @calls))
               (is (not-any? #{[:redirect-home] [:rerender]} @calls)
-                  "File-graph import must keep the Importing UI instead of leaving for home.")))
+                  "File-graph import must keep the Importing UI instead of leaving for home.")
+              (is (not-any? #{[:remember-in-tab]} @calls)
+                  "An import leaves the tab's graph to the import flow")))
           (p/catch
            (fn [error]
              (is false (str error))))
@@ -125,8 +156,7 @@
                  (repo-handler/remove-repo! repo))
                (p/then
                 (fn []
-                  (is (= [[:close (:url repo)]
-                          [:delete-db (:url repo)]
+                  (is (= [[:delete-db (:url repo)]
                           [:remove-search (:url repo)]
                           [:delete-repo repo]
                           [:set-current nil]
@@ -136,3 +166,7 @@
                 (fn [error]
                   (is false (str error))))
                (p/finally done)))))
+
+(deftest graph-already-exists-trims-input-name
+  (with-redefs [state/get-repos (constantly [{:url "logseq_db_space name"}])]
+    (is (repo-handler/graph-already-exists? "  space name  "))))

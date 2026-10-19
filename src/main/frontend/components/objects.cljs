@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -73,7 +74,7 @@
      100)))
 
 (hsx/defc class-objects-inner
-  [config class properties]
+  [config class properties {:keys [on-first-table-paint!]}]
   (let [*ref (hooks/use-ref nil)
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
@@ -88,7 +89,7 @@
                                   [:div.font-medium (t :asset/add-assets)]
                                   (filepicker/picker
                                    {:on-change (fn [_e files]
-                                                 (p/let [_ (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                 (p/let [_ (editor-assets/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
                                                    (shui/dialog-close!)))})]))
                               (p/let [block (add-new-class-object! class properties)]
                                 (when (:db/id block)
@@ -102,13 +103,14 @@
                   :add-new-object! add-new-object!
                   :show-add-property? true
                   :show-items-count? true
+                  :on-first-table-paint! on-first-table-paint!
                   :add-property! (fn [e]
                                    (state/pub-event! [:editor/new-property {:block class
                                                                             :class-schema? true
                                                                             :target (.-target e)}]))})]))
 
 (hsx/defc class-objects
-  [class config]
+  [class config on-first-table-paint!]
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         ;; Subscribe to the class block reactively so that adding/removing a
@@ -116,17 +118,25 @@
         ;; only refreshing on full remount (e.g. a page reload).
         live-class (db-hooks/use-block (:block/uuid class))
         class-properties (:logseq.property.class/properties live-class)
-        [properties set-properties!] (hooks/use-state [])
+        [fetched set-fetched!] (hooks/use-state nil)
+        [first-paint-done? set-first-paint-done!] (hooks/use-state false)
+        properties (views/first-paint-class-properties fetched first-paint-done?)
         _ (hooks/use-effect!
            (fn []
-             (p/let [result (db-async/<get-class-properties
-                              (state/get-current-repo)
-                              (:db/id class))]
-               (set-properties! (or result [])))
+             (when first-paint-done?
+               (p/let [result (db-async/<get-class-properties
+                                (state/get-current-repo)
+                                (:db/id class))]
+                 (set-fetched! (or result []))))
              nil)
-           [(:db/id class) class-properties])]
+           [(:db/id class) class-properties first-paint-done?])]
     [:div.ml-1
-     (class-objects-inner config class properties)]))
+     (class-objects-inner config class properties
+                          {:on-first-table-paint!
+                           (fn []
+                             (set-first-paint-done! true)
+                             (when on-first-table-paint!
+                               (on-first-table-paint!)))})]))
 
 (defn- <property-object-default-value
   [property]

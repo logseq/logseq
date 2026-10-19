@@ -22,6 +22,17 @@
                               {:provider :sync-state
                                :resource-key resource-key})))}))
 
+(defn- render-known-resource
+  [db resource-key runtime]
+  (let [resource-kind (first resource-key)]
+    (if-let [{:keys [shape render]} (get resource-renderers resource-kind)]
+      (do
+        (when shape
+          (common/require-shape! resource-key resource-kind shape))
+        (render db resource-key runtime))
+      (common/fail! "Unknown renderer resource key"
+                    {:resource-key resource-key}))))
+
 (defn- resource-value
   [db resource-key runtime]
   (when-not (and (vector? resource-key) (seq resource-key))
@@ -36,14 +47,23 @@
     (common/fail! "Renderer resource keys cannot contain graph entities"
                   {:resource-key resource-key})
 
-    (let [resource-kind (first resource-key)]
-      (if-let [{:keys [shape render]} (get resource-renderers resource-kind)]
-        (do
-          (when shape
-            (common/require-shape! resource-key resource-kind shape))
-          (render db resource-key runtime))
-        (common/fail! "Unknown renderer resource key"
-                      {:resource-key resource-key})))))
+    ;; Query and view-data isolate remaining failures so one bad
+    ;; query/view cannot reject the get-render-snapshots batch. Functions
+    ;; and entities in the key stay fail-fast: those keys are not transit-safe.
+    (case (first resource-key)
+      :query
+      (try
+        (render-known-resource db resource-key runtime)
+        (catch :default error
+          (query/isolated-query-failure error)))
+
+      :view-data
+      (try
+        (render-known-resource db resource-key runtime)
+        (catch :default error
+          (view/isolated-view-failure error)))
+
+      (render-known-resource db resource-key runtime))))
 
 (defn- resource-entry
   [db resource-key runtime]
@@ -106,13 +126,29 @@
                              #{[:block block-uuid]})]))
                    block-uuids)}))
 
+(def ^:private children-eager-block-limit
+  "Canonical blocks shipped with a [:children] snapshot, in document order, so
+   the visible prefix renders without per-row placeholder loads."
+  200)
+
+(def ^:private children-subtree-node-limit
+  "Upper bound on expanded nodes whose membership is included in a [:children]
+   response. Memberships beyond this document-order prefix are fetched lazily
+   per node when rows mount or expand."
+  500)
+
 (defn- children-snapshot-groups
   [db parent-uuids]
   (into {}
         (map (fn [parent-uuid]
-               (let [tree (block-handler/open-block-tree db parent-uuid)]
+               (let [children (block-handler/open-children-tree
+                               db parent-uuid children-subtree-node-limit)
+                     eager-uuids (block-handler/document-order-uuids
+                                  children parent-uuid children-eager-block-limit)
+                     {:keys [blocks]} (block-handler/canonical-blocks db eager-uuids)]
                  [[:children parent-uuid]
-                  (common/block-bundle-slots tree)])))
+                  (merge (common/children-slots children)
+                         (common/block-slots blocks))])))
         parent-uuids))
 
 (defn render-snapshots

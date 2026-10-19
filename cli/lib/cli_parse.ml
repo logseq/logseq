@@ -1,8 +1,18 @@
-let is_option token = String.length token > 0 && token.[0] = '-'
+(* A dash followed by markdown whitespace (space, tab, newline, CR)
+   starts a list item in a quoted free-text value such as --blocks, not
+   an option. Every other dash prefix keeps the strict option meaning so
+   `--1`-style tokens are still rejected as unknown options rather than
+   swallowed as values. *)
+let is_option token =
+  let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
+  let n = String.length token in
+  n > 0 && token.[0] = '-' && not (n > 1 && is_blank token.[1])
+
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
     options
+
 let option_present key options = Vec.mem_assoc key options
 
 let normalize_key = function
@@ -32,11 +42,10 @@ let split_equals_option token =
 
 let boolean_option = function
   | "version" | "help" | "verbose" | "profile" | "enable-sync" | "expand"
-  | "fix"
-  | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
-  | "with-properties" | "with-extends" | "with-classes" | "with-type"
-  | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" | "pretty-print" ->
+  | "fix" | "force" | "include-built-in" | "include-journal" | "journal-only"
+  | "include-hidden" | "with-properties" | "with-extends" | "with-classes"
+  | "with-type" | "page-hierarchy" | "linked-references" | "ref-id-footer"
+  | "progress" | "upload-keys" | "pretty-print" | "dry-run" ->
       true
   | _ -> false
 
@@ -110,7 +119,6 @@ let bool_option_value key options =
   match option_value key options with
   | Some value -> Some (String.lowercase_ascii (String.trim value) = "true")
   | None -> if option_present key options then Some true else None
-
 
 let common_list_opts options =
   {
@@ -215,7 +223,8 @@ let allowed_options_for_path path =
     Vec.append common_list_options (option_names [| "tags"; "properties" |])
   else if path2 path "list" "asset" then common_list_options
   else if path2 path "remove" "block" then option_names [| "id"; "uuid" |]
-  else if path2 path "remove" "page" then option_names [| "id"; "page" |]
+  else if path2 path "remove" "page" then
+    option_names [| "id"; "page"; "force" |]
   else if path2_any path "remove" (option_names [| "tag"; "property" |]) then
     option_names [| "id"; "name" |]
   else if path2 path "upsert" "block" then
@@ -230,6 +239,7 @@ let allowed_options_for_path path =
         "content";
         "blocks";
         "blocks-file";
+        "dry-run";
         "update-tags";
         "update-properties";
         "remove-tags";
@@ -285,7 +295,7 @@ let allowed_options_for_path path =
   else if
     path2_any path "search"
       (option_names [| "block"; "page"; "property"; "tag" |])
-  then option_names [| "content" |]
+  then option_names [| "content"; "include-hidden" |]
   else if path2 path "query" "list" then Vec.empty
   else if path1 path "query" then option_names [| "query"; "name"; "inputs" |]
   else if path1 path "show" then
@@ -321,9 +331,9 @@ let allowed_options_for_path path =
   else if path2 path "debug" "pull" then
     option_names [| "id"; "uuid"; "ident" |]
   else if path1 path "doctor" then option_names [| "dev-script" |]
+  else if path1 path "login" then option_names [| "username"; "password" |]
   else if
-    path1 path "login" || path1 path "logout" || path2 path "skill" "show"
-    || path1 path "example"
+    path1 path "logout" || path2 path "skill" "show" || path1 path "example"
   then Vec.empty
   else if path1 path "completion" then option_names [| "shell" |]
   else if path2 path "skill" "install" then option_names [| "global" |]
@@ -560,6 +570,9 @@ let parsed_remove_command options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
+                force =
+                  Option.value (bool_option_value "force" options)
+                    ~default:false;
               }))
   | "tag" ->
       Some
@@ -601,8 +614,12 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                     (option_value "pos" options)
                     Block.position_of_string;
                 content = content_option_or_args options args;
-                blocks_edn = option_value "blocks" options;
+                blocks_markdown = option_value "blocks" options;
                 blocks_file = option_value "blocks-file" options;
+                dry_run =
+                  Option.value
+                    (bool_option_value "dry-run" options)
+                    ~default:false;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;
@@ -765,7 +782,8 @@ let parsed_list_command options = function
 let path_alias_overrides = function
   | [| "graph"; "validate" |] -> [ ("-f", "--fix") ]
   | [| "graph"; "export" |] -> [ ("-f", "--file") ]
-  | [| "list"; ("page" | "tag" | "property") |] -> [ ("-e", "--expand") ]
+  | [| "remove"; "page" |] -> [ ("-f", "--force") ]
+  | [| "list"; "page" | "tag" | "property" |] -> [ ("-e", "--expand") ]
   | _ -> []
 
 (* rewrite a bare alias token, or its -x=value form *)
@@ -778,8 +796,7 @@ let apply_alias_override overrides token =
       | Some index -> (
           match List.assoc_opt (String.sub token 0 index) overrides with
           | Some replacement ->
-              replacement
-              ^ String.sub token index (String.length token - index)
+              replacement ^ String.sub token index (String.length token - index)
           | None -> token))
 
 let parse ?stdin argv =
@@ -789,9 +806,7 @@ let parse ?stdin argv =
     match path_alias_overrides positional_array with
     | [] -> options
     | overrides ->
-        argv
-        |> Vec.map (apply_alias_override overrides)
-        |> parse_tokens |> fst
+        argv |> Vec.map (apply_alias_override overrides) |> parse_tokens |> fst
   in
   let positional_tail start =
     Vec.init
@@ -837,8 +852,7 @@ let parse ?stdin argv =
         make [| "graph"; "remove" |] (Graph Parsed_remove)
     | [| "graph"; "validate" |] ->
         make [| "graph"; "validate" |]
-          (Graph
-             (Parsed_validate { fix = option_present "fix" options }))
+          (Graph (Parsed_validate { fix = option_present "fix" options }))
     | [| "graph"; "info" |] -> make [| "graph"; "info" |] (Graph Parsed_info)
     | [| "graph"; "backup"; "list" |] ->
         make [| "graph"; "backup"; "list" |] (Graph Parsed_backup_list)
@@ -922,6 +936,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "page" |] ->
         make [| "search"; "page" |]
@@ -930,6 +945,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "property" |] ->
         make [| "search"; "property" |]
@@ -938,6 +954,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "tag" |] ->
         make [| "search"; "tag" |]
@@ -946,6 +963,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "query"; "list" |] ->
         make [| "query"; "list" |] (Query Query.Parsed_list)
@@ -1107,7 +1125,27 @@ let parse ?stdin argv =
           (Doctor
              (Doctor.Parsed_doctor
                 { dev_script = option_present "dev-script" options }))
-    | [| "login" |] -> make [| "login" |] (Auth Auth_command.Parsed_login)
+    | [| "login" |] ->
+        if
+          Vec.exists
+            (fun (key, value) ->
+              (key = "username" || key = "password")
+              && (value = None || value = Some ""))
+            options
+        then
+          Error
+            (Error.invalid_options
+               "--username and --password require non-empty values")
+        else
+          let parsed =
+            Auth_command.Parsed_login
+              {
+                username = option_value "username" options;
+                password = option_value "password" options;
+              }
+          in
+          Error.bind (Auth_command.validate_parsed parsed) (fun () ->
+              make [| "login" |] (Auth parsed))
     | [| "logout" |] -> make [| "logout" |] (Auth Auth_command.Parsed_logout)
     | [| "skill"; "show" |] ->
         make [| "skill"; "show" |] (Skill Skill.Parsed_show)
@@ -1144,6 +1182,9 @@ let parse ?stdin argv =
             make [| "completion" |]
               (Completion (Completion.Parsed_completion { shell })))
     | [||] -> Error (Error.unknown_command "")
+    | _ when Vec.peek_front_opt positional = Some "login" ->
+        Error
+          (Error.invalid_options "login does not accept positional arguments")
     | _ ->
         Error
           (Error.unknown_command

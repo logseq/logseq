@@ -46,9 +46,14 @@
   min-height: 20px;
 }
 
-.ls-repeat-task-frequency .property-value-inner {
-  @apply border rounded pl-2;
-  min-width: 3em;
+.ls-repeat-task-frequency {
+  .ls-repeat-frequency-input {
+    @apply border border-input rounded-md bg-background;
+  }
+
+  .ui__select-trigger {
+    @apply h-8 min-h-8 px-2 py-0;
+  }
 }
 
 .ls-repeat-type-setting {

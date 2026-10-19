@@ -27,6 +27,20 @@
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn default-home-if-valid
+  "Keep :page when it is a usable start page. The app waits for page-identity;
+  publishing trusts a non-blank configured page because that lookup is not
+  ready on first paint."
+  [default-home {:keys [publishing? page-identity-status page-identity-value]}]
+  (when default-home
+    (let [page (:page default-home)
+          valid-page? (and (string? page)
+                           (not (string/blank? page)))]
+      (if (or (and publishing? valid-page?)
+              (and (= :ready page-identity-status) page-identity-value))
+        default-home
+        (dissoc default-home :page)))))
+
 (defn use-default-home-if-valid
   []
   (let [default-home (state/get-default-home)
@@ -36,10 +50,10 @@
         {:keys [status value]}
         (db-hooks/use-resource-snapshot
          (when valid-page? [:page-identity page]))]
-    (when default-home
-      (if (and (= :ready status) value)
-        default-home
-        (dissoc default-home :page)))))
+    (default-home-if-valid default-home
+                           {:publishing? config/publishing?
+                            :page-identity-status status
+                            :page-identity-value value})))
 
 (hsx/defc page-title-content
   [page-id display-title tooltip-title untitled? left-sidebar-resized-at]

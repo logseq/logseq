@@ -244,29 +244,68 @@
   [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
     (let [page-tag (d/entity db :logseq.class/Page)
-          library-page (ldb/get-library-page db-after)]
+          library-page (ldb/get-library-page db-after)
+          ;; Climb to the topmost page ancestor: namespaces created before
+          ;; registration existed can have a parentless root higher up.
+          move-parent-to-library-tx (fn [block-parent]
+                                      (let [root (loop [parent block-parent]
+                                                   (if (and (ldb/page? parent)
+                                                            (ldb/page? (:block/parent parent)))
+                                                     (recur (:block/parent parent))
+                                                     parent))]
+                                        (when (and (ldb/page? root)
+                                                   (nil? (:block/parent root))
+                                                   (not= (:db/id root) (:db/id library-page))
+                                                   (not (:db/ident root))
+                                                   (not (ldb/built-in? root)))
+                                          [{:db/id (:db/id root)
+                                            :block/parent (:db/id library-page)
+                                            :block/order (db-order/gen-key)}])))]
       (mapcat
        (fn [datom]
          (let [id (:e datom)
                page-tag-update? (and (= :block/tags (:a datom))
                                      (= (:db/id page-tag) (:v datom)))
-               move-to-library? (and (= :block/parent (:a datom))
-                                     (= (:db/id library-page) (:v datom))
-                                     (:added datom))]
-           (when (or page-tag-update? move-to-library?)
+               added-parent? (and (= :block/parent (:a datom))
+                                  (:added datom))
+               move-to-library? (and added-parent?
+                                     (= (:db/id library-page) (:v datom)))
+               ;; A page moved under another page creates a namespace
+               ;; whose root page should be registered in Library.
+               move-under-page? (and added-parent?
+                                     (not move-to-library?)
+                                     (ldb/internal-page? (d/entity db-after (:v datom))))]
+           (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
-                   block-after (d/entity db-after id)]
+                   block-after (d/entity db-after id)
+                   ;; When a block becomes a page its descendant blocks still point
+                   ;; :block/page at the old page; re-point them at the new page.
+                   children-page-tx (fn []
+                                      (keep (fn [child-id]
+                                              (let [child (d/entity db-after child-id)]
+                                                (when (and child (not (ldb/page? child)))
+                                                  {:db/id child-id
+                                                   :block/page id})))
+                                            (ldb/get-block-full-children-ids db-after id)))]
                (when block-after
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
-                   [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
-                     :block/tags :logseq.class/Page}
-                    [:db/retract id :block/page]]
+                   (concat
+                    [{:db/id id
+                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                      :block/tags :logseq.class/Page}
+                     [:db/retract id :block/page]]
+                    (children-page-tx))
+
+                   ;; page moved under another page
+                   (and move-under-page? (ldb/internal-page? block-after))
+                   (move-parent-to-library-tx (:block/parent block-after))
 
                    ;; block->page
-                   (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
+                   (and (not move-under-page?)
+                        (:added datom)
+                        (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
                          ;; remove inline #Page from title
@@ -278,21 +317,12 @@
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]]))
-                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
-                                                              (nil? (:block/parent block-parent))
-                                                              block-parent
-                                                              (not= (:db/id block-parent) (:db/id library-page))
-                                                              (not (:db/ident block-parent))
-                                                              (not (ldb/built-in? block-parent)))
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                                       [:db/retract id :block/order]]))]
+                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
-                   (let [parent (:block/parent block-before)
+                   (let [parent (:block/parent block-after)
                          parent-page (when parent
                                        (loop [parent parent]
                                          (if (ldb/page? parent)
@@ -522,11 +552,18 @@
                                         ensure-query-tx-data
                                         ensure-comments-tx-data
                                         commands-tx)
-        template-db (if (seq before-template-tx-data)
-                      (:db-after (d/with db-after before-template-tx-data))
-                      db-after)
-        insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
-                              (insert-tag-templates (assoc tx-report :db-after template-db)))
+        ;; insert-tag-templates keys off :tx-data tag additions, including
+        ;; pages created by commands (repeating-task reschedule).
+        template-result (when (seq before-template-tx-data)
+                          (d/with db-after before-template-tx-data))
+        template-db (or (:db-after template-result) db-after)
+        insert-templates-tx (when-not (or (rtc-tx-or-download-graph? tx-meta)
+                                          (:undo? tx-meta)
+                                          (:db-sync/replayed-tx-data? tx-meta))
+                              (insert-tag-templates
+                               (cond-> (assoc tx-report :db-after template-db)
+                                 template-result
+                                 (update :tx-data concat (:tx-data template-result)))))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat before-template-tx-data
             insert-templates-tx
@@ -587,6 +624,8 @@
     :block/tags
     :logseq.property/public?})
 
+(defonce ^:private reference-attrs-cache (js/WeakMap.))
+
 (defn- reference-owner-ids-at
   [db reference-attrs' target-id]
   (into #{}
@@ -596,20 +635,27 @@
 
 (defn- projected-reference-owner-ids
   [{:keys [db-before db-after tx-data]}]
-  (let [target-ids (into #{}
+  (let [reference-attrs-changed?
+        (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
+        target-ids (into #{}
                          (comp
                           (filter projected-reference-content-datom?)
                           (map :e)
                           (filter #(d/entity db-before %)))
                          tx-data)]
     (if (empty? target-ids)
-      #{}
-      (let [reference-attrs-changed?
-            (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
-            before-reference-attrs (reference-attrs db-before)
-            after-reference-attrs (if reference-attrs-changed?
-                                    (reference-attrs db-after)
-                                    before-reference-attrs)]
+      (do (when-not reference-attrs-changed?
+            (when-let [attrs (.get reference-attrs-cache db-before)]
+              (.set reference-attrs-cache db-after attrs)))
+          #{})
+      (let [before-reference-attrs (or (.get reference-attrs-cache db-before)
+                                     (reference-attrs db-before))
+            after-reference-attrs (or (.get reference-attrs-cache db-after)
+                                     (if reference-attrs-changed?
+                                       (reference-attrs db-after)
+                                       before-reference-attrs))]
+        (.set reference-attrs-cache db-before before-reference-attrs)
+        (.set reference-attrs-cache db-after after-reference-attrs)
         (into #{}
               (mapcat (fn [target-id]
                         (concat
@@ -676,6 +722,9 @@
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))
         tx-report' (or replace-tx-report tx-report*)
+        ;; Reference stamping does not change reference-attribute definitions.
+        _ (when-let [attrs (.get reference-attrs-cache (:db-after tx-report*))]
+            (.set reference-attrs-cache (:db-after tx-report') attrs))
         full-tx-data (concat (:tx-data tx-report*)
                              (:tx-data replace-tx-report))]
     (assoc tx-report'

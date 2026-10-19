@@ -124,6 +124,37 @@
       (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
               (common-util/safe-decode-uri-component)))))
 
+(defn- encode-iframe-path-segment
+  [segment]
+  (let [escaped (string/replace segment #"%(?![0-9a-fA-F]{2})" "%25")
+        decoded (try
+                  (js/decodeURIComponent escaped)
+                  ;; Invalid escapes represent literal filename characters.
+                  (catch :default _ segment))]
+    (js/encodeURIComponent decoded)))
+
+(defn local-file-iframe-src->assets-url
+  "Return an assets URL for a file or graph-relative asset `src`, or nil.
+
+  Preserve URL parameters and fragments, and encode filesystem path segments
+  once for the Electron assets protocol."
+  [src]
+  (when (string? src)
+    (when-let [url (try
+                     (cond
+                       (re-find #"(?i)^file:" src)
+                       (js/URL. src)
+
+                       (re-find #"^(?:\./|\.\./)*assets/" src)
+                       (when-let [repo-dir (some-> (state/get-current-repo) config/get-repo-dir)]
+                         (js/URL. (string/replace-first src #"^[./]+" "")
+                                  (str (path/prepend-protocol "file:" repo-dir) "/"))))
+                     (catch :default _ nil))]
+      (let [pathname (string/replace-first (.-pathname url)
+                                           #"^/([A-Za-z]):/" "/$1/logseq__colon/")
+            encoded-path (string/replace pathname #"[^/]+" encode-iframe-path-segment)]
+        (str "assets://" (.-host url) encoded-path (.-search url) (.-hash url))))))
+
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
@@ -145,6 +176,35 @@
               css
               (map vector rel-paths blob-urls)))))
 
+(defn- local-file-path->absolute-path
+  "Resolve a filesystem path to an absolute native path.
+
+  `~` expands to the user home, `file://`/`assets://` URLs unwrap to their
+  native path, absolute paths pass through, and `./`/`../`/bare relative
+  paths resolve against the graph dir."
+  [file-path repo-dir]
+  (cond
+    (string/starts-with? file-path "~")
+    (path/path-join (get-in (state/get-state) [:system/info :home-dir])
+                    (string/replace-first file-path #"^~[/\\]*" ""))
+
+    (path/absolute? file-path)
+    (path/file-url-or-path->path file-path)
+
+    :else
+    (path/path-join repo-dir file-path)))
+
+(defn file-path->assets-url
+  "Resolve a local filesystem path to an Electron assets:// URL.
+
+  `~/`, `file://`, absolute paths are used as-is; `./`/`../`/bare relative
+  paths resolve against the current graph dir."
+  [file-path]
+  (path/prepend-protocol "assets:"
+                         (protect-windows-drive-in-assets-path
+                          (local-file-path->absolute-path file-path
+                                                          (config/get-repo-dir (state/get-current-repo))))))
+
 (defn <make-asset-url
   "Make accessible asset url from path.
    If path is absolute url, return it directly.
@@ -159,26 +219,27 @@
      (let [repo (state/get-current-repo)
            repo-dir (config/get-repo-dir repo)
            local-asset? (common-config/local-relative-asset? path)
-           ;; Hack for path calculation
-           path (string/replace path #"^(\.\.)?/" "./")
+           ;; Hack for "../assets" path calculation
+           rpath (string/replace path #"^(\.\.)?/" "./")
            js-url? (not (nil? js-url))]
        (cond
          js-url?
          path                                               ;; just return the original
 
          (and (alias-enabled?)
-              (check-alias-path? path))
-         (resolve-asset-real-path-url (state/get-current-repo) path)
+              (check-alias-path? rpath))
+         (resolve-asset-real-path-url (state/get-current-repo) rpath)
 
           (util/electron?)
           (let [full-path (if local-asset?
-                            (path/path-join repo-dir path) path)]
+                            (path/path-join repo-dir rpath)
+                            (local-file-path->absolute-path path repo-dir))]
             ;; fullpath will be encoded
             (path/prepend-protocol "assets:" (protect-windows-drive-in-assets-path full-path)))
 
          :else
-         (p/let [binary (fs/read-file-raw repo-dir path {})
-                 svg? (string/ends-with? path ".svg")
+         (p/let [binary (fs/read-file-raw repo-dir rpath {})
+                 svg? (string/ends-with? rpath ".svg")
                  type (if svg? "image/svg+xml" "image")
                  blob (js/Blob. (array binary) (clj->js {:type type}))]
            (when blob (js/URL.createObjectURL blob))))))))

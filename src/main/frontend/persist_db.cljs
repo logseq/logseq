@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.browser :as browser]
@@ -27,8 +28,9 @@
 (defonce *ensure-remote-chain (atom nil))
 (defonce *remote-ensure-epoch (atom 0))
 (defonce *pending-remote-session (atom nil))
+(defonce ^:private *repo-generations (atom {}))
 
-(declare <ensure-remote!)
+(declare <ensure-remote-impl!)
 
 (defn- clear-remote-runtime!
   []
@@ -41,6 +43,26 @@
 (defn- same-remote-repo?
   [repo runtime-repo]
   (graph-dir/same-repo? repo runtime-repo))
+
+(defn <invalidate-remote-repo!
+  "Cancels clients and pending recovery for the removed graph instance."
+  ([repo phase] (<invalidate-remote-repo! repo phase nil))
+  ([repo phase generation]
+   (if (and generation
+            (when-let [current (get @*repo-generations (graph-dir/repo-identity repo))]
+              (not= generation current)))
+     (p/resolved nil)
+     (let [client (when (same-remote-repo? repo @remote-repo) @remote-db)]
+    (when (or (same-remote-repo? repo @remote-repo)
+              (same-remote-repo? repo (:repo @*pending-remote-session)))
+      (swap! *remote-ensure-epoch inc)
+      (clear-remote-runtime!))
+    (when (same-remote-repo? repo (state/get-current-repo))
+      (state/set-current-repo! nil)
+      (db-subs/reset-graph! nil))
+    (when (= phase "deleted")
+      (state/delete-repo! {:url repo}))
+    (if client (remote/stop! client) (p/resolved nil))))))
 
 (defn- <stop-remote-if-current!
   [repo]
@@ -128,50 +150,91 @@
            (and (> failure-count 64)
                 (zero? (mod failure-count 64))))))
 
-(defn- <release-active-runtime!
+(defn- <request-remote-runtime!
+  "Asks the main process for the graph's worker runtime. The main process probes
+  the worker over Node HTTP and restarts it only when it is not healthy."
+  [repo generation]
+  (p/let [runtime (ipc/ipc "db-worker-runtime" repo {:generation generation})]
+    (swap! *repo-generations assoc (graph-dir/repo-identity repo) (:generation runtime))
+    runtime))
+
+(defn- same-runtime-endpoint?
+  [remote-client runtime]
+  (let [client (:client remote-client)]
+    (and (= (:base-url client) (:base-url runtime))
+         (= (:auth-token client) (:auth-token runtime)))))
+
+(defn- <stop-remote-client!
+  [repo remote-client]
+  (-> (remote/stop! remote-client)
+      (p/catch (fn [error]
+                 (log/warn :event :db-worker-runtime-stop-error
+                           :repo repo
+                           :error error)))))
+
+(defn- <recover-remote-impl!
+  "Renderer transport failures (fetch/SSE) also happen while the worker is healthy,
+  e.g. Chromium suspends its network stack around system sleep. The main process
+  decides whether the worker must be replaced; a healthy worker keeps the current
+  client so its SSE reconnect path and in-flight invokes continue."
   [repo remote-client session-id]
-  (if (active-runtime-client? @remote-runtime-state repo session-id remote-client)
-    (p/let [_ (do
+  (let [active? #(active-runtime-client? @remote-runtime-state repo session-id remote-client)
+        skip! (fn [reason]
+                (log/info :event :db-worker-runtime-recovery-skipped
+                          :repo repo
+                          :reason reason)
+                nil)]
+    (cond
+      (not (active?))
+      (skip! :runtime-changed)
+
+      (not (same-remote-repo? repo (state/get-current-repo)))
+      (skip! :repo-changed)
+
+      :else
+      (p/let [runtime (<request-remote-runtime!
+                       repo
+                       (get @*repo-generations (graph-dir/repo-identity repo)))]
+        (cond
+          (not (active?))
+          (skip! :runtime-changed)
+
+          (same-runtime-endpoint? remote-client runtime)
+          (do
+            (swap! remote-runtime-state
+                   (fn [state]
+                     (if (active-runtime-client? state repo session-id remote-client)
+                       (assoc state :request-failures 0 :recovery-triggered? false)
+                       state)))
+            (log/info :event :db-worker-runtime-recovered :repo repo :worker :reused)
+            remote-client)
+
+          :else
+          (p/let [_ (<stop-remote-client! repo remote-client)]
+            (if (active?)
+              (do
                 (clear-remote-runtime!)
-                (ipc/ipc "releaseDbWorkerRuntime" repo))]
-      true)
-    (do
-      (log/info :event :db-worker-runtime-recovery-skipped
-                :repo repo
-                :reason :runtime-changed)
-      (p/resolved false))))
+                (p/let [client (<ensure-remote-impl! repo {:only-if-current? true})]
+                  (when client
+                    (log/info :event :db-worker-runtime-recovered :repo repo :worker :replaced))
+                  client))
+              (skip! :runtime-changed))))))))
 
 (defn- <trigger-db-worker-runtime-recovery!
   [repo remote-client session-id]
   (log/warn :event :db-worker-runtime-recovering :repo repo)
-  (-> (p/do!
-       (when remote-client
-         (-> (remote/stop! remote-client)
-             (p/catch (fn [error]
-                        (log/warn :event :db-worker-runtime-stop-error
-                                  :repo repo
-                                  :error error))))))
-      (p/then (fn [_]
-                (<release-active-runtime! repo remote-client session-id)))
-      (p/then (fn [released?]
-                (if (and released?
-                         (same-remote-repo? repo (state/get-current-repo)))
-                  (<ensure-remote! repo {:only-if-current? true})
-                  (when-not released?
-                    (log/info :event :db-worker-runtime-recovery-skipped
-                              :repo repo
-                              :reason :release-skipped)))))
-      (p/then (fn [client]
-                (when client
-                  (log/info :event :db-worker-runtime-recovered :repo repo))))
+  (-> (<enqueue-ensure-remote! #(<recover-remote-impl! repo remote-client session-id))
       (p/catch (fn [error]
                  (log/error :event :db-worker-runtime-recovery-failed
                             :repo repo
                             :error error)
-                 (notification/show!
-                  (t :graph/db-worker-recovery-failed-error
-                     (text-util/get-graph-name-from-path repo))
-                  :error)))))
+                 (p/let [_ (when (active-runtime-client? @remote-runtime-state repo session-id remote-client)
+                             (clear-remote-runtime!)
+                             (<stop-remote-client! repo remote-client))]
+                   (notification/show!
+                    (t :graph/db-worker-recovery-failed-error
+                       (text-util/get-graph-name-from-path repo))
+                    :error))))))
 
 (defn- record-active-request-failure!
   [repo session-id error]
@@ -282,7 +345,7 @@
   client)
 
 (defn- <ensure-remote-impl!
-  [repo {:keys [only-if-current?]}]
+  [repo {:keys [only-if-current? generation]}]
   (let [current-for-repo? #(same-remote-repo? repo (state/get-current-repo))]
     (cond
       (nil? repo)
@@ -295,7 +358,10 @@
         (p/resolved nil))
 
       (same-remote-repo? repo @remote-repo)
-      (p/resolved @remote-db)
+      (if (and generation
+               (not= generation (get @*repo-generations (graph-dir/repo-identity repo))))
+        (p/rejected (ex-info "Graph generation changed" {:code :graph-not-exists :repo repo}))
+        (p/resolved @remote-db))
 
       :else
       (let [epoch (swap! *remote-ensure-epoch inc)
@@ -313,7 +379,11 @@
               (when (pending-remote-session? repo session-id)
                 (reset! *pending-remote-session nil))
               nil)
-            (p/let [runtime (ipc/ipc "db-worker-runtime" repo)
+            (p/let [runtime (<request-remote-runtime!
+                             repo
+                             (or generation
+                                 (when only-if-current?
+                                   (get @*repo-generations (graph-dir/repo-identity repo)))))
                     client (remote/start! (assoc runtime
                                                  :repo repo
                                                  :event-handler worker-handler/handle
@@ -402,7 +472,8 @@
   [repo data]
   (when repo
     (if (electron-runtime?)
-      (p/let [client (<ensure-remote! repo)]
+      (p/let [generation (ipc/ipc "createGraph" repo)
+              client (<ensure-remote! repo {:generation generation})]
         (protocol/<import-db client repo data))
       (protocol/<import-db (get-impl) repo data))))
 
@@ -412,7 +483,9 @@
   ([repo opts]
    (when repo
      (if (electron-runtime?)
-       (p/let [client (<ensure-remote! repo)]
+       (p/let [generation (when (:sync-download-graph? opts)
+                            (ipc/ipc "createGraph" repo))
+               client (<ensure-remote! repo (when generation {:generation generation}))]
          (protocol/<open-and-fetch-schema client repo opts))
        (protocol/<open-and-fetch-schema (get-impl) repo opts)))))
 
@@ -420,8 +493,9 @@
 ;; @shuyu Do we still need this?
 (defn <new [repo opts]
   {:pre [(<= (count repo) 128)]}
-  (p/let [impl (if (electron-runtime?)
-                 (<ensure-remote! repo)
+  (p/let [generation (when (electron-runtime?) (ipc/ipc "createGraph" repo))
+          impl (if (electron-runtime?)
+                 (<ensure-remote! repo {:generation generation})
                  (p/resolved (get-impl)))
           _ (protocol/<new impl repo opts)]
     (<export-db repo {})))

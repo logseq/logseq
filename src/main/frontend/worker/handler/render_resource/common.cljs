@@ -47,12 +47,17 @@
   (or (d/entity db [:block/uuid value])
       (fail! "Missing renderer resource entity" {label value})))
 
-(defn entity-uuid!
+(defn entity-uuid
+  "Return :block/uuid when the entity has one. Use entity-uuid! for required lookups."
   [db eid]
   (let [block-uuid (:block/uuid (d/entity db eid))]
-    (when-not (uuid? block-uuid)
-      (fail! "Renderer resource row has no UUID" {:db-id eid}))
-    block-uuid))
+    (when (uuid? block-uuid)
+      block-uuid)))
+
+(defn entity-uuid!
+  [db eid]
+  (or (entity-uuid db eid)
+      (fail! "Renderer resource row has no UUID" {:db-id eid})))
 
 (defn basis-rev
   [db]
@@ -69,9 +74,9 @@
                 {:value block}]))
         blocks))
 
-(defn block-bundle-slots
-  [{:keys [blocks children]}]
-  (into (block-slots blocks)
+(defn children-slots
+  [children]
+  (into {}
         (map (fn [[parent-uuid membership]]
                [[:children parent-uuid]
                 {:tx-id (:parent-tx-id membership)

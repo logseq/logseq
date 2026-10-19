@@ -35,9 +35,12 @@
 	                                          (.preventDefault e))
 	                              :disabled (:disabled? result)}))
 	              value]
-             (when (and (map? result) (:id result))
-               [:div.tip.flex
-                [:code.opacity-20.bg-transparent (:id result)]])]]
+             [:div.tip.flex.items-center.gap-1
+              (when (and (not multiple-choices?)
+                         (selected-choices (:value result)))
+                (ui/icon "check" {:size 14}))
+              (when (and (map? result) (:id result))
+                [:code.opacity-20.bg-transparent (:id result)])]]]
     (if header
       [:div.flex.flex-col.gap-1
        header
@@ -107,11 +110,10 @@
   [{:keys [items limit on-chosen empty-placeholder grouped?
            prompt-key input-default-placeholder close-modal?
            extract-fn extract-chosen-fn host-opts on-input input-opts
-           item-cp transform-fn tap-*input-val
+           item-cp transform-fn tap-*input-val tap-*selected-choices
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           choose-first-on-enter?
            clear-input-on-chosen?]
     :or {limit 100
          prompt-key :select/default-prompt
@@ -144,6 +146,12 @@
              (when (fn? tap-*input-val)
                (tap-*input-val *input)))
            [tap-*input-val *input])
+        _ (hooks/use-effect!
+           (fn []
+             (when (fn? tap-*selected-choices)
+               (tap-*selected-choices *selected-choices))
+             nil)
+           [tap-*selected-choices])
         full-choices (cond->>
                       (remove nil? items)
                        (seq input)
@@ -204,24 +212,12 @@
                                (when on-chosen
                                  (on-chosen chosen true @*selected-choices e))))))
         input-opts* (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
-        input-opts' (if choose-first-on-enter?
-                      (let [on-key-down (:on-key-down input-opts*)]
-                        (assoc input-opts*
-                               :on-key-down
-                               (fn [e]
-                                 (if (and (= "Enter" (util/ekey e)) (seq search-result))
-                                   (do
-                                     (util/stop e)
-                                     (choose-result! (first search-result) e))
-                                   (when on-key-down
-                                     (on-key-down e))))))
-                      input-opts*)
         input-container (or
                          input-container
                          (search-input *input
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
-                                        :input-opts input-opts'
+                                        :input-opts input-opts*
                                         :on-input on-input}))
         results-container-f (fn []
                               (if loading?

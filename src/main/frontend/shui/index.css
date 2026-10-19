@@ -168,6 +168,7 @@
         border-color: hsl(var(--border));
         box-sizing: border-box;
         height: var(--height);
+        max-height: calc(100dvh - 5rem);
         right: 0;
         left: auto;
         margin: 0 auto;
@@ -247,11 +248,11 @@
         }
 
         .ui__toast-body {
-          @apply flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden;
+          @apply flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto overscroll-contain;
         }
 
         .ui__toast-text {
-          @apply flex min-w-0 flex-1 flex-col gap-1;
+          @apply flex min-h-0 min-w-0 flex-1 flex-col gap-1;
         }
 
         .ui__toast-title {
@@ -259,7 +260,7 @@
         }
 
         .ui__toast-description {
-          @apply m-0 text-sm leading-5 opacity-90;
+          @apply m-0 min-h-0 min-w-0 overflow-y-auto overscroll-contain text-sm leading-5 opacity-90;
         }
 
         .ui__toast-close {
@@ -285,6 +286,18 @@
             @apply text-red-rx-10-alpha;
           }
         }
+      }
+
+      &:has(.ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 0.75rem) / 2);
+      }
+
+      &:has(.ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 1.5rem) / 3);
+      }
+
+      &:has(.ui__toast ~ .ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 2.25rem) / 4);
       }
 
       @media (min-width: 500px) {

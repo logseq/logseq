@@ -7,6 +7,10 @@
     @apply max-h-[200px] !max-w-[80px] overflow-hidden;
   }
 
+  .asset-image-fallback {
+    @apply truncate max-w-full;
+  }
+
   a.tag {
     @apply text-sm whitespace-nowrap;
   }
@@ -26,6 +30,11 @@
   .ls-table-rows {
     > .relative {
       @apply pt-[34px] pb-[38px];
+    }
+
+    div[data-index],
+    div[data-item-index] {
+      @apply h-[33px] min-h-[33px] max-h-[33px] overflow-hidden;
     }
   }
 
@@ -87,7 +96,35 @@
   }
 
   .ls-table-cell {
-    @apply overflow-hidden;
+    @apply h-full max-h-[33px] overflow-hidden;
+
+    > div {
+      @apply h-full min-w-0 overflow-hidden;
+    }
+
+    .property-value-inner,
+    .jtrigger,
+    .inline,
+    a,
+    .asset-image-fallback {
+      @apply min-w-0 max-w-full overflow-hidden text-ellipsis;
+    }
+
+    a,
+    .asset-image-fallback {
+      @apply inline-block;
+    }
+
+    /* inline-block + overflow:hidden makes an anchor's baseline the box
+       bottom (CSS 2.1 §10.8.1), so [[page]] link text sits above its
+       brackets in Name cells. Title clipping stays on .table-block-title. */
+    .table-block-title a,
+    .page-reference a,
+    .page-reference .bracket {
+      @apply inline overflow-visible max-w-none;
+      text-overflow: clip;
+      vertical-align: baseline;
+    }
   }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;

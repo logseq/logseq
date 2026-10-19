@@ -7,6 +7,19 @@
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
+(defn- last-page-block-content
+  "Property values mount a nested .ls-block .block-content. Clicking that
+  0-width editor is not opening the last page block."
+  []
+  (let [blocks (w/-query ".ls-page-blocks .page-blocks-inner .ls-block .block-content")]
+    (loop [i (dec (.count blocks))]
+      (when (neg? i)
+        (throw (ex-info "No page block content" {})))
+      (let [el (.nth blocks i)]
+        (if (.evaluate el "el => !el.closest('.property-block-container')")
+          el
+          (recur (dec i)))))))
+
 (defn open-last-block
   "Open the last existing block or pressing add button to create a new block"
   [& {:keys [in-retry?]}]
@@ -14,10 +27,9 @@
   (assert/assert-in-normal-mode?)
 
   (let [blocks-count (util/page-blocks-count)
-        last-block (-> (if (zero? blocks-count)
-                         (w/query ".ls-page-blocks .block-add-button")
-                         (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
-                       (last))]
+        last-block (if (zero? blocks-count)
+                     (last (w/query ".ls-page-blocks .block-add-button"))
+                     (last-page-block-content))]
     (w/click last-block)
     (if in-retry?
       (assert/assert-editor-mode)

@@ -13,6 +13,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [promesa.core :as p]))
@@ -25,6 +26,11 @@
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
+  (safe-api-call "graph-lifecycle"
+                 (fn [data]
+                   (let [{:keys [repo phase generation]} (bean/->clj data)]
+                     (persist-db/<invalidate-remote-repo! repo phase generation))))
+
   (safe-api-call "notification"
                  (fn [data]
                    (let [{:keys [type payload i18n-key i18n-args]} (bean/->clj data)

@@ -9,10 +9,17 @@ type auth_data = {
   updated_at : Time.date;
 }
 
+type login_mode =
+  | Browser_login
+  | Password_login of { username : string; password : string }
+
+type login_details =
+  | Browser_login_result of { authorize_url : Cli_primitive.url; opened : bool }
+  | Password_login_result
+
 type login_result = {
   auth_path : Cli_primitive.path;
-  authorize_url : Cli_primitive.url;
-  opened : bool;
+  details : login_details;
   email : Cli_primitive.email option;
   sub : string option;
   updated_at : Time.date;
@@ -42,5 +49,8 @@ val refresh_auth :
   Cli_config.t -> auth_data -> auth_data Error.build_result Cli_effect.t
 
 val resolve_auth : Cli_config.t -> auth_data Error.build_result Cli_effect.t
-val login : Cli_config.t -> login_result Error.build_result Cli_effect.t
+
+val login :
+  Cli_config.t -> login_mode -> login_result Error.build_result Cli_effect.t
+
 val logout : Cli_config.t -> logout_result Error.build_result Cli_effect.t

@@ -225,13 +225,11 @@
   [repo graph-id]
   (when-not (seq graph-id)
     (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
-  (try
-    (uuid graph-id)
-    (catch :default e
+  ;; cljs `uuid` accepts any string; `parse-uuid` returns nil for a non-uuid
+  (or (parse-uuid graph-id)
       (fail-fast :db-sync/invalid-field {:repo repo
                                          :field :graph-id
-                                         :value graph-id
-                                         :error e}))))
+                                         :value graph-id})))
 
 (defn- set-graph-sync-metadata!
   [repo graph-id graph-e2ee?]
@@ -367,8 +365,9 @@
                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
                   _ (when (and graph-e2ee? (nil? aes-key))
                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-            (let [snapshot-checksum (sync-checksum/recompute-checksum @source-conn)]
-              (client-op/update-local-checksum repo snapshot-checksum)
+            (let [db @source-conn
+                  snapshot-checksum (sync-checksum/recompute-checksum db)]
+              (client-op/update-local-checksum repo snapshot-checksum (:max-tx db))
               (p/let [_ (update-progress {:sub-type :upload-progress
                                           :message (if graph-e2ee? "Encrypting..." "Preparing...")})
                       {:keys [db] :as temp} (<prepare-upload-temp-sqlite!

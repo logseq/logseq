@@ -41,18 +41,27 @@
                       {:plugin plugin})))
     (str plugin-property-prefix plugin-id)))
 
+(defn- property-name->title
+  [property-name]
+  (-> (if-not (string? property-name)
+        (str property-name)
+        property-name)
+      string/trim
+      (string/replace #"^:+" "")
+      string/trim))
+
 (defn get-db-ident-from-property-name
-  "Finds a property :db/ident for a given property name"
+  "Resolves a property :db/ident.
+
+  Unqualified names stay in the caller's plugin namespace. Qualified idents
+  (`user.property/…`, `logseq.property/…`, `plugin.property.<id>/…`) are used
+  as-is so a plugin can set values on an existing property without taking over
+  short names."
   [property-name plugin]
-  (let [property-name' (->
-                        (if-not (string? property-name)
-                          (str property-name)
-                          property-name)
-                        (string/replace #"^:+" ""))
+  (let [property-name' (property-name->title property-name)
         property-key (keyword property-name')]
     (if (qualified-keyword? property-key)
       property-key
-      ;; plugin property
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
         (keyword plugin-ns (db-ident/normalize-ident-name-part property-name'))))))
 
@@ -122,7 +131,7 @@
     :else :default))
 
 (defn- set-block-properties!
-  [plugin block-id properties {:keys [page-id reset-property-values]}]
+  [plugin block-id properties {:keys [page-id reset-property-values entity-id?]}]
   (ui-outliner-tx/transact!
    {:outliner-op :set-block-properties
     :ui/page-id page-id}
@@ -174,33 +183,33 @@
          (outliner-op/remove-block-property! block-id property-ident))
 
        (let [set-property! (fn [value]
-                             (outliner-op/set-block-property! block-id property-ident
-                                                              (convert-json-and-string property-type value)))
+                             (if (and (= :number property-type) (some? value))
+                               (outliner-op/batch-set-property! [block-id] property-ident value
+                                                                {:entity-id? (true? entity-id?)})
+                               (outliner-op/set-block-property! block-id property-ident
+                                                                (convert-json-and-string property-type value))))
              values (if (sequential? value') value' [value'])]
          (doseq [value values]
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  [block properties & {:keys [page-id plugin schema reset-property-values]}]
+  [block properties & {:keys [page-id plugin schema reset-property-values entity-id?]}]
   (when-let [block-id (and (seq properties) (:block/uuid block))]
     (let [properties (mapv (fn [[k v]]
-                             (let [ident (get-db-ident-from-property-name k plugin)
-                                   property-schema (get schema k)]
-                               [k ident v property-schema]))
+                             (let [ident (get-db-ident-from-property-name k plugin)]
+                               [k ident v (get schema k)]))
                            properties)
           property-idents (mapv second properties)]
       (p/let [property-results (db-async/<get-blocks (state/get-current-repo)
                                                      property-idents
                                                      {:children? false})
-              property-by-ident (into {}
-                                      (keep (fn [{:keys [id block]}]
-                                              (when block [id block])))
-                                      property-results)
-              properties (mapv (fn [[property-id ident value property-schema]]
-                                 [property-id ident value property-schema (get property-by-ident ident)])
-                               properties)]
+              properties (mapv (fn [[property-id ident value property-schema] result]
+                                 [property-id ident value property-schema (:block result)])
+                               properties
+                               (or property-results []))]
         (set-block-properties! plugin block-id properties {:page-id page-id
-                                                           :reset-property-values reset-property-values})))))
+                                                           :reset-property-values reset-property-values
+                                                           :entity-id? entity-id?})))))
 
 (defn <sync-children-blocks!
   [block]

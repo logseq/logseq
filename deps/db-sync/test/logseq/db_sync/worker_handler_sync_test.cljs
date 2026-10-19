@@ -75,6 +75,20 @@
   (p/let [text (.text response)]
     (js->clj (js/JSON.parse text) :keywordize-keys true)))
 
+(deftest handle-http-answers-500-when-an-async-route-fails-test
+  (async done
+         (let [request (js/Request. "http://localhost/sync/graph-1/tx/batch"
+                                    #js {:method "POST" :body "not json"})]
+           (-> (p/let [response (sync-handler/handle-http #js {} request)
+                       body (json-body response)]
+                 (is (= 500 (.-status response)))
+                 (is (= "server error" (:error body)))
+                 (is (string? (:debug-message body))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str "handle-http rejected: " error))
+                          (done)))))))
+
 (deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
   (async done
          (with-memory-sql-async
@@ -913,7 +927,7 @@
                    request (semantic-json-request
                             "/semantic/tasks?graph-id=graph-1" "POST"
                             {:title "Atomic task" :status "TODO" :priority "HIGH"
-                             :scheduled 20260713 :deadline 20260714})]
+                             :scheduled 1783900800000 :deadline 1783987200000})]
                (d/listen! conn ::semantic-create-task-tx
                           #(swap! tx-reports conj %))
                (-> (p/let [response (sync-handler/handle-http self request)
@@ -924,8 +938,8 @@
                      (is (= 1 (count (d/datoms @conn :avet :block/journal-day))))
                      (is (= "logseq.property/status.todo" (get-in body [:status :ident])))
                      (is (= "logseq.property/priority.high" (get-in body [:priority :ident])))
-                     (is (= 20260713 (:scheduled body)))
-                     (is (= 20260714 (:deadline body))))
+                     (is (= 1783900800000 (:scheduled body)))
+                     (is (= 1783987200000 (:deadline body))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (d/unlisten! conn ::semantic-create-task-tx)
@@ -2065,6 +2079,68 @@
                          [:block/parent :block/uuid])))
           (is (= 70 (block-title-prefix-count @conn "large-op-block-")))
           (is (= 3 (block-title-prefix-count @conn "large-dependency-"))))))))
+
+(deftest tx-batch-keeps-value-replacement-in-one-chunk-test
+  (testing "a large tx keeps a cardinality-one retract/add pair in one chunk"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              ;; Enable the db-graph transact validation that rejects a block
+              ;; left without a required attribute.
+              _ (d/transact! conn [{:db/ident :logseq.kv/db-type
+                                    :kv/value "db"}])
+              page-uuid (random-uuid)
+              block-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "replacement-page"
+                                    :block/title "replacement-page"}
+                                   {:block/uuid block-uuid
+                                    :block/title "replacement-block"
+                                    :block/page [:block/uuid page-uuid]
+                                    :block/parent [:block/uuid page-uuid]
+                                    :block/order "a0"
+                                    :block/created-at 1
+                                    :block/updated-at 1}])
+              page-ref [:block/uuid page-uuid]
+              block-ref [:block/uuid block-uuid]
+              t-before (storage/get-t sql)
+              filler (vec
+                      (mapcat (fn [idx]
+                                (let [eid (str "replacement-filler-" idx)]
+                                  [[:db/add eid :block/uuid (random-uuid)]
+                                   [:db/add eid :block/title (str "replacement-filler-" idx)]
+                                   [:db/add eid :block/page page-ref]
+                                   [:db/add eid :block/parent page-ref]
+                                   [:db/add eid :block/order "a0"]
+                                   [:db/add eid :block/created-at idx]
+                                   [:db/add eid :block/updated-at idx]]))
+                              (range 72)))
+              ;; The :block/updated-at retract and add straddle the chunk
+              ;; boundary; split apart, the retract leaves the block without a
+              ;; required attribute and the chunk is rejected.
+              tx-data (vec (concat [[:db/retract block-ref :block/updated-at 1]]
+                                   filler
+                                   [[:db/add block-ref :block/updated-at 2]]))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :save-block}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::replacement-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::replacement-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= 1 @tx-report-count))
+          (is (= 2 (:block/updated-at (d/entity @conn block-ref))))
+          (is (= 72 (block-title-prefix-count @conn "replacement-filler-"))))))))
 
 (deftest tx-batch-applies-large-delete-entry-with-descendants-across-chunks-test
   (testing "delete-blocks descendant expansion is still applied in ordered chunks"

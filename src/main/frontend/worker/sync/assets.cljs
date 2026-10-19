@@ -331,6 +331,16 @@
                      (range (min parallelism (count asset-ops))))))
       (p/resolved nil))))
 
+(defn enqueue-asset-task!
+  [client task]
+  (when-let [queue (:asset-queue client)]
+    (swap! queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 ;; Keep queue alive even if one asset task fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task))))))))
+
 (defn enqueue-asset-sync!
   [repo client {:keys [enqueue-asset-task-f current-client-f broadcast-rtc-state!-f fail-fast-f]}]
   (enqueue-asset-task-f
@@ -457,7 +467,8 @@
         queue (atom (vec candidates))
         result (atom {:total (count candidates)
                       :downloaded 0
-                      :skipped-existing 0})
+                      :skipped-existing 0
+                      :failed 0})
         pop-queue! (fn []
                      (let [selected (atom nil)]
                        (swap! queue
@@ -471,16 +482,21 @@
         worker (fn worker []
                  (if-let [{:keys [asset-uuid asset-type]} (pop-queue!)]
                    (let [asset-id (str asset-uuid)]
-                     (p/let [meta (platform/asset-stat current-platform
-                                                       repo
-                                                       (asset-file-name asset-id asset-type))
-                             _ (if meta
-                                 (do
-                                   (swap! result update :skipped-existing inc)
-                                   nil)
-                                 (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
-                                   (swap! result update :downloaded inc)))]
-                       (worker)))
+                     (-> (p/let [meta (platform/asset-stat current-platform
+                                                           repo
+                                                           (asset-file-name asset-id asset-type))
+                                 _ (if meta
+                                     (do
+                                       (swap! result update :skipped-existing inc)
+                                       nil)
+                                     (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
+                                       (swap! result update :downloaded inc)))]
+                           nil)
+                         (p/catch (fn [e]
+                                    (swap! result update :failed inc)
+                                    (log-request-asset-download-failed! repo asset-uuid e)
+                                    nil))
+                         (p/then (fn [_] (worker)))))
                    (p/resolved nil)))]
     (p/let [_ (p/all (mapv (fn [_] (worker))
                            (range (min remote-asset-download-parallelism

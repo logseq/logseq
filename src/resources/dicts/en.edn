@@ -115,6 +115,7 @@
  :block/click-to-fix-query "Click to fix query: {1}"
  :block/copy-ref "Copy block ref"
  :block/copy-url "Copy block URL"
+ :block/copy-url-unavailable-warning "No block URL is available to copy."
  :block/created-label "Created: {1}"
  :block/deprecated-latex-export "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."
  :block/deprecated-query-syntax "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."
@@ -132,6 +133,7 @@
  :block/open-block-references "Open block references"
  :block/practice "Practice"
  :block/practice-cards "Practice cards"
+ :block/ref-not-exist "This block doesn't exist."
  :block/remove-tag "Remove tag"
  :block/remove-this-tag "Remove this tag"
  :block/render-error "Block Render Error:"
@@ -518,6 +520,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/clear-heading "Clear heading"
  :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
@@ -598,6 +601,7 @@
  :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
+ :encryption/copy-key "Copy"
  :encryption/current-password "Current password"
  :encryption/enter-password "Enter password"
  :encryption/enter-password-again "Enter password again"
@@ -613,12 +617,16 @@
  :encryption/forgot-password-warning "If you forget your password, you can force a reset of your encryption password. However, this will make all currently encrypted graph data stored on the server permanently unreadable. After resetting, you'll need to re-upload your graphs from the client."
  :encryption/init-key-pair "Init E2EE encrypt-key-pair"
  :encryption/init-key-pair-error "Init key-pair err: {1}"
+ :encryption/key-unavailable "Key unavailable"
  :encryption/password-not-matched "Password not matched"
  :encryption/password-updated-successfully "Password updated successfully!"
+ :encryption/private-key "Private key (base64)"
+ :encryption/public-key "Public key (base64)"
  :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
+ :encryption/show-private-key "Show private key"
  :encryption/updating-password "Updating password ..."
  :encryption/wrong-password "Wrong password"
 
@@ -701,6 +709,8 @@
  :flashcard/shortcut-tooltip "Shortcut: {1}"
 
  :flashcard.empty/desc "You can add \"{1}\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
+ :flashcard.empty/no-due-desc "You've reviewed all the cards for this query. Come back later or practice again now."
+ :flashcard.empty/no-due-title "No cards due"
  :flashcard.empty/title "Time to create a card!"
 
  :flashcard.rating/again "Again"
@@ -714,6 +724,7 @@
 
  :flashcard.review/finished "Congrats, you've reviewed all the cards for this query, see you next time! 💯"
  :flashcard.review/hide-answers "Hide answers"
+ :flashcard.review/practice-again "Practice again"
  :flashcard.review/show-answers "Show answers"
  :flashcard.review/show-clozes "Show clozes"
 
@@ -1112,6 +1123,7 @@
  :page/contents "Contents"
  :page/convert-to-tag "Convert to Tag"
  :page/copy-url "Copy page URL"
+ :page/copy-url-unavailable-warning "No page URL is available to copy."
  :page/create "Create a new page"
  :page/created-at "Created At"
  :page/current-graph-as-sqlite-db "current graph as SQLite db"
@@ -1151,6 +1163,7 @@
  :page.convert/cant-be-block "Page \"{1}\" cannot be converted to a block."
  :page.convert/cant-be-block-has-children "Page \"{1}\" cannot be converted to a block because it has page children."
  :page.convert/cant-be-block-move-first "Page \"{1}\" cannot be converted to a block, please move it to another page first."
+ :page.convert/page-to-property-namespaced "Namespaced pages can't be properties"
  :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "Built-in pages can't be used as tags"
  :page.convert/page-to-tag-duplicate "A tag with the name \"{1}\" already exists."
@@ -1177,6 +1190,7 @@
  :page.validation/alias-source-is-alias "A page that is an alias of another page can't have its own aliases."
  :page.validation/cant-set-built-in-tags "New page can't set built-in tags: {1}"
  :page.validation/duplicate "Another page named \"{1}\" already exists for tags: {2}."
+ :page.validation/duplicate-name "Another page named \"{1}\" already exists."
  :page.validation/name-blank "Page name can't be blank."
  :page.validation/name-no-hash "Page name can't include \"#\"."
  :page.validation/name-no-slash "Page name can't include \"/\"."
@@ -1340,6 +1354,8 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
+ :profiler/fn-not-found-error "Function not found: {1}"
+ :profiler/fn-unqualified-error "Use a qualified function name, such as cljs.core/map."
  :profiler/input-fn-placeholder "input fn name here"
  :profiler/unregister "Unregister"
 
@@ -1363,9 +1379,9 @@
  :property/create-error "Property failed to create. Please try a different property name."
  :property/default-value "Default value"
  :property/delete-from-node "Delete property from node"
- :property/delete-from-node-confirm "Are you sure you want to delete the property from this node?"
+ :property/delete-from-node-confirm "Are you sure you want to delete the property \"{1}\" from this node?"
  :property/delete-from-tag "Delete property from tag"
- :property/delete-from-tag-confirm "Are you sure you want to delete the property from this tag?"
+ :property/delete-from-tag-confirm "Are you sure you want to delete the property \"{1}\" from this tag?"
  :property/description-placeholder "description"
  :property/drag-to-reorder "Drag && Drop to reorder"
  :property/existing-values "Existing values:"
@@ -1609,6 +1625,7 @@
  :query/results-for "Results for {1}"
 
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/all-values-label "ALL"
  :query.builder/between-end-label "End date"
  :query.builder/between-journal-label "between: {1} ~ {2}"
  :query.builder/between-start-label "Start date"
@@ -1691,6 +1708,7 @@
  :settings/features "Features"
  :settings/general "General"
  :settings/keymap "Keymap"
+ :settings/personal-access-tokens "Personal access tokens"
  :settings/plugins "Plugins"
 
  :settings.account/storage-usage "{1}GB of {2}GB total storage ({3})"
@@ -1852,6 +1870,29 @@
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "User doesn't exist yet."
 
+ :sync.personal-access-token/api-docs "API documentation"
+ :sync.personal-access-token/copied "Personal access token copied."
+ :sync.personal-access-token/create "Create token"
+ :sync.personal-access-token/create-title "Create a personal access token"
+ :sync.personal-access-token/created-title "Your new personal access token"
+ :sync.personal-access-token/created-warning "Copy this token now. It cannot be shown again."
+ :sync.personal-access-token/date-summary "Created {1}; expires {2}"
+ :sync.personal-access-token/deleted-graph "Deleted graph"
+ :sync.personal-access-token/description "Create graph-specific credentials for the Logseq REST API."
+ :sync.personal-access-token/empty "No personal access tokens."
+ :sync.personal-access-token/existing-title "Existing tokens"
+ :sync.personal-access-token/expiration "Expiration"
+ :sync.personal-access-token/graph "Graph"
+ :sync.personal-access-token/no-graphs "No synced graphs are available."
+ :sync.personal-access-token/permission "Permission"
+ :sync.personal-access-token/request-error "The personal access token request failed. Please try again."
+ :sync.personal-access-token/revoke "Revoke"
+ :sync.personal-access-token/revoke-confirm "Revoke this personal access token? This cannot be undone."
+
+ :sync.personal-access-token.permission/both "Read and write"
+ :sync.personal-access-token.permission/read "Read"
+ :sync.personal-access-token.permission/write "Write"
+
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Switch to {1} theme"
 
@@ -1916,6 +1957,7 @@
 
  :view/add-new-view "Add new view"
  :view/all "All"
+ :view/error "View error:"
  :view/export-edn "Export EDN"
  :view/linked-references "Linked references"
  :view/new "New"
@@ -1953,9 +1995,9 @@
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 
- :view.gallery/asset-property "Asset property"
  :view.gallery/card-size "Card size"
  :view.gallery/compact-size "Compact"
+ :view.gallery/cover-property "Cover property"
  :view.gallery/custom-size "Custom"
  :view.gallery/default-size "Default"
  :view.gallery/display-properties "Display properties"
@@ -1991,6 +2033,10 @@
  :view.table/sort-groups-order "Sort groups order"
  :view.table/total-refs-count "Total refs count"
  :view.table/unpin "Unpin"
+
+ :web.test-site/help-test "I want to help test"
+ :web.test-site/open-app "Open app.logseq.com"
+ :web.test-site/warning "test.logseq.com is for testing new features and may be unstable. If you're using Logseq for real work, please switch to app.logseq.com."
 
  :window/close "Close"
  :window/exit-fullscreen "Exit full screen"

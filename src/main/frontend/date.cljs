@@ -99,6 +99,8 @@
    (date-time-util/safe-journal-title-formatters (state/get-date-formatter))))
 
 (def journal-day->utc-ms date-time-util/journal-day->ms)
+(def journal-day->local-ms date-time-util/journal-day->local-ms)
+(def journal-day-local-range-ms date-time-util/journal-day-local-range-ms)
 
 (defn journal-title->long
   [journal-title]

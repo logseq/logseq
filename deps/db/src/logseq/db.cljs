@@ -274,8 +274,10 @@
   Notes:
   - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
+  - `transform-tx-meta` runs after the batch body to finalize operation metadata.
   - Do not rely on returned tx-report shape for undo/redo behavior."
-  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit]}]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit transform-tx-meta]
+                             :or {transform-tx-meta identity}}]
   (let [temp-conn (temp-conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
@@ -296,7 +298,7 @@
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
           ;; transact tx-data to `conn` and validate db
-          (transact! conn tx-data tx-meta)))
+          (transact! conn tx-data (transform-tx-meta tx-meta))))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
@@ -360,12 +362,15 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def recycled? entity-util/recycled?)
+(def some-parent entity-util/some-parent)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def private-tag-titles db-class/private-tag-titles)
+(def private-create-page-tag? db-class/private-create-page-tag?)
 (def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
@@ -411,7 +416,7 @@
         closed-property (:block/closed-value-property block)]
     (sort-by-order (cond
                      closed-property
-                     (:block/_closed-value-property closed-property)
+                     (mapcat :block/_closed-value-property closed-property)
 
                      from-property
                      (filter (fn [e]
@@ -444,8 +449,8 @@
                         child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
                     (if (and child-order
                              (eligible? (compare child-order block-order))
-                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
-                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (not (seq (d/datoms db :eavt child-id :logseq.property/created-from-property)))
+                             (not (seq (d/datoms db :eavt child-id :block/closed-value-property)))
                              (or (nil? best-order)
                                  (closer? (compare child-order best-order))))
                       [child-id child-order]
@@ -683,28 +688,56 @@
 (def get-block-children-ids common-initial-data/get-block-children-ids)
 (def get-block-full-children-ids common-initial-data/get-block-full-children-ids)
 
-(defn- get-sorted-page-block-ids
-  [db page-id]
-  (let [root (d/entity db page-id)]
-    (loop [result []
-           children (sort-by-order (:block/_parent root))]
-      (if (seq children)
-        (let [child (first children)]
-          (recur (conj result (:db/id child))
-                 (concat
-                  (sort-by-order (:block/_parent child))
-                  (rest children))))
-        result))))
+(defn- block-order-path
+  "The :block/order keys from the page's top-level children down to `block`,
+   sorted root-first. Comparing two paths lexicographically gives the same
+   relative order as a full preorder traversal of the page.
+   Returns nil when `block` isn't reachable from the page through :block/_parent
+   (e.g. property-created blocks)."
+  [page-id block]
+  (loop [block block
+         path ()]
+    (if (or (:logseq.property/created-from-property block)
+            (:block/closed-value-property block))
+      nil
+      (let [parent (:block/parent block)
+            path (cons (:block/order block) path)]
+        (cond
+          (nil? parent)
+          nil
+
+          (= page-id (:db/id parent))
+          (vec path)
+
+          :else
+          (recur parent path))))))
+
+(defn- compare-order-paths
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
 
 (defn sort-page-random-blocks
   "Blocks could be non consecutive."
-  [db blocks]
+  [_db blocks]
   (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
-  (let [page-id (:db/id (:block/page (first blocks)))
-        ;; TODO: there's no need to sort all the blocks
-        sorted-ids (get-sorted-page-block-ids db page-id)
-        blocks-map (zipmap (map :db/id blocks) blocks)]
-    (keep blocks-map sorted-ids)))
+  (let [page-id (:db/id (:block/page (first blocks)))]
+    (->> blocks
+         (keep (fn [block]
+                 (when-let [path (block-order-path page-id block)]
+                   [path block])))
+         (sort (fn [[path-1 _] [path-2 _]]
+                 (compare-order-paths path-1 path-2)))
+         (map second)
+         (distinct))))
 
 (defn last-child-block?
   "The child block could be collapsed."

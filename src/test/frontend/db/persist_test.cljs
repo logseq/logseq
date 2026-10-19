@@ -31,12 +31,12 @@
                    (is false (str error))))
         (p/finally done))))
 
-(deftest delete-graph-on-electron-closes-db-before-ipc-and-skips-unsafe-delete
+(deftest delete-graph-on-electron-quiesces-clients-before-ipc
   (async done
     (let [call-log (atom [])]
       (-> (p/with-redefs [util/electron? (constantly true)
-                          persist-db/<close-db (fn [graph]
-                                                 (swap! call-log conj [:close-db graph])
+                          persist-db/<invalidate-remote-repo! (fn [graph phase]
+                                                 (swap! call-log conj [:quiesce graph phase])
                                                  (p/resolved nil))
                           persist-db/<unsafe-delete (fn [graph]
                                                       (swap! call-log conj [:unsafe-delete graph])
@@ -45,10 +45,10 @@
                                     (swap! call-log conj [:ipc channel graph])
                                     (p/resolved nil))]
             (p/let [_ (db-persist/delete-graph! "logseq_db_test")]
-              (is (= [[:close-db "logseq_db_test"]
+              (is (= [[:quiesce "logseq_db_test" "deleting"]
                       [:ipc "deleteGraph" "logseq_db_test"]]
                      @call-log)
-                  "Should call <close-db then deleteGraph IPC, and never call <unsafe-delete")))
+                  "Should quiesce the client before deleteGraph IPC")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))

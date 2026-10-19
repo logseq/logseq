@@ -19,6 +19,7 @@
             [frontend.util :as util]
             [frontend.worker.export :as worker-export]
             [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def test-files
@@ -94,7 +95,15 @@
          :block/uuid uuid-10
          :build/tags [:logseq.class/Code-block]
          :build/properties {:logseq.property.node/display-type :code
-                            :logseq.property.code/lang "clojure"}}]}]))
+                            :logseq.property.code/lang "clojure"}}]}
+     {:page {:block/title "page6"}
+      :blocks
+      [{:block/title "((00000000-0000-4000-8000-0000000009ff))"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
+       {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -225,43 +234,35 @@
     (let [mkdir-calls (atom [])
           writes (atom [])
           notification-calls (atom [])
-          original-electron? util/electron?
-          original-time-ms util/time-ms
-          original-get-repo-dir config/get-repo-dir
-          original-mkdir-if-not-exists fs/mkdir-if-not-exists
-          original-apis (.-apis js/window)
-          original-export-db persist-db/<export-db
-          original-invoke-db-worker state/<invoke-db-worker
-          original-get-all-assets assets-handler/<get-all-assets
-          original-notification-show! notification/show!]
-      (set! util/electron? (constantly true))
-      (set! util/time-ms (constantly 123000))
-      (set! config/get-repo-dir (fn [repo]
-                                  (is (= "logseq_db_big_graph" repo))
-                                  "/tmp/logseq/graphs/logseq_db_big_graph"))
-      (set! fs/mkdir-if-not-exists (fn [path]
-                                     (swap! mkdir-calls conj path)
-                                     (p/resolved nil)))
+          original-apis (.-apis js/window)]
       (set! (.-apis js/window)
             #js {:writeFileBytes (fn [path content]
                                    (swap! writes conj [path content])
                                    (p/resolved nil))})
-      (set! persist-db/<export-db
-            (fn [& _args]
-              (p/rejected (ex-info "desktop zip export should read binary from db worker" {}))))
-      (set! state/<invoke-db-worker
-            (fn [qkw repo]
-              (is (= :thread-api/export-db-binary qkw))
-              (is (= "logseq_db_big_graph" repo))
-              (p/resolved {:type "Buffer"
-                           :data [1 2 3]})))
-      (set! assets-handler/<get-all-assets
-            (fn []
-              (p/resolved [["assets/a.bin" {:type "Buffer"
-                                            :data [4 5 6]}]])))
-      (set! notification/show! (fn [& args]
-                                 (swap! notification-calls conj args)))
-      (-> (export/db-based-export-repo-as-zip! "logseq_db_big_graph")
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          util/time-ms (constantly 123000)
+                          config/get-repo-dir (fn [repo]
+                                                (is (= "logseq_db_big_graph" repo))
+                                                "/tmp/logseq/graphs/logseq_db_big_graph")
+                          fs/mkdir-if-not-exists (fn [path]
+                                                   (swap! mkdir-calls conj path)
+                                                   (p/resolved nil))
+                          persist-db/<export-db
+                          (fn [& _args]
+                            (p/rejected (ex-info "desktop zip export should read binary from db worker" {})))
+                          state/<invoke-db-worker
+                          (fn [qkw repo]
+                            (is (= :thread-api/export-db-binary qkw))
+                            (is (= "logseq_db_big_graph" repo))
+                            (p/resolved {:type "Buffer"
+                                         :data [1 2 3]}))
+                          assets-handler/<get-all-assets
+                          (fn []
+                            (p/resolved [["assets/a.bin" {:type "Buffer"
+                                                          :data [4 5 6]}]]))
+                          notification/show! (fn [& args]
+                                               (swap! notification-calls conj args))]
+            (export/db-based-export-repo-as-zip! "logseq_db_big_graph"))
           (p/then (fn [_]
                     (let [expected-path "/tmp/logseq/graphs/logseq_db_big_graph/export/big_graph_123.zip"]
                       (is (= ["/tmp/logseq/graphs/logseq_db_big_graph/export"]
@@ -274,15 +275,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally
            (fn []
-             (set! util/electron? original-electron?)
-             (set! util/time-ms original-time-ms)
-             (set! config/get-repo-dir original-get-repo-dir)
-             (set! fs/mkdir-if-not-exists original-mkdir-if-not-exists)
              (set! (.-apis js/window) original-apis)
-             (set! persist-db/<export-db original-export-db)
-             (set! state/<invoke-db-worker original-invoke-db-worker)
-             (set! assets-handler/<get-all-assets original-get-all-assets)
-             (set! notification/show! original-notification-show!)
              (done)))))))
 
 (deftest auto-db-backup-reads-backup-folder-through-worker-test
@@ -478,6 +471,19 @@
              (string/trim without-properties)))
       (done))))
 
+(deftest export-blocks-as-markdown-keeps-ref-to-missing-block
+  (async done
+    (p/let [only-ref (<export-blocks-as-markdown
+                      [#uuid "00000000-0000-4000-8000-000000000601"]
+                      {:remove-options #{}})
+            in-text (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000602"]
+                     {:remove-options #{}})]
+      (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
+          "a block that is only a ref to a missing block keeps the ref")
+      (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
   (async done
     (p/let [content (<export-blocks-as-markdown
@@ -550,6 +556,16 @@
              (string/trim second-content)))
       (done))))
 
+(deftest export-tag-followed-by-a-macro
+  (testing "the parser takes a macro right after a tag into the tag: the export keeps it, and does not fail"
+    (let [block-uuid #uuid "6b000000-0000-4000-8000-0000000000d1"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks [{:block/title "a #x^^h^^{{x}}" :block/uuid block-uuid :build/keep-uuid? true}]}]})]
+      (is (= "- a #x^^h^^{{x}}\n"
+             (worker-export/export-blocks-as-format db block-uuid :markdown {} {}))))))
+
 (deftest export-blocks-as-markdown-open-blocks-only
   (async done
     (testing "collapsed descendants are excluded when :open-blocks-only is enabled"
@@ -569,6 +585,29 @@
 	- hidden-child")
                (string/trim all-content)))
         (done)))))
+
+(deftest export-block-embed-open-blocks-only
+  (testing "an embedded block's collapsed descendants are excluded when :open-blocks-only is enabled"
+    (let [parent-id #uuid "6b000000-0000-4000-8000-000000000001"
+          holder-id #uuid "6b000000-0000-4000-8000-000000000003"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks
+                  [{:block/title "Parent block" :block/uuid parent-id :build/keep-uuid? true
+                    :build/children
+                    [{:block/title "Collapsed child" :block/collapsed? true
+                      :build/children [{:block/title "Hidden grandchild"}]}]}
+                   {:block/title (str "{{embed ((" parent-id "))}}")
+                    :block/uuid holder-id :build/keep-uuid? true}]}]})
+          export! (fn [open-only?]
+                    (worker-export/export-blocks-as-format
+                     db holder-id :markdown
+                     {:remove-options [:property] :other-options {:open-blocks-only open-only?}}
+                     {}))]
+      (is (string/includes? (export! true) "Collapsed child"))
+      (is (not (string/includes? (export! true) "Hidden grandchild")))
+      (is (string/includes? (export! false) "Hidden grandchild")))))
 
 (deftest export-page-as-markdown-open-blocks-only
   (async done

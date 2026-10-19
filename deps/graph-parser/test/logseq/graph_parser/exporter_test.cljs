@@ -15,6 +15,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -24,9 +25,11 @@
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.graph-parser.exporter.finalize :as gp-exporter-finalize]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [promesa.core :as p]))
 
@@ -138,7 +141,6 @@
        (keep :block/link)
        (map #(d/entity db (:db/id %)))
        (map ldb/get-title-with-parents)))
-
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -455,6 +457,35 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
+  (p/let [file (write-temp-graph-file
+                 "pages/source.md"
+                 "tags:: [[topic]]\ntopic:: sample value\n\n- Example block\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})
+          db @conn
+          entities-titled (fn [class-ident]
+                            (d/q '[:find [?e ...] :in $ ?title ?class
+                                   :where [?e :block/title ?title] [?c :db/ident ?class] [?e :block/tags ?c]]
+                                 db "topic" class-ident))
+          [tag-id] (entities-titled :logseq.class/Tag)
+          [property-id] (entities-titled :logseq.class/Property)
+          property (some->> property-id (d/entity db))
+          page (db-test/find-page-by-title db "source")]
+    (is (some? (db-test/find-block-by-content db #"Example block"))
+        "Page content is imported")
+    (is (some? property-id) "The property is imported")
+    (is (= "sample value"
+           (some-> (get page (:db/ident property)) db-property/property-value-content))
+        "The page keeps its property value")
+    (is (some? tag-id) "The tag is imported")
+    (is (not= tag-id property-id) "The tag and property are distinct entities")
+    (is (contains? (set (map :db/id (:block/tags page))) tag-id)
+        "The page references the imported tag")
+    (is (empty? (:errors (db-validate/validate-local-db! db)))
+        "Imported graph validates")))
+
 (deftest-async import-org-page-title-when-property-appears-in-middle
   (p/let [file (write-temp-graph-file
                 "pages/20230410145300-end_to_end_note.org"
@@ -661,9 +692,199 @@ abc
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(deftest-async import-block-with-namespaced-tag-keeps-its-other-tags
+  (p/doseq [[content expected-tags]
+            [["- item #[[ns/child]] note #idea #research\n" #{"child" "idea" "research"}]
+             ["- item #[[ns/child]] note #ns #idea #research\n" #{"ns" "child" "idea" "research"}]]]
+    (p/let [file (write-temp-graph-file "pages/sample.md" content)
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [file] conn {:convert-all-tags? true})
+            block (db-test/find-block-by-content @conn #"item")]
+      (testing content
+        (is (= expected-tags (set (map :block/title (:block/tags block))))
+            "All explicit tags are preserved")))))
+
+(deftest-async import-fenced-blocks-with-properties-after-their-fence
+  (p/doseq [[opening title closing display-type language]
+            [["```clojure" "(x 1)" "```" :code "clojure"]
+             ["TODO ```clojure" "(x 1)" "```" :code "clojure"]
+             ["$$" "E = mc^2" "$$" :math nil]
+             ["DONE $$" "E = mc^2" "$$" :math nil]]]
+    (let [block-uuid #uuid "11111111-1111-4111-8111-111111111112"]
+      (p/let [file (write-temp-graph-file
+                    "pages/C.md"
+                    (str "- " opening "\n"
+                         "  " title "\n"
+                         "  " closing "\n"
+                         "  id:: " block-uuid "\n"
+                         "  rating:: 5\n"
+                         "- {{embed ((" block-uuid "))}}\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              block (d/entity @conn [:block/uuid block-uuid])]
+        (testing opening
+          (is (= title (:block/title block))
+              "Property lines after the closing fence are not part of the title")
+          (is (= display-type (:logseq.property.node/display-type block)))
+          (is (= language (:logseq.property.code/lang block)))
+          (is (some? (get block :user.property/rating))
+              "The property after the fence is the block's property"))))))
+
+(deftest-async import-code-and-math-blocks-keep-task-and-tags
+  (p/let [file (write-temp-graph-file
+                "pages/T.md"
+                (str "- TODO ```clojure\n"
+                     "  (x 1)\n"
+                     "  ```\n"
+                     "- DONE $$\n"
+                     "  E = mc^2\n"
+                     "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          [code math] (->> (:block/_page (db-test/find-page-by-title @conn "T")) (sort-by :block/order))
+          tag-idents (fn [b] (set (map :db/ident (:block/tags b))))]
+    (is (= :code (:logseq.property.node/display-type code)))
+    (is (= #{:logseq.class/Task :logseq.class/Code-block} (tag-idents code))
+        "a code block that is a task keeps its Task tag")
+    (is (= "E = mc^2" (:block/title math)))
+    (is (= :math (:logseq.property.node/display-type math))
+        "a math block that is a task is a math block")
+    (is (= #{:logseq.class/Task :logseq.class/Math-block} (tag-idents math))
+        "a math block that is a task keeps its Task tag")))
+(deftest-async import-keeps-text-around-embeds-unknown-embeds-and-multiline-math
+  (p/let [source-file (write-temp-graph-file
+                       "pages/A.md"
+                       (str "- Beta {{embed [[Alpha]]}} after\n"
+                            "- {{embed [[Gamma]]}}\n"
+                            "- b {{embed [[10307562-adaf-4557-89c4-bc8bbcd0d20e]]}}\n"
+                            "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"
+                            "- last\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          gamma-file (write-temp-graph-file "pages/Gamma.md" "- gamma\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file gamma-file] conn {})
+          page-a (db-test/find-page-by-title @conn "A")
+          blocks (->> (:block/_parent page-a) (sort-by :block/order) vec)]
+    (is (= 5 (count blocks))
+        "The whole file imports")
+    (is (= "Beta after" (:block/title (nth blocks 0)))
+        "Text around an embed is kept")
+    (is (= ["Alpha"] (map (comp :block/title :block/link) (:block/_parent (nth blocks 0))))
+        "The embed of a block with text is its child block")
+    (is (= "Gamma" (:block/title (:block/link (nth blocks 1))))
+        "A block that is only an embed links its target")
+    (is (string/starts-with? (:block/title (nth blocks 2)) "b")
+        "An embed of an unknown page keeps the block")
+    (is (= "E = mc^2" (:block/title (nth blocks 3)))
+        "A multi-line display math block keeps its formula")
+    (is (= :math (:logseq.property.node/display-type (nth blocks 3)))
+        "A multi-line display math block is a math block")
+    (is (= "last" (:block/title (nth blocks 4))))))
+
+(deftest-async import-embed-with-heading-or-status
+  (p/let [source-file (write-temp-graph-file
+                       "pages/E.md"
+                       (str "- ### {{embed [[Alpha]]}}\n"
+                            "- DONE {{embed [[Alpha]]}}\n"
+                            "- DONE UNDONE {{embed [[Alpha]]}}\n"
+                            "- DONE DONE {{embed [[Alpha]]}}\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file] conn {})
+          [heading-embed done-embed undone-text done-text :as blocks] (->> (:block/_parent (db-test/find-page-by-title @conn "E")) (sort-by :block/order))]
+    (is (= 4 (count blocks)) "All source blocks are retained")
+    (is (= ["UNDONE" "DONE"] (mapv :block/title [undone-text done-text])))
+    (is (every? #(= :logseq.property/status.done (:db/ident (:logseq.property/status %)))
+                [undone-text done-text]))
+    (is (= "Alpha" (:block/title (:block/link heading-embed))) "an embed with a heading is an embed block")
+    (is (= 3 (:logseq.property/heading heading-embed)))
+    (is (= "Alpha" (:block/title (:block/link done-embed))) "an embed with a status is an embed block")
+    (is (= :logseq.property/status.done (:db/ident (:logseq.property/status done-embed))))))
+
+(deftest-async import-preserves-literal-embed-macros
+  (p/doseq [literal ["`{{embed [[Beta]]}}`"
+                    "``{{embed [[Beta]]}}``"
+                    "\n```text\n{{embed [[Beta]]}}\n```"]]
+    (p/let [source (write-temp-graph-file "pages/Literal.md"
+                                        (str "- " (string/replace (str "示例 " literal "\n{{embed [[Alpha]]}} after")
+                                                                  "\n" "\n  ") "\n"))
+            target (write-temp-graph-file "pages/Alpha.md" "- target\n")
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source target] conn {})
+            block (first (:block/_parent (db-test/find-page-by-title @conn "Literal")))]
+      (is (= (str "示例 " literal "\n after") (:block/title block)))
+      (is (= ["Alpha"] (mapv (comp :block/title :block/link) (ordered-children block)))))))
+
+(deftest-async import-preserves-multiple-embeds
+  (p/let [source (write-temp-graph-file "pages/Embeds.md"
+                                      (str "- before {{embed [[Alpha]]}} middle {{embed [[Beta]]}} after\n"
+                                           "- {{embed [[Alpha]]}} {{embed [[Beta]]}}\n"))
+          alpha (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          beta (write-temp-graph-file "pages/Beta.md" "- beta\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source alpha beta] conn {})
+          blocks (ordered-children (db-test/find-page-by-title @conn "Embeds"))]
+    (is (= ["before middle after" ""] (mapv :block/title blocks)))
+    (is (= [["Alpha" "Beta"] ["Alpha" "Beta"]]
+           (mapv #(mapv (comp :block/title :block/link) (ordered-children %)) blocks)))))
+
+(deftest-async import-thematic-break-block
+  (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          blocks (->> (:block/_page (db-test/find-page-by-title @conn "H")) (sort-by :block/order))]
+    (is (= ["a" "---" "b"] (mapv :block/title blocks))
+        "a block whose text is a thematic break keeps it")))
+
+(deftest-async import-multiline-math-as-first-block
+  (p/let [source-file (write-temp-graph-file
+                       "pages/M.md"
+                       (str "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          block (first (:block/_page (db-test/find-page-by-title @conn "M")))]
+    (is (= "E = mc^2" (:block/title block)))
+    (is (= :math (:logseq.property.node/display-type block)))))
+
+(deftest-async import-keeps-numeric-looking-text-a-number-would-change
+  (p/let [file (write-temp-graph-file
+                "pages/paper.md"
+                (str "arxiv:: 0000.00000\n"
+                     "version:: 2401.10000\n"
+                     "code:: 007\n"
+                     "price:: 3.14\n"
+                     "count:: 42\n\n"
+                     "- note\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          page (db-test/find-page-by-title @conn "paper")
+          value (fn [k] (some-> (get page (keyword "user.property" k)) db-property/property-value-content))]
+    (is (= "0000.00000" (value "arxiv")) "a value a number would turn into 0 stays text")
+    (is (= "2401.10000" (value "version")) "trailing zeros are kept")
+    (is (= "007" (str (value "code"))) "leading zeros are kept")
+    (is (= 3.14 (value "price")) "a float that prints the same is a number")
+    (is (= 42 (value "count")) "an integer is a number")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        missing-mixed-embed-uuid #uuid "66666666-6666-4666-8666-666666666666"
         target-uuid #uuid "22222222-2222-2222-2222-222222222222"
         empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
         empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
@@ -672,6 +893,9 @@ abc
                          (str "Plain pre-block\n"
                               "- Missing ref ((" missing-uuid "))\n"
                               "- {{embed ((" missing-embed-uuid "))}}\n"
+                              "- Missing mixed {{embed [[" missing-mixed-embed-uuid "]]}}\n"
+                              "  - Original child\n"
+                              "- Forward embed {{embed [[" target-uuid "]]}}\n"
                               "- Existing ref ((" target-uuid "))\n"
                               "- ((" empty-title-property-uuid "))\n"
                               "  heading:: true\n"
@@ -688,6 +912,8 @@ abc
             missing-block (db-test/find-block-by-content @conn #"Missing ref")
             existing-block (db-test/find-block-by-content @conn #"Existing ref")
             target-block (db-test/find-block-by-content @conn "Target block")
+            missing-mixed-block (db-test/find-block-by-content @conn "Missing mixed")
+            forward-embed-block (db-test/find-block-by-content @conn "Forward embed")
             empty-title-blocks (blocks-by-title @conn "")
             empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
             empty-title-parent-block (some #(when (some (fn [child]
@@ -704,6 +930,13 @@ abc
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid missing-mixed-embed-uuid]))
+          "Missing UUID embeds do not leave placeholder entities")
+      (is (= ["Original child"] (mapv :block/title (ordered-children missing-mixed-block)))
+          "Only generated children for missing embeds are removed")
+      (is (= [(:db/id target-block)]
+             (mapv (comp :db/id :block/link) (ordered-children forward-embed-block)))
+          "Embeds of targets imported later are retained")
       (is (nil? (d/entity @conn [:block/uuid missing-embed-uuid]))
           "Missing OG block embeds do not leave placeholder entities")
       (is (empty? (d/q '[:find ?b
@@ -715,7 +948,7 @@ abc
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 3 (count empty-title-blocks))
+      (is (= 3 (count (remove :block/link empty-title-blocks)))
           "Blocks whose titles become empty after cleanup are preserved")
       (is (true? (:logseq.property/heading empty-title-property-block))
           "Empty-title blocks keep imported heading properties")
@@ -728,6 +961,100 @@ abc
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
+
+(deftest-async import-converts-markdown-headings-to-db-heading-metadata
+  (p/let [file (write-temp-graph-file
+                "pages/headings.md"
+                (str "# Top H1\n"
+                     "## Top H2\n"
+                     "### Top H3\n"
+                     "#### Top H4\n"
+                     "##### Top H5\n"
+                     "###### Top H6\n"
+                     "- # List H1\n"
+                     "- ## List H2\n"
+                     "- ### List H3\n"
+                     "- #### List H4\n"
+                     "- ##### List H5\n"
+                     "- ###### List H6\n"
+                     "- ####### Too many hashes\n"
+                     "- #hashtag-not-heading remains text\n"
+                     "- regular block\n"
+                     "- Auto heading\n"
+                     "  heading:: true\n"
+                     "- Numbered heading property\n"
+                     "  heading:: 3\n"
+                     "- ## TODO task heading\n"
+                     "- ## Parent heading\n"
+                     "  - child of heading\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (doseq [[pattern title level]
+            [[#"Top H1$" "Top H1" 1]
+             [#"Top H2$" "Top H2" 2]
+             [#"Top H3$" "Top H3" 3]
+             [#"Top H4$" "Top H4" 4]
+             [#"Top H5$" "Top H5" 5]
+             [#"Top H6$" "Top H6" 6]
+             [#"List H1$" "List H1" 1]
+             [#"List H2$" "List H2" 2]
+             [#"List H3$" "List H3" 3]
+             [#"List H4$" "List H4" 4]
+             [#"List H5$" "List H5" 5]
+             [#"List H6$" "List H6" 6]]]
+      (let [block (db-test/find-block-by-content @conn pattern)]
+        (is (some? block)
+            (str "imported markdown heading " title))
+        (is (= title (:block/title block))
+            (str title " is stored without markdown heading markers"))
+        (is (not (string/starts-with? (or (:block/title block) "") "#"))
+            (str title " does not start with #"))
+        (is (= level (:logseq.property/heading block))
+            (str title " heading level is " level))))
+    (let [too-many (db-test/find-block-by-content @conn #"Too many hashes")
+          hashtag (db-test/find-block-by-content @conn #"remains text")
+          regular (db-test/find-block-by-content @conn "regular block")
+          auto (db-test/find-block-by-content @conn "Auto heading")
+          numbered (db-test/find-block-by-content @conn "Numbered heading property")
+          task (db-test/find-block-by-content @conn #"task heading$")
+          parent (db-test/find-block-by-content @conn #"Parent heading$")
+          child (db-test/find-block-by-content @conn "child of heading")]
+      (is (= "Too many hashes" (:block/title too-many))
+          "Seven-hash titles still drop literal heading markers")
+      (is (some? (:logseq.property/heading too-many))
+          "Parser-assigned heading metadata is kept for seven-hash titles")
+      (is (string/includes? (or (:block/title hashtag) "") "remains text")
+          "Hashtags without a space are not treated as headings")
+      (is (nil? (:logseq.property/heading hashtag))
+          "Hashtag blocks do not get heading metadata")
+      (is (nil? (:logseq.property/heading regular))
+          "Regular blocks are not headings")
+      (is (true? (:logseq.property/heading auto))
+          "heading:: true imports as auto heading metadata")
+      (is (= "Auto heading" (:block/title auto))
+          "heading:: true keeps the title without markdown markers")
+      (is (= 3 (:logseq.property/heading numbered))
+          "heading:: 3 imports as heading level 3")
+      (is (= "Numbered heading property" (:block/title numbered))
+          "heading:: 3 keeps the title without markdown markers")
+      (is (= "task heading" (:block/title task))
+          "Task heading titles are stored without markdown heading markers")
+      (is (= 2 (:logseq.property/heading task))
+          "Task heading keeps heading level from markdown syntax")
+      (is (= :logseq.property/status.todo
+             (:logseq.property/status (db-test/readable-properties task)))
+          "Task heading still imports as a TODO task")
+      (is (= "Parent heading" (:block/title parent))
+          "Parent heading title is stored without markdown heading markers")
+      (is (= 2 (:logseq.property/heading parent))
+          "Parent heading level is imported")
+      (is (= ["child of heading"] (mapv :block/title (ordered-children parent)))
+          "Heading parent keeps its children")
+      (is (nil? (:logseq.property/heading child))
+          "Child of a heading is not itself a heading"))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest-async import-generated-markdown-file-graph
   (assert-generated-md-file-graphs-import generated-file-graph-test-seeds))
@@ -1046,6 +1373,53 @@ abc
               "Imported graph validates"))
         (p/finally (fn [_]
                      (set! (.-write (.-stderr js/process)) original-stderr-write))))))
+
+(deftest-async import-asset-links-in-page-and-block-property-values
+  (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
+        graph-dir (write-temp-file-graph
+                   {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}"
+                    "pages/Vertrag.md"
+                    (str "url:: ![Anlage 1.pdf](../assets/Anlage_1_1700757846845_0.pdf)\n\n"
+                         "- page with asset in property\n"
+                         "- body link ![Body.pdf](../assets/Body_1700757846845_0.pdf)\n")
+                    "pages/Block_Prop.md" "- block\n  Link:: ![x.pdf](../assets/x.pdf)\n"
+                    "assets/Anlage_1_1700757846845_0.pdf" pdf-bytes
+                    "assets/Body_1700757846845_0.pdf" pdf-bytes
+                    "assets/x.pdf" pdf-bytes})]
+    (p/let [conn (db-test/create-conn)
+            assets (atom [])
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
+            page-asset (db-test/find-block-by-content @conn "Anlage_1_1700757846845_0")
+            block-asset (db-test/find-block-by-content @conn "x")
+            body-asset (db-test/find-block-by-content @conn "Body_1700757846845_0")
+            page (db-test/find-page-by-title @conn "Vertrag")
+            block (db-test/find-block-by-content @conn "block")
+            body-block (db-test/find-block-by-content @conn #"body link")]
+      (is (some? page-asset) "Page property PDF becomes an Asset")
+      (is (some? block-asset) "Block property PDF becomes an Asset")
+      (is (some? body-asset) "Body PDF still becomes an Asset")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties page-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Page property asset has correct type")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties block-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Block property asset has correct type")
+      (is (= (page-ref/->page-ref (:block/uuid page-asset))
+             (:user.property/url (db-test/readable-properties page)))
+          "Page property value references the imported asset")
+      (is (= (page-ref/->page-ref (:block/uuid block-asset))
+             (:user.property/link (db-test/readable-properties block)))
+          "Block property value references the imported asset")
+      (is (= (str "body link " (page-ref/->page-ref (:block/uuid body-asset)))
+             (:block/title body-block))
+          "Body asset links are unchanged")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
 
 (deftest extract-template-blocks
   (let [page-uuid (random-uuid)
@@ -2145,7 +2519,7 @@ abc
         tx-id (inc (:max-tx @conn))
         reports (atom [])]
     (d/listen! conn ::finalize-test #(swap! reports conj %))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= tx-id (:block/tx-id (d/entity @conn block-id))))
     (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
            (set (map :db/id (:block/refs (d/entity @conn block-id))))))
@@ -2155,7 +2529,7 @@ abc
     (is (= 42 (:block/tx-id (d/entity @conn [:block/uuid skipped-uuid]))))
     (is (empty? (:block/refs (d/entity @conn [:block/uuid reaction-uuid]))))
     (is (= 1 (count @reports)))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= 1 (count @reports)) "Repeated finalization is a no-op")))
 
 (deftest-async import-file-graph-rebuilds-refs-without-per-file-listener
@@ -2418,6 +2792,131 @@ abc
            (set favorite-titles))
         "Imported favorites resolve to the original pages including flattened namespaces")))
 
+(deftest-async import-namespaced-pages-assign-block-order
+  (let [files {"pages/Country___Australia.md" "- Sydney\n"
+               "pages/Country___Canada.md" "- Ottawa\n"
+               "pages/Continent___Asia___Japan.md" "- Tokyo\n"}
+        dir (write-temp-file-graph
+             (assoc files "logseq/config.edn" "{:file/name-format :triple-lowbar}\n"))]
+    (p/doseq [import-mode [:file-graph :doc-files]]
+      (p/let [conn (db-test/create-conn)
+              _ (case import-mode
+                  :file-graph (import-file-graph-to-db dir conn {})
+                  :doc-files (import-files-to-db (mapv #(path/path-normalize (node-path/join dir %)) (keys files)) conn {}))
+              library (ldb/get-built-in-page @conn common-config/library-page-name)
+              country (db-test/find-page-by-title @conn "Country")
+              australia (db-test/find-page-by-title @conn "Australia")
+              canada (db-test/find-page-by-title @conn "Canada")
+              continent (db-test/find-page-by-title @conn "Continent")
+              asia (db-test/find-page-by-title @conn "Asia")
+              japan (db-test/find-page-by-title @conn "Japan")
+              nested-pages [australia canada asia japan]
+              ordered-pages (cond-> nested-pages
+                              (= :file-graph import-mode) (into [country continent]))]
+        (testing (name import-mode)
+          (is (= ["Country" "Country" "Continent" "Asia"]
+                 (mapv #(-> % :block/parent :block/title) nested-pages))
+              "Imported pages preserve their namespace parents")
+          (is (every? #(string? (:block/order %)) ordered-pages)
+              "Every imported hierarchy child has a string order")
+          (is (not= (:block/order australia) (:block/order canada))
+              "Sibling imported pages get distinct orders")
+          (when (= :file-graph import-mode)
+            (is (= [(:db/id library) (:db/id library)]
+                   (mapv #(-> % :block/parent :db/id) [country continent]))
+                "Top-level hierarchy parents are moved under Library")))))))
+
+(deftest-async import-skips-class-and-property-namespace-roots-when-moving-to-library
+  ;; Same shape as https://github.com/logseq/db-test/issues/1401:
+  ;; a class namespace root (used as tags::) and a property namespace root
+  ;; (used as x:: value) must not be parented under Library.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Vehicle___Car.md" "- a car\n"
+                "pages/Garage.md" "tags:: [[Vehicle]]\n- garage page tagged Vehicle\n"
+                "pages/City___Berlin.md" "- Berlin city child\n"
+                "pages/Trip.md" "city:: Berlin\n- page with city property\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          library (ldb/get-built-in-page @conn common-config/library-page-name)
+          vehicle (db-test/find-page-by-title @conn "Vehicle")
+          car (db-test/find-page-by-title @conn "Car")
+          city (d/entity @conn :user.property/city)
+          berlin (db-test/find-page-by-title @conn "Berlin")
+          country (db-test/find-page-by-title @conn "Country")]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (ldb/class? vehicle)
+        "Namespace root used as a tag is imported as a class")
+    (is (nil? (:block/parent vehicle))
+        "Class namespace roots are not moved under Library")
+    (is (nil? (:block/order vehicle))
+        "Class namespace roots do not get a Library order")
+    (is (ldb/property? city)
+        "Namespace root used as a property is imported as a property")
+    (is (nil? (:block/parent city))
+        "Property namespace roots are not moved under Library")
+    (is (= (:db/id vehicle) (:db/id (:block/parent car)))
+        "Class namespace children keep their class parent")
+    (is (= (:db/id city) (:db/id (:block/parent berlin)))
+        "Property namespace children keep their property parent")
+    (is (= (:db/id library) (:db/id (:block/parent country)))
+        "Non-class/non-property namespace roots still move under Library")))
+
+(deftest-async import-namespaced-pages-order-after-parent-content-blocks
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
+                "pages/Country.md" "- Overview\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})
+          country (db-test/find-page-by-title @conn "Country")
+          australia (db-test/find-page-by-title @conn "Australia")
+          overview (db-test/find-block-by-content @conn "Overview")
+          page-order (:block/order australia)
+          content-order (:block/order overview)]
+    (is (= (:db/id country)
+           (:db/id (:block/parent australia))
+           (:db/id (:block/parent overview)))
+        "The imported page and existing content share a parent")
+    (is (and (string? page-order)
+             (string? content-order)
+             (pos? (compare page-order content-order)))
+        "The imported page is ordered after existing parent content")))
+
+(deftest repaired-page-orders-advance-namespace-page-allocator
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Country"}
+                 :blocks [{:block/title "Overview"}]}]})
+        country (db-test/find-page-by-title @conn "Country")
+        overview (db-test/find-block-by-content @conn "Overview")
+        initial-max (db-order/get-max-order @conn)
+        now (.now js/Date)]
+    (with-redefs [db-order/*max-key (atom initial-max)]
+      (d/transact! conn
+                   [{:db/id (:db/id overview) :block/order initial-max}
+                    {:block/uuid (random-uuid)
+                     :block/title "Australia"
+                     :block/name "australia"
+                     :block/tags :logseq.class/Page
+                     :block/parent (:db/id country)
+                     :block/created-at now
+                     :block/updated-at now}])
+      (let [report (gp-exporter-finalize/ensure-imported-page-parent-orders! conn)
+            australia (db-test/find-page-by-title @conn "Australia")
+            repaired-order (:block/order australia)]
+        (is (= repaired-order @db-order/*max-key))
+        (is (= @conn (:db-after report)))
+        (outliner-page/create! conn "Country/New" {:split-namespace? true})
+        (let [new-page (db-test/find-page-by-title @conn "New")]
+          (is (pos? (compare (:block/order new-page) repaired-order)))
+          (is (= (:db/id australia) (:db/id (ldb/get-left-sibling new-page)))))
+        (let [allocator-max @db-order/*max-key]
+          (is (nil? (gp-exporter-finalize/ensure-imported-page-parent-orders! conn)))
+          (is (= allocator-max @db-order/*max-key)))))))
+
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)
         standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
@@ -2443,6 +2942,51 @@ abc
           "Text references are rewritten to the standard journal uuid")
       (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
           "Structured block page reference still points to the same journal entity"))))
+
+(defn- assert-rolle-property-and-class-are-distinct
+  [conn]
+  (let [klass (d/entity @conn :user.class/Rolle)
+        prop (d/entity @conn :user.property/rolle)
+        alice (or (db-test/find-page-by-title @conn "A_Alice")
+                  (db-test/find-page-by-title @conn "Alice"))
+        tagged-page-id (ffirst (d/q '[:find ?p
+                                      :where
+                                      [?p :block/tags :user.class/Rolle]
+                                      [?p :block/name]]
+                                    @conn))]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (and (some? klass) (ldb/class? klass) (not (ldb/property? klass)))
+        "Rolle tag is a class, not a property")
+    (is (and (some? prop) (ldb/property? prop) (not (ldb/class? prop)))
+        "rolle is a property, not a class")
+    (is (not= (:block/uuid klass) (:block/uuid prop))
+        "Class and property are distinct entities")
+    (is (some? tagged-page-id)
+        "A page tagged Rolle references the class")
+    (is (some? (:user.property/rolle alice))
+        "Alice's rolle value is on the property")))
+
+(deftest-async import-property-and-class-same-title-property-first
+  ;; https://github.com/logseq/db-test/issues/1402
+  ;; Property page is created first; later tags:: [[Rolle]] must not reuse it.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/A_Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"
+                "pages/B_Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
+
+(deftest-async import-property-and-class-same-title-class-first
+  ;; Inverse file order of import-property-and-class-same-title-property-first.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"
+                "pages/Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

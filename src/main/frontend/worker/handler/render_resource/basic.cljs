@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.reaction :as reaction]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb-handler]
             [frontend.worker.handler.comments :as comments-handler]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.property :as property-handler]
@@ -49,7 +50,8 @@
   [db _resource-key _runtime]
   (let [favorites-page-uuid (:block/uuid (favorites-page db))
         targets (favorite-targets db)]
-    [(into #{[:children favorites-page-uuid]}
+    [(into #{[:children favorites-page-uuid]
+             [:attr :block/link]}
            (map (fn [page] [:entity (:block/uuid page)]))
            targets)
      (mapv sidebar-page-summary targets)]))
@@ -58,7 +60,8 @@
   [db resource-key _runtime]
   (let [page-uuid (common/require-uuid! :page-uuid (second resource-key))
         favorites-page-uuid (:block/uuid (favorites-page db))]
-    [#{[:children favorites-page-uuid]}
+    [#{[:children favorites-page-uuid]
+       [:attr :block/link]}
      (boolean (some #(= page-uuid (:block/uuid %))
                     (favorite-targets db)))]))
 
@@ -93,6 +96,16 @@
       [#{[:page-lookup watch-lookup]}
        (some-> (ldb/get-page db lookup) :block/uuid)])))
 
+(defn- entity-title
+  [db resource-key _runtime]
+  (let [ident (second resource-key)]
+    (when-not (qualified-keyword? ident)
+      (common/fail! "Invalid entity title lookup" {:ident ident}))
+    (let [entity (d/entity db ident)]
+      [(cond-> #{[:attr :db/ident]}
+         (:block/uuid entity) (conj [:entity (:block/uuid entity)]))
+       (:block/title entity)])))
+
 (defn- page-preview-source
   [db resource-key _runtime]
   (let [page-uuid (common/require-uuid! :page-uuid (second resource-key))
@@ -102,51 +115,41 @@
        [:attr :block/alias]}
      (common/entity-uuid! db (:db/id source))]))
 
-(defn- breadcrumb-ref-titles
-  [entities]
-  (into {}
-        (comp
-         (mapcat :block/refs)
-         (keep (fn [ref]
-                 (when-let [ref-uuid (:block/uuid ref)]
-                   (let [title (:block/title ref)]
-                     (when-not (string? title)
-                       (common/fail! "Invalid breadcrumb reference title"
-                              {:ref-uuid ref-uuid
-                               :title title}))
-                     [ref-uuid title])))))
-        entities))
+(defn- empty-block-breadcrumb
+  [block-uuid]
+  {:target-uuid block-uuid
+   :ancestor-uuids []
+   :ancestors []
+   :ref-titles {}})
 
 (defn- block-breadcrumb
   [db resource-key _runtime]
-  (let [[_ block-uuid load-depth] resource-key
-        block (common/entity-by-uuid! db :block-uuid block-uuid)]
+  (let [[_ block-uuid load-depth] resource-key]
+    (common/require-uuid! :block-uuid block-uuid)
     (when-not (and (integer? load-depth) (pos? load-depth))
       (common/fail! "Invalid breadcrumb load depth" {:load-depth load-depth}))
-    (let [parents (vec (ldb/get-block-parents db block-uuid {:depth load-depth}))
-          page (:block/page block)
-          ancestor-blocks (if (and page
-                                   (not= (:db/id page) (:db/id (first parents))))
-                            (into [page] parents)
-                            parents)
-          from-property (:logseq.property/created-from-property block)
-          ancestor-blocks (cond-> ancestor-blocks
-                                 from-property
-                                 (conj from-property))
-          ancestor-uuids (mapv (fn [ancestor]
-                                 (common/entity-uuid! db (:db/id ancestor)))
-                               ancestor-blocks)
-          ref-titles (breadcrumb-ref-titles (into [block] ancestor-blocks))
-          watch-uuids (into (conj (set ancestor-uuids) block-uuid)
-                            (keys ref-titles))
-          watch-keys (into #{}
-                           (map (fn [watch-uuid]
-                                  [:entity watch-uuid]))
-                           watch-uuids)]
-      [watch-keys
-       {:target-uuid block-uuid
-        :ancestor-uuids ancestor-uuids
-        :ref-titles ref-titles}])))
+    (if-let [block (d/entity db [:block/uuid block-uuid])]
+      (let [breadcrumb-ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
+            ancestor-uuids (mapv :block/uuid breadcrumb-ancestors)
+            ref-titles (block-breadcrumb-handler/breadcrumb-ref-titles
+                        db (into [block] breadcrumb-ancestors))
+            watch-uuids (into (conj (set ancestor-uuids) block-uuid)
+                              (keys ref-titles))
+            watch-keys (into #{}
+                             (map (fn [watch-uuid]
+                                    [:entity watch-uuid]))
+                             watch-uuids)]
+        (when-not (every? uuid? ancestor-uuids)
+          (common/fail! "Invalid breadcrumb ancestor UUID"
+                        {:block-uuid block-uuid
+                         :ancestor-uuids ancestor-uuids}))
+        [watch-keys
+         {:target-uuid block-uuid
+          :ancestor-uuids ancestor-uuids
+          :ancestors breadcrumb-ancestors
+          :ref-titles ref-titles}])
+      [#{[:entity block-uuid]}
+       (empty-block-breadcrumb block-uuid)])))
 
 (defn- journals
   [db _resource-key _runtime]
@@ -200,7 +203,15 @@
   (let [block-uuid (second resource-key)
         block (common/entity-by-uuid! db :block-uuid block-uuid)]
     [#{[:refs block-uuid]}
-     (ldb/get-block-refs-count db (:db/id block))]))
+     ;; Property pages keep Linked References hidden: the objects table
+     ;; already lists every node that uses the property. Class/tag pages
+     ;; still need this count so [[tag]] page-link refs can mount Linked
+     ;; References. Tagged #tag instances are already excluded by
+     ;; get-block-refs-count / get-linked-references, so they stay in the
+     ;; objects table instead of double-listing here.
+     (if (ldb/property? block)
+       0
+       (ldb/get-block-refs-count db (:db/id block)))]))
 
 (defn- block-unlinked-ref-exists
   [db resource-key {:keys [repo]}]
@@ -391,6 +402,7 @@
    :favorite-status (common/renderer 2 favorite-status)
    :recent-pages (common/renderer 2 recent-pages)
    :page-identity (common/renderer 2 page-identity)
+   :entity-title (common/renderer 2 entity-title)
    :page-preview-source (common/renderer 2 page-preview-source)
    :block-breadcrumb (common/renderer 3 block-breadcrumb)
    :journals (common/renderer 1 journals)

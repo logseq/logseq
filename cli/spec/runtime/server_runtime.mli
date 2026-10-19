@@ -36,10 +36,6 @@ type cleanup_result = {
 
 val resolve_root_dir : Cli_config.t -> Cli_primitive.path
 val graphs_dir : Cli_config.t -> Cli_primitive.path
-
-val lock_path :
-  root_dir:Cli_primitive.path -> Cli_primitive.repo -> Cli_primitive.path
-
 val db_worker_runtime_script_path : unit -> Cli_primitive.path
 
 val ensure_server :
@@ -63,6 +59,15 @@ val restart_server :
   Cli_config.t ->
   Cli_primitive.repo ->
   start_result Error.build_result Cli_effect.t
+
+val delete_graph :
+  Cli_config.t ->
+  Cli_primitive.repo ->
+  on_removed:(unit -> unit Error.build_result Cli_effect.t) ->
+  bool Error.build_result Cli_effect.t
+
+val create_graph :
+  Cli_config.t -> Cli_primitive.repo -> string Error.build_result Cli_effect.t
 
 val list_servers : Cli_config.t -> server Rrbvec.t Cli_effect.t
 val list_graph_items : Cli_config.t -> Graph_types.graph_item Rrbvec.t

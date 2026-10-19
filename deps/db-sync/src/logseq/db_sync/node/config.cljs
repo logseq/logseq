@@ -23,12 +23,13 @@
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
      :assets-driver (or (env-value env "DB_SYNC_ASSETS_DRIVER") "filesystem")
      :log-level (or (env-value env "DB_SYNC_LOG_LEVEL") "info")
+     :asset-link-secret (env-value env "ASSET_LINK_SECRET")
      :cognito-issuer (env-value env "COGNITO_ISSUER")
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :base-urls :data-dir :storage-driver :assets-driver :log-level
+  [:port :base-url :base-urls :data-dir :storage-driver :assets-driver :log-level :asset-link-secret
    :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
@@ -37,7 +38,9 @@
                   :storage-driver "sqlite"
                   :assets-driver "filesystem"
                   :log-level "info"}
-        merged (merge defaults (config-from-env) overrides)
+        ;; an unset env var is nil in config-from-env: drop it, or merge
+        ;; replaces the default with nil (no DB_SYNC_PORT gave a random port)
+        merged (merge defaults (into {} (remove (comp nil? val)) (config-from-env)) overrides)
         ;; When a single :base-url is passed (e.g. in tests or programmatic use)
         ;; promote it into :base-urls so the rest of the code only needs to
         ;; deal with the vector form.

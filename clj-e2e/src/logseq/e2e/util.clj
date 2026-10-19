@@ -71,11 +71,25 @@
     (.pressSequentially input-node text
                         (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
+(defn- editor-left?
+  [timeout]
+  (try
+    (w/wait-for-not-visible editor-q {:timeout timeout})
+    true
+    (catch TimeoutError _e
+      false)))
+
 (defn exit-edit
   []
-  (dotimes [_ 2]
-    (when (get-editor)
-      (k/esc)))
+  ;; Escape saves the block before it leaves editing, so the editor can stay
+  ;; for a while after the key. An Escape pressed then reaches the page and
+  ;; clears the block selection the first one made. Press again only when
+  ;; the editor stays, e.g. the first Escape closed a popup.
+  (when (get-editor)
+    (k/esc)
+    (when-not (editor-left? 1000)
+      (when (get-editor)
+        (k/esc))))
   (assert/assert-non-editor-mode))
 
 (defn double-esc
@@ -87,26 +101,50 @@
   (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc)))
 
+(def cmdk-search-settle-ms
+  "Wait past frontend.components.cmdk.core/search-debounce-ms (300) so fill
+  does not race the debounced search."
+  400)
+
+(defn- fill-cmdk-search
+  "Clear first so a retry of the same query still fires input/onChange.
+  Playwright fill of an unchanged value does not."
+  [text]
+  (w/fill ".cp__cmdk-search-input" "")
+  (w/fill ".cp__cmdk-search-input" text))
+
+(defn- cmdk-open?
+  "Press mod+k and give the async cmdk mount a moment to render. `visible?`
+  polls instantly and loses the race to the delayed open, dropping us into
+  the fallback while the dialog is actually opening."
+  []
+  (k/press "ControlOrMeta+k")
+  (try
+    (w/wait-for ".cp__cmdk-search-input" {:timeout 2000})
+    true
+    (catch TimeoutError _e
+      false)))
+
 (defn search
   [text]
-  (if (w/visible? ".cp__cmdk-search-input")
-    (w/fill ".cp__cmdk-search-input" text)
-    (do
-      (k/press "ControlOrMeta+k")
-      (when-not (w/visible? ".cp__cmdk-search-input")
-        (double-esc)
-        (assert/assert-in-normal-mode?)
-        (w/click :#search-button))
-      (w/wait-for ".cp__cmdk-search-input")
-      (w/fill ".cp__cmdk-search-input" text))))
+  (when-not (w/visible? ".cp__cmdk-search-input")
+    (when-not (cmdk-open?)
+      (double-esc)
+      ;; the header button only renders once a graph is loaded, so wait for
+      ;; it instead of asserting instantly — a still-loading page makes the
+      ;; assert fail with AssertionFailedError, which escapes callers' waits
+      (w/wait-for "#search-button" {:timeout 15000})
+      (assert/assert-in-normal-mode?)
+      (w/click :#search-button)
+      (w/wait-for ".cp__cmdk-search-input")))
+  (fill-cmdk-search text)
+  (wait-timeout cmdk-search-settle-ms))
 
 (defn search-and-click
   [search-text]
   (search search-text)
   (let [result (.first (w/get-by-test-id search-text))]
-    (repeat-until-visible 5 result #(do
-                                      (search search-text)
-                                      (wait-timeout 300)))
+    (repeat-until-visible 5 result #(search search-text))
     (w/click result)))
 
 (defn wait-editor-gone
@@ -139,9 +177,26 @@
     (.textContent locator)))
 
 (defn get-edit-content
+  "The live text of the editing textarea. Read through inputValue, not through
+   the DOM text: a textarea keeps what the user types in its value, while its
+   child text node holds whatever it was rendered with."
   []
   (when-let [editor (get-editor)]
-    (get-text editor)))
+    (.inputValue editor)))
+
+(defn wait-edit-content
+  "Waits until the editing textarea's content equals `expected`. Deleting or
+   concatting blocks remounts the editor after an async worker roundtrip, so a
+   one-shot read can observe a stale or transiently missing editor."
+  [expected]
+  (wait-editor-visible)
+  (let [deadline (+ (System/currentTimeMillis) 10000)]
+    (loop []
+      (let [content (get-edit-content)]
+        (cond
+          (= expected content) true
+          (< deadline (System/currentTimeMillis)) (is (= expected content))
+          :else (do (wait-timeout 100) (recur)))))))
 
 (defn bounding-xy
   [locator]
@@ -160,17 +215,12 @@
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
 (defn login-test-account
-  [& {:keys [username password]
-      :or {username "e2etest"
-           password "Logseq-e2e"}}]
-  (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
-  (w/click ".toolbar-dots-btn")
-  (w/click "div:text(\"Login\")")
-  (input username)
-  (k/tab)
-  (input password)
-  (w/click ".cp__user-login button[type=\"submit\"]")
-  (w/wait-for-not-visible ".cp__user-login"))
+  "RTC tests are already logged in: `open-2-pages` injects the local db-sync
+  server URL and the test account's tokens through the init script before
+  first navigation, so no Cognito UI login is needed. This verifies the
+  injected login is present so a missing init script fails fast."
+  []
+  (is (some? (w/eval-js "localStorage.getItem('id-token')"))))
 
 (defn goto-journals
   []

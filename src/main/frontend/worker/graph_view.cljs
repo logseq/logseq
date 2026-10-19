@@ -86,6 +86,19 @@
   ([db attr value]
    (set (map :e (datoms-for db :avet attr value)))))
 
+(defn- with-descendant-ids
+  "Each id plus every :block/parent descendant."
+  [db ids]
+  (loop [queue (vec ids)
+         seen #{}]
+    (if-let [id (peek queue)]
+      (if (contains? seen id)
+        (recur (pop queue) seen)
+        (recur (into (pop queue)
+                     (map :e (datoms-for db :avet :block/parent id)))
+               (conj seen id)))
+      seen)))
+
 (defn- entity-value-map
   [db attr ids]
   (if (empty? ids)
@@ -838,8 +851,10 @@
       (let [dark? (dark-theme? theme)
             orphan-pages? (show-orphan-pages? orphan-pages?)
             name-page-ids (set (map :e name-datoms))
-            hidden-name-page-ids (set/union (entity-ids-with db :logseq.property/hide? true)
-                                            (entity-ids-with db :logseq.property/deleted-at))
+            hidden-name-page-ids (with-descendant-ids
+                                  db
+                                  (set/union (entity-ids-with db :logseq.property/hide? true)
+                                             (entity-ids-with db :logseq.property/deleted-at)))
             ident-by-name-page-id (entity-value-map-by-id db :db/ident name-page-ids)
             name-datoms (vec (remove (fn [{page-id :e}]
                                        (or (contains? hidden-name-page-ids page-id)

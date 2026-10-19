@@ -56,7 +56,6 @@
                           :repo url}))
     (let [current-repo (state/get-current-repo)]
       (p/do!
-       (persist-db/<close-db url)
        (db-persist/delete-graph! url)
        (search/remove-db! url)
        (state/delete-repo! repo)
@@ -73,6 +72,16 @@
                (state/pub-event! [:graph/switch graph {:persist? false}])))
            (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success)))))))
 
+(defn <restore-date-formatter!
+  "Load the graph's persisted journal title format into UI state.
+
+  Must finish before journals or Settings render so :ui/date-formatter is not
+  left at the default after startup or a graph switch."
+  [repo]
+  (p/let [date-formatter (db-async/<get-date-formatter repo)]
+    (state/set-date-formatter! repo date-formatter)
+    date-formatter))
+
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
@@ -81,8 +90,7 @@
    (when-not (true? (:file-graph-import? opts))
      (state/set-db-restoring! true))
    (db-restore/restore-graph! repo opts)
-   (p/let [date-formatter (db-async/<get-date-formatter repo)]
-     (state/set-date-formatter! repo date-formatter))
+   (<restore-date-formatter! repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
@@ -153,7 +161,7 @@
 (defn graph-already-exists?
   "Checks to see if given db graph name already exists"
   [graph-name]
-  (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
+  (let [full-graph-name (string/lower-case (str config/db-version-prefix (string/trim graph-name)))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
@@ -170,7 +178,14 @@
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
-           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
+           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))
+           ;; A reload opens the graph the tab remembers before the last
+           ;; current graph; remember the new one as a switch does, or a
+           ;; reload reopens the graph opened before it (db-test #1361)
+           _ (when-not file-graph-import?
+               (p/do!
+                (graph-handler/<upsert-current-graph-registry!)
+                (graph-handler/remember-current-graph-id-in-tab!)))]
      (state/pub-event! [:shortcut/refresh])
      (when-not file-graph-import?
        (route-handler/redirect-to-home!)
@@ -188,10 +203,11 @@
   "Handler for creating a new database graph"
   ([graph] (new-db! graph {}))
   ([graph opts]
-   (let [full-graph-name (str config/db-version-prefix graph)]
-     (if (graph-already-exists? graph)
+   (let [trimmed-graph (string/trim graph)
+         full-graph-name (str config/db-version-prefix trimmed-graph)]
+     (if (graph-already-exists? trimmed-graph)
        (state/pub-event! [:notification/show
-                          {:content (t :graph/already-exists-error graph)
+                          {:content (t :graph/already-exists-error trimmed-graph)
                            :status :error}])
        (create-db full-graph-name opts)))))
 

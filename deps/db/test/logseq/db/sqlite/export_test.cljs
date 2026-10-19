@@ -1467,3 +1467,63 @@
     (is (= [:block/uuid asset2-uuid]
            [:block/uuid (:block/uuid (:logseq.property.pdf/hl-image annotation-image))])
         ":logseq.property.pdf/hl-image should preserve the asset ref")))
+
+(defn- call-validate-local-db
+  [orig-validate db opts]
+  (if (seq opts)
+    (apply orig-validate db (apply concat opts))
+    (orig-validate db)))
+
+(deftest validate-import-txs-tx-scope-validates-only-touched-entities
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "existing-page"}
+                                   :blocks [{:block/title "existing-block"}]}]})
+        existing-page (db-test/find-page-by-title @conn "existing-page")
+        _ (d/transact! conn [{:db/id (:db/id existing-page)
+                              :not-a-real-attr true}])
+        export-map {:pages-and-blocks [{:page {:block/title "imported-page"}
+                                        :blocks [{:block/title "imported-block"}]}]}
+        txs (sqlite-export/build-import export-map @conn {})
+        orig-validate db-validate/validate-local-db!]
+    (testing "tx scope ignores untouched invalid entities and passes entity-ids"
+      (let [tx-calls (atom [])]
+        (with-redefs [db-validate/validate-local-db!
+                      (fn [db & {:as opts}]
+                        (swap! tx-calls conj opts)
+                        (call-validate-local-db orig-validate db opts))]
+          (let [result (sqlite-export/validate-import-txs txs @conn {:validate-scope :tx
+                                                                    :edn-label "tx-scope EDN"})
+                entity-ids (set (:entity-ids (first @tx-calls)))
+                graph-eids (set (map :e (d/datoms @conn :eavt)))]
+            (is (nil? (:error result)))
+            (is (= 1 (count @tx-calls)))
+            (is (seq entity-ids))
+            (is (not (contains? entity-ids (:db/id existing-page))))
+            (is (< (count entity-ids) (count graph-eids)))))))
+    (testing "graph scope still validates the whole db"
+      (let [graph-calls (atom [])]
+        (with-redefs [db-validate/validate-local-db!
+                      (fn [db & {:as opts}]
+                        (swap! graph-calls conj opts)
+                        (call-validate-local-db orig-validate db opts))]
+          (let [result (db-test/silence-stderr
+                        (sqlite-export/validate-import-txs txs @conn {:edn-label "graph-scope EDN"}))]
+            (is (some? (:error result)))
+            (is (re-find #"validation error" (:error result)))
+            (is (= 1 (count @graph-calls)))
+            (is (nil? (:entity-ids (first @graph-calls))))))))))
+
+(deftest validate-import-txs-tx-scope-rejects-invalid-tx
+  (let [conn (db-test/create-conn)
+        txs {:init-tx [{:db/id -1
+                        :block/uuid (random-uuid)
+                        :block/title 123
+                        :block/name "invalid-imported-page"
+                        :block/created-at 1
+                        :block/updated-at 1
+                        :block/tags :logseq.class/Page}]}]
+    (db-test/silence-stderr
+     (let [result (sqlite-export/validate-import-txs txs @conn {:validate-scope :tx
+                                                               :edn-label "invalid tx EDN"})]
+       (is (some? (:error result)))
+       (is (re-find #"validation error" (:error result)))))))

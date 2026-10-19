@@ -1025,12 +1025,20 @@
                         (set-doc-password! password))]
                   (pdf-password-input on-password-fn)))))
 
-           (do
-             (notification/show!
-              (t :pdf/generic-error (.-name error) (.-message error))
-              :error
-              false)
-             (state/set-state! :pdf/current nil)))))
+           ;; A web address the viewer cannot fetch (the site sends no CORS
+           ;; headers to the app) opens in the browser, as the link did before
+           ;; it became an asset.
+           (let [ext-url (:logseq.property.asset/external-url block)]
+             (if (and (string? ext-url) (re-find #"^https?://" ext-url))
+               (do
+                 (util/open-url ext-url)
+                 (state/set-state! :pdf/current nil))
+               (do
+                 (notification/show!
+                  (t :pdf/generic-error (.-name error) (.-message error))
+                  :error
+                  false)
+                 (state/set-state! :pdf/current nil)))))))
      [(:error loader-state)])
 
     [:> (.-Provider highlights-ctx) {:value hls-state}

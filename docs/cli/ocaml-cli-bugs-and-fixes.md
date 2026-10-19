@@ -1,6 +1,6 @@
 # OCaml CLI Bugs and Fixes
 
-Last updated: 2026-07-01
+Last updated: 2026-09-15
 
 This document tracks bugs found while using the OCaml Logseq CLI and the CLI sync stress workflow. The scope is split deliberately:
 
@@ -11,6 +11,15 @@ This document tracks bugs found while using the OCaml Logseq CLI and the CLI syn
 For detailed sync stress logs and per-run evidence, see `docs/sync/failed-cases.md`.
 
 ## OCaml CLI Product Bugs
+
+### Create results included references and omitted descendants
+
+- Status: fixed.
+- Symptom: task and asset creation returned `[194, 193]`, where `193` was a referenced page. A nested block request returned `[196, 197]` instead of `[196, 198, 199, 197]`. Updating every returned task ID also converted the reference page to a task, persisting across worker restart.
+- Root cause: `cli/lib/add.ml` scanned insertion response payloads for UUIDs and retained only the parent insertion result. These payloads included references and omitted child insertion results.
+- Fix: resolve only creation-action UUIDs in input-tree preorder after insertion and metadata operations. Deduplicate first occurrences and fail on unresolved requested entities. Remove payload scanning and the insertion-result accumulator.
+- Direct-write isolation: this branch also incorporates the equivalent of PR #13129. `execute_create_block` applies command-level tags and properties to top-level action UUIDs, independently of the returned descendant IDs.
+- Regression coverage: CLI parity tests cover incidental entities, missing descendants, UUID deduplication, and concurrent target deletion. `created-entity-result-{metadata,block,task,asset}` in `cli-e2e/spec/non_sync_cases.edn` cover references, nested trees, JSON/EDN, both block input options, follow-up writes, worker restart, explicit page-to-task updates, and mixed block/page deletion.
 
 ### Tag-name resolution failed for block tag updates
 

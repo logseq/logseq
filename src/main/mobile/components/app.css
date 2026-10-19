@@ -212,11 +212,27 @@ ul {
       > .block-control-wrap, > .block-control-wrap > .block-control {
         @apply mt-[18px];
       }
+
+      > .block-control-wrap.is-with-icon {
+        margin-top: calc(0.25rem + (2rem * 1.38 - var(--ls-block-icon-size, 28px)) / 2);
+      }
+
+      > .block-control-wrap.is-with-icon > .block-control {
+        @apply mt-0;
+      }
     }
 
     &[data-has-heading="2"], &:has(textarea.h2) {
       > .block-control-wrap, > .block-control-wrap > .block-control {
         @apply mt-3;
+      }
+
+      > .block-control-wrap.is-with-icon {
+        margin-top: calc(0.25rem + (1.5rem * 1.38 - var(--ls-block-icon-size, 24px)) / 2);
+      }
+
+      > .block-control-wrap.is-with-icon > .block-control {
+        @apply mt-0;
       }
     }
   }

@@ -37,8 +37,21 @@
             (nth tx 3)))
         tx-data))
 
+(def ^:private fixed-now
+  "Mid June: weeks away from any clock change north or south of the equator,
+  so stepping days and weeks from it is the same in local and UTC time."
+  (t/date-time 2026 6 15 12 0))
+
+(defn- local-days
+  "Local calendar days from `from` to `to` (both instants). A day step
+  keeps the local time of day, so across a clock change it is 23 or 25 hours."
+  [from to]
+  (let [midnight (fn [x] (let [d (js/Date. (tc/to-long x))]
+                           (js/Date.UTC (.getFullYear d) (.getMonth d) (.getDate d))))]
+    (/ (- (midnight to) (midnight from)) (* 1000 60 60 24))))
+
 (deftest ^:large-vars/cleanup-todo get-next-time-test
-  (let [now (t/now)
+  (let [now fixed-now
         one-minute-ago (t/minus now (t/minutes 1))
         one-hour-ago (t/minus now (t/hours 1))
         one-day-ago (t/minus now (t/days 1))
@@ -47,8 +60,8 @@
         one-year-ago (t/minus now (t/years 1))
         in-minutes (fn [next-time] (/ (- next-time now) (* 1000 60)))
         in-hours (fn [next-time] (/ (- next-time now) (* 1000 60 60)))
-        in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
-        in-weeks (fn [next-time] (/ (- next-time now) (* 1000 60 60 24 7)))
+        in-days (fn [next-time] (local-days now next-time))
+        in-weeks (fn [next-time] (/ (local-days now next-time) 7))
         in-months (fn [next-time] (t/in-months (t/interval now (tc/from-long next-time))))
         in-years (fn [next-time] (t/in-years (t/interval now (tc/from-long next-time))))]
     (with-redefs [t/now (fn [] now)]
@@ -151,9 +164,9 @@
 
 (deftest dotted-plus-advances-from-completion-test
   (testing "`.+` always anchors on now (completion), regardless of original schedule"
-    (let [now (t/now)
-          in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
-          in-weeks (fn [next-time] (/ (- next-time now) (* 1000 60 60 24 7)))
+    (let [now fixed-now
+          in-days (fn [next-time] (local-days now next-time))
+          in-weeks (fn [next-time] (/ (local-days now next-time) 7))
           in-years (fn [next-time] (t/in-years (t/interval now (tc/from-long next-time))))]
       (with-redefs [t/now (fn [] now)]
         ;; Weekly task scheduled 4 days ago and completed today:
@@ -181,9 +194,9 @@
 
 (deftest plus-advances-from-scheduled-test
   (testing "`+` advances from the original scheduled date; can land in the past (documented stacking)"
-    (let [now (t/now)
-          in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
-          in-weeks (fn [next-time] (/ (- next-time now) (* 1000 60 60 24 7)))]
+    (let [now fixed-now
+          in-days (fn [next-time] (local-days now next-time))
+          in-weeks (fn [next-time] (/ (local-days now next-time) 7))]
       (with-redefs [t/now (fn [] now)]
         ;; Weekly scheduled 10 days ago: result = original + 1 week = 3 days ago (stacked).
         (let [ten-days-ago (t/minus now (t/days 10))
@@ -204,9 +217,9 @@
 
 (deftest double-plus-advances-until-future-test
   (testing "`++` advances in whole intervals until strictly after now; preserves weekday for weekly"
-    (let [now (t/now)
-          in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
-          in-weeks (fn [next-time] (/ (- next-time now) (* 1000 60 60 24 7)))]
+    (let [now fixed-now
+          in-days (fn [next-time] (local-days now next-time))
+          in-weeks (fn [next-time] (/ (local-days now next-time) 7))]
       (with-redefs [t/now (fn [] now)]
         ;; Weekly scheduled 10 days ago: original + 1 week = 3 days ago (still past),
         ;; step again to original + 2 weeks = 4 days from now.
@@ -229,8 +242,8 @@
 
 (deftest repeat-type-defaults-to-double-plus-test
   (testing "Missing/unknown repeat-type falls back to :double-plus (preserves prior behavior on upgrade)"
-    (let [now (t/now)
-          in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
+    (let [now fixed-now
+          in-days (fn [next-time] (local-days now next-time))
           ten-days-ago (t/minus now (t/days 10))]
       (with-redefs [t/now (fn [] now)]
         (let [via-nil     (get-next-time ten-days-ago week-unit 1 nil)
@@ -240,7 +253,7 @@
 
 (deftest get-next-time-rejects-non-positive-frequency-test
   (testing "Frequency of 0 or negative returns nil instead of looping or producing nonsense"
-    (let [now (t/now)
+    (let [now fixed-now
           ten-days-ago (t/minus now (t/days 10))]
       (with-redefs [t/now (fn [] now)]
         (is (nil? (get-next-time ten-days-ago week-unit 0)))
@@ -250,17 +263,17 @@
 
 (deftest get-next-time-rejects-unknown-unit-test
   (testing "Unknown unit returns nil"
-    (let [now (t/now)]
+    (let [now fixed-now]
       (with-redefs [t/now (fn [] now)]
         (is (nil? (get-next-time now {} 1)))
         (is (nil? (get-next-time now {:db/ident :bogus} 1 dotted-plus)))))))
 
 (deftest dotted-plus-frequency-greater-than-one-test
   (testing "`.+` with frequency > 1 across units"
-    (let [now (t/now)
+    (let [now fixed-now
           in-minutes (fn [next-time] (/ (- next-time now) (* 1000 60)))
-          in-days (fn [next-time] (/ (- next-time now) (* 1000 60 60 24)))
-          in-weeks (fn [next-time] (/ (- next-time now) (* 1000 60 60 24 7)))]
+          in-days (fn [next-time] (local-days now next-time))
+          in-weeks (fn [next-time] (/ (local-days now next-time) 7))]
       (with-redefs [t/now (fn [] now)]
         (let [next-time (get-next-time (t/minus now (t/hours 5)) minute-unit 15 dotted-plus)]
           (is (= 15 (in-minutes next-time))))
@@ -271,7 +284,7 @@
 
 (deftest double-plus-month-and-year-test
   (testing "`++` on month/year units also lands strictly in the future"
-    (let [now (t/now)
+    (let [now fixed-now
           in-months (fn [next-time] (t/in-months (t/interval now (tc/from-long next-time))))
           in-years (fn [next-time] (t/in-years (t/interval now (tc/from-long next-time))))]
       (with-redefs [t/now (fn [] now)]
@@ -298,7 +311,7 @@
 
 (deftest double-plus-far-overdue-minute-is-bounded-test
   (testing "`++` does not advance far-overdue minute repeats one interval at a time"
-    (let [now (t/now)
+    (let [now fixed-now
           two-years-ago (t/minus now (t/years 2))
           unit-calls (atom 0)
           minutes (fn [frequency]
@@ -315,6 +328,52 @@
       (when-not (instance? js/Error result)
         (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
       (is (< @unit-calls 20)))))
+
+(deftest double-plus-month-end-keeps-its-day-test
+  (testing "`++` monthly repeat from a 31st lands on the next 31st, not a drifted day"
+    ;; Reproduces https://github.com/logseq/db-test/issues/1354: the bulk
+    ;; `t/plus` clamps the day (Jan 31 + 5 months = Jun 30) and stepping on
+    ;; from the clamped date drifts (Jun 30 + 1 month = Jul 30, not Jul 31).
+    ;; Local times, as the date picker stores them.
+    (let [now (t/local-date-time 2026 7 1)
+          scheduled (t/local-date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/local-date-time 2026 7 31))
+               (get-next-time scheduled month-unit 1 double-plus)))))
+    (let [now (t/local-date-time 2028 3 1)
+          scheduled (t/local-date-time 2026 10 31 9 30)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/local-date-time 2028 3 31 9 30))
+               (get-next-time scheduled month-unit 1 double-plus)))))))
+
+(deftest repeated-task-monthly-deadline-from-31st-test
+  (testing "monthly `++` deadline set on the 31st reschedules to the 31st"
+    (let [now (t/local-date-time 2026 7 1 9 0)
+          deadline (tc/to-long (t/local-date-time 2026 1 31))
+          expected-next-deadline (tc/to-long (t/local-date-time 2026 7 31))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Regression Sandbox"}
+                   :blocks [{:block/title "Monthly recurring item"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+                              :logseq.property/deadline deadline
+                              :logseq.property/status :logseq.property/status.todo}}]}]})
+          block (db-test/find-block-by-content @conn "Monthly recurring item")
+          _ (d/transact! conn [[:db/add (:db/id block)
+                                :logseq.property.repeat/repeat-type
+                                :logseq.property.repeat/repeat-type.double-plus]])
+          report (d/transact! conn [[:db/add (:db/id block)
+                                     :logseq.property/status
+                                     :logseq.property/status.done]])]
+      (with-redefs [t/now (fn [] now)]
+        (let [commands-tx (doall (commands/run-commands report))]
+          (is (= expected-next-deadline
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
 
 (deftest repeated-task-with-deadline-and-missing-temporal-property-test
   (testing "falls back to the existing deadline instead of missing scheduled"
@@ -344,6 +403,93 @@
                  (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
           (is (= :logseq.property/status.todo
                  (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
+
+(defn- reschedule-date-property
+  "Completes a weekly repeating task whose temporal property is the user :date
+  property `due`, set to journal day 20260910, and returns the commands' tx."
+  [repeat-type now pages]
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:due {:logseq.property/type :date}}
+               :pages-and-blocks
+               (into
+                (mapv (fn [day] {:page {:build/journal day}}) pages)
+                [{:page {:block/title "Inbox"}
+                  :blocks [{:block/title "weekly task"
+                            :build/properties
+                            {:logseq.property.repeat/repeated? true
+                             :logseq.property.repeat/recur-frequency 1
+                             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week
+                             :due [:build/page {:build/journal 20260910}]
+                             :logseq.property/status :logseq.property/status.todo}}]}])})
+        block (db-test/find-block-by-content @conn "weekly task")
+        _ (d/transact! conn [[:db/add (:db/id block) :logseq.property.repeat/repeat-type repeat-type]
+                             [:db/add (:db/id block) :logseq.property.repeat/temporal-property :user.property/due]])
+        report (d/transact! conn [[:db/add (:db/id block)
+                                   :logseq.property/status
+                                   :logseq.property/status.done]])]
+    (with-redefs [t/now (fn [] now)]
+      {:db @conn
+       :block block
+       :tx (doall (commands/run-commands report))})))
+
+(deftest repeated-date-property-keeps-its-weekday-test
+  (testing "A weekly repeat of a :date property lands 7 days later in any time zone"
+    ;; The day was carried as UTC midnight and read back in the local zone, so
+    ;; west of UTC it came back 6 days later. Run with TZ west and east of UTC.
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [db block tx]} (reschedule-date-property double-plus now [20260910 20260917])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260917 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "`.+` on a :date property counts from today's date"
+    (let [now (t/local-date-time 2026 9 12 21 0 0)
+          {:keys [db block tx]} (reschedule-date-property dotted-plus now [20260910 20260919])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260919 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "A missing journal page is created for the right day"
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [tx]} (reschedule-date-property double-plus now [20260910])]
+      (is (some #(= 20260917 (:block/journal-day %)) (filter map? tx))))))
+
+(defn- local-ms
+  "Local time of a day, as an instant."
+  ([y m d] (local-ms y m d 0 0))
+  ([y m d h mi] (.getTime (js/Date. y (dec m) d h mi))))
+
+(defn- local-day
+  [ms]
+  (let [d (js/Date. ms)]
+    [(.getFullYear d) (inc (.getMonth d)) (.getDate d) (.getHours d) (.getMinutes d)]))
+
+(deftest repeated-instant-steps-in-the-local-calendar-test
+  ;; db-test #1355: months and years were added in UTC, so east of UTC local
+  ;; midnight of the 1st (the last day of the month before in UTC) came back at
+  ;; the end of the same month. Run with TZ east and west of UTC.
+  (let [next-local (fn [value unit freq repeat-type now]
+                     (local-day (#'commands/get-next-time value unit freq repeat-type now)))]
+    (testing "`++` monthly from March 1 is April 1"
+      (is (= [2026 4 1 0 0]
+             (next-local (local-ms 2026 3 1) month-unit 1 double-plus
+                         (tc/from-long (local-ms 2026 3 1 9 0))))))
+    (testing "`++` yearly from 2027-03-01 is 2028-03-01"
+      (is (= [2028 3 1 0 0]
+             (next-local (local-ms 2027 3 1) year-unit 1 double-plus
+                         (tc/from-long (local-ms 2027 3 1 9 0))))))
+    (testing "`+` every 3 months from Aug 31 is Nov 30"
+      (is (= [2026 11 30 0 0]
+             (next-local (local-ms 2026 8 31) month-unit 3 plus
+                         (tc/from-long (local-ms 2026 8 31 9 0))))))
+    (testing "`.+` monthly, completed Apr 30 at 17:00, is May 30 at 17:00"
+      (is (= [2026 5 30 17 0]
+             (next-local (local-ms 2026 4 1) month-unit 1 dotted-plus
+                         (tc/from-long (local-ms 2026 4 30 17 0))))))
+    (testing "`++` weekly keeps local midnight"
+      (is (= [2026 3 8 0 0]
+             (next-local (local-ms 2026 3 1) week-unit 1 double-plus
+                         (tc/from-long (local-ms 2026 3 1 9 0))))))
+    (testing "`++` hourly is 1 hour later"
+      (is (= (+ (local-ms 2026 3 1 10 0) (* 60 60 1000))
+             (#'commands/get-next-time (local-ms 2026 3 1 10 0) hour-unit 1 double-plus
+                                       (tc/from-long (local-ms 2026 3 1 10 30))))))))
 
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]

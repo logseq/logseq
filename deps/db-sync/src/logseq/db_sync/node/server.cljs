@@ -25,9 +25,11 @@
 
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        admin-token (some-> js/process .-env (aget "DB_SYNC_ADMIN_TOKEN"))
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              (aset "ASSET_LINK_SECRET" (:asset-link-secret cfg))
               ;; Node adapter serves snapshot transit stream without gzip to avoid
               ;; browser/adapter content-encoding mismatches during graph download.
               (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
@@ -36,6 +38,8 @@
               (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
     (when (some? allow-unverified-jwt-claims)
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    (when (seq admin-token)
+      (aset env "DB_SYNC_ADMIN_TOKEN" admin-token))
     env))
 
 (defn- parse-url-origin
@@ -117,9 +121,25 @@
          (detach-ws! ctx socket)
          (log/error :db-sync/ws-error error))))
 
+(defn- local-do-namespace
+  "Durable Object namespace stand-in that forwards to the local graph context."
+  [registry deps]
+  #js {:idFromName (fn [graph-id] graph-id)
+       :get (fn [_do-id]
+              #js {:fetch (fn [request]
+                            (let [url (platform/request-url request)
+                                  graph-id (.get (.-searchParams url) "graph-id")]
+                              (sync-handler/handle-http
+                               (graph/get-or-create-graph registry deps graph-id)
+                               request)))})})
+
+(defn- unlimited-limiter []
+  #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
+
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
@@ -130,7 +150,10 @@
         env (doto (make-env cfg index-db assets-bucket)
               (aset "DB_SYNC_DELETE_GRAPH"
                     (fn [graph-id]
-                      (graph/delete-graph! registry deps graph-id))))
+                      (graph/delete-graph! registry deps graph-id)))
+              (aset "LOGSEQ_SYNC_DO" (local-do-namespace registry deps))
+              (aset "SEMANTIC_READ_RATE_LIMITER" (unlimited-limiter))
+              (aset "SEMANTIC_WRITE_RATE_LIMITER" (unlimited-limiter)))
         server (.createServer http
                               (fn [req res]
                                 (-> (p/let [request (platform-node/request-from-node req request-origin)

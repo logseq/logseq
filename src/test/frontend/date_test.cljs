@@ -102,6 +102,33 @@
          (date/journal-day->utc-ms 20260405)))
   (is (nil? (date/journal-day->utc-ms nil))))
 
+(deftest journal-day->local-ms-test
+  (let [local-midnight (.getTime (js/Date. 2026 3 5))]
+    (is (= local-midnight (date/journal-day->local-ms 20260405)))
+    (is (= 20260405
+           (->> local-midnight
+                tc/from-long
+                t/to-default-time-zone
+                (tf/unparse (tf/formatter "yyyyMMdd"))
+                parse-long)))
+    (is (nil? (date/journal-day->local-ms nil)))))
+
+(deftest journal-day-local-range-ms-test
+  (let [today 20260928
+        [start end] (date/journal-day-local-range-ms today 7)
+        today-no-time (.getTime (js/Date. 2026 8 28))
+        yesterday-21 (.getTime (js/Date. 2026 8 27 21))
+        plus6-21 (.getTime (js/Date. 2026 9 4 21))
+        plus7-no-time (.getTime (js/Date. 2026 9 5))]
+    (is (= today-no-time start))
+    (is (= plus7-no-time end))
+    (is (<= start today-no-time end))
+    (is (not (<= start yesterday-21 end)))
+    (is (<= start plus6-21 end))
+    (is (<= start plus7-no-time end))
+    (is (nil? (date/journal-day-local-range-ms nil 7)))
+    (is (nil? (date/journal-day-local-range-ms today nil)))))
+
 (deftest int->local-time-2-test
   (is (= (tf/unparse (tf/formatter "yyyy-MM-dd HH:mm")
                      (t/to-default-time-zone (tc/from-long (tc/to-long test-date-time))))

@@ -490,3 +490,9 @@ body[data-settings-tab=keymap] {
     }
   }
 }
+
+/* Electron custom title bar captures clicks unless overlays set no-drag. */
+.ls-app-no-drag,
+.ls-app-no-drag * {
+  -webkit-app-region: no-drag;
+}

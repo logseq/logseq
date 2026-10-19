@@ -134,8 +134,12 @@ jobs:
       - name: Sync public to Android Project
         run: pnpm exec cap sync android
 
+      # Google stopped serving the obsolete `tools` package; the action default
+      # (`tools platform-tools`) now fails with "Failed to find package 'tools'".
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3.2.2
+        with:
+          packages: platform-tools
 
       - name: Build Android
         run: |

@@ -63,4 +63,18 @@
           {:block/uuid (random-uuid)
            :logseq.property.asset/type "png"}
           false
-          true)))))
+          true))))
+  (testing "treats JPEG XL assets as images"
+    (is (true?
+         (block-asset/show-image-placeholder?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "jxl"
+           :logseq.property.asset/remote-metadata {:checksum "sha-256-value"
+                                                   :type "jxl"}}
+          false
+          false)))
+    (is (= :jxl
+           (block-asset/link-ext
+            "assets/photo.jxl"
+            "assets/photo.jxl"
+            {:logseq.property.asset/type "jxl"})))))

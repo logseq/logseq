@@ -190,16 +190,15 @@
                        :local-tx? true))
             worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
                           (:editor/edit-block-fn opts')
-                          (assoc :editor-row-uuids (operation-row-uuids ops)))
-            request #(p/do!
-                      (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
-                                               request-repo
-                                               request-editor-info)
-                      (state/<invoke-db-worker
-                       :thread-api/apply-outliner-ops
-                       request-repo
-                       ops
-                       worker-opts))]
+                          (assoc :editor-row-uuids (operation-row-uuids ops))
+                          ;; recorded in the worker right before apply-ops! —
+                          ;; saves a separate worker roundtrip per op
+                          true (assoc :pending-editor-info request-editor-info))
+            request #(state/<invoke-db-worker
+                      :thread-api/apply-outliner-ops
+                      request-repo
+                      ops
+                      worker-opts)]
         (p/let [response (enqueue-outliner-mutation! request-repo request)
                 {:keys [result delta editor-rows editor-row-uuids perf]} response
                 mutation-returned-at (now-ms)

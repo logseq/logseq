@@ -13,14 +13,15 @@
                    :remove-block-children? false
                    :result-transform '(partial sort-by :block/title)}
         datalog-form '[:find (pull ?block [:block/uuid])
-                       :in $ ?day %
+                       :in $ ?day ?current-page %
                        :where
                        [?block :block/journal-day ?day]
+                       [(= ?current-page "Context Page")]
                        (journal-block ?block)]
         rules '[[(journal-block ?block)
                  [?block :block/journal-day]]]
         datalog-query {:query datalog-form
-                       :inputs [:today]
+                       :inputs [:today :current-page]
                        :rules rules}]
     (with-redefs [db-hooks/use-resource
                   (fn [resource-key]
@@ -33,12 +34,14 @@
              (query-result/use-query-result
               {:dsl-query? true
                :cards? true
+               :current-page-title "Context Page"
                :current-block-uuid current-block-uuid
                :block/uuid current-block-uuid}
               dsl-query)))
       (is (= [datalog-row-uuid]
              (query-result/use-query-result
               {:dsl-query? false
+               :current-page-title "Context Page"
                :today-day 20260721
                :current-block-uuid current-block-uuid
                :block/uuid current-block-uuid}
@@ -54,8 +57,9 @@
               [:query
                {:kind :datalog
                 :query datalog-form
-                :inputs [:today]
+                :inputs [:today :current-page]
                 :rules rules
+                :current-page-title "Context Page"
                 :today-day 20260721
                 :current-block-uuid current-block-uuid}]]
              @resource-keys)))))
@@ -96,3 +100,23 @@
            :current-block-uuid (random-uuid)}
           {:query "(task TODO)"}))
         "Query syntax errors stay in the query error boundary instead of emptying the page.")))
+
+(deftest advanced-query-spec-sends-legacy-simple-query-list-as-datalog-test
+  (let [current-block-uuid (random-uuid)
+        resource-keys (atom [])]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-keys conj resource-key)
+                    {:rows []})
+                  hooks/use-effect! (fn [& _args])]
+      (is (= []
+             (query-result/use-query-result
+              {:dsl-query? false
+               :current-block-uuid current-block-uuid}
+              {:query '(task WAIT WAITING)
+               :title "Tasks on wait/waiting"})))
+      (is (= [[:query {:kind :datalog
+                       :query '(task WAIT WAITING)
+                       :current-block-uuid current-block-uuid}]]
+             @resource-keys)
+          "Advanced queries keep a simple-query list as :datalog; the worker isolates that shape."))))

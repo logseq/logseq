@@ -18,29 +18,35 @@
 (def ^:private min-vector-search-score 0.5)
 (def ^:private vector-upsert-batch-size 1024)
 
+(defn- blocks-fts-triggers
+  "Triggers that keep `fts-table` in step with the blocks table. An FTS row has
+  the rowid of its blocks row, so a delete or an update finds it by rowid:
+  FTS5 cannot index the id column, and a lookup by id reads every FTS row."
+  [trigger-prefix fts-table]
+  [;; delete
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_ad AFTER DELETE ON blocks
+         BEGIN
+             DELETE FROM " fts-table " WHERE rowid = old.rowid;
+         END;")
+   ;; insert
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_ai AFTER INSERT ON blocks
+         BEGIN
+             INSERT INTO " fts-table " (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;")
+   ;; update
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_au AFTER UPDATE ON blocks
+         BEGIN
+             DELETE FROM " fts-table " WHERE rowid = old.rowid;
+             INSERT INTO " fts-table " (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;")])
+
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
-  (let [triggers [;; delete
-                  "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                  END;"
-                  ;; insert
-                  "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
-                  BEGIN
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"
-                  ;; update
-                  "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"]]
-    (doseq [trigger triggers]
-      (.exec db trigger))))
+  (doseq [trigger (blocks-fts-triggers "blocks" "blocks_fts")]
+    (.exec db trigger)))
 
 (defn- create-blocks-table!
   [db]
@@ -51,10 +57,10 @@
                         page TEXT)"))
 
 (defn- create-blocks-fts-table!
-  [db]
+  [db table]
   ;; The trigram tokenizer extends FTS5 to support substring matching in general, instead of the usual token matching. When using the trigram tokenizer, a query or phrase token may match any sequence of characters within a row, not just a complete token.
   ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
-  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
+  (.exec db (str "CREATE VIRTUAL TABLE IF NOT EXISTS " table " USING fts5(id, title, page, tokenize=\"trigram\")")))
 
 (defn- create-blocks-title-index!
   [db]
@@ -65,7 +71,7 @@
   [db]
   (try
     (create-blocks-table! db)
-    (create-blocks-fts-table! db)
+    (create-blocks-fts-table! db "blocks_fts")
     (create-blocks-title-index! db)
     (add-blocks-fts-triggers! db)
     (catch :default e
@@ -83,10 +89,65 @@
   (.exec db "
 DROP TABLE IF EXISTS blocks;
 DROP TABLE IF EXISTS blocks_fts;
+DROP TABLE IF EXISTS blocks_fts_next;
 DROP TRIGGER IF EXISTS blocks_ad;
 DROP TRIGGER IF EXISTS blocks_ai;
 DROP TRIGGER IF EXISTS blocks_au;
 "))
+
+(def ^:private drop-next-fts-triggers-sql "
+DROP TRIGGER IF EXISTS blocks_fts_next_ad;
+DROP TRIGGER IF EXISTS blocks_fts_next_ai;
+DROP TRIGGER IF EXISTS blocks_fts_next_au;
+")
+
+(defn start-fts-rowid-migration!
+  "Starts moving an index whose blocks_fts rows have rowids unrelated to their
+  blocks rows (search index version 4 and older) to rowid keys: creates
+  blocks_fts_next with rowid triggers of its own. blocks_fts and its triggers
+  keep serving queries until `finish-fts-rowid-migration!`. A move cut short
+  (graph closed, app quit) starts over."
+  [db]
+  (.transaction db
+                (fn [tx]
+                  (.exec tx (str drop-next-fts-triggers-sql
+                                 "DROP TABLE IF EXISTS blocks_fts_next;"))
+                  (create-blocks-fts-table! tx "blocks_fts_next")
+                  (doseq [trigger (blocks-fts-triggers "blocks_fts_next" "blocks_fts_next")]
+                    (.exec tx trigger)))))
+
+(defn copy-fts-rowid-batch!
+  "Copies into blocks_fts_next the blocks rows after rowid `after`, at most
+  `limit` of them, that it lacks (its triggers add the rows written since the
+  start). Returns the last rowid of the batch, nil when no row is left."
+  [db after limit]
+  (let [last-rowid (-> (.exec db #js {:sql "SELECT max(rowid) FROM (SELECT rowid FROM blocks WHERE rowid > ? ORDER BY rowid LIMIT ?)"
+                                      :bind #js [after limit]
+                                      :rowMode "array"})
+                       (aget 0)
+                       (aget 0))]
+    (when (some? last-rowid)
+      (.exec db #js {:sql "INSERT INTO blocks_fts_next (rowid, id, title, page)
+                           SELECT rowid, id, title, page FROM blocks
+                           WHERE rowid > ? AND rowid <= ?
+                             AND NOT EXISTS (SELECT 1 FROM blocks_fts_next f WHERE f.rowid = blocks.rowid)"
+                     :bind #js [after last-rowid]})
+      last-rowid)))
+
+(defn finish-fts-rowid-migration!
+  "Replaces blocks_fts and its triggers with blocks_fts_next and rowid
+  triggers, and sets the index version, in 1 transaction."
+  [db version]
+  (.transaction db
+                (fn [tx]
+                  (.exec tx (str drop-next-fts-triggers-sql "
+DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+DROP TABLE blocks_fts;
+ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
+                  (add-blocks-fts-triggers! tx)
+                  (.exec tx (str "PRAGMA user_version = " version)))))
 
 (defn- clj-list->sql
   "Turn clojure list into SQL list
@@ -464,6 +525,13 @@ DROP TRIGGER IF EXISTS blocks_au;
   [q]
   (boolean (re-find #"\S\s+\S" q)))
 
+(defn- tag-title-query
+  [q]
+  (when (and (string? q)
+             (string/starts-with? q "#")
+             (not (re-find #"\s" q)))
+    (not-empty (subs q 1))))
+
 (defn- exact-title-query?
   [q]
   (not (re-find #"\s" q)))
@@ -589,7 +657,10 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           (cond-> {:id (str uuid)
                    :page (str (or (:block/uuid page) uuid))
-                   :title (if (page-or-object? block) title (sanitize title))}
+                   ;; Keyword index must match accent-stripped queries.
+                   ;; SQLite LIKE/NOCASE only folds ASCII, so page/object titles
+                   ;; cannot keep umlauts while queries are search-normalized.
+                   :title (sanitize title)}
             include-vector-title?
             (assoc :vector-title title))))
       (catch :default e
@@ -828,7 +899,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (code-block? code-class block))))
 
 (defn- search-result->block-result
-  [conn q code-class option {:keys [id page title snippet] :as result}]
+  [conn q code-class option {:keys [id page snippet] :as result}]
   (let [block-id (uuid id)]
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
@@ -837,9 +908,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                                    (select-keys [:block/uuid :block/title]))
               alias-match (matched-alias q block)
               page-or-object-result? (page-or-object? block)
-              result-title (if page-or-object-result?
-                             (block-result-title block)
-                             (or title (:block/title block)))
+              ;; pulled maps lack :block/refs, so ref titles resolve via entity
+              result-title (block-result-title
+                            (if (and (map? block)
+                                     (db-content/title-has-id-ref? (:block/title block)))
+                              (d/entity @conn [:block/uuid (:block/uuid block)])
+                              block))
               display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet result-title q)
                               (if page-or-object-result?
@@ -861,7 +935,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                             block
                             {:title display-title
                              :alias (:block/title alias)
-                             :truncate? false})]
+                             :truncate? false})
+              breadcrumb-ancestors (when (:include-breadcrumb? option)
+                                   (block-breadcrumb/block-breadcrumb @conn block))]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
@@ -869,8 +945,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
             (:include-breadcrumb? option)
-            (assoc :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb @conn block))
+            (assoc :block.temp/breadcrumb breadcrumb-ancestors
+                   :block.temp/breadcrumb-ref-titles
+                   (block-breadcrumb/breadcrumb-ref-titles @conn (into [block] breadcrumb-ancestors)))
 
             block-page
             (assoc :block/page block-page)
@@ -893,40 +970,6 @@ DROP TRIGGER IF EXISTS blocks_au;
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
       (include-search-block? conn block code-class option))))
-
-(defn- direct-page-results
-  [conn q code-class option limit]
-  (when (d/db? @conn)
-    (let [needle (some-> q
-                         (fuzzy/search-normalize true)
-                         fuzzy/clean-str
-                         string/lower-case)]
-      (when-not (string/blank? needle)
-      (let [pages (->> (d/datoms @conn :avet :block/name)
-                       (keep #(d/entity @conn (:e %)))
-                       (filter (fn [page]
-                                 (and (ldb/page? page)
-                                      (:block/name page)
-                                      (:block/title page))))
-                       (filter (fn [page]
-                                 (let [haystack (some-> (:block/title page)
-                                                        (fuzzy/search-normalize true)
-                                                        fuzzy/clean-str
-                                                        string/lower-case)]
-                                   (and haystack (string/includes? haystack needle)))))
-                       (take limit)
-                       vec)]
-        (keep (fn [page]
-                (search-result->block-result
-                 conn
-                 q
-                 code-class
-                 option
-                 {:id (str (:block/uuid page))
-                  :page (str (:block/uuid page))
-                  :title (:block/title page)
-                  search-result-block-key page}))
-              pages))))))
 
 (defn- vector-search-blocks
   [vector-index {:keys [limit page query-embedding]}]
@@ -959,68 +1002,70 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([conn search-db vector-index q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
                                    :as option
                                    :or {enable-snippet? true}}]
-   (when-not (string/blank? q)
-     (let [option (assoc option :enable-snippet? enable-snippet?)
-           match-input (get-match-input q)
-           non-match-input (when (<= (count q) 2)
-                             (str "%" (string/replace q #"\s+" "%") "%"))
-           limit (or limit 100)
-           limit-p (or search-limit limit)
-           exact-title-result (when (and (not page-only?)
-                                         (exact-title-query? q))
-                                (search-blocks-exact-title-aux search-db q page limit-p))
-           enough-exact-title-results? (>= (count exact-title-result) limit-p)
-           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
-           select "select id, page, title, rank from blocks_fts where "
-           pg-sql (if page "page = ? and" "")
-           match-sql (if (ns-util/namespace-page? q)
-                       (str select pg-sql " title match ? or title match ? limit ?")
-                       (str select pg-sql " title match ? limit ?"))
-           non-match-sql (str select pg-sql " title like ? limit ?")
-           matched-result (when (and (not page-only?)
-                                     (not enough-exact-title-results?))
-                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-           non-match-result (when (and (not page-only?) non-match-input)
-                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
-                                   (map (fn [result]
-                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-           skip-fuzzy? (or enough-exact-title-results?
-                           (and (multi-term-query? q)
-                                (seq matched-result)))
-           fuzzy-result (when-not skip-fuzzy?
-                          (search-blocks-fuzzy-aux search-db q page limit))
-           vector-result (when (and (not page-only?)
-                                    (:feature/enable-semantic-search? option))
-                           (vector-search-blocks vector-index {:limit limit-p
-                                                               :page page
-                                                               :query-embedding (:query-embedding option)}))
-           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
-           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
-           ;;      (prn :debug :keyword-search-result item))
-           combined-result (combine-results @conn
-                                            (concat exact-title-result fuzzy-result matched-result non-match-result)
-                                            vector-result
-                                            q)
-           code-class (when code-only?
-                        (d/entity @conn :logseq.class/Code-block))
-           matched-count (when include-matched-count?
-                           (count (filter #(search-result-visible? conn code-class option %) combined-result)))
-           result (->> combined-result
-                       (common-util/distinct-by :id)
-                       (keep #(search-result->block-result conn q code-class option %)))
-           result (cond->> result
-                    (not code-only?)
-                    (concat (direct-page-results conn q code-class option limit))
-                    true
-                    (remove nil?)
-                    true
-                    (common-util/distinct-by :block/uuid))
-           matched-count (when include-matched-count?
-                           (max (or matched-count 0) (count result)))]
-       (if include-matched-count?
-         {:items (take limit result)
-          :matched-count matched-count}
-         (take limit result))))))
+   (let [tag-title? (boolean (tag-title-query q))
+         q (or (tag-title-query q) q)]
+     (when-not (string/blank? q)
+       (let [option (assoc option :enable-snippet? enable-snippet?)
+             match-input (get-match-input q)
+             non-match-input (when (<= (count q) 2)
+                               (str "%" (string/replace q #"\s+" "%") "%"))
+             limit (or limit 100)
+             limit-p (or search-limit limit)
+             exact-title-result (when (and (not page-only?)
+                                           (exact-title-query? q))
+                                  (search-blocks-exact-title-aux search-db q page limit-p))
+             enough-exact-title-results? (>= (count exact-title-result) limit-p)
+             ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
+             select "select id, page, title, rank from blocks_fts where "
+             pg-sql (if page "page = ? and" "")
+             match-sql (if (ns-util/namespace-page? q)
+                         (str select pg-sql " title match ? or title match ? limit ?")
+                         (str select pg-sql " title match ? limit ?"))
+             non-match-sql (str select pg-sql " title like ? limit ?")
+             matched-result (when (and (not page-only?)
+                                       (not tag-title?)
+                                       (not enough-exact-title-results?))
+                              (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+             non-match-result (when (and (not page-only?) (not tag-title?) non-match-input)
+                                (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
+                                     (map (fn [result]
+                                            (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+             skip-fuzzy? (or enough-exact-title-results?
+                             tag-title?
+                             (and (multi-term-query? q)
+                                  (seq matched-result)))
+             fuzzy-result (when-not skip-fuzzy?
+                            (search-blocks-fuzzy-aux search-db q page limit))
+             vector-result (when (and (not page-only?)
+                                      (:feature/enable-semantic-search? option))
+                             (vector-search-blocks vector-index {:limit limit-p
+                                                                 :page page
+                                                                 :query-embedding (:query-embedding option)}))
+             ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
+             ;;  _ (doseq [item (concat fuzzy-result matched-result)]
+             ;;      (prn :debug :keyword-search-result item))
+             combined-result (combine-results @conn
+                                              (concat exact-title-result fuzzy-result matched-result non-match-result)
+                                              vector-result
+                                              q)
+             code-class (when code-only?
+                          (d/entity @conn :logseq.class/Code-block))
+             matched-count (when include-matched-count?
+                             (count (filter #(search-result-visible? conn code-class option %) combined-result)))
+             result (->> combined-result
+                         (common-util/distinct-by :id)
+                         (keep #(search-result->block-result conn q code-class option %)))
+             result (cond->> result
+                      true
+                      (remove nil?)
+                      true
+                      (common-util/distinct-by :block/uuid))
+             matched-count (when include-matched-count?
+                             (max (or matched-count 0) (count result)))]
+         (if include-matched-count?
+           {:items (take limit result)
+            :matched-count matched-count}
+           (take limit result)))))))
 
 (defn upsert-vector-blocks!
   [vector-index blocks]

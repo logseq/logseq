@@ -5,6 +5,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.editor :as editor]
             [frontend.components.page :as page-component]
             [frontend.components.reference :as reference]
@@ -62,11 +63,19 @@
         (state/set-db-restoring! false)
         (ui-handler/re-render-root!)))))
 
+(defn- apply-published-state!
+  [data]
+  (let [repo (or (:git/current-repo data)
+                 (first (keys (:config data))))]
+    (state/swap-state! merge (cond-> data
+                               repo (assoc :git/current-repo repo)))
+    (when repo
+      (state/set-current-repo! repo))))
+
 (defn restore-state!
   []
   (when-let [data js/window.logseq_state]
-    (let [data (reader/read-string data)]
-      (state/swap-state! merge data))))
+    (apply-published-state! (reader/read-string data))))
 
 (defn set-router!
   []
@@ -88,7 +97,7 @@
   (state/set-component! :block/linked-references reference/references)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/inline-title block/inline-title)
-  (state/set-component! :block/breadcrumb block/breadcrumb)
+  (state/set-component! :block/breadcrumb block-breadcrumb/breadcrumb)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/properties-cp block/db-properties-cp)
