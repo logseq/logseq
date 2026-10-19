@@ -73,6 +73,11 @@ let localization () =
     Platform.local_storage_set "preferred-language" "\"zh-CN\"";
     check "Locale fixture loads after application modules initialize"
       (I18n.t "settings/general"="Translated General");
+    List.iter (fun (operator,label) ->
+      eqs "Numeric comparison labels remain mathematical symbols in every locale" label (I18n.operator_text operator))
+      ["number-gt",">";"number-lt","<";"number-gte",">=";"number-lte","<="];
+    check "Unknown filter operators fail instead of displaying a different operation"
+      (try ignore (I18n.operator_text "unknown-operator");false with Invalid_argument _ -> true);
     let services = {(Cmdk_host.services ()) with
       i18n=I18n.t;repo=(fun () -> None);commands=(fun () -> []);
       route_is_page=(fun () -> true);route_page_uuid=(fun () -> Some "locale-page")} in
@@ -742,6 +747,232 @@ let run_views ~registry ~profile ~finish =
       (Views_table.created_column ()),"before",Wire.String "1 year ago","timestamp",false,[];
       {tags with c_id="fixture/date";c_name="Date";c_type="date"},"date-before",Wire.Uuid "tag-b","property-values",false,
         ["First",Wire.Uuid "tag-a";"Second",Wire.Uuid "tag-b"]]
+  in
+  let filter_operator_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+    and previous_stack= !Views_popup.stack_st in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "filter-operator-fixture"});
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack;done_ ()
+      | (before,operand,after,normalized)::rest ->
+          Views_popup.stack_st:=None;
+          let requests=ref [] in
+          Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+            let response=if method_="thread-api/get-view-filter-data" then begin
+              let opts=List.nth args 1 in
+              requests:=opts::!requests;
+              if Wire.get opts "operator"=Some (Wire.Keyword after) then
+                Wire.Map [Wire.kw "value-after-operator-change",normalized]
+              else Wire.Map [Wire.kw "operators",Wire.Array [Wire.Keyword after]]
+            end else Wire.Nil in
+            Js.Promise.resolve response);on_message=(fun _ _ -> ());
+            dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+          let instance=ref None in
+          let previous={Views_state.c_prop="fixture/other";c_op="is";c_val=Some (Wire.Bool false)}
+          and clause={Views_state.c_prop="fixture/value";c_op=before;c_val=operand}
+          and following={Views_state.c_prop="fixture/following";c_op="is";c_val=Some (Wire.Bool true)} in
+          let retire=after="number-lt" in
+          let retire_on_open=after="number-gte" in
+          let hydrate=operand=Some (Wire.String "hydrate") in
+          let selector=mount (fun _ context parent ->
+            let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KAllPages ~feature:"filter-operator-fixture" ~owner:Wire.Nil in
+            instance:=Some inst;Views_state.update inst (fun state -> {state with filters=[previous;clause;following]});
+            Lui_elements.column [Views_head.filters_row inst;popup_layer] context parent) in
+          let inst=Option.get !instance in
+          let identifier="vchip-op-" ^ string_of_int inst.Views_state.id ^ "-1" in
+          let trigger=List.find (fun node -> M.string_prop node "accessibility-identifier"=Some identifier) (nodes selector) in
+          let document= !(Stub_dom.document_ref) in
+          let lookup : string -> Js.Json.t=Stub_dom.get_field document "getElementById" in
+          let anchor=Stub_dom.make_element "button" in
+          let set_attribute : string -> string -> unit=Stub_dom.get_field anchor "setAttribute" in
+          set_attribute "id" identifier;
+          Stub_dom.set_field document "getElementById" (fun id -> if id=identifier then anchor else lookup id);
+          S.press selector trigger.M.id;Stub_dom.set_field document "getElementById" lookup;
+          if retire_on_open then Views_state.update inst (fun state -> {state with filters=[previous;following]});
+          S.flush selector;
+          ignore (Js.Promise.then_ (fun () ->
+            if retire_on_open then begin
+              check "a retired operator trigger cannot publish its delayed menu" (!Views_popup.open_popups=[]);
+              Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);next rest
+            end else begin
+            let choice=List.find (fun node -> node.M.kind="menu-item"
+              && M.string_prop node "text"=Some (I18n.operator_text after)) (nodes selector) in
+            S.press selector choice.M.id;
+            if retire then Views_state.update inst (fun state -> {state with filters=[previous;following]});
+            if hydrate then Views_state.update inst (fun state ->
+              let filters,filters_or=Views_state.filters_of_wire
+                (Views_state.filters_to_wire state.filters state.filters_or) in
+              {state with filters;filters_or;loading=not state.loading});
+            S.flush selector;
+            ignore (Js.Promise.then_ (fun () ->
+              S.flush selector;
+              check "operator changes request normalization with their current operand"
+                (List.exists (fun opts -> Wire.get opts "operator"=Some (Wire.Keyword after)
+                   && Wire.get opts "value"=Some (Option.value operand ~default:Wire.Nil)) !requests);
+              if retire then
+                check "a retired clause cannot apply its delayed operator reply to the next filter"
+                  ((Views_state.get inst).filters=[previous;following])
+              else check (if hydrate then "equivalent resource rehydration preserves a pending operator change"
+                else "operator changes apply the worker's normalized value and preserve adjacent clauses")
+                ((Views_state.get inst).filters=[previous;{clause with c_op=after;
+                    c_val=(if normalized=Wire.Nil then None else Some normalized)};following]);
+              Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);next rest;Js.Promise.resolve ())
+              (Js.Promise.resolve ()))
+            end;Js.Promise.resolve ()) (Js.Promise.resolve ()))
+    in
+    next ["is",Some (Wire.Set [Wire.Uuid "tag"]),"text-contains",Wire.Nil;
+      "is",Some (Wire.Keyword "empty"),"is-not",Wire.Nil;
+      "text-contains",Some (Wire.String "café 中文 😀"),"text-not-contains",Wire.String "café 中文 😀";
+      "text-contains",Some (Wire.String "12"),"number-gt",Wire.Nil;
+      "number-gt",Some (Wire.Float 0.),"number-lte",Wire.Float 0.;
+      "between",Some (Wire.Array [Wire.Int 1;Wire.Int 2]),"between",Wire.Array [Wire.Int 1;Wire.Int 2];
+      "after",Some (Wire.Date_ms 0L),"before",Wire.Date_ms 0L;
+      "is",None,"text-contains",Wire.Nil;
+      "text-contains",Some (Wire.String "retire"),"number-lt",Wire.Nil;
+      "text-contains",Some (Wire.String "retire menu"),"number-gte",Wire.Nil;
+      "text-contains",Some (Wire.String "hydrate"),"text-not-contains",Wire.String "hydrate"]
+  in
+  let page_name_filter_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+    and previous_stack= !Views_popup.stack_st in
+    Views_popup.stack_st:=None;
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "page-name-filter-fixture"});
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ -> Js.Promise.resolve
+      (if method_="thread-api/get-view-filter-data" then Wire.Map
+        [Wire.kw "value-source",Wire.Keyword "property-values";Wire.kw "values",Wire.Array []]
+       else Wire.Nil));on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let instance=ref None in
+    let selector=mount (fun _ context parent ->
+      let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+        ~kind:Views_state.KAllPages ~feature:"page-name-filter-fixture" ~owner:Wire.Nil in
+      instance:=Some inst;Views_state.update inst (fun state -> {state with columns=[Views_table.page_title_column ()]});
+      Lui_elements.column [Views_head.filters_row inst;popup_layer] context parent) in
+    let inst=Option.get !instance in
+    Views_head.filter_popup inst (popup_anchor ());S.flush selector;
+    let search=List.find (fun node -> node.M.kind="input") (nodes selector) in
+    S.submit selector search.M.id;
+    ignore (Js.Promise.then_ (fun () ->
+      S.flush selector;
+      check "choosing Page name creates a text-contains filter directly"
+        ((Views_state.get inst).filters=[{Views_state.c_prop="block/title";c_op="text-contains";c_val=None}]);
+      check "Page name exposes an inline field instead of opening a value picker"
+        (!Views_popup.open_popups=[] && List.exists (fun node -> node.M.kind="input"
+          && match M.string_prop node "accessibility-identifier" with
+             | Some id -> String.starts_with ~prefix:"vchip-input-" id | None -> false) (nodes selector));
+      Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);
+      Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+      Views_popup.stack_st:=previous_stack;done_ ();Js.Promise.resolve ()) (Js.Promise.resolve ()))
+  in
+  let filter_input_check () =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    Runtime.read_model:=(fun () -> Model.initial);
+    List.iter (fun (operator,initial) ->
+      let instance=ref None in
+      let previous={Views_state.c_prop="fixture/other";c_op="is";c_val=Some (Wire.Bool false)}
+      and clause={Views_state.c_prop="fixture/value";c_op=operator;c_val=initial} in
+      let selector=mount (fun _ context parent ->
+        let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:Views_state.KAllPages ~feature:"filter-input-fixture" ~owner:Wire.Nil in
+        instance:=Some inst;Views_state.update inst (fun state -> {state with filters=[previous;clause]});
+        Views_head.filters_row inst context parent) in
+      let inst=Option.get !instance in
+      let inputs ()=List.filter (fun node -> node.M.kind="input") (nodes selector) in
+      let range=operator="between" in
+      check "text, numeric and range operators render their inline fields"
+        (List.length (inputs ())=(if range then 2 else 1));
+      (match inputs () with
+       | [] -> ()
+       | first::rest ->
+          let current ()=List.nth (Views_state.get inst).filters 1 in
+          let write node draft expected =
+            S.text_changed selector node.M.id draft;
+            check "inline input persists its typed operand" ((current ()).c_val=expected);
+            check "inline edits preserve adjacent filters and the operator"
+              (List.hd (Views_state.get inst).filters=previous && (current ()).c_op=operator);
+            check "typing preserves the field and its exact draft"
+              (List.exists (fun live -> live.M.id=node.M.id && M.string_prop live "text"=Some draft) (inputs ())) in
+          check "inline fields use the reference ninety-six by twenty-four bounds"
+            (List.for_all (fun node -> Hashtbl.find_opt node.M.props "width"=Some (P.IntValue 96)
+              && Hashtbl.find_opt node.M.props "height"=Some (P.IntValue 24)) (inputs ()));
+          if range then begin
+            let last=List.hd rest in
+            check "range fields expose translated endpoint placeholders"
+              (M.string_prop first "placeholder"=Some (I18n.t "view.filter/from")
+               && M.string_prop last "placeholder"=Some (I18n.t "view.filter/to"));
+            write first "" None;
+            write last "0" (Some (Wire.Array [Wire.Nil;Wire.Float 0.]));
+            write first "1." (Some (Wire.Array [Wire.Float 1.;Wire.Float 0.]));
+            write first "1.5" (Some (Wire.Array [Wire.Float 1.5;Wire.Float 0.]));
+            write last "10" (Some (Wire.Array [Wire.Float 1.5;Wire.Float 10.]));
+            write first "" (Some (Wire.Array [Wire.Nil;Wire.Float 10.]));
+            write last "" None
+          end else if String.starts_with ~prefix:"number-" operator then begin
+            List.iter (fun (draft,number) -> write first draft (Option.map (fun n -> Wire.Float n) number))
+              ["-",None;"-1",Some (-1.);"-1.",Some (-1.);"-1.25",Some (-1.25);
+               "",None;"0",Some 0.;"1e",None;"1e2",Some 100.;"NaN",None;"infinity",None];
+            Views_state.update inst (fun state -> {state with filters=[previous;{clause with c_val=Some (Wire.Int 42)}]});
+            S.flush selector;
+            check "external numeric changes refresh the retained field"
+              (List.exists (fun node -> node.M.id=first.M.id && M.string_prop node "text"=Some "42") (inputs ()))
+          end else begin
+            write first "café 中文 😀" (Some (Wire.String "café 中文 😀"));
+            for count=1 to 200 do
+              let draft=String.make count 'x' in
+              S.text_changed selector first.M.id draft
+            done;
+            check "rapid filter typing retains every character and its input"
+              ((current ()).c_val=Some (Wire.String (String.make 200 'x'))
+               && List.exists (fun node -> node.M.id=first.M.id) (inputs ()));
+            write first "" (Some (Wire.String ""))
+          end);
+      ignore (Lui_app.dispose selector.S.app))
+      ["text-contains",Some (Wire.String "First");"text-not-contains",None;
+       "number-gt",Some (Wire.Int 2);"between",Some (Wire.Array [Wire.Int 2;Wire.Nil])];
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_model
+  in
+  let filter_scope_check () =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    Runtime.read_model:=(fun () -> Model.initial);
+    List.iter (fun query -> List.iter (fun operator ->
+      let instance=ref None in
+      let selector=mount (fun _ context parent ->
+        let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:(if query then Views_state.KQuery {block_uuid="scope-query"} else Views_state.KAllPages)
+          ~feature:"filter-scope-fixture" ~owner:Wire.Nil in
+        instance:=Some inst;
+        Views_state.update inst (fun state -> {state with qsrc="(task TODO)";loading=false;
+          data=Views_wire.VFlat {rows=[];count=0;previews=Hashtbl.create 0;qprops=[]};
+          filters=[{Views_state.c_prop="fixture/value";c_op=operator;c_val=None}]});
+        Lui_elements.column [if query then Views_view.query_view_el inst else Views_view.view_el inst] context parent) in
+      let inst=Option.get !instance in
+      let fields ()=List.filter (fun node -> match M.string_prop node "accessibility-identifier" with
+        | Some id -> String.starts_with ~prefix:"vchip-input-" id | None -> false) (nodes selector) in
+      let first=List.hd (fields ()) in
+      S.text_changed selector first.M.id "-1.";
+      check (if query then "query table updates preserve an active filter draft"
+             else "ordinary table updates preserve an active filter draft")
+        (List.exists (fun node -> node.M.id=first.M.id && M.string_prop node "text"=Some "-1.") (fields ()));
+      Views_state.update inst (fun state -> {state with loading=not state.loading});S.flush selector;
+      check "loading changes do not dispose filter inputs"
+        (List.exists (fun node -> node.M.id=first.M.id && M.string_prop node "text"=Some "-1.") (fields ()));
+      Views_state.update inst (fun state -> {state with view_uuid="another-view";
+        filters=[{Views_state.c_prop="fixture/value";c_op=operator;c_val=None}]});S.flush selector;
+      check "switching views resets unfinished filter drafts"
+        (fields ()<>[] && List.for_all (fun node -> M.string_prop node "text"=Some "") (fields ()));
+      Views_state.update inst (fun state -> {state with columns=[
+        Views_table.builtin_column "fixture/value" "Amount" "number" ()]});S.flush selector;
+      check "retained filter chips show property metadata loaded after their first frame"
+        (List.exists (fun node -> node.M.kind="button"
+          && Hashtbl.find_opt node.M.props "enabled"=Some (P.BoolValue false)
+          && M.string_prop node "text"=Some "Amount") (nodes selector));
+      ignore (Lui_app.dispose selector.S.app)) ["number-gt";"between"]) [false;true];
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_model
   in
   let config_boot_check done_ =
     let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in
@@ -2442,7 +2673,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))));
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

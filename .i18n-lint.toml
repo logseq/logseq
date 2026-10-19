@@ -374,10 +374,6 @@ always_used_key_patterns = [
   "^:ui/save-changes-error$",
   "^:ui\\.calendar/(day-label|today-day-label)$",
   "^:format\\.weekday/",
-  "^:view.filter/operator-number-gt$",
-  "^:view.filter/operator-number-gte$",
-  "^:view.filter/operator-number-lt$",
-  "^:view.filter/operator-number-lte$",
   "^:view.table/total-count$",
   "^:view/loading-label$",
 ]

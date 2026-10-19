@@ -78,6 +78,26 @@ test('Pages tag filters keep live multi-selection and restore reference titles',
   browser('wait','--fn',"document.querySelector('.ls-vf-chip') === null");
 });
 
+test('Page name filters retain rapid input, persist Unicode and normalize operator changes', () => {
+  open();
+  browser('find','text','Pages','click','--exact');
+  browser('wait','--fn',"document.querySelector('[id^=vfilter-]') !== null");
+  button('Filter');
+  browser('click','[role=menu] button:has-text("Page name")');
+  browser('wait','--fn',"document.querySelector('[id^=vchip-input-]') !== null");
+  browser('type','[id^=vchip-input-]','x'.repeat(200));
+  assert.equal(evaluate("document.querySelector('[id^=vchip-input-]').value"),'x'.repeat(200));
+  browser('fill','[id^=vchip-input-]','café 中文 😀');
+  browser('wait','--fn',"[...document.querySelectorAll('button')].some(button=>button.textContent.trim()==='All')");
+  browser('reload');
+  browser('wait','--fn',"document.querySelector('[id^=vchip-input-]')?.value === 'café 中文 😀'");
+  browser('click','[id^=vchip-op-]');
+  browser('find','role','menuitem','click','--name','is','--exact');
+  browser('wait','--fn',"document.querySelector('[id^=vchip-input-]') === null && document.querySelector('[id^=vchip-value-]')?.textContent === 'All'");
+  browser('click','.ls-vf-chip button[aria-label=Delete]');
+  browser('wait','--fn',"document.querySelector('.ls-vf-chip') === null");
+});
+
 test('Pages value filters open and apply both empty-value actions', () => {
   open();
   browser('find','text','Pages','click','--exact');

@@ -315,6 +315,11 @@ let filterable_columns (s : V.vstate) =
       && c.V.c_id <> "block.temp/refs-count")
     s.V.columns
 
+let filter_options inst fields =
+  W.Map (fields @ match (V.get inst).V.view_ent with
+    | Some view -> [W.kw "view-id",W.Int view.Wr.vid]
+    | None -> [])
+
 (* Shared value phase for new clauses and indexed edits. The picker owns
    one clause and preserves its current operator and selection. *)
 let filter_value_phase inst ~anchor ?index (c : V.column) =
@@ -330,13 +335,7 @@ let filter_value_phase inst ~anchor ?index (c : V.column) =
         [ (W.kw "db/ident", W.Keyword ident)
         ; (W.kw "logseq.property/type", W.Keyword c.V.c_type) ]
   in
-  let opts =
-    W.Map
-      ((W.kw "operator", W.Keyword operator) ::
-       (match (V.get inst).V.view_ent with
-       | Some ve -> [ (W.kw "view-id", W.Int ve.Wr.vid) ]
-       | None -> []))
-  in
+  let opts = filter_options inst [W.kw "operator",W.Keyword operator] in
   Views_db.get_view_filter_data ~opts prop_w (fun data ->
       let multiple=match initial with
         | None -> W.get data "value-source"=Some (W.Keyword "property-values")
@@ -700,9 +699,94 @@ let filter_value_label inst (f : V.filter_clause) =
       | _ -> Wr.prop_text v)
   | None -> (I.t "view/all")
 
-let filter_chip inst idx (f : V.filter_clause) : t =
-  let s = V.get inst in
-  let prop_title =
+type filter_editor = Choices | Text | Number | Range
+
+let filter_editor = function
+  | "text-contains" | "text-not-contains" -> Text
+  | "number-gt" | "number-lt" | "number-gte" | "number-lte" -> Number
+  | "between" -> Range
+  | _ -> Choices
+
+let input_number draft =
+  match float_of_string_opt (String.trim draft) with
+  | Some number when Float.is_finite number -> Some number
+  | _ -> None
+
+let operand_number = function
+  | None | Some W.Nil -> None
+  | Some (W.Int number) -> Some (float_of_int number)
+  | Some (W.Float number) when Float.is_finite number -> Some number
+  | _ -> invalid_arg "Numeric filter operand is not a finite number"
+
+let filter_input inst idx entry editor : t =
+ fun context parent ->
+  let operand clause slot =
+    if editor<>Range then clause.V.c_val
+    else match clause.V.c_val with
+      | None -> None
+      | Some (W.Array values | W.List values | W.Set values) -> List.nth_opt values slot
+      | _ -> invalid_arg "Range filter operand is not a collection" in
+  let field_text = function None | Some W.Nil -> "" | Some value -> Wr.prop_text value in
+  let field slot =
+    let _,initial=Signal.get entry in
+    let draft=Signal.state context.Lui_ui.ui_scheduler (field_text (operand initial slot)) in
+    let placeholder=if editor=Range then Some (I.t (if slot=0 then "view.filter/from" else "view.filter/to")) else None in
+    Ui_components.with_props
+      [Ui_components.Prop.font_size "14px";Ui_components.Prop.line_height "20px";
+       Ui_components.Prop.focus_shadow "none"]
+      (Ui_components.input ~key:("filter-input-" ^ string_of_int slot)
+        ~accessibility_identifier:(Printf.sprintf "vchip-input-%d-%d-%d" inst.V.id idx slot)
+        ?placeholder ~autofocus:(editor=Range && slot=0)
+        ~width:96 ~height:24 ~border_width:0 ~padding_vertical:0 ~padding_horizontal:12
+        ~text:(reactive (fun (_,clause) draft ->
+          let value=operand clause slot in
+          let matches=if editor=Text then value=Some (W.String draft)
+            else operand_number value=input_number draft in
+          if matches then draft else field_text value) entry (Signal.value draft))
+        ~on_input:(function
+          | L.TextChanged (_,text) ->
+              Signal.set draft text;
+              let _,clause=Signal.get entry in
+              let value=if editor=Text then Some (W.String text)
+                else Option.map (fun number -> W.Float number) (input_number text) in
+              let value=if editor<>Range then value
+                else
+                  let endpoints=List.init 2 (fun index ->
+                    if index=slot then Option.value value ~default:W.Nil
+                    else Option.value (operand clause index) ~default:W.Nil) in
+                  if List.for_all ((=) W.Nil) endpoints then None else Some (W.Array endpoints) in
+              let state=V.get inst in
+              set_filters inst (List.mapi (fun index previous ->
+                if index=idx then {previous with V.c_val=value} else previous) state.V.filters) state.filters_or
+          | _ -> ()) []) in
+  (if editor=Range then row ~gap:0 ~cross:`center [field 0;field 1] else field 0) context parent
+
+let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) : t =
+ fun context parent ->
+  let (_,idx),f=Signal.get entry in
+  let normalization=Ui_effect.request () in
+  let change_operator property operator =
+    if Ui_effect.alive context.Lui_ui.ui_scope then begin
+      let _,current=Signal.get entry in
+      let ticket=Ui_effect.issue normalization in
+      let opts=filter_options inst
+        [W.kw "operator",W.Keyword operator;
+         W.kw "value",Option.value current.c_val ~default:W.Nil] in
+      Views_db.get_view_filter_data ~opts property (fun response ->
+        let state=V.get inst in
+        if Ui_effect.alive context.Lui_ui.ui_scope
+           && Ui_effect.is_current normalization ticket
+           && (match List.nth_opt state.V.filters idx with
+               | Some clause -> clause=current | None -> false) then begin
+          let value=match W.get response "value-after-operator-change" with
+            | Some W.Nil -> None | Some value -> Some value
+            | None -> invalid_arg "Filter operator response lacks its normalized value" in
+          set_filters inst (List.mapi (fun index clause ->
+            if index=idx then {clause with V.c_op=operator;c_val=value} else clause)
+            state.V.filters) state.filters_or
+        end)
+    end in
+  let prop_title (s : V.vstate) =
     match List.find_opt (fun c -> c.V.c_id = f.V.c_prop) s.V.columns with
     | Some c -> c.V.c_name
     | None -> f.V.c_prop
@@ -719,7 +803,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
       Ui_components.with_props
         [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px"
         ; Ui_components.Prop.disabled_opacity 0.5 ]
-        (Ui_components.button ~variant:`ghost ~text:prop_title ~disabled:true ~padding_horizontal:8
+        (Ui_components.button ~variant:`ghost ~text:(reactive prop_title (sig_of inst)) ~disabled:true ~padding_horizontal:8
            ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
@@ -731,19 +815,20 @@ let filter_chip inst idx (f : V.filter_clause) : t =
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            ~accessibility_identifier:op_btn_id
-           ~text:(I.operator_text f.V.c_op)
+           ~text:(reactive (fun (_,clause) -> I.operator_text clause.V.c_op) entry)
            ~on_press:(fun _ ->
             match Ui_services.dom_by_id op_btn_id with
             | None -> ()
             | Some anchor ->
                 let prop =
                   match
-                    List.find_opt (fun c -> c.V.c_id = f.V.c_prop) s.V.columns
+                    List.find_opt (fun c -> c.V.c_id = f.V.c_prop) (V.get inst).V.columns
                   with
                   | Some { V.c_prop = Some m; _ } -> m
                   | _ -> W.Map [ (W.kw "db/ident", W.Keyword f.V.c_prop) ]
                 in
-                Views_db.get_view_filter_data prop (fun data ->
+                Views_db.get_view_filter_data ~opts:(filter_options inst []) prop (fun data ->
+                    if Ui_effect.alive context.Lui_ui.ui_scope then begin
                     let ops =
                       Wr.W.elems
                         (Option.value (W.get data "operators") ~default:W.Nil)
@@ -755,25 +840,17 @@ let filter_chip inst idx (f : V.filter_clause) : t =
                             (fun op ->
                               P.MItem
                                 ( I.operator_text op
-                                , fun () ->
-                                    V.update inst (fun s ->
-                                        { s with
-                                          V.filters =
-                                            List.mapi
-                                              (fun i x ->
-                                                if i = idx then
-                                                  { x with V.c_op = op }
-                                                else x)
-                                              s.V.filters
-                                        });
-                                    V.persist_filters inst;
-                                    refresh inst ))
-                            ops))))
+                                , fun () -> change_operator prop op ))
+                            ops))
+                    end))
         [])
-    ; Ui_components.with_props
+    ; reactive ~equal:(fun (_,a) (_,b) -> filter_editor a.V.c_op=filter_editor b.V.c_op)
+      (fun (_,clause) -> match filter_editor clause.V.c_op with
+      | Text | Number | Range as editor -> filter_input inst idx entry editor
+      | Choices -> Ui_components.with_props
         [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px" ]
       (Ui_parts.string_prop Lui_protocol.AccessibilityLabel
-        ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst))
+        ~value:(reactive (fun (_,clause) _ -> filter_value_label inst clause) entry (sig_of inst))
       (Ui_components.button ~variant:`ghost ~min_width:0 ~padding_horizontal:8
         ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
         ~accessibility_identifier:value_btn_id
@@ -788,8 +865,8 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         ~data_attrs:
           [ ( "style"
             , "max-width:100%;border-right:1px solid hsl(var(--border))" ) ]
-        [ text ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst))
-            ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis" [] ]))
+        [ text ~value:(reactive (fun (_,clause) _ -> filter_value_label inst clause) entry (sig_of inst))
+            ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis" [] ]))) entry
     ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
         ~padding_horizontal:4 ~padding_vertical:4 ~height:28 ~min_height:28 ~width:26 ~min_width:26 ~corner_radius:0
         ~foreground:"hsl(var(--muted-foreground))"
@@ -801,57 +878,46 @@ let filter_chip inst idx (f : V.filter_clause) : t =
               });
           V.persist_filters inst;
           refresh inst)
-        [] ]
+        [] ] context parent
 
-(* chips come off the live filters signal — if_ ~test:(filters <> [])
-   alone rebuilt only on the empty/nonempty boundary, so add/edit/remove
-   inside a nonempty set never repainted *)
-let filters_row inst : t =
+let filters_row ?(margin_bottom=0) inst : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then Logseq_el.nothing ctx parent else
-  (reactive
-     ~equal:
-       (fun (a : V.vstate) (b : V.vstate) ->
-         a.V.filters == b.V.filters && a.V.filters_or = b.V.filters_or)
-     (fun (s : V.vstate) ->
-       if s.V.filters = [] then Logseq_el.nothing
-       else
-         let chips =
-           List.mapi (fun i f -> filter_chip inst i f) s.V.filters
-         in
-         row ~style_class:"filters-row" ~cross:`center
-             ~main:`space_between ~gap:16 ~padding_vertical:8 ~min_width:0
+  (if_ ~test:(reactive (fun state -> state.V.filters<>[]) (sig_of inst))
+         (row ~style_class:"filters-row" ~cross:`center
+             ~main:`space_between ~gap:16 ~padding_vertical:8 ~min_width:0 ~margin_bottom
              ~flex_wrap:`wrap
              ~data_attrs:[ ("style", "max-width:100%") ]
            [ row ~cross:`center ~gap:8 ~min_width:0 ~flex_wrap:`wrap
-               ~data_attrs:[ ("style", "max-width:100%") ] chips
-           ; (if List.length s.V.filters > 1 then
+               ~data_attrs:[ ("style", "max-width:100%") ]
+               [keyed ~source:(reactive (fun state -> List.mapi (fun index clause -> (state.V.view_uuid,index),clause) state.V.filters) (sig_of inst))
+                  ~key:(fun (index,clause) -> index,clause.V.c_prop) ~cmp:Stdlib.compare
+                  ~mount:(filter_chip inst)]
+           ; if_ ~test:(reactive (fun state -> List.length state.V.filters>1) (sig_of inst))
                 (* ls-vf-logic keeps its class for the .75->1 opacity
                    hooks; the box chrome migrated to props *)
-                Ui_components.with_props
+                (Ui_components.with_props
                   [ Ui_components.Prop.font_size "0.875rem" ]
                   (select ~style_class:"ls-vf-logic"
                      ~height:24 ~padding_horizontal:8
                      ~background:"transparent" ~border_width:1
                      ~border_color:"hsl(var(--border))"
-                     ~text:(if s.V.filters_or then (I.t "view.filter/match-any-filter") else (I.t "view.filter/match-all-filters"))
-                     [ menu_item ~text:(I.t "view.filter/match-all-filters") ~selected:(not s.V.filters_or)
+                     ~text:(reactive (fun state -> if state.V.filters_or then I.t "view.filter/match-any-filter" else I.t "view.filter/match-all-filters") (sig_of inst))
+                     [ menu_item ~text:(I.t "view.filter/match-all-filters") ~selected:(reactive (fun state -> not state.V.filters_or) (sig_of inst))
                          ~on_press:(fun _ ->
                            V.update inst (fun s ->
                                { s with V.filters_or = false });
                            V.persist_filters inst;
                            refresh inst)
                          []
-                     ; menu_item ~text:(I.t "view.filter/match-any-filter") ~selected:s.V.filters_or
+                     ; menu_item ~text:(I.t "view.filter/match-any-filter") ~selected:(reactive (fun state -> state.V.filters_or) (sig_of inst))
                          ~on_press:(fun _ ->
                            V.update inst (fun s ->
                                { s with V.filters_or = true });
                            V.persist_filters inst;
                            refresh inst)
-                         [] ])
-              else spacer ~key:"no-logic" [])
-           ])
-     (sig_of inst))
+                         [] ]))
+           ]))
     ctx parent
 
 (* ---------- linked-references include/exclude (cljs

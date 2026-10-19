@@ -171,12 +171,12 @@ let operator_text = function
   | "date-after" -> t "view.filter/operator-date-after"
   | "before" -> t "view.filter/operator-before"
   | "after" -> t "view.filter/operator-after"
-  | "number-gt" -> t "view.filter/operator-number-gt"
-  | "number-lt" -> t "view.filter/operator-number-lt"
-  | "number-gte" -> t "view.filter/operator-number-gte"
-  | "number-lte" -> t "view.filter/operator-number-lte"
+  | "number-gt" -> ">"
+  | "number-lt" -> "<"
+  | "number-gte" -> ">="
+  | "number-lte" -> "<="
   | "between" -> t "view.filter/operator-between"
-  | _ -> t "view.filter/operator-is"
+  | operator -> invalid_arg ("Unsupported filter operator: " ^ operator)
 let timestamp_options () =
   [ ("1 day ago", t "view.filter/relative-1-day-ago")
   ; ("3 days ago", t "view.filter/relative-3-days-ago")

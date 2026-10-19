@@ -142,8 +142,6 @@ let body_eq (a : V.vstate) (b : V.vstate) =
   && a.V.group_sort_by = b.V.group_sort_by
   && a.V.group_desc = b.V.group_desc
   && a.V.sorting = b.V.sorting
-  && a.V.filters = b.V.filters
-  && a.V.filters_or = b.V.filters_or
   && a.V.loading = b.V.loading
   && a.V.query_rows = b.V.query_rows
   && a.V.query_scalar_rows = b.V.query_scalar_rows
@@ -154,6 +152,13 @@ let body_eq (a : V.vstate) (b : V.vstate) =
   && a.V.view_uuid = b.V.view_uuid
   && a.V.views = b.V.views
   && a.V.asset_class = b.V.asset_class
+
+(* Result refreshes must not retire the active filter editor's draft or focus. *)
+let body_el ?(equal=body_eq) inst : t =
+  column ~gap:0 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
+    [ Views_head.filters_row ~margin_bottom:8 inst
+    ; reactive ~equal (Views_table.result_el inst) (sig_of inst)
+    ]
 
 (* cljs views.cljs view: view container > div > .flex.flex-col.gap-2 >
    .flex.flex-col.gap-2.grid > foldable(key="view") with the whole body
@@ -177,12 +182,7 @@ let view_el inst : t =
         [ column ~gap:8 ~grow:1.
             [ Views_table.foldable inst ~key:"view"
                 ~title:(Views_head.render_head inst)
-                ~body:
-                  (reactive ~equal
-                     (fun s ->
-                       Views_table.body_el inst s
-                         ~filters:(Views_head.filters_row inst))
-                     (sig_of inst))
+                ~body:(body_el ~equal inst)
             ]
         ]
     ]
@@ -213,21 +213,30 @@ let view_el inst : t =
    the :view hiccup / scalar list / query-result table / loading /
    empty states — and the raw-source .CodeMirror editor is a sibling of
    the inner inside .custom-query-results *)
-let query_content inst (s : V.vstate) : t =
+let query_content_key (s : V.vstate) =
   let is_dsl_blank =
     match Views_query.parse_src s.V.qsrc with
     | Views_query.QBlank -> true
     | Views_query.QDsl d -> String.trim d = ""
     | _ -> false
   in
-  if is_dsl_blank then spacer ~key:"blank" []
-  else if s.V.query_view <> W.Nil then
+  if is_dsl_blank then `Blank
+  else if s.V.query_view <> W.Nil then `Custom s.V.query_view
+  else if s.V.query_error <> None then `Error (Option.get s.V.query_error)
+  else if s.V.query_scalar_rows <> [] then `Scalar s.V.query_scalar_rows
+  else if s.V.query_rows <> [] || s.V.data <> Wr.VEmpty || not s.V.loading then `Table
+  else `Loading
+
+let query_content inst (s : V.vstate) : t =
+  match query_content_key s with
+  | `Blank -> spacer ~key:"blank" []
+  | `Custom view ->
     (* :view fn output replaces the default table (cljs custom-query) *)
-    Logseq_el.fragment (hiccup_els inst s.V.query_view)
-  else if s.V.query_error <> None then
-    text ~value:(Option.value s.V.query_error ~default:"query error")
+    column (hiccup_els inst view)
+  | `Error error ->
+    text ~value:error
       ~padding:8 ~foreground:"muted-foreground" []
-  else if s.V.query_scalar_rows <> [] then
+  | `Scalar rows ->
     list
       (List.map
          (fun item ->
@@ -237,45 +246,39 @@ let query_content inst (s : V.vstate) : t =
              | other -> Edn.to_string other
            in
            list_item ~text:v [])
-         s.V.query_scalar_rows)
-  else if s.V.query_rows <> [] || not s.V.loading then
+         rows)
+  | `Table ->
     (* block results → the query-result view. cljs renders the foldable
        live-query shell ("Live query (n)" head + view-actions + table)
-       even when the result is empty — only the loading state replaces
-       it *)
+       even when the result is empty. Keep this shell during a refresh. *)
     box ~style_class:"query-result"
       [ column ~gap:8
           [ column ~gap:8
               [ Views_table.foldable inst ~key:"qr"
                   ~title:(Views_head.render_head inst)
-                  ~body:
-                    (Views_table.body_el inst s
-                       ~filters:(Views_head.filters_row inst))
+                  ~body:(body_el inst)
               ]
           ]
       ]
-  else if s.V.loading then
+  | `Loading ->
     text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
-  else text ~value:(I.t "search/no-result") ~padding_vertical:8 []
 
 let query_view_el inst : t =
   Logseq_el.fragment
     [ box 
-        [ reactive ~equal:body_eq
-            (fun s ->
-              column
-                [ (* dsl queries (and blank ones) get the builder panel;
-                     datalog don't *)
-                  (match Views_query.parse_src s.V.qsrc with
-                   | Views_query.QDatalog _ -> spacer ~key:"builder-off" []
-                   | _ ->
-                       if s.V.is_advanced then spacer ~key:"builder-off" []
-                       else
-                         Views_builder.builder_el inst
-                           ~tree:(Views_builder.tree_for inst))
-                ; query_content inst s
-                ])
-            (sig_of inst)
+        [ column
+            [ reactive ~equal:body_eq
+                (fun s ->
+                  (* DSL queries, including blank ones, get the builder panel. *)
+                  match Views_query.parse_src s.V.qsrc with
+                  | Views_query.QDatalog _ -> spacer ~key:"builder-off" []
+                  | _ ->
+                      if s.V.is_advanced then spacer ~key:"builder-off" []
+                      else Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst))
+                (sig_of inst)
+            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b)
+                (query_content inst) (sig_of inst)
+            ]
         ]
     ; Views_query.cm_host inst
     ]

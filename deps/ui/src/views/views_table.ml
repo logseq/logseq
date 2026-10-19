@@ -96,7 +96,7 @@ let title_column () : V.column = builtin_column "block/title" (I.t "view.table/n
 
 (* all_pages.cljs uses (t :page/name) — "Page name" — for its title column *)
 let page_title_column () : V.column =
-  builtin_column "block/title" (I.t "view.table/group-page-name") "node" ()
+  builtin_column "block/title" (I.t "view.table/group-page-name") "string" ()
 
 let tags_column () : V.column =
   builtin_column "block/tags" (I.t "property.built-in/tags") "node" ~many:true ()
@@ -1625,30 +1625,21 @@ let render_table inst s : t =
       box ~grow:1. ~accessibility_identifier:(Ui_services.env_random_uuid ())
         [ table_el ~paginate:more inst s ]
 
-let body_el inst (s : V.vstate) ~(filters : t) : t =
-  column ~gap:8 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
-    ((* cljs filters-row renders nil with no filters — mounting the
-        empty box would still eat the column gap *)
-     (if s.V.filters = [] then [] else [ filters ])
-    @ [ (let refs =
-           match inst.V.kind with
-           | V.KLinkedRefs | V.KUnlinkedRefs -> true
-           | _ -> false
-         in
-         (* a refetch keeps the rows already on screen (no flash back
-            to Loading); references never show the placeholder at all —
-            the section's head/count is already up and the rows land
-            within a frame or two *)
-         let has_data = (match s.V.data with Wr.VEmpty -> false | _ -> true) in
-         if s.V.loading && refs && not has_data then
-           box ~key:"ls-view-pending" []
-         else if s.V.loading && not has_data then
-         text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground"
-           []
-       else
-         (* master renders no empty-state copy under an empty table *)
-         (match s.V.display_type with
-          | "list" -> render_list inst s
-          | "gallery" -> render_gallery inst s
-          | _ -> render_table inst s))
-    ])
+let result_el inst (s : V.vstate) : t =
+  let refs =
+    match inst.V.kind with
+    | V.KLinkedRefs | V.KUnlinkedRefs -> true
+    | _ -> false
+  in
+  (* A refetch keeps existing rows on screen. References never show the
+     placeholder: their head and count already identify the pending section. *)
+  let has_data = s.V.data <> Wr.VEmpty in
+  if s.V.loading && refs && not has_data then box ~key:"ls-view-pending" []
+  else if s.V.loading && not has_data then
+    text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
+  else
+    (* master renders no empty-state copy under an empty table *)
+    match s.V.display_type with
+    | "list" -> render_list inst s
+    | "gallery" -> render_gallery inst s
+    | _ -> render_table inst s
