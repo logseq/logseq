@@ -285,6 +285,10 @@
 (rule
  (copy ../src/pages/bug_report.ml bug_report.ml))
 (rule
+ (copy ../src/pages/handbook_data.ml handbook_data.ml))
+(rule
+ (copy ../test/handbook_scenarios.ml handbook_scenarios.ml))
+(rule
  (copy ../src/pages/file_view.ml file_view.ml))
 (rule
  (copy ../src/pages/page.ml page.ml))
@@ -374,7 +378,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_window native_window_test native_fetch_test native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
+ (modules (:standard \ logseq_native native_window native_window_test native_fetch_test handbook_data_test handbook_scenarios native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
@@ -462,6 +466,12 @@
 (test
  (name native_fetch_test)
  (modules native_fetch_test)
+ (libraries logseq_ui_ocamlhost))
+
+(test
+ (name handbook_data_test)
+ (modules handbook_data_test handbook_scenarios)
+ (preprocess (pps lui.ppx))
  (libraries logseq_ui_ocamlhost))
 
 (library

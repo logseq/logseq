@@ -4478,6 +4478,7 @@ let () =
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->
+      Handbook_scenarios.run ~check;
       Test_drive_sidebar.run ();
       Bug_report_drive.run ~finish:(fun () ->
       Views_drive.run ~finish:(fun () ->
