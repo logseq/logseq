@@ -8946,3 +8946,57 @@ let () = Native_embed.with_entry_lock (fun () ->
        match Runtime.signal_get st.items with
        | [{Sidebar_state.kind="shortcut-settings";collapsed=false;_}] -> true | _ -> false);
     print_endline "native complete shortcut Help entry, flow and filtering: OK"))
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_send= !Runtime.app_send and previous_flush= !Runtime.app_flush
+  and previous_read= !Runtime.read_model in
+  let store=Lui_store.create () and registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_editor.register registry;Logseq_codemirror.register registry;
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create_with_extensions backend registry
+    {Model.initial with phase=Model.Ready;route=Model.Bug_report_clipboard}
+    (fun model () -> model) (fun _ ms _ -> Page.region ms) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.app_send:=previous_send;
+    Runtime.app_flush:=previous_flush;Runtime.read_model:=previous_read) (fun () ->
+    Runtime.app_send:=(fun _ -> false);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    check "Native clipboard inspector must mount its scoped paste owner" (Paste_capture.active ());
+    let value="Native clipboard café 中文 😀" in
+    Editor_keys.on_paste (Ui_dom_native.ev_of (Js.Json.JObject
+      ["clipboardData",Ui_dom_native.text_clipboard_data value]));
+    ignore (Lui_app.flush app);
+    check "Native clipboard result must release paste ownership" (not (Paste_capture.active ()));
+    let ids=Lui_store.preorder store in
+    let output=List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"=
+      Some "clipboard-inspection-result") ids in
+    check "Native clipboard result must contain readable Unicode JSON"
+      (match output with
+       | None -> false
+       | Some id -> let text=Option.get (Lui_store.string_prop store id "text") in
+           String.contains text '\n' && I18n.contains text value);
+    let layout=Lui_layout.create () in
+    List.iter (fun scale ->
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      List.iter (fun width ->
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~measure:(fun id text offered _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width offered) engine id text)) layout store;
+        List.iter (fun key ->
+          let action=List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=Some (I18n.t key)) ids in
+          let rect=Option.get (Lui_layout.rect layout action) in
+          let label_width,_=Text_engine.measure_text engine action (I18n.t key) in
+          let required=Float.round (label_width+.24.*.scale) in
+          let fits=rect.w+.0.1>=required && rect.h>=28.*.scale in
+          if not fits then Printf.eprintf "diagnostic button width=%.0f scale=%.0f label=%s actual=%.2f required=%.2f\n%!"
+            width scale (I18n.t key) rect.w required;
+          check "Native diagnostic buttons must preserve their complete label and padding during resize" fits)
+          ["bug-report.inspector/copy";"bug-report.inspector/create-issue";"bug-report.inspector/back"])
+        [900.;480.;320.]) [1.;2.];
+    print_endline "native clipboard inspector input, Unicode and layout: OK"))

@@ -1629,10 +1629,14 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
 
 (* the route-root dynamic segment — page routes keep the region mounted
    across data publishes (the keyed/reactive segments inside repaint
-   themselves); all other routes keep repaint-on-data semantics *)
+   themselves); diagnostic routes retain their local paste/copy state
+   independently of graph data and shell menus *)
 let region (ms : Model.t Signal.signal) : t =
   reactive
     ~equal:(fun (a : Model.t) (b : Model.t) ->
+      if a.route=Model.Bug_report || a.route=Model.Bug_report_clipboard then
+        a.phase=b.phase && a.route=b.route
+      else
       let shell =
         a.phase = b.phase
         && a.route = b.route
@@ -1691,6 +1695,8 @@ let region (ms : Model.t Signal.signal) : t =
       | Model.Ready, Model.Settings -> Settings_page.view m
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
+      | Model.Ready, Model.Bug_report -> Bug_report.view ()
+      | Model.Ready, Model.Bug_report_clipboard -> Bug_report.inspector ()
       | Model.Ready, _ -> (
           match m.route_page, m.page_missing with
           | Some _, _ -> page_view_ms ms

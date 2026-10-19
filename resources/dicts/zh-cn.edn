@@ -180,6 +180,7 @@
  :bug-report.inspector/copied "已复制到剪贴板！"
  :bug-report.inspector/copy "复制结果"
  :bug-report.inspector/copy-desc "如果可以共享，请点击复制按钮。"
+ :bug-report.inspector/copy-error "无法复制检查结果。"
  :bug-report.inspector/create-issue "创建一个 issue"
  :bug-report.inspector/create-issue-desc "现在你可以报告粘贴到剪贴板的结果了。请将结果粘贴到 “Additional Context” 部分，并说明原始内容是从哪里复制的。谢谢！"
  :bug-report.inspector/desc "按下 {1} 键来检查你的剪贴板数据\n如果你正在使用移动版本，请点击此处粘贴"

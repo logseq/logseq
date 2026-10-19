@@ -430,7 +430,7 @@ let overlays (ms : Model.t Signal.signal) =
 let help_menu_popup () : t =
   let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
   Right_sidebar_view.help_menu ~close
-    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> ()) ()
+    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> Ui_services.nav_set_hash "#/bug-report") ()
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment

@@ -1032,7 +1032,7 @@ let help_menu_popup : t =
  fun context parent ->
   let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
   Right_sidebar_view.help_menu ~close
-    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> ()) () context parent
+    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> Ui_services.nav_set_hash "#/bug-report") () context parent
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment

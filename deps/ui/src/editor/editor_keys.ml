@@ -209,6 +209,8 @@ let nav r =
     | Model.All_graphs -> "#/graphs"
     | Model.Settings -> "#/settings"
     | Model.Import -> "#/import"
+    | Model.Bug_report -> "#/bug-report"
+    | Model.Bug_report_clipboard -> "#/bug-report-tool/clipboard-data-inspector"
     | Model.Page t -> "#/page/" ^ encode_uri_component t
     | Model.Block_zoom u -> "#/page/" ^ u
     | Model.File p -> "#/file/" ^ encode_uri_component p
@@ -1474,6 +1476,7 @@ let on_keydown ev =
   end
 
 let on_paste ev =
+  if Paste_capture.dispatch ev then () else
   if Ui_services.env_publishing () then () else begin
   if S.ready () then
     let editor_target =

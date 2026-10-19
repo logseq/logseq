@@ -64,7 +64,7 @@ let effects (action : Action.t) : unit =
       (* in-graph routes always carry ?graph-id — navigation call sites
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
-       | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
+       | Model.All_graphs | Model.Import | Model.Bug_report | Model.Bug_report_clipboard | Model.Not_found _ -> ()
        | _ -> Subs_state.sync_hash_graph_id ());
       (* cljs route.cljs static-title for non-page routes (page routes
          get their title when Page_loaded lands) *)
@@ -80,6 +80,8 @@ let effects (action : Action.t) : unit =
            Ui_services.doc_set_title ((!Subs_state.i18n) "nav/settings")
        | Model.Import ->
            Ui_services.doc_set_title ((!Subs_state.i18n) "import/title")
+       | Model.Bug_report -> Ui_services.doc_set_title ((!Subs_state.i18n) "bug-report/title")
+       | Model.Bug_report_clipboard -> Ui_services.doc_set_title ((!Subs_state.i18n) "bug-report.inspector/title")
        | Model.Library | Model.Not_found _
        | Model.File _ ->
            Ui_services.doc_set_title "Logseq"

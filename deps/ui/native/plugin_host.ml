@@ -32,6 +32,7 @@ let dirty_value (owner : Signal.scheduler) : int Signal.signal =
       Signal.value st
 let toolbar_items () : ui_item list = []
 let has_installed_plugins () = false
+let diagnostic_plugins () : (string * string) list = []
 let slot_id it = "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 let inject_toolbar_ui () = ()
 let pinned () : string list = []

@@ -9,6 +9,8 @@ type route =
   | All_pages
   | All_graphs
   | Import
+  | Bug_report
+  | Bug_report_clipboard
   | Settings
   | File of string (* cljs /file/:path — raw file editor (config.edn etc.) *)
   | Not_found of string

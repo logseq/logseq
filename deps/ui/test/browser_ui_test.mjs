@@ -12,6 +12,7 @@ import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
 import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
+import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -69,6 +70,32 @@ test('Help opens complete shortcut content and reopens collapsed panels', () => 
   browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
   browser('wait', '--fn', "document.querySelectorAll('.item-type-shortcut-settings').length === 1 && !document.querySelector('.cp__right-split.is-collapsed')");
   assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
+});
+
+test('Help opens the diagnostic page and its resettable clipboard tool', () => {
+  browser('set', 'viewport', '1280', '720');
+  open();
+  const splits=evaluate(`(${measureDockGeometry.toString()})(document)`);
+  if (splits.find(split=>split.left).closed) button('Toggle left sidebar');
+  if (!splits.find(split=>!split.left).closed) button('Toggle right sidebar');
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  button('light light');
+  button('Logseq classic color');
+  browser('press', 'Escape');
+  button('Toggle help menu');
+  button('Bug report');
+  browser('wait', '--fn', "document.querySelector('.cp__bug-report-reporter') !== null");
+  assertBugReport(evaluate(`(${measureBugReport.toString()})(document)`),bugReportDesktopReference);
+  button('Clipboard helper');
+  assertClipboardInspector(evaluate(`(${measureClipboardInspector.toString()})(document)`));
+  button('Go back');
+  assertBugReport(evaluate(`(${measureBugReport.toString()})(document)`),bugReportDesktopReference);
+  button('Clipboard helper');
+  browser('reload');
+  browser('wait', '--fn', "document.querySelector('#clipboard-inspector-input') !== null");
+  assertClipboardInspector(evaluate(`(${measureClipboardInspector.toString()})(document)`));
+  button('Go back');
 });
 
 test('Import keeps shared typography, theme and option geometry', () => {

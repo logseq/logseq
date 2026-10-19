@@ -413,7 +413,7 @@ let help_menu ~close ~open_handbook ~open_bug_report () =
       (Ui_components.button ~key ~variant:`ghost ~label:title
         ~height:32 ~min_height:32 ~corner_radius:0 ~min_width:0
         ~padding_horizontal:16 ~padding_vertical:4 ~main:`start ~cross:`center ~gap:8
-        ~on_press:(fun _ -> action ();close ())
+        ~on_press:(fun _ -> close ();action ())
         [row ~opacity:0.4 [Icons.icon ~size:20. icon_name];text ~value:title []]) in
   let external_item key label icon_name url =
     item key (t label) icon_name (fun () -> Ui_services.env_open_url url) in

@@ -112,6 +112,8 @@ type env = {
   rtc_test_mode : unit -> bool;
   online : unit -> bool;
   is_mac : unit -> bool;
+  user_agent : unit -> string;
+  language : unit -> string;
   native_drag : unit -> bool;
   native_block_controls : unit -> bool;
   css_transform_icons : unit -> bool;
@@ -388,6 +390,8 @@ val env_dev_build : unit -> bool
 val env_rtc_test_mode : unit -> bool
 val env_online : unit -> bool
 val env_is_mac : unit -> bool
+val env_user_agent : unit -> string
+val env_language : unit -> string
 val env_native_drag : unit -> bool
 val env_native_block_controls : unit -> bool
 val env_css_transform_icons : unit -> bool

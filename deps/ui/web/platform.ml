@@ -265,6 +265,10 @@ let set_document_title : string -> unit =
 
 external navigator_ : Js.Json.t = "navigator"
 external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
+external navigator_user_agent : Js.Json.t -> string = "userAgent" [@@mel.get]
+external navigator_language : Js.Json.t -> string = "language" [@@mel.get]
+let user_agent () = navigator_user_agent navigator_
+let language () = navigator_language navigator_
 
 (* cljs (or util/mac? util/win32?) — goog platform detection *)
 let desktop_os () =

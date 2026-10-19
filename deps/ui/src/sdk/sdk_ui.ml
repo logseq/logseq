@@ -203,6 +203,11 @@ let get_current_route _a _b _c _d =
       resolved (detail_obj [ ("to", Js.Json.string "all-graphs") ])
   | Some Model.Import ->
       resolved (detail_obj [ ("to", Js.Json.string "import") ])
+  | Some Model.Bug_report ->
+      resolved (detail_obj [("to",Js.Json.string "bug-report")])
+  | Some Model.Bug_report_clipboard ->
+      resolved (detail_obj [("to",Js.Json.string "bug-report-tools");
+        ("pathParams",detail_obj [("tool",Js.Json.string "clipboard-data-inspector")])])
   | Some Model.Settings ->
       resolved (detail_obj [ ("to", Js.Json.string "settings") ])
   | Some (Model.Block_zoom uuid) ->

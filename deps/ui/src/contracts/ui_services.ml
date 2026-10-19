@@ -164,6 +164,8 @@ type env = {
   (* Host reports network reachability (navigator.onLine). *)
   is_mac : unit -> bool;
   (* macOS host platform detection. *)
+  user_agent : unit -> string;
+  language : unit -> string;
   native_drag : unit -> bool;
   (* The host drives block drags itself (no HTML5 drag layer). *)
   native_block_controls : unit -> bool;
@@ -501,6 +503,8 @@ let env_dev_build () = (get ()).env.dev_build ()
 let env_rtc_test_mode () = (get ()).env.rtc_test_mode ()
 let env_online () = (get ()).env.online ()
 let env_is_mac () = (get ()).env.is_mac ()
+let env_user_agent () = (get ()).env.user_agent ()
+let env_language () = (get ()).env.language ()
 let env_native_drag () = (get ()).env.native_drag ()
 let env_native_block_controls () = (get ()).env.native_block_controls ()
 let env_css_transform_icons () = (get ()).env.css_transform_icons ()

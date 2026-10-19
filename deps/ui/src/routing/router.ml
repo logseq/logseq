@@ -42,6 +42,7 @@ let parse_path (p : string) : Model.route =
           | "graphs" -> Model.All_graphs
           | "import" -> Model.Import
           | "settings" -> Model.Settings
+          | "bug-report-tool" when rest="clipboard-data-inspector" -> Model.Bug_report_clipboard
           | _ -> Model.Not_found p)
       | None -> (
           match p with
@@ -50,6 +51,7 @@ let parse_path (p : string) : Model.route =
           | "graphs" -> Model.All_graphs
           | "import" -> Model.Import
           | "settings" -> Model.Settings
+          | "bug-report" -> Model.Bug_report
           | "page" | "block" | "file" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -696,6 +698,7 @@ let load_route (route : Model.route) =
          (fun () -> load_page_ref route (Wire.String "Library"));
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.All_pages | Model.All_graphs | Model.Import
+   | Model.Bug_report | Model.Bug_report_clipboard
    | Model.File _ | Model.Not_found _ | Model.Settings ->
        Runtime.reload_current_view := (fun () -> Js.Promise.resolve ());
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()));
@@ -725,6 +728,7 @@ let load_route (route : Model.route) =
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
   | Model.All_pages | Model.All_graphs | Model.Import
+   | Model.Bug_report | Model.Bug_report_clipboard
   | Model.File _ | Model.Not_found _ | Model.Settings ->
       ()
 

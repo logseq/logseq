@@ -813,6 +813,8 @@ let fire_route_changed (route : Model.route) =
     | Model.All_pages -> "all-pages"
     | Model.All_graphs -> "graphs"
     | Model.Import -> "import"
+    | Model.Bug_report -> "bug-report"
+    | Model.Bug_report_clipboard -> "bug-report-tools"
     | Model.Settings -> "settings"
     | Model.File _ -> "file"
     | Model.Not_found _ -> "not-found"
@@ -1201,6 +1203,9 @@ let installed_version pid =
   match Js.Dict.get installed pid with
   | Some pl -> jstr (getf pl "options") "version"
   | None -> ""
+
+let diagnostic_plugins () =
+  Array.to_list (Js.Dict.keys installed) |> List.map (fun id -> id,installed_version id)
 
 let toast msg cls =
   Web_dom.dispatch_custom "ls:toast"

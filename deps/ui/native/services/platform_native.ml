@@ -602,6 +602,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
               | _ -> false)
         ; online = (fun () -> true)
         ; is_mac
+        ; user_agent = (fun () -> "Logseq Native/" ^ Sys.ocaml_version ^ " (" ^ native_system ^ ")")
+        ; language = preferred_lang
         ; native_drag = (fun () -> true)
         ; native_block_controls = (fun () -> true)
         ; css_transform_icons = (fun () -> false)

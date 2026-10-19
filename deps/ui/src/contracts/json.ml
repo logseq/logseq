@@ -92,3 +92,24 @@ let stringify j =
   let b = Buffer.create 256 in
   add_json b j;
   Buffer.contents b
+
+let stringify_pretty value =
+  let buffer=Buffer.create 256 in
+  let indent depth=Buffer.add_string buffer (String.make (depth*2) ' ') in
+  let rec write depth = function
+    | Object (_::_ as entries) ->
+        Buffer.add_string buffer "{\n";
+        List.iteri (fun index (key,value) ->
+          if index>0 then Buffer.add_string buffer ",\n";
+          indent (depth+1);add_escaped buffer key;
+          Buffer.add_string buffer ": ";write (depth+1) value) entries;
+        Buffer.add_char buffer '\n';indent depth;Buffer.add_char buffer '}'
+    | Array values when Array.length values>0 ->
+        Buffer.add_string buffer "[\n";
+        Array.iteri (fun index value ->
+          if index>0 then Buffer.add_string buffer ",\n";
+          indent (depth+1);write (depth+1) value) values;
+        Buffer.add_char buffer '\n';indent depth;Buffer.add_char buffer ']'
+    | value -> add_json buffer value
+  in
+  write 0 value;Buffer.contents buffer
