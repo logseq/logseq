@@ -1990,11 +1990,14 @@
         popup-content (fn content-fn [target]
                         [:div.property-select
                          (case type
-                           (:entity :number :default :url :checkbox)
-                           (select block property select-opts' opts)
-
                            (:node :class :property :page :date)
-                           (property-value-select-node block property select-opts' (assoc opts :target target)))])
+                           (property-value-select-node block property select-opts' (assoc opts :target target))
+
+                           ;; :entity :number :default :url :checkbox, and any
+                           ;; other type: a property with closed values comes
+                           ;; here whatever its type, and a nil type threw
+                           ;; "No matching clause" (db-test #1363)
+                           (select block property select-opts' opts))])
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
                       (when-let [anchor (hooks/deref *el)]
