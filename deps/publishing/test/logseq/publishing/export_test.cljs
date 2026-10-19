@@ -140,3 +140,27 @@
          (is (= "bar"
                 (str (fs/readFileSync "tmp/published-graph/assets/bar.png")))
              "second asset is copied correctly")))
+
+(deftest-async create-export-writes-external-transit-db
+  (create-static-dir "tmp/static")
+  (create-logseq-graph "tmp/test-graph")
+  (let [transit-payload "TRANSIT-DB-PAYLOAD-UNIQUE"
+        html (str "<!DOCTYPE html><script>window.logseq_db_url="
+                  (js/JSON.stringify "static/js/db.transit")
+                  "</script>")]
+    (p/let [_ (publish-export/create-export
+               html
+               "tmp/static"
+               "tmp/test-graph"
+               "tmp/published-graph"
+               {:db-transit transit-payload
+                :notification-fn (fn [msg]
+                                   (if (= "error" (:type msg))
+                                     (throw (ex-info (:payload msg) {}))
+                                     (js/console.log (:payload msg))))})]
+      (is (= transit-payload
+             (str (fs/readFileSync "tmp/published-graph/static/js/db.transit")))
+          "The published graph writes transit next to the app instead of inlining it")
+      (is (not (.includes (str (fs/readFileSync "tmp/published-graph/index.html"))
+                          transit-payload))
+          "index.html stays small and does not embed the transit graph"))))
