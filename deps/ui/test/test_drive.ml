@@ -628,12 +628,48 @@ let test_toasts () =
     (find_where (fun n -> n.M.kind = "toast") = [])
 
 let test_help () =
-  send Action.Help_toggle;
-  check "help popup"
-    (find_where (fun n -> has_tok n "cp__sidebar-help-menu-popup") <> []);
-  send Action.Help_toggle;
-  check "help popup closed"
-    (find_where (fun n -> has_tok n "cp__sidebar-help-menu-popup") = [])
+  let ms=Option.get !ms_ref in
+  let st=Sidebar_state.ensure ms in
+  let saved=Runtime.signal_get st.Sidebar_state.items in
+  let was_open=(Signal.get ms).Model.right_sidebar_open in
+  let previous_read= !Runtime.read_model in
+  Runtime.read_model:=(fun () -> Signal.get ms);
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_read;
+    Runtime.signal_set st.items saved;
+    if (Signal.get ms).Model.help_open then send Action.Help_toggle;
+    if (Signal.get ms).Model.right_sidebar_open<>was_open then send Action.Toggle_right_sidebar;
+    Runtime.flush ()) (fun () ->
+    Runtime.signal_set st.items [];
+    if (Signal.get ms).Model.right_sidebar_open then send Action.Toggle_right_sidebar;
+    let open_shortcuts () =
+      send Action.Help_toggle;
+      let popup=List.find (fun n -> n.M.kind="popover" && has_tok n "cp__sidebar-help-menu-popup") (M.all_nodes (tree ())) in
+      check "Help menu uses its retained trigger instead of an empty parent anchor"
+        (M.string_prop popup "anchor-target"=Some "help-menu-trigger");
+      let target=List.find (fun n -> Hashtbl.find_opt n.M.props "press-enabled"=Some (Wv.BoolValue true)
+        && subtree_contains n (fun child -> M.string_prop child "text"=Some (I18n.t "help.shortcuts/label")))
+        (M.all_nodes (tree ())) in
+      click_node target; Runtime.flush () in
+    open_shortcuts ();
+    check "Help shortcut action opens the right dock" (Signal.get ms).Model.right_sidebar_open;
+    check "Help shortcut action closes its popup" (not (Signal.get ms).Model.help_open);
+    let items=Runtime.signal_get st.items in
+    check "Help shortcut action creates one real shortcut panel"
+      (List.exists (fun (it : Sidebar_state.item) -> it.kind="shortcut-settings") items);
+    check "Shortcut help contains the trigger and Markdown tables"
+      (List.length (find_where (fun n -> n.M.kind="table"))=2);
+    has "text:\"Triggers\"";
+    has "text:\"Markdown syntax\"";
+    check "Shortcut help includes the existing keymap search"
+      (find_where (fun n -> M.string_prop n "placeholder"=Some "Search shortcuts...")<>[]);
+    Runtime.signal_set st.items (List.map (fun (it : Sidebar_state.item) -> {it with collapsed=true}) items);
+    if (Signal.get ms).Model.right_sidebar_open then send Action.Toggle_right_sidebar;
+    open_shortcuts ();
+    check "Reopening shortcut help expands the retained item without duplicates"
+      (match Runtime.signal_get st.items with
+       | [{Sidebar_state.kind="shortcut-settings";collapsed=false;_}] -> true | _ -> false);
+    check "Reopening shortcut help opens a closed dock" (Signal.get ms).Model.right_sidebar_open)
 
 let test_appearance () =
   let previous_accent = Ui_services.storage_get "radix-color" in

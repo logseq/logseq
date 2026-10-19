@@ -428,73 +428,15 @@ let overlays (ms : Model.t Signal.signal) =
     ]) ]))
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
-   the help menu popup; popup itself not ported yet *)
+   the shared help popup. *)
 (* cljs container.cljs help-button: the tabler help glyph — the native
    path renders bundled tabler icons; a hand-rolled svg renders empty *)
 let help_svg : t = Icons.icon ~size:20. "help-small"
 
-let open_url (u : string) = Host.open_url u
-
-(* cljs container.cljs help-menu-items -> .cp__sidebar-help-menu-popup *)
-let help_item key title icon_name act =
-  Ui_parts.pressable ~on_press:(fun _ -> act ())
-    (row ~key ~style_class:"it" ~cross:`center
-       [ box ~key:(key ^ "-i") ~style_class:"ls-hm-icon"
-           [ Icons.icon ~size:20. icon_name ]
-       ; text ~key:(key ^ "-t") ~style_class:"ls-hm-title" ~value:title []
-       ])
-
-(* web css: position fixed, right 0, bottom 52px — a point-anchored
-   popover carries the same geometry on native: the popup's bottom-right
-   corner sits 52px above the window's bottom-right corner. Function
-   (not a value) so ~at reads the live window size at open time *)
 let help_menu_popup () : t =
-  let close () =
-    Runtime.send Action.Help_toggle;
-    Runtime.flush ()
-  in
-  popover ~transition:Ui_components.popover_transition ~key:"help-menu"
-    ~at:(Host.inner_width (), Host.inner_height () -. 52.)
-    ~anchor:`above ~anchor_alignment:`end_
-    ~on_dismiss:(fun _ -> close ())
-    [ column ~key:"help-menu-inner" ~style_class:"cp__sidebar-help-menu-popup"
-    [ column ~key:"hm-wrap"
-        [ help_item "hm-handbook" (I18n.t "help/handbook") "book-2" close
-        ; help_item "hm-shortcuts" (I18n.t "help.shortcuts/label") "command" close
-        ; help_item "hm-docs" (I18n.t "help/docs") "help" (fun () ->
-            open_url "https://docs.logseq.com/"; close ())
-        ; divider ~key:"hm-hr1" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-bug" (I18n.t "help/bug") "bug" close
-        ; help_item "hm-feature" (I18n.t "help/feature") "git-pull-request"
-            (fun () ->
-              open_url
-                "https://discuss.logseq.com/c/feedback/feature-requests/";
-              close ())
-        ; help_item "hm-feedback" (I18n.t "help/submit-feedback") "messages"
-            (fun () ->
-              open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; divider ~key:"hm-hr2" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-discord" (I18n.t "help/ask-community") "brand-discord"
-            (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (I18n.t "help/support-forum") "message" (fun () ->
-            open_url "https://discuss.logseq.com/"; close ())
-        ; divider ~key:"hm-hr3" ~style_class:"ls-hm-hr" []
-        ; help_item "hm-notes" (I18n.t "help/release-notes") "asterisk"
-            (fun () ->
-              open_url "https://docs.logseq.com/#/page/changelog"; close ())
-        ]
-    ; row ~key:"hm-ft"
-        ~style_class:"ft"
-        ([ text ~key:"hm-ver"
-             ~style_class:"ls-hm-meta"
-             ~value:(Printf.sprintf "Logseq %s" Version.app) [] ]
-        @ (match Version.revision () with
-           | "" -> []
-           | rev ->
-               [ text ~key:"hm-rev"
-                   ~style_class:"ls-hm-meta"
-                   ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
-    ] ]
+  let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
+  Right_sidebar_view.help_menu ~close
+    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> ()) ()
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
@@ -510,7 +452,9 @@ let help_area (ms : Model.t Signal.signal) : t =
         ~on_press:(fun _ ->
           Runtime.send Action.Help_toggle; Runtime.flush ())
         (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
-           [ box ~key:"help-inner" ~style_class:"inner"
+           ~accessibility_identifier:"help-menu-trigger"
+           ~width:32 ~height:32 ~margin_right:32 ~margin_bottom:16
+           [ row ~key:"help-inner" ~main:`center ~cross:`center ~width:32 ~height:32
                [ help_svg ] ]) ]
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then

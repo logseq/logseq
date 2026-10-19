@@ -8790,3 +8790,87 @@ let () = Native_embed.with_entry_lock (fun () ->
     List.iter prerr_endline (List.rev !failures);
     check "Native Import typography, theme and file-picker activation" (!failures=[]);
     print_endline "native Import shared typography, theme and file-picker activation: OK"))
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_sidebar= !Sidebar_state.st_ref and previous_ms= !Sidebar_state.model_signal
+  and previous_sources= !Editor_state.extra_sources and previous_repo= !Subs_state.current_repo
+  and previous_loaded= !Sidebar_state.loaded_repo
+  and previous_read= !Runtime.read_model and previous_send= !Runtime.app_send
+  and previous_flush= !Runtime.app_flush in
+  let window_listeners=Hashtbl.copy Platform.window_listeners
+  and capture_listeners=Hashtbl.copy Platform.capture_listeners in
+  Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
+  Subs_state.current_repo:=Some "shortcut-help-test";
+  Sidebar_state.loaded_repo:=Some "shortcut-help-test";
+  let store=Lui_store.create () and registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let initial={Model.initial with phase=Model.Ready;repo=Some "shortcut-help-test";
+    help_open=true;right_sidebar_open=false} in
+  let app=Lui_app.create_with_extensions backend registry initial Update.apply
+    (fun _ ms _ -> Ui_components.overlay_typography
+      (Lui_elements.column ~width:512 ~foreground:"foreground"
+        [Right_sidebar_view.render ms;Chrome.help_area ms])) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Sidebar_state.st_ref:=previous_sidebar;
+    Sidebar_state.model_signal:=previous_ms;Editor_state.extra_sources:=previous_sources;
+    Subs_state.current_repo:=previous_repo;Sidebar_state.loaded_repo:=previous_loaded;
+    Runtime.read_model:=previous_read;
+    Runtime.app_send:=previous_send;Runtime.app_flush:=previous_flush;
+    Hashtbl.clear Platform.window_listeners;
+    Hashtbl.iter (Hashtbl.replace Platform.window_listeners) window_listeners;
+    Hashtbl.clear Platform.capture_listeners;
+    Hashtbl.iter (Hashtbl.replace Platform.capture_listeners) capture_listeners) (fun () ->
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_send:=(fun action -> let changed=Lui_app.send app action in ignore (Lui_app.flush app);changed);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let rec has_label id=Lui_store.string_prop store id "text"=Some (I18n.t "help.shortcuts/label")
+      || List.exists has_label (Lui_store.child_ids store id) in
+    let shortcut_entry ()=List.find (fun id -> Lui_store.bool_prop store id "press-enabled" && has_label id) (Lui_store.preorder store) in
+    let send event=ignore (Lui_app.dispatch_event app event);ignore (Lui_app.flush app) in
+    let popup=List.find (fun id -> Lui_store.kind store id="popover") (Lui_store.preorder store) in
+    check "Native Help menu must anchor to its live retained trigger"
+      (Lui_store.string_prop store popup "anchor-target"=Some "help-menu-trigger");
+    send (Press (shortcut_entry ()));
+    check "Native Help shortcut action must open the dock and close its popup"
+      ((Lui_app.model app).right_sidebar_open && not (Lui_app.model app).help_open);
+    let ids=Lui_store.preorder store in
+    check "Native shortcut help must include both real tables"
+      (List.length (List.filter (fun id -> Lui_store.kind store id="table") ids)=2);
+    check "Native shortcut help must include all six triggers and ten syntax examples"
+      (List.length (List.filter (fun id -> Lui_store.kind store id="table-row") ids)=18);
+    let search=List.find (fun id -> Lui_store.string_prop store id "placeholder"=Some (I18n.t "keymap/search-placeholder")) ids in
+    let scrolls=List.filter (fun id -> Lui_store.kind store id="scroll") ids in
+    check "The sidebar must own scrolling for its embedded keymap" (List.length scrolls=1);
+    let layout=Lui_layout.create () in
+    List.iter (fun scale ->
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      Lui_layout.sync ~scale ~width:(512.*.scale) ~height:(720.*.scale)
+        ~measure:(fun id value width _ -> Some (Text_engine.measure_text
+          ~width:(Host_interaction.measure_width width) engine id value)) layout store;
+      let search_rect=Option.get (Lui_layout.rect layout search) in
+      Printf.printf "native shortcut help scale=%.0f search y=%.1f width=%.1f\n%!" scale search_rect.y search_rect.w;
+      check "Embedded keymap search must follow the complete syntax reference" (search_rect.y>600.*.scale);
+      check "Embedded keymap search must retain a usable width" (search_rect.w>100.*.scale)) [1.;2.];
+    send (TextChanged (search,"Undo"));
+    check "Filtering embedded keymap must retain the search control" (Lui_store.mem store search);
+    let st=Option.get (Sidebar_state.current ()) in
+    Runtime.signal_set st.items (List.map (fun (it : Sidebar_state.item) -> {it with collapsed=true}) (Runtime.signal_get st.items));
+    ignore (Lui_app.flush app);
+    Lui_layout.sync ~scale:1. ~width:512. ~height:720. layout store;
+    let panel=Option.get (Lui_store.find_identifier store "sbi-shortcut-settings") in
+    check "A collapsed native sidebar panel must occupy only its header"
+      (abs_float ((Option.get (Lui_layout.rect layout panel)).h-.32.)<0.1);
+    ignore (Lui_app.send app Action.Toggle_right_sidebar);ignore (Lui_app.send app Action.Help_toggle);
+    ignore (Lui_app.flush app);send (Press (shortcut_entry ()));
+    check "Native repeated shortcut entry must reopen and expand one item"
+      ((Lui_app.model app).right_sidebar_open &&
+       match Runtime.signal_get st.items with
+       | [{Sidebar_state.kind="shortcut-settings";collapsed=false;_}] -> true | _ -> false);
+    print_endline "native complete shortcut Help entry, flow and filtering: OK"))

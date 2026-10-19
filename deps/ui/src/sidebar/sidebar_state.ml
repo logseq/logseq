@@ -805,16 +805,19 @@ let open_uuid st uuid =
 let open_sticky_item st kind =
   let repo = Runtime.repo () in
   if repo = "" then ()
-  else
-    match kind with
-    | "contents" when not (has_item st "contents") ->
+  else begin
+    (match List.find_opt (fun (it : item) -> it.key=kind) (Runtime.signal_get st.items) with
+    | Some it ->
+        Runtime.signal_set st.items ({it with collapsed=false} ::
+          List.filter (fun (other : item) -> other.key<>kind) (Runtime.signal_get st.items))
+    | None -> match kind with
+    | "contents" ->
         add_promise st (contents_item repo)
-    | "help" when not (has_item st "help") ->
+    | "help" ->
         (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
-    | (("rtc" | "undo-redo" | "profiler") as kind)
-      when not (has_item st kind) -> (
+    | (("rtc" | "undo-redo" | "profiler") as kind) -> (
         let label =
           match kind with
           | "rtc" -> "(Dev) RTC"
@@ -824,14 +827,19 @@ let open_sticky_item st kind =
         match static_item kind kind label with
         | Some it -> push_item st it
         | None -> ())
-    | "shortcut-settings" when not (has_item st "shortcut-settings") ->
+    | "shortcut-settings" ->
         (match
            static_item "shortcut-settings" "shortcut-settings"
              (t "help.shortcuts/label")
          with
          | Some it -> push_item st it
          | None -> ())
-    | _ -> ()
+    | _ -> invalid_arg ("Unknown sidebar item: " ^ kind));
+    ensure_right_open ()
+  end
+
+let open_shortcuts () =
+  open_sticky_item (Option.get !st_ref) "shortcut-settings"
 
 let ensure_contents st =
   let repo = Runtime.repo () in

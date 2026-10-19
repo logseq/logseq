@@ -826,7 +826,7 @@ let keymap_row ~key (r : Keymap_data.row) =
         ]
     ]
 
-let keymap_pane () : t =
+let keymap_pane ?(embedded=false) () : t =
  fun context parent ->
   Keymap_data.reload_shortcuts ();
   let st =
@@ -880,16 +880,20 @@ let keymap_pane () : t =
       list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
         ~margin:0 ~padding:0 (List.rev elements)
   in
+  let results_container children =
+    if embedded then column ~key:"km-art" ~min_height:0 children
+    else scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0 children in
   (Ui_components.with_props
      [
        Ui_components.Prop.font_size "0.875rem";
        Ui_components.Prop.line_height "1.25rem";
+       Ui_components.Prop.padding_top (if embedded then 12 else 0);
      ]
-     (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" ~grow:1.
+     (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" ~grow:(if embedded then 0. else 1.)
         ~min_height:0
         [
           keymap_controls st;
-          scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0
+          results_container
             [
               reactive
                 ~equal:(fun previous current ->

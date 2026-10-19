@@ -388,6 +388,117 @@ let help_pane st =
         ; ext_item ~key:"li-terms" (t "help/terms")
             "https://blog.logseq.com/terms/" ])
 
+(* Both shells use one retained trigger and the same menu geometry. *)
+let help_menu ~close ~open_handbook ~open_bug_report () =
+  let item key title icon_name action =
+    Ui_components.with_props
+      [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px";
+       Ui_components.Prop.font_weight 400;Ui_components.Prop.foreground "var(--ls-primary-text-color)";
+       Ui_components.Prop.hover_background "var(--ls-tertiary-background-color, var(--rx-gray-05))"]
+      (Ui_components.button ~key ~variant:`ghost ~label:title
+        ~height:32 ~min_height:32 ~corner_radius:0 ~min_width:0
+        ~padding_horizontal:16 ~padding_vertical:4 ~main:`start ~cross:`center ~gap:8
+        ~on_press:(fun _ -> action ();close ())
+        [row ~opacity:0.4 [Icons.icon ~size:20. icon_name];text ~value:title []]) in
+  let external_item key label icon_name url =
+    item key (t label) icon_name (fun () -> Ui_services.env_open_url url) in
+  let separator key=divider ~key ~height:1 ~margin_vertical:8
+    ~background:"hsl(var(--border))" [] in
+  Ui_components.with_props
+    [Ui_components.Prop.shadow "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)"]
+    (popover ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+      ~transition:Ui_components.popover_transition ~role:`dialog
+      ~anchor_target:"help-menu-trigger" ~anchor:`above ~anchor_alignment:`end_ ~anchor_offset:8.
+      ~width:260 ~padding:0 ~border_width:1 ~border_color:"hsl(var(--border))"
+      ~corner_radius:8 ~background:"var(--ls-secondary-background-color, var(--rx-gray-03))"
+      ~on_dismiss:(fun _ -> close ())
+      [Ui_components.with_props [Ui_components.Prop.padding_top 12]
+        (column ~key:"hm-wrap"
+          [item "hm-handbook" (t "help/handbook") "book-2" open_handbook;
+           item "hm-shortcuts" (t "help.shortcuts/label") "command" Sidebar_state.open_shortcuts;
+           external_item "hm-docs" "help/docs" "help" "https://docs.logseq.com/";
+           separator "hm-hr1";
+           item "hm-bug" (t "help/bug") "bug" open_bug_report;
+           external_item "hm-feature" "help/feature" "git-pull-request"
+             "https://discuss.logseq.com/c/feedback/feature-requests/";
+           external_item "hm-feedback" "help/submit-feedback" "messages" "https://discuss.logseq.com/c/feedback/13";
+           separator "hm-hr2";
+           external_item "hm-discord" "help/ask-community" "brand-discord" "https://discord.com/invite/KpN4eHY";
+           external_item "hm-forum" "help/support-forum" "message" "https://discuss.logseq.com/";
+           separator "hm-hr3";
+           external_item "hm-notes" "help/release-notes" "asterisk" "https://docs.logseq.com/#/page/changelog"]);
+       Ui_components.with_props
+         [Ui_components.Prop.padding_left 44;Ui_components.Prop.padding_bottom 12;
+          Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px"]
+         (column ~key:"hm-ft" ~gap:4 ~opacity:0.3
+           ([text ~value:("Logseq " ^ Version.app) []] @
+            match Version.revision () with
+            | "" -> [] | revision -> [text ~value:(I18n.tf "help/revision" [revision]) []]))])
+
+(* Shortcut reference shares rich rendering and the interactive Keymap with
+   Settings; the enclosing sidebar is its only scrolling surface. *)
+let shortcut_help () =
+  let body_color="var(--lx-gray-12, var(--ls-primary-text-color))" in
+  let table_view ~key title trailing rows =
+    let cell ~header ~right children =
+      table_cell ~padding:6 ~min_width:0 ~grow:1.
+        ~border_width:1 ~border_color:"var(--ls-border-color)"
+        ?background:(if header then Some "var(--lx-gray-03, var(--ls-tertiary-background-color))" else None)
+        ~text_alignment:(if right then `end_ else `start)
+        [Ui_components.with_props
+          [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px";
+           Ui_components.Prop.font_weight (if header then 700 else 400)]
+          (column ~cross:(if right then `end_ else `start) ~min_width:0 children)] in
+    table ~key ~margin_vertical:8 ~corner_radius:4
+      ~style_class:"cp__shortcut-reference-table"
+      (table_row [cell ~header:true ~right:false [text ~value:title []];
+                  cell ~header:true ~right:true [trailing]] ::
+       List.mapi (fun i (left,right) ->
+         table_row ~key:(string_of_int i)
+           ?background:(if i mod 2=0 then Some "var(--lx-gray-02, var(--ls-secondary-background-color))" else None)
+           [cell ~header:false ~right:false [left];cell ~header:false ~right:true [right]]) rows) in
+  let code=Render_inline.code_span in
+  let triggers =
+    [t "help/slash-autocomplete",code "/";
+     t "help/search",Settings_page.keymap_binding ~key:"search-shortcut"
+       {Keymap_data.kind="combo";data="mod+k";keys=Keymap_record.keycaps "mod+k"};
+     t "help/reference-autocomplete",code "[[]]";
+     t "help/block-reference",code "(())";
+     t "help/open-link-in-sidebar",code (t "help/open-link-in-sidebar-action");
+     t "help/context-menu",code (t "help/context-menu-action")] in
+  let syntax =
+    ["**" ^ t "format/bold" ^ "**";
+     "_" ^ t "format/italics" ^ "_";
+     "~~" ^ t "format/strikethrough" ^ "~~";
+     "^^" ^ t "format/highlight" ^ "^^";
+     t "help/inline-math-example-prefix" ^ " $E = mc^2$";
+     "$$E = mc^2$$";
+     "`" ^ t "format/code" ^ "`";
+     "[Link](https://www.example.com)"] in
+  let syntax=List.map (fun raw -> code raw,text (Render_inline.parse raw)) syntax in
+  let example="(println \"Hello world!\")" in
+  let mono="MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, monospace" in
+  let raw_block=text ~as_:`Pre ~font_family:mono ~font_size:"0.9em" ~line_height:"1.45"
+    ~value:("```clojure\n  " ^ example ^ "\n```") [] in
+  let preview_block=text ~as_:`Pre ~style_class:"CodeMirror-line"
+    ~data_attrs:["data-lang","clojure"]
+    [text ~as_:`Code ~font_family:mono ~font_size:"0.9em" ~value:example []] in
+  let image_url="https://asset.logseq.com/static/img/logo.png" in
+  let syntax=syntax @ [raw_block,preview_block;
+    code ("![image](" ^ image_url ^ ")"),
+    image ~url:image_url ~alt:(t "ui/image") ~width:32 ~height:32 []] in
+  Ui_components.with_props
+    [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px"]
+    (column ~key:"shortcut-help" ~margin_left:12 ~margin_top:(-8) ~padding_horizontal:8
+      ~foreground:body_color ~style_class:"cp__shortcut-page"
+      [table_view ~key:"shortcut-triggers" (t "help.shortcuts/triggers")
+        (text ~value:(t "help.shortcuts/shortcut-column") [])
+        (List.map (fun (label,value) -> text ~value:label [],value) triggers);
+       table_view ~key:"shortcut-syntax" (t "help/markdown-syntax")
+         (link ~url:"https://www.markdownguide.org/basic-syntax"
+           ~text:(t "help/learn-more" ^ " →") []) syntax;
+       Settings_page.keymap_pane ~embedded:true ()])
+
 (* cljs sidebar-page-properties: ghost toggle + db-properties-cp +
    hr.my-4. collapsed? = (not class?) — class pages start expanded.
    The area mounts declaratively inside the host div. *)
@@ -496,6 +607,11 @@ let item_body st idx (it : Sidebar_state.item) =
             ~style_class:"cp__cmdk__block rounded-md"
             [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
         ]
+  | "shortcut-settings" ->
+      column ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:("sidebar-panel-content" ^ (if it.collapsed then " hidden" else " initial"))
+        [shortcut_help ()]
   | "help" ->
       (* cljs :help items mount onboarding/help directly in
          .sidebar-panel-content — no page-inner/blocks wrap *)
@@ -562,7 +678,7 @@ let item_body st idx (it : Sidebar_state.item) =
 
 let sidebar_item st idx (it : Sidebar_state.item) =
   column ~key:("item-" ^ it.key)
-    ~min_height:100
+    ~min_height:(if it.collapsed then 32 else 100)
     ~background:"var(--lx-gray-02, var(--color-level-1))"
     ~style_class:
       ("sidebar-item content color-level item-type-"
@@ -574,7 +690,9 @@ let sidebar_item st idx (it : Sidebar_state.item) =
         [ Ui_components.Prop.position `relative ]
         (column ~key:("wrap-" ^ it.key) ~grow:1.
         [ item_header st idx it
-        ; item_body st idx it
+        ; Ui_components.with_props
+            (if it.collapsed then [Ui_components.Prop.display `none] else [])
+            (item_body st idx it)
         ; item_menu_host st it ])
     ]
 

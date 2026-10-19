@@ -11,6 +11,7 @@ import {measurePropertyPicker, assertPropertyPicker} from './property_picker_che
 import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography} from './transfer_dialog_checks.mjs';
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
+import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp} from './shortcut_help_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -48,6 +49,22 @@ test('dock resize handles overlay adjacent panes without reserving content width
     browser('wait', '350');
   }
   button('Toggle right sidebar');
+});
+
+test('Help opens complete shortcut content and reopens collapsed panels', () => {
+  open();
+  browser('click', '.cp__sidebar-help-btn');
+  assertHelpMenu(evaluate(`(${measureHelpMenu.toString()})(document)`));
+  browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
+  browser('wait', '--fn', "document.querySelector('.cp__shortcut-page') !== null");
+  assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
+  browser('click', '.item-type-shortcut-settings > div button[aria-label="Keyboard shortcuts"]');
+  assertCollapsedShortcutHelp(evaluate(`(${measureCollapsedShortcutHelp.toString()})(document)`));
+  button('Toggle right sidebar');
+  browser('click', '.cp__sidebar-help-btn');
+  browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
+  browser('wait', '--fn', "document.querySelectorAll('.item-type-shortcut-settings').length === 1 && !document.querySelector('.cp__right-split.is-collapsed')");
+  assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
 });
 
 test('Import keeps shared typography, theme and option geometry', () => {

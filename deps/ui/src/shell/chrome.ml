@@ -1035,92 +1035,11 @@ let help_svg : t =
   icon ~key:"help-svg" ~name:(`app "help-small") ~point_size:30
     ~style_class:"icon" []
 
-external open_url : string -> unit = "open" [@@mel.scope "window"]
-
-(* cljs container.cljs help-menu-items -> .cp__sidebar-help-menu-popup;
-   the <a> carries no href (act closes the menu or opens an url) →
-   pressable row, not the link kind *)
-let help_item key title icon_name act =
-  Ui_parts.pressable
-    ~on_press:(fun _ -> act ())
-    (Ui_components.with_props
-       [ Ui_components.Prop.user_select `none
-       ; Ui_components.Prop.cursor `pointer
-       ; Ui_components.Prop.font_size "0.875rem"
-       ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-       (row ~key ~cross:`center ~gap:8 ~padding_vertical:4
-          ~padding_horizontal:16
-          [ row ~key:(key ^ "-i") ~cross:`center ~opacity:0.4
-              [ Icons.icon ~size:20. icon_name ]
-          ; text ~key:(key ^ "-t") ~value:title []
-          ]))
-
 let help_menu_popup : t =
  fun context parent ->
-  (let close () =
-    Runtime.send Action.Help_toggle;
-    Runtime.flush ()
-  in
-  Ui_components.popover_card ~key:"help-menu"
-    ~cls:"cp__sidebar-help-menu-popup"
-    ~anchor:`above ~anchor_alignment:`end_
-    ~on_dismiss:(fun _ -> close ())
-    [ column ~key:"hm-wrap"
-        [ help_item "hm-handbook" (I18n.t "help/handbook") "book-2" close
-        ; help_item "hm-shortcuts" (I18n.t "help.shortcuts/label") "command" close
-        ; help_item "hm-docs" (I18n.t "help/docs") "help" (fun () ->
-            open_url "https://docs.logseq.com/"; close ())
-        ; divider ~key:"hm-hr1" ~margin_vertical:8
-            ~data_attrs:
-              [ ( "style"
-                , "border:0;border-top:1px solid \
-                   hsl(var(--border))" )
-              ]
-            []
-        ; help_item "hm-bug" (I18n.t "help/bug") "bug" close
-        ; help_item "hm-feature" (I18n.t "help/feature") "git-pull-request"
-            (fun () ->
-              open_url
-                "https://discuss.logseq.com/c/feedback/feature-requests/";
-              close ())
-        ; help_item "hm-feedback" (I18n.t "help/submit-feedback") "messages"
-            (fun () ->
-              open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; divider ~key:"hm-hr2" ~margin_vertical:8
-            ~data_attrs:
-              [ ( "style"
-                , "border:0;border-top:1px solid \
-                   hsl(var(--border))" )
-              ]
-            []
-        ; help_item "hm-discord" (I18n.t "help/ask-community") "brand-discord"
-            (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (I18n.t "help/support-forum") "message" (fun () ->
-            open_url "https://discuss.logseq.com/"; close ())
-        ; divider ~key:"hm-hr3" ~margin_vertical:8
-            ~data_attrs:
-              [ ( "style"
-                , "border:0;border-top:1px solid \
-                   hsl(var(--border))" )
-              ]
-            []
-        ; help_item "hm-notes" (I18n.t "help/release-notes") "asterisk"
-            (fun () ->
-              open_url "https://docs.logseq.com/#/page/changelog"; close ())
-        ]
-    ; column ~key:"hm-ft" ~gap:4
-        ~data_attrs:[ ("style", "padding-left:44px;padding-bottom:12px") ]
-        ([ text ~key:"hm-ver" ~font_size:"0.75rem"
-             ~data_attrs:[ ("style", "opacity:0.3") ]
-             ~value:(Printf.sprintf "Logseq %s" Version.app) [] ]
-        @ (match Version.revision () with
-           | "" -> []
-           | rev ->
-               [ text ~key:"hm-rev" ~font_size:"0.75rem"
-                   ~data_attrs:[ ("style", "opacity:0.3") ]
-                   ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
-    ]
-  ) context parent
+  let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
+  Right_sidebar_view.help_menu ~close
+    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> ()) () context parent
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
@@ -1131,7 +1050,7 @@ let help_area (ms : Model.t Signal.signal) : t =
         ; Ui_components.Prop.z_index 999
         ; Ui_components.Prop.opacity 0.7
         ; Ui_components.Prop.hover_opacity 1. ]
-        (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
+        (box ~key:"help" ~accessibility_identifier:"help-menu-trigger" ~style_class:"cp__sidebar-help-btn"
            [ Ui_parts.pressable
                ~on_press:(fun _ ->
                  Runtime.send Action.Help_toggle; Runtime.flush ())
