@@ -202,7 +202,8 @@
     (let [page-exists? (and (nil? (:block/parent exact-page))
                             (if db-tag?
                               (entity/class? exact-page)
-                              (entity/page? exact-page)))
+                              (or (entity/internal-page? exact-page)
+                                  (entity/journal? exact-page))))
           class-alias-match? (and db-tag?
                                   (or (class-alias? exact-page)
                                       (matched-class-or-class-alias? exact-page partial-matched-pages)

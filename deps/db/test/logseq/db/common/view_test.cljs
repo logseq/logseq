@@ -819,6 +819,121 @@
                [group (mapv (fn [id] (:block/title (d/entity @conn id))) rows)]))
         (:data result)))
 
+(defn- placeholder-sort-conn
+  "Two valued rows, one cleared to empty-placeholder, one never set.
+  Matches clearing Scheduled/Deadline with the date picker trash button."
+  [property-ident property-type early late]
+  (let [pages [{:page {:block/title "early" :build/tags [:Topic]
+                       :build/properties {property-ident early}}}
+               {:page {:block/title "late" :build/tags [:Topic]
+                       :build/properties {property-ident late}}}
+               {:page {:block/title "cleared" :build/tags [:Topic]
+                       :build/properties {property-ident early}}}
+               {:page {:block/title "missing" :build/tags [:Topic]}}]
+        built-in-datetime? (contains? #{:logseq.property/scheduled :logseq.property/deadline}
+                                      property-ident)
+        conn (if built-in-datetime?
+               (topic-conn pages)
+               (topic-conn pages :properties {property-ident {:logseq.property/type property-type}}))
+        cleared-id (title-id conn "cleared")]
+    (d/transact! conn [[:db/add cleared-id property-ident :logseq.property/empty-placeholder]])
+    conn))
+
+(defn- placeholder-sort-cases
+  [conn property-ident]
+  (let [class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        query-ids (mapv #(title-id conn %) ["late" "missing" "cleared" "early"])
+        options [{:view-feature-type :class-objects
+                  :view-for-id class-id}
+                 {:view-feature-type :query-result
+                  :query-entity-ids query-ids}]]
+    {:conn conn
+     :view-id view-id
+     :class-id class-id
+     :property-ident property-ident
+     :options options}))
+
+(deftest get-view-data-empty-placeholder-sorts-with-missing-values-test
+  ;; Clearing a :datetime/:number value writes :logseq.property/empty-placeholder
+  ;; while keeping the property on the node. compare of that keyword vs a
+  ;; timestamp/number throws and crashed the Task tag page (db-test#1453).
+  (doseq [[property-ident property-type early late]
+          [[:logseq.property/scheduled :datetime 1000 3000]
+           [:logseq.property/deadline :datetime 1000 3000]
+           [:user.property/score :number 1 9]]]
+    (let [{:keys [conn view-id options]}
+          (placeholder-sort-cases
+           (placeholder-sort-conn property-ident property-type early late)
+           property-ident)]
+      (let [cleared (get (d/entity @conn (title-id conn "cleared")) property-ident)]
+        (is (or (= :logseq.property/empty-placeholder cleared)
+                (= :logseq.property/empty-placeholder (:db/ident cleared)))
+            (str property-ident " stays on the node as empty-placeholder")))
+      (doseq [option options]
+        (let [titles (fn [sorting]
+                       (result-titles
+                        conn
+                        (db-view/get-view-data
+                         @conn view-id
+                         (assoc option :sorting sorting))))
+              asc (titles [{:id property-ident :asc? true}])
+              desc (titles [{:id property-ident :asc? false}])
+              multi (titles [{:id property-ident :asc? true}
+                             {:id :block/title :asc? true}])]
+          (is (= ["early" "late"] (take 2 asc)))
+          (is (= #{"cleared" "missing"} (set (drop 2 asc)))
+              "Placeholder and missing rows sort together last, both directions.")
+          (is (= ["late" "early"] (take 2 desc)))
+          (is (= #{"cleared" "missing"} (set (drop 2 desc))))
+          (is (= ["early" "late"] (take 2 multi)))
+          (is (= ["cleared" "missing"] (drop 2 multi))
+              "After the placeholder/missing tie, the minor title key still orders those rows."))))))
+
+(deftest get-view-data-empty-placeholder-group-and-filter-test
+  (let [{:keys [conn view-id class-id property-ident]}
+        (placeholder-sort-cases
+         (placeholder-sort-conn :logseq.property/scheduled :datetime 1000 3000)
+         :logseq.property/scheduled)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property property-ident]])
+        grouped (db-view/get-view-data
+                 @conn view-id
+                 {:view-feature-type :class-objects
+                  :view-for-id class-id
+                  :sorting [{:id :block/title :asc? true}]})
+        group-keys (mapv first (:data grouped))
+        titles-by-group (grouped-row-titles-by-key conn grouped)
+        filter-view-id (create-view-id conn :class-objects :view-for-id class-id)
+        empty-filter (db-view/get-view-data
+                      @conn filter-view-id
+                      {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :block/title :asc? true}]
+                       :filters {:or? false
+                                 :filters [[property-ident :is :empty]]}})]
+    (is (= [3000 1000 nil] group-keys)
+        "A cleared datetime groups with the empty group, not as a keyword key.")
+    (is (= ["late"] (get titles-by-group 3000)))
+    (is (= ["early"] (get titles-by-group 1000)))
+    (is (= #{"cleared" "missing"} (set (get titles-by-group nil))))
+    (is (= ["cleared" "missing"] (result-titles conn empty-filter))
+        "Filter :is :empty matches both a missing value and empty-placeholder.")))
+
+(deftest get-view-data-incomparable-sort-values-do-not-throw-test
+  ;; If a sort value is some other unexpected type, the view must still
+  ;; return rows instead of throwing out of cljs compare.
+  (let [conn (placeholder-sort-conn :logseq.property/scheduled :datetime 1000 3000)
+        unexpected-id (title-id conn "cleared")
+        _ (d/transact! conn [[:db/add unexpected-id :logseq.property/scheduled :user/not-a-date]])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :logseq.property/scheduled :asc? true}]}
+        titles (result-titles conn (db-view/get-view-data @conn view-id option))]
+    (is (= ["early" "late"] (take 2 titles)))
+    (is (= #{"cleared" "missing"} (set (drop 2 titles))))))
+
 (deftest get-view-data-query-result-missing-custom-sort-value-stays-last-test
   (let [conn (topic-conn
               [{:page {:block/title "dated" :build/tags [:Topic]

@@ -1957,6 +1957,7 @@
 
  :view/add-new-view "Add new view"
  :view/all "All"
+ :view/error "View error:"
  :view/export-edn "Export EDN"
  :view/linked-references "Linked references"
  :view/new "New"

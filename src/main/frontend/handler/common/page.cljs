@@ -81,7 +81,21 @@
 (def ^:private page-for-create-selector
   '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
     {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+    :logseq.property/built-in?
     {:block/parent ...}])
+
+(defn- reusable-for-create?
+  "Return whether `page` is a journal or an ordinary page at the top level,
+  including a direct child of the Library."
+  [page]
+  (let [tag-idents (set (keep :db/ident (:block/tags page)))
+        parent (:block/parent page)]
+    (or (contains? tag-idents :logseq.class/Journal)
+        (and (contains? tag-idents :logseq.class/Page)
+             (not (contains? tag-idents :logseq.class/Tag))
+             (not (contains? tag-idents :logseq.class/Property))
+             (or (nil? parent)
+                 (ldb/library? parent))))))
 
 (defn- <page-for-create
   [page-id-or-title]
@@ -138,7 +152,9 @@
            ;; With explicit tags, the worker finds an existing page by title and tags
            (p/let [existing-page (when-not (or class? (seq (:tags options)))
                                    (<page-for-create title'))]
-             (if (and existing-page (not (ldb/recycled? existing-page)))
+             (if (and existing-page
+                      (not (ldb/recycled? existing-page))
+                      (reusable-for-create? existing-page))
                (do
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))

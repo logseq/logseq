@@ -26,11 +26,12 @@
     "test:api-docs": "pnpm build:api-docs && node --test worker/api_docs_test.mjs worker/api_docs_build_test.mjs",
     "test:large-op-128m": "clojure -M:cljs release db-sync-large-op-memory-test && node --max-old-space-size=128 worker/dist/large-op-memory-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
-    "test:mcp": "pnpm clean && pnpm release && pnpm build:api-docs && cd worker && pnpm exec wrangler deploy --dry-run --env=\"\"",
+    "test:mcp": "pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && cd worker && pnpm exec wrangler deploy --dry-run --env=\"\"",
+    "test:mcp-transport": "node --test --test-timeout=90000 worker/mcp_transport_test.mjs",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
-    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
-    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
+    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
+    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
@@ -47,7 +48,8 @@
   },
   "devDependencies": {
     "@redocly/cli": "^2.38.0",
-    "@sentry/cli": "^3.3.3"
+    "@sentry/cli": "^3.3.3",
+    "wrangler": "^4.151.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

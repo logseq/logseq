@@ -121,7 +121,10 @@
   [{:block/keys [title level] :as block}]
   (let [block (if (nil? title)
                 block
-                (let [heading-level (when (normalize-markdown-heading? block)
+                (let [title (if (= :math (:logseq.property.node/display-type block))
+                              (or (block/math-block-formula title) title)
+                              title)
+                      heading-level (when (normalize-markdown-heading? block)
                                       (markdown-heading-level title))
                       title (if heading-level
                               (commands/clear-markdown-heading (string/triml title))

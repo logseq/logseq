@@ -399,7 +399,17 @@
     :count 0
     :rows []}])
 
-(defn- view-data
+(defn isolated-view-failure
+  "Per-resource view error. Watch-all re-evaluates once the view can render."
+  [error]
+  (log/error :renderer-view-failed {:error error})
+  [common/watch-all
+   {:partition :flat
+    :count 0
+    :rows []
+    :error {:message (or (ex-message error) (str error))}}])
+
+(defn- view-data*
   [db resource-key _runtime]
   (let [[_ view-uuid context] resource-key
         context (require-view-context! context)
@@ -458,6 +468,13 @@
              include-row-previews? (conj [:attr :block/title]))
            value]))
       (missing-view-data view-uuid))))
+
+(defn- view-data
+  [db resource-key runtime]
+  (try
+    (view-data* db resource-key runtime)
+    (catch :default error
+      (isolated-view-failure error))))
 
 (def resource-renderers
   {:views (common/renderer 3 views)
