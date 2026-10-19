@@ -44,25 +44,55 @@ let category_title (node:Data.node) = match node.key with
   | "2.sync" -> t "help.handbook/sync"
   | _ -> node.title
 
-let rec rich_nodes catalog from navigate nodes = List.concat_map (function
+let rich_block_tag = function
+  | "p" | "pre" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+  | "ul" | "ol" | "hr" | "div" | "blockquote" -> true
+  | _ -> false
+
+let rec rich_inline catalog from navigate nodes = List.concat_map (function
   | Render_html.Text value -> [text ~value:(Render_html.decode_entities value) []]
   | Render_html.Elem (tag,attrs,children) ->
-    let content ()=rich_nodes catalog from navigate children in
+    let content ()=rich_inline catalog from navigate children in
     match tag with
-    | "p" -> [paragraph ~margin_vertical:12 ~font_size:"16px" ~line_height:"25.6px" (content ())]
+    | "p" -> [paragraph ~margin:0 ~font_size:"16px" ~line_height:"25.6px" (content ())]
     | "strong" | "b" -> [text ~font_weight:700 (content ())]
     | "em" | "i" -> [text ~font_style:"italic" (content ())]
     | "code" -> [text ~as_:`Code ~font_family:Bug_report.mono ~font_size:"13.6px"
         ~background:"var(--ls-secondary-background-color)" ~corner_radius:4 ~padding_horizontal:4 (content ())]
-    | "pre" -> [text ~as_:`Pre ~white_space:"pre-wrap" ~margin_vertical:12 (content ())]
-    | "h1" | "h2" | "h3" | "h4" ->
-      [heading ~level:(int_of_string (String.sub tag 1 1)) ~margin_top:20 ~margin_bottom:12
-        ~font_size:(if tag="h3" || tag="h4" then "18px" else "20px")
-        ~line_height:"28px" ~font_weight:600 (content ())]
-    | "ul" | "ol" -> [column ~gap:4 ~margin_vertical:12 ~padding_horizontal:20 (content ())]
-    | "li" -> [row ~gap:8 ~cross:`start [text ~value:{js|•|js} [];paragraph ~grow:1. ~min_width:0 (content ())]]
+    | "pre" -> [text ~as_:`Pre ~white_space:"pre-wrap" ~margin:0 (content ())]
+    | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" ->
+      let level=int_of_string (String.sub tag 1 1) in
+      let size,line,padding,weight=match level with
+        | 1 -> "24px","32px",4,700
+        | 2 -> "20px","28px",4,700
+        | 3 -> "18px","28px",4,600
+        | 4 -> "16px","24px",4,600
+        | 5 -> "14px","20px",2,600
+        | _ -> "12px","16px",2,600 in
+      [heading ~level ~margin:0 ~padding_vertical:padding
+        ~font_size:size ~line_height:line ~font_weight:weight (content ())]
+    | "ul" | "ol" ->
+      let ordered=tag="ol" in
+      let first=match List.assoc_opt "start" attrs with None -> 1 | Some value -> int_of_string value in
+      let _,items=List.fold_left (fun (number,items) -> function
+        | Render_html.Text value when String.trim value="" -> number,items
+        | Render_html.Elem ("li",attrs,children) ->
+          let number=match List.assoc_opt "value" attrs with
+            | Some value when ordered -> int_of_string value | _ -> number in
+          let marker=if ordered then string_of_int number ^ "." else {js|•|js} in
+          let marker=Ui_components.with_props
+            [Prop.position `absolute;Prop.inset_left (-19.2);Prop.inset_top 0.;Prop.width 19]
+            (text ~text_alignment:`center ~font_size:"16px" ~line_height:"24px" ~white_space:"nowrap" ~value:marker []) in
+          let item=Ui_components.with_props [Prop.position `relative]
+            (row ~as_:`Li ~gap:0 ~margin:0 ~padding:0 ~cross:`start ~min_width:0
+              [marker;column ~grow:1. ~min_width:0 (rich_flow ~compact:true catalog from navigate children)]) in
+          number+1,item::items
+        | _ -> invalid_arg "Handbook list children must be list items") (first,[]) children in
+      [column ~as_:(if ordered then `Ol else `Ul) ~gap:4 ~margin:0 ~margin_left:19
+        ~padding:0 ~min_width:0 (List.rev items)]
+    | "div" | "blockquote" -> [column ~min_width:0 (rich_flow ~compact:false catalog from navigate children)]
     | "br" -> [text ~value:"\n" []]
-    | "hr" -> [divider ~height:1 ~margin_vertical:16 ~background:"var(--ls-border-color)" []]
+    | "hr" -> [divider ~height:1 ~margin:0 ~background:"var(--ls-border-color)" []]
     | "a" ->
       let href=List.assoc "href" attrs in
       (match Data.resolve catalog ~from href with
@@ -79,6 +109,37 @@ let rec rich_nodes catalog from navigate nodes = List.concat_map (function
       [Logseq_el.el ~tag:"video" ~attrs:["src",Data.asset_url source;"controls","";"width","100%"] []]
     | "source" -> []
     | _ -> content ()) nodes
+
+and rich_flow ~compact catalog from navigate nodes =
+  let flush inline blocks=match inline with
+    | [] -> blocks
+    | _ -> `Inline (List.rev inline)::blocks in
+  let inline,blocks=List.fold_left (fun (inline,blocks) node -> match node with
+    | Render_html.Elem (tag,_,_) when rich_block_tag tag -> [],`Block node::flush inline blocks
+    | Render_html.Text value when inline=[] && String.trim value="" -> inline,blocks
+    | _ -> node::inline,blocks) ([],[]) nodes in
+  let blocks=List.rev (flush inline blocks) in
+  (* CSS block margins collapse; resolve sibling spacing once for both hosts. *)
+  let margin = function
+    | `Block (Render_html.Elem (("p" | "pre"),_,_)) -> 12
+    | `Block (Render_html.Elem (("ul" | "ol"),_,_)) -> 4
+    | `Block (Render_html.Elem ("hr",_,_)) -> 16
+    | `Inline _ when not compact -> 12
+    | _ -> 0 in
+  let rec render previous = function
+    | [] -> []
+    | node::rest ->
+      let current=margin node in
+      let props=[Prop.margin_top (max previous current);
+        Prop.margin_bottom (if rest=[] then current else 0)] in
+      let elements=match node with
+        | `Block node -> rich_inline catalog from navigate [node]
+        | `Inline nodes -> [paragraph ~margin:0 ~font_size:"16px" ~line_height:"24px"
+            (rich_inline catalog from navigate nodes)] in
+      List.map (Ui_components.with_props props) elements @ render current rest in
+  render 0 blocks
+
+let rich_nodes catalog from navigate nodes = rich_flow ~compact:false catalog from navigate nodes
 
 let media url =
   let url=Data.asset_url url in
@@ -261,11 +322,13 @@ let panel ~loader ~close ~online context parent =
       let navigate key=open_topic key in
       let nodes=match node.content with None -> [] | Some source ->
         fst (Render_html.parse_nodes source 0 (String.length source) []) in
-      Ui_components.with_props [Prop.padding_top 8;Prop.padding_bottom 20]
-        (column ~padding_horizontal:18 ~min_width:0
-        ([heading ~level:1 ~font_size:"24px" ~line_height:"32px" ~font_weight:600 ~margin_bottom:12 ~value:node.title []] @
+      Ui_components.with_props [Prop.padding_top 4;Prop.padding_bottom 20]
+        (column ~padding_horizontal:16 ~min_width:0
+        ([Ui_components.with_props [Prop.padding_bottom 4]
+           (heading ~level:1 ~font_size:"24px" ~line_height:"32px" ~font_weight:600 ~margin:0 ~padding_vertical:0 ~value:node.title [])] @
          List.map media node.demos @
-         [typography "16px" "25.6px" 400 (column ~min_width:0 (rich_nodes catalog key navigate nodes));
+         [Ui_components.with_props [Prop.padding_top 4] (typography "16px" "24px" 400
+           (column ~min_width:0 (rich_nodes catalog key navigate nodes)));
           row ~main:`space_between ~margin_top:16
             (List.map (fun (direction,label,icon) -> match Data.adjacent catalog key direction with
               | None -> spacer []

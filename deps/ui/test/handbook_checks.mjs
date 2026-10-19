@@ -99,6 +99,38 @@ export function assertHandbookArticle(actual,reference) {
   }
 }
 
+export function measureHandbookTypography(root) {
+  const panel=root.querySelector('.cp__handbooks-popup'),origin=panel.getBoundingClientRect();
+  const measure=element=>{
+    const rect=element.getBoundingClientRect(),style=getComputedStyle(element);
+    return {text:element.textContent.trim(),font:style.fontSize,line:Number.parseFloat(style.lineHeight),
+      weight:style.fontWeight,x:rect.x-origin.x,y:rect.y-origin.y,width:rect.width,height:rect.height};
+  };
+  return {paragraphs:[...panel.querySelectorAll('p')].filter(p=>!p.closest('li')).slice(0,5).map(measure),
+    heading:[...panel.querySelectorAll('h3,[aria-level="3"]')].slice(0,1).map(measure),
+    lists:[...panel.querySelectorAll('ul,ol')].slice(0,1).map(list=>({
+      ...measure(list),items:[...list.children].map(measure)}))};
+}
+
+export function assertHandbookTypography(actual,reference) {
+  for(const group of ['paragraphs','heading','lists']) {
+    assert.equal(actual[group].length,reference[group].length,`${group} count`);
+    for(const [index,item] of actual[group].entries()) {
+      const expected=reference[group][index];
+      for(const key of ['font','weight']) assert.equal(item[key],expected[key],`${group} ${index} ${key}`);
+      for(const key of ['line','x','y','width','height'])
+        assert.ok(Math.abs(item[key]-expected[key])<.3,
+          `${group} ${index} ${key}: ${item[key]} versus ${expected[key]}`);
+      if(group==='lists') {
+        assert.equal(item.items.length,expected.items.length,'list item count');
+        for(const [i,child] of item.items.entries())
+          for(const key of ['x','y','width','height'])
+            assert.ok(Math.abs(child[key]-expected.items[i][key])<.3,`list item ${i} ${key}`);
+      }
+    }
+  }
+}
+
 export const handbookIntroductionArticleReference={nestedParagraphs:0,codes:[],videoSources:[
   'https://handbooks.pages.dev/assets/2_2_ClickPageRef.mp4',
   'https://handbooks.pages.dev/assets/2_3_ClickBlockRef.mp4',
@@ -229,6 +261,118 @@ export const handbookDesktopReference = {
     {
       "width": 70,
       "height": 52.5
+    }
+  ]
+};
+
+// Measured introduction article in the 420-point light/classic reference panel.
+export const handbookIntroductionTypographyReference={
+  "heading": [
+    {
+      "font": "18px",
+      "height": 36,
+      "line": 28.0001,
+      "text": "Blocks are like paragraphs",
+      "weight": "600",
+      "width": 386,
+      "x": 17,
+      "y": 469.796875
+    }
+  ],
+  "lists": [
+    {
+      "font": "16px",
+      "height": 80,
+      "items": [
+        {
+          "font": "16px",
+          "height": 24,
+          "line": 24,
+          "text": "Blocks",
+          "weight": "400",
+          "width": 366.8046875,
+          "x": 36.1953125,
+          "y": 314.59375
+        },
+        {
+          "font": "16px",
+          "height": 24,
+          "line": 24,
+          "text": "Pages",
+          "weight": "400",
+          "width": 366.8046875,
+          "x": 36.1953125,
+          "y": 342.59375
+        },
+        {
+          "font": "16px",
+          "height": 24,
+          "line": 24,
+          "text": "References",
+          "weight": "400",
+          "width": 366.8046875,
+          "x": 36.1953125,
+          "y": 370.59375
+        }
+      ],
+      "line": 24,
+      "text": "BlocksPagesReferences",
+      "weight": "400",
+      "width": 366.8046875,
+      "x": 36.1953125,
+      "y": 314.59375
+    }
+  ],
+  "paragraphs": [
+    {
+      "font": "16px",
+      "height": 102.40625,
+      "line": 25.6,
+      "text": "Logseq has many features. When you just get started , you may feel that you need to understand all of them. But, you need less than a handful of features to start getting value from using Logseq.",
+      "weight": "400",
+      "width": 386,
+      "x": 17,
+      "y": 136.984375
+    },
+    {
+      "font": "16px",
+      "height": 51.203125,
+      "line": 25.6,
+      "text": "In this part of the onboarding guide, we’ll have a brief look at Logseq’s core concepts:",
+      "weight": "400",
+      "width": 386,
+      "x": 17,
+      "y": 251.390625
+    },
+    {
+      "font": "16px",
+      "height": 51.203125,
+      "line": 25.6,
+      "text": "Confused about what these words mean? Let’s define things:",
+      "weight": "400",
+      "width": 386,
+      "x": 17,
+      "y": 406.59375
+    },
+    {
+      "font": "16px",
+      "height": 153.609375,
+      "line": 25.6,
+      "text": "Whenever you open Logseq, you always start on the journals section. This is a list of all of your journals pages, showing the most recent date first. In a bit we’ll explain what these pages do exactly, but first we need to take a moment to understand a fundamental concept in Logseq: blocks.",
+      "weight": "400",
+      "width": 386,
+      "x": 17,
+      "y": 517.796875
+    },
+    {
+      "font": "16px",
+      "height": 128.0078125,
+      "line": 25.6,
+      "text": "On that page with today’s date, you see a single bullet. This is called a block in Logseq, and it’s the smallest piece of information you can work with in this app. You can compare blocks to paragraphs in a regular text editor.",
+      "weight": "400",
+      "width": 386,
+      "x": 17,
+      "y": 683.40625
     }
   ]
 };

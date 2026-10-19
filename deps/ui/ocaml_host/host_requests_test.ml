@@ -9067,6 +9067,76 @@ let () = Native_embed.with_entry_lock (fun () ->
     print_endline "native clipboard inspector input, Unicode and layout: OK"))
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let source={|<p>First paragraph</p><p>Second paragraph</p><ul><li>Blocks</li><li>Pages</li><li>References</li></ul><p>Following paragraph</p><h3>Section heading</h3><ol start="3"><li>First ordered<ul><li>Nested child</li></ul></li><li value="7">Second ordered</li><li>Third ordered</li></ol>|} ^
+    String.concat "" (List.init 6 (fun index -> Printf.sprintf "<h%d>Heading %d</h%d>" (index+1) (index+1) (index+1))) in
+  let nodes=fst (Render_html.parse_nodes source 0 (String.length source) []) in
+  let catalog=Handbook_data.parse {|{:title "Handbook" :children []}|} in
+  let store=Lui_store.create () and registry=Lui_extension.registry () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create_with_extensions backend registry () (fun model () -> model)
+    (fun _ _ _ -> Handbook.typography "16px" "24px" 400
+      (Lui_elements.column (Handbook.rich_nodes catalog "" ignore nodes))) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let ids=Lui_store.preorder store in
+    let errors=ref [] in
+    let expect label condition=if not condition then errors:=label::!errors in
+    List.iter (fun marker -> expect ("Ordered list lost marker " ^ marker)
+      (List.exists (fun id -> Lui_store.string_prop store id "text"=Some marker) ids)) ["3.";"7.";"8."];
+    expect "Document lists retain their semantic tags"
+      (List.length (List.filter (fun id -> Lui_store.string_prop store id "as"=Some "ul") ids)=2 &&
+       List.length (List.filter (fun id -> Lui_store.string_prop store id "as"=Some "li") ids)=7);
+    let containing kind title=
+      let leaf=List.find (fun id -> Lui_store.string_prop store id "text"=Some title) ids in
+      let rec parent id=if Lui_store.kind store id=kind then id
+        else parent (Option.get (Lui_store.parent store id)) in parent leaf in
+    let heading level=containing "heading" ("Heading " ^ string_of_int level) in
+    let heading_specs=
+      [1,"24px","32px",700,40.;2,"20px","28px",700,36.;3,"18px","28px",600,36.;
+       4,"16px","24px",600,32.;5,"14px","20px",600,24.;6,"12px","16px",600,20.] in
+    List.iter (fun (level,size,line,weight,_height) ->
+      let id=heading level in
+      expect (Printf.sprintf "Handbook heading %d retains the reference size, line height and weight" level)
+        (Lui_store.string_prop store id "font-size"=Some size &&
+         Lui_store.string_prop store id "line-height"=Some line &&
+         Lui_store.int_prop store id "font-weight"=Some weight))
+      heading_specs;
+    let paragraph=containing "paragraph" in
+    List.iter (fun scale ->
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      List.iter (fun width ->
+        let layout=Lui_layout.create () in
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(1000.*.scale)
+          ~measure:(fun id text offered _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width offered) engine id text)) layout store;
+        let rect title=Option.get (Lui_layout.rect layout (paragraph title)) in
+        let first=rect "First paragraph" and second=rect "Second paragraph" in
+        let blocks=rect "Blocks" and pages=rect "Pages" and refs=rect "References" in
+        let following=rect "Following paragraph" in
+        let close actual expected=abs_float (actual/.scale-.expected)<=1. in
+        List.iter (fun (level,_,_,_,height) ->
+          expect (Printf.sprintf "Handbook heading %d preserves padding at width %.0f scale %.0f" level width scale)
+            (close (Option.get (Lui_layout.rect layout (heading level))).h height))
+          heading_specs;
+        expect "Paragraph margins collapse to one twelve-point gap"
+          (close (second.y-.first.y-.first.h) 12.);
+        expect "List content keeps the reference indentation"
+          (close blocks.x 19.2 && close blocks.w (width-.19.2));
+        expect "List items use twenty-four-point lines and four-point gaps"
+          (close blocks.h 24. && close (pages.y-.blocks.y) 28. && close (refs.y-.pages.y) 28.);
+        expect "List margins collapse with adjacent paragraphs"
+          (close (blocks.y-.second.y-.second.h) 12. && close (following.y-.refs.y-.refs.h) 12.);
+        expect "Nested list content remains indented beneath its parent item"
+          (close ((rect "Nested child").x-.(rect "First ordered").x) 19.2))
+        [320.;386.]) [1.;2.];
+    List.iter prerr_endline (List.rev !errors);
+    check "Native Handbook document flow and ordered lists" (!errors=[]);
+    print_endline "native Handbook document flow, nested and ordered lists: OK"))
+
+let () = Native_embed.with_entry_lock (fun () ->
   let previous_flush= !Runtime.app_flush and previous_width=Host.inner_width ()
   and previous_height=Host.inner_height () in
   Host.set_window_size 1280. 720.;
