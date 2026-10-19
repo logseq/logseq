@@ -748,6 +748,12 @@ let on_keydown el ev =
   let clipboard_key =
     (meta || ctrl) && List.mem (String.lowercase_ascii key) [ "c"; "x"; "v" ]
   in
+  (* The model retains the selected source range. Return browser input to
+     the scratch textarea before its default text/IME action; a live DOM
+     range over display runs otherwise suppresses beforeinput. *)
+  if not st.composing && not (meta || ctrl)
+     && (String.length key = 1 || List.mem key [ "Dead"; "Process"; "Unidentified" ])
+  then ignore (select_range_el el 0 0);
   if (not st.composing) && not clipboard_key
      && (List.mem key command_keys || meta || ctrl)
   then prevent_default ev

@@ -1880,6 +1880,13 @@ a.page-title {
   background: transparent;
 }
 
+/* Measurement and native pointer selection must reach the text below the
+   caret/selection decorations, including the final glyph on each line. */
+.ed-overlay {
+  pointer-events: none;
+  user-select: none;
+}
+
 /* text paints above the .ed-overlay selection/caret layer — the
    absolute .ed-pos wrappers would otherwise cover the glyphs (typed
    position/z-index on the row carry that) */

@@ -142,6 +142,40 @@ let block_heading_lvl (b : Model.block) =
       | Some (lvl, _) -> Some lvl
       | None -> None)
 
+let bullet_size (b : Model.block) =
+  if b.block_order_list = Some "number" then 20
+  else match block_heading_lvl b with
+    | Some 1 -> 28 | Some 2 -> 24 | Some 3 -> 20
+    | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
+    | _ -> 16
+
+let children_container uuid (b : Model.block) content =
+  let indent = 22 + bullet_size b / 2 - 1
+    - (if b.block_order_list = Some "number" then 3 else 0) in
+  Ui_components.with_props
+    [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2 ]
+    (row ~key:("children-" ^ uuid) ~style_class:"block-children-container"
+      ~margin_left:indent ~margin_bottom:(-2)
+      [ Ui_components.with_props
+          [ Ui_components.Prop.position `absolute
+          ; Ui_components.Prop.inset_left (-1.)
+          ; Ui_components.Prop.inset_top 0.
+          ; Ui_components.Prop.inset_bottom 0.
+          ; Ui_components.Prop.z_index 1
+          ; Ui_components.Prop.cursor `pointer ]
+          (box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
+            ~width:4 ~corner_radius:2 ~opacity:0.6
+            ~data_attrs:["data-blockid", uuid] [])
+      ; Ui_components.with_props
+          [ Ui_components.Prop.position `absolute
+          ; Ui_components.Prop.inset_left 0.
+          ; Ui_components.Prop.inset_top 0.
+          ; Ui_components.Prop.inset_bottom 0. ]
+          (box ~key:("guide-" ^ uuid) ~style_class:"block-children-indent-guide"
+            ~width:1
+            ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])
+      ; content ])
+
 let heading_attrs (b : Model.block) =
   match block_heading_lvl b with
   | Some n -> [ ("data-has-heading", string_of_int n) ]
@@ -284,12 +318,12 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ; Ui_components.Prop.opacity 0.4
         ; Ui_components.Prop.pressed_opacity 0.3 ]
         (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
-           ~url:"#" ~target:`self_
+           ~url:"#" ~target:`self_ ~min_width:22 ~min_height:22
+           ~padding:2 ~margin_top:1
            ~accessibility_identifier:("control-" ^ uuid)
            ~data_attrs:
              [ ( "style"
-               , "margin-top:1px;min-width:22px;min-height:22px;\
-                  padding:0.125rem;text-decoration:none" )
+               , "text-decoration:none" )
              ]
         [ Ui_parts.class_signal cs
             (fun c ->
@@ -1003,61 +1037,15 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
-  row ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container"
-    ~margin_left:29 ~margin_bottom:(-2)
-    ~data_attrs:
-      [ (* padding-top stays in the style data attr — no per-side
-           padding prop; native backends read margins via typed props *)
-        ("style", "position:relative;padding-top:0.125rem")
-      ]
-    [ box ~key:("border-" ^ uuid)
-        ~style_class:"block-children-left-border"
-        ~data_attrs:
-          [ ("data-blockid", uuid)
-          ; (* hover-stripped pill from .block-children-left-border —
-               intrinsic geometry for style-less backends *)
-            ( "style"
-            , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
-            )
-          ]
-        []
-    ; (* web paints the 1px indent guide as .block-children's
-         border-left via stylesheet; native reads only typed props, so
-         it gets a dedicated 1px line at the same edge *)
-      (if Ui_services.env_native_block_controls () then
-         box ~key:("guide-" ^ uuid)
-           ~style_class:"block-children-indent-guide"
-           ~width:1
-           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))"
-           ~data_attrs:
-             [ ("style", "position:absolute;left:0;top:0;bottom:0;width:1px")
-             ]
-           []
-       else Logseq_el.nothing)
-    ; (* cljs lazy-block-children: inside :virtualize? pages the
-         .block-children div is a lazy mount boundary — an
-         estimated-height placeholder until it nears the viewport *)
-      (if virtualize then
-         Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
-           ~min_height:(estimate_children_height b)
-           ~render:(fun () ->
-             child_list ~depth ~editable ~library ~virtualize uuid scope
-               bs)
-       else
-         column ~key:("clist-" ^ uuid) ~style_class:"block-children"
-           ~data_attrs:
-             [ (* .block-children's 1px indent-guide rule; stylesheet
-                  on web, inline on native *)
-               ( "data-style"
-               , "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))"
-               )
-             ]
-           ~grow:1.
-           [ child_list ~depth ~editable ~library ~virtualize uuid scope
-               bs
-           ])
-    ]
+  children_container uuid b
+    (if virtualize then
+       Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
+         ~min_height:(estimate_children_height b)
+         ~render:(fun () ->
+           child_list ~depth ~editable ~library ~virtualize uuid scope bs)
+     else
+       column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
+         [ child_list ~depth ~editable ~library ~virtualize uuid scope bs ])
 
 and children_el ~depth ~editable ~library ~virtualize uuid scope
     (b : Model.block) : t =
@@ -1152,30 +1140,9 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   ctx parent
 
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
-  row ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container"
-    ~margin_left:29 ~margin_bottom:(-2)
-    ~data_attrs:
-      [ ("style", "position:relative;padding-top:0.125rem") ]
-    [ box ~key:("border-" ^ uuid)
-        ~style_class:"block-children-left-border"
-        ~data_attrs:
-          [ ("data-blockid", uuid)
-          ; ( "style"
-            , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
-            )
-          ]
-        []
-    ; column ~key:("clist-" ^ uuid) ~style_class:"block-children"
-        ~data_attrs:
-          [ ( "data-style"
-            , "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))"
-            )
-          ]
-        ~grow:1.
-        (List.map (block_row_static ~depth:(depth + 1) ~library)
-           b.block_children)
-    ]
+  children_container uuid b
+    (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
+      (List.map (block_row_static ~depth:(depth + 1) ~library) b.block_children))
 
 
 (* -- {{embed [[page]]}}: live page block tree inside .embed-block --

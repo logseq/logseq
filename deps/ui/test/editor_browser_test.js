@@ -1347,6 +1347,56 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     await pause(30); insert('X');
     assert(text() === 'one X', {value: text()});
   });
+  await test('Regression: child guides paint and align with each parent bullet', async () => {
+    const {blocks} = await fixture(['parent']);
+    const child = await logseq.api.insert_block(blocks[0].uuid, 'child', {sibling: false});
+    await logseq.api.insert_block(child.uuid, 'grandchild', {sibling: false});
+    await pause(150); key('Escape'); await pause(100);
+    for (const uuid of [blocks[0].uuid, child.uuid]) {
+      const parent = document.getElementById('ls-block-' + uuid);
+      const container = parent.querySelector(':scope > .block-children-container');
+      const guide = container?.querySelector(':scope > .block-children-indent-guide');
+      assert(!!guide, {uuid, phase: 'missing guide'});
+      const g = guide.getBoundingClientRect();
+      const d = document.getElementById('dot-' + uuid).getBoundingClientRect();
+      assert(g.width === 1 && g.height >= 24 && Math.abs(g.x + g.width / 2 - d.x - d.width / 2) <= 1,
+        {uuid, guide: g.toJSON(), bullet: d.toJSON()});
+      assert(getComputedStyle(guide).backgroundColor !== 'rgba(0, 0, 0, 0)', {uuid, phase: 'invisible guide'});
+    }
+    return {levels: 2};
+  });
+  for (const [title, word] of [
+    ['hello world', 'world'],
+    ['hello **bold** finalword', 'finalword'],
+    ['hello 世界', '世界'],
+    ['hello finalword!', 'finalword'],
+    ['hello finalword  ', 'finalword'],
+  ]) {
+    await test('Regression: final-word double-click paints selection and accepts typing ' + JSON.stringify(title), async () => {
+      await fixture(['seed']); key('a', {metaKey: true}); insert(title);
+      await pause(30); key('End', {metaKey: true}); await pause(30);
+      const run = [...surface().querySelectorAll('.ed-r')].find(e => e.textContent.includes(word));
+      const start = run.textContent.indexOf(word);
+      const range = document.createRange(); range.setStart(run.firstChild, start);
+      range.setEnd(run.firstChild, start + 1);
+      const rect = range.getBoundingClientRect();
+      const point = {clientX: rect.x + rect.width * .3, clientY: rect.y + rect.height / 2};
+      for (const detail of [1, 2]) {
+        run.dispatchEvent(new MouseEvent('mousedown', {...point, detail, button: 0, buttons: 1, bubbles: true, cancelable: true}));
+        run.dispatchEvent(new MouseEvent('mouseup', {...point, detail, button: 0, bubbles: true}));
+      }
+      run.dispatchEvent(new MouseEvent('dblclick', {...point, detail: 2, bubbles: true, cancelable: true}));
+      await pause(30);
+      assert(surface().querySelector('.ed-sel')?.getBoundingClientRect().width > 0,
+        {phase: 'painted selection', title, selection: window.getSelection().toString()});
+      const copied = new DataTransfer();
+      input().dispatchEvent(new ClipboardEvent('copy', {clipboardData: copied, bubbles: true, cancelable: true}));
+      assert(copied.getData('text/plain') === word, {title, copied: copied.getData('text/plain')});
+      key('x'); assertNativeInsertion('typing over final-word selection');
+      insert('X'); await pause(30);
+      assert(text() === title.replace(word, 'X'), {title, value: text()});
+    });
+  }
   await test('Review: calendar labels follow the selected locale', async () => {
     const {blocks} = await fixture(['calendar']);
     document.dispatchEvent(new CustomEvent('ls:editor-command', {detail: {command: 'scheduled', block: blocks[0].uuid}}));

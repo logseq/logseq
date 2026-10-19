@@ -2099,6 +2099,60 @@ let () = Native_embed.with_entry_lock (fun () ->
 
 let () = Native_embed.with_entry_lock (fun () ->
   let old_state = !Editor_state.st and old_fields = !Editor_state.field_sigs_opt in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := old_state; Editor_state.field_sigs_opt := old_fields) (fun () ->
+    let errors = ref [] in
+    let expect message condition = if not condition then errors := message :: !errors in
+    List.iter (fun static -> List.iter (fun heading ->
+      Editor_state.st := None; Editor_state.field_sigs_opt := None;
+      let store = Lui_store.create () in
+      let backend = {backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry; Logseq_codemirror.register registry;
+      Logseq_editor.register registry;
+      let child = Model.empty_block ~uuid:"guide-child" ~title:"Child" ~is_page:false in
+      let block = {(Model.empty_block ~uuid:"guide-parent" ~title:"Parent" ~is_page:false)
+        with Model.block_children=[child;{child with block_uuid=Some "guide-second"}];
+             block_heading=heading} in
+      let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
+        (fun context _ _ ->
+          Editor_state.ensure context;
+          if static then Tree.block_row_static block
+          else Tree.row_el ~depth:0 ~editable:true ~virtualize:false "main" ~library:false block) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app); ignore (Lui_app.flush app);
+        let find cls = List.find_opt (fun id ->
+          match Lui_store.string_prop store id "style-class" with
+          | Some value -> List.mem cls (String.split_on_char ' ' value)
+          | None -> false) (Lui_store.preorder store) in
+        match find "block-children-indent-guide" with
+        | None -> expect "Every editable and reference child list must paint an indent guide" false
+        | Some guide ->
+          let dot = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=
+            Some "dot-guide-parent") (Lui_store.preorder store) in
+          let layout = Lui_layout.create () in
+          List.iter (fun scale -> List.iter (fun width ->
+            Lui_layout.sync ~scale ~width:(width *. scale) ~height:(600. *. scale) layout store;
+            let g = Option.get (Lui_layout.rect layout guide)
+            and d = Option.get (Lui_layout.rect layout dot) in
+            let label = Printf.sprintf "Guide static=%b heading=%d scale=%.0f width=%.0f"
+              static (Option.value heading ~default:0) scale width in
+            Printf.printf "%s guide=(%.1f,%.1f %.1fx%.1f) bullet=(%.1f,%.1f %.1fx%.1f)\n%!"
+              label g.x g.y g.w g.h d.x d.y d.w d.h;
+            expect (label ^ " has no visible vertical extent") (g.w > 0. && g.h >= 32. *. scale);
+            expect (label ^ " is not aligned with the parent bullet")
+              (abs_float ((g.x +. g.w /. 2.) -. (d.x +. d.w /. 2.)) <= scale);
+            expect (label ^ " has no theme-aware paint")
+              (Lui_store.string_prop store guide "background"=
+                Some "var(--lx-gray-04-alpha, var(--ls-guideline-color))")) [320.;800.]) [1.;2.])
+      ) [None;Some 1;Some 6]) [false;true];
+    List.iter prerr_endline (List.rev !errors);
+    check "Shared child guide geometry" (!errors=[])));
+  print_endline "native shared child guide geometry: OK"
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let old_state = !Editor_state.st and old_fields = !Editor_state.field_sigs_opt in
   Editor_state.st := None; Editor_state.field_sigs_opt := None;
   Fun.protect ~finally:(fun () ->
     Editor_state.st := old_state; Editor_state.field_sigs_opt := old_fields) (fun () ->
