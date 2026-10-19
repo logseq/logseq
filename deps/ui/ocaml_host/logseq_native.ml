@@ -1873,7 +1873,17 @@ let () =
     if !gl_live_cell then Sdl.gl_swap_window !win;
     Ui.frame_done ui;
     Host_requests.flush_pending_focus ();
-    incr frame
+    incr frame;
+    if Daemon_client.boot_trace then
+      Native_embed.with_entry_lock (fun () ->
+        let model = Lui_app.model (Option.get !Native_embed.current_app) in
+        let journals = List.length model.Model.journals in
+        let blocks = List.fold_left (fun count page ->
+          count + List.length page.Model.page_blocks) 0 model.journals in
+        Daemon_client.boot_mark (Printf.sprintf
+          "frame presented index=%d ready=%b journals=%d root_blocks=%d scene_ops=%d"
+          !frame (model.phase = Model.Ready) journals blocks
+          (List.length (Lui_host.scene host).Lui_scene.ops)))
   in
   Native_window.install !win (fun () ->
     let started = perf_s () in
