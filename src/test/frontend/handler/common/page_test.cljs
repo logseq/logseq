@@ -122,8 +122,7 @@
         (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Juniper"]] @conn))))))))
 
 (defn- <create-with-graph!
-  "<create! against conn: the name lookup pulls from conn, the create runs
-  the outliner's create."
+  "Run page creation against `conn` using the outliner's create operation."
   [conn title]
   (p/with-redefs [state/get-current-repo (constantly "test")
                   state/<invoke-db-worker
@@ -140,9 +139,7 @@
     (page-common-handler/<create! title {:redirect? false :edit? false})))
 
 (deftest-async create-page-does-not-open-a-namespace-child-or-a-tag-test
-  ;; db-test #1345: the name lookup returns the oldest page of that name of
-  ;; any kind anywhere; creating "Bar" with "Foo/Bar" there, or "foo" with a
-  ;; tag "Foo" there, opened them instead of creating the page
+  ;; Namespace children and tags do not replace ordinary top-level pages.
   (let [conn (db-test/create-conn-with-blocks {:classes {:Foo {}}})]
     (p/let [_ (outliner-page/create! conn "Foo2/Bar" {:split-namespace? true})
             child (ldb/get-page @conn "Bar")

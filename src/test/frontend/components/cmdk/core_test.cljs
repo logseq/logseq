@@ -28,11 +28,35 @@
         file {:file-path "car.pdf"}
         filter-item {:filter {:group :nodes}}
         namespaced-page {:result-type :page
-                         :source-block {:page? true :block.temp/original-title "transport/car"}}]
+                         :source-block {:page? true :block.temp/original-title "transport/car"}}
+        namespace-child {:result-type :page
+                         :source-block {:page? true
+                                        :block.temp/original-title "car"
+                                        :block/parent 10
+                                        :block.temp/breadcrumb [{:db/id 10 :block/title "transport"}]}}
+        library-page {:result-type :page
+                      :source-block {:page? true
+                                     :block.temp/original-title "car"
+                                     :block/parent 11
+                                     :block.temp/breadcrumb [{:db/id 11
+                                                              :block/title "Library"
+                                                              :logseq.property/built-in? true}]}}
+        tag {:result-type :page
+             :source-block {:page? true
+                            :block.temp/original-title "car"
+                            :block/tags [{:db/ident :logseq.class/Tag}]}}
+        property {:result-type :page
+                  :source-block {:page? true
+                                 :block.temp/original-title "car"
+                                 :block/tags [{:db/ident :logseq.class/Property}]}}]
     (doseq [[input filter-group results expected-groups expected-action]
             [["c" nil {:nodes {:items [page]}} [:nodes :create] :open]
              ["ca" nil {:nodes {:items [page]}} [:nodes :create] :open]
              ["car" nil {:nodes {:items [page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [namespace-child]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [library-page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [tag]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [property]}} [:nodes :create] :open]
              ["car" nil {:nodes {:items [alias]}} [:nodes :create] :open]
              ["transport/ca" nil {:nodes {:items [namespaced-page]}} [:nodes :create] :open]
              ["ca" :nodes {:nodes {:items [page]}} [:nodes :create] :open]

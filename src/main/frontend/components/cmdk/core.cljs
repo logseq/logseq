@@ -26,11 +26,13 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [frontend.util.page :as page-util]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -161,6 +163,11 @@
                          (some (fn [block]
                                  (and
                                   (:page? block)
+                                  (not (entity/class? block))
+                                  (not (entity/property? block))
+                                  (or (nil? (:block/parent block))
+                                      (entity/journal? block)
+                                      (ldb/library? (peek (:block.temp/breadcrumb block))))
                                   (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")

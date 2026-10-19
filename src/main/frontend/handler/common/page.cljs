@@ -15,7 +15,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -86,12 +85,8 @@
     {:block/parent ...}])
 
 (defn- reusable-for-create?
-  "Whether creating a page with a title can open the page the name lookup
-  found instead. The lookup returns the oldest page of that name of any kind
-  anywhere, but only an ordinary page outside a namespace (or a journal) is
-  the page being asked for, as the worker's create decides: with \"Foo/Bar\"
-  or a tag \"Foo\", creating the page \"Bar\" or \"foo\" opened them instead of
-  creating it (db-test #1345)."
+  "Return whether `page` is a journal or an ordinary page at the top level,
+  including a direct child of the Library."
   [page]
   (let [tag-idents (set (keep :db/ident (:block/tags page)))
         parent (:block/parent page)]
@@ -100,8 +95,7 @@
              (not (contains? tag-idents :logseq.class/Tag))
              (not (contains? tag-idents :logseq.class/Property))
              (or (nil? parent)
-                 (and (:logseq.property/built-in? parent)
-                      (= common-config/library-page-name (:block/title parent))))))))
+                 (ldb/library? parent))))))
 
 (defn- <page-for-create
   [page-id-or-title]
