@@ -8514,3 +8514,84 @@ let () = Native_embed.with_entry_lock (fun () ->
         ["accessibility-label","Translated More";
          "text","Translated Not Found";"text","Translated Sync server"]));
   print_endline "native late locale view construction: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_model = !Runtime.read_model and previous_remote = !Graphs_view.remote_st_ref
+  and previous_graphs = !Graphs_ops.remote_graphs and previous_refresh = !Graphs_ops.on_repos_changed in
+  let previous_token=Hashtbl.find_opt Platform_native.ls "id-token"
+  and previous_language=Hashtbl.find_opt Platform_native.ls "preferred-language" in
+  let restore key = function Some value -> Hashtbl.replace Platform_native.ls key value
+    | None -> Hashtbl.remove Platform_native.ls key in
+  let model={Model.initial with phase=Model.Ready;route=Model.All_graphs;
+    repo=Some "logseq_db_First";repos=["logseq_db_First";"logseq_db_Second"]} in
+  Runtime.read_model:=(fun () -> model);Graphs_view.remote_st_ref:=None;
+  Graphs_ops.remote_graphs:=[];Hashtbl.remove Platform_native.ls "id-token";
+  Hashtbl.replace Platform_native.ls "preferred-language" "\"en\"";
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create backend model (fun current () -> current) (fun _ ms _ ->
+    Ui_components.overlay_typography
+      (Lui_elements.column ~foreground:"hsl(var(--foreground))" [Graphs_view.view ms])) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;
+    Graphs_view.remote_st_ref:=previous_remote;Graphs_ops.remote_graphs:=previous_graphs;
+    Graphs_ops.on_repos_changed:=previous_refresh;
+    restore "id-token" previous_token;restore "preferred-language" previous_language;
+    Theme_vars.set_dark false;Theme_vars.set_accent "logseq") (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let ids=Lui_store.preorder store in
+    let text label=List.find (fun id -> Lui_store.string_prop store id "text"=Some label) ids in
+    let title=text (I18n.t "graph/all-graphs") and first=text "First" and second=text "Second" in
+    let timestamp=List.find (fun id -> match Lui_store.string_prop store id "text" with
+      | Some value -> String.starts_with ~prefix:"Last opened at:" value | None -> false) ids in
+    let failures=ref [] in
+    let expect message condition=if not condition then failures:=message::!failures in
+    let layout=Lui_layout.create () in
+    List.iter (fun (mode,name) ->
+      let snapshot=Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+        ["mode",`String name;"vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+      Theme_vars.set_dark (mode=Ui_theme.Dark);
+      List.iter (fun accent ->
+        Theme_vars.set_accent accent;
+        List.iter (fun scale ->
+          let scene=Lui_scene.create
+            ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+            ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+          let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
+            ~store:(fun () -> store) in
+          Lui_layout.sync ~scale ~width:(1280.*.scale) ~height:(720.*.scale)
+            ~measure:(fun id text width _ -> Some (Text_engine.measure_text
+              ~width:(Host_interaction.measure_width width) engine id text)) layout store;
+          let inks=Hashtbl.create 8 in
+          Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+            layout=Lui_layout.layout_hook layout;
+            text_ops=(fun id _ color _ -> Hashtbl.replace inks id color;[])}
+            store scene ~width:(int_of_float (1280.*.scale)) ~height:(int_of_float (720.*.scale))
+            ~scale ~clear:(Lui_scene.color 0 0 0 0);
+          let context=Printf.sprintf "%s/%s/%g" name accent scale in
+          List.iter (fun (id,size) ->
+            expect ("Graph text size differs from the reference: "^context)
+              (abs_float (Lui_text.size (Text_engine.font_of store id)-.size)<0.01))
+            [title,36.;first,16.;timestamp,12.8];
+          List.iter (fun (id,token) ->
+            expect ("Graph text loses its theme color: "^context)
+              (Hashtbl.find_opt inks id=Theme_vars.color_of token))
+            [title,"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))";
+             first,"var(--lx-accent-11)";timestamp,"hsl(var(--muted-foreground))"];
+          if mode=Ui_theme.Dark && accent="logseq" then
+            expect ("Classic dark graph titles differ from the reference: "^context)
+              (Hashtbl.find_opt inks title=Some (Lui_scene.color 147 161 161 255));
+          let title_rect=Option.get (Lui_layout.rect layout title)
+          and first_rect=Option.get (Lui_layout.rect layout first)
+          and second_rect=Option.get (Lui_layout.rect layout second) in
+          expect ("Graph title line height differs from the reference: "^context)
+            (abs_float (title_rect.h-.54.*.scale)<0.01);
+          expect ("Graph rows lose their reference pitch: "^context)
+            (abs_float (second_rect.y-.first_rect.y-.56.*.scale)<0.01)) [1.;2.])
+        ["logseq";"blue"]) [Ui_theme.Light,"light";Ui_theme.Dark,"dark"];
+    List.iter prerr_endline (List.rev !failures);
+    check "Native graph page typography, colors and spacing" (!failures=[]);
+    print_endline "native graph page theme typography and spacing: OK"))

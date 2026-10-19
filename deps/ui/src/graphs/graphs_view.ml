@@ -64,12 +64,14 @@ let graph_row repo : t =
     else []
   in
   row ~key:("gr-" ^ repo) ~main:`space_between ~cross:`center
+    ~margin_bottom:8
     ~style_class:"group"
     ~data_attrs:[ ("data-testid", repo) ]
     [ column ~key:("grl-" ^ repo)
         [ row ~key:("grt-" ^ repo) ~gap:4 ~cross:`center
             (* e2e: div[data-testid='logseq_db_<n>'] span:has-text('<n>') *)
             [ text ~key:("grn-" ^ repo)
+                ~foreground:"var(--lx-accent-11)"
                 ~data_attrs:
                   [ ("style", "cursor:pointer")
                   ; ("aria-label", "logseq/graphs/" ^ short_name repo) ]
@@ -79,8 +81,8 @@ let graph_row repo : t =
                 []
             ]
         ; text ~key:("grs-" ^ repo) ~as_:`Small
-            ~foreground:
-              "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+            ~font_size:"0.8em" ~line_height:"1.5rem"
+            ~foreground:"hsl(var(--muted-foreground))"
             ~value:
               (T.last_opened_at
                  (match Graphs_ops.meta_last_seen repo with
@@ -148,11 +150,13 @@ let remote_row (name, uuid, e2ee, role) : t =
       :: leave_item
   in
   row ~key:("rr-" ^ uuid) ~main:`space_between ~cross:`center
+    ~margin_bottom:8
     ~style_class:"group"
     ~data_attrs:[ ("data-testid", "logseq_db_" ^ name) ]
     [ column ~key:("rrl-" ^ uuid)
         [ row ~key:("rrt-" ^ uuid) ~gap:4 ~cross:`center
             [ text ~key:("rrn-" ^ uuid)
+                ~foreground:"var(--lx-accent-11)"
                 ~data_attrs:[ ("style", "cursor:pointer") ]
                 ~value:name
                 ~on_press:(fun _ ->
@@ -176,6 +180,10 @@ let remote_row (name, uuid, e2ee, role) : t =
     ]
     ctx parent
 
+let section_heading ~key ~value =
+  heading ~key ~level:2 ~as_:`H2 ~font_size:"1.125rem"
+    ~line_height:"1.75rem" ~font_weight:500 ~margin_bottom:16 ~value []
+
 (* cljs repos-cp remote section: hr + h2 "Remote graphs:" + refresh
    button + rows — only rendered for a logged-in user with remote
    graphs. The refresh button stays disabled while loading (e2e
@@ -186,8 +194,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
   column ~key:"remote-sec"
     [ divider ~key:"remote-hr" ~margin_top:32 []
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
-        [ heading ~key:"rh" ~level:2
-            ~value:(T.t "graph/remote-graphs") []
+        [ section_heading ~key:"rh" ~value:(T.t "graph/remote-graphs")
         ; Ui_components.button ~variant:`outline ~key:"refresh" ~text:(T.t "ui/refresh")
             ~disabled_signal:(Signal.value refreshing)
             ~on_press:(fun _ ->
@@ -239,7 +246,9 @@ let view (ms : Model.t Signal.signal) : t =
     Logseq_el.own ctx (Signal.map (fun r -> r <> []) remote_sig)
   in
   column ~key:"graphs-root"
-    [ heading ~key:"title" ~level:1 ~style_class:"title"
+    [ heading ~key:"title" ~level:1 ~as_:`H1 ~style_class:"title"
+        ~font_size:"2.25rem" ~line_height:"1.5" ~font_weight:500 ~margin:0
+        ~foreground:"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
         ~value:(T.t "graph/all-graphs") []
     ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
         [ row ~key:"create-row" ~padding_vertical:32
@@ -249,8 +258,7 @@ let view (ms : Model.t Signal.signal) : t =
                 []
             ]
         ; column ~key:"local"
-            [ heading ~key:"lh" ~level:2
-                ~value:(T.t "graph/local-graphs") []
+            [ section_heading ~key:"lh" ~value:(T.t "graph/local-graphs")
             ; keyed ~source:merged_src ~key:(fun r -> r)
                 ~cmp:String.compare
                 ~mount:(fun rs -> graph_row (Signal.get rs))

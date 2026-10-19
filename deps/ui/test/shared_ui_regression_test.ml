@@ -2160,9 +2160,42 @@ let run_views ~registry ~profile ~finish =
     d.Signal.stabilization_rounds + d.Signal.stabilization_dirty_tasks
   in
   let baseline = publish_work () in
+  let graph_rows=mount (fun _ -> Lui_elements.column
+    [Graphs_view.graph_row "logseq_db_Layout fixture";
+     Graphs_view.remote_row ("Remote fixture","layout-fixture",false,"manager")]) in
+  List.iter (fun label ->
+    let name=List.find (fun n -> M.string_prop n "text"=Some label) (nodes graph_rows) in
+    check "Graph names use the current theme accent"
+      (M.string_prop name "foreground"=Some "var(--lx-accent-11)"))
+    ["Layout fixture";"Remote fixture"];
+  let timestamp=List.find (fun n -> match M.string_prop n "text" with
+    | Some value -> I18n.contains value (I18n.sub (I18n.t "graph/last-opened-at-label") [""])
+    | None -> false) (nodes graph_rows) in
+  check "Graph timestamps use the canonical muted foreground"
+    (M.string_prop timestamp "foreground"=Some "hsl(var(--muted-foreground))");
+  let graph_list_rows=List.filter (fun n -> n.M.kind="row" && class_has n "group") (nodes graph_rows) in
+  check "Local and remote graph rows retain the reference list gap"
+    (List.length graph_list_rows=2
+     && List.for_all (fun n -> Hashtbl.find_opt n.M.props "margin-bottom"=Some (P.IntValue 8)) graph_list_rows);
+  ignore (Lui_app.dispose graph_rows.S.app);
   for cycle = 1 to 5 do
     Signal.set (Option.get !visible) true;
     S.flush s;
+    if cycle=1 then begin
+      let title=List.find (fun n -> M.string_prop n "text"=Some (I18n.t "graph/all-graphs")) (nodes s)
+      and section=List.find (fun n -> M.string_prop n "text"=Some (I18n.t "graph/local-graphs")) (nodes s) in
+      check "Graph page titles use the reference typography"
+        (M.string_prop title "font-size"=Some "2.25rem"
+         && M.string_prop title "line-height"=Some "1.5"
+         && M.string_prop title "foreground"=Some "var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
+         && Hashtbl.find_opt title.M.props "font-weight"=Some (P.IntValue 500)
+         && Hashtbl.find_opt title.M.props "margin"=Some (P.IntValue 0));
+      check "Graph section headings retain their size and bottom spacing"
+        (M.string_prop section "font-size"=Some "1.125rem"
+         && M.string_prop section "line-height"=Some "1.75rem"
+         && Hashtbl.find_opt section.M.props "font-weight"=Some (P.IntValue 500)
+         && Hashtbl.find_opt section.M.props "margin-bottom"=Some (P.IntValue 16))
+    end;
     Signal.set (Option.get !visible) false;
     S.flush s;
     check (Printf.sprintf "unmounted graph and members views release subscriptions (%d)" cycle)
