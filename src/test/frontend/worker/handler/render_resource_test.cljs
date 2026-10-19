@@ -2606,6 +2606,33 @@
       (testing label
         (assert-isolated-query-failure conn failing-query)))))
 
+(deftest render-snapshots-isolates-view-data-resource-failures-test
+  (let [{:keys [conn view-a]} (render-resource-fixture)
+        journals-key [:journals]
+        failing-view [:view-data view-a
+                      {:feature-type :class-objects
+                       :sorting [{:id :block/title :asc? true}]}]
+        response (with-redefs [db-view/get-view-data
+                               (fn [& _args]
+                                 (throw (ex-info "Cannot compare 1 to :logseq.property/empty-placeholder"
+                                                 {:sort :logseq.property/scheduled})))]
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks []
+                     :children []
+                     :resources [failing-view journals-key]}
+                    {}))]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A view-data failure must not fail sibling resources.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-view] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-view] :value :rows])))
+    (is (= :flat (get-in response [:slots [:resource failing-view] :value :partition])))
+    (is (true? (get-in response [:slots [:resource failing-view] :watch :all?])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Isolated view errors must stay transit-encodable.")))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}
@@ -2803,7 +2830,7 @@
     (let [{:keys [conn view-a view-row]} (render-resource-fixture)
           row-entity (d/entity @conn [:block/uuid view-row])
           ownerless-class-view (add-view! conn :class-objects)]
-      (testing "view contexts are one typed serializable path"
+      (testing "invalid serializable view contexts stay isolated to that resource"
         (doseq [resource-key
                 [[:view-data view-a
                   {:feature-type :class-objects
@@ -2813,6 +2840,16 @@
                  [:view-data ownerless-class-view
                   {:feature-type :class-objects}]
                  [:view-data view-a
+                  {:feature-type :query-result
+                   :query-row-uuids ["not-a-uuid"]}]]]
+          (let [response (call-resource-raw api conn resource-key)]
+            (is (string? (get-in response [:value :error :message]))
+                (str "Expected an isolated view error for " (pr-str resource-key)))
+            (is (= [] (get-in response [:value :rows])))
+            (is (true? (:watch-all? response))))))
+      (testing "view and query keys with functions or entities stay fail-fast"
+        (doseq [resource-key
+                [[:view-data view-a
                   {:feature-type :class-objects
                    :sorting [{:id :block/title
                               :value-fn identity}]}]
@@ -2820,15 +2857,7 @@
                   {:feature-type :class-objects
                    :filters {:or? false
                              :filters [[:block/tags :is #{row-entity}]]}}]
-                 [:view-data view-a
-                  {:feature-type :query-result
-                   :query-row-uuids ["not-a-uuid"]}]]]
-          (is (thrown? js/Error
-                       (call-resource-raw api conn resource-key))
-              (str "Expected invalid view resource: " (pr-str resource-key)))))
-      (testing "query keys with functions or entities stay fail-fast"
-        (doseq [resource-key
-                [[:query {:kind :dsl
+                 [:query {:kind :dsl
                           :query "(task TODO)"
                           :query-fn identity}]
                  [:query {:kind :datalog
@@ -2836,7 +2865,7 @@
                           :inputs [row-entity]}]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected non-serializable query key to fail-fast: "
+              (str "Expected non-serializable resource key to fail-fast: "
                    (pr-str resource-key))))))))
 
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
@@ -2876,8 +2905,12 @@
                               [:route-block "page identity" ""]
                               [:page-membership page :property]
                               [:page-membership quick-add-page :quick-add nil]
-                              [:page-membership quick-add-page :unknown]
-                              [:view-data (random-uuid)]]]
+                              [:page-membership quick-add-page :unknown]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected fail-fast for " (pr-str resource-key))))))))
+              (str "Expected fail-fast for " (pr-str resource-key)))))
+      (testing "malformed view-data keys stay isolated"
+        (let [resource-key [:view-data (random-uuid)]
+              response (call-resource-raw api conn resource-key)]
+          (is (string? (get-in response [:value :error :message])))
+          (is (= [] (get-in response [:value :rows]))))))))

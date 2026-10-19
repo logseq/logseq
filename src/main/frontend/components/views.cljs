@@ -4093,10 +4093,16 @@
            (set-stale-offset-window! nil)))
        js/undefined)
      [display-type group-by-property-ident])
-    (if-not (:ready? paint)
+    (cond
+      (:error view-data)
+      (ui/block-error (t :view/error) {:content (:message (:error view-data))})
+
+      (not (:ready? paint))
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
+
+      :else
       (let [data (:rows paint)
             notify-windowed-paint! (fn []
                                      (when (:full-key plan)
@@ -4243,7 +4249,7 @@
      [view-parent view-parent-uuid view-feature-type])
     nil))
 
-(hsx/defc view
+(hsx/defc view-root
   [{:keys [view-parent-uuid view-feature-type view-uuid] :as option}]
   (let [query-result? (= :query-result view-feature-type)
         view-uuids (when-not query-result?
@@ -4256,3 +4262,9 @@
 
       (and (not query-result?) (some? view-uuids))
       (missing-view view-parent-uuid view-feature-type))))
+
+(hsx/defc view
+  [option]
+  (ui/catch-error
+   (ui/block-error (t :view/error) {})
+   (view-root option)))

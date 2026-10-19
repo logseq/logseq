@@ -47,14 +47,22 @@
     (common/fail! "Renderer resource keys cannot contain graph entities"
                   {:resource-key resource-key})
 
-    ;; Query resources isolate every remaining failure so one bad query
-    ;; cannot reject the get-render-snapshots batch. Functions and
-    ;; entities in the key stay fail-fast: those keys are not transit-safe.
-    (if (= :query (first resource-key))
+    ;; Query and view-data isolate remaining failures so one bad
+    ;; query/view cannot reject the get-render-snapshots batch. Functions
+    ;; and entities in the key stay fail-fast: those keys are not transit-safe.
+    (case (first resource-key)
+      :query
       (try
         (render-known-resource db resource-key runtime)
         (catch :default error
           (query/isolated-query-failure error)))
+
+      :view-data
+      (try
+        (render-known-resource db resource-key runtime)
+        (catch :default error
+          (view/isolated-view-failure error)))
+
       (render-known-resource db resource-key runtime))))
 
 (defn- resource-entry
