@@ -661,6 +661,8 @@ let test_help () =
       (List.length (find_where (fun n -> n.M.kind="table"))=2);
     has "text:\"Triggers\"";
     has "text:\"Markdown syntax\"";
+    check "Shortcut help uses a portable Unicode arrow"
+      (find_where (fun n -> M.string_prop n "text"=Some (I18n.t "help/learn-more" ^ {js| →|js}))<>[]);
     check "Shortcut help includes the existing keymap search"
       (find_where (fun n -> M.string_prop n "placeholder"=Some "Search shortcuts...")<>[]);
     Runtime.signal_set st.items (List.map (fun (it : Sidebar_state.item) -> {it with collapsed=true}) items);

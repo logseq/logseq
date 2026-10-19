@@ -11,7 +11,7 @@ import {measurePropertyPicker, assertPropertyPicker} from './property_picker_che
 import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography} from './transfer_dialog_checks.mjs';
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
-import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp} from './shortcut_help_checks.mjs';
+import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -52,12 +52,16 @@ test('dock resize handles overlay adjacent panes without reserving content width
 });
 
 test('Help opens complete shortcut content and reopens collapsed panels', () => {
+  browser('set', 'viewport', '1280', '720');
   open();
   browser('click', '.cp__sidebar-help-btn');
   assertHelpMenu(evaluate(`(${measureHelpMenu.toString()})(document)`));
   browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
   browser('wait', '--fn', "document.querySelector('.cp__shortcut-page') !== null");
   assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
+  browser('wait', '--fn', `document.fonts.status === "loaded" && !!document.querySelector('.cp__shortcut-page .katex') && !!document.querySelector('.cp__shortcut-page pre code[data-highlighted="yes"]')`);
+  browser('find', 'text', 'Markdown syntax', 'click', '--exact');
+  assertShortcutTableLayout(evaluate(`(${measureShortcutTableLayout.toString()})(document)`), shortcutHelpDesktopReference);
   browser('click', '.item-type-shortcut-settings > div button[aria-label="Keyboard shortcuts"]');
   assertCollapsedShortcutHelp(evaluate(`(${measureCollapsedShortcutHelp.toString()})(document)`));
   button('Toggle right sidebar');

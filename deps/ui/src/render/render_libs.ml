@@ -107,7 +107,9 @@ and render_scan roots =
   List.iter
     (fun sel -> D.for_each_touched roots sel render_katex_one)
     [ ".latex"; ".latex-inline" ];
-  D.for_each_touched roots "pre.CodeMirror-line" highlight_one
+  D.for_each_touched roots "pre.CodeMirror-line" highlight_one;
+  D.for_each_touched roots "pre.code code[data-lang]" (fun el ->
+    hljs_highlight el "")
 
 and highlight_one el =
   if not (hljs_ready ()) then ()

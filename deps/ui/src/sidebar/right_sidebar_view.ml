@@ -442,13 +442,10 @@ let shortcut_help () =
   let table_view ~key title trailing rows =
     let cell ~header ~right children =
       table_cell ~padding:6 ~min_width:0 ~grow:1.
+        ~font_size:"16px" ~line_height:"24px" ~font_weight:(if header then 700 else 400)
         ~border_width:1 ~border_color:"var(--ls-border-color)"
         ?background:(if header then Some "var(--lx-gray-03, var(--ls-tertiary-background-color))" else None)
-        ~text_alignment:(if right then `end_ else `start)
-        [Ui_components.with_props
-          [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px";
-           Ui_components.Prop.font_weight (if header then 700 else 400)]
-          (column ~cross:(if right then `end_ else `start) ~min_width:0 children)] in
+        ~text_alignment:(if right then `end_ else `start) children in
     table ~key ~margin_vertical:8 ~corner_radius:4
       ~style_class:"cp__shortcut-reference-table"
       (table_row [cell ~header:true ~right:false [text ~value:title []];
@@ -471,32 +468,35 @@ let shortcut_help () =
      "_" ^ t "format/italics" ^ "_";
      "~~" ^ t "format/strikethrough" ^ "~~";
      "^^" ^ t "format/highlight" ^ "^^";
-     t "help/inline-math-example-prefix" ^ " $E = mc^2$";
-     "$$E = mc^2$$";
-     "`" ^ t "format/code" ^ "`";
-     "[Link](https://www.example.com)"] in
-  let syntax=List.map (fun raw -> code raw,text (Render_inline.parse raw)) syntax in
+     t "help/inline-math-example-prefix" ^ " $E = mc^2$"] in
+  let example_row raw=code raw,text (Render_inline.parse raw) in
+  let syntax=List.map example_row syntax @
+    [code "$$E = mc^2$$",text [Render_inline.katex_el ~block:false ~display:false "E = mc^2"]] @
+    List.map example_row ["`" ^ t "format/code" ^ "`";"[Link](https://www.example.com)"] in
   let example="(println \"Hello world!\")" in
-  let mono="MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, monospace" in
-  let raw_block=text ~as_:`Pre ~font_family:mono ~font_size:"0.9em" ~line_height:"1.45"
-    ~value:("```clojure\n  " ^ example ^ "\n```") [] in
-  let preview_block=text ~as_:`Pre ~style_class:"CodeMirror-line"
-    ~data_attrs:["data-lang","clojure"]
-    [text ~as_:`Code ~font_family:mono ~font_size:"0.9em" ~value:example []] in
+  let mono="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" in
+  let pre ?style_class ?white_space children =
+    text ~as_:`Pre ?style_class ?white_space ~padding:0 ~margin:0
+      ~background:"transparent" ~font_family:mono ~font_size:"0.9em" ~line_height:"1.45em" children in
+  let raw_block=pre [text ~value:("```clojure\n  " ^ example ^ "\n```") []] in
+  let preview_block=pre ~style_class:"code" ~white_space:"pre-wrap"
+    [text ~as_:`Code ~font_family:mono ~font_size:"0.85em" ~padding:6
+      ~data_attrs:["data-lang","clojure"] ~value:example []] in
   let image_url="https://asset.logseq.com/static/img/logo.png" in
   let syntax=syntax @ [raw_block,preview_block;
     code ("![image](" ^ image_url ^ ")"),
-    image ~url:image_url ~alt:(t "ui/image") ~width:32 ~height:32 []] in
+    row ~main:`end_ [image ~url:image_url ~alt:(t "ui/image") ~width:32 ~height:32 []]] in
   Ui_components.with_props
     [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px"]
-    (column ~key:"shortcut-help" ~margin_left:12 ~margin_top:(-8) ~padding_horizontal:8
+    (column ~key:"shortcut-help" ~min_width:0 ~margin_left:12 ~margin_top:(-8) ~padding_horizontal:8
       ~foreground:body_color ~style_class:"cp__shortcut-page"
       [table_view ~key:"shortcut-triggers" (t "help.shortcuts/triggers")
         (text ~value:(t "help.shortcuts/shortcut-column") [])
         (List.map (fun (label,value) -> text ~value:label [],value) triggers);
        table_view ~key:"shortcut-syntax" (t "help/markdown-syntax")
-         (link ~url:"https://www.markdownguide.org/basic-syntax"
-           ~text:(t "help/learn-more" ^ " →") []) syntax;
+         (Ui_components.with_props [Ui_components.Prop.white_space `nowrap]
+           (link ~url:"https://www.markdownguide.org/basic-syntax"
+             ~text:(t "help/learn-more" ^ {js| →|js}) [])) syntax;
        Settings_page.keymap_pane ~embedded:true ()])
 
 (* cljs sidebar-page-properties: ghost toggle + db-properties-cp +

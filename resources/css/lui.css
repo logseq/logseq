@@ -189,14 +189,14 @@ body {
   }
 
   .lui-table {
-    @apply w-full table-fixed border-collapse;
+    @apply w-full table-auto border-collapse;
   }
 
   .lui-table-row {
     @apply transition-colors;
   }
 
-  .lui-table-row:hover,
+  .lui-table-row:has(> .lui-table-cell[data-pressable]):hover,
   .lui-table-row[data-selected] {
     @apply bg-accent text-accent-foreground;
   }
@@ -1417,7 +1417,11 @@ body {
   }
 
   .lui-link {
-    @apply inline-flex items-center gap-1 text-primary underline underline-offset-4;
+    @apply inline text-primary underline underline-offset-4;
+  }
+
+  .lui-link:has(> .lui-link-icon[data-name]) {
+    @apply inline-flex items-center gap-1;
   }
 
   .lui-link-icon {

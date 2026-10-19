@@ -2156,3 +2156,9 @@ html[data-theme=light] {
 .lui-menu-item:not([data-selection-placement]) > .lui-menu-item-check:empty {
   display: none;
 }
+
+
+/* Match the reference code theme against the application dark surface. */
+html[data-theme="dark"] .hljs {
+  background: transparent;
+}

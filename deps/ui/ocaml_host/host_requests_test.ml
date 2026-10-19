@@ -8812,7 +8812,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     help_open=true;right_sidebar_open=false} in
   let app=Lui_app.create_with_extensions backend registry initial Update.apply
     (fun _ ms _ -> Ui_components.overlay_typography
-      (Lui_elements.column ~width:512 ~foreground:"foreground"
+      (Lui_elements.column ~foreground:"foreground"
         [Right_sidebar_view.render ms;Chrome.help_area ms])) in
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Sidebar_state.st_ref:=previous_sidebar;
@@ -8854,6 +8854,26 @@ let () = Native_embed.with_entry_lock (fun () ->
       Lui_layout.sync ~scale ~width:(512.*.scale) ~height:(720.*.scale)
         ~measure:(fun id value width _ -> Some (Text_engine.measure_text
           ~width:(Host_interaction.measure_width width) engine id value)) layout store;
+      List.iter (fun width ->
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~measure:(fun id value offered _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width offered) engine id value)) layout store;
+        List.iter (fun table ->
+          let table_rect=Option.get (Lui_layout.rect layout table) in
+          check "Native reference tables must follow the resized sidebar content width"
+            (abs_float (table_rect.w-.(width-.48.)*.scale)<0.1);
+          let rows=Lui_store.child_ids store table in
+          let header=List.hd rows in
+          let columns=List.map (fun cell -> Option.get (Lui_layout.rect layout cell))
+            (Lui_store.child_ids store header) in
+          List.iter (fun row ->
+            List.iter2 (fun expected cell ->
+              let actual=Option.get (Lui_layout.rect layout cell) in
+              check "Native reference columns must align across every row after resize"
+                (abs_float (expected.Lui_scene.x-.actual.x)<0.1 &&
+                 abs_float (expected.w-.actual.w)<0.1))
+              columns (Lui_store.child_ids store row)) rows)
+          (List.filter (fun id -> Lui_store.kind store id="table") ids)) [512.;400.;900.];
       let search_rect=Option.get (Lui_layout.rect layout search) in
       Printf.printf "native shortcut help scale=%.0f search y=%.1f width=%.1f\n%!" scale search_rect.y search_rect.w;
       check "Embedded keymap search must follow the complete syntax reference" (search_rect.y>600.*.scale);

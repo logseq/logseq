@@ -72,3 +72,52 @@ export function assertCollapsedShortcutHelp(m) {
   assert.equal(m.height, 32, 'A collapsed sidebar panel occupies only its header');
   assert.equal(m.bodyHeight, 0);
 }
+
+
+// Measured desktop reference: English, classic theme, 1280 by 720 viewport,
+// 246-point left dock and a 512-point right dock.
+export const shortcutHelpDesktopReference = {
+  pageWidth: 480,
+  headerColor: 'rgb(23, 23, 23)',
+  tables: [
+    {width: 464, columns: [259.8046875, 203.1953125], rowHeights: [37, 37, 61, 37, 37, 61, 37]},
+    {width: 464, columns: [316.953125, 146.046875], rowHeights: [37, 37, 37, 37, 37, 37.2265625, 37.2265625, 37, 37, 75.6484375, 85]},
+  ],
+};
+
+export function measureShortcutTableLayout(root) {
+  const page = root.querySelector('.cp__shortcut-page');
+  return {
+    pageWidth: page.getBoundingClientRect().width,
+    headerColor: getComputedStyle(page.querySelectorAll('table')[1].rows[0].cells[0]).color,
+    tables: Array.from(page.querySelectorAll('table')).map(table => ({
+      width: table.getBoundingClientRect().width,
+      columns: Array.from(table.rows[0].cells).map(cell => cell.getBoundingClientRect().width),
+      rowHeights: Array.from(table.rows).map(row => row.getBoundingClientRect().height),
+    })),
+    learnMore: page.querySelector('table:nth-of-type(2) a')?.textContent,
+    preview: Array.from(page.querySelectorAll('pre code')).map(code => ({
+      whiteSpace: getComputedStyle(code.parentElement).whiteSpace,
+      highlighted: code.getAttribute('data-highlighted'),
+    })),
+  };
+}
+
+export function assertShortcutTableLayout(actual, reference) {
+  assert.equal(actual.learnMore, 'Learn more →', 'UI literals must remain Unicode text in both renderers');
+  assert.equal(actual.headerColor, reference.headerColor, 'Read-only row hover must preserve readable table text');
+  assert.ok(Math.abs(actual.pageWidth - reference.pageWidth) < .1, 'Content must not widen the sidebar');
+  for (const [index, table] of actual.tables.entries()) {
+    const expected = reference.tables[index];
+    assert.ok(Math.abs(table.width - expected.width) < .1, `Table ${index} must fit its content box`);
+    for (const [column, width] of table.columns.entries()) {
+      assert.ok(Math.abs(width - expected.columns[column]) < 1, `Table ${index} column ${column} must use shared intrinsic sizing`);
+    }
+    for (const [row, height] of table.rowHeights.entries()) {
+      assert.ok(Math.abs(height - expected.rowHeights[row]) < 1, `Table ${index} row ${row} must match reference content flow`);
+    }
+  }
+  assert.equal(actual.preview.length, 1);
+  assert.equal(actual.preview[0].whiteSpace, 'pre-wrap');
+  assert.equal(actual.preview[0].highlighted, 'yes', 'The shared read-only code renderer must highlight its preview');
+}

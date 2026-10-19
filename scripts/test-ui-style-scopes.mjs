@@ -108,7 +108,7 @@ test('every referenced Radix color and channel has a definition in both modes', 
 })
 
 
-test('legacy form styling is opt-in and leaves shared controls in their component layer', async () => {
+test('shared component styles preserve intrinsic tables and opt-in legacy forms', async () => {
   const config = (await import('../postcss.config.js')).default
   const source = `@import "tailwindcss" source(none);
 @import "./resources/css/shui.css";
@@ -117,6 +117,16 @@ test('legacy form styling is opt-in and leaves shared controls in their componen
 @config "./tailwind.config.js";`
   const result = await postcss(config.plugins.filter(plugin => plugin.postcssPlugin !== 'cssnano'))
     .process(source, { from: new URL('../choice-style-test.css', import.meta.url).pathname })
+  const tableLayouts = []
+  result.root.walkRules('.lui-table', rule => {
+    rule.walkDecls('table-layout', declaration => tableLayouts.push(declaration.value))
+  })
+  assert.deepEqual(tableLayouts, ['auto'], 'Shared tables must size columns from all row contents')
+  const linkDisplays = []
+  result.root.walkRules('.lui-link', rule => {
+    rule.walkDecls('display', declaration => linkDisplays.push(declaration.value))
+  })
+  assert.deepEqual(linkDisplays, ['inline'], 'Plain links must preserve the surrounding text line box')
   const bareControls = []
   const formClasses = new Set()
   const borderResetLayers = []

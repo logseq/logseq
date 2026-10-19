@@ -9,6 +9,7 @@
 @import "./resources/css/shui.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";
+@import "@highlightjs/cdn-assets/styles/obsidian.css";
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";

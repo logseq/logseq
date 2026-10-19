@@ -236,7 +236,7 @@ module Prop : sig
     [ `static_ | `relative | `absolute | `fixed | `sticky ] -> t
   val overflow : [ `visible | `hidden | `auto ] -> t
   val s_overflow : [ `visible | `hidden | `auto ] Signal.signal -> s
-  val white_space : [ `normal | `nowrap ] -> t
+  val white_space : [ `normal | `nowrap | `pre_wrap ] -> t
   val text_overflow : [ `clip | `ellipsis ] -> t
   val user_select : [ `none | `text ] -> t
   val cursor : [ `default | `pointer | `text ] -> t
@@ -371,9 +371,9 @@ end = struct
           v
       , fun s -> StringValue s )
 
-  let white_space (v : [ `normal | `nowrap ]) =
+  let white_space (v : [ `normal | `nowrap | `pre_wrap ]) =
     str WhiteSpace
-      (match v with `normal -> "normal" | `nowrap -> "nowrap")
+      (match v with `normal -> "normal" | `nowrap -> "nowrap" | `pre_wrap -> "pre-wrap")
 
   let text_overflow (v : [ `clip | `ellipsis ]) =
     str TextOverflow
