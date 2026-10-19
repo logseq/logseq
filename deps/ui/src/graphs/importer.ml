@@ -215,54 +215,29 @@ let run_files kind files =
           import_debug_transit repo f)
   | _ -> ()
 
-let on_change id () =
-  match Ui_services.dom_query ("#" ^ id) with
-  | Some el -> (
-      match el.Ui_services.files () with
-      | [] -> ()
-      | files -> run_files id files)
-  | None -> ()
+(* Import actions use the shared file service on both hosts. *)
+let file_input ~id ~label ~desc ~accept ?(directory=false) () =
+  Ui_components.with_props
+    [ Ui_components.Prop.opacity 0.8; Ui_components.Prop.hover_opacity 1.
+    ; Ui_components.Prop.pressed_opacity 0.5; Ui_components.Prop.cursor `pointer
+    ; Ui_components.Prop.hover_background "var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)))"
+    ; Ui_components.Prop.hover_foreground "inherit"; Ui_components.Prop.white_space `normal ]
+    (button ~key:id ~accessibility_identifier:id ~label ~variant:`ghost ~text_alignment:`start
+       ~on_press:(fun _ ->
+       Ui_services.files_pick_files ~accept ~directory (run_files id))
+         ~main:`start ~cross:`center ~gap:0 ~padding:0 ~border_width:0
+         ~height:62 ~min_height:62 ~margin_horizontal:8 ~margin_top:8 ~margin_bottom:10
+         ~corner_radius:12 ~foreground:"inherit"
+         ~background:"var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)))"
+         [ box ~key:(id ^ "-icon") ~width:62 ~height:62 ~padding:16
+             ~main:`center ~cross:`center
+             [ icon ~key:(id ^ "-logo") ~name:(`app "logseq-logo") ~point_size:28 [] ]
+         ; column ~key:(id ^ "-text") ~min_width:0
+             [ text ~key:(id ^ "-title") ~as_:`Strong ~font_size:"1.125rem"
+                 ~font_weight:700 ~line_height:"1.6875rem" ~value:label []
+             ; text ~key:(id ^ "-description") ~as_:`Small ~font_size:"0.6875rem"
+                 ~font_weight:400 ~line_height:"1.03125rem" ~value:desc [] ] ])
 
-(* svg/logo 28 — three hard-coded ellipses from components/svg.cljs,
-   registered as the "logseq-logo" app icon in Icons.custom_icons *)
-
-(* TODO(component): stays dom — .importer .d > label.action-input keys
-   on the label tag and the nested <input type=file> click activation
-   has no component equivalent: file_picker's web backend emits a bare
-   `lui-file-picker` element — no Picked event, no web File objects.
-   Needs a web FilePicker backend plus directory-pick support *)
-let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
-  (* .action-input is a horizontal field row on the web — the label tag
-     wraps the whole hit area for the nested input's click activation;
-     natively the row carries the same layout via typed props *)
-  Logseq_el.el ~key:id ~tag:"label"
-    ~style_class:"action-input"
-    [ row ~key:(id ^ "-row") ~style_class:"ls-imp-row" ~cross:`center
-        ~gap:14 ~padding:12 ~corner_radius:10
-        ~border_width:1 ~border_color:"hsl(var(--border))"
-        [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center" ~width:40
-            ~height:40 ~corner_radius:8 ~main:`center ~cross:`center
-            ~background:"var(--lx-gray-03, hsl(var(--muted)))"
-            [ icon ~key:(id ^ "-ico") ~name:(`app "logseq-logo")
-                ~point_size:28 [] ]
-        ; column ~key:(id ^ "-t")
-            ~style_class:"ls-imp-field" ~gap:2 ~grow:1.
-            [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
-            ; Ui_components.with_props
-                [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
-                (text ~key:(id ^ "-d") ~as_:`Small ~value:desc []) ]
-        ]
-    ; Logseq_el.el ~key:(id ^ "-i") ~tag:"input"
-        ~style_class:"ls-hidden-input"
-        ~attrs:
-          ([ ("id", id); ("type", "file"); ("accept", accept) ]
-           @ extra_attrs)
-        ~events:"change"
-        ~on_dom_event:(fun n _ -> if n = "change" then on_change id ())
-        []
-    ]
-
-(* cljs imports.cljs importer — sqlite / zip / file-graph / transit / edn *)
 let items () =
   [ file_input ~id:"import-sqlite-db" ~label:"SQLite"
       ~desc:(T.t "onboarding.import/sqlite-desc") ~accept:".sqlite,.sqlite3,.db" ()
@@ -270,56 +245,36 @@ let items () =
       ~desc:(T.t "import/sqlite-and-assets-desc") ~accept:".zip" ()
   ; file_input ~id:"import-file-graph" ~label:(T.t "import/file-to-db-title")
       ~desc:(T.t "import/file-to-db-desc")
-      ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"
-      ~extra_attrs:[ ("webkitdirectory", "true") ]
-      ()
+      ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip" ~directory:true ()
   ; file_input ~id:"import-debug-transit"
       ~label:(T.t "import/debug-transit-title") ~desc:(T.t "import/debug-transit-desc")
       ~accept:".transit,.json" ()
   ; file_input ~id:"import-db-edn" ~label:(T.t "import/db-edn-title")
-      ~desc:(T.t "import/db-edn-desc") ~accept:".edn" ()
-  ]
+      ~desc:(T.t "import/db-edn-desc") ~accept:".edn" () ]
 
 let article () =
-  column ~key:"import" ~style_class:"importer" ~gap:16
-    [ column ~key:"imp-c" ~style_class:"c" ~gap:8 ~cross:`center
-        [ (* .importer .c h1/h2 key on the heading tags — ~as_ retags
-             the heading element so the CSS contract holds *)
-          Ui_components.with_props
-            [ Ui_components.Prop.font_size "1.25rem"
-            ; Ui_components.Prop.font_weight 600 ]
-            (heading ~key:"imp-h" ~level:1 ~as_:`H1
-               ~value:(T.t "onboarding.import/title") [])
-        ; Ui_components.with_props
-            [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
-            (heading ~key:"imp-d" ~level:2 ~as_:`H2
-               ~value:(T.t "onboarding.import/desc") []) ]
-    ; column ~key:"imp-l" ~style_class:"d" ~gap:12 (items ()) ]
+  column ~key:"import" ~accessibility_identifier:"import-options"
+    ~padding_vertical:64 ~padding_horizontal:32 ~corner_radius:20 ~cross:`stretch
+    ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))"
+    [ column ~key:"intro" ~cross:`stretch
+        [ heading ~key:"question" ~level:1 ~as_:`H1 ~font_size:"1.75rem"
+            ~font_weight:500 ~line_height:"1.5" ~margin:0 ~text_alignment:`center
+            ~value:(T.t "onboarding.import/title") []
+        ; heading ~key:"description" ~level:2 ~as_:`H2 ~font_size:"1.1875rem"
+            ~font_weight:400 ~line_height:"3" ~margin:0 ~text_alignment:`center
+            ~value:(T.t "onboarding.import/desc") [] ]
+    ; column ~key:"choices" ~accessibility_identifier:"import-choices"
+        ~padding_vertical:20 ~cross:`stretch (items ()) ]
 
-(* route view — cljs setups/setups-container :importer wraps the article in
-   .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
-  Ui_components.with_props
-    [ Ui_components.Prop.z_index 1
-    ; Ui_components.Prop.overflow `hidden ]
-    (column ~key:"importer" ~style_class:"cp__onboarding-setups"
-       ~grow:1. ~corner_radius:20 ~cross:`center ~padding:48
-    [ Ui_components.with_props
-        [ Ui_components.Prop.font_size "1.75rem"
-        ; Ui_components.Prop.font_weight 700 ]
-        (heading ~key:"imp-th" ~level:1 ~as_:`H1
-           ~style_class:"ls-imp-title"
-           ~value:(T.t "import/notes") [])
-    ; Ui_components.with_props
-        [ Ui_components.Prop.foreground "hsl(var(--muted-foreground))" ]
-        (heading ~key:"imp-td" ~level:2 ~as_:`H2
-           ~value:(T.t "onboarding.import-option/desc") [])
-    ; column ~key:"imp-card"
-        ~style_class:"inner-card" ~width:560 ~margin_top:32 ~padding:32
-        ~corner_radius:16 ~gap:24
-        ~background:"hsl(var(--card))"
-        ~border_width:1 ~border_color:"hsl(var(--border))"
-        [ article () ]
-    ])
+  Ui_components.with_props [Ui_components.Prop.padding_top 55]
+    (column ~key:"importer" ~accessibility_identifier:"importer" ~cross:`center
+        [ heading ~key:"title" ~level:1 ~as_:`H1 ~font_size:"2.25rem"
+            ~font_weight:400 ~line_height:"1.4" ~margin:0 ~text_alignment:`center
+            ~value:(T.t "import/notes") []
+        ; heading ~key:"subtitle" ~level:2 ~as_:`H2 ~font_size:"1.25rem"
+            ~font_weight:400 ~line_height:"1.5" ~margin_top:20 ~margin_bottom:40
+            ~text_alignment:`center ~value:(T.t "onboarding.import-option/desc") []
+        ; article () ])
 
 let body (_ms : Model.t Signal.signal) : t = article ()

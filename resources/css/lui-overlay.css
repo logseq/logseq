@@ -1537,63 +1537,9 @@ select.form-select {
   text-decoration: underline;
 }
 
-/* importer/new-graph/settings-url */
-.ls-imp-field {
-  display: flex;
-  flex-direction: column;
-}
-
 .ls-hidden-input {
   position: absolute;
   display: none;
-}
-
-/* cljs onboarding/index.css — article.importer is the gray-03 card;
-   .inner-card pads 55px and centers the h1/h2 header */
-.importer {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 4rem 2rem;
-  background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
-  border-radius: 20px;
-  flex: 1;
-}
-
-/* cljs onboarding/index.css centers the card on desktop */
-@media (min-width: 1024px) {
-  .cp__onboarding-setups {
-    justify-content: center;
-    align-items: center;
-  }
-}
-
-.inner-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 55px;
-}
-
-/* cljs .inner-card > h1 (36px/50.4 computed), > h2 (20px/30, my-20/40) */
-.inner-card > h1.ls-imp-title {
-  font-size: 36px;
-  line-height: 1.4;
-  margin: 0;
-  text-align: center;
-}
-
-.inner-card > h2 {
-  font-size: 20px;
-  line-height: 30px;
-  margin: 20px 0 40px;
-  padding: 0 30px;
-  text-align: center;
-}
-
-.ls-imp-title {
-  font-size: 1.25rem;
 }
 
 .ls-dialog-title-lg {
@@ -2039,97 +1985,6 @@ select.form-select {
 
 .ui__button.as-link:hover {
   text-decoration: underline;
-}
-
-/* importer internals */
-/* cljs onboarding/index.css label.action-input — gray-06 68px rounded row */
-.action-input {
-  display: flex;
-  align-items: center;
-  margin: 0.5rem;
-  background-color: var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
-  height: 68px;
-  width: 100%;
-  opacity: 0.8;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  cursor: pointer;
-  transition: none;
-}
-
-.action-input:hover {
-  opacity: 1;
-}
-
-.action-input:active {
-  opacity: 0.5;
-}
-
-.action-input strong {
-  font-size: 18px;
-  line-height: 27px;
-}
-
-.action-input small {
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-/* cljs .importer section.c header sizes (28px / 19px lh3em) and the
-   icon column inside each action-input row (62px box, pad-4) */
-.importer .c {
-  text-align: center;
-}
-
-.importer .c h1 {
-  font-size: 28px;
-  font-weight: 500;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.importer .c h2 {
-  font-size: 19px;
-  line-height: 3em;
-  margin: 0;
-}
-
-.importer .d {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  padding: 20px 0;
-}
-
-.importer .d > label.action-input {
-  width: unset;
-  height: 62px;
-  flex: 1;
-  margin-bottom: 10px;
-}
-
-.action-input .as-flex-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 62px;
-  height: 62px;
-  padding: 16px;
-  flex-shrink: 0;
-}
-
-/* icon kind paints via --lui-icon-image mask (no base .lui-icon rule
-   in this sheet) */
-.action-input .lui-icon {
-  background-color: currentColor;
-  mask-image: var(--lui-icon-image);
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: var(--lui-icon-image);
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
 /* property value-cell helpers */

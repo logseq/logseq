@@ -9,6 +9,7 @@ import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks
 import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
 import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography} from './transfer_dialog_checks.mjs';
+import {measureImportView, assertImportView} from './import_view_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -28,6 +29,21 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('Import keeps shared typography, theme and option geometry', () => {
+  open();
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  button('light light');
+  button('Logseq classic color');
+  browser('press', 'Escape');
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Import', '--exact');
+  browser('wait', '--fn', "document.querySelector('#import-options') !== null");
+  assertImportView(evaluate(`(${measureImportView.toString()})(document.querySelector('#importer'))`), {
+    text: 'rgb(23, 23, 23)', card: 'rgb(243, 243, 243)', choice: 'rgb(226, 226, 226)',
+  });
+});
 
 test('export dialog keeps theme typography and card-relative close placement', () => {
   open();

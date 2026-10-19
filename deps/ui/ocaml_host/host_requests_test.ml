@@ -8679,3 +8679,84 @@ let () = Native_embed.with_entry_lock (fun () ->
     List.iter prerr_endline (List.rev !failures);
     check "Native export dialogs preserve shared typography, theme and close geometry" (!failures=[]);
     print_endline "native export dialog typography, theme and close geometry: OK"))
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_host = !Host.host_op in
+  let requests=Queue.create () in
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+    Ui_components.overlay_typography (Lui_elements.column
+      ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"
+      [Importer.view ()])) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);Host.host_op:=previous_host;
+    Theme_vars.set_dark false;Theme_vars.set_accent "logseq") (fun () ->
+    Host.host_op:=(fun operation payload ->
+      check "Import choices must use the shared file service" (operation="dom-op");
+      let prefix="open-file-picker\n" in
+      check "Import choices must request the native file picker" (String.starts_with ~prefix payload);
+      Queue.push (Yojson.Safe.from_string (String.sub payload (String.length prefix)
+        (String.length payload-String.length prefix))) requests);
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let ids=Lui_store.preorder store and failures=ref [] in
+    let expect message condition=if not condition then failures:=message::!failures in
+    let find_text key=List.find (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t key)) ids in
+    let title=find_text "import/notes" and subtitle=find_text "onboarding.import-option/desc"
+    and question=find_text "onboarding.import/title" and explanation=find_text "onboarding.import/desc"
+    and description=find_text "onboarding.import/sqlite-desc" in
+    let title_label=List.find (fun id -> Lui_store.string_prop store id "text"=Some "SQLite") ids in
+    let choices=List.filter_map (fun name -> Option.map (fun id -> name,id)
+      (List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name) ids))
+      ["import-sqlite-db";"import-sqlite-zip";"import-file-graph";"import-debug-transit";"import-db-edn"] in
+    expect "All five Import choices must be shared pressable controls" (List.length choices=5);
+    List.iter (fun (name,id) ->
+      ignore (Lui_app.dispatch_event app (Press id));ignore (Lui_app.flush app);
+      expect ("Import choice must open exactly one file picker: "^name) (Queue.length requests=1);
+      if not (Queue.is_empty requests) then begin
+        let payload=Queue.pop requests in
+        let open Yojson.Safe.Util in
+        expect "Only the graph-folder choice requests a directory"
+          (member "directory" payload=(`Bool (name="import-file-graph")));
+        let request=member "request" payload |> to_int in
+        Platform.emit_event "files-picked" (Js.Json.JObject
+          ["request",Js.Json.JNumber (float_of_int request);"files",Js.Json.JArray [||]]);Host.drain ();
+        expect "Cancelling Import releases its native picker callback"
+          (Hashtbl.length Browser_ui.pick_pending=0)
+      end) choices;
+    let layout=Lui_layout.create () in
+    List.iter (fun (mode,name) ->
+      let snapshot=Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+        ["mode",`String name;"vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+      Theme_vars.set_dark (mode=Ui_theme.Dark);
+      List.iter (fun scale ->
+        let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+        let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+        Lui_layout.sync ~scale ~width:(960.*.scale) ~height:(1000.*.scale)
+          ~measure:(fun id value width _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width width) engine id value)) layout store;
+        let inks=Hashtbl.create 8 in
+        Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+          layout=Lui_layout.layout_hook layout;text_ops=(fun id _ color _ -> Hashtbl.replace inks id color;[])}
+          store scene ~width:(int_of_float (960.*.scale)) ~height:(int_of_float (1000.*.scale))
+          ~scale ~clear:(Lui_scene.color 0 0 0 0);
+        List.iter (fun (id,size,line) ->
+          expect ("Import text must retain reference typography: "^name)
+            (abs_float (Lui_text.size (Text_engine.font_of store id)-.size)<0.01
+             && (match Text_engine.line_height_of store id with
+                 | Some actual -> abs_float (actual-.line)<0.01 | None -> false));
+          expect ("Import text must inherit the theme body color: "^name)
+            (Hashtbl.find_opt inks id=Theme_vars.color_of "var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"))
+          [title,36.,50.4;subtitle,20.,30.;question,28.,42.;explanation,19.,57.;
+           title_label,18.,27.;description,11.,16.5];
+        List.iter (fun (_,id) ->
+          let r=Option.get (Lui_layout.rect layout id) in
+          expect "Import options must have the same reference row height"
+            (abs_float (r.h-.62.*.scale)<0.1)) choices) [1.;2.])
+      [Ui_theme.Light,"light";Ui_theme.Dark,"dark"];
+    List.iter prerr_endline (List.rev !failures);
+    check "Native Import typography, theme and file-picker activation" (!failures=[]);
+    print_endline "native Import shared typography, theme and file-picker activation: OK"))
