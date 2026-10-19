@@ -478,6 +478,7 @@ let run_views ~registry ~profile ~finish =
         data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
   in
   let custom_date_check done_ =
+    let measured_options=Hashtbl.create 3 in
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "custom-date-fixture"});
@@ -501,6 +502,13 @@ let run_views ~registry ~profile ~finish =
           ignore (Js.Promise.then_ (fun () ->
             let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
             S.text_changed selector input.M.id I18n.(t "view.filter/custom-date");
+            let option_id=Option.get (List.find_map (fun node ->
+              match M.string_prop node "accessibility-identifier" with
+              | Some identifier when String.starts_with ~prefix:"ac-content-" identifier -> Some identifier
+              | _ -> None) (nodes selector)) in
+            check "replacement selectors own distinct measurement identifiers"
+              (not (Hashtbl.mem measured_options option_id));
+            Hashtbl.replace measured_options option_id ();
             let document = !(Stub_dom.document_ref) in
             let original_lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
             let option_element=Stub_dom.make_element "div" in
@@ -508,7 +516,7 @@ let run_views ~registry ~profile ~finish =
               Js.Json.object_ (Js.Dict.fromList (List.map (fun (key,value) -> key,Js.Json.number value)
                 ["x",320.;"y",240.;"width",208.;"height",20.])));
             Stub_dom.set_field document "getElementById" (fun id ->
-              if id="ac-content-0" then option_element else original_lookup id);
+              if id=option_id then option_element else original_lookup id);
             S.submit selector input.M.id;
             ignore (Js.Promise.then_ (fun () ->
             Stub_dom.set_field document "getElementById" original_lookup;

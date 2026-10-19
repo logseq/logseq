@@ -5696,7 +5696,8 @@ let () =
                     ignore (A.repaint surface)
                   in
                   let option_rect=rect (List.find (fun id ->
-                    Lui_store.string_prop store id "accessibility-identifier"=Some "ac-content-6") (ids ())) in
+                    Lui_store.string_prop store id "accessibility-identifier"=Some
+                      (Printf.sprintf "ac-content-%d-6" !Views_popup.next_id)) (ids ())) in
                   apply (A.handle surface (W.Input.Move (x, y)));
                   apply
                     (A.handle surface

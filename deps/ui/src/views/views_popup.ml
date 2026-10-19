@@ -395,7 +395,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let filtered = Logseq_el.own context (Signal.map2 filter qsig source) in
     let bounded count picked = max 0 (min picked (count - 1)) in
     let measurement = Ui_effect.request () in
-    let content_id i = "ac-content-" ^ string_of_int i in
+    let content_id i = Printf.sprintf "ac-content-%d-%d" id i in
     let choose i it =
       let ticket = Ui_effect.issue measurement in
       if multiple then begin
