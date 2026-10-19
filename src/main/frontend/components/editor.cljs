@@ -206,10 +206,10 @@
   [q db-tag? set-matched-pages! set-exact-page!]
   (if (string/blank? q)
     (when db-tag?
-      (p/let [classes (db-async/<get-all-classes (state/get-current-repo)
-                                                 {:except-root-class? true})]
+      (p/let [repo (state/get-current-repo)
+              classes (db-async/<get-all-classes repo {:except-root-class? true})]
         (set-exact-page! nil)
-        (set-matched-pages! classes)))
+        (set-matched-pages! (state/classes-for-tag-completion repo classes))))
     (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]
