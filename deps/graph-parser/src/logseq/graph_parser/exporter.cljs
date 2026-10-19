@@ -2912,15 +2912,19 @@
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
   pages that are now properties. Existing classes with the same title stay
-  classes; a distinct property entity is created instead."
-  [pages-tx old-properties existing-pages import-state upstream-properties]
+  classes, as do pages that become classes in this file (new-class-uuids); a
+  distinct property entity is created instead."
+  [pages-tx old-properties existing-pages import-state upstream-properties new-class-uuids]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
+        new-class-page-names (set (keep #(when (contains? new-class-uuids (:block/uuid %)) (:block/name %))
+                                        pages-tx))
         class-occupied-property-names
         (into #{}
               (keep (fn [kw-name]
-                      (when-let [existing-uuid (get existing-pages (name kw-name))]
-                        (when (existing-named-page-is-class? import-state existing-uuid)
-                          kw-name))))
+                      (when (or (contains? new-class-page-names (name kw-name))
+                                (when-let [existing-uuid (get existing-pages (name kw-name))]
+                                  (existing-named-page-is-class? import-state existing-uuid)))
+                        kw-name)))
               new-properties)
         page-tx-for-new-property?
         (fn [page]
@@ -3241,7 +3245,8 @@
           _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
           split-start (when log-fn (import-profile/now-ms))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
-          (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
+          (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options)
+                                         (set (keep :block/uuid @(:classes-tx tx-options))))
           _ (log-phase-ms! log-fn :split split-start {:file file})
           tx-meta {::imported-data? true ::path file ::new-graph? true}
           _ (import-progress! options {:phase :property-transact :file file})

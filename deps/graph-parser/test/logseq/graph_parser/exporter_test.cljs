@@ -457,6 +457,35 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
+  (p/let [file (write-temp-graph-file
+                 "pages/source.md"
+                 "tags:: [[topic]]\ntopic:: sample value\n\n- Example block\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})
+          db @conn
+          entities-titled (fn [class-ident]
+                            (d/q '[:find [?e ...] :in $ ?title ?class
+                                   :where [?e :block/title ?title] [?c :db/ident ?class] [?e :block/tags ?c]]
+                                 db "topic" class-ident))
+          [tag-id] (entities-titled :logseq.class/Tag)
+          [property-id] (entities-titled :logseq.class/Property)
+          property (some->> property-id (d/entity db))
+          page (db-test/find-page-by-title db "source")]
+    (is (some? (db-test/find-block-by-content db #"Example block"))
+        "Page content is imported")
+    (is (some? property-id) "The property is imported")
+    (is (= "sample value"
+           (some-> (get page (:db/ident property)) db-property/property-value-content))
+        "The page keeps its property value")
+    (is (some? tag-id) "The tag is imported")
+    (is (not= tag-id property-id) "The tag and property are distinct entities")
+    (is (contains? (set (map :db/id (:block/tags page))) tag-id)
+        "The page references the imported tag")
+    (is (empty? (:errors (db-validate/validate-local-db! db)))
+        "Imported graph validates")))
+
 (deftest-async import-org-page-title-when-property-appears-in-middle
   (p/let [file (write-temp-graph-file
                 "pages/20230410145300-end_to_end_note.org"
