@@ -169,7 +169,7 @@ let flush () = Runtime.flush ()
 
 (* bootstrap: graph + page with nested blocks *)
 let load_test_page () =
-  send (Action.Boot_graph_ready "logseq_db_test");
+  send (Action.Boot_graph_ready ("logseq_db_test",Wire.Map []));
   send (Action.Navigate_to (Model.Page "p"));
   send
     (Action.Page_loaded

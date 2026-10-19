@@ -8,22 +8,54 @@ let config_path = "logseq/config.edn"
 
 let published_config : Wire.t option ref = ref None
 
+let start_of_week config =
+  match config with
+  | Wire.Map _ ->
+      (match Wire.get config "start-of-week" with
+       | None -> 6
+       | Some (Wire.Int day) when day>=0 && day<=6 -> day
+       | Some _ -> invalid_arg "Graph start-of-week must be an integer between zero and six")
+  | _ -> invalid_arg "Graph configuration must be an EDN map"
+
+let validate_config config = ignore (start_of_week config);config
+
+(* Graph preferences number Monday as zero; host calendar weekdays start at Sunday. *)
+let calendar_week_starts_on () =
+  (start_of_week (Runtime.model ()).Model.graph_config + 1) mod 7
+
+let report_config_error = function
+  | Edn.Parse_error _ -> Toast.error (I18n.t1 "file.config/read-failed-title" config_path)
+  | Invalid_argument _ -> Toast.error (I18n.t1 "file.config/invalid-title" config_path)
+  | error -> raise error
+
+let parse_config content = validate_config (Edn.parse content)
+
+let note_file_saved repo path content =
+  if path=config_path then
+    match parse_config content with
+    | config -> Runtime.send (Action.Graph_config_loaded (repo,config))
+    | exception (Edn.Parse_error _ | Invalid_argument _ as error) -> report_config_error error
+
 let read_config repo =
   match !published_config with
-  | Some config -> Js.Promise.resolve config
+  | Some config -> Js.Promise.resolve (validate_config config)
   | None ->
-  let* w =
-    Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
-      (Wire.String config_path)
-  in
-  Js.Promise.resolve
-    (match w with
-     | Wire.String s when String.trim s <> "" -> (
-         try Edn.parse s with _ -> Wire.Map [])
-     | _ -> Wire.Map [])
+      let* content = Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
+        (Wire.String config_path) in
+      let config = match content with
+        | Wire.Nil -> Wire.Map []
+        | Wire.String text when String.trim text="" -> Wire.Map []
+        | Wire.String text ->
+            (match parse_config text with
+             | config -> config
+             | exception (Edn.Parse_error _ | Invalid_argument _ as error) ->
+                 report_config_error error;raise error)
+        | _ -> invalid_arg "Graph configuration file must be text" in
+      Js.Promise.resolve config
 
 
 let write_config repo (cfg : Wire.t) =
+  let cfg=validate_config cfg in
   let now_ms = Int64.of_float (Js.Date.now ()) in
   let* _ =
     Runtime.invoke "thread-api/transact"
@@ -42,6 +74,7 @@ let write_config repo (cfg : Wire.t) =
       ; Wire.Nil
       ]
   in
+  Runtime.send (Action.Graph_config_loaded (repo,cfg));
   Js.Promise.resolve ()
 
 (* :app.getCurrentGraphConfigs [...keys] -> value at key path.

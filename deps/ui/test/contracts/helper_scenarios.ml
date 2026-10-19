@@ -78,6 +78,25 @@ let fake_time : Ui_services.time =
   }
 
 let run () =
+  List.iteri (fun week_starts_on (home,finish) ->
+    for offset=0 to 6 do
+      check "Week offsets rotate through all seven configured starts"
+        (Dates.weekday_offset ~week_starts_on ((week_starts_on+offset) mod 7)=offset)
+    done;
+    let navigate key = Dates.calendar_navigate ~week_starts_on
+      ~year:2024 ~month:3 ~day:1 ~key ~shift:false in
+    check "Home follows the configured week across leap-day boundaries"
+      (navigate "Home"=home);
+    check "End follows the configured week across month boundaries"
+      (navigate "End"=finish))
+    [(2024,2,25),(2024,3,2);(2024,2,26),(2024,3,3);
+     (2024,2,27),(2024,3,4);(2024,2,28),(2024,3,5);
+     (2024,2,29),(2024,3,6);(2024,3,1),(2024,3,7);
+     (2024,2,24),(2024,3,1)];
+  List.iter (fun week_starts_on ->
+    check "Invalid week starts are rejected"
+      (try ignore (Dates.weekday_offset ~week_starts_on 0);false
+       with Invalid_argument _ -> true)) [-1;7];
   (* ---- fuzzy ---- *)
   check "fuzzy nfkc fullwidth"
     (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "full-width"; "x" ]

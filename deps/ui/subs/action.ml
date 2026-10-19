@@ -1,7 +1,7 @@
 (* Reducer actions for the app loop. *)
 
 type t =
-  | Boot_graph_ready of string
+  | Boot_graph_ready of string * Wire.t
   | Graph_closed (* the open repo was deleted — no graph remains *)
   | Repos_loaded of string list
   | Page_loaded of Model.page
@@ -51,6 +51,8 @@ type t =
       ; uploading : bool
       } (* latest rtc.log sub-type activity — downloading-detail /
            uploading-detail header buttons *)
+  | Graph_config_loaded of string * Wire.t
+  | Boot_failed of string
   | Noop
 
 (* short constructor name for perf attribution — __uiPerf labels *)
@@ -89,4 +91,6 @@ let tag (a : t) : string =
   | Search_index_progress _ -> "search-index-progress"
   | Search_index_hide _ -> "search-index-hide"
   | Rtc_flow_flags _ -> "rtc-flow-flags"
+  | Graph_config_loaded _ -> "graph-config-loaded"
+  | Boot_failed _ -> "boot-failed"
   | Noop -> "noop"

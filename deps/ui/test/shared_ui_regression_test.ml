@@ -133,6 +133,14 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let startup_error=I18n.t "graph/load-error" in
+  let failed_startup=mount (fun _ context parent ->
+    Page.region (Signal.constant context.Lui_ui.ui_scheduler
+      {Model.initial with phase=Model.Failed startup_error}) context parent) in
+  check "A failed graph startup renders its message instead of a loading placeholder"
+    (List.exists (fun n -> M.string_prop n "text"=Some startup_error) (nodes failed_startup)
+     && not (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "ui/loading")) (nodes failed_startup)));
+  ignore (Lui_app.dispose failed_startup.S.app);
   let neutral_controls = mount (fun _ context parent ->
     let sched = context.Lui_ui.ui_scheduler in
     let keymap = Signal.state sched
@@ -189,8 +197,31 @@ let run_views ~registry ~profile ~finish =
                | _ -> false)) cells) rows
     | _ -> ()
   in
+  List.iter (fun (week_starts_on,year,month,first,rows) ->
+    let session=mount (fun _ -> Ui_components.calendar ~week_starts_on
+      ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label
+      ~initial:(Dates.make ~year ~month ~day:1 ()) ~translate:I18n.t ~on_pick:ignore ()) in
+    let grid=List.find (fun n -> List.assoc_opt "role"
+      (P.data_attrs_decode (Option.value (M.string_prop n "data-attrs") ~default:""))=Some "grid") (nodes session) in
+    let weeks=M.children session.S.tree grid.M.id in
+    check "Configured calendars retain the expected week count" (List.length weeks=rows);
+    let cell=List.hd (M.children session.S.tree (List.hd weeks).M.id) in
+    let day=List.hd (M.children session.S.tree cell.M.id) in
+    check "Calendar columns begin with the configured weekday"
+      (M.string_prop day "accessibility-identifier"=Some first);
+    ignore (Lui_app.dispose session.S.app))
+    [0,2024,2,"calendar-day-2024-01-28",5;
+     1,2024,2,"calendar-day-2024-01-29",5;
+     2,2024,2,"calendar-day-2024-01-30",5;
+     3,2024,2,"calendar-day-2024-01-31",5;
+     4,2024,2,"calendar-day-2024-02-01",5;
+     5,2024,2,"calendar-day-2024-01-26",5;
+     6,2024,2,"calendar-day-2024-01-27",5;
+     0,2024,3,"calendar-day-2024-02-25",6;
+     1,2024,3,"calendar-day-2024-02-26",5;
+     1,2021,2,"calendar-day-2021-02-01",4];
   let picked_date = ref None in
-  let calendar = mount (fun _ -> Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t
+  let calendar = mount (fun _ -> Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t
       ~on_pick:(fun date -> picked_date:=Some date)) in
   let today = Dates.fields (Dates.date_now ()) in
   let day_name y m d = Printf.sprintf "calendar-day-%04d-%02d-%02d" y m d in
@@ -226,7 +257,7 @@ let run_views ~registry ~profile ~finish =
   check "Calendar activation commits the navigated date"
     (Option.map Dates.journal_day_of !picked_date=Some (next.year*10000+next.month*100+next.day));
   ignore (Lui_app.dispose calendar.S.app);
-  let labelled_calendar = mount (fun _ -> Ui_components.calendar ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label
+  let labelled_calendar = mount (fun _ -> Ui_components.calendar ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label
       ~initial:(Dates.make ~year:2024 ~month:2 ~day:29 ()) ~translate:I18n.t
       ~on_pick:(fun _ -> ()) ()) in
   calendar_structure labelled_calendar "February 2024";
@@ -244,6 +275,9 @@ let run_views ~registry ~profile ~finish =
      2024,3,2,"Saturday, March 2nd, 2024"];
   ignore (Lui_app.dispose labelled_calendar.S.app);
   let old_calendar = !Editor_commands.active and old_calendar_signal = !Editor_commands.popup_vs in
+  let previous_calendar_model = !Runtime.read_model in
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "editor-week-fixture";
+    graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0]});
   let popup : Editor_commands.popup =
     {kind=Cal_insert;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
      hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
@@ -271,6 +305,9 @@ let run_views ~registry ~profile ~finish =
   check "The editor key router leaves calendar navigation to the focused button"
     (!Editor_commands.active=Some popup && not !prevented);
   calendar_structure editor_calendar "January 2024";
+  let first_editor_date=List.find (fun n -> class_has n "ui__calendar-day") (nodes editor_calendar) in
+  check "Editor calendars inherit the graph's Monday start"
+    (M.string_prop first_editor_date "accessibility-identifier"=Some "calendar-day-2024-01-01");
   let day = find_day editor_calendar 2024 1 31 in
   check "Editor calendars share complete date labels"
     (M.string_prop day "accessibility-label"=Some "Wednesday, January 31st, 2024");
@@ -280,6 +317,7 @@ let run_views ~registry ~profile ~finish =
     (match !Editor_commands.active with Some current -> current.cy=2024 && current.cm=2 && current.cd=1 | None -> false);
   ignore (Lui_app.dispose editor_calendar.S.app);
   Editor_commands.active:=old_calendar;Editor_commands.popup_vs:=old_calendar_signal;
+  Runtime.read_model:=previous_calendar_model;
   let popup_anchor () =
     let body = Ui_services.dom_body () in
     {body with Ui_services.attr=(fun name ->
@@ -476,6 +514,58 @@ let run_views ~registry ~profile ~finish =
         data "checkbox" [],2,true;
       {(Views_table.created_column ()) with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
         data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
+  in
+  let config_boot_check done_ =
+    let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in
+    let requests=ref [] in
+    Sdk_config.published_config:=None;
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      requests:=(method_,args)::!requests;
+      Js.Promise.resolve (match method_ with
+        | "thread-api/get-file-content" -> Wire.String "{:start-of-week 0}"
+        | "thread-api/create-or-open-db" -> Wire.Map [Wire.kw "schema",Wire.Map []]
+        | _ -> failwith ("Unexpected config boot request: " ^ method_)));
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    ignore (Js.Promise.then_ (fun config ->
+      check "Graph opening loads its own calendar configuration"
+        (Wire.get config "start-of-week"=Some (Wire.Int 0));
+      check "Graph config is read from the opened repo"
+        (List.exists (fun (name,args) -> name="thread-api/get-file-content"
+          && args=[Wire.String "calendar-config-fixture";Wire.String "logseq/config.edn"]) !requests);
+      Runtime.worker:=previous_worker;Sdk_config.published_config:=previous_published;
+      done_ ();Js.Promise.resolve ()) (Graph.open_graph "calendar-config-fixture"))
+  in
+  let config_save_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_send = !Runtime.app_send in
+    let original=Wire.Map [Wire.kw "start-of-week",Wire.Int 0]
+    and updated=Wire.Map [Wire.kw "start-of-week",Wire.Int 5] in
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Runtime.app_send:=previous_send;done_ ()
+      | (file,stale,invalid)::rest ->
+          let state=ref {Model.initial with repo=Some "calendar-save-fixture";graph_config=original}
+          and complete=ref (fun () -> ()) in
+          Runtime.read_model:=(fun () -> !state);
+          Runtime.app_send:=(fun action -> state:=Update.update !state action;true);
+          Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+            if name<>"thread-api/transact" then failwith ("Unexpected config save: " ^ name);
+            Js.Promise.make (fun ~resolve ~reject:_ -> complete:=(fun () -> resolve Wire.Nil [@u])));
+            on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+          if file then File_view.save "calendar-save-fixture" "logseq/config.edn"
+            (if invalid then "[:invalid-config]" else "{:start-of-week 5}")
+          else ignore (Sdk_config.write_config "calendar-save-fixture" updated);
+          check "Graph preferences wait for successful file persistence" ((!state).graph_config=original);
+          if stale then state:={(!state) with repo=Some "new-calendar-graph"};
+          !complete ();
+          ignore (Js.Promise.then_ (fun () ->
+            check "Config saves refresh only their originating graph"
+              ((!state).graph_config=(if stale || invalid then original else updated));
+            if invalid then check "Invalid config edits report an error and retain the last valid preferences"
+              (List.exists (fun toast -> toast.Model.toast_kind="error"
+                && toast.toast_text=I18n.t1 "file.config/invalid-title" "logseq/config.edn") (!state).toasts);
+            next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
+    in next [false,false,false;true,false,false;false,true,false;true,true,false;true,false,true]
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in
@@ -2087,7 +2177,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))));
+        config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

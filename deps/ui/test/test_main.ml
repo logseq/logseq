@@ -218,7 +218,19 @@ let test_move () =
 
 let test_update () =
   let m0 = Model.initial in
-  let m1 = Update.update m0 (Action.Boot_graph_ready "logseq_db_x") in
+  check "A failed startup leaves loading and displays its error"
+    ((Update.update m0 (Action.Boot_failed "Graph configuration failed")).phase
+      = Model.Failed "Graph configuration failed");
+  let config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0] in
+  let m1 = Update.update m0 (Action.Boot_graph_ready ("logseq_db_x",config)) in
+  check "Graph-ready publishes the loaded graph configuration" (m1.graph_config=config);
+  let updated=Wire.Map [Wire.kw "start-of-week",Wire.Int 5] in
+  let m2=Update.update m1 (Action.Graph_config_loaded ("logseq_db_x",updated)) in
+  check "Saving config updates the current graph snapshot" (m2.graph_config=updated);
+  let stale=Update.update m2 (Action.Graph_config_loaded ("logseq_db_old",config)) in
+  check "Late config writes cannot replace the new graph's preferences" (stale.graph_config=updated);
+  check "Closing a graph releases its configuration"
+    ((Update.update stale Action.Graph_closed).graph_config=Wire.Map []);
   check "boot_ready -> Ready"
     (m1.phase = Model.Ready && m1.repo = Some "logseq_db_x");
   let m2 = Update.update m1 (Action.Navigate_to (Model.Page "foo")) in
@@ -2949,7 +2961,7 @@ let test_update2 () =
   let m3 = Update.update m2 Action.Rtc_state_clear in
   check "rtc cleared" (m3.Model.rtc = None);
   (* Boot_graph_ready clears stale rtc of the previous graph conn *)
-  let m4 = Update.update m2 (Action.Boot_graph_ready "logseq_db_y") in
+  let m4 = Update.update m2 (Action.Boot_graph_ready ("logseq_db_y",Wire.Map [])) in
   check "boot clears rtc"
     (m4.Model.rtc = None && m4.phase = Model.Ready
     && m4.repo = Some "logseq_db_y")
@@ -3197,6 +3209,19 @@ let test_graphs_ops () =
   model_stub := saved
 
 let test_boot () =
+  let previous = !model_stub in
+  Fun.protect ~finally:(fun () -> model_stub:=previous) (fun () ->
+    List.iteri (fun start_of_week expected ->
+      model_stub:={previous with Model.graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int start_of_week]};
+      eqi "Graph calendar settings use the reference Monday-based numbering"
+        expected (Sdk_config.calendar_week_starts_on ())) [1;2;3;4;5;6;0];
+    List.iter (fun invalid ->
+      model_stub:={previous with Model.graph_config=Wire.Map [Wire.kw "start-of-week",invalid]};
+      check "Invalid configured weekdays cannot silently become Sunday"
+        (try ignore (Sdk_config.calendar_week_starts_on ());false with Invalid_argument _ -> true))
+      [Wire.Int (-1);Wire.Int 7;Wire.Float 0.;Wire.String "0"];
+    model_stub:={previous with Model.graph_config=Wire.Map []};
+    eqi "An unset calendar preference starts on Sunday" 0 (Sdk_config.calendar_week_starts_on ()));
   eqs "unquote" "x" (Platform.storage_unquote "\"x\"");
   eqs "unquote bare" "x" (Platform.storage_unquote "x");
   eqs "unquote empty" "" (Platform.storage_unquote "\"\"");

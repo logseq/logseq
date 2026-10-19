@@ -57,12 +57,12 @@ let open_graph repo =
      repo changes *)
   Pdf_state.set_current None;
   boot_mark "create-or-open issued";
-  let* r =
+  let* _ =
     Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
       (Wire.Map [])
   in
   boot_mark "create-or-open replied";
-  Js.Promise.resolve r
+  Sdk_config.read_config repo
 
 (* cljs events.cljs <build-search-index!: on graph open the frontend asks
    the worker to build blocks_fts; seed entities (Library etc.) only reach

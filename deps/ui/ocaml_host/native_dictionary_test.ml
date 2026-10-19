@@ -94,7 +94,7 @@ let () =
          Wire.Keyword "block/title",Wire.String "Locale fixture"])) in
       let page={summary with Model.page_blocks=[block]} in
       Runtime.current_page:=Some page;
-      Runtime.send (Action.Boot_graph_ready "logseq_db_LocaleFixture");
+      Runtime.send (Action.Boot_graph_ready ("logseq_db_LocaleFixture",Wire.Map []));
       Runtime.send (Action.Navigate_to (Model.Page "locale-page"));
       Runtime.send (Action.Page_loaded page);
       Signal.set sidebar.Sidebar_state.left_width 288.;

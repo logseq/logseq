@@ -8,7 +8,7 @@ open Model
    the pre-update action, before the state transition *)
 let effects (action : Action.t) : unit =
   match action with
-  | Action.Boot_graph_ready repo ->
+  | Action.Boot_graph_ready (repo, _) ->
       Subs_state.current_repo := Some repo;
       Subs_state.current_graph_uuid := None;
       Subs_state.app_hooks.on_graph_opened repo;
@@ -88,13 +88,16 @@ let effects (action : Action.t) : unit =
 
 let update (model : t) (action : Action.t) : t =
   match action with
-  | Action.Boot_graph_ready repo ->
+  | Action.Boot_graph_ready (repo, config) ->
       (* rtc broadcast state belongs to the previous graph's conn; clear it
          so the header indicator only shows the new graph once its conn
          reports — a stale "on.idle" would let e2e switch-graph proceed
          while the navigation is still in flight *)
-      { model with phase = Ready; repo = Some repo; rtc = None }
-  | Graph_closed -> { model with repo = None; rtc = None }
+      { model with phase = Ready; repo = Some repo; graph_config=config; rtc = None }
+  | Boot_failed message -> { model with phase = Failed message }
+  | Graph_config_loaded (repo, config) ->
+      if model.repo=Some repo then {model with graph_config=config} else model
+  | Graph_closed -> { model with repo = None; graph_config=Wire.Map []; rtc = None }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page ->
       { model with

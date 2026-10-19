@@ -251,7 +251,7 @@ let main root =
          Ui_services.doc_set_data "color" color
      | _ -> ());
     Runtime.send (Action.Repos_loaded [repo]);
-    Runtime.send (Action.Boot_graph_ready repo);
+    Runtime.send (Action.Boot_graph_ready (repo,config));
     Router.resolve ();
     Js.Promise.resolve ());
   ignore (Boot.run ())

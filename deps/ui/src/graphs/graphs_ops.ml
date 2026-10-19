@@ -131,11 +131,11 @@ let navigate_journal repo =
   incr nav_req;
   let seq = !nav_req in
   Graphs_meta.touch repo;
-  let* _ = Graph.open_graph repo in
+  let* config = Graph.open_graph repo in
   let* () = Boot.ensure_today_journal repo in
   if !nav_req = seq then begin
     Worker_events.reset_rtc ();
-    Runtime.send (Action.Boot_graph_ready repo);
+    Runtime.send (Action.Boot_graph_ready (repo,config));
     Graph.build_search_index repo;
     Ui_services.nav_set_hash (Runtime.nav_hash "/");
     Router.resolve ()

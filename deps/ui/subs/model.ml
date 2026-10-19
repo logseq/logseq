@@ -211,6 +211,7 @@ type toast =
 type t =
   { phase : phase
   ; repo : string option
+  ; graph_config : Wire.t
   ; route : route
   ; route_page : page option
   ; page_missing : bool (* page/block route resolved to nothing — cljs
@@ -256,6 +257,7 @@ type t =
 let initial =
   { phase = Booting
   ; repo = None
+  ; graph_config = Wire.Map []
   ; route = Home
   ; route_page = None
   ; page_missing = false

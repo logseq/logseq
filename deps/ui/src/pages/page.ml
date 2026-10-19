@@ -1670,6 +1670,10 @@ let region (ms : Model.t Signal.signal) : t =
       r)
     (fun (m : Model.t) ->
       match m.phase, m.route with
+      | Model.Failed message, _ ->
+          column ~key:"boot-failed" ~style_class:"page"
+            ~data_attrs:[ ("role", "alert") ]
+            [ text ~key:"boot-failed-message" ~value:message [] ]
       | Model.Ready, (Model.Journals | Model.Home) ->
           (* cljs container.cljs: journals render inside a plain
              route-root div *)

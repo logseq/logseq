@@ -25,7 +25,10 @@ let save repo path content =
                ; (Wire.kw "file/created-at", Wire.Date_ms now_ms)
                ; (Wire.kw "file/last-modified-at", Wire.Date_ms now_ms) ] ]
        ; Wire.Nil
-       ; Wire.Nil ])
+       ; Wire.Nil ]
+     |> Js.Promise.then_ (fun _ ->
+            Sdk_config.note_file_saved repo path content;
+            Js.Promise.resolve ()))
 
 (* util/get-file-ext: text after the last dot *)
 let file_ext path =

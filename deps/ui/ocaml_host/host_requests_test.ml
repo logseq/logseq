@@ -5466,7 +5466,8 @@ let () =
           Host.host_op := previous_host_op)
         (fun () ->
           (Runtime.read_model :=
-             fun () -> { Model.initial with repo = Some "native-date-scroll" });
+             fun () -> { Model.initial with repo = Some "native-date-scroll";
+               graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0] });
           Runtime.worker :=
             Some
               {
@@ -5719,6 +5720,18 @@ let () =
                        (fun id -> has_class id "ls-view-date-picker")
                        (ids ()));
                   let popup=List.find (fun id -> has_class id "ls-view-date-picker") (ids ()) in
+                  let first_day=List.find_map (fun id ->
+                    match Lui_store.string_prop store id "accessibility-identifier" with
+                    | Some name when String.starts_with ~prefix:"calendar-day-" name -> Some name
+                    | _ -> None) (Lui_store.preorder ~root:popup store) in
+                  check "Native filter calendars inherit the graph's Monday start"
+                    (match first_day with
+                     | Some name -> (match String.split_on_char '-' name with
+                         | [_;_;year;month;day] ->
+                             (Dates.fields (Dates.make ~year:(int_of_string year)
+                               ~month:(int_of_string month) ~day:(int_of_string day) ())).wday=1
+                         | _ -> false)
+                     | None -> false);
                   check "A scrolled option passes its painted logical rectangle to the calendar"
                     (match Option.bind (Lui_store.string_prop store popup "anchor-rect")
                       Lui_protocol.anchor_rect_of_string with
@@ -7175,7 +7188,7 @@ let () =
           (fun () () -> ())
           (fun _ _ _ ->
             Lui_elements.column ~foreground:"var(--rx-gray-12)"
-              [ Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ])
+              [ Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ])
       in
       ignore (Lui_app.start app);
       ignore (Lui_app.flush app);
@@ -7338,7 +7351,7 @@ let () =
                        ("focus-sample-" ^ string_of_int index)
                      [])
                  variants
-              @ [ Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ]
+              @ [ Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore ]
               ))
       in
       ignore (Lui_app.start app);
@@ -7500,7 +7513,7 @@ let () =
           (fun _ value _ ->
             Lui_elements.column ~gap:12
               [
-                Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore;
+                Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore;
                 Properties_menu.text_form_view ~title_v:"Title"
                   ~desc_v:"Description" ~title_placeholder:"Title"
                   ~desc_placeholder:"Description" (fun _ _ -> ());
@@ -7873,7 +7886,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
       let picked = ref [] in
       let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-        Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date -> picked:=date::!picked)) in
+        Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date -> picked:=date::!picked)) in
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
         let ui = Lui_window.Ui.create () and rects = Lui_window.Rects.create () in
@@ -7933,7 +7946,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let backend = {backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-    Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore) in
+    Ui_components.date_picker ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:ignore) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     let ids = Lui_store.preorder store in
@@ -8014,7 +8027,8 @@ let () = Native_embed.with_entry_lock (fun () ->
           | "thread-api/apply-outliner-ops",_ -> writes:=args::!writes;W.Nil
           | _ -> failwith ("Unexpected calendar fixture request: "^name)));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
-      Runtime.read_model:=(fun () -> {Model.initial with repo=Some "calendar-fixture"});
+      Runtime.read_model:=(fun () -> {Model.initial with repo=Some "calendar-fixture";
+        graph_config=map ["start-of-week",W.Int 0]});
       Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
       Properties_state.view_overlays_state:=None;
       let store=Lui_store.create () in
@@ -8050,6 +8064,10 @@ let () = Native_embed.with_entry_lock (fun () ->
         let label=entry^"/"^ty in
         expect (label^": opening must not write a value") (!writes=[]);
         expect (label^": property editing must use the shared calendar") (Option.is_some (find "calendar-month"));
+        expect (label^": property calendars inherit the graph's Monday start")
+          (List.find_opt (fun id -> match Lui_store.string_prop store id "accessibility-identifier" with
+            | Some name -> String.starts_with ~prefix:"calendar-day-" name | None -> false) (ids ())
+           =find "calendar-day-2024-01-01");
         expect (label^": built-in temporal properties use the task repeat label")
           (not is_datetime || List.exists (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t "property.repeat/task")) (ids ()));
         expect (label^": existing value determines the initial focused day")
@@ -8117,7 +8135,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let backend={backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
-    Ui_components.calendar ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:true ~translate:I18n.t
+    Ui_components.calendar ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:true ~translate:I18n.t
       ~on_pick:(fun value -> values:=value::!values) ()) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);

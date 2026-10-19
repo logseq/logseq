@@ -124,7 +124,7 @@ let run () =
      header's local-graph-sync-btn checks m.repos membership *)
   if not (List.mem repo repos) then !Runtime.add_repo repo;
   boot_mark "opening";
-  let* _ = Graph.open_graph repo in
+  let* config = Graph.open_graph repo in
   boot_mark "opened";
   let* repo =
     Graphs_meta.touch repo;
@@ -132,7 +132,7 @@ let run () =
   in
   let* () = ensure_today_journal repo in
   boot_mark "journal";
-  Runtime.send (Action.Boot_graph_ready repo);
+  Runtime.send (Action.Boot_graph_ready (repo,config));
   Graph.build_search_index repo;
   (* initial route resolution (deep link or home) *)
   Router.resolve ();
@@ -146,5 +146,7 @@ let run () =
   Js.Promise.resolve ()))
   |> Js.Promise.catch (fun err ->
          Ui_services.log_error ("boot failed", err);
-         Toast.error (I18n.t "graph/load-error");
+         let message = I18n.t "graph/load-error" in
+         Runtime.send (Action.Boot_failed message);
+         Toast.error message;
          Js.Promise.resolve ())

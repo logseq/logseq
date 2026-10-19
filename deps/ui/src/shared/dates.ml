@@ -84,7 +84,12 @@ let parse s =
      && (s.[10]='T' || s.[10]=' ') then parse_local_datetime s
   else Ui_services.time_parse s
 
-let calendar_navigate ~year ~month ~day ~key ~shift =
+let weekday_offset ~week_starts_on weekday =
+  if week_starts_on<0 || week_starts_on>6 || weekday<0 || weekday>6 then
+    invalid_arg "Calendar weekdays must be between zero and six";
+  (weekday-week_starts_on+7) mod 7
+
+let calendar_navigate ~week_starts_on ~year ~month ~day ~key ~shift =
   let date = make ~year ~month ~day () in
   let month_step delta =
     let target = fields (make ~year ~month:(month + delta) ~day:1 ()) in
@@ -96,8 +101,8 @@ let calendar_navigate ~year ~month ~day ~key ~shift =
     | "ArrowRight" -> shift_day date 1
     | "ArrowUp" -> shift_day date (-7)
     | "ArrowDown" -> shift_day date 7
-    | "Home" -> shift_day date (-(fields date).wday)
-    | "End" -> shift_day date (6 - (fields date).wday)
+    | "Home" -> shift_day date (-(weekday_offset ~week_starts_on (fields date).wday))
+    | "End" -> shift_day date (6 - weekday_offset ~week_starts_on (fields date).wday)
     | "PageUp" -> month_step (if shift then -12 else -1)
     | "PageDown" -> month_step (if shift then 12 else 1)
     | _ -> invalid_arg "Unsupported calendar navigation key"

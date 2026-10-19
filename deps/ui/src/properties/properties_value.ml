@@ -817,7 +817,7 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
   in
   (row ~key:"property-date-content" ~width:556 ~gap:0 ~cross:`start
      ~style_class:"ls-property-date-picker"
-     [ Ui_components.calendar ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:is_datetime ~initial_focus_day:true
+     [ Ui_components.calendar ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:is_datetime ~initial_focus_day:true
          ~translate:I18n.t ~on_pick:pick
          ?on_clear:(if D.value_empty_p value then None else Some on_clear) ();
        repeat_column ctx ~ident ~is_datetime ~rep ]) context parent

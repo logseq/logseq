@@ -371,7 +371,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
       in
       let custom_content it =
         if timestamp && it.P.si_value = "custom-date" then
-          Some ("ls-view-date-picker", Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
+          Some ("ls-view-date-picker", Ui_components.date_picker ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
                commit (W.Date_ms (Int64.of_float date))))
         else None
       in
