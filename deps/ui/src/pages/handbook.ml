@@ -297,6 +297,7 @@ let panel ~loader ~close ~online context parent =
      Prop.max_height_viewport 0.86;Prop.overflow `hidden;
      Prop.shadow "0 10px 30px rgb(0 0 0 / 0.16)";Prop.font_size "16px";Prop.line_height "24px"]
     (popover ~role:`dialog ~accessibility_identifier:"handbook-panel" ~style_class:"cp__handbooks-popup"
+      ~on_dismiss:(fun _ -> close ())
       ~transition:Ui_components.popover_transition ~width:420
       ~max_width:(reactive (fun width -> int_of_float (width-.64.)) viewport)
       ~height:686 ~padding:0 ~gap:0 ~corner_radius:8 ~border_width:1 ~border_color:"var(--ls-border-color)"

@@ -1347,24 +1347,33 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     await pause(30); insert('X');
     assert(text() === 'one X', {value: text()});
   });
-  await test('Regression: child guides paint and align with each parent bullet', async () => {
-    const {blocks} = await fixture(['parent']);
-    const child = await logseq.api.insert_block(blocks[0].uuid, 'child', {sibling: false});
-    await logseq.api.insert_block(child.uuid, 'grandchild', {sibling: false});
-    await pause(150); key('Escape'); await pause(100);
-    for (const uuid of [blocks[0].uuid, child.uuid]) {
-      const parent = document.getElementById('ls-block-' + uuid);
-      const container = parent.querySelector(':scope > .block-children-container');
-      const guide = container?.querySelector(':scope > .block-children-indent-guide');
-      assert(!!guide, {uuid, phase: 'missing guide'});
-      const g = guide.getBoundingClientRect();
-      const d = document.getElementById('dot-' + uuid).getBoundingClientRect();
-      assert(g.width === 1 && g.height >= 24 && Math.abs(g.x + g.width / 2 - d.x - d.width / 2) <= 1,
-        {uuid, guide: g.toJSON(), bullet: d.toJSON()});
-      assert(getComputedStyle(guide).backgroundColor !== 'rgba(0, 0, 0, 0)', {uuid, phase: 'invisible guide'});
-    }
-    return {levels: 2};
-  });
+  for (const [heading, ordered] of [
+    [0, false], [1, false], [2, false], [3, false],
+    [4, false], [5, false], [6, false], [0, true],
+  ]) {
+    await test('Regression: child guides align with parent bullet centers, heading ' + heading + ', ordered ' + ordered, async () => {
+      const {blocks} = await fixture(['#'.repeat(heading) + (heading ? ' ' : '') + 'parent']);
+      if (ordered) {
+        document.dispatchEvent(new CustomEvent('ls:editor-command', {detail: {command: 'number-list'}}));
+        await wait(() => document.getElementById('dot-' + blocks[0].uuid)?.classList.contains('as-order-list'));
+      }
+      const child = await logseq.api.insert_block(blocks[0].uuid, 'child', {sibling: false});
+      await logseq.api.insert_block(child.uuid, 'grandchild', {sibling: false});
+      await pause(150); key('Escape'); await pause(100);
+      for (const uuid of [blocks[0].uuid, child.uuid]) {
+        const parent = document.getElementById('ls-block-' + uuid);
+        const container = parent.querySelector(':scope > .block-children-container');
+        const guide = container?.querySelector(':scope > .block-children-indent-guide');
+        assert(!!guide, {uuid, phase: 'missing guide'});
+        const g = guide.getBoundingClientRect();
+        const d = document.getElementById('dot-' + uuid).getBoundingClientRect();
+        assert(g.width === 1 && g.height >= 24 && Math.abs(g.x + g.width / 2 - d.x - d.width / 2) <= .02,
+          {uuid, guide: g.toJSON(), bullet: d.toJSON()});
+        assert(getComputedStyle(guide).backgroundColor !== 'rgba(0, 0, 0, 0)', {uuid, phase: 'invisible guide'});
+      }
+      return {levels: 2, heading, ordered};
+    });
+  }
   for (const [title, word] of [
     ['hello world', 'world'],
     ['hello **bold** finalword', 'finalword'],

@@ -2103,7 +2103,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     Editor_state.st := old_state; Editor_state.field_sigs_opt := old_fields) (fun () ->
     let errors = ref [] in
     let expect message condition = if not condition then errors := message :: !errors in
-    List.iter (fun static -> List.iter (fun heading ->
+    List.iter (fun static -> List.iter (fun (heading, ordered) ->
       Editor_state.st := None; Editor_state.field_sigs_opt := None;
       let store = Lui_store.create () in
       let backend = {backend_profile=profile MacOS GenericHost;
@@ -2114,18 +2114,29 @@ let () = Native_embed.with_entry_lock (fun () ->
       let child = Model.empty_block ~uuid:"guide-child" ~title:"Child" ~is_page:false in
       let block = {(Model.empty_block ~uuid:"guide-parent" ~title:"Parent" ~is_page:false)
         with Model.block_children=[child;{child with block_uuid=Some "guide-second"}];
-             block_heading=heading} in
+             block_heading=heading;
+             block_order_list=(if ordered then Some "number" else None);
+             block_order_index=(if ordered then Some 1 else None)} in
+      let block_state = ref None in
       let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
         (fun context _ _ ->
           Editor_state.ensure context;
           if static then Tree.block_row_static block
-          else Tree.row_el ~depth:0 ~editable:true ~virtualize:false "main" ~library:false block) in
+          else
+            let state = Signal.state context.Lui_ui.ui_scheduler
+              {block with block_heading=None;block_order_list=None;block_order_index=None} in
+            block_state := Some state;
+            Tree.block_row_sig ~virtualize:false (Signal.value state)) in
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app); ignore (Lui_app.flush app);
         let find cls = List.find_opt (fun id ->
           match Lui_store.string_prop store id "style-class" with
           | Some value -> List.mem cls (String.split_on_char ' ' value)
           | None -> false) (Lui_store.preorder store) in
+        let original_guide = find "block-children-indent-guide" in
+        Option.iter (fun state -> Signal.set state block; ignore (Lui_app.flush app)) !block_state;
+        expect "Changing the parent chrome must preserve the mounted child guide"
+          (find "block-children-indent-guide" = original_guide);
         match find "block-children-indent-guide" with
         | None -> expect "Every editable and reference child list must paint an indent guide" false
         | Some guide ->
@@ -2136,17 +2147,17 @@ let () = Native_embed.with_entry_lock (fun () ->
             Lui_layout.sync ~scale ~width:(width *. scale) ~height:(600. *. scale) layout store;
             let g = Option.get (Lui_layout.rect layout guide)
             and d = Option.get (Lui_layout.rect layout dot) in
-            let label = Printf.sprintf "Guide static=%b heading=%d scale=%.0f width=%.0f"
-              static (Option.value heading ~default:0) scale width in
+            let label = Printf.sprintf "Guide static=%b heading=%d ordered=%b scale=%.0f width=%.0f"
+              static (Option.value heading ~default:0) ordered scale width in
             Printf.printf "%s guide=(%.1f,%.1f %.1fx%.1f) bullet=(%.1f,%.1f %.1fx%.1f)\n%!"
               label g.x g.y g.w g.h d.x d.y d.w d.h;
             expect (label ^ " has no visible vertical extent") (g.w > 0. && g.h >= 32. *. scale);
             expect (label ^ " is not aligned with the parent bullet")
-              (abs_float ((g.x +. g.w /. 2.) -. (d.x +. d.w /. 2.)) <= scale);
+              (abs_float ((g.x +. g.w /. 2.) -. (d.x +. d.w /. 2.)) <= 0.5);
             expect (label ^ " has no theme-aware paint")
               (Lui_store.string_prop store guide "background"=
                 Some "var(--lx-gray-04-alpha, var(--ls-guideline-color))")) [320.;800.]) [1.;2.])
-      ) [None;Some 1;Some 6]) [false;true];
+      ) ([None,false;None,true] @ List.init 6 (fun i -> Some (i+1),false))) [false;true];
     List.iter prerr_endline (List.rev !errors);
     check "Shared child guide geometry" (!errors=[])));
   print_endline "native shared child guide geometry: OK"
@@ -9072,7 +9083,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let backend={backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app=Lui_app.create_with_extensions backend registry Model.initial (fun model () -> model)
-    (fun _ _ _ -> Lui_elements.column [Handbook.host ~loader ~controls:(fun open_ _ ->
+    (fun _ _ _ -> Lui_elements.stack [Handbook.host ~loader ~controls:(fun open_ _ ->
       Lui_elements.button ~accessibility_identifier:"handbook-test-open" ~on_press:(fun _ -> open_ ()) []) ()]) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);
     Runtime.app_flush:=previous_flush;Host.set_window_size previous_width previous_height) (fun () ->
@@ -9104,6 +9115,13 @@ let () = Native_embed.with_entry_lock (fun () ->
         check "Native Handbook obeys its viewport height cap"
           (abs_float (rect.h-.Float.round (619.2*.scale))<0.1);
         let body=Option.get (Lui_layout.rect layout (find "handbook-scroll")) in
+        let header=Option.get (Lui_layout.rect layout (find "handbook-header")) in
+        check "Native Handbook header shares the positioned panel origin"
+          (header.x>=rect.x && header.x+.header.w<=rect.x+.rect.w &&
+           header.y>=rect.y && header.y+.header.h<=rect.y+.rect.h);
+        check "Native Handbook content remains inside its actual painted panel"
+          (body.x>=rect.x && body.x+.body.w<=rect.x+.rect.w &&
+           body.y>=header.y+.header.h-.0.6 && body.y+.body.h<=rect.y+.rect.h);
         Printf.printf "native Handbook scroll rect=%.2f,%.2f %.2fx%.2f\n%!"
           (body.x/.scale) (body.y/.scale) (body.w/.scale) (body.h/.scale);
         check "Native Handbook has a bounded body below its fixed header"
@@ -9129,6 +9147,14 @@ let () = Native_embed.with_entry_lock (fun () ->
     ignore (Lui_app.dispatch_event app (Press next));ignore (Lui_app.flush app);
     check "Native Handbook chapter navigation replaces the scroll owner"
       (find "handbook-scroll"<>previous_scroll);
+    let dismissed_panel=find "handbook-panel" in
+    ignore (Lui_app.dispatch_event app (Dismiss dismissed_panel));ignore (Lui_app.flush app);
+    check "Dismissing Handbook must dispose the application-owned panel"
+      (Lui_store.find_identifier store "handbook-panel"=None);
+    press "handbook-test-open";Host.drain ();ignore (Lui_app.flush app);
+    check "Handbook reopens as a new mounted session after dismissal"
+      (find "handbook-panel"<>dismissed_panel &&
+       Option.is_some (Lui_store.find_identifier store "handbook-scroll"));
     press "handbook-close";
     check "Native Handbook closes its mounted surface" (Lui_store.find_identifier store "handbook-panel"=None);
     print_endline "native Handbook mount, responsive geometry and rich content: OK"))

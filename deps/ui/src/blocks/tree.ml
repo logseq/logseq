@@ -149,13 +149,18 @@ let bullet_size (b : Model.block) =
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 16
 
-let children_container uuid (b : Model.block) content =
-  let indent = 22 + bullet_size b / 2 - 1
-    - (if b.block_order_list = Some "number" then 3 else 0) in
-  Ui_components.with_props
+let children_container uuid (bs : Model.block Signal.signal) content =
+  let indent b = 22 + bullet_size b / 2 - 1
+    - (if b.Model.block_order_list = Some "number" then 3 else 0) in
+  (* Center the one-pixel guide on the bullet, including odd icon sizes. *)
+  let guide_left b =
+    let size = bullet_size b in
+    float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
+  Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent bs)
+  (Ui_components.with_props
     [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2 ]
     (row ~key:("children-" ^ uuid) ~style_class:"block-children-container"
-      ~margin_left:indent ~margin_bottom:(-2)
+      ~margin_bottom:(-2)
       [ Ui_components.with_props
           [ Ui_components.Prop.position `absolute
           ; Ui_components.Prop.inset_left (-1.)
@@ -168,13 +173,13 @@ let children_container uuid (b : Model.block) content =
             ~data_attrs:["data-blockid", uuid] [])
       ; Ui_components.with_props
           [ Ui_components.Prop.position `absolute
-          ; Ui_components.Prop.inset_left 0.
           ; Ui_components.Prop.inset_top 0.
           ; Ui_components.Prop.inset_bottom 0. ]
-          (box ~key:("guide-" ^ uuid) ~style_class:"block-children-indent-guide"
-            ~width:1
-            ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])
-      ; content ])
+          (Ui_parts.float_prop Lui_protocol.InsetLeft ~value:(reactive guide_left bs)
+            (box ~key:("guide-" ^ uuid) ~style_class:"block-children-indent-guide"
+              ~width:1
+              ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" []))
+      ; content ]))
 
 let heading_attrs (b : Model.block) =
   match block_heading_lvl b with
@@ -363,10 +368,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ~data_attrs:
           [ ( "style"
             , "display:inline-flex;align-items:center;line-height:1;\
-               vertical-align:middle"
-              ^
-              if order_list then ";position:relative;left:-3px"
-              else "" )
+               vertical-align:middle" )
           ]
         [ Ui_parts.class_signal cs
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
@@ -1037,7 +1039,7 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
-  children_container uuid b
+  children_container uuid bs
     (if virtualize then
        Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
          ~min_height:(estimate_children_height b)
@@ -1140,9 +1142,12 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   ctx parent
 
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
-  children_container uuid b
+ fun ctx parent ->
+  let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
+  children_container uuid bs
     (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
       (List.map (block_row_static ~depth:(depth + 1) ~library) b.block_children))
+    ctx parent
 
 
 (* -- {{embed [[page]]}}: live page block tree inside .embed-block --
