@@ -8,6 +8,7 @@ import {measureModalTheme, assertModalTheme, measureKeymapFilterPaint, assertKey
 import {measureSurfaceMotion, assertSurfaceMotion} from './surface_motion_checks.mjs';
 import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
+import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography} from './transfer_dialog_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -27,6 +28,24 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('export dialog keeps theme typography and card-relative close placement', () => {
+  open();
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  button('light light');
+  button('Logseq classic color');
+  browser('press', 'Escape');
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Export graph', '--exact');
+  browser('wait', '--fn', "getComputedStyle(document.querySelector('.ls-dialog-export-graph')).transform === 'matrix(1, 0, 0, 1, 0, 0)'");
+  const measurement = evaluate(`(${measureTransferDialog.toString()})(document.querySelector('.ls-dialog-export-graph'))`);
+  assertDialogCloseGeometry(measurement);
+  assertExportTypography(measurement, {
+    title: 'rgb(23, 23, 23)', link: 'rgb(27, 104, 152)', description: 'rgb(67, 63, 56)',
+  });
+  browser('press', 'Escape');
+});
 
 test('graph switch keeps the shared trailing indicator geometry', () => {
   open();

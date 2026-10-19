@@ -45,26 +45,15 @@ let index_ci hay needle =
   go 0
 
 (* "{1}" / "{2}" placeholder substitution *)
-let replace_all s pat rep =
-  let plen = String.length pat in
-  let b = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i <= String.length s - plen do
-    if String.sub s !i plen = pat then (
-      Buffer.add_string b rep;
-      i := !i + plen)
-    else (
-      Buffer.add_char b (String.get s !i);
-      incr i)
-  done;
-  Buffer.add_string b (String.sub s !i (String.length s - !i));
-  Buffer.contents b
+let replace_all text ~pat ~rep =
+  if pat="" then invalid_arg "Translation replacement pattern must not be empty";
+  Str_util.replace_all text ~pat ~rep
 
 (* positional substitution on a literal template *)
 let sub s args =
   List.fold_left
     (fun (acc, i) a ->
-      (replace_all acc ("{" ^ string_of_int i ^ "}") a, i + 1))
+      (replace_all acc ~pat:("{" ^ string_of_int i ^ "}") ~rep:a, i + 1))
     (s, 1) args
   |> fst
 
@@ -165,7 +154,7 @@ let calendar_day_label ~today ~year ~month ~day =
     [t weekday_keys.(weekday);t Dates.month_keys.(month-1);number;string_of_int year] in
   if today then tf "ui.calendar/today-day-label" [label] else label
 
-let t1 key arg = replace_all (t key) "{1}" arg
+let t1 key arg = replace_all (t key) ~pat:"{1}" ~rep:arg
 
 let asset_already_exists title uuid = tf "asset/already-exists" [ title; uuid ]
 let page_not_found () = t "page/not-found" ^ ": "

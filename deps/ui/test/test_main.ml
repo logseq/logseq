@@ -641,9 +641,17 @@ let test_ui_strings () =
   eqs "tf extra arg unused" "Create page called 'X'"
     (I18n.tf "cmdk.info/create-page" [ "X"; "Y" ]);
   eqs "replace_all" "a-b-c"
-    (I18n.replace_all "a+b+c" "+" "-");
+    (I18n.replace_all "a+b+c" ~pat:"+" ~rep:"-");
   eqs "replace_all miss" "abc"
-    (I18n.replace_all "abc" "+" "-");
+    (I18n.replace_all "abc" ~pat:"+" ~rep:"-");
+  check "Translation replacement rejects empty patterns before allocating"
+    (try ignore (I18n.replace_all "text" ~pat:"" ~rep:"x");false
+     with Invalid_argument _ -> true);
+  eqs "Translation replacement supports removing rich-text delimiters"
+    {js|中文 café 😀|js}
+    ({js|{{中文 café 😀}}|js}
+     |> I18n.replace_all ~pat:"{{" ~rep:""
+     |> I18n.replace_all ~pat:"}}" ~rep:"");
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
   eqs "decorate mod" (Platform.decode_utf8_bytes "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");

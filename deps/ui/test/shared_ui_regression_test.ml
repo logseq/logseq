@@ -2185,7 +2185,7 @@ let run_views ~registry ~profile ~finish =
       let title=List.find (fun n -> M.string_prop n "text"=Some (I18n.t "graph/all-graphs")) (nodes s)
       and section=List.find (fun n -> M.string_prop n "text"=Some (I18n.t "graph/local-graphs")) (nodes s) in
       check "Graph page titles use the reference typography"
-        (M.string_prop title "font-size"=Some "2.25rem"
+        (M.string_prop title "font-size"=Some "var(--ls-page-title-size, 32px)"
          && M.string_prop title "line-height"=Some "1.5"
          && M.string_prop title "foreground"=Some "var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
          && Hashtbl.find_opt title.M.props "font-weight"=Some (P.IntValue 500)

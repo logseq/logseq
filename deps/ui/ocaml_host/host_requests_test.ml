@@ -8595,3 +8595,87 @@ let () = Native_embed.with_entry_lock (fun () ->
     List.iter prerr_endline (List.rev !failures);
     check "Native graph page typography, colors and spacing" (!failures=[]);
     print_endline "native graph page theme typography and spacing: OK"))
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_model = !Runtime.read_model and previous_worker = !Runtime.worker
+  and previous_folder = !Exporter.folder_sig in
+  let model={Model.initial with repo=Some "logseq_db_TransferFixture";phase=Model.Ready} in
+  Runtime.read_model:=(fun () -> model);Exporter.folder_sig:=None;
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+    if name<>"thread-api/get-key-value" then failwith ("Unexpected transfer fixture request: "^name);
+    Js.Promise.resolve Wire.Nil);on_message=(fun _ _ -> ());
+    dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let store=Lui_store.create () in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create backend model (fun current () -> current) (fun _ ms _ ->
+    Ui_components.overlay_typography
+      (Lui_elements.column [Dialogs_view.dialog_view "export-graph" ms])) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;
+    Exporter.folder_sig:=previous_folder;Theme_vars.set_dark false;
+    Theme_vars.set_accent "logseq";Theme_vars.set_var "--ls-page-title-size" "36px") (fun () ->
+    check "Native translation replacement rejects an empty pattern"
+      (try ignore (I18n.replace_all "text" ~pat:"" ~rep:"x");false
+       with Invalid_argument _ -> true);
+    let allocated=Gc.allocated_bytes () and started=Unix.gettimeofday () in
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    Printf.printf "native export retained mount: %.3f ms, %.0f bytes\n%!"
+      ((Unix.gettimeofday ()-.started)*.1000.) (Gc.allocated_bytes ()-.allocated);
+    let ids=Lui_store.preorder store in
+    let text label=List.find (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t label)) ids in
+    let title=text "export/title" and action=text "export/sqlite-db"
+    and description=text "export.backup/sqlite-desc" in
+    let dialog=List.find (fun id -> Lui_store.kind store id="dialog") ids in
+    let close=List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=Some (I18n.t "ui/close")) ids in
+    let failures=ref [] in
+    let expect message condition=if not condition then failures:=message::!failures in
+    let layout=Lui_layout.create () in
+    List.iter (fun (mode,name) ->
+      let snapshot=Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+        ["mode",`String name;"vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+      Theme_vars.set_dark (mode=Ui_theme.Dark);
+      List.iter (fun accent ->
+        Theme_vars.set_accent accent;
+        List.iter (fun title_size ->
+          Theme_vars.set_var "--ls-page-title-size" (Printf.sprintf "%gpx" title_size);
+          List.iter (fun scale ->
+            List.iter (fun (width,height) ->
+              let context=Printf.sprintf "%s/%s/%g/%g/%gx%g" name accent title_size scale width height in
+              let scene=Lui_scene.create
+                ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+                ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+              let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
+                ~store:(fun () -> store) in
+              Lui_layout.sync ~scale ~width:(width*.scale) ~height:(height*.scale)
+                ~measure:(fun id value width _ -> Some (Text_engine.measure_text
+                  ~width:(Host_interaction.measure_width width) engine id value)) layout store;
+              let inks=Hashtbl.create 8 in
+              Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+                layout=Lui_layout.layout_hook layout;
+                text_ops=(fun id _ color _ -> Hashtbl.replace inks id color;[])}
+                store scene ~width:(int_of_float (width*.scale)) ~height:(int_of_float (height*.scale))
+                ~scale ~clear:(Lui_scene.color 0 0 0 0);
+              List.iter (fun (id,size,pitch) ->
+                expect ("Transfer text typography differs from the reference: "^context)
+                  (abs_float (Lui_text.size (Text_engine.font_of store id)-.size)<0.01
+                   && Text_engine.line_height_of store id=Some pitch))
+                [title,title_size,title_size*.1.5;action,16.,24.;description,14.,20.];
+              List.iter (fun (id,token) ->
+                expect ("Transfer text loses its theme color: "^context)
+                  (Hashtbl.find_opt inks id=Theme_vars.color_of token))
+                [title,"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))";
+                 action,"var(--lx-accent-11)";description,"var(--ls-primary-text-color)"];
+              let card=Option.get (Lui_layout.rect layout dialog)
+              and control=Option.get (Lui_layout.rect layout close) in
+              expect ("Dialog close must use its card top edge: "^context)
+                (abs_float (control.y-.card.y-.17.*.scale)<0.6*.scale);
+              expect ("Dialog close must use its card right edge: "^context)
+                (abs_float (card.x+.card.w-.control.x-.control.w-.17.*.scale)<0.6*.scale))
+              [1280.,720.;480.,400.]) [1.;2.]) [36.;42.]) ["logseq";"blue"])
+      [Ui_theme.Light,"light";Ui_theme.Dark,"dark"];
+    List.iter prerr_endline (List.rev !failures);
+    check "Native export dialogs preserve shared typography, theme and close geometry" (!failures=[]);
+    print_endline "native export dialog typography, theme and close geometry: OK"))

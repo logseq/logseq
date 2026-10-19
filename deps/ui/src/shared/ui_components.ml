@@ -87,6 +87,13 @@ let textarea =
 let overlay_typography element =
   with_props [ Prop.font_size "1rem"; Prop.line_height "1.5" ] element
 
+let page_heading ?(margin_bottom=0) ~key ~value () =
+  heading ~key ~level:1 ~as_:`H1 ~style_class:"title"
+    ~font_size:"var(--ls-page-title-size, 32px)" ~line_height:"1.5"
+    ~font_weight:500 ~margin:0 ~margin_bottom
+    ~foreground:"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
+    ~value []
+
 (* Secondary navigation links keep body text ink while fading on hover. *)
 let faded_link ?key ~url ~text () =
   with_props

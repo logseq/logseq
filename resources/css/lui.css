@@ -788,7 +788,7 @@ body {
     @apply grid;
   }
 
-  .lui-dialog-body > * {
+  .lui-dialog-body > :not([data-lui-position="absolute"], [data-lui-position="fixed"]) {
     grid-area: 1 / 1;
   }
 

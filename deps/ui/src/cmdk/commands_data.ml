@@ -70,19 +70,19 @@ let current_table () =
 let decorate_binding s =
   let mac = Ui_services.env_is_mac () in
   s
-  |> (fun x -> I18n.replace_all x "mod" (if mac then {js|⌘|js} else "ctrl"))
-  |> (fun x -> I18n.replace_all x "meta" (if mac then {js|⌘|js} else {js|⊞ win|js}))
-  |> (fun x -> I18n.replace_all x "alt" (if mac then {js|⌥|js} else "alt"))
-  |> (fun x -> I18n.replace_all x "shift+/" "?")
-  |> (fun x -> I18n.replace_all x "left" {js|←|js})
-  |> (fun x -> I18n.replace_all x "right" {js|→|js})
-  |> (fun x -> I18n.replace_all x "up" {js|↑|js})
-  |> (fun x -> I18n.replace_all x "down" {js|↓|js})
-  |> (fun x -> I18n.replace_all x "shift" {js|⇧|js})
-  |> (fun x -> I18n.replace_all x "open-square-bracket" "[")
-  |> (fun x -> I18n.replace_all x "close-square-bracket" "]")
-  |> (fun x -> I18n.replace_all x "equals" "=")
-  |> (fun x -> I18n.replace_all x "semicolon" ";")
+  |> I18n.replace_all ~pat:"mod" ~rep:(if mac then {js|⌘|js} else "ctrl")
+  |> I18n.replace_all ~pat:"meta" ~rep:(if mac then {js|⌘|js} else {js|⊞ win|js})
+  |> I18n.replace_all ~pat:"alt" ~rep:(if mac then {js|⌥|js} else "alt")
+  |> I18n.replace_all ~pat:"shift+/" ~rep:"?"
+  |> I18n.replace_all ~pat:"left" ~rep:{js|←|js}
+  |> I18n.replace_all ~pat:"right" ~rep:{js|→|js}
+  |> I18n.replace_all ~pat:"up" ~rep:{js|↑|js}
+  |> I18n.replace_all ~pat:"down" ~rep:{js|↓|js}
+  |> I18n.replace_all ~pat:"shift" ~rep:{js|⇧|js}
+  |> I18n.replace_all ~pat:"open-square-bracket" ~rep:"["
+  |> I18n.replace_all ~pat:"close-square-bracket" ~rep:"]"
+  |> I18n.replace_all ~pat:"equals" ~rep:"="
+  |> I18n.replace_all ~pat:"semicolon" ~rep:";"
   |> String.lowercase_ascii
 
 (* cljs binding-for-display: join multiple bindings with " | ";

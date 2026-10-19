@@ -151,15 +151,17 @@ let export_html () =
    not a navigation link, so it maps to pressable text, not `link` *)
 let link ~key label_ desc on_click =
   column ~key
-    (text ~key:(key ^ "-a") ~style_class:"ls-strong" ~font_weight:500 ~value:label_
+    (text ~key:(key ^ "-a") ~font_size:"1rem" ~line_height:"1.5rem"
+       ~foreground:"var(--lx-accent-11)" ~font_weight:500 ~value:label_
        ~on_press:(fun _ -> ignore (on_click ()))
        []
      :: (if desc = "" then []
          else
-           [ paragraph ~key:(key ^ "-d") ~style_class:"ls-desc"
-               ~font_size:"0.875rem"
-               ~data_attrs:[ ("style", "opacity:0.7") ]
-               ~value:desc [] ]))
+           [ Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+               (paragraph ~key:(key ^ "-d") ~font_size:"0.875rem"
+               ~line_height:"1.25rem" ~margin_top:8 ~margin_bottom:0
+               ~foreground:"var(--ls-primary-text-color)"
+               ~value:desc []) ]))
 
 (* cljs components/export.cljs auto-backup — File System Access folder
    picker, folder name persisted under :logseq.kv/graph-backup-folder,
@@ -299,9 +301,8 @@ let load_folder ctx =
 
 let auto_backup ctx =
   column ~key:"ab" ~gap:16
-    [ text ~key:"ab-h" ~font_weight:500
-        ~data_attrs:[ ("style", "opacity:0.5") ]
-        ~value:(T.t "export.backup/schedule") []
+    [ Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+        (text ~key:"ab-h" ~font_weight:500 ~value:(T.t "export.backup/schedule") [])
     ; (if not (Ui_services.files_dir_picker_supported ()) then
          box ~key:"ab-na"
            [ text ~key:"ab-na-s"
@@ -309,8 +310,8 @@ let auto_backup ctx =
                   native renders its inner caption plainly *)
                ~value:
                  (T.t "export.backup/unsupported-desc"
-                  |> I18n.replace_all "{{" ""
-                  |> I18n.replace_all "}}" "")
+                  |> I18n.replace_all ~pat:"{{" ~rep:""
+                  |> I18n.replace_all ~pat:"}}" ~rep:"")
                [] ]
        else
          let folder_sig = Signal.value ((folder_st ctx)) in
@@ -322,9 +323,8 @@ let auto_backup ctx =
                (column ~key:"ab-in" ~gap:16
                   [ row ~key:"ab-row" ~gap:4 ~cross:`center
                       ~data_attrs:[ ("style", "font-size:0.875rem") ]
-                      [ text ~key:"ab-l"
-                          ~data_attrs:[ ("style", "opacity:0.5") ]
-                          ~value:(T.t "export.backup/folder") []
+                      [ Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+                          (text ~key:"ab-l" ~value:(T.t "export.backup/folder") [])
                       ; text ~key:"ab-n"
                           ~value:(reactive (function
                             | Some name -> name | None -> "")
@@ -335,9 +335,9 @@ let auto_backup ctx =
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)
                           [] ]
-                  ; text ~key:"ab-note" ~font_size:"0.875rem"
-                      ~data_attrs:[ ("style", "opacity:0.5") ]
-                      ~value:(T.t "export.backup/hourly-note") []
+                  ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+                      (text ~key:"ab-note" ~font_size:"0.875rem" ~line_height:"1.25rem"
+                        ~value:(T.t "export.backup/hourly-note") [])
                   ; Ui_components.button ~key:"ab-go"
                       ~variant:`primary
                       ~text:(T.t "export.backup/backup-now")
@@ -356,10 +356,9 @@ let auto_backup ctx =
                       ~variant:`primary
                       ~text:(T.t "export.backup/set-folder-first")
                       ~on_press:(fun _ -> choose_folder ctx) []
-                  ; text ~key:"ab-note"
-                      ~font_size:"0.875rem"
-                      ~data_attrs:[ ("style", "opacity:0.5") ]
-                      ~value:(T.t "export.backup/hourly-note") [] ])
+                   ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+                       (text ~key:"ab-note" ~font_size:"0.875rem" ~line_height:"1.25rem"
+                         ~value:(T.t "export.backup/hourly-note") []) ])
            ])
     ]
 
@@ -367,10 +366,8 @@ let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   load_folder ctx;
   column ~key:"export" ~style_class:"export"
-    [ (* .export h1.title.ls-mb keys on the h1 tag — ~as_ retags the
-         heading element *)
-      heading ~key:"ex-h" ~level:1 ~as_:`H1 ~style_class:"title ls-mb"
-        ~margin_bottom:32 ~value:(T.t "export/title") []
+    [ Ui_components.page_heading ~key:"ex-h" ~margin_bottom:32
+        ~value:(T.t "export/title") ()
     ; column ~key:"ex-list" ~style_class:"ls-ex-list" ~gap:16
         ~margin_left:4
         ([ link ~key:"ex-db" (T.t "export/sqlite-db") (T.t "export.backup/sqlite-desc")

@@ -246,10 +246,7 @@ let view (ms : Model.t Signal.signal) : t =
     Logseq_el.own ctx (Signal.map (fun r -> r <> []) remote_sig)
   in
   column ~key:"graphs-root"
-    [ heading ~key:"title" ~level:1 ~as_:`H1 ~style_class:"title"
-        ~font_size:"2.25rem" ~line_height:"1.5" ~font_weight:500 ~margin:0
-        ~foreground:"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
-        ~value:(T.t "graph/all-graphs") []
+    [ Ui_components.page_heading ~key:"title" ~value:(T.t "graph/all-graphs") ()
     ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
         [ row ~key:"create-row" ~padding_vertical:32
             [ Ui_components.button ~key:"create" ~variant:`primary ~size:`sm
