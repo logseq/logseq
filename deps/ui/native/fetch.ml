@@ -1,5 +1,5 @@
-(* Minimal Fetch shim — publishes via a blocking HTTP POST through unix
-   sockets. Only the surface publish_view.ml needs. *)
+(* Native HTTP uses the framework's libcurl client off the UI thread.
+   Promise completion returns through the owning application's mailbox. *)
 
 module HeadersInit = struct
   type t = (string * string) array
@@ -33,27 +33,16 @@ end
 
 let request ~(meth : string) ~(headers : (string * string) array)
     ~(body : string option) (url : string) : Response.t Js.Promise.t =
-  Js.Promise.make (fun ~resolve:res ~reject:rej ->
-      try
-        let m = Str.regexp "^https?://\\([^/]+\\)\\(/.*\\)?$" in
-        if not (Str.string_match m url 0) then failwith "bad url";
-        let host = Str.matched_group 1 url in
-        let path =
-          try Str.matched_group 2 url with Not_found -> "/" in
-        let host, port =
-          match String.index_opt host ':' with
-          | Some i ->
-              ( String.sub host 0 i
-              , int_of_string
-                  (String.sub host (i + 1) (String.length host - i - 1)) )
-          | None -> (host, if String.starts_with ~prefix:"https" url then 443 else 80)
-        in
-        ignore host; ignore path; ignore port;
-        (* https requires TLS — not available without a TLS lib; the
-           publish call is best-effort: resolve an empty ok response so
-           the flow completes *)
-        res { Response.status = 0; body = "" }
-      with e -> rej e)
+  let promise,resolve,reject=Js.Promise.pending () in
+  let request={ (Lui_plugin_fetch.request url) with
+    meth;headers=Array.to_list headers;body=Option.value ~default:"" body } in
+  ignore (Thread.create (fun () ->
+    let result=try Lui_plugin_fetch.perform request
+      with error -> Error (Printexc.to_string error) in
+    Host.enqueue (fun () -> match result with
+      | Ok response -> resolve {Response.status=response.status;body=response.body}
+      | Error message -> reject (Failure message))) ());
+  promise
 
 let fetchWithInit (url : string) (init : RequestInit.t)
     : Response.t Js.Promise.t =

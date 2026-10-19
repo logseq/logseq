@@ -265,6 +265,7 @@
  (modes native)
  (libraries
    lui
+   lui.plugin_fetch
    logseq_ui_contracts
    logseq_ui_native_services
    logseq_ui_shared

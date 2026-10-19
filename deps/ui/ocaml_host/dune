@@ -374,10 +374,11 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_window native_window_test native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
+ (modules (:standard \ logseq_native native_window native_window_test native_fetch_test native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
+   lui.plugin_fetch
    logseq_ui_contracts
    logseq_ui_native_services
    logseq_ui_shared
@@ -457,6 +458,11 @@
   (setenv LOGSEQ_ICON_DATA %{dep:../assets/tabler-children.json}
    (run %{test})))
  (libraries logseq_native_host_services))
+
+(test
+ (name native_fetch_test)
+ (modules native_fetch_test)
+ (libraries logseq_ui_ocamlhost))
 
 (library
  (name logseq_native_entry)
