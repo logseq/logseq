@@ -4150,14 +4150,14 @@
 (defn escape-editing
   [& {:keys [select? save-block?]
       :or {save-block? true}}]
-  (let [input-id (state/get-edit-input-id)]
+  (let [editing-target (state/get-state :editor/editing?)]
     (p/do!
      (when save-block? (save-current-block! {:flush-input? true}))
-     ;; a click during the save opened another editor: it stays open
-     (when (still-editing? input-id)
-       (if select?
-         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-           (state/exit-editing-and-set-selected-blocks! [node]))
+     ;; Navigation can unmount the input before saving finishes.
+     (when (= editing-target (state/get-state :editor/editing?))
+       (if-let [node (when select?
+                      (some-> (state/get-input) (util/rec-get-node "ls-block")))]
+         (state/exit-editing-and-set-selected-blocks! [node])
          (state/clear-edit!))))))
 
 (defn copy-current-ref
