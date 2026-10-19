@@ -29,7 +29,7 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in macosx) printf '(-cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
+    "case '%{system}' in macosx) printf '(-cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib ImageIO -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
 
 (rule
  (copy ../native/asset_dom.ml asset_dom.ml))
@@ -380,7 +380,7 @@
 (library
  (name logseq_ui_ocamlhost)
  (wrapped false)
- (modules (:standard \ logseq_native native_window native_window_test native_fetch_test handbook_data_test handbook_scenarios native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons host_images host_images_test text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
+ (modules (:standard \ logseq_native native_window native_window_test native_fetch_test handbook_data_test handbook_scenarios native_embed native_lifecycle_test native_dictionary_test bridge patch_decode host_requests host_requests_test theme_vars host_icons host_image host_images host_images_test text_engine host_platform host_platform_test host_interaction host_interaction_test host_metrics host_metrics_test))
  (modes native)
  (libraries
    lui
@@ -450,7 +450,7 @@
 (library
  (name logseq_native_host_services)
  (wrapped false)
- (modules patch_decode host_requests theme_vars host_icons host_images text_engine)
+ (modules patch_decode host_requests theme_vars host_icons host_image host_images text_engine)
  (libraries logseq_ui_ocamlhost logseq_ocaml_host_platform logseq_native_entry
    logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
    lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str unix))

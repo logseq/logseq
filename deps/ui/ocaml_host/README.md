@@ -85,9 +85,12 @@ requested locales are parsed and retained in memory.
 
 Relative native image paths resolve under `Contents/Resources`. For a direct
 development executable, set `LOGSEQ_NATIVE_ASSET_DIR` to the repository's
-absolute `resources` directory. The host decodes PNGs with `imagelib`, already
-included by the dependency installer. Decoded pixels belong to mounted image
-nodes and are released when those nodes disappear.
+absolute `resources` directory. URL images and local files share the host
+decoder. PNG, GIF, BMP and PNM use `imagelib`; macOS JPEGs use Image I/O
+with EXIF display orientation and sRGB RGBA output. Linux JPEG decoding
+remains unsupported. Decoded URL pixels belong to mounted image owners and
+are released after their final owner disappears. Local files also use the
+existing bounded resource cache.
 The template enables `MallocSpaceEfficient=1` at process startup so the allocator
 can reclaim unused backing memory. The bundled worker inherits this policy.
 Direct executable launches require the same environment setting to reproduce

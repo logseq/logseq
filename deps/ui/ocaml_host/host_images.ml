@@ -1,5 +1,5 @@
 module Resource=Lui_resource
-module Loader=Lui_resource_loaders.Image
+module Loaders=Lui_resource_loaders
 
 type owner={url:string;scope:Signal.scope;entry:Lui_scene.image Resource.entry}
 type t={cache:Lui_scene.image Resource.t;owners:(int,owner) Hashtbl.t;
@@ -8,7 +8,7 @@ type t={cache:Lui_scene.image Resource.t;owners:(int,owner) Hashtbl.t;
 let create ?(executor=Resource.executor_domain) ?(source=Lui_resource_loaders.url) ~on_change () =
   let publish=ref (fun () -> invalid_arg "Image cache is not initialized") in
   let executor job=executor (fun () -> job ();Host.enqueue (fun () -> !publish ())) in
-  let cache=Loader.create ~executor () in
+  let cache=Resource.create ~executor () in
   publish:=(fun () -> ignore (Resource.drain cache));
   {cache;owners=Hashtbl.create 16;source;on_change;disposed=false}
 
@@ -25,11 +25,16 @@ let sync_node t retired store id =
       release t retired id;
       Option.iter (fun url ->
         let scope=Signal.scope "native-image" in
-        let entry=Loader.request t.cache ~scope ~on_state:(fun entry -> match Resource.state entry with
+        let source=t.source url in
+        let load task=match Loaders.bytes_of_source task source with
+          | Error _ as error -> error
+          | Ok encoded -> if Resource.task_cancelled task then Error "cancelled"
+              else Host_image.decode encoded in
+        let entry=Resource.request t.cache ~scope ~load ~on_state:(fun entry -> match Resource.state entry with
           | Loading -> ()
           | Ready _ -> t.on_change id
           | Failed error -> Printf.eprintf "[native image] %s: %s\n%!" url error)
-          (t.source url) in
+          (Loaders.key_of_source ~kind:"img" source) in
         Hashtbl.add t.owners id {url;scope;entry}) url
 
 let sync_batch t store batch =

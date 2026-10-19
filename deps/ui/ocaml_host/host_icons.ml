@@ -188,26 +188,6 @@ let prune_file_images store =
 
 let asset_path = Platform_native.asset_path
 
-let decode_png encoded =
-  let decoded =
-    ImageLib.PNG.parsefile (ImageUtil.chunk_reader_of_string encoded)
-  in
-  let pixels = Bytes.create (decoded.width * decoded.height * 4) in
-  let channel value =
-    ((value * 255) + (decoded.max_val / 2)) / decoded.max_val
-  in
-  for y = 0 to decoded.height - 1 do
-    for x = 0 to decoded.width - 1 do
-      Image.read_rgba decoded x y (fun r g b a ->
-          let a = channel a and at = ((y * decoded.width) + x) * 4 in
-          let premultiply value = ((channel value * a) + 127) / 255 in
-          Bytes.set_uint8 pixels at (premultiply r);
-          Bytes.set_uint8 pixels (at + 1) (premultiply g);
-          Bytes.set_uint8 pixels (at + 2) (premultiply b);
-          Bytes.set_uint8 pixels (at + 3) a)
-    done
-  done;
-  Lui_scene.new_image ~w:decoded.width ~h:decoded.height pixels
 
 let file_resources : ((string * string) * Lui_scene.image) list ref = ref []
 let file_resource_budget = 1024 * 1024
@@ -219,7 +199,9 @@ let file_image path =
   match List.assoc_opt key !file_resources with
   | Some image -> image
   | None ->
-      let image = decode_png encoded in
+      let image = match Host_image.decode (Bytes.unsafe_of_string encoded) with
+        | Ok image -> image
+        | Error message -> failwith message in
       if Bytes.length image.Lui_scene.ipix <= file_resource_budget then begin
         let rec retain budget entries = function
           | [] -> []

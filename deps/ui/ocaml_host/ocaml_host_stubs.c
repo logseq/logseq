@@ -238,6 +238,7 @@ CAMLprim value loadIconNames(value arg) {
 #include <objc/message.h>
 #include <objc/runtime.h>
 #include <CoreGraphics/CoreGraphics.h>
+#include <ImageIO/ImageIO.h>
 #include <IOSurface/IOSurface.h>
 #include <libproc.h>
 #include <sys/resource.h>
@@ -2573,5 +2574,98 @@ CAMLprim value logseq_native_reduced_motion(value unit_v) {
       sel_registerName("accessibilityDisplayShouldReduceMotion")));
 #else
   return Val_false;
+#endif
+}
+
+/* Image I/O owns its input and decoding objects entirely within the worker
+   call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
+CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
+  CAMLparam1(encoded_v);
+  CAMLlocal2(pixels_v, result_v);
+#if defined(__APPLE__)
+  CFDataRef data = CFDataCreate(kCFAllocatorDefault,
+      (const UInt8 *)Bytes_val(encoded_v), caml_string_length(encoded_v));
+  if (!data) caml_raise_out_of_memory();
+  CGImageSourceRef source = NULL;
+  CFDictionaryRef properties = NULL, options = NULL;
+  CFNumberRef maximum = NULL;
+  CGImageRef image = NULL;
+  CGColorSpaceRef color = NULL;
+  CGContextRef context = NULL;
+  unsigned char *pixels = NULL;
+  size_t width = 0, height = 0, size = 0;
+  const char *error = NULL;
+  int out_of_memory = 0;
+  caml_enter_blocking_section();
+  do {
+    source = CGImageSourceCreateWithData(data, NULL);
+    if (!source || CGImageSourceGetStatus(source) != kCGImageStatusComplete) {
+      error = "Incomplete or malformed JPEG"; break;
+    }
+    properties = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+    if (!properties) { error = "Missing JPEG dimensions"; break; }
+    CFTypeRef property_width = CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
+    CFTypeRef property_height = CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
+    int64_t original_width = 0, original_height = 0;
+    if (!property_width || !property_height ||
+        CFGetTypeID(property_width) != CFNumberGetTypeID() ||
+        CFGetTypeID(property_height) != CFNumberGetTypeID() ||
+        !CFNumberGetValue(property_width, kCFNumberSInt64Type, &original_width) ||
+        !CFNumberGetValue(property_height, kCFNumberSInt64Type, &original_height) ||
+        original_width <= 0 || original_height <= 0) {
+      error = "Invalid JPEG dimensions"; break;
+    }
+    int64_t maximum_dimension = original_width > original_height ? original_width : original_height;
+    maximum = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &maximum_dimension);
+    const void *keys[] = {kCGImageSourceCreateThumbnailFromImageAlways,
+      kCGImageSourceCreateThumbnailWithTransform, kCGImageSourceThumbnailMaxPixelSize,
+      kCGImageSourceShouldCache};
+    const void *values[] = {kCFBooleanTrue, kCFBooleanTrue, maximum, kCFBooleanFalse};
+    if (!maximum) { out_of_memory = 1; break; }
+    options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 4,
+      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    if (!options) { out_of_memory = 1; break; }
+    image = CGImageSourceCreateThumbnailAtIndex(source, 0, options);
+    if (!image) { error = "Cannot decode JPEG"; break; }
+    width = CGImageGetWidth(image); height = CGImageGetHeight(image);
+    if (!width || !height || width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
+        width > Max_long || height > Max_long) {
+      error = "JPEG bitmap dimensions overflow"; break;
+    }
+    size = width * height * 4;
+    if (size > Max_long) { error = "JPEG bitmap size overflow"; break; }
+    pixels = calloc(1, size);
+    if (!pixels) { out_of_memory = 1; break; }
+    color = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    if (!color) { error = "Cannot create JPEG color space"; break; }
+    context = CGBitmapContextCreate(pixels, width, height, 8, width * 4, color,
+      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    if (!context) { error = "Cannot create JPEG bitmap context"; break; }
+    CGContextSetBlendMode(context, kCGBlendModeCopy);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+  } while (0);
+  if (context) CGContextRelease(context);
+  if (color) CGColorSpaceRelease(color);
+  if (image) CGImageRelease(image);
+  if (options) CFRelease(options);
+  if (maximum) CFRelease(maximum);
+  if (properties) CFRelease(properties);
+  if (source) CFRelease(source);
+  CFRelease(data);
+  caml_leave_blocking_section();
+  if (out_of_memory || error) {
+    free(pixels);
+    if (out_of_memory) caml_raise_out_of_memory();
+    caml_failwith(error);
+  }
+  pixels_v = caml_alloc_initialized_string(size, (const char *)pixels);
+  free(pixels);
+  result_v = caml_alloc_tuple(3);
+  Store_field(result_v, 0, Val_long(width));
+  Store_field(result_v, 1, Val_long(height));
+  Store_field(result_v, 2, pixels_v);
+  CAMLreturn(result_v);
+#else
+  caml_failwith("JPEG platform decoding requires macOS");
 #endif
 }
