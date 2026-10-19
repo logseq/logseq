@@ -15,7 +15,7 @@ export function measureHandbook(root,reference=false) {
   const input=panel.querySelector('input');
   return {viewport:{width:innerWidth,height:innerHeight},panel:measure(panel),header:measure(header),
     title:measure(header.querySelector('h1,[role="heading"]')),
-    input:input?measure(input):null,
+    input:input?{...measure(input),value:input.value,focused:input.ownerDocument.activeElement===input}:null,
     cards:[...panel.querySelectorAll(reference?'.topic-card':'button[id^="handbook-topic-"]')].map(measure),
     categories:[...panel.querySelectorAll(reference?'.category-card':'button[id^="handbook-category-"],#handbook-shortcuts')]
       .filter(element=>element.getBoundingClientRect().height>0).map(measure),
@@ -39,7 +39,8 @@ export function assertHandbookImages(actual,reference) {
 }
 
 export function assertHandbook(actual,reference) {
-  assert.deepEqual(actual.viewport,reference.viewport);
+  for(const axis of ['width','height'])
+    assert.equal(actual.viewport[axis],reference.viewport[axis],`viewport ${axis}`);
   for(const key of ['x','y','width','height'])
     assert.ok(Math.abs(actual.panel.rect[key]-reference.panel.rect[key])<.2,
       `panel ${key}: ${actual.panel.rect[key]} versus ${reference.panel.rect[key]}`);
@@ -64,3 +65,143 @@ export function assertHandbook(actual,reference) {
     }
   }
 }
+
+export function assertHandbookSearch(actual,reference) {
+  assert.ok(actual.input && reference.input,'search field exists');
+  for(const key of ['x','y','width','height'])
+    assert.ok(Math.abs(actual.input.rect[key]-reference.input.rect[key])<.2,
+      `search ${key}: ${actual.input.rect[key]} versus ${reference.input.rect[key]}`);
+  for(const key of ['font','line','weight','padding','color','background'])
+    assert.equal(actual.input[key],reference.input[key],`search ${key}`);
+}
+
+export function assertHandbookCleared(actual) {
+  assert.equal(actual.input.value,'','clear empties the search');
+  assert.equal(actual.input.focused,true,'clear restores input focus');
+}
+
+// Measured reference dashboard at 1280x720, light/classic, with no hovered card.
+export const handbookDesktopReference = {
+  "viewport": {
+    "height": 720,
+    "width": 1280
+  },
+  "panel": {
+    "rect": {
+      "height": 619.1953125,
+      "width": 420,
+      "x": 828,
+      "y": 42.8046875
+    },
+    "background": "rgb(255, 255, 255)",
+    "radius": "8px",
+    "color": "rgb(23, 23, 23)"
+  },
+  "header": {
+    "rect": {
+      "height": 48,
+      "width": 418,
+      "x": 829,
+      "y": 43.8046875
+    }
+  },
+  "title": {
+    "font": "20px",
+    "weight": "700",
+    "color": "rgb(23, 23, 23)",
+    "line": 28
+  },
+  "input": {
+    "rect": {
+      "height": 33.5,
+      "width": 380,
+      "x": 848,
+      "y": 100.8046875
+    },
+    "font": "16px",
+    "weight": "500",
+    "color": "rgb(23, 23, 23)",
+    "line": 16,
+    "padding": "7px 24px",
+    "background": "rgba(0, 0, 0, 0)"
+  },
+  "cards": [
+    {
+      "rect": {
+        "height": 97,
+        "width": 386,
+        "x": 845,
+        "y": 195.3046875
+      },
+      "background": "rgb(247, 247, 247)",
+      "font": "14px",
+      "weight": "400",
+      "color": "rgb(23, 23, 23)",
+      "radius": "8px"
+    },
+    {
+      "rect": {
+        "height": 86,
+        "width": 386,
+        "x": 845,
+        "y": 300.3046875
+      },
+      "background": "rgb(247, 247, 247)",
+      "font": "14px",
+      "weight": "400",
+      "color": "rgb(23, 23, 23)",
+      "radius": "8px"
+    }
+  ],
+  "categories": [
+    {
+      "rect": {
+        "height": 72,
+        "width": 187,
+        "x": 845,
+        "y": 434.3046875
+      },
+      "background": "rgb(247, 247, 247)",
+      "font": "16px",
+      "weight": "400",
+      "color": "rgb(23, 23, 23)",
+      "radius": "4px"
+    },
+    {
+      "rect": {
+        "height": 72,
+        "width": 187,
+        "x": 1044,
+        "y": 434.3046875
+      },
+      "background": "rgb(247, 247, 247)",
+      "font": "16px",
+      "weight": "400",
+      "color": "rgb(23, 23, 23)",
+      "radius": "4px"
+    },
+    {
+      "rect": {
+        "height": 72,
+        "width": 187,
+        "x": 845,
+        "y": 518.3046875
+      },
+      "background": "rgb(247, 247, 247)",
+      "font": "16px",
+      "weight": "400",
+      "color": "rgb(23, 23, 23)",
+      "radius": "4px"
+    }
+  ],
+  "images": [
+    {
+      "width": 70,
+      "height": 52.5
+    },
+    {
+      "width": 70,
+      "height": 52.5
+    }
+  ]
+};

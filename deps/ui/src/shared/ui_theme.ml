@@ -310,6 +310,7 @@ let cmdk_vars = function
 let handbook_vars = function
   | Light ->
       ["--lx-handbook-bg","var(--ls-primary-background-color)";
+       "--lx-handbook-search-bg","#f1f1f1";
        "--lx-handbook-heading-fg","var(--lx-gray-12)";
        "--lx-handbook-body-fg","var(--lx-gray-12)";
        "--lx-handbook-section-fg","var(--lx-gray-12)";
@@ -317,6 +318,7 @@ let handbook_vars = function
        "--lx-handbook-footer-bg","var(--ls-primary-background-color)"]
   | Dark ->
       ["--lx-handbook-bg","var(--ls-tertiary-background-color)";
+       "--lx-handbook-search-bg","var(--ls-primary-background-color)";
        "--lx-handbook-heading-fg","#ffffff";
        "--lx-handbook-body-fg","#f9fafb";
        "--lx-handbook-section-fg","#f3f4f6";

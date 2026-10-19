@@ -21,6 +21,14 @@ let escape_target : string -> Js.Json.t =
     panel.appendChild(input);document.body.appendChild(panel);
     return input;
   }"]
+let target_lookup : Js.Json.t -> (unit -> unit) =
+  [%mel.raw "function(input){
+    const previous=document.getElementById;
+    document.getElementById=id=>id===input.id?input:previous.call(document,id);
+    return ()=>{document.getElementById=previous};
+  }"]
+let focused_target : Js.Json.t -> bool =
+  [%mel.raw "function(input){return document.activeElement===input}"]
 let remove_target : Js.Json.t -> unit =
   [%mel.raw "function(input){document.body.removeChild(input.parentNode)}"]
 let escape id =
@@ -121,6 +129,15 @@ let run ~finish =
           check "Handbook arrow selection and Enter open a result" (text "Start");
           press "handbook-back";
           let retained=Option.get (find "handbook-search") in
+          input "sync";
+          let target=escape_target "handbook-search" in
+          let restore_lookup=target_lookup target in
+          Fun.protect ~finally:(fun () -> restore_lookup ();remove_target target) (fun () ->
+            press_label "help.handbook/clear-search";
+            check "Handbook clear restores input focus" (focused_target target);
+            check "Handbook clear retains its mounted search field"
+              (Option.map (fun node -> node.M.id) (find "handbook-search")=Some retained.M.id &&
+               M.string_prop (Option.get (find "handbook-search")) "text"=Some ""));
           input "sync";escape "handbook-search";S.flush app;
           check "Handbook Escape clears search before closing"
             (has "handbook-panel" && Option.map (fun node -> node.M.id) (find "handbook-search")=Some retained.M.id &&

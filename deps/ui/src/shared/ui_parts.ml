@@ -213,6 +213,7 @@ module Prop : sig
   val width : int -> t
   val s_width : int Signal.signal -> s
   val height : int -> t
+  val height_auto : t
   val min_width : int -> t
   val s_min_width : int Signal.signal -> s
   val max_width : int -> t
@@ -320,6 +321,7 @@ end = struct
   let width v = int WidthValue v
   let s_width v = sint WidthValue v
   let height v = int HeightValue v
+  let height_auto = str HeightValue "auto"
   let min_width v = int MinWidth v
   let s_min_width v = sint MinWidth v
   let max_width v = int MaxWidth v

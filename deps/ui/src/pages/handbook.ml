@@ -214,22 +214,38 @@ let panel ~loader ~close ~online context parent =
            (row ~gap:4 ~margin_top:6 ~cross:`center [Icons.icon ~size:14. "bolt";
              Ui_components.with_props [Prop.opacity 0.7] (text ~font_size:"12px" ~line_height:"16px"
                ~value:("800+ " ^ t "help.handbook/monthly-posts") [])])]) in
-    let search ()=column ~min_width:0
-      [row ~gap:6 ~cross:`center ~padding_horizontal:18 ~padding_vertical:9
-        [Icons.icon ~size:12. "search";
-         typography "16px" "16px" 400
-           (Ui_components.input ~grow:1. ~min_width:0 ~padding_horizontal:8 ~padding_vertical:8
-             ~background:"transparent" ~border_width:0 ~corner_radius:0
-             ~placeholder:(t "help.handbook/search-placeholder") ~label:(t "help.handbook/search-placeholder")
-             ~autofocus:true ~accessibility_identifier:"handbook-search"
-             ~text:(reactive Fun.id (Signal.value query))
-             ~on_input:(fun event -> match event with Lui_protocol.TextChanged (_,value) ->
-               set query value;set selected None;commit () | _ -> ())
-             ~on_navigate:(function Lui_protocol.NavigatePrevious _ -> move (-1)
-               | Lui_protocol.NavigateNext _ -> move 1 | _ -> ())
-             ~on_submit:(fun _ -> Option.iter (fun (node:Data.node) -> open_topic node.key) (chosen ())) []);
-         if_ ~test:(reactive (fun value -> String.trim value<>"") (Signal.value query))
-           (icon_button "help.handbook/clear-search" "x" (fun () -> clear ();commit ()))];
+    let search ()=Ui_components.with_props [Prop.padding_bottom 6] (column ~min_width:0
+      [Ui_components.with_props [Prop.position `relative]
+        (row ~margin_horizontal:16 ~margin_top:6 ~margin_bottom:8
+          ~border_width:3 ~border_color:"var(--ls-primary-background-color)" ~corner_radius:8
+          ~background:"var(--lx-handbook-search-bg)"
+          [Ui_components.with_props
+             [Prop.position `absolute;Prop.inset_top 6.;Prop.inset_left 7.;Prop.opacity 0.9;
+              Prop.pointer_enabled false;Prop.line_height "24px"]
+             (box [Icons.icon ~size:12. "search"]);
+           Ui_components.with_props
+             [Prop.height_auto]
+             (typography "16px" "16px" 500
+               (Ui_components.input ~grow:1. ~min_width:0 ~padding_horizontal:24 ~padding_vertical:7
+                 ~background:"transparent" ~border_width:0 ~corner_radius:0
+                 ~placeholder:(t "help.handbook/search-placeholder") ~label:(t "help.handbook/search-placeholder")
+                 ~autofocus:true ~accessibility_identifier:"handbook-search"
+                 ~text:(reactive Fun.id (Signal.value query))
+                 ~on_input:(fun event -> match event with Lui_protocol.TextChanged (_,value) ->
+                   set query value;set selected None;commit () | _ -> ())
+                 ~on_navigate:(function Lui_protocol.NavigatePrevious _ -> move (-1)
+                   | Lui_protocol.NavigateNext _ -> move 1 | _ -> ())
+                 ~on_submit:(fun _ -> Option.iter (fun (node:Data.node) -> open_topic node.key) (chosen ())) []));
+           if_ ~test:(reactive (fun value -> String.trim value<>"") (Signal.value query))
+             (Ui_components.with_props [Prop.position `absolute;Prop.inset_top 7.;Prop.inset_right 6.;
+                Prop.opacity 0.5;Prop.hover_opacity 0.8]
+               (Ui_components.button ~variant:`ghost ~label:(t "help.handbook/clear-search")
+                 ~width:12 ~height:24 ~min_width:0 ~min_height:0 ~padding:0 ~gap:0
+                 ~background:"transparent" ~on_press:(fun _ ->
+                   clear ();commit ();
+                   let field=Option.get (Ui_services.dom_by_id "handbook-search") in
+                   field.Ui_services.focus ())
+                 [Icons.icon ~size:12. "x"]))]);
        if_ ~test:(reactive (fun value -> String.trim value<>"") (Signal.value query))
          (column ~padding_horizontal:18
            [keyed ~source:(reactive (fun value -> match (Signal.get_state current).pane with
@@ -239,7 +255,7 @@ let panel ~loader ~close ~online context parent =
                let node=Signal.get node_signal in
                (topic_card ~selected_signal:(reactive (fun selection _query -> match selection with
                  | Some key -> key=node.key | None -> Option.map (fun (node:Data.node) -> node.key) (chosen ())=Some node.key)
-                   (Signal.value selected) (Signal.value query)) node) context parent)])] in
+                   (Signal.value selected) (Signal.value query)) node) context parent)])]) in
     let detail key =
       let node=Data.require catalog key in
       let navigate key=open_topic key in

@@ -12,6 +12,7 @@ import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
 import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
 import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp, measureCollapsedShortcutHelp, assertCollapsedShortcutHelp, measureShortcutTableLayout, assertShortcutTableLayout, shortcutHelpDesktopReference} from './shortcut_help_checks.mjs';
+import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference} from './handbook_checks.mjs';
 import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
 
 const session = 'logseq-ui-regressions';
@@ -70,6 +71,30 @@ test('Help opens complete shortcut content and reopens collapsed panels', () => 
   browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
   browser('wait', '--fn', "document.querySelectorAll('.item-type-shortcut-settings').length === 1 && !document.querySelector('.cp__right-split.is-collapsed')");
   assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));
+});
+
+test('Handbook matches dashboard geometry and retains search focus after clearing', () => {
+  browser('set', 'viewport', '1280', '720');
+  open();
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  button('light light');
+  button('Logseq classic color');
+  browser('press', 'Escape');
+  button('Toggle help menu');
+  button('Handbook');
+  browser('wait', '--fn', "document.querySelector('#handbook-search') !== null && [...document.querySelectorAll('.cp__handbooks-popup img')].length === 2 && [...document.querySelectorAll('.cp__handbooks-popup img')].every(image=>image.complete && image.naturalWidth>0)");
+  browser('find', 'role', 'heading', 'click', '--name', 'Help', '--exact');
+  const measure = () => evaluate(`(${measureHandbook.toString()})(document)`);
+  const actual = measure();
+  assertHandbook(actual, handbookDesktopReference);
+  assertHandbookSearch(actual, handbookDesktopReference);
+  assertHandbookImages(actual, handbookDesktopReference);
+  browser('fill', '#handbook-search', 'sync');
+  button('Clear search');
+  assertHandbookCleared(measure());
+  button('Close');
+  browser('wait', '--fn', "document.querySelector('#handbook-panel') === null");
 });
 
 test('Help opens the diagnostic page and its resettable clipboard tool', () => {
