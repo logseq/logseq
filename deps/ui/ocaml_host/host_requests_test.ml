@@ -8682,7 +8682,12 @@ let () = Native_embed.with_entry_lock (fun () ->
 
 
 let () = Native_embed.with_entry_lock (fun () ->
-  let previous_host = !Host.host_op in
+  let previous_host = !Host.host_op and previous_flush = !Runtime.app_flush
+  and previous_width=Host.inner_width () and previous_height=Host.inner_height () in
+  Host.set_window_size 1280. 1000.;
+  let listener_count ()=List.length
+    (Option.value (Hashtbl.find_opt Platform.window_listeners "resize") ~default:[]) in
+  let listeners_before=listener_count () in
   let requests=Queue.create () in
   let store=Lui_store.create () in
   let backend={backend_profile=profile MacOS GenericHost;
@@ -8692,7 +8697,10 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"
       [Importer.view ()])) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);Host.host_op:=previous_host;
-    Theme_vars.set_dark false;Theme_vars.set_accent "logseq") (fun () ->
+    Runtime.app_flush:=previous_flush;Host.set_window_size previous_width previous_height;
+    Theme_vars.set_dark false;Theme_vars.set_accent "logseq";
+    check "Disposing Import releases its viewport subscription" (listener_count ()=listeners_before)) (fun () ->
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     Host.host_op:=(fun operation payload ->
       check "Import choices must use the shared file service" (operation="dom-op");
       let prefix="open-file-picker\n" in
@@ -8735,13 +8743,18 @@ let () = Native_embed.with_entry_lock (fun () ->
         let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
           ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
         let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
-        Lui_layout.sync ~scale ~width:(960.*.scale) ~height:(1000.*.scale)
+        List.iter (fun width ->
+        Host.set_window_size width 1000.;Platform.emit_event "resize" (Js.Json.JObject []);
+        ignore (Lui_app.flush app);
+        expect "Import resize must retain every mounted control" (Lui_store.preorder store=ids);
+        let desktop=width>=1024. and compact=width<768. in
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(1000.*.scale)
           ~measure:(fun id value width _ -> Some (Text_engine.measure_text
             ~width:(Host_interaction.measure_width width) engine id value)) layout store;
         let inks=Hashtbl.create 8 in
         Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
           layout=Lui_layout.layout_hook layout;text_ops=(fun id _ color _ -> Hashtbl.replace inks id color;[])}
-          store scene ~width:(int_of_float (960.*.scale)) ~height:(int_of_float (1000.*.scale))
+          store scene ~width:(int_of_float (width*.scale)) ~height:(int_of_float (1000.*.scale))
           ~scale ~clear:(Lui_scene.color 0 0 0 0);
         List.iter (fun (id,size,line) ->
           expect ("Import text must retain reference typography: "^name)
@@ -8750,12 +8763,20 @@ let () = Native_embed.with_entry_lock (fun () ->
                  | Some actual -> abs_float (actual-.line)<0.01 | None -> false));
           expect ("Import text must inherit the theme body color: "^name)
             (Hashtbl.find_opt inks id=Theme_vars.color_of "var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"))
-          [title,36.,50.4;subtitle,20.,30.;question,28.,42.;explanation,19.,57.;
+          [title,(if desktop then 36. else 30.),(if desktop then 50.4 else 42.);
+           subtitle,(if desktop then 20. else 14.),(if desktop then 30. else 21.);
+           question,(if desktop then 28. else 26.),(if desktop then 42. else 39.);
+           explanation,(if desktop then 19. else 14.),(if desktop then 57. else 21.);
            title_label,18.,27.;description,11.,16.5];
+        let previous_row=ref None in
         List.iter (fun (_,id) ->
           let r=Option.get (Lui_layout.rect layout id) in
           expect "Import options must have the same reference row height"
-            (abs_float (r.h-.62.*.scale)<0.1)) choices) [1.;2.])
+            (abs_float (r.h-.(if compact then 80. else 62.)*.scale)<0.1);
+          Option.iter (fun y -> expect "Import options must retain responsive row spacing"
+            (abs_float (r.y-.y-.(if compact then 90. else 80.)*.scale)<0.1)) !previous_row;
+          previous_row:=Some r.y) choices)
+          [1280.;600.;767.;768.;800.;1023.;1024.;1280.]) [1.;2.])
       [Ui_theme.Light,"light";Ui_theme.Dark,"dark"];
     List.iter prerr_endline (List.rev !failures);
     check "Native Import typography, theme and file-picker activation" (!failures=[]);

@@ -216,8 +216,12 @@ let run_files kind files =
   | _ -> ()
 
 (* Import actions use the shared file service on both hosts. *)
-let file_input ~id ~label ~desc ~accept ?(directory=false) () =
-  Ui_components.with_props
+let file_input viewport ~id ~label ~desc ~accept ?(directory=false) ?(first=false) () =
+  Ui_parts.int_prop Lui_protocol.HeightValue
+    ~value:(reactive (fun width -> if width<768. then 80 else 62) viewport)
+    (Ui_parts.int_prop Lui_protocol.MarginTop
+      ~value:(reactive (fun width -> if width>=768. || first then 8 else 0) viewport)
+      (Ui_components.with_props
     [ Ui_components.Prop.opacity 0.8; Ui_components.Prop.hover_opacity 1.
     ; Ui_components.Prop.pressed_opacity 0.5; Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.hover_background "var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)))"
@@ -226,55 +230,78 @@ let file_input ~id ~label ~desc ~accept ?(directory=false) () =
        ~on_press:(fun _ ->
        Ui_services.files_pick_files ~accept ~directory (run_files id))
          ~main:`start ~cross:`center ~gap:0 ~padding:0 ~border_width:0
-         ~height:62 ~min_height:62 ~margin_horizontal:8 ~margin_top:8 ~margin_bottom:10
+         ~min_height:62 ~margin_horizontal:8 ~margin_bottom:10
          ~corner_radius:12 ~foreground:"inherit"
          ~background:"var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)))"
-         [ box ~key:(id ^ "-icon") ~width:62 ~height:62 ~padding:16
+         [ box ~key:(id ^ "-icon") ~width:62 ~min_width:62 ~height:62 ~padding:16
              ~main:`center ~cross:`center
              [ icon ~key:(id ^ "-logo") ~name:(`app "logseq-logo") ~point_size:28 [] ]
          ; column ~key:(id ^ "-text") ~min_width:0
              [ text ~key:(id ^ "-title") ~as_:`Strong ~font_size:"1.125rem"
                  ~font_weight:700 ~line_height:"1.6875rem" ~value:label []
              ; text ~key:(id ^ "-description") ~as_:`Small ~font_size:"0.6875rem"
-                 ~font_weight:400 ~line_height:"1.03125rem" ~value:desc [] ] ])
+                 ~font_weight:400 ~line_height:"1.03125rem" ~value:desc [] ] ])))
 
-let items () =
-  [ file_input ~id:"import-sqlite-db" ~label:"SQLite"
+let items viewport =
+  [ file_input viewport ~first:true ~id:"import-sqlite-db" ~label:"SQLite"
       ~desc:(T.t "onboarding.import/sqlite-desc") ~accept:".sqlite,.sqlite3,.db" ()
-  ; file_input ~id:"import-sqlite-zip" ~label:(T.t "import/sqlite-and-assets-title")
+  ; file_input viewport ~id:"import-sqlite-zip" ~label:(T.t "import/sqlite-and-assets-title")
       ~desc:(T.t "import/sqlite-and-assets-desc") ~accept:".zip" ()
-  ; file_input ~id:"import-file-graph" ~label:(T.t "import/file-to-db-title")
+  ; file_input viewport ~id:"import-file-graph" ~label:(T.t "import/file-to-db-title")
       ~desc:(T.t "import/file-to-db-desc")
       ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip" ~directory:true ()
-  ; file_input ~id:"import-debug-transit"
+  ; file_input viewport ~id:"import-debug-transit"
       ~label:(T.t "import/debug-transit-title") ~desc:(T.t "import/debug-transit-desc")
       ~accept:".transit,.json" ()
-  ; file_input ~id:"import-db-edn" ~label:(T.t "import/db-edn-title")
+  ; file_input viewport ~id:"import-db-edn" ~label:(T.t "import/db-edn-title")
       ~desc:(T.t "import/db-edn-desc") ~accept:".edn" () ]
 
-let article () =
+let desktop_font viewport large compact element =
+  Ui_parts.string_prop Lui_protocol.FontSize
+    ~value:(reactive (fun width -> if width>=1024. then large else compact) viewport) element
+
+let article viewport =
   column ~key:"import" ~accessibility_identifier:"import-options"
     ~padding_vertical:64 ~padding_horizontal:32 ~corner_radius:20 ~cross:`stretch
     ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))"
-    [ column ~key:"intro" ~cross:`stretch
-        [ heading ~key:"question" ~level:1 ~as_:`H1 ~font_size:"1.75rem"
-            ~font_weight:500 ~line_height:"1.5" ~margin:0 ~text_alignment:`center
-            ~value:(T.t "onboarding.import/title") []
-        ; heading ~key:"description" ~level:2 ~as_:`H2 ~font_size:"1.1875rem"
-            ~font_weight:400 ~line_height:"3" ~margin:0 ~text_alignment:`center
-            ~value:(T.t "onboarding.import/desc") [] ]
+    [ Ui_parts.int_prop Lui_protocol.PaddingHorizontal
+        ~value:(reactive (fun width -> if width>=1024. then 0 else 30) viewport)
+        (column ~key:"intro" ~cross:`stretch
+          [ desktop_font viewport "1.75rem" "1.625rem"
+              (heading ~key:"question" ~level:1 ~as_:`H1
+                ~font_weight:500 ~line_height:"1.5" ~margin:0 ~text_alignment:`center
+                ~value:(T.t "onboarding.import/title") [])
+          ; Ui_parts.string_prop Lui_protocol.LineHeight
+              ~value:(reactive (fun width -> if width>=1024. then "3" else "1.5") viewport)
+              (Ui_parts.int_prop Lui_protocol.PaddingVertical
+                ~value:(reactive (fun width -> if width>=1024. then 0 else 15) viewport)
+                (desktop_font viewport "1.1875rem" "0.875rem"
+                  (heading ~key:"description" ~level:2 ~as_:`H2
+                    ~font_weight:400 ~margin:0 ~text_alignment:`center
+                    ~value:(T.t "onboarding.import/desc") []))) ])
     ; column ~key:"choices" ~accessibility_identifier:"import-choices"
-        ~padding_vertical:20 ~cross:`stretch (items ()) ]
+        ~padding_vertical:20 ~cross:`stretch (items viewport) ]
 
 let view () : t =
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
   Ui_components.with_props [Ui_components.Prop.padding_top 55]
     (column ~key:"importer" ~accessibility_identifier:"importer" ~cross:`center
-        [ heading ~key:"title" ~level:1 ~as_:`H1 ~font_size:"2.25rem"
-            ~font_weight:400 ~line_height:"1.4" ~margin:0 ~text_alignment:`center
-            ~value:(T.t "import/notes") []
-        ; heading ~key:"subtitle" ~level:2 ~as_:`H2 ~font_size:"1.25rem"
-            ~font_weight:400 ~line_height:"1.5" ~margin_top:20 ~margin_bottom:40
-            ~text_alignment:`center ~value:(T.t "onboarding.import-option/desc") []
-        ; article () ])
+        [ desktop_font viewport "2.25rem" "1.875rem"
+            (heading ~key:"title" ~level:1 ~as_:`H1
+              ~font_weight:400 ~line_height:"1.4" ~margin:0 ~text_alignment:`start
+              ~value:(T.t "import/notes") [])
+        ; Ui_parts.int_prop Lui_protocol.PaddingHorizontal
+            ~value:(reactive (fun width -> if width>=1024. then 0 else 30) viewport)
+            (desktop_font viewport "1.25rem" "0.875rem"
+              (heading ~key:"subtitle" ~level:2 ~as_:`H2
+                ~font_weight:400 ~line_height:"1.5" ~margin_top:20 ~margin_bottom:40
+                ~text_alignment:`center ~value:(T.t "onboarding.import-option/desc") []))
+        ; article viewport ]) ctx parent
 
-let body (_ms : Model.t Signal.signal) : t = article ()
+let body (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  article viewport ctx parent

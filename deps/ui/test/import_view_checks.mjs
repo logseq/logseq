@@ -26,10 +26,14 @@ export function measureImportView(root) {
   };
 }
 
-export function assertImportView(measurement, colors) {
+export function assertImportView(measurement, colors, {viewportWidth = 1280} = {}) {
   const {headings, card, choices} = measurement;
+  const desktop = viewportWidth >= 1024;
+  const compact = viewportWidth < 768;
   assert.equal(headings.length, 4);
-  const expected = [[36, 50.4, '400'], [20, 30, '400'], [28, 42, '500'], [19, 57, '400']];
+  const expected = desktop
+    ? [[36, 50.4, '400'], [20, 30, '400'], [28, 42, '500'], [19, 57, '400']]
+    : [[30, 42, '400'], [14, 21, '400'], [26, 39, '500'], [14, 21, '400']];
   for (let i = 0; i < headings.length; i++) {
     assert.equal(headings[i].size, expected[i][0]);
     assert.ok(Math.abs(headings[i].line - expected[i][1]) < 0.1);
@@ -39,10 +43,14 @@ export function assertImportView(measurement, colors) {
   assert.equal(card.background, colors.card);
   assert.equal(card.radius, 20);
   [64, 32, 64, 32].forEach((value, index) => assert.equal(card.padding[index], value));
+  assert.equal(headings[1].padding[1], desktop ? 0 : 30);
+  assert.equal(headings[3].padding[0], desktop ? 0 : 15);
+  assert.equal(headings[3].padding[2], desktop ? 0 : 15);
+  assert.ok(Math.abs(headings[2].x - card.x - (desktop ? 32 : 62)) < 0.6);
   assert.equal(choices.length, 5);
   for (let i = 0; i < choices.length; i++) {
     const choice = choices[i];
-    assert.equal(choice.height, 62);
+    assert.equal(choice.height, compact ? 80 : 62);
     assert.equal(choice.radius, 12);
     assert.equal(choice.opacity, '0.8');
     assert.equal(choice.background, colors.choice);
@@ -56,6 +64,6 @@ export function assertImportView(measurement, colors) {
     assert.equal(choice.description.color, colors.text);
     assert.equal(choice.description.alignment, 'start');
     assert.ok(Math.abs(choice.title.x - choice.x - 62) < 0.6);
-    if (i) assert.ok(Math.abs(choice.y - choices[i - 1].y - 80) < 0.6);
+    if (i) assert.ok(Math.abs(choice.y - choices[i - 1].y - (compact ? 90 : 80)) < 0.6);
   }
 }
