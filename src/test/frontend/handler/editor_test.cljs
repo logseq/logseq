@@ -2606,18 +2606,6 @@
   (is (false? (editor/org-directive-hashtag-query? "#foo")))
   (is (false? (editor/org-directive-hashtag-query? nil))))
 
-(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
-  (let [prev-action (state/get-editor-action)
-        event #js {:preventDefault (fn [])
-                   :stopPropagation (fn [])}]
-    (try
-      (state/set-editor-action! :commands)
-      (#'editor-component/editor-on-hide {:config {}} :click event true)
-      (is (nil? (state/get-editor-action))
-          "Slash commands should close when leaving the original block to edit another")
-      (finally
-        (state/set-editor-action! prev-action)))))
-
 (deftest set-editing-clears-slash-commands-when-switching-blocks-test
   ;; Click-to-edit goes through set-editing! on pointerdown, not editor-on-hide.
   (let [block-a {:block/uuid (random-uuid) :block/title "/"}

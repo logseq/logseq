@@ -1696,12 +1696,9 @@
            (log/error :save-block-failed error)))))))
 
 (defn save-current-block-before-navigate!
-  "Closes any open editor popup so the raw textarea value is persisted,
-   then exits editing."
+  "Persists the current input and exits editing before leaving the page."
   []
-  (state/clear-editor-action!)
-  (save-current-block!)
-  (state/clear-edit!))
+  (escape-editing))
 
 (def insert-command! editor-common-handler/insert-command!)
 
@@ -4151,18 +4148,17 @@
             (select-all-blocks! {})))))))
 
 (defn escape-editing
-  [& {:keys [select? save-block? editing-another-block?]
+  [& {:keys [select? save-block?]
       :or {save-block? true}}]
   (let [input-id (state/get-edit-input-id)]
     (p/do!
-     (when save-block? (save-current-block!))
+     (when save-block? (save-current-block! {:flush-input? true}))
      ;; a click during the save opened another editor: it stays open
      (when (still-editing? input-id)
        (if select?
          (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
            (state/exit-editing-and-set-selected-blocks! [node]))
-         (when-not editing-another-block?
-           (state/clear-edit!)))))))
+         (state/clear-edit!))))))
 
 (defn copy-current-ref
   [block-id]

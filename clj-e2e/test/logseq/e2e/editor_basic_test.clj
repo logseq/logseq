@@ -1298,6 +1298,34 @@
         (is (= content
                (get (ls-api-call! :editor.getBlock block-uuid) "content")))))))
 
+(deftest editor-exit-persists-draft-with-open-menu-test
+  (doseq [exit [:block :outside :navigation]]
+    (testing (str "leaving through " (name exit) " persists the draft")
+      (fixtures/create-page)
+      (open-left-sidebar!)
+      (b/new-block "source value")
+      (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+        (b/new-block "destination value")
+        (util/exit-edit)
+        (w/click (str "[blockid='" block-uuid "'] .block-content"))
+        (w/fill util/editor-q "draft ")
+        (util/press-seq "/")
+        (w/wait-for "[data-editor-popup-ref='commands']")
+        (case exit
+          :block (w/click (loc/filter ".ls-page-blocks .block-content"
+                                     :has-text "destination value"))
+          :outside (w/click "#main-content-container"
+                            (doto (Locator$ClickOptions.) (.setPosition 20 400)))
+          :navigation (w/click ".all-pages-nav a"))
+        (if (= exit :block)
+          (assert-editor-value! "destination value")
+          (assert/assert-have-count util/editor-q 0))
+        (is (= "draft /" (get (ls-api-call! :editor.getBlock block-uuid) "content")))
+        (when (= exit :navigation)
+          (util/goto-journals))
+        (util/refresh-until-graph-loaded)
+        (is (= "draft /" (get (ls-api-call! :editor.getBlock block-uuid) "content")))))))
+
 (deftest empty-enter-and-soft-line-break-test
   (testing "empty Enter obeys tree rules while Shift+Enter stays inside one block"
     (b/new-block "")
@@ -1962,7 +1990,9 @@
       (assert/assert-is-visible ".ui__popover-content a.menu-link")
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
-      (is (= target-page (p/get-page-name)))
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText target-page))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
