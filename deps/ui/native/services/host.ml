@@ -186,3 +186,8 @@ let dark_ref = ref false
 
 let set_dark d = dark_ref := d
 let prefers_dark () = !dark_ref
+
+(* Advertised by the embedding host once it owns URL image resources. *)
+let url_images_supported = ref false
+let set_url_images_supported enabled = url_images_supported := enabled
+let supports_url_images () = !url_images_supported

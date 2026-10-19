@@ -216,6 +216,7 @@ let () =
      touches no SDL/Metal state. Run it on a spare domain while this
      thread does window + renderer setup; joined below right before
      the init patches are applied. *)
+  Host.set_url_images_supported true;
   let init_d =
     Domain.spawn
       (fun () -> Native_embed.initialize Host_platform.platform_code 0 "")
@@ -450,6 +451,11 @@ let () =
                   (fun () -> (!renderer_cell).Lui_host.render s))) }
   in
   let host_cell = ref None in
+  let host_req_repaint = ref false in
+  let images=Host_images.create ~on_change:(fun id ->
+    let host=Option.get !host_cell in
+    Lui_host.invalidate_layout host;Lui_host.note_paint host id;
+    host_req_repaint:=true) () in
   let rects = Rects.create () in
   let ui = Ui.create () in
   Ui.set_scale ui scale;
@@ -656,13 +662,15 @@ let () =
                    { r with Lui_scene.w = slot; Lui_scene.h = slot }
                  | None -> r
                in
-               Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
+               if Lui_store.kind (Lui_host.store h) id="image" then Host_images.image_of images id
+               else Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
              | None -> None);
         image_in =
           (fun id r ->
              match !host_cell with
              | Some h ->
-               Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
+               if Lui_store.kind (Lui_host.store h) id="image" then Host_images.image_of images id
+               else Host_icons.image_of ~hooks (Lui_host.store h) !scale_cell id r
              | None -> None);
         shadow_of =
           (fun name ->
@@ -701,7 +709,7 @@ let () =
   let layout_trace = Option.map open_out_bin (Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_TRACE") in
   let module Timed_layout = struct
     include Lui_layout
-    let sync ?scale ?measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store =
+    let sync ?scale ?measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store =
       Option.iter (fun channel ->
         let hidden_ids = List.filter
           (fun id -> match hidden with Some predicate -> predicate id | None -> false)
@@ -710,7 +718,7 @@ let () =
           (store,width,height,Option.value scale ~default:1.,hidden_ids,ctx_anchor) [];
         flush channel) layout_trace;
       let started = perf_s () and before = stat_syncs t in
-      sync ?scale ?measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store;
+      sync ?scale ?measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store;
       metrics.layout_ms <- (perf_s () -. started) *. 1000.;
       let runs = stat_syncs t - before in
       (match layout_capture_path with
@@ -808,9 +816,10 @@ let () =
       List.iter
         (fun b ->
            metrics.patch_ops <- metrics.patch_ops + List.length b.Lui_protocol.ops;
-           ignore (match event with
+           let applied=match event with
              | Some event -> Host_interaction.apply_event_batch host event b
-             | None -> Lui_host.apply_batch host b))
+             | None -> Lui_host.apply_batch host b in
+           if applied then Host_images.sync_batch images store b)
         batches;
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
@@ -1777,7 +1786,6 @@ let () =
   Ui.set_content_rect ui engine_rect;
   let a11y = Lui_a11y.of_store store in
   (* Host_requests env: the dom-op/platform-request sink. *)
-  let host_req_repaint = ref false in
   native_menu_theme (!Theme_vars.mode = Lui_theme.Dark);
   let theme_gen_seen = ref !Theme_vars.generation in
   Host_requests.install
@@ -1788,7 +1796,7 @@ let () =
       scale = (fun () -> !scale_cell);
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
       text_layout = (fun id s -> Text_engine.text_layout text_engine id (shifted_rect id) s);
-      apply_batch = (fun b -> ignore (Lui_host.apply_batch host b));
+      apply_batch = (fun b -> if Lui_host.apply_batch host b then Host_images.sync_batch images store b);
       apply_actions;
       set_ime_rect;
       focused_text_input;
@@ -2301,6 +2309,7 @@ let () =
     | None -> ()
 
   done);
+  Host_images.dispose images;
   Option.iter close_out metrics_log;
   Native_window.dispose !win;
   Option.iter Lui_raster.Tile_renderer.release cocoa_tiles;

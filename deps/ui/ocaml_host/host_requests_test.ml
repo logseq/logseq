@@ -5371,12 +5371,12 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~scale:(fun () -> scale) ~store:(fun () -> A.store (surface ()))) in
     let module Measured_layout = struct
       include Lui_layout
-      let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store =
+      let sync ?scale:layout_scale ?measure:_ ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store =
         let measure id text offered_width _ =
           let measured = Text_engine.measure_text ~width:(Host_interaction.measure_width offered_width)
             (Lazy.force engine) id text in
           Some (Text_engine.pad_size store id ~scale measured) in
-        Lui_layout.sync ?scale:layout_scale ~measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
+        Lui_layout.sync ?scale:layout_scale ~measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
     end in
     let surface = A.create ~layout:(module Measured_layout) ~scale_cell:(ref scale)
       ~text:{measure=(fun id text -> Text_engine.measure_text (Lazy.force engine) id text);
@@ -5555,7 +5555,7 @@ let () =
               let module Measured_layout = struct
                 include Lui_layout
 
-                let sync ?scale:layout_scale ?measure:_ ?hidden ?ctx_anchor
+                let sync ?scale:layout_scale ?measure:_ ?image_measure ?hidden ?ctx_anchor
                     ?vport ?anchor_shift ~width ~height layout store =
                   let measure id text offered_width _ =
                     Some
@@ -5565,7 +5565,7 @@ let () =
                               (Host_interaction.measure_width offered_width)
                             (Lazy.force engine) id text))
                   in
-                  Lui_layout.sync ?scale:layout_scale ~measure ?hidden
+                  Lui_layout.sync ?scale:layout_scale ~measure ?image_measure ?hidden
                     ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
               end in
               let surface =
