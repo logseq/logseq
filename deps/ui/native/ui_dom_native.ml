@@ -221,10 +221,10 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
         | Some d -> Option.map json_of_js (jfield name d)
         | None -> None)
   ; clipboard_get =
-      (fun _mime ->
-        match clipboard_data e with
-        | Some cd -> Option.value (jstr "text" cd) ~default:""
-        | None -> "")
+      (fun mime ->
+        match mime, clipboard_data e with
+        | "text/plain", Some cd -> Option.value (jstr "text" cd) ~default:""
+        | _ -> "")
   ; clipboard_set =
       (fun mime text ->
         (* no clipboardData object natively — a copy/cut event's setData

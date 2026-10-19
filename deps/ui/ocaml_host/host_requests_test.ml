@@ -9,6 +9,27 @@ let check message condition = if not condition then failwith message
 
 let icon_hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of}
 
+let () =
+  let errors=ref [] in
+  let expect label condition=if not condition then errors:=label::!errors in
+  List.iter (fun text ->
+    let payload=Js.Json.JObject ["clipboardData",Js.Json.JObject ["text",Js.Json.JString text]] in
+    let event=Ui_dom_native.ev_of payload in
+    expect "Native paste must preserve plain-text Unicode and literal markup"
+      (event.Ui_services.clipboard_get "text/plain"=text);
+    List.iter (fun mime ->
+      expect ("Native paste must not mislabel plain text as " ^ mime)
+        (event.Ui_services.clipboard_get mime=""))
+      ["text/html";"text/rtf";"application/x-logseq-blocks"])
+    ["";"plain text";"<b>café 中文 😀</b>"];
+  let no_clipboard=Ui_dom_native.ev_of (Js.Json.JObject []) in
+  expect "Non-clipboard events must not expose clipboard text"
+    (no_clipboard.Ui_services.clipboard_get "text/plain"="");
+  List.iter prerr_endline (List.rev !errors);
+  check "Native clipboard MIME isolation" (!errors=[]);
+  print_endline "native clipboard MIME isolation and Unicode preservation: OK"
+
+
 
 let () =
   let module U = Lui_window.Ui in
