@@ -391,6 +391,18 @@ let transfer_has_files transfer =
         (array_from types)
   | None -> false
 
+let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
+
+let inspect_clipboard data () =
+  let entries name=Array.to_list (array_from (Option.get (j_field data name))) in
+  let string value=Option.get (Js.Json.decodeString value) in
+  let field name value=string (Option.get (j_field value name)) in
+  {Ui_services.clipboard_formats=List.map (fun value ->
+     let mime=string value in mime,cd_get data mime) (entries "types");
+   clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
+   clipboard_files=List.map (fun file -> field "name" file,field "type" file,num file "size")
+     (entries "files")}
+
 let ev_of (e : Js.Json.t) : Ui_services.ev =
   let clipboard = clipboard_data_js e in
   let transfer = data_transfer_js e in
@@ -438,6 +450,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
         match clipboard_data_js e with
         | Some cd -> cd_get cd mime
         | None -> "")
+  ; clipboard_snapshot = (match clipboard with None -> empty_clipboard_snapshot | Some data -> inspect_clipboard data)
   ; clipboard_set =
       (fun mime v ->
         match clipboard_data_js e with

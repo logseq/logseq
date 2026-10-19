@@ -101,6 +101,29 @@ let file_of_json (f : Js.Json.t) : Ui_services.file =
 
 let clipboard_data e = jfield "clipboardData" e
 
+let text_clipboard_data text =
+  Js.Json.JObject ["text",Js.Json.JString text;
+    "types",Js.Json.JArray [|Js.Json.JString "text/plain"|];
+    "items",Js.Json.JArray [|Js.Json.JObject
+      ["kind",Js.Json.JString "string";"type",Js.Json.JString "text/plain"]|];
+    "files",Js.Json.JArray [||]]
+
+let clipboard_value data mime =
+  if mime="text/plain" then Option.value (jstr "text" data) ~default:"" else ""
+
+let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
+
+let inspect_clipboard data () =
+  let entries name=match jfield name data with
+    | Some (Js.Json.JArray values) -> Array.to_list values
+    | _ -> invalid_arg ("Invalid native clipboard " ^ name) in
+  let field name value=Option.get (jstr name value) in
+  {Ui_services.clipboard_formats=List.map (fun value ->
+     let mime=Option.get (Js.Json.decodeString value) in mime,clipboard_value data mime) (entries "types");
+   clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
+   clipboard_files=List.map (fun file -> field "name" file,
+     Option.value (jstr "type" file) ~default:"",jnum "size" file) (entries "files")}
+
 let rec el_of (e : Js.Json.t) : Ui_services.el =
   let result = { Ui_services.token = next_token ()
   ; closest = (fun sel -> Option.map el_of (Dom_ext.closest e sel))
@@ -160,6 +183,7 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
   result
 
 let ev_of (e : Js.Json.t) : Ui_services.ev =
+  let clipboard=clipboard_data e in
   let files =
     match
       ( Option.bind (clipboard_data e) (fun cd -> jfield "files" cd)
@@ -222,9 +246,10 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
         | None -> None)
   ; clipboard_get =
       (fun mime ->
-        match mime, clipboard_data e with
-        | "text/plain", Some cd -> Option.value (jstr "text" cd) ~default:""
-        | _ -> "")
+        match clipboard_data e with
+        | Some data -> clipboard_value data mime
+        | None -> "")
+  ; clipboard_snapshot = (match clipboard with None -> empty_clipboard_snapshot | Some data -> inspect_clipboard data)
   ; clipboard_set =
       (fun mime text ->
         (* no clipboardData object natively — a copy/cut event's setData

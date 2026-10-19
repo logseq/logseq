@@ -1059,7 +1059,7 @@ let run_views ~registry ~profile ~finish =
       repeat = false; movement_x = 0.; movement_y = 0.; default_prevented = false;
       target = None; touches = []; detail = (fun _ -> None);
       detail_json = (fun _ -> None); clipboard_get = (fun _ -> "");
-      clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+      clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot); clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
       files = []; has_files = false; prevent_default = (fun () -> ());
       stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
   in

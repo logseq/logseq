@@ -228,6 +228,14 @@ type el = {
   style_prop : string -> string;
 }
 
+type clipboard_snapshot = {
+  clipboard_formats : (string * string) list;
+  clipboard_items : (string * string) list;
+  clipboard_files : (string * string * float) list;
+}
+
+val empty_clipboard_snapshot : clipboard_snapshot
+
 type ev = {
   x : float;
   y : float;
@@ -254,6 +262,8 @@ type ev = {
      covers string fields; numbers/bools/objects need this *)
   detail_json : string -> Json.t option;
   clipboard_get : string -> string;
+  clipboard_snapshot : unit -> clipboard_snapshot;
+  (* Inspect the current paste payload on demand, without reading file contents. *)
   clipboard_set : string -> string -> unit;
   data_transfer_get : string -> string;
   files : file list;

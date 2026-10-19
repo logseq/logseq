@@ -29,6 +29,33 @@ let () =
   check "Native clipboard MIME isolation" (!errors=[]);
   print_endline "native clipboard MIME isolation and Unicode preservation: OK"
 
+let () =
+  let value="<b>café 中文 😀</b>" in
+  let event=Ui_dom_native.ev_of (Js.Json.JObject ["clipboardData",Js.Json.JObject
+    ["text",Js.Json.JString value;
+     "types",Js.Json.JArray [|Js.Json.JString "text/plain"|];
+     "items",Js.Json.JArray [|Js.Json.JObject
+       ["kind",Js.Json.JString "string";"type",Js.Json.JString "text/plain"]|];
+     "files",Js.Json.JArray [|Js.Json.JObject
+      ["name",Js.Json.JString "attachment.png";"type",Js.Json.JString "image/png";
+       "size",Js.Json.JNumber 12.]|]]]) in
+  let host_event=Ui_dom_native.ev_of (Js.Json.JObject
+    ["clipboardData",Ui_dom_native.text_clipboard_data value]) in
+  check "The native host clipboard packet must expose its actual plain-text metadata"
+    (host_event.Ui_services.clipboard_snapshot ()=
+      {Ui_services.clipboard_formats=["text/plain",value];
+       clipboard_items=["string","text/plain"];clipboard_files=[]});
+  let snapshot=event.Ui_services.clipboard_snapshot () in
+  check "Native clipboard inspection must describe only the admitted text representation"
+    (snapshot.Ui_services.clipboard_formats=["text/plain",value] &&
+     snapshot.clipboard_items=["string","text/plain"]);
+  check "Native clipboard inspection must preserve file metadata without reading contents"
+    (snapshot.clipboard_files=["attachment.png","image/png",12.]);
+  let empty=Ui_dom_native.ev_of (Js.Json.JObject []) in
+  check "Non-clipboard native events must have empty inspection data"
+    (empty.Ui_services.clipboard_snapshot ()=Ui_services.empty_clipboard_snapshot);
+  print_endline "native clipboard inspection metadata: OK"
+
 
 
 let () =

@@ -1541,7 +1541,7 @@ let () =
                Option.value (Lui_shell.clipboard_read ()) ~default:""
              in
              emit_dom "paste" target
-               [ ("clipboardData", "{\"text\":" ^ jstr text ^ "}") ]
+               [ ("clipboardData", Js.Json.stringify (Ui_dom_native.text_clipboard_data text)) ]
          | _ -> ())
     end
   in

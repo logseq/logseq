@@ -306,6 +306,15 @@ type el = {
   (* Computed style property — "" where the host has no stylesheets. *)
 }
 
+type clipboard_snapshot = {
+  clipboard_formats : (string * string) list;
+  clipboard_items : (string * string) list;
+  clipboard_files : (string * string * float) list;
+}
+
+let empty_clipboard_snapshot =
+  {clipboard_formats=[];clipboard_items=[];clipboard_files=[]}
+
 type ev = {
   x : float;
   y : float;
@@ -331,6 +340,8 @@ type ev = {
   detail_json : string -> Json.t option;
   clipboard_get : string -> string;
   (* clipboardData.getData <mime> — "" without data. *)
+  clipboard_snapshot : unit -> clipboard_snapshot;
+  (* Inspect the current paste payload on demand, without reading file contents. *)
   clipboard_set : string -> string -> unit;
   data_transfer_get : string -> string;
   files : file list;

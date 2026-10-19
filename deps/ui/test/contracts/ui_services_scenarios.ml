@@ -294,7 +294,7 @@ let run () =
                      ; detail = (fun _ -> None)
                      ; detail_json = (fun _ -> None)
                      ; clipboard_get = (fun _ -> "")
-                     ; clipboard_set = (fun _ _ -> ())
+                     ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot); clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")
                      ; files = []; has_files = false
                      ; prevent_default = (fun () -> incr prevented)
@@ -332,7 +332,7 @@ let run () =
                            if k = "dialog" then Some (Json.String name)
                            else None)
                      ; clipboard_get = (fun _ -> "")
-                     ; clipboard_set = (fun _ _ -> ())
+                     ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot); clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")
                      ; files = []; has_files = false
                      ; prevent_default = (fun () -> ())
