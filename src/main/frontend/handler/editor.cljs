@@ -436,6 +436,8 @@
   (assoc block :block/title title :block/raw-title title))
 
 (defn insert-new-block-aux!
+  "Split the edited block at the selection and insert the remainder.
+  With `:preserve-current-block?`, keep its title and insert `value` unchanged."
   [config
    {:block/keys [uuid]
     :as block}
@@ -450,7 +452,9 @@
                                 (db-async/<get-block-with-children
                                  repo block-id {:children? true}))]
           (let [block (block-with-worker-children block worker-result)
-                [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                [fst-block-text snd-block-text] (if (:preserve-current-block? config)
+                                                 [(:block/title block) value]
+                                                 (compute-fst-snd-block-text value selection-start selection-end))
                 current-block (current-block-with-title block fst-block-text)
                 current-block (apply dissoc current-block retract-attributes)
                 new-m {:block/uuid (ldb/new-block-id)

@@ -409,11 +409,9 @@
                                     (editor-handler/save-block! (state/get-current-repo) % requested-title))]
       (p/let [converted-block (if (or (not (nil? block-type))
                                       (and (not update-current-block?) (not (string/blank? block-title))))
-                                ;; insert a new block: insert-new-block-aux! resolves to
-                                ;; [insert-promise sibling? block]; wait for the insert itself, as
-                                ;; Enter does. No block is inserted (nil) for a default value or a
-                                ;; single URL value: then nothing is turned.
-                                (p/let [[insert-promise _ block'] (editor-handler/insert-new-block-aux! {} db-block "")
+                                ;; Await the insert itself before converting the new block.
+                                (p/let [[insert-promise _ block'] (editor-handler/insert-new-block-aux!
+                                                                   {:preserve-current-block? true} db-block "")
                                         _ insert-promise]
                                   (when-let [id (:block/uuid block')]
                                     (p/let [_ (turn-type! block')]
