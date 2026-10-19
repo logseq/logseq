@@ -9200,6 +9200,30 @@ let () = Native_embed.with_entry_lock (fun () ->
     check "Native Handbook category mounts its final topic"
       (Option.is_some (Lui_store.find_identifier store "handbook-topic-start/topic29"));
     press "handbook-topic-start/topic0";
+    List.iter (fun scale ->
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      List.iter (fun width ->
+        Host.set_window_size width 720.;
+        Platform.emit_event "resize" (Js.Json.JObject []);ignore (Lui_app.flush app);
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~measure:(fun id text offered _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width offered) engine id text)) layout store;
+        let rect name=Option.get (Lui_layout.rect layout (find name)) in
+        let panel=rect "handbook-panel" and back=rect "handbook-back"
+        and copy=rect "handbook-copy-link" and close=rect "handbook-close" in
+        let title_id=List.find (fun id -> Lui_store.kind store id="text")
+          (Lui_store.child_ids store (find "handbook-back")) in
+        let title=Option.get (Lui_layout.rect layout title_id) in
+        let near a b=abs_float (a/.scale-.b)<=0.5 in
+        check "Native Handbook back control keeps the reference width and left alignment"
+          (near (back.x-.panel.x) 13. && near back.w (min 292. (panel.w/.scale-.116.)) &&
+           near (title.x-.back.x) 26. && near title.w (back.w/.scale-.26.));
+        check "Native Handbook header actions keep eighteen-point icons and twelve-point gaps"
+          (near copy.w 18. && near copy.h 18. && near close.w 18. && near close.h 18. &&
+           near (close.x-.copy.x-.copy.w) 12. && near (copy.y-.panel.y) 18.))
+        [1280.;400.]) [1.;2.];
     check "Native Handbook preserves nested rich content"
       (List.exists (fun id -> Lui_store.string_prop store id "text"=Some "bold") (Lui_store.preorder store));
     let paragraphs=List.filter (fun id -> Lui_store.kind store id="paragraph") (Lui_store.preorder store) in

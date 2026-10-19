@@ -1505,6 +1505,8 @@ let () =
       let menu = Ui.open_menu ui in
       if menu <> 0 then menu else Ui.focused ui
     in
+    dbg "dom key down=%b key=%s target=%d identifier=%s" down (dom_key scancode) target
+      (Option.value (Lui_store.string_prop store target "accessibility-identifier") ~default:"-");
     let fields =
       [ ("key", jstr (dom_key scancode))
       ; ("code", jstr (dom_code scancode))

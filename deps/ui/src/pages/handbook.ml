@@ -35,9 +35,9 @@ let typography size line weight child = Ui_components.with_props
 
 let icon_button ?identifier label name action =
   Ui_components.button ~variant:`ghost ~label:(t label) ?accessibility_identifier:identifier
-    ~width:20 ~height:24 ~min_width:20 ~min_height:24 ~padding:0 ~gap:0
+    ~width:18 ~height:18 ~min_width:18 ~min_height:18 ~padding:0 ~gap:0
     ~background:"transparent" ~foreground:"var(--lx-handbook-heading-fg)"
-    ~on_press:(fun _ -> action ()) [Icons.icon ~size:20. name]
+    ~on_press:(fun _ -> action ()) [Icons.icon ~size:18. name]
 
 let category_title (node:Data.node) = match node.key with
   | "1.getting_started" -> t "help/start"
@@ -374,9 +374,10 @@ let panel ~loader ~close ~online context parent =
                 ~grow:1. ~min_width:0 ~value:entry.title []
             | _ -> typography "20px" "28px" 700
                 (button ~variant:`ghost ~accessibility_identifier:"handbook-back" ~label:entry.title
-                  ~grow:1. ~min_width:0 ~padding:0 ~gap:8 ~background:"transparent"
+                  ~grow:1. ~max_width:292 ~min_width:0 ~main:`start ~padding:0 ~gap:8 ~background:"transparent"
                   ~foreground:"var(--lx-handbook-heading-fg)" ~on_press:(fun _ -> back ())
-                  [Icons.icon ~size:20. "chevron-left";text ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:entry.title []]))
+                  [Icons.icon ~size:18. "chevron-left";text ~grow:1. ~min_width:0
+                    ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:entry.title []]))
             (Signal.value current);
           row ~gap:12 ~cross:`center
             [if_ ~test:(reactive (fun entries -> List.length entries>1) (Signal.value history))

@@ -112,6 +112,37 @@ export function measureHandbookTypography(root) {
       ...measure(list),items:[...list.children].map(measure)}))};
 }
 
+export function measureHandbookArticleHeader(root,reference=false) {
+  const panel=root.querySelector('.cp__handbooks-popup'),origin=panel.getBoundingClientRect();
+  const header=panel.querySelector(reference?'.hd':'#handbook-header');
+  const back=header.querySelector(reference?'h1 button':'#handbook-back');
+  const measure=element=>{
+    const rect=element.getBoundingClientRect();
+    return {x:rect.x-origin.x,y:rect.y-origin.y,width:rect.width,height:rect.height};
+  };
+  return {back:measure(back),title:measure(back.querySelector(reference?'.title':'.lui-text')),
+    icons:[...header.querySelectorAll(reference?'svg':'.ui__icon')].map(measure),
+    actions:[...header.querySelectorAll(reference?'a':'#handbook-copy-link,#handbook-close')].map(measure)};
+}
+
+export function assertHandbookArticleHeader(actual,reference) {
+  for(const key of ['back','title','icons','actions']) {
+    const items=Array.isArray(actual[key])?actual[key]:[actual[key]];
+    const expected=Array.isArray(reference[key])?reference[key]:[reference[key]];
+    assert.equal(items.length,expected.length,`header ${key} count`);
+    for(const [index,item] of items.entries())
+      for(const dimension of ['x','y','width','height'])
+        assert.ok(Math.abs(item[dimension]-expected[index][dimension])<.3,
+          `header ${key} ${index} ${dimension}: ${item[dimension]} versus ${expected[index][dimension]}`);
+  }
+}
+
+export const handbookArticleHeaderReference={
+  back:{x:13,y:13,width:292,height:28},title:{x:39,y:13,width:266,height:28},
+  icons:[{x:13,y:18,width:18,height:18},{x:359,y:18,width:18,height:18},{x:389,y:18,width:18,height:18}],
+  actions:[{x:359,y:18,width:18,height:18},{x:389,y:18,width:18,height:18}]
+};
+
 export function assertHandbookTypography(actual,reference) {
   for(const group of ['paragraphs','heading','lists']) {
     assert.equal(actual[group].length,reference[group].length,`${group} count`);
