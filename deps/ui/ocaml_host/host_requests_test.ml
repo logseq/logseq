@@ -1094,6 +1094,10 @@ let () = Native_embed.with_entry_lock (fun () ->
     (Lui_store.preorder store) in
   let left_split = List.find (fun id -> Lui_store.parent store sidebar=Some id) splits in
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let left_edge=Option.get (Lui_layout.rect layout sidebar)
+  and main_edge=Option.get (Lui_layout.rect layout scroll) in
+  check "The left dock resize handle must not reserve content width"
+    (abs_float (main_edge.x-.left_edge.x-.left_edge.w)<0.01);
   let expanded = (Option.get (Lui_layout.rect layout inner)).Lui_scene.w in
   let expanded_value=Option.get (Lui_store.float_prop store left_split "first-pane-width") in
   Lui_store.apply_op store (SetProp (left_split,FirstPaneWidth,FloatValue 30.));
@@ -1109,6 +1113,11 @@ let () = Native_embed.with_entry_lock (fun () ->
     (Lui_store.preorder store) in
   ignore (Lui_app.send app {initial with right_sidebar_open=true});
   ignore (Lui_app.flush app);
+  Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
+  let main_edge=Option.get (Lui_layout.rect layout left_split)
+  and right_edge=Option.get (Lui_layout.rect layout right_sidebar) in
+  check "The right dock resize handle must not reserve content width"
+    (abs_float (right_edge.x-.main_edge.x-.main_edge.w)<0.01);
   let expanded_value=Option.get (Lui_store.float_prop store left_split "first-pane-width")
   and right_value=Option.get (Lui_store.float_prop store right_split "value") in
   List.iter (fun (split,pane,endpoint) ->
@@ -1118,7 +1127,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       (Lui_layout.rect layout id)) (Lui_store.preorder store);
     let first = List.hd (Lui_store.child_ids store split) in
     let first_rect = Lui_window.Rects.get rects first in
-    let x = (first_rect.x +. first_rect.w +. 3.) /. 2. in
+    let x = (first_rect.x +. first_rect.w) /. 2. +. (if split=left_split then 0.5 else 2.5) in
     let ui = Lui_window.Ui.create () in
     Lui_window.Ui.set_scale ui 2.;
     ignore (Lui_window.Ui.handle ui store rects
@@ -1520,7 +1529,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         let apply actions = List.iter (function W.Dispatch ev -> ignore (Lui_app.dispatch_event app ev) | _ -> ()) actions;refresh () in
         let drag first target =
           let r=rect first in
-          let x=(r.x+.r.w)/.scale+.1.5 in
+          let x=(r.x+.r.w)/.scale+.(if first=left then 0.5 else 2.5) in
           apply (A.handle surface (W.Input.Button_down (x,180.,W.Input.Left,1,W.Input.mods_none)));
           apply (A.handle surface (W.Input.Move (target,180.)));
           apply (A.handle surface (W.Input.Button_up (target,180.,W.Input.Left,W.Input.mods_none))) in
@@ -1599,19 +1608,19 @@ let () = Native_embed.with_entry_lock (fun () ->
         assert_width left 246. "Opening the right dock moves the left dock";
         assert_width right (width*.0.4) "Default right dock";
         let left_split = Option.get (Lui_store.parent store left) in
-        drag left_split (width*.0.45-.1.5);
+        drag left_split (width*.0.45+.2.5);
         assert_width right (width*.0.55) "Resized right dock";
         assert_width left 246. "Resizing the right dock moves the left dock";
         List.iter (fun next -> resize next;assert_width left 246. "Window resize drifts the left dock";
           assert_width right (next*.0.55) "Window resize changes the right ratio")
           [1000.;1600.;width];
-        drag left 301.5;assert_width left 300. "Resized left dock";
+        drag left 300.5;assert_width left 300. "Resized left dock";
         List.iter (fun open_ -> set_model (fun m -> {m with right_sidebar_open=open_});
           assert_width left 300. "Toggling the right dock changes the resized left width") [false;true;false];
         List.iter (fun target -> drag left target;assert_width left 460. "Left maximum drag bound")
           [width-.10.;width-.5.];
         drag left 10.;assert_width left 240. "Left minimum drag bound";
-        drag left 301.5;assert_width left 300. "Final persisted left width");
+        drag left 300.5;assert_width left 300. "Final persisted left width");
       let reopened,surface,_refresh = mount (width+.160.) in
       Fun.protect ~finally:(fun () ->
         ignore (Lui_app.dispose reopened);

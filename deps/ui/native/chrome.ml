@@ -301,30 +301,28 @@ let left_sidebar (ms : Model.t Signal.signal) =
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  Ui_parts.int_prop Lui_protocol.Gap ~value:(reactive (fun (m : Model.t) ->
-      if m.left_sidebar_open then Sidebar_state.divider_width else 0) ms)
-  (split ~key:"left-split" ~grow:1.
+  split ~key:"left-split" ~grow:1.
+    ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
     ~first_width:
       (reactive
          (fun (m : Model.t) width -> if m.Model.left_sidebar_open then width else 0.)
          ms (Signal.value st.Sidebar_state.left_width))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content)
+    (left_sidebar ms) content
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  Ui_parts.int_prop Lui_protocol.Gap ~value:(reactive (fun (m : Model.t) ->
-      if m.right_sidebar_open then Sidebar_state.divider_width else 0) ms)
-  (split ~key:"right-split" ~grow:1.
+  split ~key:"right-split" ~grow:1.
+    ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
     ~value:
       (reactive
-         (fun (m : Model.t) fraction viewport ->
-           if m.Model.right_sidebar_open then Sidebar_state.right_split_fraction ~viewport fraction else 1.)
-         ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
+         (fun (m : Model.t) fraction ->
+           if m.Model.right_sidebar_open then 1. -. fraction else 1.)
+         ms (Signal.value st.Sidebar_state.right_fraction))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
-    first second)
+    first second
 
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)

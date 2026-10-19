@@ -856,11 +856,8 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       if Sidebar_state.left_docked m.Model.left_sidebar_open vw then
         "cp__left-split"
       else "cp__left-split is-collapsed")
-    (Ui_parts.int_prop P.Gap ~value:(reactive (fun (m : Model.t) viewport ->
-         if Sidebar_state.left_docked m.left_sidebar_open viewport
-         then Sidebar_state.divider_width else 0)
-         ms (Signal.value st.Sidebar_state.viewport_w))
-     (split ~key:"left-split" ~grow:1. ~min_height:0
+    (split ~key:"left-split" ~grow:1. ~min_height:0
+       ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
        ~first_width:
          (reactive
             (fun (m : Model.t) width vw ->
@@ -871,7 +868,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
        ~on_resize:(Sidebar_state.on_left_split_resize st)
        (if Ui_services.env_publishing () then Logseq_el.nothing
         else left_sidebar ms st)
-       content))
+       content)
 
 (* docked right split: the right dock is the SECOND pane, so the split
    value is 1 - <persisted fraction>; a closed dock pins the value at
@@ -882,17 +879,16 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (fun (m : Model.t) ->
       "cp__right-split"
       ^ if m.right_sidebar_open then "" else " is-collapsed")
-    (Ui_parts.int_prop P.Gap ~value:(reactive (fun (m : Model.t) ->
-         if m.right_sidebar_open then Sidebar_state.divider_width else 0) ms)
-     (split ~key:"right-split" ~grow:1. ~min_height:0
+    (split ~key:"right-split" ~grow:1. ~min_height:0
+       ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
        ~value:
          (reactive
-            (fun (m : Model.t) fraction viewport ->
-              if m.Model.right_sidebar_open then Sidebar_state.right_split_fraction ~viewport fraction else 1.)
-            ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
+            (fun (m : Model.t) fraction ->
+              if m.Model.right_sidebar_open then 1. -. fraction else 1.)
+            ms (Signal.value st.Sidebar_state.right_fraction))
        ~resize_duration:300 ~resize_easing:`standard
        ~on_resize:(Sidebar_state.on_right_split_resize st)
-       first second))
+       first second)
 
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms

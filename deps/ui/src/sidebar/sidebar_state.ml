@@ -131,7 +131,6 @@ let class_rm (el : Ui_services.el) c = el.Ui_services.remove_class c
 
 let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 
-let divider_width = 3
 let left_width_min = 240
 let left_width_max = 460
 let left_width_default = 246.
@@ -152,9 +151,6 @@ let fraction_of_storage ~key ~default =
 let store_fraction key f =
   Ui_services.storage_set key (Printf.sprintf "%.4g" f)
 
-let right_split_fraction ~viewport fraction =
-  1. -. (fraction *. viewport /. (viewport -. float divider_width))
-
 let on_left_split_resize st ev =
   match ev with
   | Lui_protocol.ValueChanged (_, v) ->
@@ -170,7 +166,7 @@ let on_right_split_resize st ev =
       let viewport = Runtime.signal_get st.viewport_w in
       let minimum = Float.max right_fraction_min (320. /. viewport) in
       let f = clampf minimum right_fraction_max
-        ((1. -. v) *. (viewport -. float divider_width) /. viewport) in
+        (1. -. v) in
       Runtime.signal_set st.right_fraction f;
       store_fraction "ls-right-sidebar-width" f
   | _ -> ()

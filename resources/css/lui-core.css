@@ -663,7 +663,7 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   cursor: col-resize;
 }
 
-/* the kit divider is a 1px ::after line inside the ~gap hit zone —
+/* the kit divider is a 1px ::after line inside the independent resize hit area —
    widen + accent it on hover/drag so the resize affordance is
    discoverable (cljs had a visible resizer strip) */
 .cp__left-split:not(.is-collapsed) > .lui-split-divider:hover::after,

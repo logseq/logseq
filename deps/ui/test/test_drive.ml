@@ -262,12 +262,11 @@ let test_leading_toolbar_ownership () =
         Runtime.signal_set st.viewport_w viewport;
         flush ();
         List.iter (fun open_ ->
-          let docked = open_ && viewport >= 640. in
           List.iter (fun (cls, expected) ->
             let split = List.find (fun n -> has_tok n cls) (M.all_nodes (tree ())) in
-            check (cls ^ " reserves a divider only for an open dock")
+            check (cls ^ " keeps its resize handle outside layout flow")
               (Hashtbl.find_opt split.M.props "gap" = Some (Wv.IntValue expected)))
-            ["cp__left-split", (if docked then Sidebar_state.divider_width else 0);
+            ["cp__left-split", 0;
              "cp__right-split", 0];
           List.iter (fun id ->
             let found = controls id in

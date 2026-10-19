@@ -10,6 +10,7 @@ import {measureControlHits, assertControlHits} from './overlay_hit_checks.mjs';
 import {measurePropertyPicker, assertPropertyPicker} from './property_picker_checks.mjs';
 import {measureTransferDialog, assertDialogCloseGeometry, assertExportTypography} from './transfer_dialog_checks.mjs';
 import {measureImportView, assertImportView} from './import_view_checks.mjs';
+import {measureDockGeometry, assertDockGeometry} from './split_geometry_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -29,6 +30,25 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('dock resize handles overlay adjacent panes without reserving content width', () => {
+  open();
+  const measure = () => evaluate(`(${measureDockGeometry.toString()})(document)`);
+  for (const name of ['Toggle left sidebar', 'Toggle right sidebar']) {
+    const left = name.includes('left');
+    if (measure().find(split => split.left === left).closed) button(name);
+  }
+  browser('wait', '350');
+  assertDockGeometry(measure());
+  for (const name of ['Toggle right sidebar', 'Toggle left sidebar']) {
+    button(name);
+    browser('wait', '350');
+    assertDockGeometry(measure());
+    button(name);
+    browser('wait', '350');
+  }
+  button('Toggle right sidebar');
+});
 
 test('Import keeps shared typography, theme and option geometry', () => {
   open();
