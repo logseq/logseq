@@ -307,6 +307,22 @@ let cmdk_vars = function
     ; "--lx-nav-active", "rgb(255 255 255 / 0.08)"
     ]
 
+let handbook_vars = function
+  | Light ->
+      ["--lx-handbook-bg","var(--ls-primary-background-color)";
+       "--lx-handbook-heading-fg","var(--lx-gray-12)";
+       "--lx-handbook-body-fg","var(--lx-gray-12)";
+       "--lx-handbook-section-fg","var(--lx-gray-12)";
+       "--lx-handbook-hover-bg","var(--ls-tertiary-background-color)";
+       "--lx-handbook-footer-bg","var(--ls-primary-background-color)"]
+  | Dark ->
+      ["--lx-handbook-bg","var(--ls-tertiary-background-color)";
+       "--lx-handbook-heading-fg","#ffffff";
+       "--lx-handbook-body-fg","#f9fafb";
+       "--lx-handbook-section-fg","#f3f4f6";
+       "--lx-handbook-hover-bg","var(--ls-primary-background-color)";
+       "--lx-handbook-footer-bg","var(--ls-quaternary-background-color)"]
+
 (* Global palette declarations have one owner: the authored theme CSS. *)
 let stylesheet_owned_var name =
   String.starts_with ~prefix:"--rx-" name
@@ -331,7 +347,7 @@ let snapshot mode =
   ; vars =
       List.filter (fun (name, _) -> not (stylesheet_owned_var name))
         (ls_vars @ lui_vars c @ canonical_vars c cs
-           typography @ cmdk_vars mode
+           typography @ cmdk_vars mode @ handbook_vars mode
          @ [ "--left-sidebar-bg-color", "var(--lx-gray-02)" ])
   }
 

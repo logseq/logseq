@@ -9000,3 +9000,66 @@ let () = Native_embed.with_entry_lock (fun () ->
           ["bug-report.inspector/copy";"bug-report.inspector/create-issue";"bug-report.inspector/back"])
         [900.;480.;320.]) [1.;2.];
     print_endline "native clipboard inspector input, Unicode and layout: OK"))
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_flush= !Runtime.app_flush and previous_width=Host.inner_width ()
+  and previous_height=Host.inner_height () in
+  Host.set_window_size 1280. 720.;
+  let store=Lui_store.create () and registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_editor.register registry;Logseq_codemirror.register registry;
+  let children=List.init 30 (fun index -> Printf.sprintf
+    {|{:key "start/topic%d" :title "Topic %d" :content "<p>One <strong>bold</strong></p>"}|} index index)
+    |> String.concat " " in
+  let catalog=Handbook_data.parse
+    ({|{:title "Handbook" :children [{:key "start" :title "Getting started" :children [|} ^ children ^ "]}]}") in
+  let loader={Handbook.catalog=(fun () -> Js.Promise.resolve catalog);
+    online=(fun () -> Js.Promise.resolve None)} in
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create_with_extensions backend registry Model.initial (fun model () -> model)
+    (fun _ _ _ -> Lui_elements.column [Handbook.host ~loader ~controls:(fun open_ _ ->
+      Lui_elements.button ~accessibility_identifier:"handbook-test-open" ~on_press:(fun _ -> open_ ()) []) ()]) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);
+    Runtime.app_flush:=previous_flush;Host.set_window_size previous_width previous_height) (fun () ->
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let find id=Option.get (Lui_store.find_identifier store id) in
+    let press id=ignore (Lui_app.dispatch_event app (Press (find id)));ignore (Lui_app.flush app) in
+    press "handbook-test-open";Host.drain ();ignore (Lui_app.flush app);
+    check "Native Handbook loads through its mounted control" (Lui_store.mem store (find "handbook-panel"));
+    let layout=Lui_layout.create () in
+    List.iter (fun scale ->
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      List.iter (fun width ->
+        Host.set_window_size width 720.;
+        Platform.emit_event "resize" (Js.Json.JObject []);ignore (Lui_app.flush app);
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~measure:(fun id text offered _ -> Some (Text_engine.measure_text
+            ~width:(Host_interaction.measure_width offered) engine id text)) layout store;
+        let rect=Option.get (Lui_layout.rect layout (find "handbook-panel")) in
+        let expected_width=min 420. (width-.64.) in
+        Printf.printf "native Handbook width=%.0f scale=%.0f rect=%.2f,%.2f %.2fx%.2f\n%!"
+          width scale (rect.x/.scale) (rect.y/.scale) (rect.w/.scale) (rect.h/.scale);
+        check "Native Handbook keeps the reference width while resizing" (abs_float (rect.w/.scale-.expected_width)<0.2);
+        check "Native Handbook retains its right and bottom inset"
+          (abs_float (width-.(rect.x+.rect.w)/.scale-.32.)<0.2 &&
+           abs_float (720.-.(rect.y+.rect.h)/.scale-.58.)<0.2);
+        check "Native Handbook obeys its viewport height cap"
+          (abs_float (rect.h-.Float.round (619.2*.scale))<0.1);
+        let body=Option.get (Lui_layout.rect layout (find "handbook-scroll")) in
+        Printf.printf "native Handbook scroll rect=%.2f,%.2f %.2fx%.2f\n%!"
+          (body.x/.scale) (body.y/.scale) (body.w/.scale) (body.h/.scale);
+        check "Native Handbook has a bounded body below its fixed header"
+          (body.h>0. && body.h/.scale<=rect.h/.scale-.48.+.0.2)) [1280.;600.;400.]) [1.;2.];
+    press "handbook-category-start";
+    check "Native Handbook category mounts its final topic"
+      (Option.is_some (Lui_store.find_identifier store "handbook-topic-start/topic29"));
+    press "handbook-topic-start/topic0";
+    check "Native Handbook preserves nested rich content"
+      (List.exists (fun id -> Lui_store.string_prop store id "text"=Some "bold") (Lui_store.preorder store));
+    press "handbook-close";
+    check "Native Handbook closes its mounted surface" (Lui_store.find_identifier store "handbook-panel"=None);
+    print_endline "native Handbook mount, responsive geometry and rich content: OK"))

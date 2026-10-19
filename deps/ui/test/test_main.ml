@@ -4481,8 +4481,9 @@ let () =
       Handbook_scenarios.run ~check;
       Test_drive_sidebar.run ();
       Bug_report_drive.run ~finish:(fun () ->
+      Handbook_drive.run ~finish:(fun () ->
       Views_drive.run ~finish:(fun () ->
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)
-          test_editor_cmds ())))
+          test_editor_cmds ()))))

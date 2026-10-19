@@ -287,6 +287,8 @@
 (rule
  (copy ../src/pages/handbook_data.ml handbook_data.ml))
 (rule
+ (copy ../src/pages/handbook.ml handbook.ml))
+(rule
  (copy ../test/handbook_scenarios.ml handbook_scenarios.ml))
 (rule
  (copy ../src/pages/file_view.ml file_view.ml))

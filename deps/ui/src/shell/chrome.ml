@@ -1028,27 +1028,28 @@ let overlays (ms : Model.t Signal.signal) =
         ms
         ]))
 
-let help_menu_popup : t =
+let help_menu_popup ~open_handbook : t =
  fun context parent ->
   let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
   Right_sidebar_view.help_menu ~close
-    ~open_handbook:(fun () -> ()) ~open_bug_report:(fun () -> Ui_services.nav_set_hash "#/bug-report") () context parent
+    ~open_handbook ~open_bug_report:(fun () -> Ui_services.nav_set_hash "#/bug-report") () context parent
 
 let help_area (ms : Model.t Signal.signal) : t =
-  Logseq_el.fragment
+  Handbook.host ~controls:(fun open_handbook close_handbook -> Logseq_el.fragment
     [ Ui_components.with_props
         [ Ui_components.Prop.position `fixed
         ; Ui_components.Prop.inset_bottom 16.
         ; Ui_components.Prop.inset_right 32.
         ; Ui_components.Prop.z_index 999 ]
-        (Right_sidebar_view.help_trigger ())
+        (Right_sidebar_view.help_trigger ~on_press:(fun () ->
+           close_handbook ();Runtime.send Action.Help_toggle;Runtime.flush ()) ())
     ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
-          if m.help_open then help_menu_popup
+          if m.help_open then help_menu_popup ~open_handbook
           else spacer ~key:"help-none" [])
         ms
-    ]
+    ]) ()
 
 (* cljs page.cljs not-found: replaces the whole app chrome. Rendered
    as a fixed overlay (remounting the whole app tree inside a reactive
