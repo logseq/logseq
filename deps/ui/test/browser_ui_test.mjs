@@ -15,6 +15,7 @@ import {measureHelpMenu, assertHelpMenu, measureShortcutHelp, assertShortcutHelp
 import {measureHandbook, assertHandbook, assertHandbookImages, assertHandbookSearch, assertHandbookCleared, handbookDesktopReference, measureHandbookArticle, assertHandbookArticle, handbookIntroductionArticleReference, handbookJournalsArticleReference, measureHandbookSearchPaint, assertHandbookSearchPaint, handbookSearchPaintReference} from './handbook_checks.mjs';
 import {measureBugReport, assertBugReport, bugReportDesktopReference, measureClipboardInspector, assertClipboardInspector} from './bug_report_checks.mjs';
 import {measureHandbookCategoryContent, assertHandbookCategoryContent, handbookCategoryContentReference} from './handbook_checks.mjs';
+import {measureHandbookArticleHeader, assertHandbookArticleHeader, handbookArticleHeaderReference} from './handbook_checks.mjs';
 
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
@@ -34,6 +35,31 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('Pages tag filters keep live multi-selection and restore reference titles', () => {
+  open();
+  browser('find','text','Pages','click','--exact');
+  browser('wait','--fn',"document.querySelector('[id^=vfilter-]') !== null");
+  button('Filter');
+  browser('click','[role="menu"] button:has-text("Tags")');
+  browser('wait','--fn',"document.querySelector('input[placeholder=Tags]') !== null");
+  button('Journal');
+  assert.equal(evaluate("document.activeElement === document.querySelector('input[placeholder=Tags]')"),true,'row selection returns focus to search');
+  browser('find','role','checkbox','click','--name','Page','--exact');
+  assert.equal(evaluate("document.activeElement === document.querySelector('input[placeholder=Tags]')"),true,'checkbox selection returns focus to search');
+  browser('fill','input[placeholder=Tags]','Journal');
+  browser('press','Enter');
+  assert.equal(evaluate("document.querySelector('input[placeholder=Tags]').value"),'Journal','selection preserves the query');
+  assert.equal(evaluate("document.activeElement === document.querySelector('input[placeholder=Tags]')"),true,'keyboard selection preserves search focus');
+  browser('press','Enter');
+  assert.equal(evaluate("document.querySelectorAll('.ls-vf-chip').length"),1,'tag values share one filter');
+  assert.equal(evaluate("document.querySelector('input[placeholder=Tags]') !== null"),true,'selection keeps the picker open');
+  assert.equal(evaluate("document.querySelector('.ls-vf-chip').textContent.includes('Journal') && document.querySelector('.ls-vf-chip').textContent.includes('Page')"),true,'tag titles render immediately');
+  browser('press','Escape');browser('reload');
+  browser('wait','--fn',"document.querySelector('.ls-vf-chip')?.textContent.includes('Journal') && document.querySelector('.ls-vf-chip')?.textContent.includes('Page')");
+  browser('click','.ls-vf-chip button[aria-label=Delete]');
+  browser('wait','--fn',"document.querySelector('.ls-vf-chip') === null");
+});
 
 test('Pages value filters open and apply both empty-value actions', () => {
   open();
@@ -130,13 +156,19 @@ test('Handbook preserves dashboard geometry, search focus and published article 
   browser('find','role','button','click','--name','The only features you need to get started with Logseq','--exact');
   browser('wait','--fn',"document.querySelectorAll('.cp__handbooks-popup video').length === 2 && [...document.querySelectorAll('.cp__handbooks-popup video')].every(video=>video.readyState>=1)");
   assertHandbookArticle(evaluate(`(${measureHandbookArticle.toString()})(document)`),handbookIntroductionArticleReference);
+  assertHandbookArticleHeader(evaluate(`(${measureHandbookArticleHeader.toString()})(document)`),handbookArticleHeaderReference);
   button('Next chapter');
   browser('wait','--fn',"document.querySelector('.cp__handbooks-popup').textContent.includes('Fundamental 1:') && [...document.querySelectorAll('.cp__handbooks-popup video')].every(video=>video.readyState>=1)");
   button('Next chapter');
   browser('wait','--fn',"document.querySelectorAll('.cp__handbooks-popup code').length === 2");
   assertHandbookArticle(evaluate(`(${measureHandbookArticle.toString()})(document)`),handbookJournalsArticleReference);
-  button('Close');
+  browser('press','Escape');
   browser('wait', '--fn', "document.querySelector('#handbook-panel') === null");
+  assert.equal(evaluate("document.activeElement === document.querySelector('#help-menu-trigger')"),true,'article dismissal returns to the surviving Help trigger');
+  browser('press','Enter');
+  browser('wait','--fn',"document.querySelector('.cp__sidebar-help-menu-popup') !== null");
+  browser('press','Escape');
+  browser('wait','--fn',"document.querySelector('.cp__sidebar-help-menu-popup') === null");
 });
 
 test('Help opens the diagnostic page and its resettable clipboard tool', () => {

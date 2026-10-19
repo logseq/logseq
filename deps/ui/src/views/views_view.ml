@@ -51,7 +51,7 @@ let title_of_uuid inst u =
   match Hashtbl.find_opt (V.get inst).V.blocks u with
   | Some b ->
       Wr.prop_text (Option.value (W.get b "block/title") ~default:W.Nil)
-  | None -> u
+  | None -> Option.value (Hashtbl.find_opt (V.get inst).V.ref_titles u) ~default:u
 
 (* ---------- :view hiccup wire -> elements ---------- *)
 
@@ -347,6 +347,13 @@ let copy_blocks src =
    runs on success and on worker failure so the batch ticket clears. *)
 let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
     ?(finally = fun () -> ()) inst uuids f =
+  let rec references acc = function
+    | W.Uuid uuid -> uuid::acc
+    | W.Array values | W.List values | W.Set values -> List.fold_left references acc values
+    | _ -> acc in
+  let filter_refs=List.fold_left (fun acc (clause:V.filter_clause) ->
+    match clause.c_val with Some value -> references acc value | None -> acc) [] (V.get inst).V.filters in
+  let uuids=dedupe_uuids (uuids @ List.rev filter_refs) in
   let apply blocks =
     Fun.protect ~finally (fun () ->
         if fresh () then begin

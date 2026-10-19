@@ -7945,7 +7945,7 @@ let () = Native_embed.with_entry_lock (fun () ->
               [Views_popup.MItem ("Action",ignore)]
           | "select" -> Views_popup.show_select ~anchor ~align_end
               ~items:(Views_popup.fixed_items []) ~placeholder:"Filter"
-              ~on_chosen:(fun _ _ -> ()) ()
+              ~on_chosen:(fun _ _ _ -> ()) ()
           | _ -> Views_popup.show_custom ~anchor ~align_end ~cls:"edge-fixture"
               (Lui_elements.text ~value:"Content" []) in
         List.iter (fun kind -> List.iter (fun align_end ->

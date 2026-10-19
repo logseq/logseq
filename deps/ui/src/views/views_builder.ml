@@ -268,7 +268,7 @@ let value_picker inst ~tree ~loc ~anchor ident =
                     ; si_extra = None
                     })
                   its))
-             ~on_chosen:(fun it _ ->
+             ~on_chosen:(fun it _ _ ->
                add_clause { a_dsl = "\"" ^ it.P.si_value ^ "\""; a_disp = it.si_value })
              ())
       in
@@ -335,7 +335,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
         (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~extra:(fun () -> head ())
            ~wrap_cls:"query-builder-picker"
-           ~on_chosen:(fun it _ ->
+           ~on_chosen:(fun it _ _ ->
              value_picker inst ~tree ~loc ~anchor it.P.si_value)
            ()))
 
@@ -364,7 +364,7 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name =
                tree := append_at !tree loc (CItem (name, args));
                commit inst ~tree ()
              end)
-           ~on_chosen:(fun _ _ -> ())
+           ~on_chosen:(fun _ _ _ -> ())
            ()))
 
 let page_picker inst ~tree ~loc ~anchor kind =
@@ -378,7 +378,7 @@ let page_picker inst ~tree ~loc ~anchor kind =
       ignore
         (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
-           ~on_chosen:(fun it _ ->
+           ~on_chosen:(fun it _ _ ->
              let v = it.P.si_value in
              let clause =
                match kind with
@@ -408,7 +408,7 @@ let tag_picker inst ~tree ~loc ~anchor =
       ignore
         (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~wrap_cls:"query-builder-picker"
-           ~on_chosen:(fun it _ ->
+           ~on_chosen:(fun it _ _ ->
              (* seed uuid -> title so a re-parsed [[uuid]] clause still
                 resolves before refresh_block re-reads the value block's
                 block/refs (async) *)
@@ -434,8 +434,8 @@ let between_picker inst ~tree ~loc ~anchor =
                   titles))
              ~wrap_cls:"query-builder-picker" ~on_chosen:on_done ())
       in
-      pick (I.t "query.builder/between-start-label") (fun s _ ->
-          pick (I.t "query.builder/between-end-label") (fun e _ ->
+      pick (I.t "query.builder/between-start-label") (fun s _ _ ->
+          pick (I.t "query.builder/between-end-label") (fun e _ _ ->
               tree :=
                 append_at !tree loc
                   (CItem
@@ -476,7 +476,7 @@ let sample_picker inst ~tree ~loc ~anchor =
               let n = string_of_int (i + 1) in
               { P.si_label = n; si_value = n; si_extra = None })))
        ~wrap_cls:"query-builder-picker"
-       ~on_chosen:(fun it _ ->
+       ~on_chosen:(fun it _ _ ->
          tree := append_at !tree loc (CItem ("sample", [ { a_dsl = it.P.si_value; a_disp = it.si_value } ]));
          commit inst ~tree ())
        ())
@@ -507,7 +507,7 @@ let picker inst ~tree ~loc ~anchor =
   ignore
     (P.show_select ~anchor ~placeholder:(I.t "query.builder/add-filter-or-operator-placeholder")
        ~items:(P.fixed_items items) ~wrap_cls:"query-builder-picker"
-       ~on_chosen:(fun it _ ->
+       ~on_chosen:(fun it _ _ ->
          match it.P.si_value with
          | op when is_op op ->
              tree := append_at !tree loc (COp (op, []));

@@ -348,7 +348,7 @@ let run_views ~registry ~profile ~finish =
   assert_anchored "View menu";
   Views_popup.show_select ~anchor:trigger ~align_end:true
     ~items:(Views_popup.fixed_items []) ~placeholder:"Choice"
-    ~on_chosen:(fun _ _ -> ()) ();
+    ~on_chosen:(fun _ _ _ -> ()) ();
   assert_anchored "View select";
   Views_popup.show_custom ~anchor:trigger ~align_end:true ~cls:"popup-fixture"
     (Lui_elements.text ~value:"Content" []);
@@ -463,7 +463,7 @@ let run_views ~registry ~profile ~finish =
       | [] ->
           Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
           Views_popup.stack_st:=previous_stack;done_ ()
-      | (column,data,expected,empty_action)::rest ->
+      | (column,data,expected,scenario)::rest ->
           Views_popup.stack_st:=None;
           Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
               if name="thread-api/get-view-filter-data" then
@@ -486,14 +486,21 @@ let run_views ~registry ~profile ~finish =
             let rendered = List.exists (fun n -> n.M.kind="input") (nodes selector) in
             check "asynchronous view popups publish their own frame without another input event" rendered;
             if rendered then begin
+              let multiple=Wire.get data "value-source"=Some (Wire.Keyword "property-values") in
               check "filter value controls satisfy the portable button naming contract"
                 (List.for_all (fun node -> node.M.kind<>"button"
                   || P.node_properties_supported P.Button (button_properties node)) (nodes selector));
               eqi "view filter values use the same portable option list" expected
                 (List.length (List.filter (fun n -> class_has n "ls-view-select-option") (nodes selector)));
               let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
-              (match empty_action with
-              | Some key ->
+              check "property-value filters expose checkbox choices"
+                (List.length (List.filter (fun node -> node.M.kind="checkbox") (nodes selector))
+                 =if multiple then expected else 0);
+              check "live property-value filters have no Apply action"
+                (not (List.exists (fun node -> node.M.kind="button"
+                  && M.string_prop node "text"=Some (I18n.t "ui/apply")) (nodes selector)));
+              (match scenario with
+              | `Empty key ->
                 S.text_changed selector input.M.id "No matching value";
                 let action=List.find_opt (fun n -> n.M.kind="button"
                   && M.string_prop n "text"=Some (I18n.t key)) (nodes selector) in
@@ -503,10 +510,60 @@ let run_views ~registry ~profile ~finish =
                   (match (Views_state.get inst).filters with
                    | [clause] -> clause.c_op=(if key="view.filter/is-empty" then "is" else "is-not")
                        && clause.c_val=Some (Wire.Keyword "empty")
-                   | _ -> false)
-              | None -> S.submit selector input.M.id);
-              check "view filter value selection updates one clause and closes"
-                (List.length (Views_state.get inst).filters=1 && !Views_popup.open_popups=[]);
+                   | _ -> false);
+                check "empty-value footer closes its popup" (!Views_popup.open_popups=[])
+              | `Choose ->
+                  S.submit selector input.M.id;
+                  check "view filter value selection updates one clause"
+                    (List.length (Views_state.get inst).filters=1);
+                  check "only multi-value filters retain their popup after selection"
+                    ((!Views_popup.open_popups<>[])=multiple);
+                  if multiple then
+                    check "property-value filters persist a value set"
+                      (match (Views_state.get inst).filters with
+                       | [{c_val=Some (Wire.Set [Wire.String "alpha"]);_}] -> true | _ -> false)
+              | `Multiple ->
+                  let previous={Views_state.c_prop="fixture/previous";c_op="text-contains";c_val=Some (Wire.String "keep")}
+                  and newer={Views_state.c_prop="fixture/newer";c_op="text-contains";c_val=Some (Wire.String "also keep")} in
+                  Views_state.update inst (fun state -> {state with filters=[previous]});
+                  let rows ()=List.filter (fun node -> class_has node "ls-view-select-option") (nodes selector) in
+                  let choose index=match List.nth_opt (rows ()) index with
+                    | Some node -> S.press selector node.M.id
+                    | None -> check "requested multi-value choice remains available" false in
+                  let values ()=List.find_map (fun (clause:Views_state.filter_clause) ->
+                    if clause.Views_state.c_prop=column.c_id then match clause.c_val with
+                      | Some (Wire.Set values) -> Some values | _ -> None
+                    else None) (Views_state.get inst).filters in
+                  choose 0;
+                  check "first tag selection creates a set and keeps the picker open"
+                    (values ()=Some [Wire.Uuid "tag-a"] && !Views_popup.open_popups<>[]);
+                  Views_state.update inst (fun state -> {state with filters=state.filters @ [newer]});
+                  S.text_changed selector input.M.id "Omega";
+                  S.submit selector input.M.id;
+                  check "filtered selection preserves hidden checked values"
+                    (values ()=Some [Wire.Uuid "tag-a";Wire.Uuid "tag-c"]);
+                  check "multi-value selection preserves the searched result list"
+                    (List.length (rows ())=1);
+                  S.text_changed selector input.M.id "";
+                  choose 1;
+                  check "identical tag labels retain distinct reference values"
+                    (values ()=Some [Wire.Uuid "tag-a";Wire.Uuid "tag-b";Wire.Uuid "tag-c"]);
+                  check "repeated tag selection updates one owned clause and preserves other filters"
+                    (List.length (Views_state.get inst).filters=3
+                     && List.mem previous (Views_state.get inst).filters && List.mem newer (Views_state.get inst).filters);
+                  (match List.find_opt (fun (clause:Views_state.filter_clause) -> clause.c_prop=column.c_id) (Views_state.get inst).filters with
+                   | Some clause -> check "selected tag sets display titles instead of UUIDs"
+                       (Views_head.filter_value_label inst clause="Same, Same, Omega")
+                   | None -> check "selected tag clause exists" false);
+                  List.iter choose [0;1;2];
+                  check "unchecking all tags removes only the owned filter"
+                    ((Views_state.get inst).filters=[previous;newer] && !Views_popup.open_popups<>[]);
+                  choose 0;
+                  let empty=List.find_opt (fun node -> node.M.kind="button"
+                    && M.string_prop node "text"=Some (I18n.t "view.filter/is-empty")) (nodes selector) in
+                  Option.iter (fun node -> S.press selector node.M.id) empty;
+                  check "empty footer replaces the live tag clause instead of appending another"
+                    (List.length (Views_state.get inst).filters=3 && !Views_popup.open_popups=[]));
               if column.Views_state.c_type="datetime" then
                 check "timestamp filter presets use the reference after operator"
                   (List.exists (fun f -> f.Views_state.c_op="after") (Views_state.get inst).filters)
@@ -520,12 +577,56 @@ let run_views ~registry ~profile ~finish =
     let checked={(Views_table.created_column ()) with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"}
     and value={(Views_table.created_column ()) with Views_state.c_id="fixture/value";c_name="Value";c_type="default"} in
     let values=data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]] in
-    next [(Views_table.created_column ()),data "timestamp" [],List.length (I18n.timestamp_options ()),None;
-      checked,data "checkbox" [],2,Some "view.filter/is-empty";
-      checked,data "checkbox" [],2,Some "view.filter/is-not-empty";
-      value,values,1,None;
-      value,values,1,Some "view.filter/is-empty";
-      value,values,1,Some "view.filter/is-not-empty"]
+    next [(Views_table.created_column ()),data "timestamp" [],List.length (I18n.timestamp_options ()),`Choose;
+      checked,data "checkbox" [],2,`Empty "view.filter/is-empty";
+      checked,data "checkbox" [],2,`Empty "view.filter/is-not-empty";
+      value,values,1,`Choose;
+      value,values,1,`Empty "view.filter/is-empty";
+      value,values,1,`Empty "view.filter/is-not-empty";
+      {value with c_id="fixture/tags";c_name="Tags"},data "property-values"
+        (List.map (fun (label,uuid) -> Wire.Map [Wire.kw "label",Wire.String label;Wire.kw "value",Wire.Uuid uuid])
+          ["Same","tag-a";"Same","tag-b";"Omega","tag-c"]),3,`Multiple]
+  in
+  let filter_reference_titles_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "filter-reference-fixture"});
+    let requested=ref [] in
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      let results=if method_="thread-api/get-blocks" then
+        match args with
+        | [_;Wire.Array requests] ->
+            List.map (fun request ->
+              let uuid=Option.get (Option.bind (Wire.get request "id") Wire.as_uuid) in
+              requested:= !requested @ [uuid];
+              Wire.Map [Wire.kw "block",Wire.Map
+                [Wire.kw "block/uuid",Wire.Uuid uuid;Wire.kw "block/title",Wire.String
+                  (match uuid with "tag-a" -> "Journal" | "tag-b" -> "Page" | _ -> "Row")]]) requests
+        | _ -> []
+        else [] in
+      Js.Promise.resolve (Wire.List results));on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let instance=ref None in
+    let selector=mount (fun _ context parent ->
+      let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+        ~kind:Views_state.KAllPages ~feature:"filter-reference-fixture" ~owner:Wire.Nil in
+      instance:=Some inst;Views_head.filters_row inst context parent) in
+    let inst=Option.get !instance in
+    let clause={Views_state.c_prop="block/tags";c_op="is";
+      c_val=Some (Wire.Set [Wire.Uuid "tag-a";Wire.Uuid "tag-b"])} in
+    Views_state.update inst (fun state -> {state with filters=[clause]});
+    S.flush selector;
+    let retained_label=List.find (fun node -> M.string_prop node "text"=Some "tag-a, tag-b") (nodes selector) in
+    Views_view.load_blocks inst ["row"] (fun () ->
+      S.flush selector;
+      check "view loading fetches filter references with row metadata"
+        (!requested=["row";"tag-a";"tag-b"]);
+      check "reloaded filter sets resolve reference titles"
+        (Views_head.filter_value_label inst clause="Journal, Page");
+      check "hydrating reference titles updates the existing filter label"
+        (List.exists (fun node -> node.M.id=retained_label.M.id
+          && M.string_prop node "text"=Some "Journal, Page") (nodes selector));
+      ignore (Lui_app.dispose selector.S.app);Runtime.worker:=previous_worker;
+      Runtime.read_model:=previous_model;done_ ())
   in
   let config_boot_check done_ =
     let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in
@@ -1837,7 +1938,7 @@ let run_views ~registry ~profile ~finish =
   let open_choices ?(multiple=false) items =
     Views_popup.show_select ~anchor:(popup_anchor ()) ~items:(Views_popup.fixed_items items)
       ~placeholder:"Choice" ~multiple
-      ~on_chosen:(fun item checked -> selected_items := !selected_items @ [item.Views_popup.si_value, checked])
+      ~on_chosen:(fun item checked _ -> selected_items := !selected_items @ [item.Views_popup.si_value, checked])
       ~on_apply:(fun items -> applied_items := items) ();
     S.flush sorting in
   let choice_rows () = List.filter (fun n -> class_has n "ls-view-select-option") (nodes sorting) in
@@ -2226,7 +2327,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))));
+        filter_reference_titles_check (fun () -> config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

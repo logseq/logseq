@@ -373,7 +373,7 @@ let show_custom_rect ~rect ~cls content =
     ~align_end:false ~cls ~card:true ~on_dismiss:(fun _ -> close_entry id) [content]))
 
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
-    ?(on_apply = fun _ -> ()) ?(extra : (unit -> t option) option)
+    ?on_apply ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
     ?(custom_content = fun _ -> None) ~on_chosen () =
   let anchor_target = anchor_identifier anchor in
@@ -396,18 +396,22 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let bounded count picked = max 0 (min picked (count - 1)) in
     let measurement = Ui_effect.request () in
     let content_id i = Printf.sprintf "ac-content-%d-%d" id i in
+    let input_id = Printf.sprintf "vpsel-i%d" id in
     let choose i it =
       let ticket = Ui_effect.issue measurement in
       if multiple then begin
         let sel = Signal.get_state sel_values in
         let now = List.mem it.si_value sel in
-        Signal.set sel_values
-          (if now then List.filter (fun v -> v <> it.si_value) sel
-           else it.si_value :: sel);
+        let selected=if now then List.filter (fun v -> v <> it.si_value) sel
+          else it.si_value :: sel in
+        Signal.set sel_values selected;
         on_chosen it (not now)
+          (List.filter (fun choice -> List.mem choice.si_value selected) (Signal.get source));
+        if List.exists (fun popup -> popup.p_id=id) !open_popups then
+          Option.iter (fun input -> input.U.focus ()) (U.dom_by_id input_id)
       end
       else match custom_content it with
-      | None -> close_all (); on_chosen it true
+      | None -> close_all (); on_chosen it true [it]
       | Some (cls, content) ->
           Ui_effect.task ~scope:context.Lui_ui.ui_scope (U.dom_measure_rect (content_id i))
             ~ok:(fun rect ->
@@ -434,6 +438,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
         ; Ui_components.Prop.line_height "20px"
         ; Ui_components.Prop.hover_background "var(--lx-select-active-bg)"
         ; Ui_components.Prop.selected_background "var(--lx-select-active-bg)" ]
+        (Ui_parts.string_prop Lui_protocol.AccessibilityLabel ~value:it.si_label
         (list_item ~key:("ac-" ^ string_of_int i)
            ~accessibility_identifier:("ac-" ^ string_of_int i)
            ~style_class:"ls-view-select-option"
@@ -447,11 +452,11 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            ~on_press:(fun _ -> choose i it)
            [ row ~accessibility_identifier:(content_id i) ~gap:4 ~cross:`center ~grow:1. ~min_width:0
              ((if multiple then
-               [ checkbox ~key:"checked" ~width:16 ~height:16
+               [ checkbox ~key:"checked" ~width:16 ~height:16 ~label:it.si_label
                    ~checked:(reactive (fun sel -> List.mem it.si_value sel) ssig)
                    ~on_toggle:(fun _ -> choose i it) [] ]
              else [])
-            @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ])
+            @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ]))
     in
     let results =
       reactive (fun visible ->
@@ -479,7 +484,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                 [ Ui_components.Prop.font_size "16px"
                 ; Ui_components.Prop.line_height "24px"
                 ; Ui_components.Prop.focus_shadow "none" ]
-                (Ui_components.input ~key:("vpsel-i" ^ string_of_int id)
+                (Ui_components.input ~key:input_id ~accessibility_identifier:input_id
                    ~style_class:"cp__select-input" ~placeholder
                    ~autofocus:true ~height:32
                    ~padding_horizontal:8 ~padding_vertical:4
@@ -496,15 +501,16 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                      | _ -> ())
                    ~on_submit:(fun _ -> submit ()) [])
             ; column ~padding_vertical:4 ~cross:`stretch [ results ] ]
-            @ (if multiple then
+            @ (match multiple,on_apply with
+              | true,Some apply ->
               [ column ~style_class:"cp__select-apply" ~padding:16
                   [ Ui_components.button ~variant:`outline
                       ~key:("vpsel-a-" ^ string_of_int id) ~text:(I.t "ui/apply")
                       ~padding_vertical:8 ~padding_horizontal:16
                       ~on_press:(fun _ ->
                         close_all ();
-                        on_apply (Signal.get_state sel_values)) [] ] ]
-            else [])
+                        apply (Signal.get_state sel_values)) [] ] ]
+              | _ -> [])
             @ footer))
     in
     let wrap =

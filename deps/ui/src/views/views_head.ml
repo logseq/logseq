@@ -337,6 +337,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
        | None -> []))
   in
   Views_db.get_view_filter_data ~opts prop_w (fun data ->
+      let multiple=W.get data "value-source"=Some (W.Keyword "property-values") in
       let items =
         match W.get data "value-source" with
         | Some (W.Keyword "timestamp") ->
@@ -349,25 +350,39 @@ let filter_value_phase inst ~anchor (c : V.column) =
             ; { P.si_label = (I.t "ui/false"); si_value = "false"
               ; si_extra = Some (W.Bool false) } ]
         | Some (W.Keyword "property-values") ->
-            List.map
-              (fun it ->
-                { P.si_label =
-                    Option.value (W.map_get_string it "label") ~default:""
-                ; si_value =
-                    Option.value (W.map_get_string it "label") ~default:""
-                ; si_extra = W.get it "value" })
+            List.mapi
+              (fun index it ->
+                { P.si_label = (match W.map_get_string it "label" with Some label -> label
+                    | None -> invalid_arg "view filter value lacks a label")
+                ; si_value = string_of_int index
+                ; si_extra = Some (match W.get it "value" with Some value -> value
+                    | None -> invalid_arg "view filter value lacks a value") })
               (Wr.W.elems
                  (Option.value (W.get data "values") ~default:W.Nil))
         | _ -> invalid_arg "view filter data has an unsupported value source"
       in
+      if multiple then begin
+        let ref_titles=Hashtbl.copy (V.get inst).V.ref_titles in
+        List.iter (fun item -> match item.P.si_extra with
+          | Some (W.Uuid uuid) -> Hashtbl.replace ref_titles uuid item.si_label
+          | _ -> ()) items;
+        V.update inst (fun state -> {state with ref_titles})
+      end;
+      let position=ref None in
+      let set_clause clause =
+        let state=V.get inst in
+        let filters=match !position,clause with
+          | None,None -> state.V.filters
+          | None,Some clause -> position:=Some (List.length state.filters);state.filters @ [clause]
+          | Some index,clause ->
+              if index>=List.length state.filters then invalid_arg "view filter session lost its clause";
+              (match clause with
+               | None -> position:=None;List.filteri (fun i _ -> i<>index) state.filters
+               | Some clause -> List.mapi (fun i previous -> if i=index then clause else previous) state.filters) in
+        if filters<>state.filters then set_filters inst filters state.filters_or in
       let commit value =
         P.close_all ();
-        set_filters inst
-          ((V.get inst).V.filters
-           @ [ { V.c_prop = ident; c_op = operator
-               ; c_val = Some value
-               } ])
-          (V.get inst).V.filters_or
+        set_clause (Some {V.c_prop=ident;c_op=operator;c_val=Some value})
       in
       let custom_content it =
         if timestamp && it.P.si_value = "custom-date" then
@@ -385,17 +400,18 @@ let filter_value_phase inst ~anchor (c : V.column) =
                 ~padding_vertical:4 ~padding_horizontal:8
                 ~on_press:(fun _ ->
                   P.close_all ();
-                  set_filters inst
-                    ((V.get inst).V.filters
-                     @ [ { V.c_prop = ident; c_op = op
-                         ; c_val = Some (W.Keyword "empty") } ])
-                    (V.get inst).V.filters_or)
+                  set_clause (Some {V.c_prop=ident;c_op=op;c_val=Some (W.Keyword "empty")}))
                 [])
             [ ((I.t "view.filter/is-empty"), "is"); ((I.t "view.filter/is-not-empty"), "is-not") ]
       in
-      P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name
+      P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name ~multiple
         ~footer:ops ~custom_content
-        ~on_chosen:(fun item _ -> commit (Option.value item.P.si_extra ~default:(W.String item.P.si_value))) ())
+        ~on_chosen:(fun item _ selected ->
+          let value item=Option.value item.P.si_extra ~default:(W.String item.P.si_value) in
+          if multiple then
+            set_clause (match selected with [] -> None
+              | _ -> Some {V.c_prop=ident;c_op=operator;c_val=Some (W.Set (List.map value selected))})
+          else commit (value item)) ())
 
 let filter_popup inst anchor =
   let items context =
@@ -407,7 +423,7 @@ let filter_popup inst anchor =
   in
   ignore
     (P.show_select ~anchor ~align_end:true ~items ~placeholder:(I.t "view.filter/filter")
-       ~on_chosen:(fun it _ ->
+       ~on_chosen:(fun it _ _ ->
          let s = V.get inst in
          match
            List.find_opt (fun c -> c.V.c_id = it.P.si_value) s.V.columns
@@ -661,6 +677,7 @@ let filter_value_label inst (f : V.filter_clause) =
                (fun x ->
                  match x with
                  | W.Map _ -> Option.value (Wr.ref_title x) ~default:""
+                 | W.Uuid uuid -> (V.ops ()).V.o_title_of_uuid inst uuid
                  | _ -> Wr.prop_text x)
                xs)
       | _ -> Wr.prop_text v)
@@ -740,7 +757,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
           [ ( "style"
             , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
                white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
-        [ text ~value:(filter_value_label inst f) [] ]
+        [ text ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst)) [] ]
     ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
         ~padding_horizontal:4
         ~foreground:"hsl(var(--muted-foreground))"
