@@ -2167,3 +2167,14 @@ Final browser hit acceptance passes for all eleven More menu entries while Handb
 
 
 Final screenshot inspection finds another standard-widget defect to fix next: URL image pixels are absolutely positioned with height:100% inside an auto-height wrapper. Both loaded cover resources report natural size 192x144 and destination width 70, yet their painted height is zero. Keep this measured intrinsic-image sizing issue open; do not restore an invented fixed cover height to hide it. The current screenshot is progress evidence, not completed visual parity.
+
+
+## Preserve intrinsic image sizing in the standard Web widget
+
+Reproduce the loaded-cover failure in the actual production browser: both PNGs have natural dimensions 192x144, authored width 70 and painted height zero. The standard Image wrapper has auto height while its pixels are absolutely positioned and forced to height 100 percent. Add four compiled renderer/property-path regressions before changing this behavior. The valid RED run fails natural height, in-flow sizing and property-removal scenarios. Include explicit zero dimensions, viewport/frame changes, registered resources and source crops; preserve fail-fast rejection when the final image source is removed.
+
+Let an unauthored axis use the decoded image's intrinsic size and keep those pixels in flow. Preserve absolute filling when both axes are authored, and retain source-rectangle geometry using the wrapper's aspect ratio and proportional crop coordinates. Refresh sizing when authored dimensions or crop/resource properties change or are removed. Do not set an application-specific cover height. All four focused cases and 132 compiled Web tests pass. The full application release build and 4953 shared checks pass.
+
+Execute the same independent browser image contract before and after rebuilding. It first rejects cover 0 because it does not participate in layout; afterward both loaded covers measure 70x52.5, matching the actual reference. Keep image-intrinsic-*, image-app-*, handbook-image-sizing-* and handbook-images-restored-web-20261019.png outside Git. The strict dashboard comparison still rejects the 1.5-point search-area difference; its tolerance is unchanged. Actual reference input height is 33.5 with 7-point vertical padding, weight 500 and a 3-point wrapper border; the current standard input has a fixed 40-point recipe. Resolve that sizing capability rather than adding a positional offset.
+
+Native image acceptance remains incomplete: the current native host resolves registered icon/local-file resources, but does not load URL bitmaps, and its layout adapter has no intrinsic Image measure callback. This Web repair is not evidence of native remote-image paint. Reuse framework resource loading and lifecycle ownership when implementing that path; do not add idle polling or an unbounded application cache. The manual native window remains running unchanged. The complete UI parity objective stays active.

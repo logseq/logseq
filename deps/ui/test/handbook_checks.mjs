@@ -19,8 +19,23 @@ export function measureHandbook(root,reference=false) {
     cards:[...panel.querySelectorAll(reference?'.topic-card':'button[id^="handbook-topic-"]')].map(measure),
     categories:[...panel.querySelectorAll(reference?'.category-card':'button[id^="handbook-category-"],#handbook-shortcuts')]
       .filter(element=>element.getBoundingClientRect().height>0).map(measure),
+    images:[...panel.querySelectorAll('img')].map(image=>({src:image.currentSrc,
+      naturalWidth:image.naturalWidth,naturalHeight:image.naturalHeight,
+      width:image.getBoundingClientRect().width,height:image.getBoundingClientRect().height})),
     scroll:{client:scroll.clientHeight,total:scroll.scrollHeight,top:scroll.scrollTop,
       overflow:getComputedStyle(scroll).overflowY,rect:measure(scroll).rect}};
+}
+
+export function assertHandbookImages(actual,reference) {
+  assert.equal(actual.images.length,reference.images.length,'visible cover count');
+  for(const [index,image] of actual.images.entries()) {
+    assert.ok(image.naturalWidth>0 && image.naturalHeight>0,`cover ${index} loaded`);
+    assert.ok(image.width>0 && image.height>0,`cover ${index} participates in layout`);
+    assert.ok(Math.abs(image.width/image.height-image.naturalWidth/image.naturalHeight)<.01,
+      `cover ${index} preserves its natural aspect ratio`);
+    for(const dimension of ['width','height'])
+      assert.ok(Math.abs(image[dimension]-reference.images[index][dimension])<.2,`cover ${index} ${dimension}`);
+  }
 }
 
 export function assertHandbook(actual,reference) {
