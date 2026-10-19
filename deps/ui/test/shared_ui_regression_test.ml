@@ -486,17 +486,25 @@ let run_views ~registry ~profile ~finish =
             let rendered = List.exists (fun n -> n.M.kind="input") (nodes selector) in
             check "asynchronous view popups publish their own frame without another input event" rendered;
             if rendered then begin
+              check "filter value controls satisfy the portable button naming contract"
+                (List.for_all (fun node -> node.M.kind<>"button"
+                  || P.node_properties_supported P.Button (button_properties node)) (nodes selector));
               eqi "view filter values use the same portable option list" expected
                 (List.length (List.filter (fun n -> class_has n "ls-view-select-option") (nodes selector)));
               let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
-              if empty_action then begin
+              (match empty_action with
+              | Some key ->
                 S.text_changed selector input.M.id "No matching value";
                 let action=List.find_opt (fun n -> n.M.kind="button"
-                  && List.exists (fun c -> M.string_prop c "text"=Some (I18n.t "view.filter/is-empty"))
-                    (M.children selector.S.tree n.M.id)) (nodes selector) in
+                  && M.string_prop n "text"=Some (I18n.t key)) (nodes selector) in
                 check "value search preserves its empty-value footer action" (Option.is_some action);
-                Option.iter (fun n -> S.press selector n.M.id) action
-              end else S.submit selector input.M.id;
+                Option.iter (fun n -> S.press selector n.M.id) action;
+                check "empty-value footer commits the chosen operator"
+                  (match (Views_state.get inst).filters with
+                   | [clause] -> clause.c_op=(if key="view.filter/is-empty" then "is" else "is-not")
+                       && clause.c_val=Some (Wire.Keyword "empty")
+                   | _ -> false)
+              | None -> S.submit selector input.M.id);
               check "view filter value selection updates one clause and closes"
                 (List.length (Views_state.get inst).filters=1 && !Views_popup.open_popups=[]);
               if column.Views_state.c_type="datetime" then
@@ -509,11 +517,15 @@ let run_views ~registry ~profile ~finish =
     in
     let data source values=Wire.Map [Wire.kw "value-source",Wire.Keyword source;
       Wire.kw "values",Wire.Array values] in
-    next [(Views_table.created_column ()),data "timestamp" [],List.length (I18n.timestamp_options ()),false;
-      {(Views_table.created_column ()) with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"},
-        data "checkbox" [],2,true;
-      {(Views_table.created_column ()) with Views_state.c_id="fixture/value";c_name="Value";c_type="default"},
-        data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]],1,false]
+    let checked={(Views_table.created_column ()) with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"}
+    and value={(Views_table.created_column ()) with Views_state.c_id="fixture/value";c_name="Value";c_type="default"} in
+    let values=data "property-values" [Wire.Map [Wire.kw "label",Wire.String "Alpha";Wire.kw "value",Wire.String "alpha"]] in
+    next [(Views_table.created_column ()),data "timestamp" [],List.length (I18n.timestamp_options ()),None;
+      checked,data "checkbox" [],2,Some "view.filter/is-empty";
+      checked,data "checkbox" [],2,Some "view.filter/is-not-empty";
+      value,values,1,None;
+      value,values,1,Some "view.filter/is-empty";
+      value,values,1,Some "view.filter/is-not-empty"]
   in
   let config_boot_check done_ =
     let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in

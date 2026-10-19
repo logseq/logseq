@@ -381,6 +381,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
           List.map
             (fun (label, op) ->
               Ui_components.button ~variant:`ghost ~main:`start
+                ~text:label
                 ~padding_vertical:4 ~padding_horizontal:8
                 ~on_press:(fun _ ->
                   P.close_all ();
@@ -389,11 +390,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
                      @ [ { V.c_prop = ident; c_op = op
                          ; c_val = Some (W.Keyword "empty") } ])
                     (V.get inst).V.filters_or)
-                [ (* ls-op-label stays a hook — the .75->1 opacity
-                     pair has no prop channel (an inline base opacity
-                     always beats the zero-specificity hover channel) *)
-                  text ~value:label ~font_size:"0.875rem"
-                    ~style_class:"ls-op-label" [] ])
+                [])
             [ ((I.t "view.filter/is-empty"), "is"); ((I.t "view.filter/is-not-empty"), "is-not") ]
       in
       P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name

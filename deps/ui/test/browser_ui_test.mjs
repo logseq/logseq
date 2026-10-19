@@ -35,6 +35,21 @@ const openSettings = () => {
 };
 after(() => browser('close'));
 
+test('Pages value filters open and apply both empty-value actions', () => {
+  open();
+  browser('find','text','Pages','click','--exact');
+  browser('wait','--fn',"document.querySelector('[id^=vfilter-]') !== null");
+  for (const action of ['Is Empty','Is Not Empty']) {
+    button('Filter');
+    browser('click','[role="menu"] button:has-text("Tags")');
+    browser('wait','--fn',"document.querySelector('input[placeholder=Tags]') !== null");
+    button(action);
+    browser('wait','--fn',"document.querySelector('.ls-vf-chip') !== null && document.querySelector('input[placeholder=Tags]') === null");
+    browser('click','.ls-vf-chip button[aria-label=Delete]');
+    browser('wait','--fn',"document.querySelector('.ls-vf-chip') === null");
+  }
+});
+
 test('dock resize handles overlay adjacent panes without reserving content width', () => {
   open();
   const measure = () => evaluate(`(${measureDockGeometry.toString()})(document)`);
