@@ -264,7 +264,7 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
 
 (* cljs imports.cljs importer — sqlite / zip / file-graph / transit / edn *)
 let items () =
-  [ file_input ~id:"import-sqlite-db" ~label:(T.t "import/sqlite-label")
+  [ file_input ~id:"import-sqlite-db" ~label:"SQLite"
       ~desc:(T.t "onboarding.import/sqlite-desc") ~accept:".sqlite,.sqlite3,.db" ()
   ; file_input ~id:"import-sqlite-zip" ~label:(T.t "import/sqlite-and-assets-title")
       ~desc:(T.t "import/sqlite-and-assets-desc") ~accept:".zip" ()

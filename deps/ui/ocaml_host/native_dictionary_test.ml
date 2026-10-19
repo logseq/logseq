@@ -40,6 +40,9 @@ let () =
     Unix.putenv "LOGSEQ_ROOT_DIR" (Filename.concat root "graphs");
     reset ();select "en";
     expect "English startup must use its embedded dictionary without external files" (load ());
+    Array.iter (fun (key,value) ->
+      expect ("Native English UI text follows the canonical dictionary: " ^ key)
+        (I18n.t key=Platform.decode_utf8_bytes value)) Dicts_gen.en;
     reset ();select "fr";
     write "fr.edn" "{:header/more \"Bienvenue café 中文 👩🏽‍💻\"}";
     expect "Native startup must load a selected dictionary file"

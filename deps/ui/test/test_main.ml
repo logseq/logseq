@@ -3209,6 +3209,9 @@ let test_graphs_ops () =
   model_stub := saved
 
 let test_boot () =
+  Array.iter (fun (key, value) ->
+    check ("English UI text follows the canonical dictionary: " ^ key)
+      (I18n.en_text key = Platform.decode_utf8_bytes value)) Dicts_gen.en;
   let previous = !model_stub in
   Fun.protect ~finally:(fun () -> model_stub:=previous) (fun () ->
     List.iteri (fun start_of_week expected ->

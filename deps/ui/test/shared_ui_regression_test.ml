@@ -962,9 +962,8 @@ let run_views ~registry ~profile ~finish =
           let state = Signal.state (Signal.signal_owner ms) true in
           Settings_page.dfmt_menu ~key:"unicode" state [value] value) ])
     [ {js|中文|js}; {js|café|js}; {js|é|js}; {js|😀|js}; {js|a b|js} ];
-  check "English fallback text emits its Unicode arrow without byte decoding"
-    (I18n.t "settings.editor/preferred-outdenting-tip" =
-      {js|The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled → Learn more|js});
+  check "The canonical English help link preserves its Unicode arrow"
+    (I18n.t "settings.editor/preferred-outdenting-tip-more" = {js|→ Learn more|js});
   let chosen = ref None in
   let picker = mount (fun _ ->
       Icon_picker.picker_view ~del:true ~emoji_only:false
