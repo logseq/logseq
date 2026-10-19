@@ -273,6 +273,7 @@ type dom = {
   query : string -> el option;
   query_all : string -> el list;
   by_id : string -> el option;
+  measure_rect : string -> (float * float * float * float) Ui_task.t;
   active_element : unit -> el option;
   element_at : float -> float -> el option;
   doc_root : unit -> el;
@@ -394,6 +395,11 @@ val viewport_width_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> 
 val dom_query : string -> el option
 val dom_query_all : string -> el list
 val dom_by_id : string -> el option
+
+(** Measure a mounted retained identifier in viewport logical pixels.
+    Native completion waits for the host; cancellation releases the request. *)
+val dom_measure_rect : string -> (float * float * float * float) Ui_task.t
+
 val dom_active_element : unit -> el option
 val dom_element_at : float -> float -> el option
 val dom_root : unit -> el

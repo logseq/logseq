@@ -501,10 +501,24 @@ let run_views ~registry ~profile ~finish =
           ignore (Js.Promise.then_ (fun () ->
             let input=List.find (fun n -> n.M.kind="input") (nodes selector) in
             S.text_changed selector input.M.id I18n.(t "view.filter/custom-date");
+            let document = !(Stub_dom.document_ref) in
+            let original_lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+            let option_element=Stub_dom.make_element "div" in
+            Stub_dom.set_field option_element "getBoundingClientRect" (fun () ->
+              Js.Json.object_ (Js.Dict.fromList (List.map (fun (key,value) -> key,Js.Json.number value)
+                ["x",320.;"y",240.;"width",208.;"height",20.])));
+            Stub_dom.set_field document "getElementById" (fun id ->
+              if id="ac-content-0" then option_element else original_lookup id);
             S.submit selector input.M.id;
+            ignore (Js.Promise.then_ (fun () ->
+            Stub_dom.set_field document "getElementById" original_lookup;
             check "custom date opens a calendar without changing the filter" ((Views_state.get inst).filters=[]);
             let calendar=List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some "date-time-picker") (nodes selector) in
             check "custom date renders the shared calendar" (Option.is_some calendar);
+            let popup=List.find (fun n -> n.M.kind="popover") (nodes selector) in
+            check "custom date stays at the chosen option after the select unmounts"
+              (M.string_prop popup "anchor-target"=None
+               && M.string_prop popup "anchor-rect"=Some "320. 240. 208. 20.");
             (match calendar with
              | None -> ()
              | Some _ ->
@@ -550,7 +564,8 @@ let run_views ~registry ~profile ~finish =
                    check_value 2024 2 29
                  end);
             Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);
-            next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
+            next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()));
+            Js.Promise.resolve ()) (Js.Promise.resolve ()))
     in next ["day";"text";"dismiss"]
   in
   let type_choice_check done_ =

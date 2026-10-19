@@ -355,6 +355,7 @@ type dom = {
   query : string -> el option;
   query_all : string -> el list;
   by_id : string -> el option;
+  measure_rect : string -> (float * float * float * float) Ui_task.t;
   active_element : unit -> el option;
   element_at : float -> float -> el option;
   doc_root : unit -> el;
@@ -514,6 +515,7 @@ let viewport_width_signal ~scheduler ~scope =
 let dom_query sel = (get ()).dom.query sel
 let dom_query_all sel = (get ()).dom.query_all sel
 let dom_by_id id = (get ()).dom.by_id id
+let dom_measure_rect id = (get ()).dom.measure_rect id
 let dom_active_element () = (get ()).dom.active_element ()
 let dom_element_at x y = (get ()).dom.element_at x y
 let dom_root () = (get ()).dom.doc_root ()

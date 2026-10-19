@@ -904,6 +904,57 @@ let () = Native_embed.with_entry_lock (fun () ->
   Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let store=Lui_store.create () and ui=Lui_window.Ui.create () in
+  let rects=Lui_window.Rects.create () in
+  List.iter (Lui_store.apply_op store)
+    [CreateNode (9100,Root);CreateNode (9101,Box);InsertChild (9100,9101,0);
+     SetProp (9101,AccessibilityIdentifier,StringValue "picker-option")];
+  Hashtbl.replace rects 9101 (Lui_scene.rect 640. 480. 416. 40.);
+  let env : Host_requests.env = {
+    store;ui;rects;rect_of=Lui_window.Rects.get rects;scale=(fun () -> 2.);
+    measure=(fun _ _ -> 0.,0.);text_layout=(fun _ _ -> failwith "Unexpected text layout");
+    apply_batch=(fun _ -> ());apply_actions=(fun _ -> ());set_ime_rect=(fun _ -> ());
+    focused_text_input=(fun _ -> ());toggle_native_performance=(fun () -> ());
+    repaint=(fun () -> ())} in
+  let previous_op = !Host.host_op and requests=Queue.create () in
+  Fun.protect ~finally:(fun () -> Host.host_op:=previous_op) (fun () ->
+    Host.host_op:=(fun op payload ->
+      check "Rectangle measurement uses the existing host operation" (op="dom-op");
+      let prefix="measure-node\n" in
+      check "Rectangle measurement requests the host's painted node" (String.starts_with ~prefix payload);
+      Queue.push (String.sub payload (String.length prefix) (String.length payload-String.length prefix)) requests);
+    let seen=ref [] in
+    let observe task=ignore (Ui_task.catch
+      (Ui_task.bind task (fun value -> seen:=Ok value::!seen;Ui_task.resolve ()))
+      (fun error -> seen:=Error error::!seen;Ui_task.resolve ())) in
+    observe (Ui_services.dom_measure_rect "picker-option");
+    Host.drain ();
+    check "Native rectangle measurement cannot resolve before the host replies" (!seen=[]);
+    let first=Queue.pop requests in
+    Host_requests.dom_op env "measure-node" first;Host.drain ();
+    check "Native rectangle measurement returns painted logical coordinates"
+      (!seen=[Ok (320.,240.,208.,20.)] && Hashtbl.length Dom_ext.rect_requests=0);
+    let task=Ui_services.dom_measure_rect "picker-option" in
+    observe task;let cancelled=Queue.pop requests in
+    Ui_task.cancel task;Host.drain ();
+    check "Cancelling a measurement releases its pending callback"
+      (Hashtbl.length Dom_ext.rect_requests=0 && List.hd !seen=Error Ui_task.Cancelled);
+    Host_requests.dom_op env "measure-node" cancelled;Host.drain ();
+    check "A late cancelled measurement cannot deliver a rectangle" (List.length !seen=2);
+    seen:=[];
+    observe (Ui_services.dom_measure_rect "picker-option");let older=Queue.pop requests in
+    observe (Ui_services.dom_measure_rect "picker-option");let newer=Queue.pop requests in
+    Host_requests.dom_op env "measure-node" newer;Host.drain ();
+    Hashtbl.replace rects 9101 (Lui_scene.rect 800. 600. 416. 40.);
+    Host_requests.dom_op env "measure-node" older;Host.drain ();
+    check "Out-of-order replies keep their own measurement identity"
+      (!seen=[Ok (400.,300.,208.,20.);Ok (320.,240.,208.,20.)]);
+    seen:=[];
+    observe (Ui_services.dom_measure_rect "missing-picker-option");
+    Host_requests.dom_op env "measure-node" (Queue.pop requests);Host.drain ();
+    check "A missing native measurement target rejects instead of hanging"
+      (match !seen with [Error (Invalid_argument _)]->Hashtbl.length Dom_ext.rect_requests=0 | _->false));
+  print_endline "native popup rectangle handoff: OK";
   List.iter (fun (source, expected) ->
     check "Native command-palette spacing must preserve UTF-8 text"
       (Cmdk_view.display_spaces source = expected))
@@ -5402,7 +5453,8 @@ let () =
       and previous_flush = !Runtime.app_flush
       and previous_popups = !Views_popup.open_popups
       and previous_stack = !Views_popup.stack_st
-      and previous_open = !Views_popup.open_st in
+      and previous_open = !Views_popup.open_st
+      and previous_host_op = !Host.host_op in
       Fun.protect
         ~finally:(fun () ->
           Runtime.worker := previous_worker;
@@ -5410,7 +5462,8 @@ let () =
           Runtime.app_flush := previous_flush;
           Views_popup.open_popups := previous_popups;
           Views_popup.stack_st := previous_stack;
-          Views_popup.open_st := previous_open)
+          Views_popup.open_st := previous_open;
+          Host.host_op := previous_host_op)
         (fun () ->
           (Runtime.read_model :=
              fun () -> { Model.initial with repo = Some "native-date-scroll" });
@@ -5525,6 +5578,19 @@ let () =
                   ignore (Lui_app.flush app);
                   ignore (A.store_changed surface);
                   let store = A.store surface and ui = A.ui surface in
+                  let requests=Queue.create () in
+                  let env : Host_requests.env = {
+                    store;ui;rects=A.rects surface;rect_of=W.Rects.get (A.rects surface);
+                    scale=(fun () -> scale);measure=(fun _ _ -> 0.,0.);
+                    text_layout=(fun _ _ -> failwith "Unexpected date picker text layout");
+                    apply_batch=(fun _ -> ());apply_actions=(fun _ -> ());set_ime_rect=(fun _ -> ());
+                    focused_text_input=(fun _ -> ());toggle_native_performance=(fun () -> ());
+                    repaint=(fun () -> ())} in
+                  Host.host_op := (fun kind payload ->
+                    let prefix="measure-node\n" in
+                    if kind="dom-op" && String.starts_with ~prefix payload then
+                      Queue.push (String.sub payload (String.length prefix)
+                        (String.length payload-String.length prefix)) requests);
                   let ids () = Lui_store.preorder store in
                   let rect id = W.Rects.get (A.rects surface) id in
                   let has_class id value =
@@ -5629,6 +5695,8 @@ let () =
                     ignore (A.store_changed surface);
                     ignore (A.repaint surface)
                   in
+                  let option_rect=rect (List.find (fun id ->
+                    Lui_store.string_prop store id "accessibility-identifier"=Some "ac-content-6") (ids ())) in
                   apply (A.handle surface (W.Input.Move (x, y)));
                   apply
                     (A.handle surface
@@ -5637,12 +5705,28 @@ let () =
                   apply
                     (A.handle surface
                        (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+                  check "The picker must keep its option mounted until measurement completes"
+                    (not (Queue.is_empty requests) && not (List.exists
+                      (fun id -> has_class id "ls-view-date-picker") (ids ())));
+                  Queue.iter (Host_requests.dom_op env "measure-node") requests;
+                  Host.drain ();ignore (Lui_app.flush app);
+                  ignore (A.store_changed surface);ignore (A.repaint surface);
                   check
                     "Clicking the scrolled final date option must open the \
                      calendar"
                     (List.exists
                        (fun id -> has_class id "ls-view-date-picker")
-                       (ids ()))))
+                       (ids ()));
+                  let popup=List.find (fun id -> has_class id "ls-view-date-picker") (ids ()) in
+                  check "A scrolled option passes its painted logical rectangle to the calendar"
+                    (match Option.bind (Lui_store.string_prop store popup "anchor-rect")
+                      Lui_protocol.anchor_rect_of_string with
+                     | Some (x,y,w,h) ->
+                         abs_float (x -. option_rect.x /. scale)<0.01
+                         && abs_float (y -. option_rect.y /. scale)<0.01
+                         && abs_float (w -. option_rect.w /. scale)<0.01
+                         && abs_float (h -. option_rect.h /. scale)<0.01
+                     | None -> false)))
             [ 1.; 2. ]);
       print_endline "native date popup nested scroll and final-option input: OK")
 

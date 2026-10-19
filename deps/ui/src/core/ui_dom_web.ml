@@ -488,6 +488,10 @@ let ops : Ui_services.dom =
         List.map el_of
           (Array.to_list (Web_dom.query_selector_all_arr sel)))
   ; by_id = (fun id -> Option.map el_of (Web_dom.get_element_by_id id))
+  ; measure_rect = (fun id ->
+      match Web_dom.get_element_by_id id with
+      | Some element -> Ui_task.resolve ((el_of element).Ui_services.rect ())
+      | None -> Ui_task.reject (Invalid_argument ("Cannot measure missing element: " ^ id)))
   ; active_element =
       (fun () ->
         match active_element_js with

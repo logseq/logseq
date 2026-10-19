@@ -559,7 +559,38 @@ let ref_key_of (el : element) : string option =
   | Some _ as k -> k
   | None -> str_prop "ref-id" el
 
+type rect_request = {
+  resolve_rect : (float * float * float * float) -> unit;
+  reject_rect : exn -> unit;
+}
+let rect_requests : (int, rect_request) Hashtbl.t = Hashtbl.create 4
+let next_rect_request = ref 0
+
+let measure_rect identifier =
+  incr next_rect_request;
+  let id = !next_rect_request in
+  Ui_task.create ~cancel:(fun () -> Hashtbl.remove rect_requests id)
+    (fun ~resolve ~reject ->
+      Hashtbl.add rect_requests id {resolve_rect=resolve; reject_rect=reject};
+      Host.dom_op "measure-node" (Js.Json.stringify (Js.Json.JObject
+        [("ref", Js.Json.JObject [("#ref", Js.Json.string identifier);
+                                  ("measurement-id", Js.Json.number (float_of_int id))])])) )
+
 let note_node_rect (j : Js.Json.t) : unit =
+  (match num_prop "measurement-id" (prop "ref" j) with
+   | None -> ()
+   | Some number ->
+       let id = int_of_float number in
+       (match Hashtbl.find_opt rect_requests id with
+        | None -> ()
+        | Some request ->
+            Hashtbl.remove rect_requests id;
+            let rect = prop "rect" j in
+            match num_prop "left" rect, num_prop "top" rect,
+                  num_prop "width" rect, num_prop "height" rect with
+            | Some x, Some y, Some width, Some height ->
+                request.resolve_rect (x, y, width, height)
+            | _ -> request.reject_rect (Invalid_argument "Native measurement target is unavailable")));
   (match Option.map int_of_float (num_prop "nodeId" j) with
    | Some id -> (
        match prop "rect" j with

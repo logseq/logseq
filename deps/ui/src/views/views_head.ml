@@ -369,12 +369,11 @@ let filter_value_phase inst ~anchor (c : V.column) =
                } ])
           (V.get inst).V.filters_or
       in
-      let pick it =
+      let custom_content it =
         if timestamp && it.P.si_value = "custom-date" then
-          P.show_custom ~anchor ~align_end:true ~cls:"ls-view-date-picker"
-            (Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
+          Some ("ls-view-date-picker", Ui_components.date_picker ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
                commit (W.Date_ms (Int64.of_float date))))
-        else commit (Option.value it.P.si_extra ~default:(W.String it.P.si_value))
+        else None
       in
       let ops =
         if ident = "block/created-at" || ident = "block/updated-at" then []
@@ -398,7 +397,8 @@ let filter_value_phase inst ~anchor (c : V.column) =
             [ ((I.t "view.filter/is-empty"), "is"); ((I.t "view.filter/is-not-empty"), "is-not") ]
       in
       P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name
-        ~footer:ops ~on_chosen:(fun item _ -> pick item) ())
+        ~footer:ops ~custom_content
+        ~on_chosen:(fun item _ -> commit (Option.value item.P.si_extra ~default:(W.String item.P.si_value))) ())
 
 let filter_popup inst anchor =
   let items context =

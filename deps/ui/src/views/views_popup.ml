@@ -117,13 +117,18 @@ let anchor_identifier (anchor : U.el) =
 (* A caller-anchored popover positioned by the host.
    [card] paints the .ui__dropdown-menu-content card chrome as props
    (menu surfaces); select/custom popups keep caller-driven classes. *)
-let anchored_popover ~key ~id ~anchor_target ~align_end ~cls ~card ?role ~on_dismiss children : t =
+type popup_anchor = Target of string | Rectangle of (float * float * float * float)
+
+let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ~on_dismiss children : t =
+  let anchor_target, anchor_rect, alignment = match anchor with
+    | Target target -> Some target, None, (if align_end then `end_ else `start)
+    | Rectangle rect -> None, Some rect, `center in
   Ui_components.with_props
     (if card then [ Ui_components.card_shadow ] else [])
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
-       ~anchor:`below ~anchor_target ~anchor_offset:0.
-       ~anchor_alignment:(if align_end then `end_ else `start)
+       ~anchor:`below ?anchor_target ?anchor_rect ~anchor_offset:0.
+       ~anchor_alignment:alignment
        ?background:(if card then Some "hsl(var(--popover))" else None)
        ?foreground:(if card then Some "inherit" else None)
        ?border_color:(if card then Some "hsl(var(--border))" else None)
@@ -348,7 +353,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
     (push
        (fun context parent ->
          anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
-           ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor_target ~align_end ~card:true
+           ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor:(Target anchor_target) ~align_end ~card:true
            ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
            ~on_dismiss:(fun _ -> close_entry id)
            [ menu_level ~pid:id ~cls:cls_prefix
@@ -360,9 +365,17 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
 let fixed_items items context =
   Signal.constant context.Lui_ui.ui_scheduler items
 
+let show_custom_rect ~rect ~cls content =
+  close_all ();
+  let id = !next_id + 1 in
+  ignore (push (anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
+    ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Rectangle rect)
+    ~align_end:false ~cls ~card:true ~on_dismiss:(fun _ -> close_entry id) [content]))
+
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> t option) option)
-    ?(wrap_cls = "") ?(align_end = false) ?(footer = []) ~on_chosen () =
+    ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
+    ?(custom_content = fun _ -> None) ~on_chosen () =
   let anchor_target = anchor_identifier anchor in
   close_all ();
   let id = !next_id + 1 in
@@ -381,7 +394,10 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     in
     let filtered = Logseq_el.own context (Signal.map2 filter qsig source) in
     let bounded count picked = max 0 (min picked (count - 1)) in
-    let choose it =
+    let measurement = Ui_effect.request () in
+    let content_id i = "ac-content-" ^ string_of_int i in
+    let choose i it =
+      let ticket = Ui_effect.issue measurement in
       if multiple then begin
         let sel = Signal.get_state sel_values in
         let now = List.mem it.si_value sel in
@@ -390,10 +406,15 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            else it.si_value :: sel);
         on_chosen it (not now)
       end
-      else begin
-        close_all ();
-        on_chosen it true
-      end
+      else match custom_content it with
+      | None -> close_all (); on_chosen it true
+      | Some (cls, content) ->
+          Ui_effect.task ~scope:context.Lui_ui.ui_scope (U.dom_measure_rect (content_id i))
+            ~ok:(fun rect ->
+              if Ui_effect.is_current measurement ticket
+                 && List.exists (fun popup -> popup.p_id=id) !open_popups then
+                show_custom_rect ~rect ~cls content)
+            ~error:raise
     in
     let navigate direction =
       let count = List.length (Signal.get filtered) in
@@ -402,8 +423,9 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     in
     let submit () =
       let visible = Signal.get filtered in
-      match List.nth_opt visible (bounded (List.length visible) (Signal.get_state chosen)) with
-      | Some it -> choose it
+      let i = bounded (List.length visible) (Signal.get_state chosen) in
+      match List.nth_opt visible i with
+      | Some it -> choose i it
       | None -> ()
     in
     let row count i (it : select_item) =
@@ -422,12 +444,12 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
              else "hsl(var(--popover-foreground) / 0.75)") csig)
            ~selected:(reactive (fun picked -> i = bounded count picked) csig)
            ~on_pointer_enter:(fun _ -> Signal.set chosen i)
-           ~on_press:(fun _ -> choose it)
-           [ row ~gap:4 ~cross:`center ~grow:1. ~min_width:0
+           ~on_press:(fun _ -> choose i it)
+           [ row ~accessibility_identifier:(content_id i) ~gap:4 ~cross:`center ~grow:1. ~min_width:0
              ((if multiple then
                [ checkbox ~key:"checked" ~width:16 ~height:16
                    ~checked:(reactive (fun sel -> List.mem it.si_value sel) ssig)
-                   ~on_toggle:(fun _ -> choose it) [] ]
+                   ~on_toggle:(fun _ -> choose i it) [] ]
              else [])
             @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ])
     in
@@ -495,7 +517,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            @ [ select_col ])
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
-      ~id:("vpsel-p" ^ string_of_int id) ~anchor_target ~align_end ~card:true
+      ~id:("vpsel-p" ^ string_of_int id) ~anchor:(Target anchor_target) ~align_end ~card:true
       ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
@@ -579,7 +601,7 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
     (push
        (fun context parent ->
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
-           ~id:(Printf.sprintf "vp-c-%d" id) ~anchor_target ~align_end ~cls ~card:true
+           ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Target anchor_target) ~align_end ~cls ~card:true
            ~on_dismiss:(fun _ -> close_entry id)
            [ content ] context parent))
 

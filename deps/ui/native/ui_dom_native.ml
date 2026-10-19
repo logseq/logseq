@@ -279,6 +279,7 @@ let ops : Ui_services.dom =
   ; query = (fun sel -> Option.map el_of (Dom_ext.doc_query_selector sel))
   ; query_all =
       (fun sel -> List.map el_of (Dom_ext.doc_query_selector_all sel))
+  ; measure_rect = Dom_ext.measure_rect
   ; by_id = (fun id -> Option.map el_of (Dom_ext.by_id id))
   ; active_element =
       (fun () -> Option.map el_of (Dom_ext.active_element ()))

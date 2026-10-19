@@ -261,6 +261,7 @@ let run () =
          ; query = (fun _ -> None)
          ; query_all = (fun _ -> [])
          ; by_id = (fun _ -> None)
+         ; measure_rect = (fun _ -> Ui_task.resolve (320., 240., 208., 20.))
          ; active_element = (fun () -> None)
          ; element_at = (fun _ _ -> None)
          ; doc_root = fake_el

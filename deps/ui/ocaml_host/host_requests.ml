@@ -638,7 +638,7 @@ let dom_op (e : env) (op : string) (body : string) =
             [ ("nodeId", `Int id)
             ; ("rect", rect_json e r)
             ; ("ref", ref_) ])
-     | None -> ())
+     | None -> reply "node-rect" (`Assoc [("rect", `Null); ("ref", ref_)]))
   | "natural-size" ->
     (match target with
      | Some id ->
