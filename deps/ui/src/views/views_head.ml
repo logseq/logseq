@@ -315,13 +315,14 @@ let filterable_columns (s : V.vstate) =
       && c.V.c_id <> "block.temp/refs-count")
     s.V.columns
 
-(* value phase: select of values + Is Empty / Is Not Empty buttons,
-   shown in a popup anchored at the filter button — overlay surface, so
-   it stays imperative inside Views_popup *)
-let filter_value_phase inst ~anchor (c : V.column) =
+(* Shared value phase for new clauses and indexed edits. The picker owns
+   one clause and preserves its current operator and selection. *)
+let filter_value_phase inst ~anchor ?index (c : V.column) =
   let ident = c.V.c_id in
   let timestamp = c.V.c_type = "datetime" in
-  let operator = if timestamp then "after" else "is" in
+  let initial=Option.map (fun index -> List.nth (V.get inst).V.filters index) index in
+  let operator=match initial with Some clause -> clause.V.c_op
+    | None -> if timestamp then "after" else "is" in
   let prop_w =
     match c.V.c_prop with
     | Some m -> m
@@ -337,7 +338,10 @@ let filter_value_phase inst ~anchor (c : V.column) =
        | None -> []))
   in
   Views_db.get_view_filter_data ~opts prop_w (fun data ->
-      let multiple=W.get data "value-source"=Some (W.Keyword "property-values") in
+      let multiple=match initial with
+        | None -> W.get data "value-source"=Some (W.Keyword "property-values")
+        | Some _ -> (match W.get data "many?" with Some (W.Bool many) -> many
+            | _ -> invalid_arg "view filter data lacks its selection cardinality") in
       let items =
         match W.get data "value-source" with
         | Some (W.Keyword "timestamp") ->
@@ -361,14 +365,22 @@ let filter_value_phase inst ~anchor (c : V.column) =
                  (Option.value (W.get data "values") ~default:W.Nil))
         | _ -> invalid_arg "view filter data has an unsupported value source"
       in
-      if multiple then begin
+      if W.get data "value-source"=Some (W.Keyword "property-values") then begin
         let ref_titles=Hashtbl.copy (V.get inst).V.ref_titles in
         List.iter (fun item -> match item.P.si_extra with
           | Some (W.Uuid uuid) -> Hashtbl.replace ref_titles uuid item.si_label
           | _ -> ()) items;
         V.update inst (fun state -> {state with ref_titles})
       end;
-      let position=ref None in
+      let value item=Option.value item.P.si_extra ~default:(W.String item.P.si_value) in
+      let initial_values=match initial with
+        | Some {V.c_val=Some (W.Set values | W.Array values | W.List values);_} -> values
+        | _ -> [] in
+      let selected_values=List.filter_map (fun item ->
+        if List.mem (value item) initial_values then Some item.P.si_value else None) items in
+      let unlisted_values=List.filter (fun selected ->
+        not (List.exists (fun item -> value item=selected) items)) initial_values in
+      let position=ref index in
       let set_clause clause =
         let state=V.get inst in
         let filters=match !position,clause with
@@ -391,26 +403,30 @@ let filter_value_phase inst ~anchor (c : V.column) =
         else None
       in
       let ops =
-        if ident = "block/created-at" || ident = "block/updated-at" then []
+        if ident = "block/created-at" || ident = "block/updated-at"
+           || (initial<>None && operator<>"is" && operator<>"is-not") then []
         else
           List.map
             (fun (label, op) ->
-              Ui_components.button ~variant:`ghost ~main:`start
-                ~text:label
-                ~padding_vertical:4 ~padding_horizontal:8
+              Ui_components.button ~variant:`ghost ~size:`sm ~main:`start
+                ~label
                 ~on_press:(fun _ ->
-                  P.close_all ();
+                  if initial=None then P.close_all ();
                   set_clause (Some {V.c_prop=ident;c_op=op;c_val=Some (W.Keyword "empty")}))
-                [])
-            [ ((I.t "view.filter/is-empty"), "is"); ((I.t "view.filter/is-not-empty"), "is-not") ]
+                [Ui_components.with_props
+                   [Ui_components.Prop.opacity 0.75;Ui_components.Prop.hover_opacity 1.]
+                   (text ~value:label ~font_weight:400 [])])
+            (if initial<>None then [I.t "view.filter/empty",operator]
+             else [I.t "view.filter/is-empty","is";I.t "view.filter/is-not-empty","is-not"])
       in
-      P.show_select ~anchor ~align_end:true ~items:(P.fixed_items items) ~placeholder:c.V.c_name ~multiple
+      P.show_select ~anchor ~align_end:(initial=None) ~items:(P.fixed_items items) ~placeholder:c.V.c_name ~multiple ~selected_values
+        ~input_padding_horizontal:(if initial=None then 8 else 12)
         ~footer:ops ~custom_content
         ~on_chosen:(fun item _ selected ->
-          let value item=Option.value item.P.si_extra ~default:(W.String item.P.si_value) in
           if multiple then
-            set_clause (match selected with [] -> None
-              | _ -> Some {V.c_prop=ident;c_op=operator;c_val=Some (W.Set (List.map value selected))})
+            set_clause (match selected with [] when initial=None -> None
+              | _ -> Some {V.c_prop=ident;c_op=operator;
+                  c_val=Some (W.Set (List.map value selected @ unlisted_values))})
           else commit (value item)) ())
 
 let filter_popup inst anchor =
@@ -664,6 +680,7 @@ let search_el inst : t =
 let filter_value_label inst (f : V.filter_clause) =
   match f.V.c_val with
   | Some (W.Keyword "empty") -> (I.t "view.filter/empty")
+  | Some (W.Set [] | W.Array [] | W.List []) -> I.t "view/all"
   | Some v -> (
       match v with
       | W.Date_ms ms ->
@@ -693,21 +710,24 @@ let filter_chip inst idx (f : V.filter_clause) : t =
   let op_btn_id =
     "vchip-op-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int idx
   in
+  let value_btn_id="vchip-value-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int idx in
   row ~cross:`center ~style_class:"ls-vf-chip"
       ~border_width:1 ~border_color:"hsl(var(--border))"
       ~corner_radius:4 ~min_width:0
       ~data_attrs:[ ("style", "max-width:100%") ]
     [ (* per-side borders ride the data_attrs style channel *)
       Ui_components.with_props
-        [ Ui_components.Prop.font_size "0.875rem"
-        ; Ui_components.Prop.disabled_opacity 0.8 ]
+        [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px"
+        ; Ui_components.Prop.disabled_opacity 0.5 ]
         (Ui_components.button ~variant:`ghost ~text:prop_title ~disabled:true ~padding_horizontal:8
+           ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            [])
     ; Ui_components.with_props
-        [ Ui_components.Prop.font_size "0.875rem" ]
+        [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px" ]
         (Ui_components.button ~variant:`ghost ~padding_horizontal:8
+           ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
            ~data_attrs:
              [ ("style", "border-right:1px solid hsl(var(--border))") ]
            ~accessibility_identifier:op_btn_id
@@ -750,16 +770,28 @@ let filter_chip inst idx (f : V.filter_clause) : t =
                                     refresh inst ))
                             ops))))
         [])
-    ; (* chip-val + view-filter-value-item collapse to one clip box —
-         overflow/ellipsis/white-space have no container-kind prop *)
-      box ~min_width:0 ~padding_horizontal:8
+    ; Ui_components.with_props
+        [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px" ]
+      (Ui_parts.string_prop Lui_protocol.AccessibilityLabel
+        ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst))
+      (Ui_components.button ~variant:`ghost ~min_width:0 ~padding_horizontal:8
+        ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
+        ~accessibility_identifier:value_btn_id
+        ~on_press:(fun _ ->
+          match Ui_services.dom_by_id value_btn_id with
+          | None -> ()
+          | Some anchor ->
+              let column=match List.find_opt (fun column -> column.V.c_id=f.c_prop) (V.get inst).V.columns with
+                | Some column -> column
+                | None -> Option.get (Views_table.column_of_ident (V.get inst) f.c_prop) in
+              filter_value_phase inst ~anchor ~index:idx column)
         ~data_attrs:
           [ ( "style"
-            , "max-width:100%;overflow:hidden;text-overflow:ellipsis;\
-               white-space:nowrap;border-right:1px solid hsl(var(--border))" ) ]
-        [ text ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst)) [] ]
+            , "max-width:100%;border-right:1px solid hsl(var(--border))" ) ]
+        [ text ~value:(reactive (fun _ -> filter_value_label inst f) (sig_of inst))
+            ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis" [] ]))
     ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
-        ~padding_horizontal:4
+        ~padding_horizontal:4 ~padding_vertical:4 ~height:28 ~min_height:28 ~width:26 ~min_width:26 ~corner_radius:0
         ~foreground:"hsl(var(--muted-foreground))"
         ~on_press:(fun _ ->
           V.update inst (fun s ->

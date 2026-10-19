@@ -18,6 +18,11 @@ let button_properties n =
       | None -> props)
     P.Property_map.empty [ P.TextValue; P.AccessibilityLabel ]
 
+let button_label node =
+  match M.string_prop node "accessibility-label" with
+  | Some _ as label -> label
+  | None -> M.string_prop node "text"
+
 let localization () =
   let previous_language = Platform.local_storage_get "preferred-language" in
   let previous_dictionary = Hashtbl.find_opt I18n.locale_tbls "zh-CN" in
@@ -503,7 +508,7 @@ let run_views ~registry ~profile ~finish =
               | `Empty key ->
                 S.text_changed selector input.M.id "No matching value";
                 let action=List.find_opt (fun n -> n.M.kind="button"
-                  && M.string_prop n "text"=Some (I18n.t key)) (nodes selector) in
+                  && button_label n=Some (I18n.t key)) (nodes selector) in
                 check "value search preserves its empty-value footer action" (Option.is_some action);
                 Option.iter (fun n -> S.press selector n.M.id) action;
                 check "empty-value footer commits the chosen operator"
@@ -560,7 +565,7 @@ let run_views ~registry ~profile ~finish =
                     ((Views_state.get inst).filters=[previous;newer] && !Views_popup.open_popups<>[]);
                   choose 0;
                   let empty=List.find_opt (fun node -> node.M.kind="button"
-                    && M.string_prop node "text"=Some (I18n.t "view.filter/is-empty")) (nodes selector) in
+                    && button_label node=Some (I18n.t "view.filter/is-empty")) (nodes selector) in
                   Option.iter (fun node -> S.press selector node.M.id) empty;
                   check "empty footer replaces the live tag clause instead of appending another"
                     (List.length (Views_state.get inst).filters=3 && !Views_popup.open_popups=[]));
@@ -627,6 +632,116 @@ let run_views ~registry ~profile ~finish =
           && M.string_prop node "text"=Some "Journal, Page") (nodes selector));
       ignore (Lui_app.dispose selector.S.app);Runtime.worker:=previous_worker;
       Runtime.read_model:=previous_model;done_ ())
+  in
+  let filter_edit_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+    and previous_stack= !Views_popup.stack_st in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "filter-edit-fixture"});
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack;done_ ()
+      | (column,operator,initial,source,many,choices)::rest ->
+          Views_popup.stack_st:=None;
+          Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+            if method_="thread-api/get-view-filter-data" then
+              check "reopening a filter requests values for its current operator"
+                (match args with [_;opts] -> Wire.get opts "operator"=Some (Wire.Keyword operator) | _ -> false);
+            Js.Promise.resolve (if method_="thread-api/get-view-filter-data" then Wire.Map
+              [Wire.kw "value-source",Wire.Keyword source;Wire.kw "many?",Wire.Bool many;
+               Wire.kw "values",Wire.Array (List.map (fun (label,value) -> Wire.Map
+                 [Wire.kw "label",Wire.String label;Wire.kw "value",value]) choices)] else Wire.Nil));
+            on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+          let previous={Views_state.c_prop="fixture/previous";c_op="is";c_val=Some (Wire.Bool true)}
+          and current={Views_state.c_prop=column.Views_state.c_id;c_op=operator;c_val=Some initial}
+          and following={Views_state.c_prop="fixture/following";c_op="is";c_val=Some (Wire.Bool false)} in
+          let unlisted=initial=Wire.Set [Wire.Uuid "tag-a";Wire.Uuid "tag-c"] in
+          let retained=if unlisted then [Wire.Uuid "tag-c"] else [] in
+          let instance=ref None in
+          let selector=mount (fun _ context parent ->
+            let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KAllPages ~feature:"filter-edit-fixture" ~owner:Wire.Nil in
+            instance:=Some inst;
+            Views_state.update inst (fun state ->
+              Hashtbl.replace state.ref_titles "tag-c" "Retained";
+              {state with columns=[column];filters=[previous;current;following]});
+            Lui_elements.column [Views_head.filters_row inst;popup_layer] context parent) in
+          let inst=Option.get !instance in
+          let value_id="vchip-value-" ^ string_of_int inst.Views_state.id ^ "-1" in
+          let button ()=List.find_opt (fun node -> M.string_prop node "accessibility-identifier"=Some value_id) (nodes selector) in
+          check "every existing filter has an editable value button"
+            (match button () with Some node -> node.M.kind="button" | None -> false);
+          (match button () with
+          | None -> ignore (Lui_app.dispose selector.S.app);next rest
+          | Some trigger ->
+              let document= !(Stub_dom.document_ref) in
+              let lookup : string -> Js.Json.t=Stub_dom.get_field document "getElementById" in
+              let anchor=Stub_dom.make_element "button" in
+              let set_attribute : string -> string -> unit=Stub_dom.get_field anchor "setAttribute" in
+              set_attribute "id" value_id;
+              Stub_dom.set_field document "getElementById" (fun id -> if id=value_id then anchor else lookup id);
+              S.press selector trigger.M.id;
+              Stub_dom.set_field document "getElementById" lookup;
+              ignore (Js.Promise.then_ (fun () ->
+                let input=List.find_opt (fun node -> node.M.kind="input") (nodes selector) in
+                check "clicking an existing filter opens its value picker" (Option.is_some input);
+                Option.iter (fun input ->
+                  check "reopening a value picker does not alter its filter"
+                    ((Views_state.get inst).filters=[previous;current;following]);
+                  check "only many-value editors expose checkboxes"
+                    ((List.exists (fun node -> node.M.kind="checkbox") (nodes selector))=many);
+                  if many then begin
+                    let boxes ()=List.filter (fun node -> node.M.kind="checkbox") (nodes selector) in
+                    check "reopened multi-value filters restore their checked choice"
+                      (List.exists (fun node -> M.string_prop node "accessibility-label"=Some "First"
+                        && Hashtbl.find_opt node.M.props "checked"=Some (P.BoolValue true)) (boxes ()));
+                    S.text_changed selector input.M.id "Second";
+                    S.submit selector input.M.id;
+                    check "editing updates one clause and retains hidden selected references"
+                      ((Views_state.get inst).filters=[previous;{current with c_val=Some
+                        (Wire.Set ([Wire.Uuid "tag-a";Wire.Uuid "tag-b"] @ retained))};following]);
+                    check "live filter edits retain the value trigger"
+                      (match button () with Some node -> node.M.id=trigger.M.id | None -> false);
+                    S.submit selector input.M.id;
+                    S.text_changed selector input.M.id "First";
+                    S.submit selector input.M.id;
+                    check "clearing available choices preserves unlisted references and the operator"
+                      ((Views_state.get inst).filters=[previous;{current with c_val=Some (Wire.Set retained)};following]);
+                    if not unlisted then
+                      check "empty selections display the translated All label"
+                        (Views_head.filter_value_label inst {current with c_val=Some (Wire.Set [])}=I18n.t "view/all");
+                    let empty=List.filter (fun node -> node.M.kind="button"
+                      && button_label node=Some (I18n.t "view.filter/empty")) (nodes selector) in
+                    check "existing value filters offer exactly one Empty footer action" (List.length empty=1);
+                    check "filter footer actions keep the reference height"
+                      (List.for_all (fun node -> Hashtbl.find_opt node.M.props "height"=Some (P.IntValue 28)) empty);
+                    List.iter (fun node -> S.press selector node.M.id) empty;
+                    check "the Empty action preserves the existing operator and popup"
+                      ((Views_state.get inst).filters=[previous;{current with c_val=Some (Wire.Keyword "empty")};following]
+                       && !Views_popup.open_popups<>[])
+                  end else begin
+                    S.submit selector input.M.id;
+                    check "single value replacement preserves adjacent clauses and its operator"
+                      (match (Views_state.get inst).filters with
+                       | [a;b;c] -> a=previous && c=following && b.c_op=operator && b.c_val<>current.c_val
+                       | _ -> false);
+                    check "single value replacement closes its picker" (!Views_popup.open_popups=[]);
+                    if source="property-values" then
+                        check "single reference choices publish their title immediately"
+                          (Views_head.filter_value_label inst (List.nth (Views_state.get inst).filters 1)="First")
+                  end) input;
+                Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);next rest;Js.Promise.resolve ())
+                (Js.Promise.resolve ())))
+    in
+    let tags=Views_table.tags_column () in
+    let checked={tags with Views_state.c_id="fixture/checked";c_name="Checked";c_type="checkbox"} in
+    next [tags,"is-not",Wire.Set [Wire.Uuid "tag-a"],"property-values",true,
+        ["First",Wire.Uuid "tag-a";"Second",Wire.Uuid "tag-b"];
+      tags,"is",Wire.Set [Wire.Uuid "tag-a";Wire.Uuid "tag-c"],"property-values",true,
+        ["First",Wire.Uuid "tag-a";"Second",Wire.Uuid "tag-b"];
+      checked,"is",Wire.Bool false,"checkbox",false,[];
+      (Views_table.created_column ()),"before",Wire.String "1 year ago","timestamp",false,[];
+      {tags with c_id="fixture/date";c_name="Date";c_type="date"},"date-before",Wire.Uuid "tag-b","property-values",false,
+        ["First",Wire.Uuid "tag-a";"Second",Wire.Uuid "tag-b"]]
   in
   let config_boot_check done_ =
     let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in
@@ -2327,7 +2442,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))));
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))
 
 let popup_press (ev : Ui_services.ev) =

@@ -373,6 +373,8 @@ let show_custom_rect ~rect ~cls content =
     ~align_end:false ~cls ~card:true ~on_dismiss:(fun _ -> close_entry id) [content]))
 
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
+    ?(selected_values = [])
+    ?(input_padding_horizontal = 8)
     ?on_apply ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
     ?(custom_content = fun _ -> None) ~on_chosen () =
@@ -384,7 +386,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     let source = items context in
     let query = Signal.state sched "" in
     let chosen = Signal.state sched 0 in
-    let sel_values = Signal.state sched [] in
+    let sel_values = Signal.state sched selected_values in
     let qsig = Signal.value (query)
     and csig = Signal.value (chosen)
     and ssig = (Signal.value (sel_values)) in
@@ -487,7 +489,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                 (Ui_components.input ~key:input_id ~accessibility_identifier:input_id
                    ~style_class:"cp__select-input" ~placeholder
                    ~autofocus:true ~height:32
-                   ~padding_horizontal:8 ~padding_vertical:4
+                   ~padding_horizontal:input_padding_horizontal ~padding_vertical:4
                    ~background:"transparent" ~border_width:0 ~corner_radius:0
                    ~foreground:"var(--ls-secondary-text-color)"
                    ~on_input:(function
@@ -511,7 +513,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                         close_all ();
                         apply (Signal.get_state sel_values)) [] ] ]
               | _ -> [])
-            @ footer))
+            @ (if footer=[] then [] else [column ~gap:4 ~margin_top:4 footer])))
     in
     let wrap =
       if wrap_cls = "" then select_col
