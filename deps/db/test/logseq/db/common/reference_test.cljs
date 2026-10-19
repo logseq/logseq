@@ -86,17 +86,18 @@
 (deftest get-unlinked-references-ignores-ref-ids-in-block-titles
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
-               [{:page {:block/title "A"}}
+               [{:page {:block/title "aa"}}
                 {:page {:block/title "C"
                         :block/uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
                         :build/keep-uuid? true}}
                 {:page {:block/title "Notes"}
                  :blocks [{:block/title "[[C]]"}
-                          {:block/title "plain mention of a"}]}]})
-        page-a (db-test/find-page-by-title @conn "A")
+                          {:block/title "a[[C]]a"}
+                          {:block/title "plain mention of aa"}]}]})
+        page-a (db-test/find-page-by-title @conn "aa")
         refs (db-reference/get-unlinked-references @conn (:db/id page-a))]
-    (is (= #{"plain mention of a"} (set (map :block/title refs)))
-        "A block whose only text is a ref to another page is not an unlinked reference of A, though the ref's stored id contains an a")))
+    (is (= #{"plain mention of aa"} (set (map :block/title refs)))
+        "Reference IDs and text across reference boundaries are not unlinked mentions.")))
 
 (deftest get-unlinked-references-matches-alias-titles
   (let [conn (db-test/create-conn-with-blocks

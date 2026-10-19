@@ -310,14 +310,15 @@
     (linked-reference-result db id include-ref-pages-count? has-filters? ref-blocks children-ids))))
 
 (defn- mentions-title?
-  "Whether block-title mentions one of titles (lower-cased) as text. Refs are
-  stored as [[uuid]], so the ids are removed first: a page title such as \"a\"
-  would otherwise match the id of any referenced page."
+  "Returns whether `block-title` mentions one of the lower-cased `titles`
+  within a text segment outside node references."
   [block-title titles]
   (let [lc (string/lower-case block-title)]
     (and (some #(string/includes? lc %) titles)
-         (let [text (string/replace lc db-content/id-ref-pattern "")]
-           (some #(string/includes? text %) titles)))))
+         ;; Split includes captured UUIDs at odd indexes; only search text segments.
+         (some (fn [text]
+                 (some #(string/includes? text %) titles))
+               (take-nth 2 (string/split lc db-content/id-ref-pattern))))))
 
 (defn get-unlinked-references
   "Blocks that mention the page, or one of its aliases, by title without
