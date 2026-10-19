@@ -911,6 +911,7 @@
  :help/support-forum "支持论坛"
  :help/terms "服务条款"
  :help/terms-title "条款"
+ :help/toggle-menu "切换帮助菜单"
  :help/usage-title "使用说明"
 
  :help.handbook/chat-on-discord "在 Discord 上聊天"

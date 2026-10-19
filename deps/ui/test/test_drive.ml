@@ -642,6 +642,14 @@ let test_help () =
     Runtime.flush ()) (fun () ->
     Runtime.signal_set st.items [];
     if (Signal.get ms).Model.right_sidebar_open then send Action.Toggle_right_sidebar;
+    let trigger=List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "help-menu-trigger")
+      (M.all_nodes (tree ())) in
+    check "Floating Help is a labelled standard button"
+      (trigger.M.kind="button" && M.string_prop trigger "accessibility-label"=Some (I18n.t "help/toggle-menu"));
+    click_node trigger; Runtime.flush ();
+    check "The standard Help button opens its popup" (Signal.get ms).Model.help_open;
+    if (Signal.get ms).Model.help_open then (click_node trigger; Runtime.flush ());
+    check "The standard Help button closes its popup" (not (Signal.get ms).Model.help_open);
     let open_shortcuts () =
       send Action.Help_toggle;
       let popup=List.find (fun n -> n.M.kind="popover" && has_tok n "cp__sidebar-help-menu-popup") (M.all_nodes (tree ())) in

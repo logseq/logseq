@@ -389,6 +389,21 @@ let help_pane st =
             "https://blog.logseq.com/terms/" ])
 
 (* Both shells use one retained trigger and the same menu geometry. *)
+let help_trigger () =
+  let background="var(--lx-gray-02, var(--ls-secondary-background-color))" in
+  Ui_components.with_props
+    [Ui_components.Prop.opacity 0.7;Ui_components.Prop.hover_opacity 1.;
+     Ui_components.Prop.font_weight 700;
+     Ui_components.Prop.hover_background background;
+     Ui_components.Prop.hover_foreground "var(--ls-primary-text-color)"]
+    (Ui_components.button ~key:"help" ~variant:`ghost ~label:(t "help/toggle-menu")
+      ~accessibility_identifier:"help-menu-trigger" ~style_class:"cp__sidebar-help-btn"
+      ~width:32 ~height:32 ~min_width:32 ~min_height:32 ~padding:0 ~gap:0
+      ~main:`center ~cross:`center ~corner_radius:16 ~background
+      ~foreground:"var(--ls-primary-text-color)"
+      ~on_press:(fun _ -> Runtime.send Action.Help_toggle;Runtime.flush ())
+      [icon_ ~size:30 "help-small"])
+
 let help_menu ~close ~open_handbook ~open_bug_report () =
   let item key title icon_name action =
     Ui_components.with_props

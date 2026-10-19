@@ -1028,13 +1028,6 @@ let overlays (ms : Model.t Signal.signal) =
         ms
         ]))
 
-(* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
-   the help menu popup *)
-(* cljs container.cljs help-button: inline tabler help-small svg *)
-let help_svg : t =
-  icon ~key:"help-svg" ~name:(`app "help-small") ~point_size:30
-    ~style_class:"icon" []
-
 let help_menu_popup : t =
  fun context parent ->
   let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
@@ -1047,24 +1040,8 @@ let help_area (ms : Model.t Signal.signal) : t =
         [ Ui_components.Prop.position `fixed
         ; Ui_components.Prop.inset_bottom 16.
         ; Ui_components.Prop.inset_right 32.
-        ; Ui_components.Prop.z_index 999
-        ; Ui_components.Prop.opacity 0.7
-        ; Ui_components.Prop.hover_opacity 1. ]
-        (box ~key:"help" ~accessibility_identifier:"help-menu-trigger" ~style_class:"cp__sidebar-help-btn"
-           [ Ui_parts.pressable
-               ~on_press:(fun _ ->
-                 Runtime.send Action.Help_toggle; Runtime.flush ())
-               (Ui_components.with_props
-                  [ Ui_components.Prop.user_select `none
-                  ; Ui_components.Prop.cursor `pointer ]
-                  (Ui_components.with_props
-                     [ Ui_components.Prop.font_weight 700 ]
-                     (row ~key:"help-inner" ~main:`center ~cross:`center
-                        ~width:32 ~height:32 ~corner_radius:16
-                        ~background:
-                          "var(--lx-gray-02, \
-                           var(--ls-secondary-background-color))"
-                        [ help_svg ]))) ])
+        ; Ui_components.Prop.z_index 999 ]
+        (Right_sidebar_view.help_trigger ())
     ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->

@@ -427,12 +427,6 @@ let overlays (ms : Model.t Signal.signal) =
           else spacer ~key:"app-none" []) ms
     ]) ]))
 
-(* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
-   the shared help popup. *)
-(* cljs container.cljs help-button: the tabler help glyph — the native
-   path renders bundled tabler icons; a hand-rolled svg renders empty *)
-let help_svg : t = Icons.icon ~size:20. "help-small"
-
 let help_menu_popup () : t =
   let close () = Runtime.send Action.Help_toggle; Runtime.flush () in
   Right_sidebar_view.help_menu ~close
@@ -440,22 +434,10 @@ let help_menu_popup () : t =
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_el.fragment
-    (* click handler on the OUTER element: the native hit test resolves the
-       smallest frame at the point and may land on the wrapper or the svg —
-       the document listener walks ancestors, so the handler must sit on
-       the outermost element of the hit box. *)
-    [ (* stack overlay child: pin to the bottom-trailing corner —
-         edge-stretch would cover the whole window and swallow every
-         press *)
-      overlay ~key:"help-anchor" ~alignment:`bottom_trailing
-        [ Ui_parts.pressable
-        ~on_press:(fun _ ->
-          Runtime.send Action.Help_toggle; Runtime.flush ())
-        (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
-           ~accessibility_identifier:"help-menu-trigger"
-           ~width:32 ~height:32 ~margin_right:32 ~margin_bottom:16
-           [ row ~key:"help-inner" ~main:`center ~cross:`center ~width:32 ~height:32
-               [ help_svg ] ]) ]
+    [ overlay ~key:"help-anchor" ~alignment:`bottom_trailing
+        [ Ui_components.with_props
+            [Ui_components.Prop.margin_right 32;Ui_components.Prop.margin_bottom 16]
+            (Right_sidebar_view.help_trigger ()) ]
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then
             (* the dismiss catcher box is gone: the popover's own

@@ -54,7 +54,7 @@ test('dock resize handles overlay adjacent panes without reserving content width
 test('Help opens complete shortcut content and reopens collapsed panels', () => {
   browser('set', 'viewport', '1280', '720');
   open();
-  browser('click', '.cp__sidebar-help-btn');
+  button('Toggle help menu');
   assertHelpMenu(evaluate(`(${measureHelpMenu.toString()})(document)`));
   browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
   browser('wait', '--fn', "document.querySelector('.cp__shortcut-page') !== null");
@@ -65,7 +65,7 @@ test('Help opens complete shortcut content and reopens collapsed panels', () => 
   browser('click', '.item-type-shortcut-settings > div button[aria-label="Keyboard shortcuts"]');
   assertCollapsedShortcutHelp(evaluate(`(${measureCollapsedShortcutHelp.toString()})(document)`));
   button('Toggle right sidebar');
-  browser('click', '.cp__sidebar-help-btn');
+  button('Toggle help menu');
   browser('find', 'role', 'button', 'click', '--name', 'Keyboard shortcuts', '--exact');
   browser('wait', '--fn', "document.querySelectorAll('.item-type-shortcut-settings').length === 1 && !document.querySelector('.cp__right-split.is-collapsed')");
   assertShortcutHelp(evaluate(`(${measureShortcutHelp.toString()})(document)`));

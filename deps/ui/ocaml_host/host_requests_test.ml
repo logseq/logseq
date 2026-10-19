@@ -8832,6 +8832,10 @@ let () = Native_embed.with_entry_lock (fun () ->
       || List.exists has_label (Lui_store.child_ids store id) in
     let shortcut_entry ()=List.find (fun id -> Lui_store.bool_prop store id "press-enabled" && has_label id) (Lui_store.preorder store) in
     let send event=ignore (Lui_app.dispatch_event app event);ignore (Lui_app.flush app) in
+    let trigger=Option.get (Lui_store.find_identifier store "help-menu-trigger") in
+    check "Native floating Help must be a labelled standard button"
+      (Lui_store.kind store trigger="button" &&
+       Lui_store.string_prop store trigger "accessibility-label"=Some (I18n.t "help/toggle-menu"));
     let popup=List.find (fun id -> Lui_store.kind store id="popover") (Lui_store.preorder store) in
     check "Native Help menu must anchor to its live retained trigger"
       (Lui_store.string_prop store popup "anchor-target"=Some "help-menu-trigger");

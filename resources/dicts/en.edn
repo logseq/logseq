@@ -911,6 +911,7 @@
  :help/support-forum "Support forum"
  :help/terms "Terms"
  :help/terms-title "Terms"
+ :help/toggle-menu "Toggle help menu"
  :help/usage-title "Usage"
 
  :help.handbook/chat-on-discord "Chat on Discord"
