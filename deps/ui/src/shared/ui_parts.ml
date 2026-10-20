@@ -235,6 +235,7 @@ module Prop : sig
   val inset_top : float -> t
   val inset_right : float -> t
   val inset_bottom : float -> t
+  val collision_padding : float -> t
   val inset_left : float -> t
   val accessibility_label : string -> t
   val s_accessibility_label : string Signal.signal -> s
@@ -349,6 +350,7 @@ end = struct
   let inset_top v = flt InsetTop v
   let inset_right v = flt InsetRight v
   let inset_bottom v = flt InsetBottom v
+  let collision_padding v = flt CollisionPadding v
   let inset_left v = flt InsetLeft v
   let accessibility_label v = str AccessibilityLabel v
   let s_accessibility_label v = sstr AccessibilityLabel v

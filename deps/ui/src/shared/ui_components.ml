@@ -1032,7 +1032,8 @@ let menu_item_chrome element =
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
 let menu_surface ?max_height element =
   with_props
-    [ Prop.gap 0
+    [ Prop.collision_padding 5.
+    ; Prop.gap 0
     ; ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ; Prop.font_size "0.875rem"
@@ -1060,7 +1061,8 @@ let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
 let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     children : t =
   with_props
-    [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+    [ Prop.collision_padding 5.
+    ; ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" ) ]
     (popover ~transition:popover_transition ~key ~anchor ~anchor_alignment ~on_dismiss
        ~min_width:128 ~padding:4

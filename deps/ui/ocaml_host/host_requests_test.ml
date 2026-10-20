@@ -497,7 +497,8 @@ let () =
   Lui_host.resize host ~width:1440 ~height:200 ~scale:1.;
   ignore (Lui_host.repaint host);
   let small = Option.get (Lui_host.layout_rect host menu) in
-  expect "A menu exceeds its resized window" (small.h <= 184.);
+  expect "A menu loses its five-point resized viewport clearance"
+    (small.h <= 190. && small.y >= 5. && small.y+.small.h <= 195.);
   ignore (Lui_app.dispose app);
   Theme_vars.set_dark false;
   List.iter prerr_endline (List.rev !failures);
@@ -9882,6 +9883,25 @@ let () = Native_embed.with_entry_lock (fun () ->
           let r=W.Rects.get rects id in
           expect "Native context menu must flip above a low anchor without leaving the viewport"
             (abs_float ((r.y+.r.h)/.scale-.850.)<0.6 && r.y>=0.)) (popup ());
+        escape ();
+        Host.set_window_size 1440. 200.;
+        Lui_host.resize host ~width:(int_of_float (1440.*.scale))
+          ~height:(int_of_float (200.*.scale)) ~scale;
+        refresh ();click_trigger ();
+        let retained=popup () in
+        List.iter (fun height ->
+          Host.set_window_size 1440. height;
+          Lui_host.resize host ~width:(int_of_float (1440.*.scale))
+            ~height:(int_of_float (height*.scale)) ~scale;
+          refresh ();
+          expect "Window resizing must retain the open page menu" (popup ()=retained);
+          Option.iter (fun id ->
+            let r=W.Rects.get rects id in
+            let expected=Float.min 234. (height-.45.) in
+            expect (Printf.sprintf "More must use live five-point viewport clearance: height=%.0f scale=%.0f actual=%.1f expected=%.1f"
+              height scale (r.h/.scale) expected)
+              (abs_float (r.y/.scale-.40.)<0.6 && abs_float (r.h/.scale-.expected)<0.6)) (popup ()))
+          [200.;900.;260.;900.];
         escape ())) [1.;2.]);
   List.iter prerr_endline (List.rev !failures);
   check "Native page menu pointer, keyboard and focus lifecycle" (!failures=[]);

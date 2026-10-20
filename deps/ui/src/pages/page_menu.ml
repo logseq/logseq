@@ -249,7 +249,6 @@ let global_items () =
 
 let view (ax, atop, abot, with_app_items) (p : Model.page option) =
   let inner_width = Ui_services.dom_viewport_width () in
-  let inner_height = Ui_services.dom_viewport_height () in
   let flip =
     (not with_app_items) && Popups_state.anchor_above atop abot
   in
@@ -264,8 +263,6 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
     ~anchor:(if flip then `above else `below)
     ~anchor_alignment:(if with_app_items then `end_ else `center)
     ~anchor_offset:0. ~anchor_alignment_offset:(if with_app_items then -33. else 0.)
-    ~available_height:
-      (if flip then atop -. 5. else inner_height -. abot -. 5.)
     ~role:`menu ~width:(if with_app_items then 256 else 280)
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))

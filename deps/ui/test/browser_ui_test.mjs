@@ -784,6 +784,37 @@ test('More menu keeps icons before labels and readable highlighted text', () => 
   assert.equal(evaluate("(()=>{const rows=document.querySelectorAll('.ui__dropdown-menu-item');return getComputedStyle(rows[0]).color===getComputedStyle(rows[1]).color})()"), true);
 });
 
+test('More menu recovers its content height while the retained viewport resizes', () => {
+  open();
+  browser('set', 'viewport', '1280', '720');
+  button('More');
+  const measure = "(()=>{const menu=document.querySelector('.ls-dots-menu');const r=menu.getBoundingClientRect();return {id:menu.id,x:r.x,y:r.y,width:r.width,height:r.height,client:menu.clientHeight,scroll:menu.scrollHeight}})()";
+  const initial = evaluate(measure);
+  try {
+    for (const height of [200, 720, 300, 720]) {
+      browser('set', 'viewport', '1280', String(height));
+      const expected = Math.min(initial.height, height - 45);
+      browser('wait', '--fn', `Math.abs(document.querySelector('.ls-dots-menu').getBoundingClientRect().height-${expected})<1`);
+      const menu = evaluate(measure);
+      assert.equal(menu.id, initial.id, 'resize retains the open menu');
+      assert.equal(menu.x, 1019);
+      assert.equal(menu.y, 40);
+      assert.equal(menu.width, 256);
+      assert.ok(Math.abs(menu.height - expected) < 1);
+      if (height === 200) {
+        assert.ok(menu.scroll > menu.client, 'short menus retain scrollable content');
+        browser('scroll', 'down', '1000', '--selector', '.ls-dots-menu');
+        browser('wait', '--fn', "(()=>{const menu=document.querySelector('.ls-dots-menu');return Math.abs(menu.scrollTop-(menu.scrollHeight-menu.clientHeight))<1})()");
+        const bottom = evaluate("(()=>{const menu=document.querySelector('.ls-dots-menu');const tail=Array.from(menu.querySelectorAll('[role=menuitem]')).at(-1);return {menu:menu.getBoundingClientRect().bottom,tail:tail.getBoundingClientRect().bottom}})()");
+        assert.ok(bottom.tail <= bottom.menu, 'the last menu item remains reachable after repositioning');
+      }
+    }
+  } finally {
+    browser('press', 'Escape');
+    browser('set', 'viewport', '1280', '720');
+  }
+});
+
 test('right-sidebar panel headings use neutral disclosure chrome', () => {
   open();
   button('Toggle right sidebar');
