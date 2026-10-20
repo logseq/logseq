@@ -939,11 +939,41 @@
                (when-not value-matches?
                  (raw-set-block-property! conn block property v'))))))))))
 
+(defn- create-property!
+  [conn property-id db-ident schema {:keys [property-name properties] :as opts}]
+  (let [k-name (or (and property-name (name property-name))
+                   (name property-id))
+        db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
+    (assert (some? k-name)
+            (prn "property-id: " property-id ", property-name: " property-name))
+    ;; e2ee titles are ciphertext packages, not validatable page titles
+    (when-not (:e2ee? opts)
+      (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+      (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+      (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}}))
+    (let [db-id (:db/id properties)
+          page (when (integer? db-id)
+                 (d/entity @conn db-id))
+          _ (outliner-validate/validate-page-to-property-conversion page)
+          opts' (cond-> {:title k-name
+                         :properties properties}
+                  (integer? db-id)
+                  (assoc :block-uuid (:block/uuid page)))
+          tx-data (concat
+                   [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
+                      (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
+                   ;; Convert page to property
+                   (when db-id
+                     [[:db/retract db-id :block/tags :logseq.class/Page]]))]
+      (ldb/transact! conn tx-data
+                     {:outliner-op :upsert-property}))
+    (d/entity @conn db-ident')))
+
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
     with the given property-id or :property-name option. When a property is created
     it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name properties] :as opts}]
+  [conn property-id schema {:keys [property-name] :as opts}]
   (let [db @conn
         existing (when-not (:e2ee? opts)
                    (when-let [title (or property-name (some-> property-id name))]
@@ -975,33 +1005,7 @@
         existing)
 
       :else
-      (let [k-name (or (and property-name (name property-name))
-                       (name property-id))
-            db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
-        (assert (some? k-name)
-                (prn "property-id: " property-id ", property-name: " property-name))
-        ;; e2ee titles are ciphertext packages, not validatable page titles
-        (when-not (:e2ee? opts)
-          (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
-          (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-          (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}}))
-        (let [db-id (:db/id properties)
-              page (when (integer? db-id)
-                     (d/entity db db-id))
-              _ (outliner-validate/validate-page-to-property-conversion page)
-              opts' (cond-> {:title k-name
-                             :properties properties}
-                      (integer? db-id)
-                      (assoc :block-uuid (:block/uuid page)))
-              tx-data (concat
-                       [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
-                          (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
-                       ;; Convert page to property
-                       (when db-id
-                         [[:db/retract db-id :block/tags :logseq.class/Page]]))]
-          (ldb/transact! conn tx-data
-                         {:outliner-op :upsert-property}))
-        (d/entity @conn db-ident')))))
+      (create-property! conn property-id db-ident schema opts))))
 
 (defn- node-value-target-id
   "Resolves a :node property value to the id of the node it targets. Such
