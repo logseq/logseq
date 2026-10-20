@@ -417,6 +417,77 @@ let () =
   Theme_vars.set_dark false;
   print_endline "native stylesheet semantic control channels: OK"
 
+
+let () =
+  let failures = ref [] in
+  let expect label condition = if not condition then failures := label :: !failures in
+  List.iter (fun mode ->
+    let snapshot = Ui_theme.snapshot mode in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+       "vars",`Assoc (List.map (fun (k,v) -> k,`String v) snapshot.vars)]));
+    Theme_vars.set_dark (mode=Ui_theme.Dark);
+    List.iter (fun accent ->
+      Theme_vars.set_accent accent;
+      List.iter (fun scale ->
+        List.iter (fun checked ->
+          List.iter (fun owner ->
+          let painted = ref [] and changes = ref [] in
+          let host = Lui_host.create
+            ~hooks:{Lui_paint.default_hooks with color_of=Theme_vars.color_of}
+            ~layout:(module Lui_layout)
+            ~renderer:{Lui_host.name="switch-theme-test";render=(fun scene -> painted:=scene.Lui_scene.ops;Bytes.empty)}
+            ~width:(int_of_float (80.*.scale)) ~height:(int_of_float (40.*.scale)) ~scale () in
+          let app = Lui_app.create (Lui_host.backend host (profile MacOS GenericHost)) checked
+            (fun _ value -> value) (fun _ model send -> Lui_elements.column
+              [reactive (fun current ->
+                 let on_checked value = changes := value :: !changes;ignore (send value) in
+                 if owner="settings" then
+                   Settings_controls.switch_el ~key:"themed-switch" ~on:current ~on_checked
+                 else Plugins_view.switch_btn ~checked:current ~on_toggle:on_checked) model]) in
+          ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint host);
+          let thumb_color = Theme_vars.color_of "hsl(var(--background))"
+          and track_color = Theme_vars.color_of (if checked then "hsl(var(--primary))" else "hsl(var(--input))") in
+          let fills = List.filter_map (function Lui_scene.Fill f -> Some f | _ -> None) !painted in
+          expect "Shared switch must paint the reference twelve-point themed thumb"
+            (List.exists (fun f -> abs_float (f.Lui_scene.frect.w-.12.*.scale)<0.01
+              && abs_float (f.frect.h-.12.*.scale)<0.01 && Some f.fcolor=thumb_color
+              && abs_float (f.frect.x-.(if checked then 17. else 3.)*.scale)<0.01) fills);
+          expect "Shared switch track must use the current theme's checked or input color"
+            (List.exists (fun f -> abs_float (f.Lui_scene.frect.w-.32.*.scale)<0.01
+              && abs_float (f.frect.h-.18.*.scale)<0.01 && Some f.fcolor=track_color) fills);
+          let switch = List.find (fun id -> Lui_store.kind (Lui_host.store host) id="switch")
+              (Lui_store.preorder (Lui_host.store host)) in
+          ignore (Lui_app.dispatch_event app (ToggleChanged (switch,not checked)));
+          ignore (Lui_app.flush app);
+          expect "Shared switch must forward its next boolean state exactly once" (!changes=[not checked]);
+          let module W = Lui_window in
+          let ui = W.Ui.create () and rects = W.Rects.create () in
+          W.Ui.set_scale ui scale;
+          let store = Lui_host.store host in
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+            (Lui_host.layout_rect host id)) (Lui_store.preorder store);
+          let r = Option.get (Lui_host.layout_rect host switch) in
+          List.iter (fun fraction ->
+            changes := [];
+            let next = not (Lui_store.bool_prop store switch "checked") in
+            let x = (r.x+.fraction*.r.w)/.scale and y = (r.y+.r.h/.2.)/.scale in
+            let deliver = List.iter (function W.Dispatch event ->
+              ignore (Lui_app.dispatch_event app event) | _ -> ()) in
+            let down = W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)) in
+            deliver down;
+            let up = W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+            deliver up;
+            ignore (Lui_app.flush app);
+            expect "Every visible part of the switch must deliver one toggle"
+              (!changes=[next])) [0.1;0.5;0.9];
+          ignore (Lui_app.dispose app)) ["settings";"plugins"]) [false;true]) [1.;2.])
+      ["logseq";"blue";"orange"]) [Ui_theme.Light;Ui_theme.Dark];
+  Theme_vars.set_accent "logseq";Theme_vars.set_dark false;
+  List.iter prerr_endline (List.rev !failures);
+  check "Shared switch theme and geometry parity" (!failures=[]);
+  print_endline "native shared switch themes and geometry: OK"
+
 let () =
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in

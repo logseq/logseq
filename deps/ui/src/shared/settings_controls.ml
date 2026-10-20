@@ -87,7 +87,10 @@ let btn_size = function
    web, so no mirror is needed. ToggleChanged is decoded once here —
    callers get the new checked state, not the raw event. *)
 let switch_el ~key ~on ~on_checked =
-  switch_ ~key ~style_class:"ui__switch" ~width:32 ~height:18 ~checked:on
+  switch_ ~key ~style_class:"ui__switch" ~width:32 ~height:18
+    ~padding:3 ~border_width:0 ~corner_radius:9
+    ~background:(if on then "hsl(var(--primary))" else "hsl(var(--input))")
+    ~foreground:"hsl(var(--background))" ~checked:on
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked

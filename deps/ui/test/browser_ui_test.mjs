@@ -952,6 +952,34 @@ test('settings switches match the reference dimensions and persist clicks', () =
   assert.equal(evaluate(`document.querySelector('${selector}').checked`), !before);
 });
 
+test('Appearance switches share reference chrome across light and dark themes', () => {
+  open();
+  button('More');
+  browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  try {
+    for (const [theme, accent, thumb, off, on] of [
+      ['dark', 'Logseq classic color', 'rgb(0, 45, 56)', 'rgb(41, 69, 86)', 'rgb(3, 125, 186)'],
+      ['light', 'Logseq classic color', 'rgb(255, 255, 255)', 'rgb(232, 232, 232)', 'rgb(3, 125, 186)'],
+      ['dark', 'Blue', 'rgb(28, 28, 28)', 'rgb(41, 41, 41)', 'rgb(0, 145, 255)'],
+    ]) {
+      browser('find', 'role', 'button', 'click', '--name', accent, '--exact');
+      browser('find', 'text', theme, 'click', '--exact');
+      browser('wait', '--fn', `document.body.classList.contains('dark-theme')===${theme === 'dark'}`);
+      const controls = evaluate("Array.from(document.querySelectorAll('.ui__switch input[role=switch]')).map(e=>{const r=e.getBoundingClientRect();const t=getComputedStyle(e,'::after');return {checked:e.checked,width:r.width,height:r.height,track:getComputedStyle(e).backgroundColor,thumb:t.backgroundColor,thumbWidth:t.width,thumbHeight:t.height}})");
+      assert.equal(controls.length, 2);
+      for (const control of controls) {
+        assert.deepEqual([control.width,control.height,control.thumbWidth,control.thumbHeight], [32,18,'12px','12px']);
+        assert.equal(control.thumb, thumb);
+        assert.equal(control.track, control.checked ? on : off);
+      }
+    }
+  } finally {
+    browser('find', 'role', 'button', 'click', '--name', 'Logseq classic color', '--exact');
+    browser('find', 'text', 'light', 'click', '--exact');
+    browser('press', 'Escape');
+  }
+});
+
 
 test('selecting an empty page reference consumes its autopaired closing brackets', () => {
   open();

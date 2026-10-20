@@ -1400,42 +1400,15 @@ select.form-select {
   margin-bottom: 0;
 }
 
-/* LUI wraps the actual switch input in a label. Style the input so the
-   wrapper does not paint a second track or constrain the control label. */
-.ui__switch {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 0;
-  width: 2rem;
-  height: 1.125rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
+/* The shared switch recipe owns track dimensions, insets and colors. */
 .ui__switch > .lui-control-label:empty {
   display: none;
-}
-
-.ui__switch > .lui-switch-control {
-  width: 2rem;
-  height: 1.125rem;
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  padding: 0 1px;
-  background: hsl(var(--input));
-  transition: background-color 150ms;
-}
-
-.ui__switch > .lui-switch-control:checked {
-  background: hsl(var(--primary));
 }
 
 .ui__switch > .lui-switch-control::after {
   width: 0.75rem;
   height: 0.75rem;
-  background: var(--ls-primary-background-color, var(--lui-c-background));
+  background: currentColor;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   translate: none;
@@ -1515,11 +1488,6 @@ select.form-select {
 }
 
 /* plugins + remaining helper classes */
-.ui__switch.ls-switch-lg {
-  width: 2.25rem;
-  height: 1.25rem;
-}
-
 .html-content.ls-pl-html {
   padding-left: 0.25rem;
   flex: 1;

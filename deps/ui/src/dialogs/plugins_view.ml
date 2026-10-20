@@ -251,15 +251,8 @@ let card_name plj web_pkg pid =
   in
   List.find (fun s -> s <> "") candidates
 
-let toggle_of_switch ev =
-  match ev with
-  | Lui_protocol.ToggleChanged (_, b) -> b
-  | _ -> false
-
 let switch_btn ~checked ~on_toggle =
-  switch_ ~key:"sw" ~style_class:"ls-switch-lg" ~checked
-    ~on_toggle:(fun ev -> on_toggle (toggle_of_switch ev))
-    []
+  Settings_controls.switch_el ~key:"sw" ~on:checked ~on_checked:on_toggle
 
 let menu_li ~key label act =
   list_item ~key ~text:label ~on_press:(fun _ -> act ()) []
