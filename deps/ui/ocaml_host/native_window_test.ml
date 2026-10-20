@@ -283,6 +283,93 @@ let software_upload_budget () =
           check "Native upload fixture exceeded the physical-memory guard"
             (physical_footprint () <= 200_000_000)))
 
+let software_span_reuse_regression id =
+  let width=2048 and height=151 and rows=64 in
+  let errors=ref [] in
+  let verify message condition = if not condition then errors:=message::!errors in
+  List.iter (fun y0 ->
+    Native_window.software_begin id (width,height,rows);
+    let expected=Bytes.init (width*height*4) (fun index ->
+      let channel=index mod 4 and x=(index/4) mod width and y=index/(width*4) in
+      Char.chr (if channel=3 then 128 else
+        if (x>=100 && x<120) || (x>=1900 && x<1920) then (y*13+channel*17) mod 127
+        else 31)) in
+    let upload y = Native_window.software_tile id
+      (y,min rows (height-y),width*4,
+       Bytes.sub expected (y*width*4) (min rows (height-y)*width*4)) in
+    List.iter upload [0;64;128];Native_window.software_present id;
+    let offset=(y0/rows)*5 in
+    let initial=software_image_ids id in
+    check "Span reuse fixture needs two separate image surfaces"
+      (initial.(offset+3)<>0 && initial.(offset+4)<>0);
+    List.iter (fun change ->
+      let previous=Bytes.copy expected and before=software_image_ids id in
+      (match change with
+       | 0 | 1 ->
+           let at=((y0+1)*width+(if change=0 then 105 else 1905))*4 in
+           Bytes.set expected at (Char.chr ((Char.code (Bytes.get expected at)+1) mod 127))
+       | 2 ->
+           for y=y0 to min height (y0+rows)-1 do
+             for x=100 to 129 do
+               for channel=0 to 2 do
+                 Bytes.set expected ((y*width+x)*4+channel)
+                   (Char.chr (if x<110 then 31 else (y*13+channel*17) mod 127))
+               done
+             done
+           done
+       | 3 ->
+           for y=y0 to min height (y0+rows)-1 do
+             for x=130 to 1899 do
+               Bytes.set expected ((y*width+x)*4) '\007'
+             done
+           done
+       | 4 ->
+           for y=y0 to min height (y0+rows)-1 do
+             for x=110 to 139 do
+               for channel=0 to 2 do
+                 Bytes.set expected ((y*width+x)*4+channel)
+                   (Char.chr (if x<120 then 31 else (y*13+channel*17) mod 127))
+               done
+             done
+           done
+       | 5 ->
+           for y=y0 to min height (y0+rows)-1 do
+             for x=140 to 149 do
+               for channel=0 to 2 do
+                 Bytes.set expected ((y*width+x)*4+channel)
+                   (Char.chr ((y*13+channel*17) mod 127))
+               done
+             done
+           done
+       | 6 ->
+           let at=(y0*width+120)*4 in
+           Bytes.set expected at (Char.chr ((Char.code (Bytes.get expected at)+1) mod 127))
+       | _ -> assert false);
+      upload y0;
+      let after=software_image_ids id in
+      if change<>1 then
+        verify "Changing the left span or background replaces the unchanged right image"
+          (before.(offset+4)=after.(offset+4));
+      if change=1 || change=3 || change=4 then
+        verify "Changing the right span or background replaces the unchanged left image"
+          (before.(offset+3)=after.(offset+3));
+      if change<3 || change>=5 then
+        verify "Changed image pixels or bounds keep their previous surface identity"
+          (before.(offset+(if change=1 then 4 else 3))
+           <>after.(offset+(if change=1 then 4 else 3)));
+      check "A pending span update mutates the frame still owned by the compositor"
+        (software_composite id=previous);
+      Native_window.software_present id;
+      check "Retaining unchanged image spans loses updated pixels"
+        (software_composite id=expected && Native_window.software_read id=expected);
+      check "Span reuse expands immutable surface ownership"
+        (Native_window.software_owned_bytes id<=131_072)
+    ) [0;1;2;3;4;5;6]
+  ) [0;64;128];
+  List.iter prerr_endline (List.rev !errors);
+  check "Independent immutable image span reuse failed" (!errors=[]);
+  print_endline "native independent immutable image spans: OK"
+
 let software_band_reuse_regression id =
   let width=2048 and height=131 and rows=64 in
   let errors=ref [] in
@@ -565,6 +652,7 @@ let () =
       (not (has_sidebar_material window_id));
     software_band_compression_regression window_id;
     software_band_reuse_regression window_id;
+    software_span_reuse_regression window_id;
     Native_window.software_begin window_id (17,131,64);
     let band = Bytes.make (17 * 64 * 4) '\255' in
     List.iter (fun y ->

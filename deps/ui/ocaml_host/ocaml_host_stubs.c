@@ -695,7 +695,7 @@ typedef struct {
   CGColorRef backgrounds[3];
   id layers[5];
   int edges[6];
-  uint32_t pixels[3];
+  uint32_t pixels[3], image_pixels[2];
   bool ready, changed;
 } LogseqSoftwareBand;
 
@@ -783,7 +783,36 @@ static IOSurfaceRef logseq_software_band(int w, int h) {
   return image;
 }
 
-static IOSurfaceRef logseq_software_image(int w, int h, const unsigned char *source, size_t stride) {
+static uint32_t logseq_software_pixel(const unsigned char *source) {
+  uint32_t pixel;
+  memcpy(&pixel, source, sizeof(pixel));
+  return pixel;
+}
+
+static bool logseq_software_image_matches(IOSurfaceRef image, uint32_t first_pixel, int w, int h,
+                                          const unsigned char *source, size_t stride) {
+  if (!image || first_pixel != logseq_software_pixel(source)
+      || IOSurfaceGetWidth(image) != (size_t)w || IOSurfaceGetHeight(image) != (size_t)h)
+    return false;
+  if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
+    caml_failwith("Cannot compare software IOSurface band");
+  const unsigned char *pixels = IOSurfaceGetBaseAddress(image);
+  size_t row_bytes = IOSurfaceGetBytesPerRow(image);
+  bool equal = true;
+  for (int y=0; y<h && equal; y++)
+    equal = memcmp(source + stride*y, pixels + row_bytes*y, (size_t)w*4) == 0;
+  if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
+    caml_failwith("Cannot finish comparing software IOSurface band");
+  return equal;
+}
+
+static IOSurfaceRef logseq_software_image(IOSurfaceRef previous, uint32_t first_pixel, int w, int h,
+                                         const unsigned char *source, size_t stride) {
+  /* A dirty band can still contain an unchanged immutable image span. */
+  if (logseq_software_image_matches(previous, first_pixel, w, h, source, stride)) {
+    CFRetain(previous);
+    return previous;
+  }
   IOSurfaceRef image = logseq_software_band(w, h);
   if (IOSurfaceLock(image, 0, NULL)) {
     CFRelease(image);
@@ -822,31 +851,15 @@ static CGColorRef logseq_software_color(uint32_t pixel) {
   return color;
 }
 
-static uint32_t logseq_software_pixel(const unsigned char *source) {
-  uint32_t pixel;
-  memcpy(&pixel, source, sizeof(pixel));
-  return pixel;
-}
-
 static bool logseq_software_matches(LogseqSoftwareBand *band,
                                    const unsigned char *source, size_t stride, int h) {
   if (!band->ready) return false;
   /* Inspect images first: changed content usually rejects the band before
      its larger uniform margins need comparison. Existing surfaces stay immutable. */
   for (int part=0; part<2; part++) if (band->images[part]) {
-    IOSurfaceRef image = band->images[part];
-    if (IOSurfaceLock(image, kIOSurfaceLockReadOnly, NULL))
-      caml_failwith("Cannot compare software IOSurface band");
-    const unsigned char *pixels = IOSurfaceGetBaseAddress(image);
-    size_t row_bytes = IOSurfaceGetBytesPerRow(image);
     int left = band->edges[part*2+1], right = band->edges[part*2+2];
-    bool equal = true;
-    for (int y=0; y<h && equal; y++)
-      equal = memcmp(source + stride*y + (size_t)left*4,
-                     pixels + row_bytes*y, (size_t)(right-left)*4) == 0;
-    if (IOSurfaceUnlock(image, kIOSurfaceLockReadOnly, NULL))
-      caml_failwith("Cannot finish comparing software IOSurface band");
-    if (!equal) return false;
+    if (!logseq_software_image_matches(band->images[part], band->image_pixels[part], right-left, h,
+                                       source + (size_t)left*4, stride)) return false;
   }
   for (int part=0; part<5; part+=2) {
     int left = band->edges[part], right = band->edges[part+1];
@@ -972,9 +985,11 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
     gap_left = gap_right = right;
   IOSurfaceRef images[2] = {NULL, NULL};
   if (gap_left > left)
-    images[0] = logseq_software_image(gap_left-left, h, source + (size_t)left*4, stride);
+    images[0] = logseq_software_image(band->images[0], band->image_pixels[0], gap_left-left, h,
+                                      source + (size_t)left*4, stride);
   if (right > gap_right)
-    images[1] = logseq_software_image(right-gap_right, h, source + (size_t)gap_right*4, stride);
+    images[1] = logseq_software_image(band->images[1], band->image_pixels[1], right-gap_right, h,
+                                      source + (size_t)gap_right*4, stride);
   int edges[] = {0, left, gap_left, gap_right, right, surface->w};
   CGColorRef backgrounds[3] = {NULL, NULL, NULL};
   for (int i=0; i<3; i++) if (edges[i*2] < edges[i*2+1]) {
@@ -990,6 +1005,7 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   band->ready = true; band->changed = true;
   for (int i=0; i<2; i++) {
     band->images[i] = images[i];
+    band->image_pixels[i] = images[i] ? logseq_software_pixel(source + (size_t)edges[i*2+1]*4) : 0;
     if (images[i]) surface->owned_bytes += IOSurfaceGetAllocSize(images[i]);
   }
   CAMLreturn(Val_unit);
