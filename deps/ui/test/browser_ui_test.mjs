@@ -194,6 +194,56 @@ test('Rapid table title replacement persists through immediate Enter and reload'
   }
 });
 
+test('Rich title selections cover styled Unicode text across every wrapped row', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.table-block-title') !== null");
+  const row = evaluate("document.querySelector('.table-block-title').closest('.ls-block').id");
+  const uuid = row.replace(/^ls-block-/, '');
+  const selector = `[id="${row}"] .table-block-title`;
+  const original = evaluate(`(async () => (await logseq.api.get_block(${JSON.stringify(uuid)})).content)()`);
+  browser('click', selector);
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.ls-table-block .ed-input')");
+  try {
+    for (const source of [
+      'A **bold title** 汉字 café 👋 with enough words to overflow the entire table column',
+      'A `code` ==marked== 汉字 café 👋 with enough words to overflow the entire table column'
+    ]) {
+      browser('press', 'Meta+a');
+      browser('keyboard', 'type', source);
+      browser('wait', '--fn', `document.querySelector('.ed-line').textContent.replaceAll(String.fromCharCode(8203), '') === ${JSON.stringify(source)}`);
+      browser('press', 'Meta+a');
+      browser('wait', '--fn', "document.querySelectorAll('.ed-sel').length > 0");
+      const geometry = evaluate(`(() => {
+        const editor = document.querySelector('.block-editor').getBoundingClientRect();
+        const selected = [...document.querySelectorAll('.ed-sel')].map(n => n.getBoundingClientRect());
+        const textRects = [...document.querySelectorAll('.ed-r:not(.ed-pad)')].flatMap(node => {
+          const range = document.createRange(); range.selectNodeContents(node);
+          return [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0);
+        });
+        return {
+          rows: new Set(textRects.map(r => Math.round(r.top))).size,
+          covered: textRects.every(r => selected.some(s =>
+            s.left <= r.left + 1 && s.right >= r.right - 1 &&
+            s.top <= r.top + 1 && s.bottom >= r.bottom - 1)),
+          contained: selected.every(r => r.left >= editor.left - 1 && r.right <= editor.right + 1 &&
+            r.top >= editor.top - 1 && r.bottom <= editor.bottom + 1)
+        };
+      })()`);
+      assert.ok(geometry.rows >= 2, 'The selection fixture must really wrap');
+      assert.ok(geometry.covered, 'Every selected text fragment must have its own painted coverage');
+      assert.ok(geometry.contained, 'Selection backgrounds must stay inside the edited paragraph');
+      browser('press', 'ArrowRight');
+      browser('wait', '--fn', "document.querySelectorAll('.ed-sel').length === 0");
+    }
+  } finally {
+    browser('press', 'Meta+a');
+    browser('keyboard', 'type', original);
+    browser('press', 'Enter');
+    browser('wait', '--fn', `(async () => (await logseq.api.get_block(${JSON.stringify(uuid)})).content === ${JSON.stringify(original)})()`);
+  }
+});
+
 test('Pages tag filters keep live multi-selection and restore reference titles', () => {
   open();
   browser('find','text','Pages','click','--exact');

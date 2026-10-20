@@ -476,13 +476,55 @@ let caret_rect_el el (off : int) : frect option =
   in
   first_ok (frags_at st.runs off)
 
-(* model selection [lo, hi) -> a live DOM selection over the .ed-r
-   frags, so the browser's own context menu offers text items
-   (Copy / Look Up / Share…). Positions use the same per-tag mapping
-   as [caret_rect_el]: anchor runs snap to the element's edges, pad
-   runs collapse to their point, text frags clamp inside their text
-   node. Returns false when either endpoint finds no run — callers
-   then leave the native menu's generic items. *)
+(* Map source endpoints into one DOM range, shared by selection geometry
+   and the browser context menu. Atomic references snap to element edges;
+   text offsets use DOM code units and zero-width pads remain collapsed. *)
+let source_range_el el lo hi =
+  if lo >= hi then None else
+  let st = state_of el in
+  let els = run_els el in
+  let rng = create_range () in
+  let place ~start off =
+    (* prefer real content runs over zero-width pads: an offset shared
+       by a pad and a text frag must land on the text, or the range
+       collapses onto the ZWSP *)
+    let rec pick = function
+      | [] -> None
+      | i :: tl -> (
+          if i >= Array.length els || i >= Array.length st.runs then
+            pick tl
+          else
+            match st.runs.(i) with
+            | _, _, "z" -> (match pick tl with None -> Some i | some -> some)
+            | _ -> Some i)
+    in
+    match pick (frags_at st.runs off) with
+    | Some i -> (
+        let a, b, tag = st.runs.(i) in
+        let fel = els.(i) in
+        match tag with
+        | "a" ->
+            if start then (
+              if off <= a then range_set_start_before rng fel
+              else range_set_start_after rng fel)
+            else if off >= b then range_set_end_after rng fel
+            else range_set_end_before rng fel;
+            true
+        | _ -> (
+            let tn = j_first_child fel in
+            if js_nullish tn then false
+            else (
+              let u16 =
+                if tag = "z" then 0
+                else min (off - a) (String.length (j_text_content fel))
+              in
+              if start then range_set_start rng tn u16
+              else range_set_end rng tn u16;
+              true)))
+    | _ -> false
+  in
+  if place ~start:true lo && place ~start:false hi then Some rng else None
+
 let select_range_el el lo hi : bool =
   let st = state_of el in
   if lo = hi then (
@@ -502,55 +544,14 @@ let select_range_el el lo hi : bool =
                Web_dom.el_set_selection_range active 0 0
            | _ -> ()));
     true)
-  else if lo < hi then (
-    let els = run_els el in
-    let rng = create_range () in
-    let place ~start off =
-      (* prefer real content runs over zero-width pads: an offset shared
-         by a pad and a text frag must land on the text, or the range
-         collapses onto the ZWSP *)
-      let rec pick = function
-        | [] -> None
-        | i :: tl -> (
-            if i >= Array.length els || i >= Array.length st.runs then
-              pick tl
-            else
-              match st.runs.(i) with
-              | _, _, "z" -> (match pick tl with None -> Some i | some -> some)
-              | _ -> Some i)
-      in
-      match pick (frags_at st.runs off) with
-      | Some i -> (
-          let a, b, tag = st.runs.(i) in
-          let fel = els.(i) in
-          match tag with
-          | "a" ->
-              if start then (
-                if off <= a then range_set_start_before rng fel
-                else range_set_start_after rng fel)
-              else if off >= b then range_set_end_after rng fel
-              else range_set_end_before rng fel;
-              true
-          | _ -> (
-              let tn = j_first_child fel in
-              if js_nullish tn then false
-              else (
-                let u16 =
-                  if tag = "z" then 0
-                  else min (off - a) (String.length (j_text_content fel))
-                in
-                if start then range_set_start rng tn u16
-                else range_set_end rng tn u16;
-                true)))
-      | _ -> false
-    in
-    if place ~start:true lo && place ~start:false hi then (
-      let s = w_get_selection () in
-      sel_remove_all s;
-      sel_add_range s rng;
-      true)
-    else false)
-  else false
+  else
+    match source_range_el el lo hi with
+    | Some rng ->
+      let selection = w_get_selection () in
+      sel_remove_all selection;
+      sel_add_range selection rng;
+      true
+    | None -> false
 
 (* px -> model unit offset: caretRangeFromPoint hits a text node inside
    an .ed-r element (frag lo + DOM offset) or an element boundary (the
@@ -1013,6 +1014,20 @@ let conduit block_id : Edit_input.conduit option =
                   ; h = int_of_float r.fh
                   })
                 (caret_rect_el el off))
+        ; selection_rects =
+            (fun (first,last) ->
+              match source_range_el el first last with
+              | None -> []
+              | Some range ->
+                let rects=range_rects range and ox,oy=origin () in
+                let round value=int_of_float (Float.round value) in
+                List.init (rl_len rects) (fun index -> rl_at rects index)
+                |> List.filter_map (fun rect ->
+                  let left=rect_left rect and right=rect_right rect
+                  and top=rect_top rect and height=rect_height rect in
+                  if right<=left || height<=0. then None else
+                  Some {Edit_input.x=round left-ox;y=round top-oy;
+                    w=round right-round left;h=round (top+.height)-round top}))
         ; offset_at =
             (fun ~x ~y ->
               let ox, oy = origin () in

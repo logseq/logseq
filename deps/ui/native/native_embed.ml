@@ -697,7 +697,7 @@ let platform_event payload =
       else if name = "node-natural-size" then
         Dom_ext.note_node_natural_size json
       else if
-        name = "caret-rect" || name = "offset-at"
+        name = "caret-rect" || name = "selection-rects" || name = "offset-at"
         || name = "line-ranges" || name = "scroll-height"
       then Logseq_editor.note_measurement name json
       else if name = "clipboard-read" then (

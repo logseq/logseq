@@ -26,6 +26,7 @@
                  model units. Native units are Bytes (Edit_model.Bytes):
                  NSString is UTF-16, so the host converts its UTF-16
                  offsets to UTF-8 byte offsets before emitting.
+     dblclick    {offset} — select the source word at the hit position
      A hidden UIKeyInput (iOS) / NSTextInputClient (macOS) responder
      attached to the block editor supplies these; hardware-keyboard
      and IME marked text route to it while the block is edited.
@@ -35,6 +36,7 @@
      caret-rect      {block-id, offset} -> {block-id, offset, x, y, h, ox, oy}
                      x/y/h relative to .block-editor; ox/oy its
                      window-space origin (popup anchors add them)
+     selection-rects {block-id, first, last} -> {block-id, first, last, rects}
      offset-at       {block-id, x, y}   -> {block-id, x, y, offset}
      line-ranges     {block-id}         -> {block-id, ranges} — "lo,hi;…"
      scroll-height   {block-id}         -> {block-id, height}
@@ -44,7 +46,7 @@
    NSTextLayoutManager/NSLayoutManager (or the LUI renderer's own
    text layout) over the composed run strings — the `runs` prop zips
    each .ed-r view against its unit span exactly as
-   Range.getClientRects zips DOM text nodes on web. All rects are px
+   Range.getClientRects zips DOM text nodes on web. All rects are logical pixels
    relative to the block-editor container; all offsets are model
    units (UTF-8 bytes on native — the host translates its UTF-16
    layout offsets at this boundary; see the units note in
@@ -163,6 +165,9 @@ type caret_rect_reply =
 let caret_rects : (string * int, caret_rect_reply * int) Hashtbl.t =
   Hashtbl.create 64
 
+let selection_rects : (string * int * int, Edit_input.rect list * int) Hashtbl.t =
+  Hashtbl.create 64
+
 let offset_ats : (string * int * int, int * int) Hashtbl.t = Hashtbl.create 64
 
 let line_ranges_store : (string, (int * int) list * int) Hashtbl.t =
@@ -275,6 +280,22 @@ let note_measurement name (j : Js.Json.t) : unit =
                   (int_of_float off, ep)
               end
           | _ -> ())
+      | "selection-rects" -> (
+          match jnum "first" j,jnum "last" j,Js.Json.decodeArray (jprop "rects" j) with
+          | Some first,Some last,Some values ->
+            let first,last=int_of_float first,int_of_float last in
+            let arg=Printf.sprintf "%d,%d" first last in
+            if reply_fresh block_id name arg then begin
+              Hashtbl.remove pending (block_id,name ^ "|" ^ arg);
+              let rects=Array.to_list values |> List.map (fun value ->
+                let x=Option.get (jnum "x" value) and y=Option.get (jnum "y" value)
+                and w=Option.get (jnum "w" value) and h=Option.get (jnum "h" value) in
+                let round value=int_of_float (Float.round value) in
+                {Edit_input.x=round x;y=round y;w=round (x+.w)-round x;h=round (y+.h)-round y}) in
+              cap selection_rects;
+              store_measurement block_id selection_rects (block_id,first,last) (rects,ep)
+            end
+          | _ -> ())
       | "line-ranges" -> (
           match jstr "ranges" j with
           | Some s ->
@@ -319,6 +340,13 @@ let conduit block_id : Edit_input.conduit option =
           | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
               Some { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch }
           | _ -> None)
+    ; selection_rects =
+        (fun (first,last) ->
+          issue block_id "selection-rects" (Printf.sprintf "%d,%d" first last);
+          request block_id "selection-rects" ["first",jnum_v first;"last",jnum_v last];
+          match Hashtbl.find_opt selection_rects (block_id,first,last) with
+          | Some (rects,ep) when ep=epoch_of block_id -> rects
+          | _ -> [])
     ; offset_at =
         (fun ~x ~y ->
           issue block_id "offset-at" (Printf.sprintf "%d,%d" x y);

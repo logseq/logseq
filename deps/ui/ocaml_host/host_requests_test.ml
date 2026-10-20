@@ -10209,7 +10209,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~renderer:{Lui_host.name="rich-editor-flow-test";render=(fun _ -> Bytes.empty)}
       ~width:(int_of_float (width*.scale)) ~height:(int_of_float (400.*.scale)) ~scale () in
     host_ref:=Some h;
-    let model_cell=ref None and width_cell=ref None in
+    let model_cell=ref None and width_cell=ref None and frame_cell=ref None in
     let registry=Lui_extension.registry () in
     Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
     let app=Lui_app.create_with_extensions (Lui_host.backend h (profile MacOS GenericHost)) registry ()
@@ -10218,14 +10218,14 @@ let () = Native_embed.with_entry_lock (fun () ->
         let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
           ~anchor:(String.length source) ~focus:(String.length source) in
         let model_state=Signal.state context.Lui_ui.ui_scheduler model
-        and width_state=Signal.state context.Lui_ui.ui_scheduler (int_of_float width) in
-        model_cell:=Some model_state;width_cell:=Some width_state;
-        let state v=Signal.value (Signal.state context.Lui_ui.ui_scheduler v) in
+        and width_state=Signal.state context.Lui_ui.ui_scheduler (int_of_float width)
+        and frame_state=Signal.state context.Lui_ui.ui_scheduler Edit_input.empty_frame in
+        model_cell:=Some model_state;width_cell:=Some width_state;frame_cell:=Some frame_state;
         Ui_components.with_props [Ui_components.Prop.font_size "16px";
           Ui_components.Prop.line_height "24px"]
         (Ui_parts.int_prop Lui_protocol.WidthValue ~value:(reactive Fun.id (Signal.value width_state))
         (Lui_elements.column
-          [Edit_view.view ~model:(Signal.value model_state) ~frame:(state Edit_input.empty_frame)
+          [Edit_view.view ~model:(Signal.value model_state) ~frame:(Signal.value frame_state)
             ~block_id:"rich-editor-flow" ~on_input:(fun event ->
               Signal.set model_state (Edit_input.handle ~route:Edit_input.no_route
                 ~conduit:Edit_input.no_conduit (Signal.sample (Signal.value model_state)) event))
@@ -10459,7 +10459,66 @@ let () = Native_embed.with_entry_lock (fun () ->
         expect "Secondary buttons and overlaid controls must not collapse rich-editor selection"
           (not (dispatch (Lui_window.Input.Button_down (px,py,Right,1,Lui_window.Input.mods_none)) [editor])
            && not (dispatch (Lui_window.Input.Button_down (px,py,Left,1,Lui_window.Input.mods_none)) [])
-           && (Signal.sample (Signal.value (Option.get !model_cell)))=selected))
+           && (Signal.sample (Signal.value (Option.get !model_cell)))=selected);
+        let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+        let surface=Option.get (env.text_flow context.groups.(0).group_node) in
+        let lo=Host_requests.display_offset context surface (Host_requests.run_of_off context (first+1)) (first+1)
+        and hi=Host_requests.display_offset context surface (Host_requests.run_of_off context (String.length source))
+          (String.length source) in
+        let expected=Host_platform.Text.selection_rects surface.surface_layout (lo,hi) in
+        let previous_op= !Host.host_op in
+        Fun.protect ~finally:(fun () -> Host.host_op:=previous_op) (fun () ->
+          Host.host_op:=(fun op payload ->
+            if op<>"dom-op" then failwith ("Unexpected editor measurement: " ^ op);
+            let boundary=String.index payload '\n' in
+            Host_requests.dom_op env (String.sub payload 0 boundary)
+              (String.sub payload (boundary+1) (String.length payload-boundary-1)));
+          Logseq_editor.invalidate "rich-editor-flow";
+          let conduit=Option.get (Logseq_editor.conduit "rich-editor-flow") in
+          for _=1 to 4 do ignore (Edit_input.measure conduit selected);Host.drain () done;
+          let frame=Edit_input.measure conduit selected in
+          Host.drain ();
+          let caret=Option.get frame.caret in
+          expect "The editor conduit must expose logical caret height at every display scale"
+            (abs_float (float caret.h-.24.)<1.);
+          ignore (conduit.caret_rect (first+1));Host.drain ();
+          let start=Option.get (conduit.caret_rect (first+1)) in
+          ignore (conduit.offset_at ~x:start.x ~y:(start.y+start.h/2));Host.drain ();
+          expect "Logical conduit coordinates must round-trip into native source hit testing"
+            (conduit.offset_at ~x:start.x ~y:(start.y+start.h/2)=Some (first+1));
+          expect "A wrapped source selection must paint every selected visual row"
+            (List.length frame.selection=List.length expected);
+          let reversed=Edit_model.select selected ~anchor:selected.caret ~focus:(Option.get selected.anchor) in
+          expect "Reversing a wrapped selection must preserve its painted range"
+            ((Edit_input.measure conduit reversed).selection=frame.selection);
+          let collapsed=Edit_model.select selected ~anchor:selected.caret ~focus:selected.caret in
+          expect "Collapsing selection must remove every background rectangle immediately"
+            ((Edit_input.measure conduit collapsed).selection=[]);
+          Signal.set (Option.get !frame_cell) frame;
+          ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+          let bars=List.filter (fun node -> Lui_store.string_prop store node "style-class"=Some "ed-sel")
+            (Lui_store.preorder store) in
+          expect "Every measured selection rectangle must mount a native background view"
+            (List.length bars=List.length expected);
+          if List.length bars=List.length expected then
+            List.iter2 (fun node (expected:Host_platform.Text.rect) ->
+              let actual=rect node in
+              let wanted=Lui_scene.rect_snap {Lui_scene.x=surface.surface_x+.expected.rx*.scale;
+                y=surface.surface_y+.expected.ry*.scale;w=expected.rw*.scale;h=expected.rh*.scale} in
+              expect (Printf.sprintf "Native selection must align with paragraph ink: width=%.0f scale=%.0f actual=%.1f,%.1f %.1fx%.1f expected=%.1f,%.1f %.1fx%.1f"
+                width scale actual.x actual.y actual.w actual.h wanted.x wanted.y wanted.w wanted.h)
+                (abs_float (actual.x-.wanted.x)<=scale && abs_float (actual.y-.wanted.y)<=scale
+                 && abs_float (actual.w-.wanted.w)<=scale && abs_float (actual.h-.wanted.h)<=scale)) bars expected;
+          Signal.set (Option.get !frame_cell) Edit_input.empty_frame;
+          ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+          let runs=Option.get (Lui_store.prop store context.sink "runs") in
+          Fun.protect ~finally:(fun () ->
+            Lui_store.apply_op store (SetExtensionProp (context.sink,"runs",runs))) (fun () ->
+            Lui_store.apply_op store (SetExtensionProp (context.sink,"runs",StringValue ""));
+            let incomplete=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+            expect "A selection query during a run remount must return no data until source spans arrive"
+              (try Host_requests.selection_rects env incomplete (first+1,String.length source)=[]
+               with Invalid_argument _ -> false))))
         ["A `code`";"A ==marked=="]))
       [180.;338.;600.]) [1.;2.];
   List.iter prerr_endline (List.rev !failures);

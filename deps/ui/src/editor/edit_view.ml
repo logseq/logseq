@@ -14,12 +14,9 @@
                                   on even when the tail run is hidden
                                   or the line is empty
        ed-overlay (column)        selection rects + caret bar, each in
-                                  an .ed-pos wrapper pushed to (x, y)
-                                  by typed padding props — LUI has no
-                                  coordinate channel, so offsets go
-                                  through padding on an absolutely
-                                  positioned wrapper (px from host
-                                  measurements via Edit_input.frame)
+                                  an .ed-pos wrapper positioned by
+                                  typed left/top insets in logical
+                                  pixels from Edit_input.frame
        logseq-editor (extension)  hidden input sink — see
                                   extension/logseq_editor.ml
 
@@ -531,9 +528,8 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
     context parent
 
 (* --- selection overlay + caret -------------------------------------------------
-   Each measured rect is a .ed-pos wrapper absolutely positioned over
-   the block editor; its typed padding props push the inner bar to
-   (x, y) — px arrive via Edit_input.measure. *)
+   Position each decoration in logical editor coordinates. Insets move
+   the wrapper without consuming the background bar's available width. *)
 
 (* layout props reject negatives: a mid-reflow measure can report a
    transient negative rect (e.g. a `**` delimiter insertion shifting
@@ -541,21 +537,19 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
    flush inside set_prop *)
 let clamp_nonneg v = if v < 0 then 0 else v
 
-let ed_pos_wrap () =
-  Ui_components.with_props
-    [ Ui_components.Prop.position `absolute
-    ; Ui_components.Prop.inset_left 0.
-    ; Ui_components.Prop.inset_top 0. ]
-    (row ~style_class:"ed-pos" [])
+let ed_pos_wrap rect_s =
+  Ui_parts.float_prop InsetLeft
+    ~value:(reactive (fun r -> float r.Edit_input.x) rect_s)
+  (Ui_parts.float_prop InsetTop
+    ~value:(reactive (fun r -> float r.Edit_input.y) rect_s)
+  (Ui_components.with_props
+    [ Ui_components.Prop.position `absolute ]
+    (row ~style_class:"ed-pos" [])))
 
 let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
  fun context parent ->
   let rect_s = own context (Signal.map snd r_s) in
-  let wrap = (ed_pos_wrap ()) context parent in
-  bind_int context wrap PaddingHorizontal
-    (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) rect_s);
-  bind_int context wrap PaddingVertical
-    (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) rect_s);
+  let wrap = (ed_pos_wrap rect_s) context parent in
   let bar =
     (Ui_components.with_props
        [ ( Ui_components.Prop.background "var(--ls-block-highlight-color)" )
@@ -580,11 +574,7 @@ let caret_view (frame : frame Signal.signal) : t =
              ~default:{ x = 0; y = 0; w = 0; h = 0 })
          frame)
   in
-  let wrap = (ed_pos_wrap ()) context parent in
-  bind_int context wrap PaddingHorizontal
-    (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) r_s);
-  bind_int context wrap PaddingVertical
-    (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) r_s);
+  let wrap = (ed_pos_wrap r_s) context parent in
   let bar =
     (Ui_components.with_props
        [ ( Ui_components.Prop.background

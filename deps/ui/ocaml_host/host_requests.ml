@@ -440,6 +440,45 @@ let scroll_height e ctx =
       first:=min !first top;last:=max !last bottom) views;
     !last-. !first
 
+let selection_rects e ctx (first,last) =
+  if Array.length ctx.nodes<>Array.length ctx.runs then [] else
+  let fragment index =
+    let lo,hi=ctx.runs.(index) in
+    let a,b=max first lo,min last hi in
+    let node=ctx.nodes.(index) in
+    if a>=b || Lui_store.string_prop e.store node "display"=Some "none" then []
+    else if ctx.kinds.(index)="a" then
+      let rect=e.rect_of node in
+      [{rect with Lui_scene.x=rect.x-.ctx.ox;y=rect.y-.ctx.oy}]
+    else
+      let text=Option.get (Lui_store.string_prop e.store node "text") in
+      let layout,x,y=e.text_layout node text in
+      List.map (fun (rect:Lui_text.rect) ->
+        {Lui_scene.x=x+.rect.rx*.e.scale ()-.ctx.ox;y=y+.rect.ry*.e.scale ()-.ctx.oy;
+         w=rect.rw*.e.scale ();h=rect.rh*.e.scale ()})
+        (Lui_text.selection_rects layout (a-lo,b-lo)) in
+  let fragments indices=Array.to_list indices |> List.concat_map fragment in
+  match paragraph_views e ctx with
+  | None -> fragments (Array.init (Array.length ctx.nodes) Fun.id)
+  | Some views -> Array.to_list views |> List.concat_map (fun (group,surface) ->
+    match surface with
+    | None -> fragments group.group_indices
+    | Some surface ->
+      let lo=ref max_int and hi=ref min_int in
+      Array.iter (fun index ->
+        let a,b=ctx.runs.(index) in
+        let a,b=max a first,min b last in
+        if a<b then begin
+          lo:=min !lo (display_offset ctx surface index a);
+          hi:=max !hi (display_offset ctx surface index b)
+        end) group.group_indices;
+      if !lo>= !hi then [] else
+      List.map (fun (rect:Lui_text.rect) ->
+        {Lui_scene.x=surface.surface_x+.rect.rx*.e.scale ()-.ctx.ox;
+         y=surface.surface_y+.rect.ry*.e.scale ()-.ctx.oy;
+         w=rect.rw*.e.scale ();h=rect.rh*.e.scale ()})
+        (Lui_text.selection_rects surface.surface_layout (!lo,!hi)))
+
 (* ---------- ref resolution (domops.rs twin) ----------
 
    {"node-id": n} -> n; {"#ref"/"ref-id": ident} -> the node whose
@@ -987,14 +1026,14 @@ let dom_op (e : env) (op : string) (body : string) =
      | _ -> ())
   | "click" | "katex-pending" | "hljs-pending"
   | "imperative-attach" | "imperative-detach" -> ()
-  | "caret-rect" | "offset-at" | "line-ranges" | "scroll-height" ->
+  | "caret-rect" | "selection-rects" | "offset-at" | "line-ranges" | "scroll-height" ->
     (* Editor conduit over the rendered .ed-r text runs — the host's
        twin of getClientRects over DOM text nodes. The sink node
        (ed-sink-<block-id>) carries the "runs" prop listing each run's
        model-unit span in document order; it zips against the .ed-r
-       elements under the sink's parent. All rects are device px;
-       x/y/h are relative to the block-editor element, ox/oy is its
-       window-space origin. A miss replies with the contract's
+       elements under the sink's parent. Convert host device pixels to
+       logical coordinates at this conduit boundary. Rects are relative
+       to the block editor; ox/oy is its window-space origin. A miss replies with the contract's
        no-data values so the app's measure loop keeps cycling. *)
     (match jstr_opt "block-id" parsed with
      | None -> ()
@@ -1011,13 +1050,24 @@ let dom_op (e : env) (op : string) (body : string) =
                 (`Assoc
                    [ ("block-id", `String bid)
                    ; ("offset", `Int off)
-                   ; ("x", `Float x); ("y", `Float y); ("h", `Float h)
-                   ; ("ox", `Float ctx.ox); ("oy", `Float ctx.oy) ])
+                   ; ("x", `Float (x/.e.scale ())); ("y", `Float (y/.e.scale ()))
+                   ; ("h", `Float (h/.e.scale ()))
+                   ; ("ox", `Float (ctx.ox/.e.scale ())); ("oy", `Float (ctx.oy/.e.scale ())) ])
             | None -> ())
+         | "selection-rects" ->
+           (match jint_opt "first" parsed,jint_opt "last" parsed with
+            | Some first,Some last ->
+              let rects=selection_rects e ctx (first,last) |> List.map (fun (rect:Lui_scene.rect) ->
+                `Assoc ["x",`Float (rect.x/.e.scale ());"y",`Float (rect.y/.e.scale ());
+                  "w",`Float (rect.w/.e.scale ());"h",`Float (rect.h/.e.scale ())]) in
+              reply "selection-rects" (`Assoc ["block-id",`String bid;"first",`Int first;
+                "last",`Int last;"rects",`List rects])
+            | _ -> ())
          | "offset-at" ->
            (match (jint_opt "x" parsed, jint_opt "y" parsed) with
             | Some x, Some y ->
-              let off = offset_at e ctx x y in
+              let off = offset_at e ctx (int_of_float (Float.round (float x*.e.scale ())))
+                (int_of_float (Float.round (float y*.e.scale ()))) in
               reply "offset-at"
                 (`Assoc
                    [ ("block-id", `String bid)
@@ -1034,7 +1084,7 @@ let dom_op (e : env) (op : string) (body : string) =
            reply "scroll-height"
              (`Assoc
                 [ ("block-id", `String bid)
-                ; ("height", `Float (scroll_height e ctx)) ])
+                ; ("height", `Float (scroll_height e ctx/.e.scale ())) ])
          | _ -> ())))
   | "set-input-focus" ->
     (* the conduit contract is a handshake: after the host moves its

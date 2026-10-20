@@ -88,15 +88,24 @@ text-input/IME/measurement channel bound to one block editor:
 - **events** → OCaml: `key {key, mods, repeat}`, `insert {text}`,
   `delete {kind: backward|forward|word|line}`, `composition {state,
   text, range}`, `focus`/`blur`, `pointer {offset}` (hit-tested text
-  position for click-to-place-caret and drag-select)
+  position for click-to-place-caret and drag-select), `dblclick {offset}`
+  for source-word selection
 - **commands** OCaml → host: `set-input-focus`, `caret-rect {offset} →
-  {x, y, h}` and `line-ranges`/`offset-at {x, y}` — implemented per
+  {x, y, h}`, `selection-rects {first, last} → rects` and
+  `line-ranges`/`offset-at {x, y}` — implemented per
   platform on the rendered run nodes (web: Range.getClientRects /
   caretRangeFromPoint on the run text nodes; apple: TextKit
   layoutManager; OCaml host: editor text layout)
 
-Selection highlight and the caret blink are LUI-rendered (shared), so
-the conduit never draws text itself.
+All conduit geometry uses logical pixels relative to the block editor;
+source offsets retain the model's units. Native hosts convert drawable
+pixels at this boundary. Range geometry must include every selected
+visual fragment, including soft-wrap boundaries and bidirectional runs.
+Do not infer a selection rectangle by subtracting two caret positions.
+
+Selection highlights use shared LUI views with typed left/top insets.
+The OCaml host paints its caret from current glyph geometry; Web uses
+the shared caret view. The conduit itself draws no text.
 
 ## Hard parts (flagged early)
 

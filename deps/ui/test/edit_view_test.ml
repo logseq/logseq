@@ -257,8 +257,8 @@ let test_overlay ~env () =
        match bar.DM.parent with
        | Some pid ->
            check "caret wrapper positioned"
-             (DM.prop t pid "padding-horizontal" = Some (IntValue 10)
-              && DM.prop t pid "padding-vertical" = Some (IntValue 4))
+             (DM.prop t pid "inset-left" = Some (FloatValue 10.)
+              && DM.prop t pid "inset-top" = Some (FloatValue 4.))
        | None -> check "caret wrapper positioned" false)
    | _ -> check "caret bar emitted" false);
   (match cls_nodes h "ed-sel" with
@@ -280,7 +280,7 @@ let test_overlay ~env () =
        match bar.DM.parent with
        | Some pid ->
            check "caret re-positioned"
-             (DM.prop t pid "padding-horizontal" = Some (IntValue 20))
+             (DM.prop t pid "inset-left" = Some (FloatValue 20.))
        | None -> check "caret re-positioned" false)
    | _ -> check "caret bar still there" false)
 

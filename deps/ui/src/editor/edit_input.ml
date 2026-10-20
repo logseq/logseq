@@ -27,10 +27,12 @@ type frame =
 
 let empty_frame = { caret = None; selection = [] }
 
-(* host surface: everything the view/input needs that OCaml cannot
-   compute — all positions in px, all offsets in model bytes *)
+(* Host geometry uses logical pixels relative to the editor; offsets use
+   the model's units. Selection rectangles come from the platform range,
+   since wrapped/bidirectional ranges cannot be inferred from two carets. *)
 type conduit =
   { caret_rect : int -> rect option (* byte off -> caret rect *)
+  ; selection_rects : int * int -> rect list
   ; offset_at : x:int -> y:int -> int option (* px -> byte off *)
   ; line_ranges : unit -> (int * int) list (* visual lines as [lo, hi) *)
   ; set_input_focus : bool -> unit
@@ -38,6 +40,7 @@ type conduit =
 
 let no_conduit =
   { caret_rect = (fun _ -> None)
+  ; selection_rects = (fun _ -> [])
   ; offset_at = (fun ~x:_ ~y:_ -> None)
   ; line_ranges = (fun () -> [])
   ; set_input_focus = (fun _ -> ())
@@ -272,16 +275,6 @@ let measure conduit (m : Edit_model.t) : frame =
   let selection =
     match Edit_model.selection_range m with
     | None -> []
-    | Some (sel_lo, sel_hi) ->
-        List.filter_map
-          (fun (lo, hi) ->
-            let a = max lo sel_lo and b = min hi sel_hi in
-            if a >= b then None
-            else
-              match conduit.caret_rect a, conduit.caret_rect b with
-              | Some ra, Some rb when rb.y = ra.y ->
-                  Some { x = ra.x; y = ra.y; w = rb.x - ra.x; h = ra.h }
-              | _ -> None)
-          (conduit.line_ranges ())
+    | Some range -> conduit.selection_rects range
   in
   { caret; selection }
