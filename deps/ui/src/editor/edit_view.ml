@@ -1,8 +1,8 @@
 (* Edit_view — renders an Edit_model.t as a Lui_elements tree.
 
      block-editor (column)
-       ed-line (row)              bounded multiline flows on Web; native
-                                  keeps one row per logical line
+       ed-line (text flow)        bounded multiline flows on Web; native
+                                  keeps one flow per logical line
          ed-r run fragment        keyed; Plain -> text, Delim -> text
                                   with ed-delim (+ed-hidden when the
                                   caret is outside the construct's
@@ -386,15 +386,15 @@ let accent_ref cls =
 
 let accent_fg = "var(--lx-accent-11, var(--ls-link-text-color))"
 
-(* cls tokens the typed props cover, translated at mount (keyed
-   remounts pick up cls changes). ed-bold/ed-italic stay class-driven
-   (bolder / font-style have no channel); ed-hidden, ed-pad and the
-   :hover rules too. *)
+(* Typed inline marks keep editing geometry shared across hosts. Keyed
+   remounts pick up mark changes; delimiter visibility stays reactive. *)
 let frag_binds cls =
   let module P = Lui_protocol in
   List.concat_map
     (fun t ->
       match t with
+      | "ed-bold" -> [ Ui_components.Prop.font_weight 700 ]
+      | "ed-italic" -> [ Ui_components.Prop.font_style "italic" ]
       | "ed-code" ->
           [ ( Ui_components.Prop.font_family
                 "MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
@@ -436,7 +436,9 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
            (text ~value:(reactive (fun f -> f.text) frag_s)
               ~style_class:"ed-r" []))
   | Frag_delim ->
-      Ui_parts.class_signal frag_s
+      Ui_parts.string_prop DisplayValue
+        ~value:(reactive (fun f -> if f.shown then "inline" else "none") frag_s)
+      (Ui_parts.class_signal frag_s
         (fun f ->
           "ed-r ed-delim" ^ (if f.shown then "" else " ed-hidden")
           ^ cls_suffix f)
@@ -448,7 +450,7 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
                 [ ( Ui_components.Prop.foreground "var(--ls-secondary-text-color)" )
                 ])
            (text ~value:(reactive (fun f -> f.text) frag_s)
-              ~style_class:"ed-r ed-delim" []))
+              ~style_class:"ed-r ed-delim" [])))
   | Frag_raw ->
       Ui_parts.class_signal frag_s
         (fun f -> "ed-r ed-raw" ^ cls_suffix f)
@@ -523,7 +525,7 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
      ; Ui_components.Prop.position `relative
      ; Ui_components.Prop.z_index 1
      ; Ui_components.Prop.user_select `text ]
-     (row ~style_class:"ed-line"
+     (text ~white_space:"pre-wrap" ~style_class:"ed-line"
         [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
             ~mount:(frag_view ~on_input ~start_off_of) ]))
     context parent

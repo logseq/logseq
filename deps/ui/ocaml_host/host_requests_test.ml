@@ -10012,3 +10012,227 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native table title action visibility, layout and routing" (!failures=[]);
   print_endline "native table title action visibility, layout and routing: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures=ref [] in
+  let expect message condition=if not condition then failures:=message::!failures in
+  let previous_worker= !Runtime.worker and previous_read= !Runtime.read_model
+  and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
+  and previous_editor= !Editor_state.st and previous_fields= !Editor_state.field_sigs_opt
+  and previous_sources= !Editor_state.extra_sources and previous_sink= !Editor_sink.current
+  and previous_stack= !Views_popup.stack_st and previous_open= !Views_popup.open_st
+  and previous_popups= !Views_popup.open_popups
+  and previous_pending= !Editor_state.structure_pending
+  and previous_queue=Queue.copy Editor_state.pending_edit_actions
+  and previous_real= !Editor_state.pending_edit_real
+  and previous_reload= !Runtime.reload_current_view
+  and previous_refresh=Runtime.hooks.refresh_after_ops
+  and previous_properties=Runtime.hooks.refresh_property_areas in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_read;
+    Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Editor_state.extra_sources:=previous_sources;Editor_sink.current:=previous_sink;
+    Views_popup.stack_st:=previous_stack;Views_popup.open_st:=previous_open;
+    Views_popup.open_popups:=previous_popups;
+    Editor_state.structure_pending:=previous_pending;
+    Queue.clear Editor_state.pending_edit_actions;
+    Queue.iter (fun f -> Queue.add f Editor_state.pending_edit_actions) previous_queue;
+    Editor_state.pending_edit_real:=previous_real;
+    Runtime.reload_current_view:=previous_reload;
+    Runtime.hooks.refresh_after_ops<-previous_refresh;
+    Runtime.hooks.refresh_property_areas<-previous_properties;
+    Editor_actions.cancel_pending_focus ()) (fun () ->
+    List.iter (fun scale -> List.iter (fun (exit,changed,type_during_save) ->
+      let expect message condition=expect
+        (Printf.sprintf "%s changed=%b typing=%b: %s" exit changed type_during_save message) condition in
+      Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+      Editor_state.extra_sources:=[];Views_popup.stack_st:=None;
+      Views_popup.open_st:=None;Views_popup.open_popups:=[];
+      Editor_state.structure_pending:=false;Queue.clear Editor_state.pending_edit_actions;
+      Editor_state.pending_edit_real:=0;
+      Runtime.reload_current_view:=(fun () -> Js.Promise.resolve ());
+      let writes=ref [] and complete=ref (fun () -> ()) in
+      let refreshed ()=Subs_state.task_of_promise (Js.Promise.resolve ()) in
+      Runtime.hooks.refresh_after_ops<-refreshed;
+      Runtime.hooks.refresh_property_areas<-refreshed;
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+        match method_ with
+        | "thread-api/apply-outliner-ops" ->
+            writes:=args::!writes;
+            Js.Promise.make (fun ~resolve ~reject:_ ->
+              complete:=(fun () -> resolve Wire.Nil [@u]))
+        | _ -> failwith ("Unexpected inline title request: " ^ method_));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      let title="café 中文 😀" in
+      let uuid=Printf.sprintf "inline-table-title-%s-%b-%b-%.0f" exit changed type_during_save scale in
+      let blk=Wire.Map [Wire.kw "block/uuid",Wire.Uuid uuid;
+        Wire.kw "db/id",Wire.Int 101;Wire.kw "block/title",Wire.String title] in
+      let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.*.scale,24.*.scale))
+        ~renderer:{Lui_host.name="inline-title-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1000.*.scale)) ~height:(int_of_float (600.*.scale)) ~scale () in
+      let store=Lui_host.store host in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let model={Model.initial with repo=Some "inline-title-fixture";route=Model.Page "Task"} in
+      let app=Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry model (fun model () -> model) (fun context _ _ ->
+          Editor_state.ensure context;
+          let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:(Views_state.KTagPage "Task") ~feature:"inline-title" ~owner:Wire.Nil in
+          Lui_elements.column ~width:360 ~margin_left:100 ~margin_top:100
+            [Views_table.title_cell inst ~row_uuid:uuid ~blk
+            (Views_table.title_column ());Views_popup.layer]) in
+      Fun.protect ~finally:(fun () ->
+        Views_popup.close_all ();ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.read_model:=(fun () -> Lui_app.model app);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        Runtime.app_send:=(fun _ -> failwith "Inline title edit must not navigate");
+        let ids ()=Lui_store.preorder store in
+        let find identifier=List.find_opt (fun id -> Lui_store.string_prop store id
+          "accessibility-identifier"=Some identifier) (ids ()) in
+        let sink ()=find ("edit-block-" ^ uuid) in
+        let caption=List.find (fun id -> Lui_store.string_prop store id "text"=Some title) (ids ()) in
+        let rec pressable id=if Lui_store.bool_prop store id "press-enabled" then id
+          else pressable (Option.get (Lui_store.parent store id)) in
+        ignore (Lui_app.dispatch_event app (Press (pressable caption)));
+        for _=1 to 16 do Host.drain ();ignore (Lui_app.flush app) done;
+        expect "Normal table title click must open the shared inline rich-text editor"
+          (Option.is_some (sink ()));
+        expect "Inline title editing must keep its owning page and avoid a sidebar"
+          ((Lui_app.model app).Model.route=Model.Page "Task"
+           && not (Lui_app.model app).Model.right_sidebar_open);
+        match sink () with
+        | None -> ()
+        | Some _ ->
+          ignore (Lui_host.repaint host);
+          let rect id=Option.get (Lui_host.layout_rect host id) in
+          let popup=rect (Option.get (find "ls-table-block-editor")) in
+          let content=rect (List.find (fun id -> Lui_store.string_prop store id "style-class"
+            =Some "ls-table-block") (ids ())) in
+          let anchor=rect (List.find (fun id -> match Lui_store.string_prop store id
+            "accessibility-identifier" with Some id -> String.starts_with ~prefix:"table-title-" id
+            | None -> false) (ids ())) in
+          let editor=rect (Option.get (find ("editor-edit-block-" ^ uuid))) in
+          expect "Inline editor content must align with the cell top and retain reference widths"
+            (abs_float ((content.y-.anchor.y)/.scale)<0.6 && abs_float (content.w/.scale-.342.)<0.6
+             && abs_float (editor.w/.scale-.338.)<0.6 && abs_float (popup.w/.scale-.358.)<0.6
+             && abs_float ((popup.x+.popup.w/.2.-.anchor.x-.anchor.w/.2.)/.scale)<0.6);
+          expect "Inline editing must preserve Unicode and initially place the caret at the end"
+            (match Editor_state.editing () with Some e ->
+              e.buffer=title && e.model.caret=String.length title | None -> false);
+          let emit name fields=ignore (Lui_app.dispatch_event app
+            (ExtensionEvent (Option.get (sink ()),Editor_sink.identifier,name,fields)));
+            ignore (Lui_app.flush app) in
+          let key ?(shift=false) ?(meta=false) key=emit "key" (String_map.empty
+            |> String_map.add "key" (StringValue key)
+            |> String_map.add "shift" (BoolValue shift)
+            |> String_map.add "meta" (BoolValue meta)) in
+          let insert text=emit "insert" (String_map.singleton "text" (StringValue text)) in
+          if changed then begin
+            key ~shift:true "Enter";insert "More text";
+            expect "Shift+Enter in a table title must insert a rich-text newline"
+              (match Editor_state.editing () with Some e -> e.buffer=title ^ "\nMore text" | None -> false)
+          end;
+          if exit="outside" then begin
+            let popup=List.find (fun id -> Lui_window.event_supported store id (Dismiss id)) (ids ()) in
+            ignore (Lui_app.dispatch_event app (Dismiss popup))
+          end else key exit;
+          for _=1 to 16 do Host.drain ();ignore (Lui_app.flush app) done;
+          expect "Inline Enter, Escape and outside press must save only changed titles"
+            (List.length !writes=(if changed then 1 else 0));
+          if changed then begin
+            expect "The inline editor must stay mounted while saving"
+              (Option.is_some (sink ()) && Option.is_some (Editor_state.editing ()));
+            expect "Submitting a table title must save the current block without splitting it"
+              (match !writes with [[_;Wire.Array [Wire.Array [Wire.Keyword "save-block";
+                Wire.Array [block;_]]];_]] ->
+                  Wire.map_get_uuid block "block/uuid"=Some uuid
+                  && Wire.map_get_string block "block/title"=Some (title ^ "\nMore text")
+               | _ -> false);
+            if type_during_save then insert " still typing";
+            (!complete) ();
+            for _=1 to 24 do Host.drain ();ignore (Lui_app.flush app) done;
+            if type_during_save then begin
+              expect "A completed save must not discard input typed while it was pending"
+                (Option.is_some (sink ()) && match Editor_state.editing () with
+                  Some e -> e.buffer=title ^ "\nMore text still typing" | None -> false);
+              key "Enter";
+              for _=1 to 16 do Host.drain ();ignore (Lui_app.flush app) done;
+              (!complete) ();
+              for _=1 to 24 do Host.drain ();ignore (Lui_app.flush app) done
+            end
+          end;
+          expect "A saved inline title must close both its editor and popup"
+            (sink ()=None && Editor_state.editing ()=None && !Views_popup.open_popups=[]);
+          expect "Closing inline editing must release its temporary block lookup source"
+            (Editor_state.find uuid=None);
+          expect "Closing inline editing must restore a live selection scope for subsequent input"
+            (let current=Editor_state.value () in
+             current.selection_scope="main" &&
+             try ignore (Editor_state.blocks_in_scope current.selection_scope);true
+             with Not_found -> false)))
+      ["Enter",false,false;"Escape",false,false;"outside",false,false;
+       "Enter",true,false;"Escape",true,false;"outside",true,false;"Enter",true,true]) [1.;2.];
+    List.iter prerr_endline (List.rev !failures);
+    check "Table titles edit in place and commit through the shared rich-text editor" (!failures=[]);
+    print_endline "table inline rich-text editing lifecycle: OK"))
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures=ref [] in
+  let expect label condition=if not condition then failures:=label::!failures in
+  List.iter (fun scale -> List.iter (fun width ->
+    let host_ref=ref None in
+    let host ()=Option.get !host_ref in
+    let engine=lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (host ()))
+      ~scale:(fun () -> scale) ~store:(fun () -> Lui_host.store (host ()))) in
+    let hooks={Lui_paint.default_hooks with text_ops=(fun id rect color text ->
+      Text_engine.text_ops (Lazy.force engine) id rect color text)} in
+    let h=Lui_host.create ~hooks ~layout:(module Lui_layout)
+      ~measure:(fun id text offered _ ->
+        let measured=Text_engine.measure_text ~width:(Host_interaction.measure_width offered)
+          (Lazy.force engine) id text in
+        Some (Text_engine.pad_size (Lui_host.store (host ())) id ~scale measured))
+      ~renderer:{Lui_host.name="rich-editor-flow-test";render=(fun _ -> Bytes.empty)}
+      ~width:(int_of_float (width*.scale)) ~height:(int_of_float (400.*.scale)) ~scale () in
+    host_ref:=Some h;
+    let registry=Lui_extension.registry () in
+    Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+    let app=Lui_app.create_with_extensions (Lui_host.backend h (profile MacOS GenericHost)) registry ()
+      (fun () () -> ()) (fun context _ _ ->
+        let source="A **bold title** 汉字 café 👋 with enough words to overflow the entire table column" in
+        let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
+          ~anchor:(String.length source) ~focus:(String.length source) in
+        let state v=Signal.value (Signal.state context.Lui_ui.ui_scheduler v) in
+        Lui_elements.column ~width:(int_of_float width)
+          [Edit_view.view ~model:(state model) ~frame:(state Edit_input.empty_frame)
+            ~block_id:"rich-editor-flow" ~on_input:(fun _ -> ()) ~cls:""]) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+      let store=Lui_host.store h in
+      let nodes=Lui_store.preorder store in
+      let text_id value=List.find (fun id -> Lui_store.string_prop store id "text"=Some value) nodes in
+      let rect id=Option.value (Lui_host.layout_rect h id)
+        ~default:{Lui_scene.x=0.;y=0.;w=0.;h=0.} in
+      let first=rect (text_id "A ") and bold=rect (text_id "bold title") in
+      expect "Rich editor fragments must follow source order on the same first baseline"
+        (abs_float (first.y-.bold.y)<0.6*.scale
+         && first.x+.first.w<=bold.x+.0.6*.scale);
+      let natural,_=Text_engine.measure_text (Lazy.force engine) (text_id "bold title") "bold title" in
+      expect "A narrow rich editor must not squeeze short formatted fragments into columns"
+        (abs_float (bold.w-.natural)<0.6*.scale && bold.h<=30.*.scale);
+      expect "Native rich editing must retain bold text geometry"
+        (Option.value (Text_engine.inherited_int store (text_id "bold title") "font-weight")
+          ~default:400>=600);
+      List.iter (fun id ->
+        match Lui_store.string_prop store id "style-class" with
+        | Some classes when List.mem "ed-hidden" (String.split_on_char ' ' classes) ->
+            let hidden=rect id in
+            expect "Concealed rich-text delimiters must consume no native layout or ink"
+              (hidden.w=0. && hidden.h=0.)
+        | _ -> ()) nodes)) [180.;338.;600.]) [1.;2.];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native rich editor fragments flow and conceal delimiters" (!failures=[]);
+  print_endline "native rich editor fragment flow: OK")

@@ -460,7 +460,7 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
-let rec enter_edit ?scope uuid caret =
+let rec enter_edit ?scope ?(submit_on_enter = false) uuid caret =
   if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   let scope = match scope with Some sc -> sc | None -> scope_of_uuid uuid in
@@ -469,7 +469,7 @@ let rec enter_edit ?scope uuid caret =
   else if !S.structure_pending then
     S.enqueue_edit_action ~real:true (fun () ->
       if context = (Runtime.repo (), Runtime.route ()) then
-        enter_edit ~scope uuid caret)
+        enter_edit ~scope ~submit_on_enter uuid caret)
   else (
   clear_pending_blur ();
   (* single editing surface (cljs): a block editor opening commits any
@@ -491,7 +491,7 @@ let rec enter_edit ?scope uuid caret =
             S.set (fun st ->
                 { st with
                   S.editing =
-                    Some (S.mk_editing ~caret ~uuid ~buffer ~scope ~base:buffer ())
+                    Some (S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer ())
                 ; selection_scope = scope
                 ; selected = S.String_set.empty
                 ; anchor = None
@@ -534,7 +534,6 @@ let rec exit_edit ~select =
           | Some current when current.S.uuid = e.uuid && current.S.scope = e.scope
                               && String.equal current.S.model.Edit_model.source
                                    e.S.model.Edit_model.source ->
-              S.notify_edit_exit e.uuid;
               (if Lazy.force perf_keys then
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
               Editor_sink.invalidate e.uuid;
@@ -547,7 +546,8 @@ let rec exit_edit ~select =
                   ; anchor = (if select then Some e.uuid else st.anchor)
                     (* Escape selects the block without raising the action bar. *)
                   ; action_bar = false
-                  })
+                  });
+              S.notify_edit_exit e.uuid
           | _ -> ()
         in
         (* Exit belongs to the editing session, even when its route changes
@@ -2098,7 +2098,10 @@ let restore_history result =
              | Some (Wire.Int caret) -> caret
              | Some (Wire.Keyword "end") -> String.length title
              | _ -> invalid_arg "history caret must be an offset or end" in
-           let e = S.mk_editing ~caret ~uuid ~buffer:title ~scope ~base:title () in
+           let submit_on_enter = match S.editing () with
+             | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.submit_on_enter
+             | _ -> false in
+           let e = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer:title ~scope ~base:title () in
            let e = match Wire.map_get cursor "anchor" with
              | Some (Wire.Int anchor) ->
                  S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
@@ -2134,11 +2137,15 @@ let redo () = run_history Ops.redo
 (* the Edit_input route for the open editor — structural intents go to
    the outliner ops; focused/menu have no surface effect yet *)
 let route_of uuid : Edit_input.route =
-  { Edit_input.split_block = (fun () -> split_at_cursor uuid)
+  let submit_on_enter () = match S.editing () with
+    | Some e when e.S.uuid = uuid -> e.S.submit_on_enter
+    | _ -> false in
+  { Edit_input.split_block = (fun () ->
+      if submit_on_enter () then exit_edit ~select:false else split_at_cursor uuid)
   ; merge_prev = (fun () -> merge_prev uuid)
   ; indent = (fun () -> indent_or_outdent ~indent:true)
   ; outdent = (fun () -> indent_or_outdent ~indent:false)
-  ; cancel = (fun () -> exit_edit ~select:true)
+  ; cancel = (fun () -> exit_edit ~select:(not (submit_on_enter ())))
   ; focused =
       (fun b ->
         S.focused_block := (if b then Some uuid else None))

@@ -1873,34 +1873,19 @@ a.page-title {
   white-space: pre-wrap;
 }
 
-.ed-hidden {
-  /* reveal-on-caret delimiters collapse to zero width until shown */
-  display: none;
-}
-
-/* chip appearance (bg/corner/padding/cursor) is typed on the frag;
-   text kind cannot take display — keep it here */
+/* Chip appearance (background, radius, padding and cursor) is typed on
+   the fragment; its inline display remains stylesheet-owned. */
 .ed-pill {
   display: inline-block;
 }
 
-/* node refs keep their read-mode colors in edit mode: the accent
-   foreground comes through typed props (see frag_binds); display on
-   the text kind is the only declaration left here */
+/* Node references keep their read-mode accent through typed props. */
 .ed-pill.ed-block-ref,
 .ed-pill.ed-page-ref,
 .ed-pill.ed-tag,
 .ed-pill.ed-link,
 .ed-r.ed-url {
   display: inline;
-}
-
-/* edit-surface inline marks mirror their read-mode element styles so the
-   text geometry stays identical when a block enters editing — mirrors
-   `b/strong`, `i/em`, `del/s`, `u/ins`, `mark`, `:not(pre) > code` and
-   `sub/sup` UA + theme rules above. */
-.ed-bold {
-  font-weight: bolder;
 }
 
 /* .block-control chrome rides typed props + the emitters' inline style;
@@ -1945,10 +1930,6 @@ a.page-title {
   &.bullet-hidden {
     padding-right: 2px;
   }
-}
-
-.ed-italic {
-  font-style: italic;
 }
 
 .ed-code {

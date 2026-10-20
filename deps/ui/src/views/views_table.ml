@@ -352,6 +352,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   | _ ->
       fun context parent ->
       let hovered = Signal.state context.Lui_ui.ui_scheduler false in
+      let anchor = Printf.sprintf "table-title-%d-%s" inst.V.id row_uuid in
       let hover on = Signal.set hovered on; Runtime.flush () in
       let ghost icon_name title_ on_press =
         Ui_components.button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
@@ -368,9 +369,12 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
               (row ~cross:`center ~grow:1. ~min_width:0 ~height:32
                  ~on_pointer_enter:(fun _ -> hover true)
                  ~on_pointer_leave:(fun _ -> hover false)
+                 ~accessibility_identifier:anchor ~data_attrs:["tabindex","0"]
                  ~style_class:"table-block-title"
                  [ (* Keep the caption and overlay actions as sibling hit regions. *)
-                   Ui_parts.pressable ~on_press:(fun _ -> open_row_sidebar row_uuid)
+                   Ui_parts.pressable ~on_press:(fun _ ->
+                     Table_title_editor.show ~anchor ~column_width:(column_size c)
+                       {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
                        [ text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title) ])
                  ; Ui_parts.float_prop L.Opacity

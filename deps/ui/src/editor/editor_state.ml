@@ -29,19 +29,20 @@ let edit_units : Edit_model.units =
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
   ; model : Edit_model.t
+  ; submit_on_enter : bool
   ; epoch : int ref
       (* identity for one edit session: shared through {e with} rebuilds,
          fresh per mk_editing — lets queued input shadows tell "already
          applied to this session" from "a different record was restored" *)
   }
 
-let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
+let mk_editing ?(caret = 0) ?(submit_on_enter = false) ~uuid ~buffer ~scope ~base () =
   Editor_sink.invalidate uuid;
   let model =
     Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
   in
-  { uuid; buffer; scope; base; model; epoch = ref 0 }
+  { uuid; buffer; scope; base; model; submit_on_enter; epoch = ref 0 }
 
 (* republish with a new model — keeps buffer mirroring model.source *)
 let with_model e model =
@@ -469,6 +470,9 @@ let rec find_in blocks uuid =
 let extra_sources : (string * (unit -> Model.block list)) list ref = ref []
 
 let add_block_source ~scope f = extra_sources := (scope, f) :: !extra_sources
+
+let remove_block_source ~scope =
+  extra_sources := List.filter (fun (owner, _) -> owner <> scope) !extra_sources
 
 let blocks_in_scope scope =
   let page_scope =

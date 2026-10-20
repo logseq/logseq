@@ -119,6 +119,47 @@ test('Table title actions retain hover and isolate navigation from sidebar openi
   browser('wait', '--fn', `getComputedStyle(document.querySelector(${JSON.stringify(selector + ' .ls-title-ghosts')})).opacity === '0'`);
 });
 
+test('Table titles retain rich editing, cell anchoring and focus after submission', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.page-tabs .ls-view-head') !== null");
+  if (!evaluate("document.querySelector('.table-block-title') !== null")) {
+    button('New node');
+    browser('wait', '--fn', "document.querySelector('.table-block-title') !== null");
+  }
+  if (evaluate(`document.querySelector('button[aria-label="Close"]') !== null`)) button('Toggle right sidebar');
+  const row = evaluate("document.querySelector('.table-block-title').closest('.ls-block').id");
+  const selector = `[id="${row}"] .table-block-title`;
+  const hash = evaluate('location.hash');
+  for (const key of ['Escape', 'Enter']) {
+    browser('click', selector);
+    browser('wait', '--fn', "document.activeElement === document.querySelector('.ls-table-block .ed-input')");
+    const geometry = evaluate(`(() => {
+      const title = document.querySelector(${JSON.stringify(selector)});
+      const content = document.querySelector('.ls-table-block');
+      const popup = document.querySelector('#ls-table-block-editor');
+      const editor = content.querySelector('.editor-wrapper');
+      const caret = content.querySelector('.ed-caret').getBoundingClientRect();
+      const pads = content.querySelectorAll('.ed-pad');
+      const end = pads[pads.length - 1].getBoundingClientRect();
+      return {top: content.getBoundingClientRect().top - title.getBoundingClientRect().top,
+        contentWidth: content.getBoundingClientRect().width,
+        editorWidth: editor.getBoundingClientRect().width,
+        popupWidth: popup.getBoundingClientRect().width, caretEndGap: caret.left - end.left};
+    })()`);
+    assert.ok(Math.abs(geometry.top) < 1);
+    assert.equal(geometry.contentWidth, 342);
+    assert.equal(geometry.editorWidth, 338);
+    assert.equal(geometry.popupWidth, 358);
+    assert.ok(Math.abs(geometry.caretEndGap) < 1, 'The visible caret must start at the title end');
+    browser('press', key);
+    browser('wait', '--fn', "document.querySelector('.ls-table-block') === null");
+    assert.equal(evaluate('document.activeElement.id'), evaluate(`document.querySelector(${JSON.stringify(selector)}).id`));
+    assert.equal(evaluate('location.hash'), hash);
+    assert.equal(evaluate(`document.querySelector('button[aria-label="Close"]') !== null`), false);
+  }
+});
+
 test('Pages tag filters keep live multi-selection and restore reference titles', () => {
   open();
   browser('find','text','Pages','click','--exact');
