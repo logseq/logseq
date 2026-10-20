@@ -11320,3 +11320,96 @@ let () =
   List.iter prerr_endline (List.rev !node_icon_regression_failures);
   check "Native structured node icon regressions" (!node_icon_regression_failures=[]);
   print_endline "native block tag icon hydration and refresh: OK"
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let failures = ref [] in
+  let services = Cmdk_host.services () in
+  let initial : Cmdk_state.item =
+    { ikey="breadcrumb-fixture";idx=0;gid=G_nodes;ititle="Result 汉字 café";
+      info=None;header=Some "Parent";iicon=Some (Node_icon.tabler "point-filled");
+      inline_icon=None;isc="";ibadge=No_badge;act=Open_block "breadcrumb-owner";
+      ihl=false;imouse=false;iq="" } in
+  List.iter (fun scale -> List.iter (fun width ->
+    let store = Lui_store.create () in
+    let backend = { backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch;true) } in
+    let section name child = Lui_elements.column ~accessibility_identifier:name [child] in
+    let app = Lui_app.create backend initial (fun _ next -> next)
+      (fun ctx source _ ->
+        let state = Cmdk_state.make ~register:false ctx.Lui_ui.ui_scheduler services in
+        Lui_elements.column ~width ~cross:`stretch
+          [section "breadcrumb-result" (Cmdk_view.item_row services state source);
+           section "breadcrumb-group-title"
+             (Ui_components.cmdk_group_title ~key:"title" ~value:"Nodes" ~on_press:(fun _ -> ()));
+           section "breadcrumb-group-count" (Ui_components.cmdk_group_count ~key:"count" ~value:"7");
+           section "breadcrumb-search-only" (Ui_components.cmdk_search_only_name ~key:"filter" ~value:"Page filter")]) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let scene = Lui_scene.create
+        ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine = Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
+        ~store:(fun () -> store) in
+      let layout = Lui_layout.create () in
+      let sync () = Lui_layout.sync ~scale ~width:(float width *. scale) ~height:(720. *. scale)
+        ~measure:(fun id text offered _ -> Some (Text_engine.pad_size store id ~scale
+          (Text_engine.measure_text ~width:(Host_interaction.measure_width offered) engine id text)))
+        layout store in
+      let root name = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name)
+        (Lui_store.preorder store) in
+      let rec subtree id = id::List.concat_map subtree (Lui_store.child_ids store id) in
+      let rect id = Option.get (Lui_layout.rect layout id) in
+      let expect label condition = if not condition then failures :=
+        (Printf.sprintf "%s width=%d scale=%.0f" label width scale)::!failures in
+      let close a b = abs_float (a-.b)<0.01 in
+      let paths = ["Parent";"Parent 汉字 café 👋 / Nested";
+        String.concat " / " (List.init 20 (fun _ -> "Parent 汉字 café 👋"))] in
+      List.iter (fun path -> List.iter (fun badge -> List.iter (fun query ->
+        ignore (Lui_app.send app {initial with Cmdk_state.header=Some path;ibadge=badge;iq=query});
+        ignore (Lui_app.flush app);sync ();
+        let ids = subtree (root "breadcrumb-result") in
+        let find_class name = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some name) ids in
+        let header = find_class "breadcrumb" and main = find_class "cp__cmdk-item-main-text" in
+        let first_row parent = List.find (fun id -> Lui_store.kind store id="row") (Lui_store.child_ids store parent) in
+        let header_label = first_row header and title_label = first_row main in
+        let h = rect header and title = rect title_label and label = rect header_label in
+        let row = List.find (fun id -> Lui_store.bool_prop store id "press-enabled") ids in
+        if badge=Cmdk_state.Header_badge then begin
+          let badge_node = List.find (fun id -> Lui_store.kind store id="text") (Lui_store.child_ids store header) in
+          let text = Option.get (Lui_store.string_prop store badge_node "text") in
+          let natural_width,_ = Text_engine.pad_size store badge_node ~scale
+            (Text_engine.measure_text ~width:0. engine badge_node text) in
+          expect (Printf.sprintf "Breadcrumb badge retains its readable intrinsic width (path=%d actual=%.1f expected=%.1f)"
+            (String.length path) ((rect badge_node).w/.scale) (natural_width/.scale))
+            ((rect badge_node).w+.0.01>=natural_width)
+        end;
+        expect "Breadcrumb has the reference 32-point inset" (close (label.x-.h.x) (32.*.scale));
+        expect "Breadcrumb and result title start at the same position" (close label.x title.x);
+        expect "Breadcrumb preserves a two-point gap before result content"
+          (close (title.y-.(h.y+.h.h)) (2.*.scale));
+        expect (Printf.sprintf "Result height includes the negative breadcrumb margin (path=%d badge=%b query=%S row=%.1f header=%.1f title=%.1f)"
+          (String.length path) (badge=Cmdk_state.Header_badge) query ((rect row).h/.scale) (h.h/.scale) (title.h/.scale))
+          (close (rect row).h ((if badge=Cmdk_state.Header_badge then 48. else 46.)*.scale));
+        let rects = W.Rects.create () in
+        List.iter (fun id -> Hashtbl.replace rects id (rect id)) (Lui_store.preorder store);
+        let ui = W.Ui.create () in W.Ui.set_scale ui scale;
+        let x = (label.x+.min (8.*.scale) (label.w/.2.))/.scale
+        and y = (label.y+.label.h/.2.)/.scale in
+        ignore (W.Ui.handle ui store rects (W.Input.Move (x,y)));
+        ignore (W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+        let actions = W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+        let owners = List.filter_map (function W.Dispatch (Press id) -> Some id | _ -> None) actions in
+        expect "Breadcrumb pointer activation has one result owner" (owners=[row])) ["";"Parent"])
+        [Cmdk_state.No_badge;Cmdk_state.Header_badge]) paths;
+      List.iter (fun (name,label,inset) ->
+        let container = List.hd (Lui_store.child_ids store (root name)) in
+        let text = List.find (fun id -> Lui_store.string_prop store id "text"=Some label) (subtree container) in
+        expect (name^" keeps its fixed inset in a stretched row")
+          (close ((rect text).x-.(rect container).x) (inset*.scale)))
+        ["breadcrumb-group-title","Nodes",2.;"breadcrumb-group-count","7",6.;
+         "breadcrumb-search-only","Page filter",4.])) [360;520;900]) [1.;2.];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native search breadcrumb and fixed inset parity" (!failures=[]);
+  print_endline "native search breadcrumb and fixed inset parity: OK")

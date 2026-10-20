@@ -296,9 +296,12 @@ let display_spaces s =
    .lui-stack divs — block-level inside the span — which wraps every
    segment to its own line. As row children they are flex items and
    stay on one line like the deleted display:inline rules intended. *)
-let hl_span key (item_sig : S.item Signal.signal)
+let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
     (title_of : S.item -> string) : t =
-  row ~key ~gap:0 ~cross:`center
+  Ui_components.with_props
+    (if single_line then [Ui_components.Prop.overflow `hidden] else [])
+    (row ~key ~gap:0 ~cross:`center
+    ?min_width:(if single_line then Some 0 else None)
     ~data_attrs:
       (reactive
          (fun it ->
@@ -325,10 +328,12 @@ let hl_span key (item_sig : S.item Signal.signal)
               let txt = display_spaces txt in
               if hl then
                 text ~key:"hl" ~as_:`Mark ~padding:0 ~corner_radius:0
+                  ?white_space:(if single_line then Some "nowrap" else None)
                   ~value:txt []
-              else text ~key:"tx" ~as_:`Span ~value:txt [])
+              else text ~key:"tx" ~as_:`Span ?white_space:(if single_line then Some "nowrap" else None)
+                  ~value:txt [])
             seg)
-    ]
+    ])
 
 let badge_el svs key =
   Ui_components.cmdk_badge ~key
@@ -381,7 +386,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
     | Some _ ->
         Some
           (Ui_components.cmdk_item_header ~key:"hdr"
-             [ hl_span "hdr-hl" item_sig
+             [ hl_span ~single_line:true "hdr-hl" item_sig
                  (fun it -> Option.value ~default:"" it.S.header)
              ; if_
                  ~test:

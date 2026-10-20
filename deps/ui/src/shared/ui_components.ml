@@ -354,21 +354,18 @@ let cmdk_group_header ~key children =
           hsl(var(--muted-foreground))))"
        children)
 
-(* A two-point leading spacer keeps the count's inset in row flow. *)
+(* Fixed insets use row padding rather than flexible spacer children. *)
 let cmdk_group_title ~key ~value ~on_press : t =
-  row ~key ~gap:0
-    [ spacer ~key:"i" ~width:2 ~height:1 []
-    ; with_props [ Prop.user_select `none; Prop.cursor `pointer ]
-        (text ~key:"t" ~style_class:"cp__cmdk-group-title" ~font_weight:700
-           ~value ~on_press [])
-    ]
+  with_props [ Prop.padding_left 2 ]
+    (row ~key ~gap:0
+       [ with_props [ Prop.user_select `none; Prop.cursor `pointer ]
+           (text ~key:"t" ~style_class:"cp__cmdk-group-title" ~font_weight:700
+              ~value ~on_press []) ])
 
 let cmdk_group_count ~key ~value : t =
-  row ~key ~gap:0
-    [ spacer ~key:"i" ~width:6 ~height:1 []
-    ; text ~key:"t"
-        ~font_size:"0.7rem" ~corner_radius:9999 ~value []
-    ]
+  with_props [ Prop.padding_left 6 ]
+    (row ~key ~gap:0
+       [ text ~key:"t" ~font_size:"0.7rem" ~corner_radius:9999 ~value [] ])
 
 let cmdk_group_more ~key ~on_press children : t =
   Ui_parts.pressable ~on_press
@@ -417,19 +414,14 @@ let cmdk_item_header ~key children =
     ; Prop.font_weight 300
     ; Prop.line_height "16px"
     ; Prop.overflow `hidden
-    ; Prop.position `relative
-    ; Prop.inset_top (-4.)
+    ; Prop.padding_left 32
     ]
     (row ~key ~style_class:"breadcrumb" ~cross:`center
-       ~gap:8 ~min_width:0
-       ~data_attrs:
-         [ (* WhiteSpace/TextOverflow are text-kind props — on a row the
-              only channel is the documented data-attrs style pair. *)
-           ("style", "white-space: nowrap; text-overflow: ellipsis") ]
+       ~gap:8 ~min_width:0 ~margin_top:(-4)
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
           hsl(var(--muted-foreground))))"
-       (spacer ~key:"i" ~width:32 ~height:1 [] :: children))
+       children)
 
 let cmdk_item_main ~key children =
   row ~key ~cross:`start ~gap:12 children
@@ -473,7 +465,7 @@ let cmdk_info_text ~key children =
 let cmdk_badge ~key ~value : t =
   text ~key ~as_:`Span
     ~font_size:"var(--lx-text-header)" ~font_weight:500 ~line_height:"1"
-    ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
+    ~white_space:"nowrap" ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
     ~border_width:1
     ~border_color:
       "var(--lx-gray-06, var(--ls-border-color, rgb(0 0 0 / 0.12)))"
@@ -690,13 +682,10 @@ let cmdk_search_only_row ~key children : t =
   row ~key ~cross:`center ~gap:4
     children
 
-(* 4px left inset via leading spacer (see group_title). *)
+(* The search-only label shares the fixed-inset recipe. *)
 let cmdk_search_only_name ~key ~value : t =
-  row ~key ~gap:0
-    [ spacer ~key:"i" ~width:4 ~height:1 []
-    ; text ~key:"t"
-        ~font_weight:500 ~value []
-    ]
+  with_props [ Prop.padding_left 4 ]
+    (row ~key ~gap:0 [ text ~key:"t" ~font_weight:500 ~value [] ])
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
   with_props [ Prop.cursor `pointer ]
