@@ -174,6 +174,10 @@
   [operations {:keys [property-idents class-idents existing-classes new-classes]}]
   (let [class-ops (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
         classes (merge
+                 (into {} (keep (fn [[ident entity]]
+                                  (when-not (ldb/built-in? entity)
+                                    [ident (select-keys entity [:block/uuid :block/title])])))
+                       existing-classes)
                  new-classes
                  (->> class-ops
                       (remove #(existing-classes (get-ident class-idents (get-in % [:data :title]))))
@@ -194,7 +198,7 @@
   (let [new-properties (filter #(and (= "property" (:entityType %)) (= "add" (:operation %))) operations)
         properties
         (merge
-         existing-properties
+         (into {} (remove (comp db-property/built-in-properties key)) existing-properties)
          (->> new-properties
               (remove #(contains? existing-properties (get-ident property-idents (get-in % [:data :title]))))
               (common-util/distinct-by #(get-ident property-idents (get-in % [:data :title])))
@@ -258,7 +262,7 @@
     {:property-idents (:idents properties)
      :class-idents (:idents classes)
      :new-classes (:new classes)
-     :existing-classes (set (keys (:existing classes)))
+     :existing-classes (:existing classes)
      :existing-properties (into {} (map (fn [[ident entity]]
                                         [ident (select-keys entity [:block/title :db/cardinality :logseq.property/type])]))
                                 (:existing properties))}))

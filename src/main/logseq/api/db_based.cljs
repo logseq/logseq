@@ -256,8 +256,12 @@
                                  (p/all (map
                                            (fn [{:keys [name schema properties]}]
                                              (let [property-ident (api-block/get-db-ident-from-property-name name this)]
-                                               (p/let [property-entity (<get-block property-ident)]
+                                               (p/let [property-entity (<get-block property-ident)
+                                                       named-property (when-not property-entity
+                                                                        (db-async/<get-page-by-name
+                                                                         (state/get-current-repo) name #{:logseq.class/Property}))]
                                                  (or property-entity    ; property exists already
+                                                     named-property
                                                      (upsert-property-aux this name schema {:properties properties})))))
                                         tag-properties)))]
              (when (seq properties)
