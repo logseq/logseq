@@ -8,6 +8,10 @@
 (use-fixtures :each {:before api-test/start-plugin-api-db!
                      :after api-test/destroy-plugin-api-db!})
 
+(defn- block-by-title
+  [blocks title]
+  (first (filter #(= title (:block/title %)) blocks)))
+
 (deftest list-and-get-page-data
   (test-helper/load-test-files
    [{:page {:block/title "Tools Page"}
@@ -20,6 +24,26 @@
     (is (= "Tools Page" (get-in page-data [:entity :block/title])))
     (is (some #(= "tools block" (:block/title %)) (:blocks page-data)))
     (is (nil? missing))))
+
+(deftest get-page-data-includes-nested-blocks
+  (test-helper/load-test-files
+   [{:page {:block/title "Nested Tools Page"}
+     :blocks [{:block/title "A top"
+               :build/children [{:block/title "A child 1"
+                                 :build/children [{:block/title "A grandchild"}]}
+                                {:block/title "A child 2"}]}
+              {:block/title "D top"}]}])
+  (let [page-data (api-tools/get-page-data (conn/get-db) "Nested Tools Page")
+        blocks (:blocks page-data)
+        a-top (block-by-title blocks "A top")
+        a-child-1 (block-by-title (:block/children a-top) "A child 1")
+        grandchild (block-by-title (:block/children a-child-1) "A grandchild")]
+    (is (= #{"A top" "D top"} (set (map :block/title blocks))))
+    (is (= #{"A child 1" "A child 2"} (set (map :block/title (:block/children a-top)))))
+    (is (= "A grandchild" (:block/title grandchild)))
+    (is (string? (:block/uuid grandchild)))
+    (is (not (contains? a-top :block/page)))
+    (is (not (contains? grandchild :block/page)))))
 
 (deftest build-upsert-nodes-edn-from-add-operations
   (let [db (conn/get-db)

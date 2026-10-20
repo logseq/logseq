@@ -12,6 +12,10 @@
 (use-fixtures :each {:before api-test/start-plugin-api-db!
                      :after api-test/destroy-plugin-api-db!})
 
+(defn- js-block-by-title
+  [blocks title]
+  (first (filter #(= title (:title %)) blocks)))
+
 (deftest list-endpoints-return-graph-entities
   (async done
     (test-helper/load-test-files
@@ -35,6 +39,30 @@
               (is (= "Cli Page" (api-test/api-title (aget page-data "entity"))))
               (is (pos? (count (aget page-data "blocks"))))
               (is (some? (aget missing "error"))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-page-data-returns-nested-blocks
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Nested Cli Page"}
+       :blocks [{:block/title "A top"
+                 :build/children [{:block/title "A child 1"
+                                   :build/children [{:block/title "A grandchild"}]}
+                                  {:block/title "A child 2"}]}
+                {:block/title "D top"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [page-data (cli-api/get-page-data "Nested Cli Page")
+                    blocks (js->clj (aget page-data "blocks") :keywordize-keys true)
+                    a-top (js-block-by-title blocks "A top")
+                    a-child-1 (js-block-by-title (:children a-top) "A child 1")
+                    grandchild (js-block-by-title (:children a-child-1) "A grandchild")]
+              (is (= #{"A top" "D top"} (set (map :title blocks))))
+              (is (= #{"A child 1" "A child 2"} (set (map :title (:children a-top)))))
+              (is (= "A grandchild" (:title grandchild)))
+              (is (string? (:uuid grandchild))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
