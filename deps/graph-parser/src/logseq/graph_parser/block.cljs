@@ -336,6 +336,9 @@
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
                       (cond
+                        (and db-based? (not class?) (common-util/uuid-string? original-page-name))
+                        (d/entity db [:block/uuid (uuid original-page-name)])
+
                         journal-day
                         (ldb/get-journal-page-by-day db journal-day)
 
@@ -388,7 +391,10 @@
                   (assoc :block/tags [:logseq.class/Journal])
                   (not db-based?)
                   (assoc :block/type "journal"))
-                {}))]
+                {})
+              (when (and db-based? page-entity (common-util/uuid-string? original-page-name))
+                (assoc (select-keys page-entity [:db/id :db/ident :block/name])
+                       :block/tags (mapv :db/ident (:block/tags page-entity)))))]
     [page page-entity]))
 
 (defn sanitize-hashtag-name
