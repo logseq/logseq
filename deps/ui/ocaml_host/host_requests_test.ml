@@ -5373,7 +5373,27 @@ let () = Native_embed.with_entry_lock (fun () ->
         let before = List.length !add_calls in
         ignore (Lui_app.dispatch_event app (Press control));ignore (Lui_app.flush app);
         expect "Native New footer does not dispatch exactly once to its owning table"
-          (List.length !add_calls=before+1 && List.hd !add_calls=(Option.get !instance).Views_state.id)))
+          (List.length !add_calls=before+1 && List.hd !add_calls=(Option.get !instance).Views_state.id);
+        if (rect control).y+.(rect control).h <= 600.*.scale then begin
+          let module W = Lui_window in
+          let rects=W.Rects.create () and ui=W.Ui.create () in
+          W.Ui.set_scale ui scale;
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+            (Lui_host.layout_rect host id)) ids;
+          List.iter (fun fraction ->
+            let r=rect control in
+            let x=(r.x+.fraction*.r.w)/.scale and y=(r.y+.r.h/.2.)/.scale in
+            let deliver actions=List.iter (function
+              | W.Dispatch event -> ignore (Lui_app.dispatch_event app event)
+              | _ -> ()) actions in
+            let before=List.length !add_calls in
+            deliver (W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+            deliver (W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)));
+            ignore (Lui_app.flush app);
+            expect "Native pointer click misses the visible New footer or dispatches twice"
+              (List.length !add_calls=before+1 && List.hd !add_calls=(Option.get !instance).Views_state.id))
+            [0.1;0.9]
+        end))
       [0;1;3;80]) [400.;1000.]) [1.;2.]);
   List.iter prerr_endline (List.rev !failures);
   check "Native table New footer placement and owner dispatch" (!failures=[]);
