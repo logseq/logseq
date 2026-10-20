@@ -2181,16 +2181,6 @@ a.tag {
 
 }
 
-.ui__checkbox:not([data-checked]),
-button[role='checkbox'][data-state='unchecked'] {
-  border-color: var(--lx-gray-12, var(--ls-primary-text-color));
-}
-
-.dark-theme .ui__checkbox:not([data-checked]),
-.dark-theme button[role='checkbox'][data-state='unchecked'] {
-  border-color: var(--lx-gray-11, var(--ls-primary-text-color));
-}
-
 /* flex display, position, paddings and the hover fill are typed on
    the chip box; the anchors' font/opacity are typed on the links */
 .block-tag {

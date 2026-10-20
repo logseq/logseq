@@ -282,7 +282,7 @@ let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
   Ui_parts.float_prop L.Opacity
     ~value:(reactive (fun s -> if shown s then 1. else 0.) (sig_of inst))
     (Ui_components.with_props [Ui_components.Prop.hover_opacity 1.]
-      (checkbox ~accessibility_identifier:id ~label:aria_label
+      (Ui_components.checkbox ~accessibility_identifier:id ~label:aria_label
         ~width:32 ~height:32 ~main:`center ~cross:`center
         ~border_color:"hsl(var(--primary))"
         ~transition:"opacity 150ms"
@@ -458,7 +458,7 @@ let prop_cell ~blk (c : V.column) : t =
                 (row ~cross:`center ~grow:1. ~gap:4 ~min_width:0
                    ~style_class:"jtrigger multi-values" item_els) ] ]
   | W.Bool b when c.V.c_type = "checkbox" ->
-      inner_cell [ checkbox ~checked:b ~disabled:true [] ]
+      inner_cell [ Ui_components.checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =

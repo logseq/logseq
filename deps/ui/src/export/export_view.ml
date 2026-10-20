@@ -27,7 +27,7 @@ let checkbox ctx ~key ~show ~on ~on_toggle ?text () =
   Ui_parts.class_signal (st_sig ctx)
     (fun (st : S.t) ->
       "ui__checkbox" ^ if show st then "" else " invisible")
-    (checkbox ~key
+    (Ui_components.checkbox ~key
        ~checked:(reactive on (st_sig ctx))
        ~on_toggle:(fun _ -> on_toggle ())
        ?text [])

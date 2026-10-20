@@ -7235,6 +7235,9 @@ let () = Native_embed.with_entry_lock (fun () ->
       let checkbox=Option.get checkbox in
       check "Global font caption must inherit the application's body color"
         (Lui_store.prop store checkbox "foreground"=None);
+      check "Application checkbox indicators must use the shared neutral state borders"
+        (Lui_store.string_prop store checkbox "indicator-border-color"=Some "var(--lx-checkbox-border)"
+         && Lui_store.string_prop store checkbox "checked-indicator-border-color"=Some "hsl(var(--border))");
       check "Global font caption opacity must be separate from its indicator"
         (Lui_store.float_prop store checkbox "label-opacity"=Some 0.7);
       let note=List.find (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t "settings.general/accent-color-alert"))

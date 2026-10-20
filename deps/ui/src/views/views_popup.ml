@@ -454,7 +454,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
            ~on_press:(fun _ -> choose i it)
            [ row ~accessibility_identifier:(content_id i) ~gap:4 ~cross:`center ~grow:1. ~min_width:0
              ((if multiple then
-               [ checkbox ~key:"checked" ~width:16 ~height:16 ~label:it.si_label
+               [ Ui_components.checkbox ~key:"checked" ~width:16 ~height:16 ~label:it.si_label
                    ~checked:(reactive (fun sel -> List.mem it.si_value sel) ssig)
                    ~on_toggle:(fun _ -> choose i it) [] ]
              else [])

@@ -480,7 +480,7 @@ let scalar_edit_cell ctx row : t =
 let checkbox_view ctx row : t =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
-  checkbox ~checked
+  Ui_components.checkbox ~checked
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, b) ->
@@ -741,7 +741,7 @@ let repeat_column ctx ~ident ~is_datetime ~rep : t =
              [Ui_components.Prop.font_size "0.875rem";Ui_components.Prop.line_height "1.25rem"]
              (column ~key:"rep" ~style_class:"ls-repeat-col" ~gap:16 ~padding:16 ~width:256
                [row ~key:"rpt" ~cross:`center ~gap:4 ~margin_bottom:16
-                  [checkbox ~key:"repeat" ~width:16 ~min_width:16 ~height:16
+                  [Ui_components.checkbox ~key:"repeat" ~width:16 ~min_width:16 ~height:16
                      ~style_class:"ls-rep-cb" ~label:(I18n.t
                        (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"] then "property.repeat/task"
                         else if is_datetime then "property.repeat/datetime" else "property.repeat/date"))

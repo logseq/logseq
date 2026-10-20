@@ -16,7 +16,7 @@ let toggle st =
 
 (* shui/checkbox — the kind draws its own check indicator *)
 let checkbox ~key ~id ~checked ~on_toggle =
-  checkbox ~key ~accessibility_identifier:id
+  Ui_components.checkbox ~key ~accessibility_identifier:id
     ~style_class:"ui__checkbox" ~checked_signal:checked
     ~on_toggle:(fun _ -> on_toggle ()) []
 

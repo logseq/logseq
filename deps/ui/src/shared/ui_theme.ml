@@ -307,6 +307,10 @@ let cmdk_vars = function
     ; "--lx-nav-active", "rgb(255 255 255 / 0.08)"
     ]
 
+let checkbox_vars = function
+  | Light -> ["--lx-checkbox-border", "var(--lx-gray-12, var(--ls-primary-text-color))"]
+  | Dark -> ["--lx-checkbox-border", "var(--lx-gray-11, var(--ls-primary-text-color))"]
+
 let handbook_vars = function
   | Light ->
       ["--lx-handbook-bg","var(--ls-primary-background-color)";
@@ -353,7 +357,7 @@ let snapshot mode =
   ; vars =
       List.filter (fun (name, _) -> not (stylesheet_owned_var name))
         (ls_vars @ lui_vars c @ canonical_vars c cs
-           typography @ cmdk_vars mode @ handbook_vars mode
+           typography @ cmdk_vars mode @ checkbox_vars mode @ handbook_vars mode
          @ [ "--left-sidebar-bg-color", "var(--lx-gray-02)" ])
   }
 

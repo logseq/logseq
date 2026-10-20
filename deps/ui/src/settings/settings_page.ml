@@ -144,7 +144,7 @@ let editor_font_row ?(density = `regular) () =
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.line_height "1.25rem"
         ; Ui_components.Prop.label_opacity 0.7 ]
-        (checkbox ~key:"font-g" ~gap:4 ~margin_top:12
+        (Ui_components.checkbox ~key:"font-g" ~gap:4 ~margin_top:12
           ~min_height:(if density=`compact then 20 else 28)
           ~text:(T.t "settings.general/editor-font-set-global") ~label:(T.t "settings.general/editor-font-set-global")
           ~checked:font.S.fglobal

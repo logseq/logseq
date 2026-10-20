@@ -1153,6 +1153,7 @@ body {
 
   .lui-checkbox-control {
     @apply relative size-4 shrink-0 cursor-pointer appearance-none rounded-sm border border-primary text-primary-foreground ring-offset-background transition-colors;
+    border-color: var(--lui-indicator-border-color, var(--color-primary));
   }
 
   .lui-checkbox-control:focus-visible {
@@ -1164,7 +1165,9 @@ body {
   }
 
   .lui-checkbox-control:checked {
-    @apply border-0 bg-primary;
+    @apply bg-primary;
+    border-width: var(--lui-checked-indicator-border-width, 0px);
+    border-color: var(--lui-checked-indicator-border-color, var(--color-primary));
   }
 
   .lui-checkbox-control::after {

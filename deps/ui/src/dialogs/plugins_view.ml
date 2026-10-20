@@ -676,7 +676,7 @@ let item_toggle pid key s cur =
   desc_item ~key:("t-" ^ key) ~label:(desc_h2 key title)
     ~control:
       (row ~key:"fc" ~cross:`center ~gap:6
-         (checkbox ~key:"cb" ~checked
+         (Ui_components.checkbox ~key:"cb" ~checked
             ~on_toggle:(fun ev ->
               match ev with
               | Lui_protocol.ToggleChanged (_, on) ->

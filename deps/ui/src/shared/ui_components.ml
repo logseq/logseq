@@ -82,6 +82,13 @@ let textarea =
       Lui_elements.textarea ~background ~border_color ~border_width
         ~corner_radius)
 
+(* Indicator borders are independent of the selected primary fill and label ink. *)
+let checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition (children : t list) : t =
+  with_props
+    [ Prop.indicator_border_color "var(--lx-checkbox-border)"
+    ; Prop.checked_indicator_border_color "hsl(var(--border))" ]
+    (Lui_elements.checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition children)
+
 (* Reference portals live outside the page-size root. Establish the body
    type scale once on overlay carriers, independently of page text sizing. *)
 let overlay_typography element =
