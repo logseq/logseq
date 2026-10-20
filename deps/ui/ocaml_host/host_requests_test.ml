@@ -11236,7 +11236,7 @@ let () = Native_embed.with_entry_lock (fun () ->
             ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
           let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
             ~store:(fun () -> store) in
-          Lui_layout.sync ~scale ~width:(520.*.scale) ~height:(720.*.scale)
+          Lui_layout.sync ~scale ~text_flow:(Text_engine.text_flow engine) ~width:(520.*.scale) ~height:(720.*.scale)
             ~measure:(fun id text width _ -> Some (Text_engine.pad_size store id ~scale
               (Text_engine.measure_text ~width:(Host_interaction.measure_width width) engine id text)))
             layout store;
@@ -11353,7 +11353,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let engine = Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
         ~store:(fun () -> store) in
       let layout = Lui_layout.create () in
-      let sync () = Lui_layout.sync ~scale ~width:(float width *. scale) ~height:(720. *. scale)
+      let sync () = Lui_layout.sync ~scale ~text_flow:(Text_engine.text_flow engine) ~width:(float width *. scale) ~height:(720. *. scale)
         ~measure:(fun id text offered _ -> Some (Text_engine.pad_size store id ~scale
           (Text_engine.measure_text ~width:(Host_interaction.measure_width offered) engine id text)))
         layout store in
@@ -11373,7 +11373,8 @@ let () = Native_embed.with_entry_lock (fun () ->
         let find_class name = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some name) ids in
         let header = find_class "breadcrumb" and main = find_class "cp__cmdk-item-main-text" in
         let first_row parent = List.find (fun id -> Lui_store.kind store id="row") (Lui_store.child_ids store parent) in
-        let header_label = first_row header and title_label = first_row main in
+        let header_label = first_row header and title_label =
+          List.find (fun id -> Lui_store.kind store id="text") (Lui_store.child_ids store main) in
         let h = rect header and title = rect title_label and label = rect header_label in
         let row = List.find (fun id -> Lui_store.bool_prop store id "press-enabled") ids in
         if badge=Cmdk_state.Header_badge then begin
@@ -11388,12 +11389,12 @@ let () = Native_embed.with_entry_lock (fun () ->
         expect "Breadcrumb has the reference 32-point inset" (close (label.x-.h.x) (32.*.scale));
         expect "Breadcrumb and result title start at the same position" (close label.x title.x);
         expect "Breadcrumb preserves a two-point gap before result content"
-          (close (title.y-.(h.y+.h.h)) (2.*.scale));
+          (close ((rect main).y-.(h.y+.h.h)) (2.*.scale));
         expect (Printf.sprintf "Result height includes the negative breadcrumb margin (path=%d badge=%b query=%S row=%.1f header=%.1f title=%.1f)"
           (String.length path) (badge=Cmdk_state.Header_badge) query ((rect row).h/.scale) (h.h/.scale) (title.h/.scale))
           (close (rect row).h ((if badge=Cmdk_state.Header_badge then 48. else 46.)*.scale));
         let rects = W.Rects.create () in
-        List.iter (fun id -> Hashtbl.replace rects id (rect id)) (Lui_store.preorder store);
+        List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout id)) (Lui_store.preorder store);
         let ui = W.Ui.create () in W.Ui.set_scale ui scale;
         let x = (label.x+.min (8.*.scale) (label.w/.2.))/.scale
         and y = (label.y+.label.h/.2.)/.scale in
@@ -11413,3 +11414,105 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native search breadcrumb and fixed inset parity" (!failures=[]);
   print_endline "native search breadcrumb and fixed inset parity: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let services = Cmdk_host.services () in
+  let long = "A very long table title 汉字 café with many words to test single line clipping across the whole cell #Task" in
+  let initial : Cmdk_state.item =
+    {ikey="flow-fixture";idx=0;gid=G_nodes;ititle="Short title";info=None;header=None;
+     iicon=Some (Node_icon.tabler "point-filled");inline_icon=None;isc="";
+     ibadge=No_badge;act=Open_block "flow-owner";ihl=false;imouse=false;iq=""} in
+  List.iter (fun scale ->
+    let store=Lui_store.create () in
+    let backend={backend_profile=profile MacOS GenericHost;
+      apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+    let registry=Lui_extension.registry () in
+    Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+    let app=Lui_app.create_with_extensions backend registry initial (fun _ next -> next)
+      (fun ctx source _ ->
+        let state=Cmdk_state.make ~register:false ctx.Lui_ui.ui_scheduler services in
+        Cmdk_view.item_row services state source) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+      let layout=Lui_layout.create () in
+      let main ()=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "cp__cmdk-item-main-text")
+        (Lui_store.preorder store) in
+      let owner ()=List.find (fun id -> Lui_store.bool_prop store id "press-enabled") (Lui_store.preorder store) in
+      let original_owner=owner () in
+      List.iter (fun (inline_icon,ibadge,info) -> List.iter (fun width -> List.iter (fun (title,query,lines) ->
+        ignore (Lui_app.send app {initial with Cmdk_state.ititle=title;iq=query;inline_icon;ibadge;info});ignore (Lui_app.flush app);
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~text_flow:(Text_engine.text_flow engine)
+          ~measure:(fun id text offered _ -> Some (Text_engine.pad_size store id ~scale
+            (Text_engine.measure_text ~width:(Host_interaction.measure_width offered) engine id text))) layout store;
+        let r=Option.get (Lui_layout.rect layout (main ())) in
+        if abs_float (r.h-.float lines*.20.*.scale)>0.02 then failures:=
+          Printf.sprintf "Search flow width=%.0f scale=%.0f query=%S expected=%d actual=%.1f"
+            width scale query lines (r.h/.scale)::!failures;
+        (match Text_engine.flow_surface engine (main ()) r with
+         | None -> failures:="Search results must use a shared inline paragraph"::!failures
+         | Some surface ->
+           if Array.length surface.Text_engine.surface_layout.Host_platform.Text.lay_lines<>lines then
+             failures:="Search shaping and measured line counts disagree"::!failures;
+           if title=long && width=360. && not (String.ends_with ~suffix:"…" surface.surface_layout.lay_text) then
+             failures:="Long search results must paint their trailing ellipsis"::!failures);
+        let placed id=Option.get (Lui_layout.rect layout id) in
+        let painted_icons=ref [] in
+        let image id region =
+          let result=Host_icons.image_of ~hooks:icon_hooks store scale id region in
+          if result<>None then painted_icons:=id::!painted_icons;
+          result in
+        let hooks={icon_hooks with Lui_paint.layout=Lui_layout.layout_hook layout;
+          text_flow=Text_engine.text_flow engine;text_flow_ops=Text_engine.text_flow_ops engine;
+          text_ops=Text_engine.text_ops engine;image_of=(fun id -> image id (placed id));image_in=image} in
+        Lui_paint.paint hooks store scene ~width:(int_of_float (width*.scale)) ~height:(int_of_float (720.*.scale))
+          ~scale ~clear:(Lui_scene.color 255 255 255 255);
+        if scene.Lui_scene.glyphs=[] then failures:="Search paragraph lost its painted glyphs"::!failures;
+        (match inline_icon with
+         | Some value when value.Node_icon.icon_kind="tabler-icon" ->
+           if List.length (List.sort_uniq Int.compare !painted_icons)<2 then
+             failures:="Search paragraph must paint its inline icon as well as the leading chip"::!failures
+         | _ -> ());
+        if owner ()<>original_owner then failures:="Search result owner remounted during text update"::!failures)
+        ["Short title","",1;"Short\n \t title","",1;long,"",2;long,"very long",2;"Short title","title",1]) [360.;520.])
+        [None,Cmdk_state.No_badge,None;
+         Some (Node_icon.tabler "Star"),Cmdk_state.Text_badge,Some "Related";
+         Some {Node_icon.icon_kind="emoji";icon_id="smile";icon_color=None},Cmdk_state.No_badge,None])) [1.;2.];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native two-line search result flow" (!failures=[]);
+  print_endline "native two-line search result flow: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_width=Host.inner_width () and previous_height=Host.inner_height () in
+  let failures=ref [] in
+  Fun.protect ~finally:(fun () -> Host.set_window_size previous_width previous_height) (fun () ->
+    List.iter (fun scale -> List.iter (fun (width,expected) ->
+      Host.set_window_size width 720.;
+      let store=Lui_store.create () in
+      let backend={backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let services=Cmdk_host.services () in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app=Lui_app.create_with_extensions backend registry () (fun () () -> ())
+        (fun context _ _ -> Cmdk_view.modal_shell services
+          (Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler services)) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let dialog=List.find (fun id -> Lui_store.kind store id="dialog") (Lui_store.preorder store) in
+        let layout=Lui_layout.create () in
+        Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
+          ~measure:(fun _ text _ _ -> Some (float (String.length text)*.7.*.scale,20.*.scale)) layout store;
+        let actual=(Option.get (Lui_layout.rect layout dialog)).w/.scale in
+        if abs_float (actual-.expected)>0.01 then failures:=
+          Printf.sprintf "Search modal width=%.0f scale=%.0f expected=%.0f actual=%.1f" width scale expected actual::!failures))
+      [360.,326.;600.,542.;1280.,898.]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native responsive search panel border-box width" (!failures=[]);
+  print_endline "native responsive search panel border-box width: OK")

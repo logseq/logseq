@@ -2233,3 +2233,10 @@ body {
   }
 
 }
+
+/* The typed line-clamp property owns the block formatting contract. */
+[data-lui-line-clamp] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

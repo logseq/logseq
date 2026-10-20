@@ -430,7 +430,7 @@ let cmdk_item_main ~key children =
    color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
-    ~width:20 ~height:20 ~corner_radius:4
+    ~width:20 ~min_width:20 ~height:20 ~corner_radius:4
     ~background:
       "var(--lx-gray-05, var(--ls-tertiary-background-color, \
        hsl(var(--muted))))"
@@ -441,26 +441,18 @@ let cmdk_item_body ~key children =
     ~cross:`stretch children
 
 let cmdk_main_text ~key children =
-  with_props [ Prop.font_weight 500; Prop.overflow `hidden ]
-    (row ~key ~style_class:"cp__cmdk-item-main-text" ~cross:`center
-       ~gap:4 ~min_width:0
-       ~foreground:
-         "var(--lx-gray-12, var(--ls-primary-text-color, \
-          var(--lui-c-foreground)))"
-       children)
+  text ~key ~as_:`Span ~style_class:"cp__cmdk-item-main-text"
+    ~font_weight:500 ~line_clamp:2 ~overflow:"hidden" ~min_width:0
+    ~foreground:
+      "var(--lx-gray-12, var(--ls-primary-text-color, var(--lui-c-foreground)))"
+    children
 
-(* Inline info suffix — a gap-0 row (NOT a text/span: keyed children
-   under a text element render as block-level .lui-stack divs and wrap
-   to their own line). Small gray text like the deleted
-   .cp__cmdk-item-info rule. *)
 let cmdk_info_text ~key children =
-  with_props [ Prop.font_size "var(--lx-text-header)" ]
-    (row ~key ~style_class:"cp__cmdk-item-info" ~cross:`center ~gap:0
-       ~min_width:0
-       ~foreground:
-         "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          hsl(var(--muted-foreground))))"
-       children)
+  text ~key ~as_:`Span ~style_class:"cp__cmdk-item-info"
+    ~font_size:"var(--lx-text-header)" ~line_height:"16px"
+    ~foreground:
+      "var(--lx-gray-11, var(--ls-secondary-text-color, hsl(var(--muted-foreground))))"
+    children
 
 let cmdk_badge ~key ~value : t =
   text ~key ~as_:`Span

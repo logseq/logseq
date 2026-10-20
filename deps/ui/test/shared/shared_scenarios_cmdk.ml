@@ -409,26 +409,26 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
     (match by_class h "cmdk-item-icon" with
      | Some n ->
          int_prop_eq n "width" 20
+         && int_prop_eq n "min-width" 20
          && int_prop_eq n "height" 20
          && int_prop_eq n "corner-radius" 4
          && prop_contains n "background" "--lx-gray-05"
      | None -> false);
-  h.H.check "main text row is a medium-weight inline run"
+  h.H.check "main text has a medium-weight two-line paragraph contract"
     (match by_class h "cp__cmdk-item-main-text" with
      | Some n ->
-         n.M.kind = "row"
-         && int_prop_eq n "gap" 4
+         n.M.kind = "text"
+         && int_prop_eq n "line-clamp" 2
          && int_prop_eq n "font-weight" 500
          && str_prop_eq n "overflow" "hidden"
      | None -> false);
-  h.H.check "info suffix is an inline row in header type"
+  h.H.check "info suffix is inline text in header type"
     (match by_class h "cp__cmdk-item-info" with
      | Some n ->
-         (* a gap-0 row, not a span: keyed children under a text element
-            render as block-level .lui-stack divs and wrap *)
-         n.M.kind = "row"
-         && int_prop_eq n "gap" 0
+         n.M.kind = "text"
+         && str_prop_eq n "as" "span"
          && str_prop_eq n "font-size" "var(--lx-text-header)"
+         && str_prop_eq n "line-height" "16px"
          && prop_contains n "foreground" "--lx-gray-11"
      | None -> false);
   (* -- shortcut keycaps -- *)

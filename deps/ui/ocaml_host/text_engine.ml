@@ -39,12 +39,18 @@ type slot = {
 
 type flow_piece = { piece_node : int; piece_lo : int; piece_hi : int }
 type flow_projection = { flow_lo : int; flow_hi : int; content_lo : int; content_hi : int }
-type flow_range = { range_node : int; range_projection : flow_projection; range_visible : bool }
+type flow_range = {
+  range_node : int;
+  range_projection : flow_projection;
+  range_visible : bool;
+  range_object : (float * float * float) option;
+}
 type flow_body = {
   flow_spans : Lui_text.span list;
   flow_ranges : flow_range list;
   flow_range_table : (int, flow_projection) Hashtbl.t;
   flow_pieces : flow_piece array;
+  flow_objects : flow_range list;
 }
 
 type flow_surface = {
@@ -398,21 +404,35 @@ let emit_glyph t scene ~scale ~pen ~baseline ~font ~gid ~g_y ~fg =
     scene.glyphs <- gl :: scene.glyphs;
     true
 
+let is_flow_root store id =
+  Lui_store.string_prop store id "style-class" = Some "ed-line"
+  || num_prop store id "line-clamp" <> None
+
 let flow_body t id =
   let store = t.store () in
   let revision = Lui_store.layout_rev store in
   if revision <> t.flow_revision then begin
     t.flow_revision <- revision;
     Hashtbl.filter_map_inplace (fun node cached ->
-      if Lui_store.string_prop store node "style-class" = Some "ed-line" then Some cached else None)
+      if is_flow_root store node then Some cached else None)
       t.flow_bodies
   end;
-  if Lui_store.string_prop store id "style-class" <> Some "ed-line" then None
+  if not (is_flow_root store id) then None
   else match Hashtbl.find_opt t.flow_bodies id with
   | Some (previous,theme,body) when previous=revision && theme= !Theme_vars.generation -> body
   | previous ->
-    let buffer = Buffer.create 128 and spans = ref [] and ranges = ref [] and pieces = ref [] in
+    let buffer = Buffer.create 128 and spans = ref [] and ranges = ref [] and pieces = ref [] and objects = ref [] in
     let supported = ref true in
+    let add_text node text =
+      if num_prop store id "line-clamp"=None
+         || inherited_str store node "white-space"=Some "pre-wrap" then
+        Buffer.add_string buffer text
+      else String.iter (fun character ->
+        match character with
+        | ' ' | '\t' | '\n' | '\r' | '\012' ->
+          let length=Buffer.length buffer in
+          if length>0 && Buffer.nth buffer (length-1)<>' ' then Buffer.add_char buffer ' '
+        | character -> Buffer.add_char buffer character) text in
     let edge_keys = ["margin";"margin-horizontal";
       "margin-vertical";"margin-top";"margin-right";"margin-bottom";"margin-left";
       "width";"height";"gap"] in
@@ -421,6 +441,21 @@ let flow_body t id =
       let start = Buffer.length buffer in
       let padding=Lui_paint.text_placement_of store node in
       let font=font_of store node in
+      let metrics=Lui_text.metrics font in
+      let atomic =
+        if node=id || not visible then None else
+        match Lui_store.kind store node,num_prop store node "width",num_prop store node "height" with
+        | ("icon"|"image"|"row"),Some width,Some height when width>0. && height>0. ->
+          Some (width,height)
+        | "text",_,_ when Lui_store.string_prop store node "white-space"=Some "nowrap" ->
+          Option.map (fun text ->
+            let layout=Lui_text.Cache.layout (layout_cache t node) font text
+              ?line_height:(line_height_of store node) in
+            let border=Option.value (num_prop store node "border-width") ~default:0. in
+            layout.lay_width+.padding.tp_pad_left+.padding.tp_pad_right+.2.*.border,
+            layout.lay_height+.padding.tp_pad_top+.padding.tp_pad_bottom+.2.*.border)
+            (Lui_store.string_prop store node "text")
+        | _ -> None in
       let object_ width =
         if visible && node<>id && width>0. then begin
           let first=Buffer.length buffer in
@@ -428,6 +463,28 @@ let flow_body t id =
           spans:=((first,Buffer.length buffer),{Lui_text.default_style with sfont=Some font;
             sobject=Some {Lui_text.object_width=width;object_ascent=0.;object_descent=0.}})::!spans
         end in
+      match atomic with
+      | Some (width,height) ->
+        let ascent=max 0. (min height ((height+.metrics.ascent-.metrics.descent)/.2.)) in
+        let margin side=Option.value (num_prop store node ("margin-"^side))
+          ~default:(Option.value (num_prop store node "margin-horizontal")
+            ~default:(Option.value (num_prop store node "margin") ~default:0.)) in
+        let left=margin "left" and right=margin "right" in
+        if left>0. then begin object_ left;Buffer.add_string buffer "\xe2\x81\xa0" end;
+        let start=Buffer.length buffer in
+        Buffer.add_string buffer "\xef\xbf\xbc";
+        let stop=Buffer.length buffer in
+        spans:=((start,stop),{Lui_text.default_style with sfont=Some font;
+          sobject=Some {Lui_text.object_width=width;object_ascent=ascent;object_descent=height-.ascent}})::!spans;
+        pieces:={piece_node=node;piece_lo=start;piece_hi=stop}::!pieces;
+        let range descendant={range_node=descendant;range_projection={flow_lo=start;flow_hi=stop;
+          content_lo=start;content_hi=stop};range_visible=true;range_object=Some (width,height,ascent)} in
+        let rec record descendant=
+          ranges:=range descendant::!ranges;
+          List.iter record (Lui_store.child_ids store descendant) in
+        record node;objects:=range node::!objects;
+        if right>0. then begin Buffer.add_string buffer "\xe2\x81\xa0";object_ right end
+      | None ->
       (* Measured U+FFFC objects carry padding; U+2060 keeps each inset attached
          to its content at a wrap boundary. Neither contributes painted ink. *)
       if visible && node<>id && padding.tp_pad_left>0. then begin
@@ -443,7 +500,7 @@ let flow_body t id =
           | Some value -> List.mem "ed-pad" (String.split_on_char ' ' value) | None -> false in
         (match Lui_store.string_prop store node "text" with
          | Some text when text<>"" && not pad ->
-           Buffer.add_string buffer text;
+           add_text node text;
            let stop = Buffer.length buffer in
            spans := ((content_start,stop),{Lui_text.default_style with sfont=Some font;
              skern=Option.value (inherited_num store node "letter-spacing") ~default:0.}) :: !spans;
@@ -457,7 +514,7 @@ let flow_body t id =
       end;
       if node<>id then ranges := {range_node=node;range_projection={flow_lo=start;
         flow_hi=Buffer.length buffer;content_lo=content_start;content_hi=content_stop};
-        range_visible=visible} :: !ranges
+        range_visible=visible;range_object=None} :: !ranges
     in
     visit true id;
     let body = if not !supported then None else
@@ -468,7 +525,7 @@ let flow_body t id =
         range.range_projection) ranges;
       Some {flow_spans=List.rev_map (fun (range,style) -> {Lui_text.text;range;style}) !spans;
         flow_ranges=ranges;flow_range_table=range_table;
-        flow_pieces=Array.of_list (List.rev !pieces)} in
+        flow_pieces=Array.of_list (List.rev !pieces);flow_objects=List.rev !objects} in
     (match previous,body with
      | Some (_,_,Some old),Some body when old.flow_spans<>body.flow_spans ->
        Lui_text.Cache.clear (layout_cache t id)
@@ -481,7 +538,9 @@ let shaped_flow t id offered =
     let store=t.store () in
     let width=if Float.is_finite offered && offered>0. then offered/.t.scale () else 0. in
     let layout=Lui_text.Cache.layout_spans (layout_cache t id) ~width
-      ?line_height:(line_height_of store id) (font_of store id) body.flow_spans in
+      ?line_height:(line_height_of store id)
+      ?max_lines:(Option.map int_of_float (num_prop store id "line-clamp"))
+      (font_of store id) body.flow_spans in
     body,layout) (flow_body t id)
 
 let flow_span_rects layout first last =
@@ -498,8 +557,12 @@ let flow_node_rects t layout range =
   List.map (fun (rect:Lui_text.rect) ->
     let line=Option.get (Array.find_opt (fun (line:Lui_text.line_layout) ->
       abs_float (line.ll_top-.rect.ry)<0.001) layout.Lui_text.lay_lines) in
-    {rect with Lui_text.ry=line.ll_baseline-.metrics.ascent-.padding.tp_pad_top;
-      rh=metrics.ascent+.metrics.descent+.padding.tp_pad_top+.padding.tp_pad_bottom}) rects
+    match range.range_object with
+    | Some (width,height,ascent) ->
+      {Lui_text.rx=rect.rx;ry=line.ll_baseline-.ascent;rw=width;rh=height}
+    | None ->
+      {rect with Lui_text.ry=line.ll_baseline-.metrics.ascent-.padding.tp_pad_top;
+        rh=metrics.ascent+.metrics.descent+.padding.tp_pad_top+.padding.tp_pad_bottom}) rects
 
 let text_flow t id offered =
   Option.map (fun (body,layout) ->
@@ -578,7 +641,8 @@ let text_flow_ops t ctx id (rect:Lui_scene.rect) fg =
         else Some (Lui_paint.text_fg ctx store piece.piece_node) in
       find 0 (Array.length pieces-1) in
     let backgrounds=List.concat_map (fun range ->
-      if not range.range_visible || range.range_projection.flow_lo=range.range_projection.flow_hi then [] else
+      if not range.range_visible || range.range_object<>None
+         || range.range_projection.flow_lo=range.range_projection.flow_hi then [] else
       let state=Lui_paint.effective_state ctx.Lui_paint.hooks store range.range_node in
       let style=Lui_paint.resolve_style store range.range_node state in
       List.concat_map (fun (r:Lui_text.rect) ->
@@ -586,6 +650,20 @@ let text_flow_ops t ctx id (rect:Lui_scene.rect) fg =
           {Lui_scene.x=rect.x+.r.rx*.scale;y=rect.y+.r.ry*.scale;
            w=r.rw*.scale;h=r.rh*.scale} 1.)
         (flow_node_rects t layout range)) body.flow_ranges in
+    let visible_stop =
+      let original=Lui_text.span_text body.flow_spans in
+      if layout.lay_text=original then String.length original else max 0 (String.length layout.lay_text-3) in
+    let objects=List.concat_map (fun range ->
+      if range.range_projection.flow_lo>=visible_stop then [] else
+      List.concat_map (fun (r:Lui_text.rect) ->
+        let rect={Lui_scene.x=rect.x+.r.rx*.scale;y=rect.y+.r.ry*.scale;
+          w=r.rw*.scale;h=r.rh*.scale} in
+        let rec paint node =
+          let state=Lui_paint.effective_state ctx.Lui_paint.hooks store node in
+          let style=Lui_paint.resolve_style store node state in
+          let own,_=Lui_paint.paint_own ctx store node state (Lui_store.kind store node) rect style 1. in
+          own @ List.concat_map paint (Lui_store.child_ids store node) in
+        paint range.range_node) (flow_node_rects t layout range)) body.flow_objects in
     let first=List.length scene.glyphs in
     Array.iter (fun (line:Lui_text.line_layout) ->
       let baseline=Lui_text.baseline (rect.y+.line.ll_baseline*.scale) in
@@ -595,7 +673,7 @@ let text_flow_ops t ctx id (rect:Lui_scene.rect) fg =
             ~font:run.font ~gid:glyph.id ~g_y:glyph.y ~fg)) (piece_color glyph.cluster)) run.glyphs)
         line.ll_line.runs) layout.lay_lines;
     let last=List.length scene.glyphs in
-    if first=last then backgrounds else backgrounds @
+    if first=last then backgrounds @ objects else backgrounds @ objects @
       [Glyphs {gstart=first;gend=last;gpaint=Solid;gcolor=fg;gcolor2=fg;
         ggradient=(0.,0.,0.,0.);gwide2=0;gopacity=1.}]) (shaped_flow_in_rect t id rect)
 

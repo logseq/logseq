@@ -1523,12 +1523,12 @@ let run_views ~registry ~profile ~finish =
     check ("command palette preserves Unicode text and spacing: " ^ name)
       (runs = expected);
     ignore (Lui_app.dispose palette.S.app))
-    [ "date", "Oct 17th, 2026", "", [{js|Oct 17th, 2026|js}]
+    [ "date", "Oct 17th, 2026", "", ["Oct 17th, 2026"]
     ; "highlighted date", "Oct 17th, 2026", "17th",
-        [{js|Oct |js}; "17th"; {js|, 2026|js}]
+        ["Oct "; "17th"; ", 2026"]
     ; "Unicode", {js|中文 café 😀|js}, {js|café|js},
-        [{js|中文 |js}; {js|café|js}; {js| 😀|js}]
-    ; "existing spaces", {js|a b  c|js}, "", [{js|a b  c|js}]
+        [{js|中文 |js}; {js|café|js}; {js| 😀|js}]
+    ; "existing spaces", {js|a b  c|js}, "", [{js|a b  c|js}]
     ; "empty", "", "", [] ];
   List.iter (fun value ->
     List.iter (fun (name, view) ->

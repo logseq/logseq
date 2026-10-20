@@ -289,29 +289,10 @@ let display_spaces s =
       s;
     Buffer.contents b
 
-(* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
-   padding 0 border-radius 0; data-testid is the original (unmarked)
-   title. The runs live inside a gap-0 row, NOT inside a text/span
-   element: keyed children mounted under a text element render as
-   .lui-stack divs — block-level inside the span — which wraps every
-   segment to its own line. As row children they are flex items and
-   stay on one line like the deleted display:inline rules intended. *)
+(* Result content uses inline text; breadcrumb runs retain their single line. *)
 let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
     (title_of : S.item -> string) : t =
-  Ui_components.with_props
-    (if single_line then [Ui_components.Prop.overflow `hidden] else [])
-    (row ~key ~gap:0 ~cross:`center
-    ?min_width:(if single_line then Some 0 else None)
-    ~data_attrs:
-      (reactive
-         (fun it ->
-           let plain =
-             String.concat ""
-               (List.map snd
-                  (hl_segments ~query:it.S.iq ~text:(title_of it)))
-           in
-           [ ("data-testid", plain) ])
-         item_sig)
+  let content =
     [ keyed
         ~source:
           (reactive
@@ -324,16 +305,22 @@ let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
         ~cmp:Stdlib.compare
         ~mount:(fun seg ->
           reactive
-            (fun (_, hl, txt) ->
-              let txt = display_spaces txt in
-              if hl then
-                text ~key:"hl" ~as_:`Mark ~padding:0 ~corner_radius:0
-                  ?white_space:(if single_line then Some "nowrap" else None)
-                  ~value:txt []
-              else text ~key:"tx" ~as_:`Span ?white_space:(if single_line then Some "nowrap" else None)
-                  ~value:txt [])
+            (fun (_, hl, value) ->
+              let value = if single_line then display_spaces value else value in
+              text ~key:"run" ~as_:(if hl then `Mark else `Span)
+                ~padding:0 ~corner_radius:0
+                ?white_space:(if single_line then Some "nowrap" else None)
+                ~value [])
             seg)
-    ])
+    ] in
+  let attrs it =
+    ["data-testid", String.concat "" (List.map snd
+       (hl_segments ~query:it.S.iq ~text:(title_of it)))] in
+  if single_line then
+    Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+      (row ~key ~gap:0 ~cross:`center ~min_width:0
+         ~data_attrs:(reactive attrs item_sig) content)
+  else text ~key ~as_:`Span ~data_attrs:(reactive attrs item_sig) content
 
 let badge_el svs key =
   Ui_components.cmdk_badge ~key
@@ -463,7 +450,8 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                                ~equal:(fun (a : S.item) b -> a.inline_icon = b.inline_icon)
                                (fun it -> match it.S.inline_icon with
                                 | None -> box []
-                                | Some value -> svs.Cmdk_services.render_icon ~size:14 value)
+                                | Some value -> Ui_components.with_props [Ui_components.Prop.margin_right 4]
+                                    (svs.Cmdk_services.render_icon ~size:14 value))
                                item_sig)
                         ; hl_span "label" item_sig (fun it -> it.S.ititle)
                         ; if_
@@ -472,7 +460,8 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                                  (fun (it : S.item) ->
                                    it.S.ibadge = S.Text_badge)
                                  item_sig)
-                            (badge_el svs "tb")
+                            (Ui_components.with_props [Ui_components.Prop.margin_left 4]
+                               (badge_el svs "tb"))
                         ; if_
                             ~test:
                               (reactive
@@ -874,7 +863,7 @@ let handle_mousemove st (ev : Svs.move_ev) =
 (* The host owns modal placement, focus trapping, and dismissal. *)
 let modal_shell svs st =
   (* prod .ui__dialog-content measures 898 border-box at 1280 *)
-  let width viewport = Float.min 898. (viewport *. 0.9) in
+  let width viewport = Float.min 898. ((viewport *. 0.9) +. 2.) in
   Ui_components.dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
     ~on_dismiss:(fun _ -> S.close st)
     [ Ui_components.cmdk_modal ~key:"modal" [ palette svs st ] ]
