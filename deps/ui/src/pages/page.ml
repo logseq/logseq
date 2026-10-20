@@ -1680,7 +1680,7 @@ let region (ms : Model.t Signal.signal) : t =
                 ~owner:(Wire.String "$$$views") ]
       | Model.Ready, Model.All_graphs -> Graphs_view.view ms
       | Model.Ready, Model.Page "Recycle" -> Recycle.view ms
-      | Model.Ready, Model.Settings -> Settings_page.view m
+      | Model.Ready, Model.Settings -> Settings_page.view ms
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, Model.Bug_report -> Bug_report.view ()

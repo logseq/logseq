@@ -1,12 +1,10 @@
-(* Settings page/dialog area state — mirrors cljs components/settings.cljs
-   *active* tab atom + the repo :config subscription (logseq/config.edn),
-   plus localStorage-backed prefs. Storage keys use cljs storage.cljs
+(* Settings page/dialog area state and localStorage-backed preferences.
+   Graph configuration belongs to the reducer model. Storage keys use cljs storage.cljs
    `(name key)` semantics (namespace stripped). *)
 
 open Promise_ext
 type t =
   { tab : string
-  ; config : Wire.t
   ; journal_uuid : string option
   ; date_format : string
   ; tick : int
@@ -14,7 +12,6 @@ type t =
 
 let initial =
   { tab = "general"
-  ; config = Wire.Map []
   ; journal_uuid = None
   ; date_format = "MMM do, yyyy"
   ; tick = 0
@@ -27,7 +24,7 @@ end)
 
 let ensure ctx = mount ctx initial
 
-(* storage-backed toggles don't touch `config` — bump tick so the pane
+(* storage-backed toggles bump tick so the pane
    reactive re-renders. Toggles are reachable without the pane mounted (cmdk
    "ui/toggle-wide-mode"), where there is nothing to re-render *)
 let poke () =
@@ -89,26 +86,23 @@ let pull_journal repo =
 
 let load () =
   let r = repo () in
-  let cfg_p = Sdk_config.read_config r in
   let jour_p = pull_journal r in
   ignore
-    (let* cfg = cfg_p in
-    let* journal = jour_p in
+    (let* journal = jour_p in
     let uuid, fmt =
       match journal with
       | Some (u, f) ->
           (Some u, Option.value f ~default:"MMM do, yyyy")
       | None -> (None, "MMM do, yyyy")
     in
-    Runtime.signal_set (state ())
+    if repo ()=r then Runtime.signal_set (state ())
       { (value ()) with
-        config = cfg
-      ; journal_uuid = uuid
+        journal_uuid = uuid
       ; date_format = fmt
       };
     Js.Promise.resolve ())
 
-(* cljs settings-effect: body[data-settings-tab] + config refresh.
+(* cljs settings-effect: body[data-settings-tab] + journal format refresh.
    Uses Signal.set (no flush) — called during mount, the pending render
    picks up the fresh value. *)
 let activate () =
@@ -124,7 +118,7 @@ let deactivate () = Ui_services.doc_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
-let config_get key = Wire.get (value ()).config key
+let config_get key = Wire.get (Runtime.model ()).Model.graph_config key
 
 let config_bool key ~default =
   match config_get key with Some (Wire.Bool b) -> b | _ -> default
@@ -148,11 +142,10 @@ let map_dissoc key kvs =
 
 let set_config key v =
   let cfg' =
-    match (value ()).config with
+    match (Runtime.model ()).Model.graph_config with
     | Wire.Map kvs -> Wire.Map (map_assoc key v kvs)
-    | _ -> Wire.Map [ (Wire.Keyword key, v) ]
+    | _ -> invalid_arg "Graph configuration must be an EDN map"
   in
-  set (fun s -> { s with config = cfg' });
   ignore (Sdk_config.write_config (repo ()) cfg')
 
 let config_set_bool key b = set_config key (Wire.Bool b)

@@ -952,6 +952,33 @@ test('settings switches match the reference dimensions and persist clicks', () =
   assert.equal(evaluate(`document.querySelector('${selector}').checked`), !before);
 });
 
+test('Appearance reads saved graph preferences immediately after a reload', () => {
+  open();
+  const show = () => {
+    button('More');
+    browser('find', 'role', 'menuitem', 'click', '--name', 'Appearance', '--exact');
+  };
+  const selector = '#appearance_settings .it:nth-child(4) input[role=switch]';
+  const checked = () => evaluate(`document.querySelector('${selector}').checked`);
+  show();
+  const before = checked();
+  try {
+    if (checked()) browser('click', selector);
+    browser('wait', '--fn', `document.querySelector('${selector}').checked===false`);
+    browser('press', 'Escape');
+    browser('reload');
+    browser('wait', '--fn', "document.querySelector('#head') !== null");
+    show();
+    assert.equal(checked(), false, 'opening Appearance must not depend on opening Settings first');
+  } finally {
+    if (checked() !== before) {
+      browser('click', selector);
+      browser('wait', '--fn', `document.querySelector('${selector}').checked===${before}`);
+    }
+    browser('press', 'Escape');
+  }
+});
+
 test('Appearance switches share reference chrome across light and dark themes', () => {
   open();
   button('More');

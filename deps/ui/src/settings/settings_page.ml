@@ -1073,7 +1073,10 @@ let pane_of ~modal ctx tab =
   | "features" -> features_pane ctx
   | _ -> general_pane ~modal ctx
 
-let article ~modal ctx =
+let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
+  s == t && a.graph_config = b.graph_config
+
+let article ~modal ms ctx =
   Ui_components.with_props
     [Ui_components.Prop.overflow `auto;Ui_components.Prop.height_viewport 0.7]
     (column ~key:"settings-article" ~style_class:"settings-article"
@@ -1090,11 +1093,11 @@ let article ~modal ctx =
                     (S.signal ()))
                []
            ]
-       ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
-           (S.signal ())
+       ; reactive ~equal:same_config (fun (s : S.t) _ -> pane_of ~modal ctx s.tab)
+           (S.signal ()) ms
        ])
 
-let inner ~modal : t =
+let inner ~modal ms : t =
  fun ctx parent ->
   S.ensure ctx;
   S.activate ();
@@ -1149,17 +1152,17 @@ let inner ~modal : t =
                           nav_item ~key:("nav-" ^ string_of_int i) it)
                         (nav_items ())))
                  ]))))
-             ; article ~modal ctx
+             ; article ~modal ms ctx
              ])
       ]
   in
   node ctx parent
 
 (* page entry: #/settings *)
-let view (_m : Model.t) : t = inner ~modal:false
+let view ms : t = inner ~modal:false ms
 
 (* dialog body: .settings-modal wrapper like cljs *)
-let modal_body (_ms : Model.t Signal.signal) : t =
+let modal_body (ms : Model.t Signal.signal) : t =
   fun ctx parent ->
     let node =
       (* cljs general() calls (accent-color-row false) in the settings
@@ -1167,7 +1170,7 @@ let modal_body (_ms : Model.t Signal.signal) : t =
          popup (as-modal-picker grid, no shortcut chips) *)
       column ~key:"settings-modal" ~style_class:"settings-modal"
         ~corner_radius:12
-        [ inner ~modal:false ]
+        [ inner ~modal:false ms ]
     in
     node ctx parent
 
@@ -1183,7 +1186,7 @@ let appearance_rows ctx =
   ; accent_row ~modal:true
   ]
 
-let appearance_body () : t =
+let appearance_body ms : t =
  fun ctx parent ->
   S.ensure ctx;
   let node =
@@ -1202,11 +1205,11 @@ let appearance_body () : t =
               ~accessibility_identifier:"appearance_settings"
               ~style_class:"cp__settings-appearance-dialog-inner"
               ~padding:20
-              [ reactive ~equal:( == ) (fun (_ : S.t) ->
+              [ reactive ~equal:same_config (fun _ _ ->
                     (* cljs cp__settings-appearance-dialog-inner:
                        flex-col gap-4 between the .it rows *)
                     column ~key:"app-rows" ~gap:16 (appearance_rows ctx))
-                  (S.signal ()) ]
+                  (S.signal ()) ms ]
           ])
   in
   node ctx parent

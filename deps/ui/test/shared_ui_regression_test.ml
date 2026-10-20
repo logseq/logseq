@@ -129,7 +129,69 @@ let localization () =
     check "Timestamp choices resolve the initialized locale"
       (List.exists (fun (_,label) -> label="Translated Custom date") (I18n.timestamp_options ())))
 
+let settings_config ~registry ~profile =
+  let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
+  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
+    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun owner ->
+      Settings_state.st:=None;
+      let config checked = Wire.Map [Wire.kw "ui/show-brackets?",Wire.Bool checked;
+        Wire.kw "start-of-week",Wire.Int 2;Wire.kw "custom-fixture",Wire.String "retained"] in
+      let current=ref {Model.initial with repo=Some "settings-config-fixture";
+        graph_config=config false} and requests=ref [] in
+      Runtime.read_model:=(fun () -> !current);
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+        requests:=(name,args)::!requests;
+        Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      let session=S.mount ~registry ~profile ~initial:!current
+        ~reducer:(fun model action ->
+          let updated=Update.update model action in current:=updated;updated)
+        ~view:(fun _ ms _ -> match owner with
+          | "appearance" -> Settings_page.appearance_body ms
+          | "page" -> Settings_page.view ms
+          | _ -> Settings_page.modal_body ms) () in
+      Runtime.app_flush:=(fun () -> S.flush session);
+      if owner<>"appearance" then (Settings_state.set_tab "editor";S.flush session);
+      let switch () =
+        let rec descendant node =
+          if node.M.kind="switch" then Some node else
+            List.find_map descendant (M.children session.S.tree node.M.id) in
+        let rec containing node = match descendant node with
+          | Some control -> control
+          | None -> containing (Hashtbl.find session.S.tree.M.nodes (Option.get node.M.parent)) in
+        containing (List.find (fun node -> M.string_prop node "text"
+          =Some (I18n.t "settings.editor/show-brackets")) (nodes session)) in
+      check (owner ^ " reads persisted config before Settings has loaded")
+        (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
+      let publish repo cfg =
+        ignore (Lui_app.send session.S.app (Action.Graph_config_loaded (repo,cfg)));
+        S.flush session in
+      publish "settings-config-fixture" (config true);
+      check (owner ^ " follows a live graph configuration edit")
+        (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue true));
+      publish "settings-config-fixture" (config false);
+      check (owner ^ " follows a second live graph configuration edit")
+        (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
+      ignore (Lui_app.send session.S.app (Action.Boot_graph_ready ("second-settings-fixture",config false)));
+      S.flush session;
+      check (owner ^ " follows the newly opened graph configuration")
+        (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
+      S.toggle session (switch ()).M.id true;
+      check (owner ^ " preserves other graph preferences when toggled")
+        (List.exists (function
+          | "thread-api/transact",Wire.String repo::Wire.Array [file]::_ ->
+              repo="second-settings-fixture" &&
+              (match Wire.get file "file/content" with
+               | Some (Wire.String content) -> Edn.parse content=config true
+               | _ -> false)
+          | _ -> false) !requests);
+      ignore (Lui_app.dispose session.S.app)) ["appearance";"page";"dialog"])
+
 let run_views ~registry ~profile ~finish =
+  settings_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
   let previous_used = Ui_services.storage_get "ls-icons-used" in

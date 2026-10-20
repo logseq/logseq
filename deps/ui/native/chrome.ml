@@ -418,7 +418,7 @@ let overlays (ms : Model.t Signal.signal) =
                  b.route_page) (fun m -> Page_menu.dialog_view m) ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.appearance = b.appearance) (fun m ->
-          if m.Model.appearance then Settings_page.appearance_body ()
+          if m.Model.appearance then Settings_page.appearance_body ms
           else spacer ~key:"app-none" []) ms
     ]) ]))
 
