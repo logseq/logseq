@@ -158,8 +158,10 @@
 (def-thread-api :thread-api/get-page-by-name
   [repo page-name-or-uuid tags]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (some-> (ldb/get-page-by-name @conn page-name-or-uuid tags)
-            entity-util/entity->map)))
+    (when-let [page (ldb/get-page-by-name @conn page-name-or-uuid tags)]
+      (assoc (worker-plain/entity-forward-map @conn page {})
+             :block/alias-source-page-class?
+             (boolean (ldb/class? (ldb/get-alias-source-page @conn (:db/id page))))))))
 
 (def-thread-api :thread-api/get-tags-by-name
   [repo name]

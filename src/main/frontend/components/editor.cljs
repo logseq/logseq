@@ -216,6 +216,7 @@
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]
                        (if (and (entity/internal-page? page)
+                                (not (class-alias? page))
                                 (not (ldb/built-in? page)))
                          (cons {:block/title (:block/title page)
                                 :db/id (:db/id page)
@@ -226,7 +227,7 @@
                              (editor-handler/<get-matched-blocks q {:nlp-pages? true
                                                                     :built-in? true
                                                                     :page-only? false}))]
-      (set-exact-page! block)
+      (set-exact-page! (or block (when (class-alias? page) page)))
       (set-matched-pages! result))))
 
 (hsx/defc page-search-aux

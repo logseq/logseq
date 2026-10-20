@@ -1206,17 +1206,21 @@
 (deftest tag-search-does-not-convert-class-aliases
   (async done
     (let [matched-pages (atom nil)
-          original-<get-block db-async/<get-block
+          exact-page (atom nil)
+          original-<get-page-by-name db-async/<get-page-by-name
           original-<get-all-classes db-async/<get-all-classes
           original-<invoke-db-worker state/<invoke-db-worker
           previous-worker @state/*db-worker]
       (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
       (reset! state/*db-worker (fn [& _args] (p/resolved nil)))
       (create-tag-with-alias!)
-      (set! db-async/<get-block (fn [_repo _title _opts]
-                                  (let [test-db (conn/get-db test-helper/test-db)
-                                        alias (ldb/get-page test-db "Alias Only")]
-                                    (p/resolved (assoc alias :block/alias-source-page-class? true)))))
+      (set! db-async/<get-page-by-name
+            (fn [_repo title tags]
+              (let [test-db (conn/get-db test-helper/test-db)
+                    page (ldb/get-page-by-name test-db title tags)]
+                (p/resolved (when page
+                              (assoc (into {} page) :block/alias-source-page-class?
+                                     (boolean (ldb/class? (ldb/get-alias-source-page test-db (:db/id page))))))))))
       (set! db-async/<get-all-classes
             (fn [_repo _opts]
               (let [test-db (conn/get-db test-helper/test-db)
@@ -1225,18 +1229,21 @@
                                               [:db/id :block/uuid :block/title])
                                  :block/alias #{(select-keys alias [:db/id :block/uuid :block/title])})]
                 (p/resolved [class]))))
-      (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
+      (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) #(reset! exact-page %))
           (p/then
            (fn []
              (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
                  "The alias is still selectable from tag completion")
              (is (not-any? :convert-page-to-tag? @matched-pages)
-                 "A class alias must not show a redundant Convert action")))
+                 "A class alias must not show a redundant Convert action")
+             (is (every? :db/id (#'editor-component/matched-pages-with-new-page
+                                @matched-pages true "Alias Only" @exact-page))
+                 "A class alias must not offer a new tag")))
           (p/catch
            (fn [error]
              (is false (str error))))
           (p/finally (fn []
-                       (set! db-async/<get-block original-<get-block)
+                       (set! db-async/<get-page-by-name original-<get-page-by-name)
                        (set! db-async/<get-all-classes original-<get-all-classes)
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
 	                       (reset! state/*db-worker previous-worker)
