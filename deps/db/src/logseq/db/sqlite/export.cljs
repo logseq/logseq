@@ -1130,6 +1130,35 @@
 
 ;; Import fns
 ;; ==========
+(defn- import-page-index
+  [db page-name]
+  (reduce
+   (fn [index datom]
+     (let [page (d/entity db (:e datom))
+           parent (:db/id (:block/parent page))
+           tags (disj (set (map :db/ident (:block/tags page))) :logseq.class/Page)]
+       (if (and (entity-util/internal-page? page) (not (or (ldb/class? page) (ldb/property? page))))
+         (reduce (fn [result key]
+                   (update result key #(if % (min % (:db/id page)) (:db/id page))))
+                 index
+                 (for [tag (conj (if (seq tags) tags #{nil}) ::any-tag)
+                       title [nil (:block/title page)]]
+                   [parent tag title]))
+         index)))
+   {} (d/datoms db :avet :block/name page-name)))
+
+(defn- find-import-page
+  [db index title parent tags]
+  (let [parents (if parent
+                  [(or (:db/id (d/entity db parent)) parent)]
+                  [nil (:db/id (ldb/get-library-page db))])
+        tags (if (seq tags) (conj tags nil) #{::any-tag})
+        oldest (fn [exact-title]
+                 (when-let [ids (seq (keep #(get index %)
+                                          (for [p parents tag tags] [p tag exact-title])))]
+                   (apply min ids)))]
+    (d/entity db (or (oldest title) (oldest nil)))))
+
 (defn- existing-import-page
   [db {:keys [classes page-index]} {:block/keys [title parent] page-uuid :block/uuid
                                     :build/keys [tags journal]}]
@@ -1145,14 +1174,30 @@
                                                         #{:logseq.class/Tag}))
                                             tag))))
                                tags)
-              page-name (some-> title common-util/page-name-sanity-lc)
-              parent-id (when parent (or (:db/id (d/entity db parent)) parent))
-              page {:block/name page-name
-                    :block/parent {:db/id parent-id}
-                    :block/tags (map #(hash-map :db/ident %) tag-idents)}]
+              page-name (some-> title common-util/page-name-sanity-lc)]
           (when page-name
-            (some->> (ldb/find-page-name-conflict (page-index page-name) page)
-                     (d/entity db)))))))
+            (find-import-page db (page-index page-name) title parent tag-idents))))))
+
+(defn- reconcile-import-classes
+  [db {:keys [classes] :as export-map}]
+  (let [existing (into {}
+                       (keep (fn [[ident class]]
+                               (when-let [entity (or (when-let [uuid (:block/uuid class)]
+                                                      (d/entity db [:block/uuid uuid]))
+                                                    (d/entity db ident)
+                                                    (ldb/get-page-by-name db (or (:block/title class) (name ident))
+                                                                          #{:logseq.class/Tag}))]
+                                 [ident entity])))
+                       classes)
+        replacements (into {} (map (fn [[ident entity]] [ident (:db/ident entity)])) existing)
+        uuid-replacements (into {} (keep (fn [[ident entity]]
+                                          (when-let [uuid (:block/uuid (get classes ident))]
+                                            [uuid (:block/uuid entity)]))) existing)]
+    (-> (walk/postwalk-replace (merge replacements uuid-replacements) export-map)
+        (update :classes
+                #(merge % (into {} (map (fn [[_ entity]]
+                                         [(:db/ident entity) {:block/uuid (:block/uuid entity)}]))
+                                existing))))))
 
 (defn- add-uuid-to-page-if-exists
   [db {:keys [page-uuids import-options] :as context} m]
@@ -1189,13 +1234,15 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
-  (let [import-to-existing-page-uuids (atom {})
+  [db export-map property-conflicts]
+  (let [{:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map}
+        (reconcile-import-classes db export-map)
+        import-to-existing-page-uuids (atom {})
         import-page (partial add-uuid-to-page-if-exists db
                              {:classes classes
                               :page-uuids import-to-existing-page-uuids
                               :import-options import-options
-                              :page-index (memoize #(ldb/index-page-names db [%]))})
+                              :page-index (memoize #(import-page-index db %))})
         export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
@@ -1205,13 +1252,7 @@
                          (update m :page import-page))
                        pages-and-blocks))
           (seq classes)
-          (assoc :classes
-                 (->> classes
-                      (map (fn [[k v]]
-                             (if-let [ent (d/entity db k)]
-                               [k (assoc v :block/uuid (:block/uuid ent))]
-                               [k v])))
-                      (into {})))
+          (assoc :classes classes)
           (seq properties)
           (assoc :properties (update-existing-properties db property-conflicts properties))
           ;; Graph exports don't use :build/page so this speeds up build
