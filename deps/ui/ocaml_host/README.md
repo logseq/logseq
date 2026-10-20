@@ -142,9 +142,19 @@ application first so other Metal test processes do not compete for the
 same GPU. The default Metal suite includes the native modal composition;
 captured-scene replay remains available for diagnosing a specific graph.
 
-On the affected macOS installation, SDL2-compat reports incorrect mouse
-coordinates. The development bundle uses the installed SDL 2.32.6 library
-in `Contents/Frameworks/libSDL2-2.0.0.dylib`, with the executable's SDL
-install name set to `@executable_path/../Frameworks/libSDL2-2.0.0.dylib`.
-Preserve that dependency when replacing the executable and sign the
-bundle again before launching it.
+On macOS 26.4, the installed SDL2-compat 2.32.74 backed by SDL3 3.4.18
+reproduces stale coordinates for positioned automated pointer events.
+The same executable receives the intended coordinates with official SDL
+2.32.10. This comparison isolates an input-library difference; it does not
+establish that physical mouse input has the same defect.
+
+Package the tested SDL2 library in
+`Contents/Frameworks/libSDL2-2.0.0.dylib`. Inspect `otool -L` on the copied
+bundle executable, then use `install_name_tool -change` to replace its
+actual SDL dependency with
+`@executable_path/../Frameworks/libSDL2-2.0.0.dylib`. Sign the copied library
+and executable after this change. Repeat when replacing the executable:
+a fresh Dune binary links the switch's installed SDL dependency. Do not
+modify Homebrew's links or rely on a development-only `DYLD_LIBRARY_PATH`.
+Verify the running process loads the bundled library before native pointer
+acceptance; a README or header version alone does not prove this.

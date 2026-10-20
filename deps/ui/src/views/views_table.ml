@@ -339,14 +339,15 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
       in
       inner_cell
         [ row ~cross:`center ~grow:1.
-            [ link ~style_class:"page-ref" ~text:title
+            [ Ui_components.with_props
+                [Ui_components.Prop.white_space `nowrap;Ui_components.Prop.text_overflow `ellipsis]
+              (link ~style_class:"page-ref" ~text:title
                 ~data_attrs:
-                  ([ ("style", "white-space:nowrap;text-overflow:ellipsis")
-                   ; ("data-ref", String.lowercase_ascii page_name)
+                  ([ ("data-ref", String.lowercase_ascii page_name)
                    ; ("tabindex", "0"); ("draggable", "true") ]
                    @ if row_uuid <> "" then [ ("data-uuid", row_uuid) ]
                      else [])
-                [] ]
+                []) ]
         ]
   | _ ->
       (* cljs table-block-title: flex row of text + hover "Open" ghost
@@ -368,7 +369,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                [ (* inline host, not a lui row: flex items collapse the
                     trailing space in runs like "Clean Code #Book" —
                     cljs keeps one inline flow *)
-                 text (Render_inline.parse ~self:row_uuid title)
+                 text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center ~style_class:"ls-title-ghosts"
                    ~transition:"opacity 150ms"
                    [ ghost "arrow-right" (I.t "ui/open")

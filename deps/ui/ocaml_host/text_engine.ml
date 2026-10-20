@@ -391,7 +391,7 @@ let text_layout t id (r : Lui_scene.rect) s =
   (* Flowing text wraps at its padded width so a long line never spills
      into the node's inset; labeled controls keep a single line. *)
   let wrap_w =
-    if r.w <= 0. || Lui_store.string_prop store id "white-space" = Some "nowrap" then 0.
+    if r.w <= 0. || inherited_str store id "white-space" = Some "nowrap" then 0.
     else match Lui_store.kind store id with
     | "text" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
     | "popover" | "alert" ->
@@ -500,7 +500,7 @@ let measure_text ?(width = 0.) t id s =
   else
     let scale = t.scale () in
     let width =
-      if Lui_store.string_prop (t.store ()) id "white-space" = Some "nowrap" then 0.
+      if inherited_str (t.store ()) id "white-space" = Some "nowrap" then 0.
       else if Float.is_finite width && width > 0. then width /. scale else 0.
     in
     let store=t.store () in

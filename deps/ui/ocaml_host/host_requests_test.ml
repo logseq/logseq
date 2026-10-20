@@ -9658,3 +9658,100 @@ let () = Native_embed.with_entry_lock (fun () ->
     press "handbook-close";
     check "Native Handbook closes its mounted surface" (Lui_store.find_identifier store "handbook-panel"=None);
     print_endline "native Handbook mount, responsive geometry and rich content: OK"))
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  List.iter (fun scale ->
+    List.iter (fun width ->
+      List.iter (fun all_pages ->
+        List.iter (fun title ->
+          let host_cell = ref None in
+          let host () = Option.get !host_cell in
+          let engine = lazy (Text_engine.create
+            ~scene:(fun () -> Lui_host.scene (host ()))
+            ~scale:(fun () -> scale) ~store:(fun () -> Lui_host.store (host ()))) in
+          let hooks = {Lui_paint.default_hooks with
+            text_ops=(fun id rect color text ->
+              Text_engine.text_ops (Lazy.force engine) id rect color text)} in
+          let h = Lui_host.create ~hooks ~layout:(module Lui_layout)
+            ~measure:(fun id _ _ _ ->
+              Some (Text_engine.measure (Lui_host.store (host ())) id ~scale))
+            ~renderer:{Lui_host.name="table-title-line-test";render=(fun _ -> Bytes.empty)}
+            ~width:(int_of_float (width*.scale)) ~height:(int_of_float (200.*.scale)) ~scale () in
+          host_cell:=Some h;
+          let registry = Lui_extension.registry () in
+          Logseq_el.register_all registry;Logseq_codemirror.register registry;
+          let app = Lui_app.create_with_extensions
+            (Lui_host.backend h (profile MacOS GenericHost)) registry ()
+            (fun () () -> ()) (fun context _ _ ->
+              let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+                ~kind:(if all_pages then Views_state.KAllPages else Views_state.KTagPage "Task")
+                ~feature:"title-line-fixture" ~owner:Wire.Nil in
+              let blk = Wire.Map
+                ([Wire.Keyword "block/uuid",Wire.Uuid "title-line-fixture";
+                  Wire.Keyword "block/title",Wire.String title]
+                 @ if all_pages then [Wire.Keyword "block/name",Wire.String title] else []) in
+              Ui_components.with_props
+                [Ui_components.Prop.font_size "14px";Ui_components.Prop.line_height "20px"]
+              (Lui_elements.column ~width:(int_of_float width) ~height:200
+                [Views_table.title_cell inst ~row_uuid:"title-line-fixture" ~blk
+                  (Views_table.title_column ())])) in
+          Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+            ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+            let glyphs = (Lui_host.scene h).Lui_scene.glyphs in
+            let top = List.fold_left (fun v g -> min v g.Lui_scene.gy) infinity glyphs
+            and bottom = List.fold_left (fun v g -> max v (g.Lui_scene.gy+.g.gh)) neg_infinity glyphs in
+            if glyphs=[] || bottom-.top > 24.*.scale then
+              failures:=Printf.sprintf
+                "Table title wraps inside its fixed row: all_pages=%b width=%.0f scale=%.0f ink_height=%.1f title=%s"
+                all_pages width scale ((bottom-.top)/.scale) title :: !failures;
+            let store = Lui_host.store h in
+            List.iter (fun id ->
+              if Lui_store.kind store id="text" then
+                Option.iter (fun value ->
+                  let natural,_ = Text_engine.measure_text (Lazy.force engine) id value in
+                  let rect = Option.get (Lui_host.layout_rect h id) in
+                  if rect.w+.1. < natural then
+                    failures:=Printf.sprintf
+                      "Table inline fragment shrinks below its ink width: width=%.0f scale=%.0f allocated=%.1f natural=%.1f text=%s"
+                      width scale (rect.w/.scale) (natural/.scale) value :: !failures)
+                  (Lui_store.string_prop store id "text")) (Lui_store.preorder store)))
+          [String.concat " " (List.init 12 (fun _ -> "long title"));
+           "A **bold title** followed by enough plain words to overflow its table column";
+           "A Unicode title 汉字 café 👋 with enough words to overflow its table column"])
+        [false;true]) [180.;320.]) [1.;2.];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native table titles stay on one line" (!failures=[]);
+  print_endline "native single-line table titles: OK")
+
+let () =
+  List.iter (fun scale ->
+    let store = Lui_store.create () in
+    List.iter (Lui_store.apply_op store)
+      [CreateNode (990001,Text);CreateNode (990002,Text);
+       SetProp (990001,FontSize,StringValue "14px");
+       SetProp (990001,LineHeight,StringValue "20px");
+       InsertChild (990001,990002,0)];
+    let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:64 ~h:64)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:64 ~h:64) in
+    let engine = Text_engine.create ~scene:(fun () -> scene)
+      ~scale:(fun () -> scale) ~store:(fun () -> store) in
+    let text = "A long caption that needs several lines in this narrow rectangle" in
+    List.iter (fun (parent,child,nowrap) ->
+      List.iter (fun (id,value) ->
+        Lui_store.apply_op store (match value with
+          | None -> RemoveProp (id,WhiteSpace)
+          | Some value -> SetProp (id,WhiteSpace,StringValue value)))
+        [990001,parent;990002,child];
+      let _,measured = Text_engine.measure_text ~width:(80.*.scale) engine 990002 text in
+      let painted,_,_ = Text_engine.text_layout engine 990002
+        (Lui_scene.rect 0. 0. (80.*.scale) (20.*.scale)) text in
+      check "Native caption measure must inherit and override white-space"
+        ((measured <= 20.*.scale+.0.01)=nowrap);
+      check "Native caption paint must inherit and override white-space"
+        ((painted.Host_platform.Text.lay_height <= 20.01)=nowrap))
+      [None,None,false;Some "nowrap",None,true;
+       Some "nowrap",Some "normal",false;Some "normal",Some "nowrap",true;
+       Some "nowrap",None,true;None,None,false]) [1.;2.];
+  print_endline "native inherited white-space measure and paint: OK"
