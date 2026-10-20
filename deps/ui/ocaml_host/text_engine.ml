@@ -38,11 +38,12 @@ type slot = {
 }
 
 type flow_piece = { piece_node : int; piece_lo : int; piece_hi : int }
-type flow_range = { range_node : int; range_lo : int; range_hi : int; range_visible : bool }
+type flow_projection = { flow_lo : int; flow_hi : int; content_lo : int; content_hi : int }
+type flow_range = { range_node : int; range_projection : flow_projection; range_visible : bool }
 type flow_body = {
   flow_spans : Lui_text.span list;
   flow_ranges : flow_range list;
-  flow_range_table : (int, int * int) Hashtbl.t;
+  flow_range_table : (int, flow_projection) Hashtbl.t;
   flow_pieces : flow_piece array;
 }
 
@@ -50,7 +51,7 @@ type flow_surface = {
   surface_layout : Lui_text.layout;
   surface_x : float;
   surface_y : float;
-  surface_ranges : (int, int * int) Hashtbl.t;
+  surface_ranges : (int, flow_projection) Hashtbl.t;
 }
 
 type t = {
@@ -412,13 +413,27 @@ let flow_body t id =
   | previous ->
     let buffer = Buffer.create 128 and spans = ref [] and ranges = ref [] and pieces = ref [] in
     let supported = ref true in
-    let edge_keys = ["padding";"padding-horizontal";"padding-vertical";"padding-top";
-      "padding-right";"padding-bottom";"padding-left";"margin";"margin-horizontal";
+    let edge_keys = ["margin";"margin-horizontal";
       "margin-vertical";"margin-top";"margin-right";"margin-bottom";"margin-left";
       "width";"height";"gap"] in
     let rec visit visible node =
       let visible = visible && Lui_store.string_prop store node "display" <> Some "none" in
       let start = Buffer.length buffer in
+      let padding=Lui_paint.text_placement_of store node in
+      let font=font_of store node in
+      let object_ width =
+        if visible && node<>id && width>0. then begin
+          let first=Buffer.length buffer in
+          Buffer.add_string buffer "\xef\xbf\xbc";
+          spans:=((first,Buffer.length buffer),{Lui_text.default_style with sfont=Some font;
+            sobject=Some {Lui_text.object_width=width;object_ascent=0.;object_descent=0.}})::!spans
+        end in
+      (* Measured U+FFFC objects carry padding; U+2060 keeps each inset attached
+         to its content at a wrap boundary. Neither contributes painted ink. *)
+      if visible && node<>id && padding.tp_pad_left>0. then begin
+        object_ padding.tp_pad_left;Buffer.add_string buffer "\xe2\x81\xa0"
+      end;
+      let content_start=Buffer.length buffer in
       if visible then begin
         if node<>id && (not (List.mem (Lui_store.kind store node)
           ["text";"row";"column";"stack";"box";"link";"paragraph";"kbd"])
@@ -430,14 +445,19 @@ let flow_body t id =
          | Some text when text<>"" && not pad ->
            Buffer.add_string buffer text;
            let stop = Buffer.length buffer in
-           spans := (start,stop,font_of store node,
-             Option.value (inherited_num store node "letter-spacing") ~default:0.) :: !spans;
-           pieces := {piece_node=node;piece_lo=start;piece_hi=stop} :: !pieces
+           spans := ((content_start,stop),{Lui_text.default_style with sfont=Some font;
+             skern=Option.value (inherited_num store node "letter-spacing") ~default:0.}) :: !spans;
+           pieces := {piece_node=node;piece_lo=content_start;piece_hi=stop} :: !pieces
          | _ -> ())
       end;
       List.iter (visit visible) (Lui_store.child_ids store node);
-      if node<>id then ranges := {range_node=node;range_lo=start;
-        range_hi=Buffer.length buffer;range_visible=visible} :: !ranges
+      let content_stop=Buffer.length buffer in
+      if visible && node<>id && padding.tp_pad_right>0. then begin
+        Buffer.add_string buffer "\xe2\x81\xa0";object_ padding.tp_pad_right
+      end;
+      if node<>id then ranges := {range_node=node;range_projection={flow_lo=start;
+        flow_hi=Buffer.length buffer;content_lo=content_start;content_hi=content_stop};
+        range_visible=visible} :: !ranges
     in
     visit true id;
     let body = if not !supported then None else
@@ -445,10 +465,8 @@ let flow_body t id =
       let ranges=List.rev !ranges in
       let range_table=Hashtbl.create (List.length ranges) in
       List.iter (fun range -> Hashtbl.add range_table range.range_node
-        (range.range_lo,range.range_hi)) ranges;
-      Some {flow_spans=List.rev_map (fun (start,stop,font,kern) ->
-          {Lui_text.text;range=(start,stop);
-           style={Lui_text.default_style with sfont=Some font;skern=kern}}) !spans;
+        range.range_projection) ranges;
+      Some {flow_spans=List.rev_map (fun (range,style) -> {Lui_text.text;range;style}) !spans;
         flow_ranges=ranges;flow_range_table=range_table;
         flow_pieces=Array.of_list (List.rev !pieces)} in
     (match previous,body with
@@ -470,12 +488,25 @@ let flow_span_rects layout first last =
   if first=last then [Lui_text.caret_rect layout first]
   else Lui_text.selection_rects layout (first,last)
 
+let flow_node_rects t layout range =
+  let projection=range.range_projection in
+  let rects=flow_span_rects layout projection.flow_lo projection.flow_hi in
+  if projection.flow_lo=projection.flow_hi then rects else
+  let store=t.store () in
+  let metrics=Lui_text.metrics (font_of store range.range_node) in
+  let padding=Lui_paint.text_placement_of store range.range_node in
+  List.map (fun (rect:Lui_text.rect) ->
+    let line=Option.get (Array.find_opt (fun (line:Lui_text.line_layout) ->
+      abs_float (line.ll_top-.rect.ry)<0.001) layout.Lui_text.lay_lines) in
+    {rect with Lui_text.ry=line.ll_baseline-.metrics.ascent-.padding.tp_pad_top;
+      rh=metrics.ascent+.metrics.descent+.padding.tp_pad_top+.padding.tp_pad_bottom}) rects
+
 let text_flow t id offered =
   Option.map (fun (body,layout) ->
     let scale=t.scale () in
     let rects=List.filter_map (fun range ->
       if not range.range_visible then None else
-      let rects=flow_span_rects layout range.range_lo range.range_hi in
+      let rects=flow_node_rects t layout range in
       let x,y,right,bottom=List.fold_left (fun (x,y,right,bottom) (r:Lui_text.rect) ->
         min x r.rx,min y r.ry,max right (r.rx+.r.rw),max bottom (r.ry+.r.rh))
         (infinity,infinity,neg_infinity,neg_infinity) rects in
@@ -539,28 +570,29 @@ let text_flow_ops t ctx id (rect:Lui_scene.rect) fg =
     let piece_color cluster =
       let pieces=body.flow_pieces in
       let rec find lo hi =
-        if lo>hi then fg else
+        if lo>hi then None else
         let mid=lo+(hi-lo)/2 in
         let piece=pieces.(mid) in
         if cluster<piece.piece_lo then find lo (mid-1)
         else if cluster>=piece.piece_hi then find (mid+1) hi
-        else Lui_paint.text_fg ctx store piece.piece_node in
+        else Some (Lui_paint.text_fg ctx store piece.piece_node) in
       find 0 (Array.length pieces-1) in
     let backgrounds=List.concat_map (fun range ->
-      if not range.range_visible || range.range_lo=range.range_hi then [] else
+      if not range.range_visible || range.range_projection.flow_lo=range.range_projection.flow_hi then [] else
       let state=Lui_paint.effective_state ctx.Lui_paint.hooks store range.range_node in
       let style=Lui_paint.resolve_style store range.range_node state in
       List.concat_map (fun (r:Lui_text.rect) ->
         Lui_paint.box_ops ctx store range.range_node style
           {Lui_scene.x=rect.x+.r.rx*.scale;y=rect.y+.r.ry*.scale;
            w=r.rw*.scale;h=r.rh*.scale} 1.)
-        (flow_span_rects layout range.range_lo range.range_hi)) body.flow_ranges in
+        (flow_node_rects t layout range)) body.flow_ranges in
     let first=List.length scene.glyphs in
     Array.iter (fun (line:Lui_text.line_layout) ->
       let baseline=Lui_text.baseline (rect.y+.line.ll_baseline*.scale) in
-      Array.iter (fun (run:Lui_text.run) -> Array.iter (fun (glyph:Lui_text.glyph) ->
-        ignore (emit_glyph t scene ~scale ~pen:(rect.x+.glyph.x*.scale) ~baseline
-          ~font:run.font ~gid:glyph.id ~g_y:glyph.y ~fg:(piece_color glyph.cluster))) run.glyphs)
+      Array.iter (fun (run:Lui_text.run) -> if not run.rinline then
+        Array.iter (fun (glyph:Lui_text.glyph) ->
+          Option.iter (fun fg -> ignore (emit_glyph t scene ~scale ~pen:(rect.x+.glyph.x*.scale) ~baseline
+            ~font:run.font ~gid:glyph.id ~g_y:glyph.y ~fg)) (piece_color glyph.cluster)) run.glyphs)
         line.ll_line.runs) layout.lay_lines;
     let last=List.length scene.glyphs in
     if first=last then backgrounds else backgrounds @
@@ -593,7 +625,7 @@ let text_ops t id r fg s =
          | Ta_end -> x0 +. Float.max 0. (w' -. l.width *. scale)
        in
        Array.iter
-         (fun (run : Lui_text.run) ->
+         (fun (run : Lui_text.run) -> if not run.rinline then
             Array.iter
               (fun (g : Lui_text.glyph) ->
                  ignore

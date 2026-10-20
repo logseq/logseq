@@ -10226,7 +10226,10 @@ let () = Native_embed.with_entry_lock (fun () ->
         (Ui_parts.int_prop Lui_protocol.WidthValue ~value:(reactive Fun.id (Signal.value width_state))
         (Lui_elements.column
           [Edit_view.view ~model:(Signal.value model_state) ~frame:(state Edit_input.empty_frame)
-            ~block_id:"rich-editor-flow" ~on_input:(fun _ -> ()) ~cls:""]))) in
+            ~block_id:"rich-editor-flow" ~on_input:(fun event ->
+              Signal.set model_state (Edit_input.handle ~route:Edit_input.no_route
+                ~conduit:Edit_input.no_conduit (Signal.sample (Signal.value model_state)) event))
+            ~cls:""]))) in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
       ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
       let store=Lui_host.store h in
@@ -10359,7 +10362,105 @@ let () = Native_embed.with_entry_lock (fun () ->
       let x,y,_=Host_requests.caret_rect env context 17 in
       expect "An inline widget in another logical line must not change a shaped paragraph's caret"
         (abs_float ((x+.context.ox-.root_rect.x)/.scale-.expected.rx)<1.
-         && abs_float ((y+.context.oy-.root_rect.y)/.scale-.expected.ry)<1.)))
+         && abs_float ((y+.context.oy-.root_rect.y)/.scale-.expected.ry)<1.);
+      List.iter (fun prefix ->
+        let source=prefix ^ " with enough words to overflow the entire table column 汉字 café 👋" in
+        let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
+          ~anchor:(String.length source) ~focus:(String.length source) in
+        Signal.set (Option.get !model_cell) model;
+        Signal.set (Option.get !width_cell) (int_of_float width);
+        ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+        let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+        let _,first_y,_=Host_requests.caret_rect env context 0 in
+        let _,tail_y,_=Host_requests.caret_rect env context (String.length prefix+1) in
+        expect (Printf.sprintf "Inline box padding must preserve continuous first-line text: %S width=%.0f scale=%.0f"
+          prefix width scale) (abs_float (tail_y-.first_y)<1.*.scale);
+        if width=338. then
+          expect "The 338-point inline code/highlight fixture must retain the Web two-line height"
+            (abs_float (Host_requests.scroll_height env context/.scale-.48.)<1.);
+        let group=context.groups.(0) in
+        let surface=Option.get (env.text_flow group.group_node) in
+        let word=if prefix="A `code`" then "code" else "marked" in
+        let index=Option.get (Array.find_index (fun node ->
+          Lui_store.string_prop store node "text"=Some word) context.nodes) in
+        let first,last=context.runs.(index) in
+        let projection=Hashtbl.find surface.surface_ranges context.nodes.(index) in
+        expect "Inline padding must belong to the source span without adding source characters"
+          (projection.flow_lo<projection.content_lo
+           && projection.content_hi<projection.flow_hi
+           && Host_requests.source_offset context group surface ~bias:`Hit projection.flow_lo=first
+           && Host_requests.source_offset context group surface ~bias:`Hit (projection.content_hi+3)=last);
+        let expected_padding=if word="code" then 5. else 4. in
+        let left=Host_platform.Text.caret_rect surface.surface_layout projection.flow_lo
+        and content=Host_platform.Text.caret_rect surface.surface_layout projection.content_lo in
+        expect "Inline code/highlight must retain exact leading padding in the shared paragraph"
+          (abs_float (content.rx-.left.rx-.expected_padding)<0.01);
+        let pointer=Host_requests.editor_pointer () in
+        let editor=Option.get (Lui_store.parent store context.sink) in
+        let dispatch input path =
+          match Host_requests.handle_editor_pointer env pointer ~path input with
+          | None -> false
+          | Some actions ->
+            List.iter (function Lui_window.Dispatch event -> ignore (Lui_app.dispatch_event app event)
+              | Lui_window.Focus_changed _ -> ()
+              | _ -> failwith "Unexpected rich-editor pointer action") actions;
+            ignore (Lui_app.flush app);ignore (Lui_host.repaint h);true in
+        let px=(surface.surface_x+.left.rx*.scale+.1.)/.scale
+        and py=(surface.surface_y+.(left.ry+.12.)*.scale)/.scale in
+        expect "A real primary-button event in inline padding must enter the rich-editor input route"
+          (dispatch (Lui_window.Input.Button_down (px,py,Left,1,Lui_window.Input.mods_none))
+            [context.nodes.(index);editor]);
+        expect "A primary-button event must move the model caret from EOF to the inline source start"
+          ((Signal.sample (Signal.value (Option.get !model_cell))).Edit_model.caret=first);
+        ignore (dispatch (Lui_window.Input.Button_up (px,py,Left,Lui_window.Input.mods_none)) []);
+        Signal.set (Option.get !model_cell) model;
+        ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+        let root_rect=rect group.group_node in
+        let valid=Host_platform.Text.graphemes source in
+        Array.iter (fun (line:Host_platform.Text.line_layout) ->
+          for x=0 to int_of_float width do
+            let px=int_of_float (root_rect.x+.float x*.scale-.context.ox)
+            and py=int_of_float (root_rect.y+.(line.ll_top+.12.)*.scale-.context.oy) in
+            let offset=Host_requests.offset_at env context px py in
+            expect "Every inline-box pointer hit must map to a complete source grapheme"
+              (Array.mem offset valid)
+          done) surface.surface_layout.lay_lines;
+        let model=Edit_model.select model ~anchor:(first+1) ~focus:(first+1) in
+        Signal.set (Option.get !model_cell) model;
+        ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+        let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+        expect "Revealing inline delimiters must preserve paragraph composition"
+          (Option.is_some (env.text_flow context.groups.(0).group_node));
+        let x,y,height=Host_requests.caret_rect env context (first+1) in
+        expect "A caret inside revealed inline markup must round-trip through the painted paragraph"
+          (Host_requests.offset_at env context (int_of_float (Float.round x))
+            (int_of_float (Float.round (y+.height/.2.)))=first+1);
+        let point off =
+          let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+          let x,y,height=Host_requests.caret_rect env context off in
+          (x+.context.ox)/.scale,(y+.context.oy+.height/.2.)/.scale in
+        let px,py=point (first+1) in
+        expect "Native double-click must reach the rich-editor word selection event"
+          (dispatch (Lui_window.Input.Button_down (px,py,Left,2,Lui_window.Input.mods_none)) [editor]);
+        let selected=Signal.sample (Signal.value (Option.get !model_cell)) in
+        expect "Native double-click must select exactly the code/highlight word"
+          (selected.Edit_model.anchor=Some first && selected.caret=last);
+        ignore (dispatch (Lui_window.Input.Button_up (px,py,Left,Lui_window.Input.mods_none)) []);
+        ignore (dispatch (Lui_window.Input.Button_down (px,py,Left,1,Lui_window.Input.mods_none)) [editor]);
+        let ex,ey=point (String.length source) in
+        expect "Rich-editor drag selection must remain captured outside its original glyph"
+          (dispatch (Lui_window.Input.Move (ex+.40.,ey)) []);
+        let selected=Signal.sample (Signal.value (Option.get !model_cell)) in
+        expect "Native drag must extend from the pressed source position to exact Unicode EOF"
+          (selected.Edit_model.anchor=Some (first+1) && selected.caret=String.length source);
+        expect "A rich-editor release must end pointer capture"
+          (dispatch (Lui_window.Input.Button_up (ex,ey,Left,Lui_window.Input.mods_none)) []
+           && not (dispatch (Lui_window.Input.Move (px,py)) []));
+        expect "Secondary buttons and overlaid controls must not collapse rich-editor selection"
+          (not (dispatch (Lui_window.Input.Button_down (px,py,Right,1,Lui_window.Input.mods_none)) [editor])
+           && not (dispatch (Lui_window.Input.Button_down (px,py,Left,1,Lui_window.Input.mods_none)) [])
+           && (Signal.sample (Signal.value (Option.get !model_cell)))=selected))
+        ["A `code`";"A ==marked=="]))
       [180.;338.;600.]) [1.;2.];
   List.iter prerr_endline (List.rev !failures);
   check "Native rich editor fragments flow and conceal delimiters" (!failures=[]);

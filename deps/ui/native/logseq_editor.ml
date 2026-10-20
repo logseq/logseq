@@ -132,6 +132,8 @@ let schema =
         ; Lui_extension.event_field "extend" Lui_extension.BoolScalar
             false
         ]
+    ; Lui_extension.event "dblclick"
+        [ Lui_extension.event_field "offset" Lui_extension.IntScalar true ]
         (* hosts carry document-level events (keydown feeding popups and
            global chords) through the focused node as dom-event — the
            sink's on_event fans them out to Platform.emit_event *)

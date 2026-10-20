@@ -958,8 +958,24 @@ let () =
     ~store ~rects ~epoch:!hit_epoch in
   let component_input = ref false in
   let on_component_input () = component_input := true in
+  let editor_pointer = Host_requests.editor_pointer () in
   let handle_input input =
-    match input with
+    let editor_actions=match input with
+      | Input.Move _ when Option.is_none editor_pointer.drag -> None
+      | Input.Move _ | Input.Button_down _ | Input.Button_up _ ->
+        (match !Host_requests.env with
+         | None -> None
+         | Some env ->
+           let path=match input with
+             | Input.Button_down (x,y,Input.Left,_,_) ->
+               hit_path ~spatial:(spatial_index ()) store rects
+                 ~x:(x*. !scale_cell) ~y:(y*. !scale_cell)
+             | _ -> [] in
+           Host_requests.handle_editor_pointer env editor_pointer ~path input)
+      | _ -> None in
+    match editor_actions,input with
+    | Some actions,_ -> component_input := true;actions
+    | None,input -> match input with
     | Input.Key_down _ when Keyboard_capture.active () -> []
     | Input.Text_input _ when Keyboard_capture.active () ->
         component_input := true; []
@@ -1692,6 +1708,9 @@ let () =
         dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
         metrics.event_count <- metrics.event_count + 1;
         let input = Native_window.input_of_event input_state e in
+        (if Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ)=`Window_event
+            && Sdl.Event.get e Sdl.Event.window_event_id=Sdl.Event.window_event_focus_lost
+         then Host_requests.reset_editor_pointer editor_pointer);
         (match input with
          | Some (Input.Key_down _) ->
            Host_metrics.note_key metrics

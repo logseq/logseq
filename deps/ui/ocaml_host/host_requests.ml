@@ -345,7 +345,8 @@ let paragraph_bounds e (group,surface) =
 
 let display_offset ctx surface index off =
   let first,last=ctx.runs.(index) in
-  let a,b=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
+  let range=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
+  let a,b=range.content_lo,range.content_hi in
   if off<=first then a else if off>=last then b
   else if ctx.kinds.(index)="a" then a else min b (a+off-first)
 
@@ -355,16 +356,17 @@ let source_offset ctx group surface ~bias offset =
   let result=ref None in
   Array.iter (fun index ->
     let first,last=ctx.runs.(index) in
-    let a,b=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
-    if a<=offset && offset<=b then begin
+    let range=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
+    let a,b=range.content_lo,range.content_hi in
+    if range.flow_lo<=offset && offset<=range.flow_hi then begin
       let candidate=if offset<=a then first else if offset>=b then last
         else if ctx.kinds.(index)="a" then first+1 else min last (first+offset-a) in
-      let candidate=if a=b && bias=`After then last else candidate in
+      let candidate=if range.flow_lo=range.flow_hi && bias=`After then last else candidate in
       match !result,bias with
       | None,_ -> result:=Some candidate
       | Some previous,`Before -> result:=Some (min previous candidate)
       | Some previous,`After -> result:=Some (max previous candidate)
-      | Some _,`Hit when offset<b -> result:=Some candidate
+      | Some _,`Hit when offset<range.flow_hi -> result:=Some candidate
       | Some _,`Hit -> ()
     end) group.group_indices;
   match !result with
@@ -711,6 +713,51 @@ let editor_caret_ops ~color =
 
 let ensure_ed_focus () =
   match !env with Some e -> ensure_ed_focus_ e | None -> ()
+
+type editor_pointer = { mutable drag : (string * int) option }
+let editor_pointer () = {drag=None}
+let reset_editor_pointer state = state.drag <- None
+
+let handle_editor_pointer e state ~path input =
+  let context bid=Option.map (fun ctx -> bid,ctx) (ed_ctx e bid) in
+  let offset ctx x y =
+    offset_at e ctx (int_of_float (Float.round (x*.e.scale ()-.ctx.ox)))
+      (int_of_float (Float.round (y*.e.scale ()-.ctx.oy))) in
+  let event ctx name fields=Dispatch (ExtensionEvent
+    (ctx.sink,"logseq-editor",name,fields)) in
+  let pointer ctx off extend=event ctx "pointer" (String_map.empty
+    |> String_map.add "offset" (IntValue off)
+    |> String_map.add "extend" (BoolValue extend)) in
+  match input with
+  | Input.Button_down (x,y,Left,clicks,mods) ->
+    reset_editor_pointer state;
+    Option.bind (Option.bind (editor_sink_bid e.store) context) (fun (bid,ctx) ->
+      let editor=Option.get (Lui_store.parent e.store ctx.sink) in
+      (* Use the clipped hit ancestry, so a menu above the editor owns its
+         own click even when its rectangle overlaps the text surface. *)
+      if not (List.mem editor path) then None else
+      let off=offset ctx x y in
+      state.drag <- Some (bid,off);
+      let focused=Ui.focused e.ui=ctx.sink in
+      Ui.set_focused e.ui e.store ctx.sink;
+      editor_focus_bid := Some bid;
+      let action=if clicks>=2 then event ctx "dblclick" (String_map.singleton "offset" (IntValue off))
+        else pointer ctx off mods.shift in
+      Some ((if focused then [] else [Focus_changed ctx.sink]) @ [action]))
+  | Input.Move (x,y) ->
+    Option.bind state.drag (fun (bid,previous) ->
+      match context bid with
+      | None -> reset_editor_pointer state;None
+      | Some (_,ctx) ->
+        let off=offset ctx x y in
+        state.drag <- Some (bid,off);
+        Some (if off=previous then [] else [pointer ctx off true]))
+  | Input.Button_up (_,_,Left,_) ->
+    let captured=Option.is_some state.drag in
+    reset_editor_pointer state;
+    if captured then Some [] else None
+  | Input.Button_down _ -> reset_editor_pointer state;None
+  | _ -> None
 
 let flush_pending_focus () =
   match !env with
