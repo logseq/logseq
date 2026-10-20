@@ -10615,3 +10615,151 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native rich editor fragments flow and conceal delimiters" (!failures=[]);
   print_endline "native rich editor fragment flow: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  let map fields = Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let choice = map ["db/id",Wire.Int 202;"block/title",Wire.String "High"] in
+  let property = map ["db/ident",Wire.Keyword "logseq.property/priority";
+    "block/title",Wire.String "Priority";"logseq.property/type",Wire.Keyword "default";
+    "property/closed-values",Wire.List [choice]] in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+    Js.Promise.resolve (match name with
+      | "thread-api/pull" -> map ["block/tags",Wire.List []]
+      | _ -> failwith ("Unexpected empty-property fixture request: "^name)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "empty-property-fixture"});
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun scale ->
+      List.iter (fun (table,value,shown,dashed) ->
+        let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+          ~text:{measure=(fun _ text -> float_of_int (String.length text)*.7.*.scale,20.*.scale);
+            text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+            caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+              {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+               c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+          ~renderer:{Lui_host.name="empty-property-test";render=(fun _ -> Bytes.empty)}
+          ~width:(int_of_float (800.*.scale)) ~height:(int_of_float (600.*.scale)) () in
+        Lui_host.set_reduced_motion (A.host surface) true;
+        let app = Lui_app.create (A.backend surface (profile MacOS GenericHost)) ()
+          (fun () () -> ()) (fun context _ _ ->
+            let cell = if table then
+              let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+                ~kind:(Views_state.KTagPage "tag") ~feature:"empty-property" ~owner:Wire.Nil in
+              let column : Views_state.column = {c_id="logseq.property/priority";
+                c_name="Priority";c_type="default";c_prop=Some property;
+                c_disable_hide=false;c_many=false} in
+              Views_table.cell_el inst ~row_uuid:"empty-property-owner"
+                ~blk:(map ["db/id",Wire.Int 100;"logseq.property/priority",value]) column
+            else Properties_value.view ~hover:None
+              {owner_key="empty-property-panel";block_uuid="empty-property-owner";
+               block_id=Some 100;refresh=(fun () -> ());is_page=false;class_schema=false}
+              (map ["property",property;"property-id",Wire.Keyword "logseq.property/priority";
+                "value",value]) in
+            Lui_elements.column ~width:180 [cell]) in
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+          ignore (Lui_app.start app);
+          let store = A.store surface in
+          let refresh () = ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+          let apply actions = List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;refresh () in
+          refresh ();
+          let ids () = Lui_store.preorder store in
+          let trigger = List.find (fun id -> Lui_store.kind store id="button"
+            && Lui_store.string_prop store id "style-class"=Some "pv-closed-value") (ids ()) in
+          let text = List.filter_map (fun id ->
+            if Lui_store.kind store id="text" then Lui_store.string_prop store id "text" else None) (ids ()) in
+          expect "A missing closed value must not display its accessibility placeholder"
+            (String.concat "" text=shown);
+          expect "Panel and explicit-placeholder values must retain their dashed affordance"
+            (List.exists (fun id -> Lui_store.string_prop store id "name"=Some "app:line-dashed"
+              || Lui_store.string_prop store id "icon"=Some "app:line-dashed") (ids ())=dashed);
+          expect "A blank closed-value trigger must keep an accessible name"
+            (Lui_store.string_prop store trigger "accessibility-label"=Some (if shown="" then I18n.t "ui/empty" else shown));
+          let r = W.Rects.get (A.rects surface) trigger in
+          expect "A blank closed-value trigger must fill its value column and keep a 24-point hit height"
+            (r.w>=(if table then 163. else 179.)*.scale && abs_float (r.h-.24.*.scale)<0.1);
+          let x,y = (r.x+.r.w/.2.)/.scale,(r.y+.r.h/.2.)/.scale in
+          apply (A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+          apply (A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)));
+          let popups () = List.filter (fun id -> Lui_store.kind store id="popover") (ids ()) in
+          expect "Clicking an empty property must open its chooser" (List.length (popups ())=1);
+          expect "An empty property chooser must focus its search field"
+            (Lui_store.kind store (W.Ui.focused (A.ui surface))="text-field");
+          apply (A.handle surface (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)));
+          expect "Escape must close the empty property chooser" (popups ()=[]);
+          expect "Escape must return focus to the empty property trigger"
+            (W.Ui.focused (A.ui surface)=trigger)))
+        [true,Wire.Nil,"",false;false,Wire.Nil,"",true;
+         true,Wire.Keyword "logseq.property/empty-placeholder","",true;
+         true,map ["db/ident",Wire.Keyword "logseq.property/empty-placeholder";
+           "block/title",Wire.String "Empty"],"",true;
+         true,choice,"High",false]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native empty property presentation and focus" (!failures=[]);
+  print_endline "native empty property presentation and focus: OK")
+
+let () =
+  let module U = Lui_window.Ui in
+  let module I = Lui_window.Input in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_accent = !Theme_vars.accent and previous_mode = !Theme_vars.mode in
+  Fun.protect ~finally:(fun () -> Theme_vars.set_accent previous_accent;
+    Theme_vars.set_dark (previous_mode=Lui_theme.Dark)) (fun () ->
+    List.iter (fun (mode,dark) ->
+      let snapshot = Ui_theme.snapshot mode in
+      Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+        ["mode",`String (if dark then "dark" else "light");
+         "vars",`Assoc (List.map (fun (key,value) -> key,`String value) snapshot.vars)]));
+      Theme_vars.set_dark dark;
+      List.iter (fun accent ->
+        if accent<>"" then begin
+          Theme_vars.set_accent accent;
+          let label = (if dark then "dark/" else "light/")^accent in
+          let foreground = Theme_vars.color_of "var(--ls-primary-text-color)"
+          and selection = Theme_vars.color_of "var(--ls-selection-background-color)" in
+          expect ("Input foreground must resolve for "^label) (Option.is_some foreground);
+          expect ("Input selection must resolve for "^label) (Option.is_some selection);
+          if accent="none" then begin
+            expect ("None input foreground must inherit canonical foreground: "^label)
+              (foreground=Theme_vars.color_of "hsl(var(--foreground))");
+            expect ("None selection must use the reference primary/20 color: "^label)
+              (selection=Theme_vars.color_of "hsl(var(--primary) / 0.2)")
+          end;
+          let store = Lui_store.create () in
+          List.iter (Lui_store.apply_op store)
+            [CreateNode (1,Root);CreateNode (2,TextField);InsertChild (1,2,0);
+             SetProp (2,TextValue,StringValue "A中😀B");
+             SetProp (2,FontSize,StringValue "14px");SetProp (2,LineHeight,StringValue "20px")];
+          let ui = U.create () in
+          let scene = Lui_scene.create
+            ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
+            ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512) in
+          Lui_scene.reset scene ~width:400 ~height:200 ~scale:1.
+            ~clear:(Lui_scene.color 0 0 0 0);
+          let engine = Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> 1.)
+            ~store:(fun () -> store) in
+          Text_engine.bind_input engine ui;
+          U.set_focused ui store 2;
+          let region = Lui_scene.rect 10. 10. 200. 32. in
+          let rects = Lui_window.Rects.create () in
+          Hashtbl.replace rects 2 region;
+          ignore (U.handle ui store rects (I.Key_down (I.Home,I.mods_none,false)));
+          ignore (U.handle ui store rects (I.Key_down (I.Arrow_right,{I.mods_none with shift=true},false)));
+          let painted = try
+            let ops = Text_engine.control_text_ops engine ~ui ~color_of:Theme_vars.color_of
+              2 region (Option.get (Theme_vars.color_of "foreground")) "A中😀B" in
+            List.exists (function Lui_scene.Fill fill -> Some fill.fcolor=selection | _ -> false) ops
+            with Invalid_argument _ -> false in
+          expect ("Focused input selection must paint without missing-color exceptions: "^label) painted
+        end) Ui_theme_css.accents) [Ui_theme.Light,false;Ui_theme.Dark,true]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native input selection across theme accents" (!failures=[]);
+  print_endline "native input selection across theme accents: OK"

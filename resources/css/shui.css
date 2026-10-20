@@ -62,10 +62,8 @@ html {
 
   &[data-color=none] {
     --ls-block-bullet-color: var(--rx-gray-08);
-
-    ::selection {
-      @apply bg-primary/20;
-    }
+    --ls-primary-text-color: hsl(var(--foreground));
+    --ls-selection-background-color: hsl(var(--primary) / 0.2);
 
     .cp__cmdk {
       --lx-gray-07: var(--rx-gray-07);

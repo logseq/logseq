@@ -1053,7 +1053,7 @@ let extends_view ctx row : t =
      ])
     context parent
 
-let closed_value_view ~positioned ctx row : t =
+let closed_value_view ~positioned ~table_view ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
@@ -1063,13 +1063,17 @@ let closed_value_view ~positioned ctx row : t =
     Signal.state sched None
   in
   let close () = Runtime.signal_set open_ false in
-  let display =
-    let txt = D.value_display value in
-    if txt = "logseq.property/empty-placeholder" then "" else txt
+  let display = if D.value_empty_p value then "" else D.value_display value in
+  let icon_id =
+    match closed_value_icon_id value with
+    | Some _ as icon -> icon
+    | None when D.value_empty_p value && not table_view ->
+        Some (Option.value (closed_value_icon_id (D.row_prop row)) ~default:"line-dashed")
+    | None -> None
   in
-  let icon_id = closed_value_icon_id value in
   let label = if display = "" then I18n.t "ui/empty" else display in
-  let show_text = not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
+  let show_text = display <> "" &&
+    not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
   (column ~gap:0 ~grow:1.0
      [ Ui_components.with_props
          [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
@@ -1111,7 +1115,7 @@ let closed_value_view ~positioned ctx row : t =
                      Runtime.signal_set items_st (Some items)))))
          [ Lui_elements.row ~gap:4 ~cross:`center
              ((match icon_id with None -> [] | Some id -> [ Icons.icon id ])
-              @ if show_text then [ text ~value:label [] ] else []) ])
+              @ if show_text then [ text ~value:display [] ] else []) ])
      ; if_ ~test:(Signal.value open_)
          (closed_value_popup ~on_dismiss:(fun _ -> close ())
             (reactive
@@ -1179,7 +1183,7 @@ let node_view ctx row : t =
    value column. [hover] (when the row supplies one) reflects pointer
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
-let rec view ?(positioned = false) ~(hover : bool Signal.state option)
+let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
@@ -1197,7 +1201,7 @@ let rec view ?(positioned = false) ~(hover : bool Signal.state option)
     in
     display (D.row_effective_value row')
   else if ident = "logseq.property/icon" then icon_view ctx row'
-  else if D.row_closed_values row' <> [] then closed_value_view ~positioned ctx row'
+  else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
   else
     match ty with
     | "checkbox" -> checkbox_view ctx row'

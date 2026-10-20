@@ -506,7 +506,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; is_page = is_page_row blk
                  ; class_schema = false }
                in
-               inner_cell [ Properties_value.view ~hover:None pctx row ]
+               inner_cell [ Properties_value.view ~table_view:true ~hover:None pctx row ]
            | None -> prop_cell ~blk c)) ]))
 
 (* ---------- header ---------- *)
