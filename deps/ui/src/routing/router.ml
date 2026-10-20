@@ -108,18 +108,6 @@ let jump_to_anchor anchor =
 
 let fetch_blocks (p : Model.page) =
   let* blocks = Outliner_ops.fetch_page_blocks (repo ()) p in
-  (* cljs page-membership :class: children tagged with the class
-                itself are excluded from the block tree — they render in
-                the class-objects table instead *)
-  let blocks =
-    match p.Model.page_db_id with
-    | Some id when p.Model.page_is_tag ->
-        List.filter
-          (fun (b : Model.block) ->
-            not (List.mem id b.Model.block_tag_ids))
-          blocks
-    | _ -> blocks
-  in
   Js.Promise.resolve
     { p with
       Model.page_blocks = Model.merge_blocks p.Model.page_blocks blocks

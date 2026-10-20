@@ -150,6 +150,16 @@ type page =
        fold arrow + data-db-collapsable *)
   }
 
+(* Class objects render in the table, not among the page's ordinary
+   direct-child notes. Nested note children keep their own membership. *)
+let page_outliner_blocks (page : page) blocks =
+  match page.page_is_tag, page.page_db_id with
+  | true, Some id ->
+      let member (b : block) = List.mem id b.block_tag_ids in
+      if List.exists member blocks then List.filter (fun b -> not (member b)) blocks
+      else blocks
+  | _ -> blocks
+
 type phase =
   | Booting
   | Ready

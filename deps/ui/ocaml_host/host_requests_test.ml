@@ -10763,3 +10763,121 @@ let () =
   List.iter prerr_endline (List.rev !failures);
   check "Native input selection across theme accents" (!failures=[]);
   print_endline "native input selection across theme accents: OK"
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A = Lui_window.Assembly in
+  let module W = Lui_window in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let map fields = Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let block ?(tags=[]) ?(children=[]) uuid title = map
+    ["block/uuid",Wire.Uuid uuid;"block/title",Wire.String title;
+     "block/tags",Wire.Set (List.map (fun id -> Wire.Int id) tags);
+     "block/children",Wire.Array children] in
+  let nested = block ~tags:[7] "nested-member" "Nested note child" in
+  let member = block ~tags:[7] "class-member" "Table-only object" in
+  let note = block ~children:[nested] "class-note" "Ordinary class note" in
+  let other = block ~tags:[8] "other-tag" "Unrelated tag note" in
+  let raw = Wire.Array [note;member;other] in
+  let class_wire = map ["db/id",Wire.Int 7;"block/uuid",Wire.Uuid "class-page";
+    "block/title",Wire.String "Fixture class"] in
+  let page = {(Option.get (Decode.page_of_summary class_wire)) with Model.page_is_tag=true} in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush
+  and previous_page = !Subs_state.current_page and previous_route = !Subs_state.current_route in
+  let result promise =
+    if promise.Js.Promise.state=Js.Promise.Pending then Host.drain ();
+    match promise.Js.Promise.state with
+    | Js.Promise.Resolved value -> value
+    | Js.Promise.Rejected error -> raise error
+    | Js.Promise.Pending -> failwith "Class membership fixture did not settle" in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+    Js.Promise.resolve (match name with
+      | "thread-api/get-page-blocks-tree" -> raw
+      | "thread-api/get-blocks" -> Wire.Array (List.map (fun entity -> map ["block",entity])
+          [class_wire;map ["db/id",Wire.Int 8;"block/title",Wire.String "Other tag"]])
+      | "thread-api/get-case-page" -> class_wire
+      | "thread-api/get-render-snapshots" -> map []
+      | _ -> failwith ("Unexpected class-membership request: "^name)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;
+    Runtime.read_model:=previous_model;Runtime.app_send:=previous_send;
+    Runtime.app_flush:=previous_flush;Subs_state.current_page:=previous_page;
+    Subs_state.current_route:=previous_route;Page_delta.reset ()) (fun () ->
+    let surface = A.create ~layout:(module Lui_layout) ~scale_cell:(ref 1.)
+      ~text:{measure=(fun _ text -> float_of_int (String.length text)*.7.,20.);
+        text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+        caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+          {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+           c_rect=(fun _ -> 0.,0.,20.)})}
+      ~renderer:{Lui_host.name="class-membership-test";render=(fun _ -> Bytes.empty)}
+      ~width:800 ~height:600 () in
+    Lui_host.set_reduced_motion (A.host surface) true;
+    let registry = Lui_extension.registry () in
+    Logseq_el.register_all registry;
+    Logseq_codemirror.register registry;Logseq_editor.register registry;
+    let app = Lui_app.create_with_extensions (A.backend surface (profile MacOS GenericHost)) registry
+      {Model.initial with repo=Some "class-fixture";route=Model.Page "class-page";
+        route_page=Some page} Update.apply
+      (fun _ model _ -> Page.blocks_area ~scope:"main" ~library:false ~puuid:"class-page" model) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      Runtime.read_model:=(fun () -> Lui_app.model app);
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Runtime.app_send:=(fun action ->
+        let changed=Lui_app.send app action in ignore (Lui_app.flush app);changed);
+      Subs_state.current_route:=Some (Model.Page "class-page");
+      ignore (Lui_app.start app);
+      let titles blocks = List.map (fun b -> b.Model.block_title) blocks in
+      let visible = ["Ordinary class note";"Unrelated tag note"] in
+      let loaded = result (Router.fetch_blocks page) in
+      expect "Initial class loading must retain only ordinary root notes" (titles loaded.page_blocks=visible);
+      Runtime.send (Action.Page_loaded loaded);
+      ignore (result (Outliner_ops.refresh_page ()));
+      let refreshed = Option.get (Lui_app.model app).Model.route_page in
+      expect "A full class refresh must not reveal objects already shown in its table"
+        (titles refreshed.page_blocks=visible);
+      expect "Class membership only filters direct children, not nested note children"
+        (match refreshed.page_blocks with b::_ -> titles b.Model.block_children=["Nested note child"] | [] -> false);
+      ignore (A.store_changed surface);ignore (A.repaint surface);
+      let store=A.store surface in
+      expect "The actual class outliner must not mount its table-only object"
+        (not (List.exists (fun id -> Lui_store.string_prop store id "accessibility-identifier"=
+          Some "block-content-class-member") (Lui_store.preorder store)));
+      let sidebar = result (Sidebar_state.fetch_blocks page) in
+      expect "Sidebar class pages must use the same direct-child membership"
+        (titles sidebar.page_blocks=visible);
+      let normal = result (Outliner_ops.fetch_page_blocks "class-fixture" {page with page_is_tag=false}) in
+      expect "Normal page loading must preserve identically tagged children"
+        (titles normal=["Ordinary class note";"Table-only object";"Unrelated tag note"]);
+      let h : Page_delta.helpers = {resolve=Ui_task.resolve;fill_embeds=Ui_task.resolve;
+        merge_collapsed=(fun _ _ -> ());refresh_page_fields=Ui_task.resolve} in
+      let apply page rev rows upsert =
+        Page_delta.reset ();
+        let delta = map ["rev",Wire.Int rev;
+          "blocks",Wire.Map (List.map (fun (uuid,row) -> Wire.Uuid uuid,row) rows);
+          "deleted",Wire.Array [];
+          "children",Wire.Map [Wire.Uuid "class-page",map ["base-rev",Wire.Int 0;
+            "remove",Wire.Array [];"upsert",Wire.Array (List.map (fun (uuid,order) ->
+              Wire.Array [Wire.Uuid uuid;Wire.String order]) upsert)]]] in
+        match result (Subs_state.promise_of_task (Page_delta.apply_to_page ~strict:false h page delta)) with
+        | Page_delta.Applied p ->
+            expect "A projected class delta must retain its own-commit identity" (Page_delta.is_own_commit p);p
+        | _ -> failwith "Class membership delta did not apply" in
+      let added = apply loaded 1 ["class-member",member;
+        "new-note",block "new-note" "New ordinary note"] ["class-member","z1";"new-note","z2"] in
+      expect "Membership upserts must not duplicate class objects in the outliner"
+        (titles added.page_blocks=visible @ ["New ordinary note"]);
+      let tagged = apply loaded 2 ["class-note",block ~tags:[7] "class-note" "Ordinary class note"] [] in
+      expect "Tagging an ordinary root with its page class must remove it from the outliner"
+        (titles tagged.page_blocks=["Unrelated tag note"]);
+      let untagged = apply loaded 3 ["class-member",block "class-member" "Restored ordinary note"]
+        ["class-member","z1"] in
+      expect "An untagged object restored by membership must reappear as an ordinary note"
+        (titles untagged.page_blocks=visible @ ["Restored ordinary note"]);
+      let unchanged = apply loaded 4 ["class-note",block "class-note" "Updated class note"] [] in
+      expect "Membership projection must preserve an unrelated root's record identity"
+        (List.find (fun b -> b.Model.block_uuid=Some "other-tag") unchanged.page_blocks
+         == List.find (fun b -> b.Model.block_uuid=Some "other-tag") loaded.page_blocks)));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native class membership across loading and refresh" (!failures=[]);
+  print_endline "native class membership across loading and refresh: OK")

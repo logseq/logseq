@@ -610,6 +610,9 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
                 h.refresh_page_fields page'
             | _ -> Ui_task.resolve page'
           in
+          let visible = Model.page_outliner_blocks page' page'.Model.page_blocks in
+          let page' = if visible == page'.Model.page_blocks then page'
+            else {page' with Model.page_blocks=renumber_tree visible} in
           if epoch <> !materialization_epoch then Ui_task.resolve Unchanged
           else begin
             let add_c, rem_c = collapsed_sets p in

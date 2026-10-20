@@ -707,7 +707,8 @@ let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
          (Option.value p.Model.page_uuid ~default:p.Model.page_title))
       Wire.Nil
   in
-  (blocks_of_tree_wire ~plain repo p) v
+  let* blocks = blocks_of_tree_wire ~plain repo p v in
+  Js.Promise.resolve (Model.page_outliner_blocks p blocks)
 
 (* block-zoom breadcrumb chain: ancestor titles must be refetched on
    refresh too — a renamed parent shows stale text otherwise *)
