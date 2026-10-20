@@ -160,6 +160,40 @@ test('Table titles retain rich editing, cell anchoring and focus after submissio
   }
 });
 
+test('Rapid table title replacement persists through immediate Enter and reload', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.page-tabs .ls-view-head') !== null");
+  if (!evaluate("document.querySelector('.table-block-title') !== null")) {
+    button('New node');
+    browser('wait', '--fn', "document.querySelector('.table-block-title') !== null");
+  }
+  if (evaluate(`document.querySelector('button[aria-label="Close"]') !== null`)) button('Toggle right sidebar');
+  const row = evaluate("document.querySelector('.table-block-title').closest('.ls-block').id");
+  const uuid = row.replace(/^ls-block-/, '');
+  const selector = `[id="${row}"] .table-block-title`;
+  const original = evaluate(`(async () => (await logseq.api.get_block(${JSON.stringify(uuid)})).content)()`);
+  const replace = text => {
+    browser('click', selector);
+    browser('wait', '--fn', "document.activeElement === document.querySelector('.ls-table-block .ed-input')");
+    browser('press', 'Meta+a');
+    browser('keyboard', 'type', text);
+    browser('press', 'Enter');
+    browser('wait', '--fn', "document.querySelector('.ls-table-block .ed-input') === null");
+  };
+  try {
+    for (const text of ['Rapid submit', 'Rapid café 中文 👋 ' + 'x'.repeat(200)]) {
+      replace(text);
+      browser('wait', '--fn', `document.querySelector(${JSON.stringify(selector)})?.textContent === ${JSON.stringify(text)}`);
+      browser('reload');
+      browser('wait', '--fn', `document.querySelector(${JSON.stringify(selector)})?.textContent === ${JSON.stringify(text)}`);
+    }
+  } finally {
+    replace(original);
+    browser('wait', '--fn', `(async () => (await logseq.api.get_block(${JSON.stringify(uuid)})).content === ${JSON.stringify(original)})()`);
+  }
+});
+
 test('Pages tag filters keep live multi-selection and restore reference titles', () => {
   open();
   browser('find','text','Pages','click','--exact');

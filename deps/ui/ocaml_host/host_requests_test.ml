@@ -10045,6 +10045,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     Runtime.hooks.refresh_property_areas<-previous_properties;
     Editor_actions.cancel_pending_focus ()) (fun () ->
     List.iter (fun scale -> List.iter (fun (exit,changed,type_during_save) ->
+      let rapid=exit="rapid" in
       let expect message condition=expect
         (Printf.sprintf "%s changed=%b typing=%b: %s" exit changed type_during_save message) condition in
       Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
@@ -10126,13 +10127,18 @@ let () = Native_embed.with_entry_lock (fun () ->
               e.buffer=title && e.model.caret=String.length title | None -> false);
           let emit name fields=ignore (Lui_app.dispatch_event app
             (ExtensionEvent (Option.get (sink ()),Editor_sink.identifier,name,fields)));
-            ignore (Lui_app.flush app) in
+            if not rapid then ignore (Lui_app.flush app) in
           let key ?(shift=false) ?(meta=false) key=emit "key" (String_map.empty
             |> String_map.add "key" (StringValue key)
             |> String_map.add "shift" (BoolValue shift)
             |> String_map.add "meta" (BoolValue meta)) in
           let insert text=emit "insert" (String_map.singleton "text" (StringValue text)) in
-          if changed then begin
+          let submitted_title=if rapid then "Rapid café 中文 😀" ^ String.make 200 'x'
+            else title ^ "\nMore text" in
+          if rapid then begin
+            key ~meta:true "a";insert "Rapid ";insert "café 中文 😀";
+            for _=1 to 200 do insert "x" done
+          end else if changed then begin
             key ~shift:true "Enter";insert "More text";
             expect "Shift+Enter in a table title must insert a rich-text newline"
               (match Editor_state.editing () with Some e -> e.buffer=title ^ "\nMore text" | None -> false)
@@ -10140,7 +10146,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           if exit="outside" then begin
             let popup=List.find (fun id -> Lui_window.event_supported store id (Dismiss id)) (ids ()) in
             ignore (Lui_app.dispatch_event app (Dismiss popup))
-          end else key exit;
+          end else key (if rapid then "Enter" else exit);
           for _=1 to 16 do Host.drain ();ignore (Lui_app.flush app) done;
           expect "Inline Enter, Escape and outside press must save only changed titles"
             (List.length !writes=(if changed then 1 else 0));
@@ -10151,7 +10157,7 @@ let () = Native_embed.with_entry_lock (fun () ->
               (match !writes with [[_;Wire.Array [Wire.Array [Wire.Keyword "save-block";
                 Wire.Array [block;_]]];_]] ->
                   Wire.map_get_uuid block "block/uuid"=Some uuid
-                  && Wire.map_get_string block "block/title"=Some (title ^ "\nMore text")
+                  && Wire.map_get_string block "block/title"=Some submitted_title
                | _ -> false);
             if type_during_save then insert " still typing";
             (!complete) ();
@@ -10176,7 +10182,8 @@ let () = Native_embed.with_entry_lock (fun () ->
              try ignore (Editor_state.blocks_in_scope current.selection_scope);true
              with Not_found -> false)))
       ["Enter",false,false;"Escape",false,false;"outside",false,false;
-       "Enter",true,false;"Escape",true,false;"outside",true,false;"Enter",true,true]) [1.;2.];
+       "Enter",true,false;"Escape",true,false;"outside",true,false;"Enter",true,true;
+       "rapid",true,false]) [1.;2.];
     List.iter prerr_endline (List.rev !failures);
     check "Table titles edit in place and commit through the shared rich-text editor" (!failures=[]);
     print_endline "table inline rich-text editing lifecycle: OK"))
