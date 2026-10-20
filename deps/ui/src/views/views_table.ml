@@ -1107,17 +1107,22 @@ let add_row_footer inst : t =
     | V.KAllPages | V.KQuery _ | V.KLinkedRefs | V.KUnlinkedRefs -> false
   in
   if has_add_object then
-    (* .ls-table-footer: absolute bottom strip; width:100% has no prop *)
+    (* The positioned strip occupies the shared table body's reserved space. *)
     Ui_components.with_props
       [ Ui_components.Prop.position `absolute
       ; Ui_components.Prop.inset_left 0.
+      ; Ui_components.Prop.inset_right 0.
       ; Ui_components.Prop.inset_bottom 8. ]
-      (box ~data_attrs:[ ("style", "width:100%") ]
+      (box
       [ Ui_parts.pressable
           ~on_press:(fun _ -> (V.ops ()).V.o_add_object inst)
+          (Ui_components.with_props
+            [ Ui_components.Prop.padding_bottom 5
+            ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
           (row ~gap:4 ~cross:`center ~padding_horizontal:8
              ~padding_vertical:4 ~foreground:"muted-foreground" ~grow:1.
-             [ icon_el "plus"; text ~value:(I.t "view/new") [] ]) ])
+             [ icon ~name:(Icons.name_ref "plus") ~point_size:14 []
+             ; text ~value:(I.t "view/new") [] ])) ])
   else spacer ~key:"no-footer" []
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
@@ -1132,7 +1137,8 @@ let table_el ?(paginate = false) inst (s : V.vstate) : t =
         (scroll ~orientation:`horizontal ~grow:1.
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
-            [ Ui_components.Prop.position `relative ]
+            [ Ui_components.Prop.position `relative
+            ; Ui_components.Prop.padding_bottom 38 ]
             (box
             [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
                  the header inside the same relative box — overlay carries

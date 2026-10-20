@@ -5323,6 +5323,63 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native table geometry and paint parity: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  let previous_ops = !Views_state.ops_ref in
+  Views_view.install_ops ();
+  let add_calls = ref [] in
+  Views_state.install_ops {(Views_state.ops ()) with
+    o_add_object=(fun inst -> add_calls:=inst.Views_state.id::!add_calls)};
+  Fun.protect ~finally:(fun () -> Views_state.ops_ref:=previous_ops) (fun () ->
+    List.iter (fun scale -> List.iter (fun width -> List.iter (fun count ->
+      let host = Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.*.scale,20.*.scale))
+        ~renderer:{Lui_host.name="table-footer-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (width*.scale)) ~height:(int_of_float (600.*.scale)) ~scale () in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      let instance = ref None in
+      let app = Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry () (fun () () -> ()) (fun context _ _ ->
+          let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:(Views_state.KPropertyPage "footer-owner") ~feature:"property-objects" ~owner:Wire.Nil in
+          instance:=Some inst;
+          let rows = List.init count (fun index -> "footer-row-" ^ string_of_int index) in
+          Views_state.update inst (fun state -> {state with loading=false;
+            columns=[Views_table.select_column ();Views_table.builtin_column "fixture/value" "Value" "string" ()];
+            data=Views_wire.VFlat {rows;count;previews=Hashtbl.create 0;qprops=[]}});
+          Lui_elements.column ~width:(int_of_float width) [Views_table.table_el inst (Views_state.get inst)]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint host);
+        let store = Lui_host.store host in
+        let ids = Lui_store.preorder store in
+        let rect id = Option.get (Lui_host.layout_rect host id) in
+        let has_class id name = match Lui_store.string_prop store id "style-class" with
+          | Some classes -> List.mem name (String.split_on_char ' ' classes) | None -> false in
+        let caption = List.find (fun id -> Lui_store.string_prop store id "text"=Some (I18n.t "view/new")) ids in
+        let control = Option.get (Lui_store.parent store caption) in
+        let footer = Option.get (Lui_store.parent store control) in
+        let content = Option.get (Lui_store.parent store footer) in
+        let bottom = List.fold_left (fun bottom id ->
+          if has_class id "ls-table-row" || has_class id "ls-table-header" then
+            max bottom ((rect id).y+.(rect id).h) else bottom) 0. ids in
+        expect "Native New footer overlaps the table header or data rows"
+          ((rect footer).y >= bottom-.0.1);
+        expect "Native New footer loses its eight-point trailing inset"
+          (abs_float ((rect content).y+.(rect content).h-.(rect footer).y-.(rect footer).h-.8.*.scale)<0.1);
+        expect "Native New footer does not span its table content width"
+          (abs_float ((rect footer).x-.(rect content).x)<0.1
+           && abs_float ((rect footer).w-.(rect content).w)<0.1);
+        let before = List.length !add_calls in
+        ignore (Lui_app.dispatch_event app (Press control));ignore (Lui_app.flush app);
+        expect "Native New footer does not dispatch exactly once to its owning table"
+          (List.length !add_calls=before+1 && List.hd !add_calls=(Option.get !instance).Views_state.id)))
+      [0;1;3;80]) [400.;1000.]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native table New footer placement and owner dispatch" (!failures=[]);
+  print_endline "native table New footer placement and owner dispatch: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in
   let failures = ref [] in

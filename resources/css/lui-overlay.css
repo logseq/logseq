@@ -1823,12 +1823,6 @@ select.form-select {
   background-color: hsl(var(--muted));
 }
 
-/* cljs .ls-table-rows > .relative keeps pb-[38px] so the absolute
-   .ls-table-footer ("+ New") clears the last row */
-.ls-table-rows > .relative {
-  padding-bottom: 38px;
-}
-
 /* cljs table text is text-sm (14px/20px) — LUI rows inherited the
    16px/24px body default */
 .ls-table-rows .ls-table-row,
