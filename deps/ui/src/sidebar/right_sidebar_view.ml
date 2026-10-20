@@ -202,27 +202,15 @@ let breadcrumb crumbs =
 let item_title (it : Sidebar_state.item) =
   match it.breadcrumb, it.kind with
   | [], "page" ->
-      let is_class =
+      let icon =
         match it.Sidebar_state.page with
-        | Some p -> p.Model.page_is_tag || p.Model.page_is_property
-        | None -> false
+        | Some page -> Icon_picker.page_icon_el ~size:14. page
+        | None -> Icon_picker.icon_el ~size:14.
+            (Option.value it.icon ~default:("tabler-icon", "file"))
       in
       let icon_els =
-        match it.icon with
-        | Some ("emoji", eid) ->
-            [ Logseq_emoji.el ~key:"pt-e" ~name:eid () ]
-        | Some (_, iid) ->
-            [ icon_ ~key:"pt-ti" ~cls:("ls-icon-" ^ iid) iid ]
-        | None ->
-            (* cljs icon/get-node-icon: class pages default to "hash",
-               plain pages to "file"; both inside .icon-cp-container *)
-            [ row ~key:"pt-ti" ~style_class:"icon-cp-container"
-                ~cross:`center ~foreground:"inherit"
-                [ (* cljs get-node-icon-cp merges {:size 14} for all
-                     icons *)
-                  icon_ ~size:14
-                    (if is_class then "hash" else "file") ]
-            ]
+        [row ~key:"pt-ti" ~style_class:"icon-cp-container"
+           ~cross:`center ~foreground:"inherit" [icon]]
       in
       row ~key:"pt" ~style_class:"page-title" ~cross:`center ~gap:4
         (icon_els

@@ -945,6 +945,12 @@ let item_hits affected st =
       | None -> false)
     (Runtime.signal_get st.items)
 
+let navigation_hits affected pages =
+  let hit uuid = List.mem (Subs_state.watch_key_uuid "entity" uuid) affected in
+  List.exists (fun (page : Model.page) ->
+    Option.fold ~none:false ~some:hit page.page_uuid
+    || List.exists hit page.page_tag_uuids) pages
+
 let on_sync st affected =
   match (model ()).Model.repo with  | Some repo ->
       (* the route reload comes from Worker_events.dispatch's debounced
@@ -959,10 +965,10 @@ let on_sync st affected =
                | None -> false)
              affected
       in
-      if sets_hit then begin
+      if sets_hit || navigation_hits affected (Runtime.signal_get st.favorites) then
         load_favorites repo st;
-        load_recents repo st
-      end;
+      if sets_hit || navigation_hits affected (Runtime.signal_get st.recents) then
+        load_recents repo st;
       if sets_hit || item_hits affected st then refresh_items repo st
   | None -> ()
 
@@ -975,6 +981,31 @@ let page_key (p : Model.page) =
   | None -> "d:" ^ string_of_int (Option.value p.Model.page_db_id ~default:0)
 
 
+(* Own transactions do not receive a remote sync echo. Publish their
+   current page metadata without retaining its outliner in navigation. *)
+let publish_navigation_page st (page : Model.page) =
+  let outdated (old : Model.page) =
+    (match page.page_uuid, old.page_uuid with
+     | Some a, Some b -> a=b
+     | _ -> page.page_db_id<>None && page.page_db_id=old.page_db_id)
+    && (old.page_title<>page.page_title || old.page_icon<>page.page_icon
+        || old.page_is_tag<>page.page_is_tag || old.page_is_property<>page.page_is_property
+        || old.page_tags<>page.page_tags || old.page_tag_idents<>page.page_tag_idents
+        || old.page_tag_uuids<>page.page_tag_uuids || old.page_tag_db_ids<>page.page_tag_db_ids
+        || old.page_tag_icons<>page.page_tag_icons) in
+  let publish state =
+    let pages=Runtime.signal_get state in
+    if List.exists outdated pages then
+      Runtime.signal_set state (List.map (fun (old : Model.page) ->
+        if not (outdated old) then old else
+          {old with page_title=page.page_title;page_icon=page.page_icon;
+            page_is_tag=page.page_is_tag;page_is_property=page.page_is_property;
+            page_tags=page.page_tags;page_tag_idents=page.page_tag_idents;
+            page_tag_uuids=page.page_tag_uuids;page_tag_db_ids=page.page_tag_db_ids;
+            page_tag_icons=page.page_tag_icons}) pages) in
+  publish st.favorites;
+  publish st.recents
+
 let on_model st (m : Model.t) =
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
@@ -986,6 +1017,7 @@ let on_model st (m : Model.t) =
    | _ -> ());
   (match m.Model.route_page with
    | Some p when m.Model.phase = Model.Ready ->
+       publish_navigation_page st p;
        let key = page_key p in
        if !last_page_key <> Some key then (
          last_page_key := Some key;

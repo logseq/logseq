@@ -512,63 +512,43 @@ let view_blocks ~(library : bool) (bs : Model.block list) :
     Model.block list =
   if library then pages_only bs else List.map mark_default_collapsed bs
 
-(* page is a tag/class when route-info says tag? or its entity tags
-   contain logseq.class/Tag *)
-let is_tag_page (w : Wire.t) : bool =
+(* Route summaries carry compact tags; navigation reads expanded entities. *)
+let page_tag_entries w =
+  match Wire.get w "tags" with
+  | Some tags -> Wire.elems tags
+  | None ->
+      Option.value (Option.map Wire.elems (Wire.get w "block/tags")) ~default:[]
+
+let page_tag_ident tag =
+  match Wire.get tag "ident", Wire.get tag "db/ident" with
+  | Some (Wire.String ident), _
+  | _, Some (Wire.Keyword ident) | _, Some (Wire.String ident) -> Some ident
+  | _ -> None
+
+let page_tag_title tag =
+  match Wire.map_get_string tag "title" with
+  | Some _ as title -> title
+  | None -> Wire.map_get_string tag "block/title"
+
+let has_ident_page w ident =
+  List.exists (fun tag -> page_tag_ident tag = Some ident) (page_tag_entries w)
+
+let is_tag_page w =
   match Option.bind (Wire.get w "tag?") Wire.as_bool with
-  | Some b -> b
-  | None -> (
-      match Wire.get w "tags" with
-      | Some (Wire.Array xs) | Some (Wire.List xs) ->
-          List.exists
-            (fun t ->
-              Wire.map_get_string t "ident" = Some "logseq.class/Tag")
-            xs
-      | _ -> false)
+  | Some value -> value
+  | None -> has_ident_page w "logseq.class/Tag"
 
-(* entity internal-page? = :block/tags contains the given class ident
-   (route-info maps carry "tags" [{ident}] stubs) *)
-let has_ident_page (w : Wire.t) (ident : string) : bool =
-  match Wire.get w "tags" with
-  | Some (Wire.Array xs) | Some (Wire.List xs) ->
-      List.exists
-        (fun t -> Wire.map_get_string t "ident" = Some ident)
-        xs
-  | _ -> false
-(* page is a property entity when route-info says property? or its
-   entity tags contain logseq.class/Property *)
-let is_property_page (w : Wire.t) : bool =
+let is_property_page w =
   match Option.bind (Wire.get w "property?") Wire.as_bool with
-  | Some b -> b
-  | None -> (
-      match Wire.get w "tags" with
-      | Some (Wire.Array xs) | Some (Wire.List xs) ->
-          List.exists
-            (fun t ->
-              Wire.map_get_string t "ident" = Some "logseq.class/Property")
-            xs
-      | _ -> false)
+  | Some value -> value
+  | None -> has_ident_page w "logseq.class/Property"
 
-(* tag titles for data-page-tags — wire ships [{ident, title}] *)
-let page_tag_titles (w : Wire.t) : string list =
-  match Wire.get w "tags" with
-  | Some (Wire.Array xs) | Some (Wire.List xs) ->
-      List.filter_map
-        (fun t -> Wire.map_get_string t "title")
-        xs
-  | _ -> []
+let page_tag_titles w = List.filter_map page_tag_title (page_tag_entries w)
 
-(* idents aligned with page_tag_titles *)
-let page_tag_idents (w : Wire.t) : string list =
-  match Wire.get w "tags" with
-  | Some (Wire.Array xs) | Some (Wire.List xs) ->
-      List.map
-        (fun t ->
-          match Wire.map_get_string t "ident" with
-          | Some s -> s
-          | None -> "")
-        xs
-  | _ -> []
+let page_tag_idents w =
+  page_tag_entries w
+  |> List.filter (fun tag -> Option.is_some (page_tag_title tag))
+  |> List.map (fun tag -> Option.value (page_tag_ident tag) ~default:"")
 
 (* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
 let icon_of_wire (w : Wire.t) : (string * string) option =
@@ -581,6 +561,11 @@ let icon_of_wire (w : Wire.t) : (string * string) option =
   match ty, Wire.map_get_string w "id" with
   | Some t, Some i -> Some (t, i)
   | _ -> None
+
+let page_tag_icons w =
+  page_tag_entries w
+  |> List.stable_sort (fun a b -> compare (Wire.map_get_int a "db/id") (Wire.map_get_int b "db/id"))
+  |> List.filter_map (fun tag -> Option.bind (Wire.get tag "logseq.property/icon") icon_of_wire)
 
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
@@ -659,8 +644,11 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | _ -> false)
         ; page_tags = page_tag_titles w
         ; page_tag_idents = page_tag_idents w
-        ; page_tag_uuids = []
-        ; page_tag_db_ids = []
+        ; page_tag_uuids = List.filter_map
+            (fun tag -> Wire.map_get_uuid tag "block/uuid") (page_tag_entries w)
+        ; page_tag_db_ids = List.filter_map
+            (fun tag -> Wire.map_get_int tag "db/id") (page_tag_entries w)
+        ; page_tag_icons = page_tag_icons w
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []

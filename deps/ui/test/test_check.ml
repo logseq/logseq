@@ -96,6 +96,7 @@ let page blocks : Model.page =
   ; page_tag_idents = []
   ; page_tag_uuids = []
   ; page_tag_db_ids = []
+  ; page_tag_icons = []
   ; page_blocks = blocks
   ; page_linked_refs = []
   ; page_parents = []

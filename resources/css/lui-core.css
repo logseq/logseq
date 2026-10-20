@@ -635,18 +635,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     margin-right: 0.5rem;
     opacity: 0.7;
   }
-
-  .page-icon {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    align-content: baseline;
-    line-height: 1;
-    /* cljs wraps the node icon in .icon-cp-container (pr-1, inner icon
-       mr-0) — same geometry without the extra element */
-    padding-right: calc(var(--spacing) * 1);
-
-  }
 }
 
 /* the split kind's divider replaced the hand-rolled resizers;

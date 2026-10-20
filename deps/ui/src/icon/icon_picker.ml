@@ -27,8 +27,16 @@ type tab = Tab_all | Tab_emoji | Tab_icon
 (* icon value {type,id} -> display element *)
 let icon_el ?(size = 18.) ?(cls = "") (ty, id) : t =
   match ty with
-  | "emoji" -> Logseq_emoji.el ~name:id ()
+  | "emoji" ->
+      Ui_components.with_props
+        [Ui_components.Prop.font_size (Printf.sprintf "%gpx" size);Ui_components.Prop.line_height "1"]
+        (row ~width:(int_of_float size) ~height:(int_of_float size)
+           ~cross:`center ~main:`center ~style_class:cls [Logseq_emoji.el ~name:id ()])
   | _ -> Icons.icon ~size ~cls id
+
+let page_icon_el ?(size = 16.) page =
+  let value = Option.value (Model.page_node_icon page) ~default:("tabler-icon", "file") in
+  Ui_components.with_props [Ui_components.Prop.margin_right 0] (icon_el ~size value)
 
 (* cljs ui__button base + variant classes (shui/button); the small
    28px outline-button chrome rides the typed props *)

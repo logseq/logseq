@@ -190,3 +190,16 @@ test('view tabs have one shared typed layout owner', async () => {
   })
   assert.deepEqual(duplicates, [], 'Shared view recipes own tab spacing on every host')
 })
+
+
+test('sidebar page icon spacing has one shared typed owner', async () => {
+  const root = postcss.parse(await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8'))
+  const spacing = []
+  root.walkRules('.page-icon', rule => {
+    if (rule.parent.selector !== '.left-sidebar-inner') return
+    rule.walkDecls(declaration => {
+      if (/^(padding|margin|gap)/.test(declaration.prop)) spacing.push(declaration.prop)
+    })
+  })
+  assert.deepEqual(spacing, [], 'Browser CSS must not add spacing to the shared sidebar icon row')
+})

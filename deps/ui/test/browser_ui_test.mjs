@@ -59,6 +59,23 @@ test('Unchanged built-in titles exit with Escape, Enter and blur', () => {
   browser('press', 'Escape');
 });
 
+test('Emoji header actions keep popup focus and never enter title editing', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn') !== null");
+  button('Set icon');
+  browser('wait', '--fn', "document.activeElement?.placeholder === 'Search all'");
+  browser('click', ':nth-match(.ls-emoji-cell:has(em-emoji[id="smile"]), 1)');
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn em-emoji[id=smile]') !== null");
+  assert.equal(evaluate("document.querySelector('.ls-page-title .editor-wrapper') !== null"), false);
+  browser('click', '.ls-page-icon-btn em-emoji');
+  browser('wait', '--fn', "document.activeElement?.placeholder === 'Search all'");
+  assert.equal(evaluate("document.querySelector('.ls-page-title .editor-wrapper') !== null"), false);
+  button('Delete');
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn [data-name=\"app:hash\"]') !== null");
+  assert.equal(evaluate("document.querySelector('.ls-page-title .editor-wrapper') !== null"), false);
+});
+
 test('Page titles retain block padding and their trailing content edge', () => {
   open();
   browser('find', 'text', 'Journals', 'click', '--exact');

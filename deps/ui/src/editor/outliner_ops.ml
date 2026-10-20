@@ -429,8 +429,8 @@ let tag_hidden blk =
   | Some (Wire.Bool hidden) -> hidden
   | _ -> false
 
-(* (db-id, (title, ident, hidden, uuid)) per tag entity *)
-let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Promise.t =
+(* (db-id, (title, ident, hidden, uuid, icon)) per tag entity *)
+let tag_titles repo ids : (int * (string * string * bool * string * (string * string) option)) list Js.Promise.t =
   let* w =
     Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
       (Wire.Array
@@ -443,6 +443,7 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
                       [ ( Wire.String "properties"
                         , Wire.Array
                             [ Wire.Keyword "db/ident"
+                            ; Wire.Keyword "logseq.property/icon"
                             ; Wire.Keyword
                                 "logseq.property.class/hide-from-node" ])
                       ]) ])
@@ -470,7 +471,8 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
                     | _ -> "")
                  , tag_hidden blk
                  , Option.value (Wire.map_get_uuid blk "block/uuid")
-                     ~default:"" ) )
+                     ~default:""
+                 , Option.bind (Wire.get blk "logseq.property/icon") Decode.icon_of_wire ) )
          | _ -> None)
        (Wire.elems w))
 
@@ -494,19 +496,19 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                 b.Model.block_tag_ids
             in
             let idents =
-              List.map (fun (_, (_, i, _, _)) -> i) resolved
+              List.map (fun (_, (_, i, _, _, _)) -> i) resolved
             in
             let visible =
               List.filter
-                (fun (_, (_, ident, hidden, _uuid)) ->
+                (fun (_, (_, ident, hidden, _uuid, _icon)) ->
                   not hidden && not (internal_tag_ident ident))
                 resolved
             in
             { b with
               Model.block_tags =
-                List.map (fun (_, (t, _, _, _)) -> t) visible
+                List.map (fun (_, (t, _, _, _, _)) -> t) visible
             ; block_tag_uuids =
-                List.map (fun (_, (_, _, _, u)) -> u) visible
+                List.map (fun (_, (_, _, _, u, _)) -> u) visible
             ; (* block_tag_idents stays unfiltered: internal
                  classes (Page, Comments, Query, …) drive the
                  node icon and structural checks even though
@@ -543,33 +545,35 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
           xs
     | _ -> []
   in
-  match ids with
-  | [] -> Js.Promise.resolve page
-  | _ ->
-      let* titles = tag_titles repo ids in
-      (* the built-in Page class is implicit on every page —
-                cljs never renders it as a chip *)
-      let keep (i, (_, ident, _, _)) =
-        List.mem i ids && ident <> "logseq.class/Page"
-      in
-      let kept = List.filter keep titles in
-      Js.Promise.resolve
-        { page with
-          Model.page_tags =
-            List.map (fun (_, (t, _, _, _)) -> t) kept
-        ; page_tag_idents =
-            List.map (fun (_, (_, ident, _, _)) -> ident) kept
-        ; page_tag_uuids =
-            List.map (fun (_, (_, _, _, u)) -> u) kept
-        ; page_tag_db_ids =
-            List.map (fun (i, _) -> i) kept
-        ; page_internal =
-            List.exists
-              (fun (i, (_, ident, _hidden, _uuid)) ->
-                List.mem i ids
-                && ident = "logseq.class/Page")
-              titles
-        }
+  let* titles = match ids with
+    | [] -> Js.Promise.resolve []
+    | _ -> tag_titles repo ids in
+  (* the built-in Page class is implicit on every page —
+            cljs never renders it as a chip *)
+  let keep (i, (_, ident, _, _, _)) =
+    List.mem i ids && ident <> "logseq.class/Page"
+  in
+  let kept = List.filter keep titles in
+  Js.Promise.resolve
+    { page with
+      Model.page_tags =
+        List.map (fun (_, (t, _, _, _, _)) -> t) kept
+    ; page_tag_idents =
+        List.map (fun (_, (_, ident, _, _, _)) -> ident) kept
+    ; page_tag_uuids =
+        List.map (fun (_, (_, _, _, u, _)) -> u) kept
+    ; page_tag_db_ids =
+        List.map (fun (i, _) -> i) kept
+    ; page_tag_icons =
+        titles |> List.sort (fun (a, _) (b, _) -> Int.compare a b)
+        |> List.filter_map (fun (_, (_, _, _, _, icon)) -> icon)
+    ; page_internal =
+        List.exists
+          (fun (i, (_, ident, _hidden, _uuid, _icon)) ->
+            List.mem i ids
+            && ident = "logseq.class/Page")
+          titles
+    }
 
 (* block zoom: the route root is a block, not a page — refetch it via
    get-blocks (get-page-blocks-tree would return its children or nothing).

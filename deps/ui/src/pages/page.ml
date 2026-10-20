@@ -463,17 +463,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      mounts the editor state — the .ls-block class signal needs it *)
   let () = S.ensure ctx in
   (
-  (* cljs page-icon: custom :logseq.property/icon -> first tag icon ->
-     class "hash" -> property "letter-p"; rendered as the icon-picker
-     button inside .block-main-content *)
   let icon_el =
-    match page.page_icon, page.page_is_tag, page.page_is_property with
-    | Some ("emoji", eid), _, _ ->
-        Some (Logseq_emoji.el ~key:"pt-e" ~name:eid ())
-    | Some (_, iid), _, _ -> Some (Icons.icon ~size:38. iid)
-    | None, true, _ -> Some (Icons.icon ~size:38. "hash")
-    | None, _, true -> Some (Icons.icon ~size:38. "letter-p")
-    | _ -> None
+    Option.map (Icon_picker.icon_el ~size:38.) (Model.page_node_icon page)
   in
   let uuid = Option.value page.page_uuid ~default:"" in
   (* cljs db-page-title: tag/class pages render collapsed by default; the
@@ -751,46 +742,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ]
     ]
   in
-  (* TODO(component): click needs the DOM payload (targetId/
-     interactive closest-walk/shiftKey) — pointer_detail carries
-     target_class but not the interactive hit, so title-edit would
-     fire on action-button clicks too. Needs a pointer_detail
-     extension (target identity + interactive flag) *)
-  Logseq_el.el ~key:"page-title"
+  (* Title content owns editing; header actions own their button presses. *)
+  row ~key:"page-title" ~grow:1. ~cross:`start
     ~style_class:"ls-page-title content title"
-    ~attrs:
+    ~data_attrs:
       [ ("data-testid", "page title")
-      ; ( "style"
-        , "border-radius:calc(var(--radius) - 4px);display:flex;flex:1;\
-           width:100%;align-items:flex-start" )
-      ]
-    ~events:"click contextmenu"
-    ~on_dom_event:(fun name payload ->
-      match name with
-      | "click" ->
-          (* icon buttons live inside #page-title; skip title-edit when
-             they (or their children) are the click target *)
-          let target, interactive =
-            ( Json_payload.str payload "targetId"
-            , Json_payload.bool payload "interactive" )
-          in
-          let shift =
-            Json_payload.bool payload "shiftKey"
-          in
-          if
-            page.page_uuid <> None && page.page_journal_day = None
-            && not shift
-            && (target = "" || target = "page-title"
-                || target = "page-title-text")
-            && not interactive
-          then (
-            (* cljs edit entry clears any block selection *)
-            if S.ready () then Editor_actions.clear_selection ();
-            Runtime.send Action.Title_edit_start;
-            Runtime.flush ())
-      (* contextmenu lives on the full-width title_row below — the raw
-         el only hugs the text, so it would miss the row's empty tail *)
-      | _ -> ())
+      ; ("style", "border-radius:calc(var(--radius) - 4px)") ]
     body
     ) ctx parent
 
@@ -1065,9 +1022,10 @@ let journal_item_sig (ms : Model.t Signal.signal)
   let title_eq ((a : Model.page), ea) ((b : Model.page), eb) =
     ea = eb
     && a.Model.page_title = b.Model.page_title
-    && a.Model.page_icon = b.Model.page_icon
+    && Model.page_node_icon a = Model.page_node_icon b
     && a.Model.page_tags = b.Model.page_tags
     && a.Model.page_is_tag = b.Model.page_is_tag
+    && a.Model.page_is_property = b.Model.page_is_property
     && a.Model.page_db_collapsable = b.Model.page_db_collapsable
     && a.Model.page_uuid = b.Model.page_uuid
   in
@@ -1505,7 +1463,8 @@ let top_key (p : Model.page option) =
   match p with
   | Some p ->
       Some
-        ( p.page_uuid, p.page_title, p.page_icon, p.page_is_tag
+        ( p.page_uuid, p.page_title, Model.page_node_icon p, p.page_is_tag
+        , p.page_is_property
         , p.page_is_library, p.page_db_collapsable, p.page_parents
         , p.page_journal_day )
   | None -> None

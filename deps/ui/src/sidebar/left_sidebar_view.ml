@@ -624,7 +624,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                   space-between;height:32px;padding:0 8px;\
                   border-radius:6px" ) ]
            [ row ~cross:`center ~style_class:"page-icon" ~margin_right:4
-               [ icon_ ~attrs:[ ("style", "margin-right:0") ] "file" ]
+               [ Icon_picker.page_icon_el ~size:16. p ]
            ; text ~style_class:"page-title" ~value:p.Model.page_title
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
                ~line_height:"1.25rem"
@@ -733,13 +733,6 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
            ; if_ ~test:(reactive (fun groups -> not (List.mem class_ groups))
                          (Signal.value st.Sidebar_state.groups_collapsed))
              (reactive
-               ~equal:(fun a b ->
-                 List.map
-                   (fun (p : Model.page) -> (p.page_uuid, p.page_title))
-                   a
-                 = List.map
-                     (fun (p : Model.page) -> (p.page_uuid, p.page_title))
-                     b)
                (fun ps ->
                  if ps = [] && not always_bd then Logseq_el.nothing
                  else

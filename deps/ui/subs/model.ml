@@ -142,6 +142,7 @@ type page =
   ; page_tag_idents : string list (* aligned with page_tags *)
   ; page_tag_uuids : string list (* aligned — chip ctx menu *)
   ; page_tag_db_ids : int list (* aligned with page_tags *)
+  ; page_tag_icons : (string * string) list (* ordered by tag entity ID *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
@@ -149,6 +150,14 @@ type page =
     (* cljs db-collapsable? on the page entity — drives the title-row
        fold arrow + data-db-collapsable *)
   }
+
+(* Keep explicit icon ownership separate from inherited presentation. *)
+let page_node_icon page =
+  match page.page_icon with
+  | Some _ as icon -> icon
+  | None when page.page_is_tag -> Some ("tabler-icon", "hash")
+  | None when page.page_is_property -> Some ("tabler-icon", "letter-p")
+  | None -> List.nth_opt page.page_tag_icons 0
 
 (* Class objects render in the table, not among the page's ordinary
    direct-child notes. Nested note children keep their own membership. *)

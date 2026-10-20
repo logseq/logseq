@@ -10881,3 +10881,228 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native class membership across loading and refresh" (!failures=[]);
   print_endline "native class membership across loading and refresh: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures = ref [] in
+  let expect label condition = if not condition then failures:=label::!failures in
+  let map fields = Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let icon kind id = map ["type",Wire.Keyword kind;"id",Wire.String id] in
+  let tag ?icon:own id ident = map
+    (["db/id",Wire.Int id;"block/uuid",Wire.Uuid ("tag-"^string_of_int id);
+      "db/ident",Wire.Keyword ident;
+      "block/title",Wire.String ident] @
+     match own with None -> [] | Some value -> ["logseq.property/icon",value]) in
+  let entity ?(tags=[]) ?icon:own name = map
+    (["db/id",Wire.Int 99;"block/uuid",Wire.Uuid name;"block/title",Wire.String name;
+      "block/tags",Wire.Set tags] @
+     match own with None -> [] | Some value -> ["logseq.property/icon",value]) in
+  let cases =
+    ["plain",entity "plain","app:file";
+     "journal",map ["block/title",Wire.String "journal";"block/journal-day",Wire.Int 20261021],"app:file";
+     "raw class",entity ~tags:[tag 1 "logseq.class/Tag"] "class","app:hash";
+     "raw property",entity ~tags:[tag 1 "logseq.class/Property"] "property","app:letter-p";
+     "compact class",map ["page-title",Wire.String "compact";
+       "tags",Wire.Array [map ["ident",Wire.String "logseq.class/Tag";"title",Wire.String "Class"]]],"app:hash";
+     "custom overrides class",entity ~tags:[tag 1 "logseq.class/Tag"]
+       ~icon:(icon "tabler-icon" "24Hours") "custom","app:hours-24";
+     "custom emoji",entity ~icon:(icon "emoji" "smile") "emoji","emoji:smile";
+     "inherited order",entity ~tags:[tag ~icon:(icon "tabler-icon" "Star") 20 "user.class/Later";
+       tag ~icon:(icon "tabler-icon" "24Hours") 10 "user.class/First"] "inherited","app:hours-24";
+     "class beats inherited",entity ~tags:[tag ~icon:(icon "tabler-icon" "Star") 1 "logseq.class/Tag"] "class","app:hash";
+     "property beats inherited",entity ~tags:[tag ~icon:(icon "tabler-icon" "Star") 1 "logseq.class/Property"] "property","app:letter-p"] in
+  let heading_page = Option.get (Decode.page_of_summary (entity "heading")) in
+  let changed_heading = Option.get (Decode.page_of_summary
+    (entity ~tags:[tag ~icon:(icon "tabler-icon" "Star") 10 "user.class/Heading"] "heading")) in
+  let model page = {Model.initial with route=Model.Page "heading";route_page=Some page} in
+  expect "Inherited icon changes must invalidate the retained page heading"
+    (not (Page.top_eq (model heading_page) (model changed_heading)));
+  expect "Property classification must invalidate the retained page heading"
+    (not (Page.top_eq (model heading_page) (model {heading_page with page_is_property=true})));
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_repo = !Sidebar_state.loaded_repo and previous_key = !Sidebar_state.last_page_key
+  and previous_sidebar_model = !Sidebar_state.model_signal in
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Sidebar_state.loaded_repo:=previous_repo;Sidebar_state.last_page_key:=previous_key;
+    Sidebar_state.model_signal:=previous_sidebar_model)
+    (fun () -> List.iter (fun scale -> List.iter (fun recent ->
+      let payload = ref (Wire.Array []) in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+        if name="thread-api/get-favorite-pages" || name="thread-api/get-recent-pages"
+        then Js.Promise.resolve !payload else failwith ("Unexpected icon request: "^name));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      let store = Lui_store.create () and sidebar = ref None in
+      let backend = {backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;
+      Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app = Lui_app.create_with_extensions backend registry
+        {Model.initial with repo=Some "icon-fixture";phase=Model.Ready}
+        (fun model (_ : Action.t) -> model)
+        (fun ctx model_signal _ ->
+          Sidebar_state.model_signal:=Some model_signal;
+          let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+          let st : Sidebar_state.t =
+            {favorites=state [];recents=state [];nav_checked=state [];nav_tag_titles=state [];
+             items=state [];open_menu=state "";groups_collapsed=state [];
+             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 800.} in
+          sidebar:=Some st;
+          let items = Signal.value (if recent then st.recents else st.favorites) in
+          Lui_elements.column ~width:240
+            [Left_sidebar_view.content_group st ~key:"node-icons" ~class_:"favorites"
+               ~label:"sidebar/favorites" ~items_sig:items ~li_class:"favorite-item"
+               ~ul_class:"" ~always_bd:true ~recent;
+             reactive (fun pages -> Lui_elements.column (List.map (fun page ->
+               Right_sidebar_view.item_title (Sidebar_state.item_of_page page)) pages)) items]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let st = Option.get !sidebar in
+        let both_icons name =
+          List.length (List.filter (fun id -> Lui_store.string_prop store id "name"=Some name)
+            (Lui_store.preorder store))=2 in
+        List.iter (fun (name,value,expected) ->
+          payload:=Wire.Array [value];
+          (if recent then Sidebar_state.load_recents else Sidebar_state.load_favorites) "icon-fixture" st;
+          for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+          let nodes=Lui_store.preorder store in
+          let glyphs=List.filter_map (fun id ->
+            if Lui_store.kind store id="icon" then Lui_store.string_prop store id "name"
+            else if Lui_store.ext_id store id=Some "logseq-em-emoji" then
+              Option.map (fun glyph -> "emoji:"^glyph) (Lui_store.string_prop store id "text") else None) nodes in
+          let target=if expected="emoji:smile" then "emoji:😄" else expected in
+          let count=List.length (List.filter ((=) target) glyphs) in
+          if count<>2 then Printf.eprintf "icon case %s: pages=%d glyphs=%s\n%!" name
+            (List.length (Runtime.signal_get (if recent then st.recents else st.favorites))) (String.concat "," glyphs);
+          expect (Printf.sprintf "%s icons must agree across both sidebars (scale %.0f, recent %b): expected %s twice"
+            name scale recent expected) (count=2);
+          let layout=Lui_layout.create () in
+          Lui_layout.sync ~scale ~width:800. ~height:600. layout store;
+          let icon_nodes=List.filter (fun id -> Lui_store.string_prop store id "name"=Some target) nodes in
+          List.iter (fun id -> let rect=Option.get (Lui_layout.rect layout id) in
+            expect (name^" navigation icon stays within its compact row")
+              (rect.Lui_scene.w<=16.*.scale+.0.01 && rect.h<=16.*.scale+.0.01)) icon_nodes)
+          cases;
+        Runtime.read_model:=(fun () -> {Model.initial with repo=Some "icon-fixture";phase=Model.Ready});
+        payload:=Wire.Array [entity ~icon:(icon "tabler-icon" "Star") "sync-page"];
+        (if recent then Sidebar_state.load_recents else Sidebar_state.load_favorites) "icon-fixture" st;
+        for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        payload:=Wire.Array [entity ~icon:(icon "tabler-icon" "Moon") "sync-page"];
+        Sidebar_state.on_sync st [Subs_state.watch_key_uuid "entity" "sync-page"];
+        for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
+        expect "Entity icon writes must refresh visible navigation summaries"
+          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Moon") && both_icons "app:moon" | _ -> false);
+        let updated=Option.get (Decode.page_of_summary
+          (entity ~icon:(icon "tabler-icon" "Sun") "sync-page")) in
+        let model={Model.initial with repo=Some "icon-fixture";phase=Model.Ready;route_page=Some updated} in
+        Sidebar_state.loaded_repo:=Some "icon-fixture";
+        Sidebar_state.on_model st model;
+        for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
+        expect "Own page writes must publish navigation icons without a remote echo"
+          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Sun") && both_icons "app:sun" | _ -> false);
+        let inherited icon_name = Wire.Array [entity "inherited-sync"
+          ~tags:[tag 20 "user.class/Label" ~icon:(icon "tabler-icon" icon_name)]] in
+        payload:=inherited "Star";
+        (if recent then Sidebar_state.load_recents else Sidebar_state.load_favorites) "icon-fixture" st;
+        for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        payload:=inherited "Moon";
+        Sidebar_state.on_sync st [Subs_state.watch_key_uuid "entity" "tag-20"];
+        for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
+        let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
+        expect "Tag icon writes must refresh navigation pages inheriting that icon"
+          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Moon") && both_icons "app:moon" | _ -> false)))
+      [false;true]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native page icons through sidebar loaders" (!failures=[]);
+  print_endline "native page icons through sidebar loaders: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let map fields = Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let previous_worker = !Runtime.worker in
+  let tag id icon = map ["db/id",Wire.Int id;"block/title",Wire.String (string_of_int id);
+    "block/uuid",Wire.Uuid (string_of_int id);"db/ident",Wire.Keyword "user.class/Label";
+    "logseq.property/icon",map ["type",Wire.Keyword "tabler-icon";"id",Wire.String icon]] in
+  let current = ref [tag 20 "Star";tag 10 "24Hours"] and tag_ids = ref [20;10] in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ -> Js.Promise.resolve
+    (match name with
+    | "thread-api/get-case-page" -> map ["block/tags",Wire.Set (List.map (fun id -> Wire.Int id) !tag_ids)]
+    | "thread-api/get-blocks" -> Wire.Array (List.map (fun value -> map ["block",value]) !current)
+    | _ -> failwith ("Unexpected tag-icon request: "^name)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker) (fun () ->
+    let page=Option.get (Decode.page_of_summary (map ["page-title",Wire.String "Tagged page"])) in
+    let resolve page =
+      let pending=Outliner_ops.resolve_page_tags "icon-fixture" page in
+      for _=1 to 8 do Host.drain () done;
+      match pending.Js.Promise.state with
+      | Js.Promise.Resolved value -> value
+      | Js.Promise.Rejected error -> raise error
+      | Js.Promise.Pending -> failwith "Tag icon fixture did not settle" in
+    let loaded=resolve page in
+    let first=Model.page_node_icon loaded=Some ("tabler-icon","24Hours") in
+    current:=[tag 20 "Star";tag 10 "Moon"];
+    let refreshed=resolve loaded in
+    let updated=Model.page_node_icon refreshed=Some ("tabler-icon","Moon") in
+    current:=[];tag_ids:=[];
+    let cleared=resolve refreshed in
+    let removed=Model.page_node_icon cleared=None && cleared.Model.page_tags=[] in
+    check "Route tag hydration and refresh must preserve ordered inherited icons"
+      (first && updated && removed));
+  print_endline "native route tag icon hydration and refresh: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush
+  and previous_model = !Runtime.read_model and previous_parent = !Platform.dom_parent_of
+  and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_worker = !Runtime.worker in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let failures=ref [] in
+  let expect label condition=if not condition then failures:=label::!failures in
+  let page=Option.get (Decode.page_of_summary (Wire.Map
+    [Wire.kw "block/uuid",Wire.Uuid "header-click-owner";
+     Wire.kw "block/title",Wire.String "Header click owner";
+     Wire.kw "logseq.property/icon",Wire.Map [Wire.kw "type",Wire.Keyword "emoji";
+       Wire.kw "id",Wire.String "smile"]])) in
+  let model={Model.initial with repo=Some "header-click-fixture";phase=Model.Ready;
+    route=Model.Page "header-click-owner";route_page=Some page} in
+  let store=Lui_store.create () and edits=ref 0 in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+  let backend={backend_profile=profile MacOS GenericHost;
+    apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+  let app=Lui_app.create_with_extensions backend registry model
+    (fun model (_ : Action.t) -> model) (fun _ ms _ ->
+      Lui_elements.column [reactive (fun model -> Page.page_title_el model page) ms]) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);
+    Runtime.app_send:=previous_send;Runtime.app_flush:=previous_flush;
+    Runtime.read_model:=previous_model;Platform.dom_parent_of:=previous_parent;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;Runtime.worker:=previous_worker) (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    Runtime.read_model:=(fun () -> model);
+    Runtime.app_send:=(fun action -> (match action with Action.Title_edit_start -> incr edits | _ -> ());true);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Platform.dom_parent_of:=Lui_store.parent store;
+    let nodes=Lui_store.preorder store in
+    let glyph=List.find (fun id -> Lui_store.ext_id store id=Some "logseq-em-emoji") nodes in
+    let title=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+      =Some "block-content-header-click-owner") nodes in
+    let click id shift =
+      edits:=0;Platform.last_click_ms:=neg_infinity;
+      Platform.emit_event "click" (Js.Json.JObject
+        ["nodeId",Js.Json.JNumber (float id);"targetId",Js.Json.JString "";
+         "shiftKey",Js.Json.JBoolean shift]);
+      ignore (Lui_app.flush app);!edits in
+    expect "An anonymous emoji descendant of the icon button must not start title editing"
+      (click glyph false=0);
+    expect "Title content owns exactly one edit request"
+      (click title false=1);
+    expect "Shift-click title content preserves sidebar navigation ownership"
+      (click title true=0));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native title content and header action click ownership" (!failures=[]);
+  print_endline "native title content and header action click ownership: OK")
