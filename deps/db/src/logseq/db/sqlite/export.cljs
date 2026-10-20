@@ -1149,13 +1149,13 @@
 
 (defn- find-import-page
   [db index title parent tags]
-  (let [parents (if parent
+  (let [parent-ids (if parent
                   [(or (:db/id (d/entity db parent)) parent)]
                   [nil (:db/id (ldb/get-library-page db))])
         tags (if (seq tags) (conj tags nil) #{::any-tag})
         oldest (fn [exact-title]
                  (when-let [ids (seq (keep #(get index %)
-                                          (for [p parents tag tags] [p tag exact-title])))]
+                                          (for [p parent-ids tag tags] [p tag exact-title])))]
                    (apply min ids)))]
     (d/entity db (or (oldest title) (oldest nil)))))
 
@@ -1182,8 +1182,8 @@
   [db {:keys [classes] :as export-map}]
   (let [existing (into {}
                        (keep (fn [[ident class]]
-                               (when-let [entity (or (when-let [uuid (:block/uuid class)]
-                                                      (d/entity db [:block/uuid uuid]))
+                               (when-let [entity (or (when-let [class-uuid (:block/uuid class)]
+                                                      (d/entity db [:block/uuid class-uuid]))
                                                     (d/entity db ident)
                                                     (ldb/get-page-by-name db (or (:block/title class) (name ident))
                                                                           #{:logseq.class/Tag}))]
@@ -1191,8 +1191,8 @@
                        classes)
         replacements (into {} (map (fn [[ident entity]] [ident (:db/ident entity)])) existing)
         uuid-replacements (into {} (keep (fn [[ident entity]]
-                                          (when-let [uuid (:block/uuid (get classes ident))]
-                                            [uuid (:block/uuid entity)]))) existing)]
+                                          (when-let [class-uuid (:block/uuid (get classes ident))]
+                                            [class-uuid (:block/uuid entity)]))) existing)]
     (-> (walk/postwalk-replace (merge replacements uuid-replacements) export-map)
         (update :classes
                 #(merge % (into {} (map (fn [[_ entity]]
