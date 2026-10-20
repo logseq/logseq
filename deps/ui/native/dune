@@ -28,6 +28,8 @@
 (rule
  (copy ../src/app/boot.ml boot.ml))
 (rule
+ (copy ../src/pages/page_menu.ml page_menu.ml))
+(rule
  (copy ../subs/decode.ml decode.ml))
 (rule
  (copy ../src/app/graph.ml graph.ml))

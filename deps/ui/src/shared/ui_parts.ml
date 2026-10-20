@@ -203,6 +203,7 @@ module Prop : sig
   val z_index : int -> t
   val pointer_enabled : bool -> t
   val grow : float -> t
+  val gap : int -> t
   val padding : int -> t
   val padding_horizontal : int -> t
   val padding_vertical : int -> t
@@ -317,6 +318,7 @@ end = struct
   let pointer_enabled v = bool PointerEnabled v
   let grow v = flt GrowValue v
   let padding v = int PaddingValue v
+  let gap v = int Gap v
   let padding_horizontal v = int PaddingHorizontal v
   let padding_vertical v = int PaddingVertical v
   let padding_top v = int PaddingTop v

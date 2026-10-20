@@ -86,7 +86,7 @@
 (rule
  (copy ../native/native_embed.ml native_embed.ml))
 (rule
- (copy ../native/page_menu.ml page_menu.ml))
+ (copy ../src/pages/page_menu.ml page_menu.ml))
 (rule
  (copy ../native/pdf.ml pdf.ml))
 (rule

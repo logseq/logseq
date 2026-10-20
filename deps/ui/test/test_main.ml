@@ -18,6 +18,19 @@ let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
 let () = Theme_web_test.run ()
 
+let () =
+  List.iter (fun (email,expected) ->
+    check ("email masking preserves complete Unicode graphemes: " ^ email)
+      (Page_menu.mask_email email=expected))
+    ["","";"a","a";"@..","@..";
+     "test@example.com","t***@*******.**m";
+     {js|é@ab.c|js},{js|é@**.c|js};
+     {js|中文@例子.测试|js},{js|中*@**.*试|js};
+     {js|😀中@é.文|js},{js|😀*@*.文|js};
+     {js|éx@aa.ź|js},{js|é*@**.ź|js};
+     {js|👩‍💻x@a.z|js},{js|👩‍💻*@*.z|js};
+     {js|🇨🇳x@a.z|js},{js|🇨🇳*@*.z|js}]
+
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)
 let model_stub = ref Model.initial

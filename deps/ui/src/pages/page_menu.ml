@@ -128,22 +128,31 @@ let page_items (p : Model.page) =
   fav @ del @ [ export_page; publish_page ] @ convert @ dev
   @ plugin_items
 
-(* cljs util/email.cljs mask-email: '@' and '.' stay visible plus the
-   first and last non-separator chars; the rest become '*' *)
+(* Keep separators and the first/last non-separator graphemes intact. *)
 let mask_email email =
   let n = String.length email in
-  let sep c = c = '@' || c = '.' in
+  let units = match Platform.edit_units with
+    | `Bytes -> Edit_model.Bytes | `U16 -> Edit_model.U16 in
+  let sep i = email.[i] = '@' || email.[i] = '.' in
   let first = ref (-1) and last = ref (-1) in
-  String.iteri
-    (fun i c ->
-      if not (sep c) then begin
-        if !first < 0 then first := i;
-        last := i
-      end)
-    email;
-  String.init n (fun i ->
-      let c = email.[i] in
-      if sep c || i = !first || i = !last then c else '*')
+  let offset = ref 0 in
+  while !offset < n do
+    if not (sep !offset) then begin
+      if !first < 0 then first := !offset;
+      last := !offset
+    end;
+    offset := Edit_model.next_off units email !offset
+  done;
+  let masked = Buffer.create n in
+  offset := 0;
+  while !offset < n do
+    let next = Edit_model.next_off units email !offset in
+    if sep !offset || !offset = !first || !offset = !last then
+      Buffer.add_substring masked email !offset (next - !offset)
+    else Buffer.add_char masked '*';
+    offset := next
+  done;
+  Buffer.contents masked
 
 
 (* cljs header.cljs logged-in user block: separator + inert menuitem
@@ -167,10 +176,7 @@ let user_item () : Lui_elements.t =
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
             [ text ~key:"u-addr-t"
-                ~value_signal:
-                  (Signal.map
-                     (fun m -> if m then mask_email email else email)
-                     maskedv)
+                ~value:(reactive (fun m -> if m then mask_email email else email) maskedv)
                 []
             ; Ui_parts.prop_signal Lui_protocol.AccessibilityLabel maskedv
                 (fun m ->
@@ -242,44 +248,30 @@ let global_items () =
           Sidebar_state.open_dialog "login") ]
 
 let view (ax, atop, abot, with_app_items) (p : Model.page option) =
-  (* mel innerWidth/innerHeight — Ui_services.dom_viewport_* serves both
-     hosts *)
   let inner_width = Ui_services.dom_viewport_width () in
   let inner_height = Ui_services.dom_viewport_height () in
-  (* cljs popup-show!: pointer menus anchor to the event target
-     element — ls-anchor-cx centers the positioner on ax and
-     ls-anchor-top lifts it by its own height when it flips above *)
   let flip =
     (not with_app_items) && Popups_state.anchor_above atop abot
   in
-  let x =
-    if with_app_items then
-      (* toolbar dots menu is 16rem wide (cljs header.cljs); ax is the
-         desired menu right edge -> clamp it 5px inside the viewport
-         like the cljs popover. The cljs menu renders its right edge
-         ~1px right of the computed anchor (measured +33 inset offset),
-         so -255 reproduces the observed position *)
-      Float.min ax (inner_width -. 5.) -. 255.
-    else
-      (* the 280px ls-context-menu-content centers on the anchor *)
-      Float.max 148.
-        (Float.min ax (inner_width -. 148.))
+  let anchor_target = if with_app_items then Some "toolbar-dots-btn" else None in
+  let anchor_rect =
+    if with_app_items then None
+    else Some (Float.max 148. (Float.min ax (inner_width -. 148.)), atop, 0., abot -. atop)
   in
-  let y = if flip then atop else abot in
-  (* popover ~at is the same point placement the inline left/top carried;
-     --lui-popup-available-height = viewport space below y *)
-  Ui_components.menu_surface (popover ~key:"page-menu" ~at:(x, y)
+  (* More owns its trigger on both hosts; pointer menus keep a frozen
+     target rectangle. Typed anchors handle centering and upward placement. *)
+  Ui_components.menu_surface (popover ~key:"page-menu" ?anchor_target ?anchor_rect
+    ~anchor:(if flip then `above else `below)
+    ~anchor_alignment:(if with_app_items then `end_ else `center)
+    ~anchor_offset:0. ~anchor_alignment_offset:(if with_app_items then -33. else 0.)
     ~available_height:
-      (if flip then atop -. 5. else inner_height -. y -. 5.)
+      (if flip then atop -. 5. else inner_height -. abot -. 5.)
     ~role:`menu ~width:(if with_app_items then 256 else 280)
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
-       else
-         "ui__dropdown-menu-content ls-context-menu-content \
-          ls-anchor-cx"
-         ^ if flip then " ls-anchor-top" else "")
+       else "ui__dropdown-menu-content ls-context-menu-content")
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with

@@ -9755,3 +9755,149 @@ let () =
        Some "nowrap",Some "normal",false;Some "normal",Some "nowrap",true;
        Some "nowrap",None,true;None,None,false]) [1.;2.];
   print_endline "native inherited white-space measure and paint: OK"
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let previous_read = !Runtime.read_model and previous_send = !Runtime.app_send
+  and previous_flush = !Runtime.app_flush
+  and previous_width = Host.inner_width () and previous_height = Host.inner_height () in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_read;Runtime.app_send:=previous_send;
+    Runtime.app_flush:=previous_flush;Host.set_window_size previous_width previous_height) (fun () ->
+    Host.set_window_size 1440. 900.;
+    List.iter (fun scale ->
+      let host = Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.*.scale,20.*.scale))
+        ~renderer:{Lui_host.name="page-menu-input-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1440.*.scale)) ~height:(int_of_float (900.*.scale)) ~scale () in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      let app = Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry Model.initial Update.update (fun _ ms _ ->
+          Lui_elements.stack ~width:1440 ~height:900
+            [Ui_components.with_props [Ui_components.Prop.padding_right 48]
+               (Ui_parts.int_prop Lui_protocol.WidthValue
+                  ~value:(reactive (fun model -> if model.Model.right_sidebar_open then 900 else 1440) ms)
+                  (Lui_elements.row ~height:48 ~main:`end_ ~cross:`center [Chrome.dots_btn]));
+             reactive ~equal:(fun a b -> a.Model.page_menu=b.Model.page_menu)
+               (fun model -> Page_menu.dialog_view model) ms]) in
+      let closes = ref 0 in
+      Runtime.read_model:=(fun () -> Lui_app.model app);
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Runtime.app_send:=(fun action ->
+        (match action with Action.Page_menu_set None -> incr closes | _ -> ());
+        Lui_app.send app action);
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let store = Lui_host.store host and ui = W.Ui.create () and rects = W.Rects.create () in
+        W.Ui.set_scale ui scale;
+        W.Ui.set_content_rect ui (fun id -> W.Rects.get rects id);
+        let refresh () =
+          ignore (Lui_host.repaint host);Hashtbl.clear rects;
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+            (Lui_host.layout_rect host id)) (Lui_store.preorder store);
+          W.Ui.notify_layout ui in
+        let deliver actions =
+          List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event)
+            | _ -> ()) actions;
+          ignore (Lui_app.flush app);refresh () in
+        let input event = deliver (W.Ui.handle ui store rects event) in
+        let trigger = Option.get (Lui_store.find_identifier store "toolbar-dots-btn") in
+        let open_ () = (Lui_app.model app).Model.page_menu<>None in
+        let popup () = List.find_opt (fun id -> Lui_store.kind store id="popover")
+          (Lui_store.preorder store) in
+        let click_trigger () =
+          let r=W.Rects.get rects trigger in
+          let x=(r.x+.r.w/.2.)/.scale and y=(r.y+.r.h/.2.)/.scale in
+          input (W.Input.Move (x,y));
+          input (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none));
+          input (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+        let escape () = input (W.Input.Key_down (W.Input.Escape,W.Input.mods_none,false)) in
+        let normalize () =
+          Runtime.send (Action.Page_menu_set None);refresh ();
+          input (W.Input.Move (10.,850.));closes:=0 in
+        refresh ();
+        click_trigger ();
+        expect "Native More pointer must open its application-owned menu" (open_ () && Option.is_some (popup ()));
+        let menu=popup () in
+        Option.iter (fun id ->
+          let r=W.Rects.get rects id in
+          let trigger_rect=W.Rects.get rects trigger in
+          Printf.printf "native More scale=%.0f viewport=%.0f/%.0f menu=%.1f,%.1f %.1fx%.1f trigger=%.1f,%.1f %.1fx%.1f\n%!"
+            scale (Ui_services.dom_viewport_width ()) (Ui_services.dom_viewport_height ())
+            (r.x/.scale) (r.y/.scale) (r.w/.scale) (r.h/.scale)
+            (trigger_rect.x/.scale) (trigger_rect.y/.scale) (trigger_rect.w/.scale) (trigger_rect.h/.scale);
+          expect "Native More menu must retain its reference trailing edge and header gap"
+            (abs_float ((r.x+.r.w)/.scale -. min 1432. ((trigger_rect.x+.trigger_rect.w)/.scale+.33.))<0.6
+             && abs_float (r.y-.trigger_rect.y-.trigger_rect.h)<0.6*.scale);
+          let rows=List.filter (fun child -> Lui_store.kind store child="menu-item")
+            (Lui_store.child_ids store id) in
+          List.iter (fun row ->
+            expect "Native menu rows must retain the reference thirty-two-point height"
+              (abs_float ((W.Rects.get rects row).h/.scale-.32.)<0.6)) rows;
+          let rec gaps = function
+            | a::(b::_ as rest) ->
+                let first=W.Rects.get rects a and second=W.Rects.get rects b in
+                expect "Native menus must not add a popover gap between consecutive rows"
+                  (abs_float (second.y-.first.y-.first.h)<0.6*.scale);
+                gaps rest
+            | _ -> () in
+          gaps rows) menu;
+        Runtime.send Action.Toggle_right_sidebar;refresh ();
+        expect "Header width changes must preserve the mounted More menu" (popup ()=menu);
+        Option.iter (fun id ->
+          let r=W.Rects.get rects id and trigger_rect=W.Rects.get rects trigger in
+          expect "Native More menu must follow its trigger when the sidebar changes header width"
+            (abs_float (r.x+.r.w-.trigger_rect.x-.trigger_rect.w-.33.*.scale)<0.6*.scale)) (popup ());
+        Runtime.send Action.Toggle_right_sidebar;refresh ();
+        escape ();
+        expect "Native Escape must close the owning menu exactly once" (not (open_ ()) && !closes=1);
+        expect "Native Escape must dispose the menu rather than retain an inert surface"
+          (Option.is_some menu && popup ()=None);
+        input (W.Input.Move (10.,850.));
+        expect "Native Escape must return keyboard focus to More" (W.Ui.focused ui=trigger);
+        input (W.Input.Key_down (W.Input.Return,W.Input.mods_none,false));
+        expect "Enter on restored More focus must reopen its menu" (open_ ());
+        normalize ();click_trigger ();closes:=0;
+        click_trigger ();
+        expect "Pressing More again must close once without reopening" (not (open_ ()) && !closes=1);
+        normalize ();click_trigger ();closes:=0;
+        input (W.Input.Button_down (400.,500.,W.Input.Left,1,W.Input.mods_none));
+        input (W.Input.Button_up (400.,500.,W.Input.Left,W.Input.mods_none));
+        expect "Native outside press must close the page menu exactly once" (not (open_ ()) && !closes=1);
+        normalize ();
+        Runtime.send (Action.Page_menu_set (Some (300.,100.,100.,false,None)));refresh ();
+        Option.iter (fun id ->
+          let r=W.Rects.get rects id in
+          expect "Native context menu must center on its point anchor"
+            (abs_float (r.x/.scale-.160.)<0.6 && abs_float (r.y/.scale-.100.)<0.6)) (popup ());
+        escape ();
+        expect "Native context menus must share Escape dismissal" (not (open_ ()) && !closes=1);
+        normalize ();
+        Runtime.send (Action.Page_menu_set (Some (300.,850.,870.,false,None)));refresh ();
+        Option.iter (fun id ->
+          let r=W.Rects.get rects id in
+          expect "Native context menu must flip above a low anchor without leaving the viewport"
+            (abs_float ((r.y+.r.h)/.scale-.850.)<0.6 && r.y>=0.)) (popup ());
+        escape ())) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native page menu pointer, keyboard and focus lifecycle" (!failures=[]);
+  print_endline "native page menu pointer, keyboard and focus lifecycle: OK")
+
+let () =
+  let failures = ref [] in
+  List.iter (fun (email,expected) ->
+    if Page_menu.mask_email email<>expected then failures:=email::!failures)
+    ["","";"a","a";"@..","@..";
+     "test@example.com","t***@*******.**m";
+     {js|é@ab.c|js},{js|é@**.c|js};
+     {js|中文@例子.测试|js},{js|中*@**.*试|js};
+     {js|😀中@é.文|js},{js|😀*@*.文|js};
+     {js|éx@aa.ź|js},{js|é*@**.ź|js};
+     {js|👩‍💻x@a.z|js},{js|👩‍💻*@*.z|js};
+     {js|🇨🇳x@a.z|js},{js|🇨🇳*@*.z|js}];
+  List.iter (fun email -> prerr_endline ("Unicode email masking failed: "^email)) (List.rev !failures);
+  check "Native email masking preserves complete Unicode graphemes" (!failures=[]);
+  print_endline "native Unicode email masking: OK"

@@ -30,7 +30,6 @@ open Lui_elements
    two stacked placement toolbars produced doubled bars/borders — so
    one plain row is the parity form. rtc/plugin toolbar items keep
    hidden DOM mounts below so their emitters stay live. *)
-let menu_dismiss_installed = ref false
 
 let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ?foreground_signal ?style_class on_press =
@@ -58,17 +57,13 @@ let search_btn ?(key = "search-btn") () =
     ?keys:(if keys = "" then None else Some keys)
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
-(* cljs anchors the dropdown to the trigger's right edge — the fixed
-   trailing position: menu right edge just left of the last button,
-   just under the header. *)
+(* The shared menu owns this trigger and follows its retained bounds. *)
 let dots_btn : t =
  fun context parent ->
   (icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
     ~label:(I18n.t "header/more") (fun () ->
-      (* re-pressing the trigger toggles the menu closed (the document
-         click-catcher installed in [shell] dismisses on outside press
-         only — the button itself is outside the menu surface) *)
+      (* Re-pressing the owning trigger toggles its menu closed. *)
       if (Runtime.model ()).Model.page_menu <> None then (
         Runtime.send (Action.Page_menu_set None);
         Runtime.flush ())
@@ -471,34 +466,8 @@ let not_found_page : t =
     ]
   ) context parent
 
-(* page menu dismiss contract (cljs document handlers): Escape or a
-   press outside .ui__dropdown-menu-content closes it. Installed once
-   per session — the handler reads the live model via [Runtime.model]. *)
-
-let install_menu_dismiss () =
-  if not !menu_dismiss_installed then (
-    menu_dismiss_installed := true;
-    Ui_services.dom_on_document_event "keydown" (fun ev ->
-        match ev.Ui_services.key with
-        | Some "Escape"
-          when (Runtime.model ()).Model.page_menu <> None ->
-            Runtime.send (Action.Page_menu_set None);
-            Runtime.flush ()
-        | _ -> ());
-    Ui_services.dom_on_document_event "click" (fun ev ->
-        match ev.Ui_services.target with
-        | Some el
-          when (Runtime.model ()).Model.page_menu <> None
-               && el.Ui_services.closest ".ui__dropdown-menu-content"
-                  = None
-               && el.Ui_services.closest ".toolbar-dots-btn" = None ->
-            Runtime.send (Action.Page_menu_set None);
-            Runtime.flush ()
-        | _ -> ()))
-
 let shell_contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  install_menu_dismiss ();
   stack ~key:"shell-content"
     [ (* horizontal shell: the docked splits own both side docks'
          tracks — the left split's second pane is the detail column

@@ -1032,7 +1032,8 @@ let menu_item_chrome element =
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
 let menu_surface ?max_height element =
   with_props
-    [ ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
+    [ Prop.gap 0
+    ; ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ; Prop.font_size "0.875rem"
     ; Prop.line_height "1.25rem"
