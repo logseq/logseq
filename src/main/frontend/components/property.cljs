@@ -45,7 +45,9 @@
           id-or-name (or block-uuid id-or-name*)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (entity/class? entity) class-schema?)
-          property (db-async/<get-block repo id-or-name {:children? false})
+          property (if block-uuid
+                     (db-async/<get-block repo block-uuid {:children? false})
+                     (db-async/<get-page-by-name repo id-or-name #{:logseq.class/Property}))
           property? (entity/property? property)
           property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
@@ -176,6 +178,7 @@
 (hsx/defc property-select
   [select-opts]
   (let [[properties set-properties!] (hooks/use-state nil)
+        [page-to-convert set-page-to-convert!] (hooks/use-state nil)
         [q set-q!] (hooks/use-state "")]
     (hooks/use-effect!
      (fn []
@@ -187,15 +190,22 @@
      [])
     (hooks/use-effect!
      (fn []
-       (p/let [repo (state/get-current-repo)
-               block (when-not (string/blank? q)
-                       (db-async/<get-block repo q {:children? false}))
-               internal-page-exists? (entity/internal-page? block)]
-         (when internal-page-exists?
-           (set-properties!
-            (cons (assoc block :convert-page-to-property? true) properties)))))
+       (let [active? (atom true)]
+         (set-page-to-convert! nil)
+         (p/let [repo (state/get-current-repo)
+                 block (when-not (string/blank? q)
+                         (db-async/<get-page-by-name repo q #{:logseq.class/Page}))]
+           (when @active?
+             (set-page-to-convert! block)))
+         #(reset! active? false)))
      [q])
     (let [transform-fn (:transform-fn select-opts)
+          property-exists? (some #(= (string/lower-case q)
+                                    (some-> (:block/title %) string/lower-case))
+                                 properties)
+          property-options (cond->> properties
+                             (and (entity/internal-page? page-to-convert) (not property-exists?))
+                             (cons (assoc page-to-convert :convert-page-to-property? true)))
           items (->>
                  (map (fn [x]
                         (let [convert? (:convert-page-to-property? x)]
@@ -217,9 +227,11 @@
                            :value (or (:block/uuid x) (:db/ident x))
                            :property x
                            :db/ident (:db/ident x)
-                           :block/title (or (db-property/built-in-display-title x t)
-                                            (:block/title x))
-                           :convert-page-to-property? convert?})) properties)
+                           :block/title (if convert?
+                                          (t :property/convert-page-to-property (:block/title x))
+                                          (or (db-property/built-in-display-title x t)
+                                              (:block/title x)))
+                           :convert-page-to-property? convert?})) property-options)
                  (util/distinct-by-last-wins (fn [item] (or (:value item) (:db/ident item)))))
           property-transform-fn (fn [results input]
                                   (let [results (prefer-exact-property-title-match results input)
@@ -240,7 +252,6 @@
                          :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false
-                         :new-case-sensitive? true
                          :show-new-when-not-exact-match? true
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                          :input-default-placeholder (t :property/add-or-change)
@@ -540,6 +551,7 @@
                                                     :*property-schema *property-schema
                                                     :default-open? true
                                                     :block block
+                                                    :block-uuid (:block/uuid property)
                                                     :*show-new-property-config? *show-new-property-config?
                                                     :*show-class-select? *show-class-select?}))
 

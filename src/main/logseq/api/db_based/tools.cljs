@@ -171,14 +171,13 @@
     pages-and-blocks))
 
 (defn- ops->classes
-  [operations {:keys [property-idents class-idents existing-classes]}]
-  (let [new-classes (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
+  [operations {:keys [property-idents class-idents existing-classes new-classes]}]
+  (let [class-ops (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
         classes (merge
-                 (into {} (keep (fn [[k v]]
-                                  ;; Removing existing until edits are supported
-                                  (when-not (existing-classes v) [v {:block/title k}]))
-                                class-idents))
-                 (->> new-classes
+                 new-classes
+                 (->> class-ops
+                      (remove #(existing-classes (get-ident class-idents (get-in % [:data :title]))))
+                      (common-util/distinct-by #(get-ident class-idents (get-in % [:data :title])))
                       (map (fn [{:keys [data] :as op}]
                              (let [title (get-in op [:data :title])
                                    class-m (cond-> {:block/title title}
@@ -197,6 +196,8 @@
         (merge
          existing-properties
          (->> new-properties
+              (remove #(contains? existing-properties (get-ident property-idents (get-in % [:data :title]))))
+              (common-util/distinct-by #(get-ident property-idents (get-in % [:data :title])))
               (map (fn [{:keys [data] :as op}]
                      (let [title (get-in op [:data :title])
                            prop-m (cond-> {:block/title title}
@@ -212,56 +213,55 @@
               (into {})))]
     properties))
 
+(defn- resolve-type-names
+  [db titles type-tag create-ident]
+  (reduce
+   (fn [result [_ variants]]
+     (let [title (first variants)
+           by-uuid (when (common-util/uuid-string? title)
+                     (ldb/get-page-by-name db title #{type-tag}))
+           _ (when (and (common-util/uuid-string? title) (nil? by-uuid))
+               (throw (ex-info "Node does not have the required type" {:uuid title :type type-tag})))
+           entities (if by-uuid
+                      [by-uuid]
+                      (map #(d/entity db %) (sort (ldb/page-exists? db title #{type-tag}))))
+           by-title (into {} (map (juxt :block/title identity)) (reverse entities))
+           fallback (first entities)
+           new-ident (when-not fallback (create-ident title))]
+       (reduce (fn [resolved variant]
+                 (let [entity (or (get by-title variant) fallback)
+                       ident (or (:db/ident entity) new-ident)]
+                   (cond-> (assoc-in resolved [:idents variant] ident)
+                     entity (assoc-in [:existing ident] entity))))
+               (cond-> result
+                 new-ident (assoc-in [:new new-ident] {:block/title title}))
+               variants)))
+   {:idents {} :existing {} :new {}}
+   (group-by common-util/page-name-sanity-lc (distinct titles))))
+
 (defn- operations->idents
-  "Creates property and class idents from all uses of them in operations"
+  "Resolves property and class names independently without regard to case."
   [db operations]
-  (let [existing-classes (atom #{})
-        existing-properties (atom {})
-        property-idents
-        (->> (filter #(and (= "property" (:entityType %)) (= "add" (:operation %)))
-                     operations)
-             (map #(get-in % [:data :title]))
-             (into (mapcat #(get-in % [:data :class-properties])
-                           (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %)))
-                                   operations)))
-             distinct
-             (map #(vector % (if (common-util/uuid-string? %)
-                               (let [ent (d/entity db [:block/uuid (uuid %)])
-                                     ident (:db/ident ent)]
-                                 (when-not (entity-util/property? ent)
-                                   (throw (ex-info (str (pr-str (:block/title ent))
-                                                        " is not a property and can't be used as one")
-                                                   {})))
-                                 (swap! existing-properties assoc ident (select-keys ent [:db/cardinality :logseq.property/type]))
-                                 ident)
-                               (db-property/create-user-property-ident-from-name %))))
-             (into {}))
-        class-idents
-        (->> (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
-             (mapcat (fn [op]
-                       (into [(get-in op [:data :title])] (get-in op [:data :class-extends]))))
-             (into (mapcat #(get-in % [:data :property-classes])
-                           (filter #(and (= "property" (:entityType %)) (= "add" (:operation %)))
-                                   operations)))
-             (into (mapcat #(get-in % [:data :tags])
-                           (filter #(and (= "block" (:entityType %)) (= "add" (:operation %)))
-                                   operations)))
-             distinct
-             (map #(vector % (if (common-util/uuid-string? %)
-                               (let [ent (d/entity db [:block/uuid (uuid %)])
-                                     ident (:db/ident ent)]
-                                 (when-not (entity-util/class? ent)
-                                   (throw (ex-info (str (pr-str (:block/title ent))
-                                                        " is not a tag and can't be used as one")
-                                                   {})))
-                                 (swap! existing-classes conj ident)
-                                 ident)
-                               (db-class/create-user-class-ident-from-name db %))))
-             (into {}))]
-    {:property-idents property-idents
-     :class-idents class-idents
-     :existing-classes @existing-classes
-     :existing-properties @existing-properties}))
+  (let [property-ops (filter #(and (= "property" (:entityType %)) (= "add" (:operation %))) operations)
+        class-ops (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
+        block-ops (filter #(and (= "block" (:entityType %)) (= "add" (:operation %))) operations)
+        properties (resolve-type-names db
+                                       (concat (map #(get-in % [:data :title]) property-ops)
+                                               (mapcat #(get-in % [:data :class-properties]) class-ops))
+                                       :logseq.class/Property db-property/create-user-property-ident-from-name)
+        classes (resolve-type-names db
+                                    (concat (map #(get-in % [:data :title]) class-ops)
+                                            (mapcat #(get-in % [:data :class-extends]) class-ops)
+                                            (mapcat #(get-in % [:data :property-classes]) property-ops)
+                                            (mapcat #(get-in % [:data :tags]) block-ops))
+                                    :logseq.class/Tag #(db-class/create-user-class-ident-from-name db %))]
+    {:property-idents (:idents properties)
+     :class-idents (:idents classes)
+     :new-classes (:new classes)
+     :existing-classes (set (keys (:existing classes)))
+     :existing-properties (into {} (map (fn [[ident entity]]
+                                        [ident (select-keys entity [:block/title :db/cardinality :logseq.property/type])]))
+                                (:existing properties))}))
 
 (def ^:private add-non-block-schema
   [:map

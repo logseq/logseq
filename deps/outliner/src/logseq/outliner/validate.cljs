@@ -47,39 +47,27 @@
                                       :i18n-key :page.validation/name-blank
                                       :type :warning}})))))
 
-(defn- case-sensitive-title?
-  "Properties and tags keep exact-title uniqueness. Ordinary pages match create
-   via :block/name (page-name-sanity-lc)."
-  [entity]
-  (or (ldb/property? entity) (ldb/class? entity)))
-
 (defn- find-other-ids-with-title-and-tags
-  "Query that finds other ids given the id to ignore, title or lc name to look up, and tags to consider.
-   Properties and tags match by exact :block/title; ordinary pages match by :block/name
-   (page-name-sanity-lc, same as page creation). Entities with a parent are scoped to
-   that parent; top-level pages only match other top-level pages."
+  "Matches names without regard to case within the same type and page parent."
   [entity]
-  (let [case-sensitive? (case-sensitive-title? entity)]
-    (vec
-     (concat
-      '[:find [?b ...]
-        :in $ ?eid ?title [?tag-id ...]
-        :where]
-      [(vector '?b (if case-sensitive? :block/title :block/name) '?title)
-       '[?b :block/tags ?tag-id]
-       '[(not= ?b ?eid)]]
-      (cond
-        (ldb/property? entity)
-        ;; Property names are unique in that they can
-        ;; have the same names as built-in property names
-        '[[(missing? $ ?b :logseq.property/built-in?)]]
-        (:block/parent entity)
-        ;; same parent
-        '[[?b :block/parent ?bp]
-          [?eid :block/parent ?ep]
-          [(= ?bp ?ep)]]
-        (not case-sensitive?)
-        '[[(missing? $ ?b :block/parent)]])))))
+  (vec
+   (concat
+    '[:find [?b ...]
+      :in $ ?eid ?name [?tag-id ...]
+      :where
+      [?b :block/name ?name]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]]
+    (when (entity-util/internal-page? entity)
+      (concat
+       '[[?b :block/tags :logseq.class/Page]
+         (not [?b :block/tags :logseq.class/Tag])
+         (not [?b :block/tags :logseq.class/Property])]
+       (if (:block/parent entity)
+         '[[?b :block/parent ?bp]
+           [?eid :block/parent ?ep]
+           [(= ?bp ?ep)]]
+         '[[(missing? $ ?b :block/parent)]]))))))
 
 (defn- throw-duplicate
   [title payload]
@@ -106,10 +94,12 @@
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (when (seq tags)
-    (let [lookup (if (case-sensitive-title? entity)
-                   new-title
-                   (common-util/page-name-sanity-lc new-title))
-          common-tag-ids (colliding-tag-ids db entity lookup tags)]
+    (let [lookup (common-util/page-name-sanity-lc new-title)
+          type-tags (cond
+                      (ldb/property? entity) (filter #(= :logseq.class/Property (:db/ident %)) tags)
+                      (ldb/class? entity) (filter #(= :logseq.class/Tag (:db/ident %)) tags)
+                      :else tags)
+          common-tag-ids (colliding-tag-ids db entity lookup type-tags)]
       (when common-tag-ids
         (cond
           (ldb/property? entity)
@@ -144,13 +134,41 @@
 
 (defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
-   - Ordinary page names are unique by :block/name (case-insensitive) for the same parent or among top-level pages
-   - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
-   - Property names are unique with user properties being allowed to have the same name as built-in ones
-   - Class names are unique regardless of their extends or if they're built-in"
+   - Ordinary page names are case-insensitive within the same parent and overlapping tag scopes
+   - Pages with disjoint user tags can share a name, such as Apple #Company and Apple #Fruit
+   - Property names are unique without regard to case, including built-in properties
+   - Class names are unique without regard to case, regardless of extends or built-in status"
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
+
+(defn validate-page-name-changes
+  "Validates ordinary page uniqueness in the final transaction state.
+   Unchanged names and scopes preserve historical duplicates."
+  [{:keys [db-before db-after tx-data]}]
+  (let [page-scope (fn [entity]
+                     [(:block/name entity)
+                      (:db/id (:block/parent entity))
+                      (set (map :db/id (:block/tags entity)))])
+        changed-ids (into #{}
+                          (keep (fn [datom]
+                                  (when (contains? #{:block/name :block/tags :block/parent} (:a datom))
+                                    (:e datom))))
+                          tx-data)
+        ordinary-page? (fn [entity]
+                         (and (entity-util/internal-page? entity)
+                              (not (or (entity-util/class? entity) (entity-util/property? entity)))))
+        changed-pages (into []
+                            (comp (map #(d/entity db-after %))
+                                  (filter #(and (ordinary-page? %)
+                                                (:block/name %)
+                                                (not (entity-util/recycled? %))
+                                                (not= (page-scope (d/entity db-before (:db/id %))) (page-scope %)))))
+                            changed-ids)
+        index (ldb/index-page-names db-after (map :block/name changed-pages))]
+    (doseq [entity changed-pages
+            :when (ldb/find-page-name-conflict index entity)]
+      (validate-unique-for-page db-after (:block/title entity) entity))))
 
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
@@ -166,7 +184,8 @@
 (defn validate-block-title
   "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
-  (validate-unique-by-name-and-tags db new-title existing-block-entity)
+  (when (not= new-title (:block/title existing-block-entity))
+    (validate-unique-by-name-and-tags db new-title existing-block-entity))
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
 (defn validate-property-title

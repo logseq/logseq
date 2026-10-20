@@ -17,14 +17,22 @@
 
 (deftest create-class
   (let [conn (db-test/create-conn)
-        _ (outliner-page/create! conn "movie" {:class? true})
-        _ (outliner-page/create! conn "Movie" {:class? true})
-        movie-class (ldb/get-case-page @conn "movie")
-        Movie-class (ldb/get-case-page @conn "Movie")]
+        [_ first-uuid] (outliner-page/create! conn "movie" {:class? true})
+        [_ second-uuid] (outliner-page/create! conn "Movie" {:class? true})
+        [_ page-uuid] (outliner-page/create! conn "MOVIE" {})]
+    (is (= first-uuid second-uuid) "Class creation reuses a case-insensitive name")
+    (is (not= first-uuid page-uuid) "Pages and classes have separate names")
+    (is (= "movie" (:block/title (d/entity @conn [:block/uuid first-uuid]))))))
 
-    (is (ldb/class? movie-class) "Creates a class")
-    (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
-    (is (not= movie-class Movie-class) "The two classes are not the same")))
+(deftest create-class-namespace-reuses-case-variants
+  (let [conn (db-test/create-conn)
+        [_ class-uuid] (outliner-page/create! conn "Cedar/cedar"
+                                             {:class? true :split-namespace? true})
+        class (d/entity @conn [:block/uuid class-uuid])]
+    (is (= 1 (count (ldb/page-exists? @conn "CEDAR" #{:logseq.class/Tag}))))
+    (is (= "Cedar" (:block/title class)))
+    (is (= #{:logseq.class/Root}
+           (set (map :db/ident (:logseq.property.class/extends class)))))))
 
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -66,30 +74,23 @@
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
 
     (testing "Child pages with same name and different parents"
-      (let [_ (outliner-page/create! conn "vim/keys" {:split-namespace? true})
-            _ (outliner-page/create! conn "emacs/keys" {:split-namespace? true})]
+      (let [_ (outliner-page/create! conn "vim/shared/keys" {:split-namespace? true})
+            _ (outliner-page/create! conn "emacs/shared/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
-               (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
-                    (map #(get-in % [:block/parent :block/title]))
+               (->> (d/q '[:find [(pull ?b [{:block/parent [{:block/parent [:block/title]}]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:block/parent :block/parent :block/title]))
                     set))
             "Two child pages with same name exist and have different parents")))
 
-    (testing "Invalid workflows"
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "class1/page" {:split-namespace? true}))
-          "Page can't have a class parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/page" {:split-namespace? true}))
-          "Page can't have a property parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
-          "Class can't have a property parent"))))
+    (testing "Namespace parents are resolved within the requested type"
+      (doseq [[title class?] [["class1/page" false]
+                              ["property1/page" false]
+                              ["property1/class" true]]]
+        (let [[_ child-uuid] (outliner-page/create! conn title {:split-namespace? true :class? class?})
+              child (d/entity @conn [:block/uuid child-uuid])]
+          (is (if class?
+                (every? ldb/class? (:logseq.property.class/extends child))
+                (ldb/internal-page? (:block/parent child)))))))))
 
 (deftest create-page
   (let [conn (db-test/create-conn)

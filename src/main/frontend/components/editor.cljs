@@ -186,22 +186,18 @@
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q exact-page]
   (when (some? partial-matched-pages)
-    (let [page-exists? (and (nil? (:block/parent exact-page))
-                            (if db-tag?
-                              (entity/class? exact-page)
+    (let [page-exists? (if db-tag?
+                         (entity/class? exact-page)
+                         (and (or (nil? (:block/parent exact-page))
+                                  (ldb/library? (:block/parent exact-page))
+                                  (entity/journal? exact-page))
                               (or (entity/internal-page? exact-page)
                                   (entity/journal? exact-page))))]
       (if (or page-exists?
               (and db-tag? (class-alias? exact-page)))
         partial-matched-pages
-        (if db-tag?
-          (concat
-           ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
-           (when-not (and (entity/internal-page? exact-page) (= (:block/title exact-page) q))
-             [{:block/title (str (t :editor/new-tag) " " q)}])
-           partial-matched-pages)
-          (cons {:block/title (str (t :editor/new-page) " " q)}
-                partial-matched-pages))))))
+        (cons {:block/title (str (t (if db-tag? :editor/new-tag :editor/new-page)) " " q)}
+              partial-matched-pages)))))
 
 (defn- search-pages
   [q db-tag? set-matched-pages! set-exact-page!]
@@ -211,16 +207,19 @@
                                                  {:except-root-class? true})]
         (set-exact-page! nil)
         (set-matched-pages! classes)))
-    (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
+    (p/let [repo (state/get-current-repo)
+            block (db-async/<get-page-by-name repo q (if db-tag?
+                                                       #{:logseq.class/Tag}
+                                                       #{:logseq.class/Page :logseq.class/Journal}))
+            page (when (and db-tag? (nil? block))
+                   (db-async/<get-page-by-name repo q #{:logseq.class/Page}))
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]
-                       (if (and (entity/internal-page? block)
-                                (= (:block/title block) q)
-                                (not (ldb/built-in? block))
-                                (not (class-alias? block)))
-                         (cons {:block/title q
-                                :db/id (:db/id block)
-                                :block/uuid (:block/uuid block)
+                       (if (and (entity/internal-page? page)
+                                (not (ldb/built-in? page)))
+                         (cons {:block/title (:block/title page)
+                                :db/id (:db/id page)
+                                :block/uuid (:block/uuid page)
                                 :convert-page-to-tag? true
                                 :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))

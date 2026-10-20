@@ -1101,8 +1101,8 @@
         test-conn (conn/get-db test-helper/test-db false)]
     (d/transact! test-conn (concat init-index init-tx block-props-tx)))
   (let [test-db (conn/get-db test-helper/test-db)
-        class (ldb/get-case-page test-db "Project Tag")
-        alias (ldb/get-case-page test-db "Alias Only")]
+        class (ldb/get-page-by-name test-db "Project Tag")
+        alias (ldb/get-page-by-name test-db "Alias Only")]
     (d/transact! (conn/get-db test-helper/test-db false)
                  [{:db/id (:db/id class)
                    :block/alias #{(:db/id alias)}
@@ -1220,8 +1220,8 @@
       (set! db-async/<get-all-classes
             (fn [_repo _opts]
               (let [test-db (conn/get-db test-helper/test-db)
-                    alias (ldb/get-case-page test-db "Alias Only")
-                    class (assoc (select-keys (ldb/get-case-page test-db "Project Tag")
+                    alias (ldb/get-page-by-name test-db "Alias Only")
+                    class (assoc (select-keys (ldb/get-page-by-name test-db "Project Tag")
                                               [:db/id :block/uuid :block/title])
                                  :block/alias #{(select-keys alias [:db/id :block/uuid :block/title])})]
                 (p/resolved [class]))))

@@ -190,56 +190,38 @@
   [db block]
   (outliner-pipeline/db-rebuild-block-refs db block))
 
+(defn- index-tag-ref
+  [index ref]
+  (-> index
+      (update :first-ref #(or % ref))
+      (assoc-in [:uuids (:block/uuid ref)] ref)
+      (assoc-in [:titles (:block/title ref)] ref)))
+
 (defn- matching-ref-for-tag
-  "Class titles are case-sensitive while :block/name is not, so among same-name
-  refs prefer the one whose :block/title equals the tag's."
-  [tag candidates]
-  (or (some (fn [r]
-              (when (and (:block/title tag)
-                         (= (:block/title r) (:block/title tag)))
-                r))
-            candidates)
-      (first candidates)))
+  [tag index]
+  (or (when (:block/uuid tag) (get-in index [:uuids (:block/uuid tag)]))
+      (get-in index [:titles (:block/title tag)])
+      (:first-ref index)))
 
 (defn- fix-tag-ids
-  "Fix or remove tags related when entered via `Escape`"
+  "Resolves tag identities from the references saved with the block."
   [m db]
-  (let [refs (set (keep :block/name (seq (:block/refs m))))
-        tags (seq (:block/tags m))]
-    (if (and (seq refs) tags)
+  (let [refs-by-name (reduce (fn [index ref]
+                               (update index (:block/name ref) index-tag-ref ref))
+                             {} (:block/refs m))]
+    (if (and (seq refs-by-name) (seq (:block/tags m)))
       (update m :block/tags
               (fn [tags]
-                (let [tags (map (fn [tag] (or (and (:db/id tag)
-                                                   (let [e (d/entity db (:db/id tag))]
-                                                     (select-keys e [:db/id :block/uuid :block/title :block/name])))
-                                              tag))
-                                tags)]
-                  (cond->>
-                   ;; Update :block/tag to reference ids from :block/refs
-                   (map (fn [tag]
-                          (if (contains? refs (:block/name tag))
-                            (let [matched-ref (matching-ref-for-tag
-                                               tag
-                                               (filter #(= (:block/name tag) (:block/name %))
-                                                       (:block/refs m)))]
-                              (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
-                                (:db/ident matched-ref)
-                                (assoc :db/ident (:db/ident matched-ref))))
-                            tag))
-                        tags)
-
-                    true
-                    ;; Remove tags changing case with `Escape`
-                    ((fn [tags']
-                       (let [ref-titles (->> (map :block/title (:block/refs m))
-                                             (remove nil?)
-                                             set)
-                             lc-ref-titles (set (map string/lower-case ref-titles))]
-                         (remove (fn [tag]
-                                   (when-let [title (:block/title tag)]
-                                     (and (not (contains? ref-titles title))
-                                          (contains? lc-ref-titles (string/lower-case title)))))
-                                 tags'))))))))
+                (map (fn [tag]
+                       (let [resolved (if-let [id (:db/id tag)]
+                                        (select-keys (d/entity db id) [:db/id :block/uuid :block/title :block/name])
+                                        tag)
+                             matched (matching-ref-for-tag resolved (get refs-by-name (:block/name resolved)))]
+                         (if matched
+                           (cond-> (assoc resolved :block/uuid (:block/uuid matched))
+                             (:db/ident matched) (assoc :db/ident (:db/ident matched)))
+                           resolved)))
+                     tags)))
       m)))
 
 (defn- ref-tags
@@ -272,7 +254,7 @@
   [db ref tag-names]
   (if (new-page-ref? ref)
     (let [class? (contains? tag-names (:block/name ref))]
-      (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
+      (if-let [page (and (not class?) (ldb/get-page-by-name db (:block/name ref) #{:logseq.class/Page :logseq.class/Journal}))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
                 (select-keys ref [:block.temp/original-page-name]))
          nil]
@@ -292,15 +274,14 @@
 (defn- resolve-refs-dedup
   "Resolve new-page refs, deduping pages created during the pass: db doesn't
   see them yet, so a repeated [[same name]] ref would otherwise create a
-  duplicate page. Class titles are case-sensitive (#Movie and #movie are
-  distinct classes), so class refs dedupe by :block/title instead."
+  duplicate page. Names are case-insensitive within each node type."
   [db refs tag-names]
   (first
    (reduce
     (fn [[resolved seen] ref]
       (let [new-page? (new-page-ref? ref)
             dedup-key (if (contains? tag-names (:block/name ref))
-                        [:class (:block/title ref)]
+                        [:class (:block/name ref)]
                         [:page (:block/name ref)])]
         (if-let [seen-ref (and new-page? (get seen dedup-key))]
           [(conj resolved [(merge seen-ref
@@ -355,7 +336,7 @@
            page-txs (mapcat #(nth % 2) resolved-pairs)
            tag-refs (reduce (fn [m ref]
                               (if (:db/ident ref)
-                                (update m (:block/name ref) (fnil conj []) ref)
+                                (update m (:block/name ref) index-tag-ref ref)
                                 m))
                             {}
                             refs')
@@ -519,7 +500,7 @@
                    (or (ldb/page? block-entity) (ldb/object? block-entity))
                    (:block/title m)
                    (not= (:block/title m) (:block/title block-entity)))
-              (outliner-validate/validate-block-title db (:block/title m) block-entity))]
+              (outliner-validate/validate-disallow-page-with-journal-name (:block/title m) block-entity))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -682,6 +663,10 @@
                      block
                      (merge entity block))]
         (otree/-save block' *txs-state db opts)
+        (when (ldb/page? entity)
+          (outliner-validate/validate-page-name-changes (d/with db @*txs-state))
+          (when (or (ldb/class? entity) (ldb/property? entity))
+            (outliner-validate/validate-block-title db (:block/title block') entity)))
         {:tx-data @*txs-state}))))
 
 (defn- get-right-siblings

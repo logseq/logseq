@@ -340,9 +340,10 @@
                         (ldb/get-journal-page-by-day db journal-day)
 
                         (and class? db-based?)
-                        (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
-                                 first
-                                 (d/entity db))
+                        (ldb/get-page-by-name db original-page-name' #{:logseq.class/Tag})
+
+                        db-based?
+                        (ldb/get-page-by-name db original-page-name' #{:logseq.class/Page :logseq.class/Journal})
 
                         :else
                         (get-page db original-page-name')))

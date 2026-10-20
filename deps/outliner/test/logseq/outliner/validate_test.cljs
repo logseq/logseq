@@ -11,19 +11,20 @@
               {:properties {:color {:logseq.property/type :default}
                             :color2 {:logseq.property/type :default}}})]
 
-    (is (nil?
+    (is (thrown-with-msg?
+         js/Error #"Duplicate property"
          (outliner-validate/validate-unique-by-name-and-tags
           @conn
           (:block/title (d/entity @conn :logseq.property/background-color))
           (d/entity @conn :user.property/color)))
-        "Allow user property to have same name as built-in property")
+        "Disallow a user property name that matches a built-in property")
 
     (is (thrown-with-msg?
          js/Error
          #"Duplicate property"
          (outliner-validate/validate-unique-by-name-and-tags
           @conn
-          "color"
+          "cOLOR"
           (d/entity @conn :user.property/color2)))
         "Disallow duplicate user property")))
 
@@ -48,12 +49,13 @@
           "Card"
           (d/entity @conn :user.class/Class1)))
         "Disallow duplicate class names even if it's built-in")
-    (is (nil?
+    (is (thrown-with-msg?
+         js/Error #"Duplicate class"
          (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "class1"
           (d/entity @conn :user.class/Class2)))
-        "Allow a class to use a case variant of another class name")))
+        "Disallow a case variant of another class name")))
 
 (deftest validate-block-title-unique-for-namespaced-pages
   (let [conn (db-test/create-conn-with-blocks

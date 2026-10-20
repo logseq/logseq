@@ -224,7 +224,7 @@
                    class-uuid-or-ident-or-title)]
     (p/let [class (if (or (uuid? class-id) (qualified-keyword? class-id))
                     (<get-block class-id)
-                    (db-async/<get-case-page (state/get-current-repo) class-id))]
+                    (db-async/<get-page-by-name (state/get-current-repo) class-id #{:logseq.class/Tag}))]
       (when-not (entity/class? class)
         (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
       (if-not class
@@ -335,7 +335,7 @@
 
 (defn tag-add-property [tag-id property-id-or-name]
   (this-as this
-           (p/let [tag (db-async/<get-case-page (state/get-current-repo) tag-id)
+           (p/let [tag (db-async/<get-page-by-name (state/get-current-repo) tag-id #{:logseq.class/Tag})
                    eid (resolve-property-eid this property-id-or-name)
                    property (<get-block eid)]
              (when-not (entity/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
@@ -345,18 +345,18 @@
                (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
              (p/do!
               (db-property-handler/class-add-property! (:db/id tag) (:db/ident property))
-              (p/let [tag (db-async/<get-case-page (state/get-current-repo) tag-id)]
+              (p/let [tag (db-async/<get-page-by-name (state/get-current-repo) tag-id #{:logseq.class/Tag})]
                 (sdk-utils/result->js tag))))))
 
 (defn tag-remove-property [tag-id property-id-or-name]
   (p/let [repo (state/get-current-repo)
-          tag (db-async/<get-case-page repo tag-id)
-          property (db-async/<get-case-page repo property-id-or-name)]
+          tag (db-async/<get-page-by-name repo tag-id #{:logseq.class/Tag})
+          property (db-async/<get-page-by-name repo property-id-or-name #{:logseq.class/Property})]
     (when-not (entity/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
     (when-not (entity/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
     (p/do!
      (db-property-handler/class-remove-property! (:db/id tag) (:db/ident property))
-     (p/let [tag (db-async/<get-case-page repo tag-id)]
+     (p/let [tag (db-async/<get-page-by-name repo tag-id #{:logseq.class/Tag})]
        (sdk-utils/result->js tag)))))
 
 (defn add-block-tag [id-or-name tag-id]

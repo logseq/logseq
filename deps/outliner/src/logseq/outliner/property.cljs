@@ -462,14 +462,7 @@
 (defn- get-property-value-eid
   [db property-id raw-value]
   (if (= property-id :block/tags)
-    (first
-     (d/q '[:find [?v ...]
-            :in $ ?title
-            :where
-            [?v :block/title ?title]
-            [?v :block/tags :logseq.class/Tag]]
-          db
-          raw-value))
+    (:db/id (ldb/get-page-by-name db raw-value #{:logseq.class/Tag}))
     (first
      (d/q '[:find [?v ...]
             :in $ ?property-id ?raw-value
@@ -532,8 +525,8 @@
                         :v v}]
         (if (or (string/blank? v) (not (string? v)))
           (throw (ex-info "Value should be non-empty string" error-data))
-          (let [page (ldb/get-page @conn v)]
-            (if (entity-util/page? page)
+          (let [page (ldb/get-page-by-name @conn v #{:logseq.class/Page :logseq.class/Journal})]
+            (if page
               (:db/id page)
               (let [[_ page-uuid] (outliner-page/create! conn v error-data)]
                 (if-not page-uuid
@@ -952,6 +945,9 @@
     it is ensured to have a unique :db/ident"
   [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
+        existing (when-not (:e2ee? opts)
+                   (when-let [title (or property-name (some-> property-id name))]
+                     (ldb/get-page-by-name db title #{:logseq.class/Property})))
         db-ident (or property-id
                      (try (db-property/create-user-property-ident-from-name property-name)
                           (catch :default e
@@ -966,8 +962,19 @@
       (throw (ex-info ":checkbox property doesn't allow multiple values"
                       {:property-id property-id
                        :schema schema})))
-    (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
-      (update-property conn db-ident property schema opts)
+    (cond
+      (and (qualified-keyword? property-id) (d/entity db db-ident))
+      (update-property conn db-ident (d/entity db db-ident) schema opts)
+
+      existing
+      (do
+        (when property-id
+          (outliner-validate/validate-unique-by-name-and-tags
+           db (:block/title existing)
+           {:db/id -1 :block/tags [(d/entity db :logseq.class/Property)]}))
+        existing)
+
+      :else
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
             db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]

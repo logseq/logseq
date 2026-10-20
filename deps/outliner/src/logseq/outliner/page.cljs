@@ -288,22 +288,24 @@
         title (common-util/remove-boundary-slashes title)]
     title))
 
-(defn- get-page-by-parent-name
-  [db parent-title child-title class?]
-  (some->>
-   (d/q
-    '[:find [?b ...]
-      :in $ ?attribute ?parent-name ?child-name
-      :where
-      [?b ?attribute ?p]
-      [?b :block/name ?child-name]
-      [?p :block/name ?parent-name]]
-    db
-    (if class? :logseq.property.class/extends :block/parent)
-    (common-util/page-name-sanity-lc parent-title)
-    (common-util/page-name-sanity-lc child-title))
-   first
-   (d/entity db)))
+(defn- get-page-by-parent
+  [db parent title]
+  (when-let [parent-id (if parent (:db/id parent) (:db/id (ldb/get-library-page db)))]
+    (some->>
+     (d/q (into '[:find [?b ...] :in $ ?parent ?name :where]
+                (if parent
+                  '[[?b :block/parent ?parent]
+                    [?b :block/name ?name]
+                    [?b :block/tags :logseq.class/Page]]
+                  '[[?b :block/name ?name]
+                    [?b :block/tags :logseq.class/Page]
+                    (or-join [?b ?parent]
+                             (not [?b :block/parent])
+                             [?b :block/parent ?parent])]))
+          db parent-id (common-util/page-name-sanity-lc title))
+     sort
+     first
+     (d/entity db))))
 
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
@@ -315,70 +317,38 @@
            :block/parent (or parent (:db/id library))
            :block/order (db-order/gen-key))))
 
-(defn- ^:large-vars/cleanup-todo split-namespace-pages
-  [db page date-formatter create-class?]
+(defn- split-namespace-pages
+  [db page date-formatter class?]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
-    (->>
-     (if (and (or (entity-util/class? page)
-                  (entity-util/page? page))
-              (ns-util/namespace-page? title))
-       (let [class? (entity-util/class? page)
-             parts (->> (string/split title ns-util/parent-re)
-                        (map string/trim)
-                        (remove string/blank?))
-             pages (map-indexed
-                    (fn [idx part]
-                      (let [last-part? (= idx (dec (count parts)))
-                            page (if (zero? idx)
-                                   (ldb/get-page db part)
-                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
-                            result (or page
-                                       (gp-block/page-name->map part db true date-formatter
-                                                                {:page-uuid (when last-part? block-uuid)
-                                                                 :skip-existing-page-check? true
-                                                                 :class? class?}))]
-                        result))
-                    parts)]
-         (cond
-           (and (not class?) (not (every? ldb/internal-page? pages)))
-           (throw (ex-info "Cannot create this page unless all parents are pages"
-                           {:type :notification
-                            :payload {:message "Cannot create this page unless all parents are pages."
-                                      :i18n-key :page.validation/parents-must-be-pages
-                                      :type :warning}}))
-
-           (and class? (not (every? ldb/class? pages)))
-           (throw (ex-info "Cannot create this tag unless all parents are tags"
-                           {:type :notification
-                            :payload {:message "Cannot create this tag unless all parents are tags."
-                                      :i18n-key :class.validation/parents-must-be-tags
-                                      :type :warning}}))
-
-           :else
-           (map-indexed
-            (fn [idx page]
-              (let [parent-eid (when (> idx 0)
-                                 (when-let [id (:block/uuid (nth pages (dec idx)))]
-                                   [:block/uuid id]))]
-                (if class?
-                  (cond
-                    (and (de/entity? page) (ldb/class? page))
-                    (assoc page :logseq.property.class/extends parent-eid)
-
-                    (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
-                    nil
-
-                    (zero? idx)
-                    (db-class/build-new-class db page)
-
-                    :else
-                    (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
-                  (if (de/entity? page)
-                    page
-                    (page-with-parent-and-order db page {:parent parent-eid})))))
-            pages)))
-       [page])
-     (remove nil?))))
+    (if (and (or (entity-util/class? page) (entity-util/page? page))
+             (ns-util/namespace-page? title))
+      (let [parts (->> (string/split title ns-util/parent-re)
+                       (map string/trim)
+                       (remove string/blank?)
+                       vec)]
+        (:pages
+         (reduce
+          (fn [{:keys [pages classes]} part]
+            (let [part-name (common-util/page-name-sanity-lc part)
+                  existing (if class?
+                             (or (ldb/get-page-by-name db part #{:logseq.class/Tag})
+                                 (get classes part-name))
+                             (get-page-by-parent db (peek pages) part))
+                  result (or existing
+                             (let [parent-ref (some->> (peek pages) :block/uuid (vector :block/uuid))
+                                   node (gp-block/page-name->map
+                                         part db true date-formatter
+                                         {:page-uuid (when (= (count pages) (dec (count parts))) block-uuid)
+                                          :skip-existing-page-check? true
+                                          :class? class?})]
+                               (if class?
+                                 (db-class/build-new-class
+                                  db (cond-> node parent-ref (assoc :logseq.property.class/extends parent-ref)))
+                                 (page-with-parent-and-order db node {:parent parent-ref}))))]
+              {:pages (conj pages result)
+               :classes (if class? (assoc classes part-name result) classes)}))
+          {:pages [] :classes {}} parts)))
+      [page])))
 
 (defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
@@ -405,60 +375,50 @@
                     (set (keep #(resolved-tag-ident db %) resolved-tags))
                     :else
                     #{:logseq.class/Page})
-        existing-names-page (ldb/page-exists? db title types)
-        journal-page-uuid (some-> (gp-block/page-name->map title db false date-formatter
-                                                           {:class? class?
-                                                            :skip-existing-page-check? true})
-                                  :block/uuid)
+        existing-names-page (filter (fn [eid]
+                                      (let [entity (d/entity db eid)]
+                                        (cond
+                                          class? (ldb/class? entity)
+                                          (or journal? today-journal?) (ldb/journal? entity)
+                                          :else (and (ldb/internal-page? entity)
+                                                     (not (or (ldb/class? entity) (ldb/property? entity)))
+                                                     (or (nil? (:block/parent entity))
+                                                         (ldb/library? (:block/parent entity))
+                                                         (ldb/recycled? entity))))))
+                                    (ldb/page-exists? db title types))
+        journal-page-uuid (when-not class?
+                           (:block/uuid (gp-block/page-name->map title db false date-formatter
+                                                               {:skip-existing-page-check? true})))
         existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
                                         (d/entity db [:block/uuid journal-page-uuid]))
-        existing-page-id (if class-ident-namespace?
-                           (some->> existing-names-page
-                                    (filter #(try (when-let [e (d/entity db %)]
-                                                    (let [ns' (namespace (:db/ident e))]
-                                                      (= (str ns') class-ident-namespace)))
-                                                  (catch :default _ false)))
-                                    (first))
-                           (first existing-names-page))
+        existing-page-id (or (when class-ident-namespace?
+                              (some->> existing-names-page
+                                       (filter #(= class-ident-namespace
+                                                    (some-> (d/entity db %) :db/ident namespace)))
+                                       sort
+                                       first))
+                            (some #(when (= title (:block/title (d/entity db %))) %) existing-names-page)
+                            (first (sort existing-names-page)))
         existing-page (or (some->> existing-page-id (d/entity db))
                           existing-page-by-journal-uuid)]
     (if (and existing-page
-             (or (:block/journal-day existing-page)
+             (or class?
+                 (:block/journal-day existing-page)
                  (not (:block/parent existing-page))
+                 (ldb/library? (:block/parent existing-page))
                  (ldb/recycled? existing-page)))
-      (let [tx-meta {:persist-op? persist-op?
-                     :outliner-op :save-block}]
-        (cond
-          (and class?
-               (not (ldb/class? existing-page))
-               (ldb/internal-page? existing-page))
-          ;; Convert existing page to class
-          (let [tx-data [(merge (db-class/build-new-class db
-                                                          (select-keys existing-page [:block/title :block/uuid :block/created-at])
-                                                          (when class-ident-namespace?
-                                                            {:ident-namespace class-ident-namespace}))
-                                (select-keys existing-page [:db/ident]))
-                         [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
-            {:tx-meta tx-meta
-             :tx-data tx-data
-             :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})
-
-          (ldb/recycled? existing-page)
-          (let [options' (assoc options :uuid (:block/uuid existing-page))
-                tx-meta' (outliner-tx-meta/ensure-outliner-ops
-                          {:persist-op? persist-op?
-                           :outliner-op :create-page}
-                          [:create-page [title options']])]
-            {:tx-meta tx-meta'
-             :tx-data (outliner-recycle/restore-tx-data db existing-page)
-             :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})
-
-          ;; Just return existing page info
-          :else
-          {:page-uuid (:block/uuid existing-page)
-           :title (:block/title existing-page)}))
+      (if (ldb/recycled? existing-page)
+        (let [options' (assoc options :uuid (:block/uuid existing-page))
+              tx-meta (outliner-tx-meta/ensure-outliner-ops
+                       {:persist-op? persist-op?
+                        :outliner-op :create-page}
+                       [:create-page [title options']])]
+          {:tx-meta tx-meta
+           :tx-data (outliner-recycle/restore-tx-data db existing-page)
+           :page-uuid (:block/uuid existing-page)
+           :title (:block/title existing-page)})
+        {:page-uuid (:block/uuid existing-page)
+         :title (:block/title existing-page)})
       (let [page (cond-> (gp-block/page-name->map title db true date-formatter
                                                 {:class? class?
                                                  :page-uuid (when (uuid? uuid') uuid')

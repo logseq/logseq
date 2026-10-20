@@ -155,10 +155,10 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (boolean (seq (ldb/page-exists? @conn page-name tags)))))
 
-(def-thread-api :thread-api/get-case-page
-  [repo page-name-or-uuid]
+(def-thread-api :thread-api/get-page-by-name
+  [repo page-name-or-uuid tags]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (some-> (ldb/get-case-page @conn page-name-or-uuid)
+    (some-> (ldb/get-page-by-name @conn page-name-or-uuid tags)
             entity-util/entity->map)))
 
 (def-thread-api :thread-api/get-tags-by-name

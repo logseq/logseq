@@ -515,27 +515,12 @@
 (def get-first-page-by-name common-initial-data/get-first-page-by-name)
 
 (defn page-exists?
-  "Returns all page db ids that given title and one of the given `tags`."
+  "Returns ids matching `page-name` without regard to case and one of `tags`."
   [db page-name tags]
   (when page-name
     (let [tags' (if (coll? tags) (set tags) #{tags})]
-        ;; Classes and properties are case sensitive and can be looked up
-        ;; as such in case-sensitive contexts e.g. no Page
-      (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
-        (seq
-         (d/q
-          '[:find [?p ...]
-            :in $ ?name [?tag-ident ...]
-            :where
-            [?p :block/title ?name]
-            [?p :block/tags ?tag]
-            [?tag :db/ident ?tag-ident]]
-          db
-          page-name
-          tags'))
-        ;; TODO: Decouple db graphs from file specific :block/name
-        (seq
-         (d/q
+      (seq
+       (d/q
           '[:find [?p ...]
             :in $ ?name [?tag-ident ...]
             :where
@@ -544,7 +529,7 @@
             [?tag :db/ident ?tag-ident]]
           db
           (common-util/page-name-sanity-lc page-name)
-          tags'))))))
+          tags')))))
 
 (defn get-page
   "Get a page given its unsanitized name or uuid"
@@ -580,14 +565,69 @@
   [db]
   (get-built-in-page db common-config/library-page-name))
 
-(defn get-case-page
-  "Case sensitive version of get-page. For use with DB graphs"
-  [db page-name-or-uuid]
-  (when db
-    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                    (parse-uuid page-name-or-uuid))]
-      (d/entity db [:block/uuid id])
-      (d/entity db (common-initial-data/get-first-page-by-title db page-name-or-uuid)))))
+(defn get-page-by-name
+  "Resolves an id or a case-insensitive name, optionally restricted to `tags`.
+   Historical duplicates prefer the exact title, then the oldest entity."
+  ([db id-or-name]
+   (get-page-by-name db id-or-name nil))
+  ([db id-or-name tags]
+   (when db
+     (if-let [id (cond
+                   (or (uuid? id-or-name) (integer? id-or-name) (keyword? id-or-name)) id-or-name
+                   (string? id-or-name) (parse-uuid id-or-name))]
+       (let [entity (if (uuid? id) (d/entity db [:block/uuid id]) (d/entity db id))]
+         (when (or (nil? tags) (seq (set/intersection (set tags) (set (map :db/ident (:block/tags entity))))))
+           entity))
+       (when (string? id-or-name)
+         (let [ids (sort (if tags
+                           (page-exists? db id-or-name tags)
+                           (map :e (entity-util/get-pages-by-name db id-or-name))))
+               exact-id (some #(when (= id-or-name (:block/title (d/entity db %))) %) ids)]
+           (d/entity db (or exact-id (first ids)))))))))
+
+(defn- page-scope-tags
+  [page]
+  (into #{} (comp (map :db/ident) (remove #{:logseq.class/Page})) (:block/tags page)))
+
+(defn- sample-page-id
+  [ids eid]
+  ;; Two oldest ids suffice to find a match after excluding the page itself.
+  (vec (take 2 (sort (conj (or ids []) eid)))))
+
+(defn index-page-names
+  "Indexes ordinary pages by normalized name, parent and tag for a single operation."
+  [db page-names]
+  (reduce
+   (fn [index page-name]
+     (reduce
+      (fn [result datom]
+        (let [page (d/entity db (:e datom))]
+          (if (and (entity-util/internal-page? page)
+                   (not (or (entity-util/class? page) (entity-util/property? page))))
+            (let [scope [(:block/name page) (:db/id (:block/parent page))]
+                  tags (page-scope-tags page)
+                  result (update-in result [scope :pages] sample-page-id (:db/id page))]
+              (if (empty? tags)
+                (update-in result [scope :untagged] sample-page-id (:db/id page))
+                (reduce #(update-in %1 [scope :tags %2] sample-page-id (:db/id page)) result tags)))
+            result)))
+      index (d/datoms db :avet :block/name page-name)))
+   {} (distinct page-names)))
+
+(defn find-page-name-conflict
+  "Returns the oldest other page in `index` with the same name and overlapping scope."
+  [index page]
+  (let [scope (get index [(:block/name page) (:db/id (:block/parent page))])
+        tags (page-scope-tags page)
+        candidates (concat (:untagged scope)
+                           (if (empty? tags)
+                             (:pages scope)
+                             (mapcat #(get-in scope [:tags %]) tags)))]
+    (reduce (fn [match-id eid]
+              (if (= eid (:db/id page))
+                match-id
+                (if match-id (min match-id eid) eid)))
+            nil candidates)))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?

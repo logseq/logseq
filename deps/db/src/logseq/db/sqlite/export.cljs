@@ -8,6 +8,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.class :as db-class]
@@ -1129,20 +1130,38 @@
 
 ;; Import fns
 ;; ==========
+(defn- existing-import-page
+  [db {:keys [classes page-index]} {:block/keys [title parent] page-uuid :block/uuid
+                                    :build/keys [tags journal]}]
+  (or (when page-uuid (d/entity db [:block/uuid page-uuid]))
+      (if journal
+        (ldb/get-journal-page-by-day db journal)
+        (let [tag-idents (into #{}
+                               (map (fn [tag]
+                                      (if (qualified-keyword? tag)
+                                        tag
+                                        (or (:db/ident (ldb/get-page-by-name
+                                                        db (or (:block/title (get classes tag)) (name tag))
+                                                        #{:logseq.class/Tag}))
+                                            tag))))
+                               tags)
+              page-name (some-> title common-util/page-name-sanity-lc)
+              parent-id (when parent (or (:db/id (d/entity db parent)) parent))
+              page {:block/name page-name
+                    :block/parent {:db/id parent-id}
+                    :block/tags (map #(hash-map :db/ident %) tag-idents)}]
+          (when page-name
+            (some->> (ldb/find-page-name-conflict (page-index page-name) page)
+                     (d/entity db)))))))
+
 (defn- add-uuid-to-page-if-exists
-  [db import-to-existing-page-uuids {:keys [existing-pages-keep-properties?]} m]
-  (if-let [ent (if (:build/journal m)
-                 (some->> (:build/journal m)
-                          (d/datoms db :avet :block/journal-day)
-                          first
-                          :e
-                          (d/entity db))
-                 ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-                 (some->> (:block/title m) (ldb/get-case-page db)))]
+  [db {:keys [page-uuids import-options] :as context} m]
+  (if-let [ent (existing-import-page db context m)]
     (do
-      (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-      (cond-> (assoc m :block/uuid (:block/uuid ent))
-        (and (:build/properties m) existing-pages-keep-properties?)
+      (when (:block/uuid m)
+        (swap! page-uuids assoc (:block/uuid m) (:block/uuid ent)))
+      (cond-> (assoc m :block/uuid (:block/uuid ent) :block/title (:block/title ent))
+        (and (:build/properties m) (:existing-pages-keep-properties? import-options))
         (update :build/properties (fn [props]
                                     (->> props
                                          (remove (fn [[k _v]] (get ent k)))
@@ -1172,13 +1191,18 @@
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
   (let [import-to-existing-page-uuids (atom {})
+        import-page (partial add-uuid-to-page-if-exists db
+                             {:classes classes
+                              :page-uuids import-to-existing-page-uuids
+                              :import-options import-options
+                              :page-index (memoize #(ldb/index-page-names db [%]))})
         export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options)))
+                         (update m :page import-page))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -1201,7 +1225,7 @@
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
                                          [:build/page
-                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options (second f))]
+                                          (import-page (second f))]
                                          f))
                                      export-map))
         ;; Update uuid references of all pages that had their uuids updated to reference an existing page
