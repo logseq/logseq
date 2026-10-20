@@ -71,6 +71,54 @@ test('Page titles retain block padding and their trailing content edge', () => {
   assertPageTitleLayout(objects);
 });
 
+test('Table title actions retain hover and isolate navigation from sidebar opening', () => {
+  open();
+  const taskUrl = `${origin.replace(/#.*$/, '')}#/page/Task`;
+  browser('open', taskUrl);
+  browser('wait', '--fn', "document.querySelector('.page-tabs .ls-view-head') !== null");
+  if (!evaluate("document.querySelector('.table-block-title') !== null")) {
+    button('New node');
+    browser('wait', '--fn', "document.querySelector('.table-block-title') !== null");
+  }
+  const closeSidebar = () => {
+    if (evaluate(`document.querySelector('button[aria-label="Close"]') !== null`)) button('Toggle right sidebar');
+  };
+  closeSidebar();
+  const row = evaluate("document.querySelector('.table-block-title').closest('.ls-block').id");
+  const uuid = row.replace(/^ls-block-/, '');
+  const selector = `[id="${row}"] .table-block-title`;
+  browser('hover', selector);
+  browser('wait', '--fn', `getComputedStyle(document.querySelector(${JSON.stringify(selector + ' .ls-title-ghosts')})).opacity === '1'`);
+  const geometry = evaluate(`(() => {
+    const title = document.querySelector(${JSON.stringify(selector)});
+    const rect = title.getBoundingClientRect();
+    return {height: rect.height, overflow: getComputedStyle(title).overflow,
+      buttons: [...title.querySelectorAll('button')].map(button => {
+        const bounds = button.getBoundingClientRect();
+        return {width: bounds.width, height: bounds.height, top: bounds.top - rect.top};
+      })};
+  })()`);
+  assert.equal(geometry.height, 32);
+  assert.equal(geometry.overflow, 'hidden');
+  assert.equal(geometry.buttons.length, 2);
+  assert.ok(geometry.buttons.every(button => button.width === 24 && button.height === 24 && button.top === 4));
+  browser('hover', selector + ' button[aria-label="Open"]');
+  assert.equal(evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector + ' .ls-title-ghosts')})).opacity`), '1');
+  browser('click', selector + ' button[aria-label="Open"]');
+  browser('wait', '--fn', `location.hash.startsWith(${JSON.stringify('#/page/' + uuid)})`);
+  assert.equal(evaluate(`document.querySelector('button[aria-label="Close"]') !== null`), false,
+    'Open must not bubble into the title sidebar action');
+  browser('open', taskUrl);
+  browser('wait', '--fn', `document.querySelector(${JSON.stringify(selector)}) !== null`);
+  const hash = evaluate('location.hash');
+  browser('click', selector + ' button[aria-label="Open in sidebar"]');
+  browser('wait', '--fn', `document.querySelector('button[aria-label="Close"]') !== null`);
+  assert.equal(evaluate('location.hash'), hash, 'Sidebar opening must preserve the main route');
+  closeSidebar();
+  browser('hover', '#head');
+  browser('wait', '--fn', `getComputedStyle(document.querySelector(${JSON.stringify(selector + ' .ls-title-ghosts')})).opacity === '0'`);
+});
+
 test('Pages tag filters keep live multi-selection and restore reference titles', () => {
   open();
   browser('find','text','Pages','click','--exact');

@@ -350,31 +350,43 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                 []) ]
         ]
   | _ ->
-      (* cljs table-block-title: flex row of text + hover "Open" ghost
-         buttons (.-right-1.absolute) that open the row in the sidebar —
-         the hover-only visibility is DOM-only; the buttons are always
-         rendered now *)
-      let ghost icon_name title_ =
+      fun context parent ->
+      let hovered = Signal.state context.Lui_ui.ui_scheduler false in
+      let hover on = Signal.set hovered on; Runtime.flush () in
+      let ghost icon_name title_ on_press =
         Ui_components.button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
+          ~width:24 ~height:24 ~padding:4
           ~foreground:"muted-foreground"
           ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
-          ~label:title_
-          ~on_press:(fun _ -> open_row_sidebar row_uuid) []
+          ~label:title_ ~on_press:(fun _ -> on_press ()) []
       in
-      inner_cell
-        [ Ui_parts.pressable
-            ~on_press:(fun _ -> open_row_sidebar row_uuid)
-            (row ~cross:`center ~grow:1.
-               ~style_class:"table-block-title"
-               [ (* inline host, not a lui row: flex items collapse the
-                    trailing space in runs like "Clean Code #Book" —
-                    cljs keeps one inline flow *)
-                 text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title)
-               ; row ~cross:`center ~style_class:"ls-title-ghosts"
-                   ~transition:"opacity 150ms"
-                   [ ghost "arrow-right" (I.t "ui/open")
-                   ; ghost "layout-sidebar-right" (I.t "sidebar.right/open") ]
-               ]) ]
+      (* Actions overlay the title's trailing edge and share its hover owner.
+         Their retained nodes remain available for keyboard navigation. *)
+      (inner_cell
+        [ Ui_components.with_props
+            [Ui_components.Prop.position `relative;Ui_components.Prop.overflow `hidden]
+              (row ~cross:`center ~grow:1. ~min_width:0 ~height:32
+                 ~on_pointer_enter:(fun _ -> hover true)
+                 ~on_pointer_leave:(fun _ -> hover false)
+                 ~style_class:"table-block-title"
+                 [ (* Keep the caption and overlay actions as sibling hit regions. *)
+                   Ui_parts.pressable ~on_press:(fun _ -> open_row_sidebar row_uuid)
+                     (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
+                       [ text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title) ])
+                 ; Ui_parts.float_prop L.Opacity
+                     ~value:(reactive (fun on -> if on then 1. else 0.) (Signal.value hovered))
+                     (Ui_components.with_props
+                       [Ui_components.Prop.position `absolute;Ui_components.Prop.inset_right (-4.);
+                        Ui_components.Prop.inset_top 4.]
+                       (row ~cross:`center ~gap:0 ~height:24 ~style_class:"ls-title-ghosts"
+                          ~transition:"opacity 100ms cubic-bezier(0.4, 0, 1, 1)"
+                          [ ghost "arrow-right" (I.t "ui/open") (fun () ->
+                              Runtime.mark_nav ();
+                              Platform.set_location_hash
+                                ("#/page/" ^ Ui_services.uri_encode_component row_uuid))
+                          ; ghost "layout-sidebar-right" (I.t "sidebar.right/open")
+                              (fun () -> open_row_sidebar row_uuid) ]))
+                 ]) ]) context parent
 
 let prop_cell ~blk (c : V.column) : t =
   match cell_value blk c with

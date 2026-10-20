@@ -9901,3 +9901,114 @@ let () =
   List.iter (fun email -> prerr_endline ("Unicode email masking failed: "^email)) (List.rev !failures);
   check "Native email masking preserves complete Unicode graphemes" (!failures=[]);
   print_endline "native Unicode email masking: OK"
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let previous_flush = !Runtime.app_flush and previous_hash = !Platform.hash_ref
+  and previous_back = !Platform.back_stack and previous_forward = !Platform.fwd_stack
+  and previous_hash_listeners = !Platform.hash_change_fns in
+  let event_name = "ls:open-right-sidebar" in
+  let previous_listeners = Hashtbl.find_opt Platform.window_listeners event_name in
+  let failures = ref [] in
+  let expect message condition = if not condition then failures:=message::!failures in
+  Fun.protect ~finally:(fun () ->
+    Runtime.app_flush:=previous_flush;Platform.hash_ref:=previous_hash;
+    Platform.back_stack:=previous_back;Platform.fwd_stack:=previous_forward;
+    Platform.hash_change_fns:=previous_hash_listeners;
+    match previous_listeners with
+    | Some listeners -> Hashtbl.replace Platform.window_listeners event_name listeners
+    | None -> Hashtbl.remove Platform.window_listeners event_name) (fun () ->
+    Platform.hash_change_fns:=[];
+    List.iter (fun scale -> List.iter (fun width ->
+      let opened = ref [] in
+      Hashtbl.replace Platform.window_listeners event_name [fun payload ->
+        opened:=payload::!opened];
+      let host = Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.*.scale,20.*.scale))
+        ~renderer:{Lui_host.name="table-title-actions-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (width*.scale)) ~height:(int_of_float (100.*.scale)) ~scale () in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      let app = Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry () (fun () () -> ()) (fun context _ _ ->
+          let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:(Views_state.KTagPage "Task") ~feature:"title-actions" ~owner:Wire.Nil in
+          let cell uuid title = Views_table.title_cell inst ~row_uuid:uuid
+            ~blk:(Wire.Map [Wire.kw "block/title",Wire.String title]) (Views_table.title_column ()) in
+          Lui_elements.column ~gap:0 ~width:(int_of_float width) ~height:100
+            [cell "title-actions-first" "A very long title that must fill the cell without reserving button space";
+             cell "title-actions-second" "Another title"]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        let store = Lui_host.store host and ui = W.Ui.create () and rects = W.Rects.create () in
+        W.Ui.set_scale ui scale;W.Ui.set_content_rect ui (fun id -> W.Rects.get rects id);
+        let refresh () =
+          ignore (Lui_host.repaint host);Hashtbl.clear rects;
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_host.layout_rect host id))
+            (Lui_store.preorder store);W.Ui.notify_layout ui in
+        let input event =
+          List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ())
+            (W.Ui.handle ui store rects event);
+          ignore (Lui_app.flush app);refresh () in
+        let has_class id cls = match Lui_store.string_prop store id "style-class" with
+          | Some value -> List.mem cls (String.split_on_char ' ' value) | None -> false in
+        let titles = List.filter (fun id -> has_class id "table-block-title") (Lui_store.preorder store) in
+        let ghosts = List.map (fun title -> List.find (fun id -> has_class id "ls-title-ghosts")
+          (Lui_store.child_ids store title)) titles in
+        let first = List.hd titles and first_ghost = List.hd ghosts in
+        let opacity id = Option.value (Lui_store.float_prop store id "opacity") ~default:1. in
+        refresh ();
+        expect "Table title actions must be hidden before hover on every row"
+          (List.for_all (fun id -> opacity id=0.) ghosts);
+        List.iter2 (fun title ghost ->
+          let r=W.Rects.get rects title and g=W.Rects.get rects ghost in
+          expect "The title hover owner must fill its thirty-two-point row"
+            (abs_float (r.h/.scale-.32.)<0.6);
+          expect "Native paint must clip title ink and trailing action padding to the title bounds"
+            (List.exists (function Lui_scene.Push_clip clip ->
+              let c=clip.Lui_scene.crect in
+              abs_float (c.x-.r.x)<0.6*.scale && abs_float (c.y-.r.y)<0.6*.scale &&
+              abs_float (c.w-.r.w)<0.6*.scale && abs_float (c.h-.r.h)<0.6*.scale
+              | _ -> false) (Lui_host.scene host).Lui_scene.ops);
+          expect "Table title actions must overlay the trailing edge without consuming title width"
+            (abs_float ((g.x+.g.w-.r.x-.r.w)/.scale-.4.)<0.6 &&
+             abs_float ((g.y-.r.y)/.scale-.4.)<0.6 && abs_float (g.w/.scale-.48.)<0.6);
+          List.iter (fun button -> let b=W.Rects.get rects button in
+            expect "Table title action targets must match the reference twenty-four-point size"
+              (abs_float (b.w/.scale-.24.)<0.6 && abs_float (b.h/.scale-.24.)<0.6))
+            (Lui_store.child_ids store ghost)) titles ghosts;
+        let r=W.Rects.get rects first in
+        input (W.Input.Move ((r.x+.20.*.scale)/.scale,(r.y+.16.*.scale)/.scale));
+        expect "Hovering a title must reveal only that row's retained actions"
+          (opacity first_ghost=1. && opacity (List.nth ghosts 1)=0.);
+        input (W.Input.Move ((r.x+.r.w)/.scale+.2.,(r.y+.16.*.scale)/.scale));
+        expect "The clipped trailing padding must not extend the title hover target"
+          (opacity first_ghost=0.);
+        input (W.Input.Move ((r.x+.20.*.scale)/.scale,(r.y+.16.*.scale)/.scale));
+        let buttons = Lui_store.child_ids store first_ghost in
+        let arrow = List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=
+          Some (I18n.t "ui/open")) buttons in
+        let sidebar = List.find (fun id -> Lui_store.string_prop store id "accessibility-label"=
+          Some (I18n.t "sidebar.right/open")) buttons in
+        let click id = let b=W.Rects.get rects id in
+          let x=(b.x+.b.w/.2.)/.scale and y=(b.y+.b.h/.2.)/.scale in
+          input (W.Input.Move (x,y));
+          expect "Moving into a title action must not hide its owning row" (opacity first_ghost=1.);
+          input (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none));
+          input (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+        Platform.hash_ref:="#/page/Task";opened:=[];
+        click arrow;
+        expect "Open must navigate to the row without opening a sidebar"
+          (Platform.location_hash ()="#/page/title-actions-first" && !opened=[]);
+        Platform.hash_ref:="#/page/Task";opened:=[];
+        click sidebar;
+        expect "Open in sidebar must dispatch once without changing the main route"
+          (Platform.location_hash ()="#/page/Task" && List.length !opened=1);
+        input (W.Input.Move (10.,90.));
+        expect "Leaving a title must hide its retained actions without remounting"
+          (opacity first_ghost=0. && List.for_all (Lui_store.mem store) buttons))) [160.;400.]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native table title action visibility, layout and routing" (!failures=[]);
+  print_endline "native table title action visibility, layout and routing: OK")

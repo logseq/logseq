@@ -1762,7 +1762,6 @@ select.form-select {
   white-space: nowrap;
 }
 
-.ls-table-row .table-block-title,
 .ls-table-row .block-head-wrap a {
   text-overflow: ellipsis;
   overflow: hidden;
@@ -1800,20 +1799,6 @@ select.form-select {
   height: 100%;
   min-width: 0;
   overflow: hidden;
-}
-
-/* cljs table-block-title: the open/open-in-sidebar ghost buttons are
-   hover-only */
-.ls-table-row .ls-title-ghosts {
-  opacity: 0;
-}
-
-/* cljs reveals the title ghost buttons from .table-block-title's own
-   on-mouse-over — hovering the select label or other cells does NOT
-   reveal them */
-.ls-table-row .table-block-title:hover .ls-title-ghosts,
-.ls-table-row .ls-title-ghosts:hover {
-  opacity: 1;
 }
 
 /* cljs table row selection is bg-muted via :has(.ui__checkbox
