@@ -136,8 +136,8 @@ let editor_inner ~key children : t =
 
 (* cljs editor wrapper — flex container around the logseq-editor
    surface (Edit_view's .block-editor column + hidden .ed-input) *)
-let editor_wrapper ~key ~id children : t =
-  row ~key ~style_class:"editor-wrapper" ~grow:1.
+let editor_wrapper ?on_appear ~key ~id children : t =
+  row ~key ~style_class:"editor-wrapper" ~grow:1. ?on_appear
     ~accessibility_identifier:id children
 
 (* cljs arrow svg inside .control-hide/.rotating-arrow — the custom

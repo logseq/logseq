@@ -38,6 +38,27 @@ const openSettings = () => {
 };
 after(() => browser('close'));
 
+test('Unchanged built-in titles exit with Escape, Enter and blur', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.ls-page-title .block-title-wrap') !== null");
+  for (const key of ['Escape', 'Enter']) {
+    browser('click', '.ls-page-title .block-title-wrap');
+    browser('wait', '--fn', "document.activeElement === document.querySelector('.ls-page-title .ed-input')");
+    browser('press', key);
+    browser('wait', '--fn', "document.querySelector('.ls-page-title .editor-wrapper') === null");
+  }
+  browser('click', '.ls-page-title .block-title-wrap');
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.ls-page-title .ed-input')");
+  button('More');
+  browser('wait', '--fn', "document.querySelector('.ls-page-title .editor-wrapper') === null");
+  browser('press', 'Escape');
+  browser('wait', '--fn', "document.activeElement?.id === 'toolbar-dots-btn'");
+  browser('press', 'Enter');
+  browser('wait', '--fn', "document.querySelector('[role=menu]') !== null");
+  browser('press', 'Escape');
+});
+
 test('Page titles retain block padding and their trailing content edge', () => {
   open();
   browser('find', 'text', 'Journals', 'click', '--exact');

@@ -5324,6 +5324,118 @@ let () = Native_embed.with_entry_lock (fun () ->
 
 let () = Native_embed.with_entry_lock (fun () ->
   let failures=ref [] in
+  let expect label condition=if not condition then failures:=label::!failures in
+  let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+  and previous_send= !Runtime.app_send and previous_flush= !Runtime.app_flush
+  and previous_editor= !Editor_state.st and previous_fields= !Editor_state.field_sigs_opt
+  and previous_sink= !Editor_sink.current
+  and previous_pending= !Editor_state.pending_focus
+  and previous_route= !Runtime.current_route and previous_page= !Runtime.current_page
+  and previous_loaded= !Router.loaded_route and previous_loading= !Router.loading_route
+  and previous_refresh=Runtime.hooks.refresh_after_ops
+  and previous_properties=Runtime.hooks.refresh_property_areas in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.app_send:=previous_send;Runtime.app_flush:=previous_flush;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Editor_sink.current:=previous_sink;Editor_state.pending_focus:=previous_pending;Runtime.current_route:=previous_route;
+    Runtime.current_page:=previous_page;Router.loaded_route:=previous_loaded;
+    Router.loading_route:=previous_loading;Runtime.hooks.refresh_after_ops<-previous_refresh;
+    Runtime.hooks.refresh_property_areas<-previous_properties) (fun () ->
+    let refreshed ()=Subs_state.task_of_promise (Js.Promise.resolve ()) in
+    Runtime.hooks.refresh_after_ops<-refreshed;Runtime.hooks.refresh_property_areas<-refreshed;
+    List.iter (fun (exit,draft,rejected) ->
+      Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+      let writes=ref [] and complete=ref (fun () -> ()) in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+        if method_="thread-api/apply-outliner-ops" then begin
+          writes:=args::!writes;
+          let response=Js.Promise.make (fun ~resolve ~reject:_ ->
+            complete:=(fun () -> resolve Wire.Nil [@u])) in
+          Js.Promise.then_ (fun result ->
+            if rejected || String.trim draft="Task" then failwith "Built-in title cannot be renamed";
+            Js.Promise.resolve result) response
+        end else Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      let page=Option.get (Decode.page_of_summary (Wire.Map
+        [Wire.kw "block/uuid",Wire.Uuid "title-edit-owner";
+         Wire.kw "block/title",Wire.String "Task"])) in
+      let model={Model.initial with repo=Some "title-edit-fixture";editing_title=true;
+        route=Model.Page "title-edit-owner";route_page=Some page} in
+      let store=Lui_store.create () in
+      let backend={backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app=Lui_app.create_with_extensions backend registry model
+        (fun model action -> match action with
+          | Action.Title_edit_done -> Update.update model action
+          | _ -> model)
+        (fun _ ms _ -> let open Lui_elements in
+          column [reactive (fun model -> Page.page_title_el model page) ms]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.read_model:=(fun () -> Lui_app.model app);
+        Runtime.app_send:=(fun action -> Lui_app.send app action);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        let sink ()=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+          =Some "edit-block-title-edit-owner") (Lui_store.preorder store) in
+        let focused=ref [] in
+        Editor_sink.register {Editor_sink.no_impl with focus_input=(fun uuid ->
+          focused:=(uuid,List.exists (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+            =Some ("edit-block-" ^ uuid)) (Lui_store.preorder store))::!focused)};
+        let wrapper=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+          =Some "editor-edit-block-title-edit-owner") (Lui_store.preorder store) in
+        if Lui_window.event_supported store wrapper (Appear wrapper) then
+          ignore (Lui_app.dispatch_event app (Appear wrapper));
+        ignore (Lui_app.flush app);
+        expect "Title editors acquire focus only after their mounted surface appears"
+          (!focused=["title-edit-owner",true]);
+        let emit name fields=ignore (Lui_app.dispatch_event app
+          (ExtensionEvent (sink (),Editor_sink.identifier,name,fields)));
+          ignore (Lui_app.flush app) in
+        let key ?(meta=false) name=emit "key" (String_map.empty
+          |> String_map.add "key" (StringValue name)
+          |> String_map.add "meta" (BoolValue meta)) in
+        let replace text=key ~meta:true "a";emit "insert" (String_map.singleton "text" (StringValue text)) in
+        if draft="Task" then replace "Temporary draft";
+        replace draft;
+        if exit="blur" then emit "blur" String_map.empty else key exit;
+        for _=1 to 12 do Host.drain ();ignore (Lui_app.flush app) done;
+        let changed=String.trim draft<>"Task" in
+        expect "Unchanged title exits must not invoke a worker rename"
+          (List.length !writes=(if changed then 1 else 0));
+        if changed then begin
+          expect "Changed titles remain editable until their rename completes"
+            (Lui_app.model app).Model.editing_title;
+          expect "Changed title commits preserve Unicode and their target"
+            (match !writes with
+             | [[_;Wire.Array [Wire.Array [Wire.Keyword "rename-page";
+                 Wire.Array [Wire.Uuid "title-edit-owner";Wire.String title]]];_]] -> title=String.trim draft
+             | _ -> false)
+        end;
+        (!complete) ();
+        for _=1 to 24 do Host.drain ();ignore (Lui_app.flush app) done;
+        expect "Accepted or unchanged titles leave editing; rejected changes keep their editor"
+          ((Lui_app.model app).Model.editing_title=(changed && rejected));
+        if not (changed && rejected) then
+          expect "Completing a title exit removes its input surface"
+            (not (List.exists (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+              =Some "edit-block-title-edit-owner") (Lui_store.preorder store)))
+        else begin
+          replace "Task";key "Escape";
+          for _=1 to 12 do Host.drain ();ignore (Lui_app.flush app) done;
+          expect "Reverting a rejected rename exits without retrying the invalid mutation"
+            (not (Lui_app.model app).Model.editing_title && List.length !writes=1)
+        end))
+      ["Escape","Task",false;"Enter","Task",false;"blur","Task",false;
+       "Escape","  Task  ",false;"Enter","café 中文 😀",false;"Escape","Rejected title",true]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Title editor commits only changed titles and completes unchanged exits" (!failures=[]);
+  print_endline "title editor commits only changed titles and completes unchanged exits: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let failures=ref [] in
   let expect message condition=if not condition then failures:=message::!failures in
   let previous_model= !Runtime.read_model and previous_worker= !Runtime.worker
   and previous_flush= !Runtime.app_flush and previous_editor= !Editor_state.st

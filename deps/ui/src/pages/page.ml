@@ -238,7 +238,8 @@ let title_editor (page : Model.page) : t =
     (match page.page_uuid with
      | Some u ->
          ignore
-           (Page_ops.rename u value
+           ((if value = page.page_title then Js.Promise.resolve ()
+             else Page_ops.rename u value)
             |> Js.Promise.then_ (fun () ->
               Runtime.send Action.Title_edit_done;
               if select then Editor_actions.select_single u;
@@ -297,6 +298,7 @@ let title_editor (page : Model.page) : t =
         Signal.update frame (fun _ -> Edit_input.measure conduit m2)
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
+     ~on_appear:(fun _ -> Editor_sink.focus_input uuid)
      [ Edit_view.view
          ~model:(Signal.value (model_st))
          ~frame:(Signal.value (frame)) ~block_id:uuid ~on_input ~cls:""
@@ -390,10 +392,7 @@ let title_content (page : Model.page) : t =
                 (* cljs edit entry clears any block selection *)
                 if S.ready () then Editor_actions.clear_selection ();
                 Runtime.send Action.Title_edit_start;
-                Runtime.flush ();
-                (* land the key input on the freshly mounted sink —
-                   the model already carries caret=end *)
-                Editor_sink.focus_input uuid)) )
+                Runtime.flush ())) )
   in
   (* TODO(component): click needs the DOM payload (targetId/
      interactive closest-walk/shiftKey) and blockid/containerid/
@@ -788,9 +787,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             (* cljs edit entry clears any block selection *)
             if S.ready () then Editor_actions.clear_selection ();
             Runtime.send Action.Title_edit_start;
-            Runtime.flush ();
-            (* land the key input on the freshly mounted sink *)
-            Editor_sink.focus_input uuid)
+            Runtime.flush ())
       (* contextmenu lives on the full-width title_row below — the raw
          el only hugs the text, so it would miss the row's empty tail *)
       | _ -> ())
