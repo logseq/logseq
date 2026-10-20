@@ -107,19 +107,13 @@ let lang_menu ~key st mst =
 
 (* A shared selected option card owns the thumbnail, caption and ring.
    Theme changes update typed state without replacing the control. *)
-(* Native and web hosts use the same bundled theme thumbnails. *)
-let theme_thumb_native ~key mode =
-  file_image ~key ~path:("img/" ^ mode ^ "-theme.png")
-    ~fit:`fill ~width:92 ~height:63 ~corner_radius:4 []
-
 let theme_item ~st mode label =
   let thumbnail =
-    if Ui_services.env_url_images () then
-      image ~key:("tt-" ^ mode)
-        ~url:("../img/" ^ mode ^ "-theme.png") ~alt:label
+    Ui_components.with_props [Ui_components.Prop.image_fit `fill]
+      (image ~key:("tt-" ^ mode)
+        ~url:(Ui_services.env_resource_url ("img/" ^ mode ^ "-theme.png")) ~alt:label
         ~width:92 ~height:63 ~corner_radius:4
-        ~data_attrs:[ "style", "height:63.25px;object-fit:cover" ] []
-    else theme_thumb_native ~key:("tt-" ^ mode) mode
+        ~data_attrs:[ "style", "height:63.25px" ] [])
   in
   Ui_components.option_card ~key:("tm-" ^ mode) ~thumbnail ~label
        ~min_height:85

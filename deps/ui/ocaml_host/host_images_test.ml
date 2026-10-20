@@ -85,6 +85,43 @@ let () =
   Printf.printf "native atomic image ownership transfer: OK\n%!"
 
 
+let () =
+  let path = Filename.temp_file "native image café 中文 # %20 " ".png" in
+  Fun.protect ~finally:(fun () -> Sys.remove path) (fun () ->
+    Out_channel.with_open_bin path (fun output -> output_bytes output (png ()));
+    let encoded = String.split_on_char '/' path |> List.map Uri.pct_encode |> String.concat "/" in
+    let url = Uri.to_string (Uri.make ~scheme:"file" ~path:encoded ()) in
+    let executor,pump = Lui_resource.executor_queued () and changes = ref [] in
+    let images = Host_images.create ~executor ~on_change:(fun id -> changes := id :: !changes) () in
+    Fun.protect ~finally:(fun () -> Host_images.dispose images) (fun () ->
+      let store = Lui_store.create () in
+      let apply ops = let patch=batch ops in
+        Lui_store.apply_batch store patch;Host_images.sync_batch images store patch in
+      let canonical = Platform_native.resource_url path in
+      let decoded = Uri.pct_decode (Uri.path (Uri.of_string canonical)) in
+      check (Printf.sprintf "Resource URL must preserve the path: %S -> %S, expected %S" canonical decoded path)
+        (decoded = path);
+      let local = Uri.to_string (Uri.make ~scheme:"file" ~host:"localhost" ~path:encoded ()) in
+      apply (add 1 url @ add 2 canonical @ add 3 local);
+      check "Local file URI forms share one decoded resource" (Host_images.resource_count images=1);
+      check "File URL owners share one decode task" (pump ()=1);
+      check "File URL decoding publishes on the application thread" (!changes=[]);
+      Host.drain ();
+      let image = Host_images.image_of images 1 in
+      check "Encoded Unicode file URLs must decode through the production image source"
+        (match image with Some image -> image.Lui_scene.iw=4 && image.ih=3 | None -> false);
+      check "File URL owners retain the same decoded bitmap"
+        (Host_images.image_of images 2=image && Host_images.image_of images 3=image);
+      check "File URL readiness notifies every mounted owner" (List.sort Int.compare !changes=[1;2;3]);
+      apply [DropNode 1;DropNode 2;DropNode 3];
+      check "File URL pixels release with their final owner"
+        (Host_images.resource_count images=0 && Host_images.owner_count images=0);
+      let missing = Uri.to_string (Uri.make ~scheme:"file" ~path:(encoded ^ ".missing") ()) in
+      apply (add 4 missing);ignore (pump ());Host.drain ();
+      check "A missing file URL fails without publishing a bitmap" (Host_images.image_of images 4=None)));
+  print_endline "native file URL decoding, Unicode paths and ownership: OK"
+
+
 let bytes_of_hex value =
   Bytes.init (String.length value / 2) (fun index ->
     Char.chr (int_of_string ("0x" ^ String.sub value (index * 2) 2)))

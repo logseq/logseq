@@ -4093,26 +4093,26 @@ let () =
               (fun id ->
                 Lui_store.kind store id = "list-item"
                 && List.exists
-                     (fun child -> Lui_store.kind store child = "file-image")
+                     (fun child -> Lui_store.kind store child = "image")
                      (Lui_store.preorder ~root:id store))
               nodes
           in
+          check "Theme cards must contain standard URL images on the native host" (List.length cards=3);
           expect
-            "Native theme choices still draw approximations instead of the \
-             bundled PNGs"
+            "Theme choices must use the same URL image pipeline on both hosts"
             (List.length
                (List.filter
                   (fun id ->
-                    Lui_store.kind store id = "file-image"
+                    Lui_store.kind store id = "image"
+                    && Lui_store.string_prop store id "image-fit" = Some "fill"
                     &&
-                    match Lui_store.string_prop store id "path" with
-                    | Some path ->
-                        List.mem path
-                          [
-                            "img/light-theme.png";
-                            "img/dark-theme.png";
-                            "img/system-theme.png";
-                          ]
+                    match Lui_store.string_prop store id "url" with
+                    | Some url ->
+                        let uri = Uri.of_string url in
+                        Uri.scheme uri = Some "file"
+                        && List.exists (fun mode -> String.ends_with
+                          ~suffix:("/img/" ^ mode ^ "-theme.png") (Uri.pct_decode (Uri.path uri)))
+                          ["light";"dark";"system"]
                     | None -> false)
                   nodes)
             = 3);

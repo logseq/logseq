@@ -83,10 +83,14 @@ from this directory before the first view is constructed. Missing or malformed
 packaged dictionaries fail startup instead of silently showing English. Only
 requested locales are parsed and retained in memory.
 
-Relative native image paths resolve under `Contents/Resources`. For a direct
-development executable, set `LOGSEQ_NATIVE_ASSET_DIR` to the repository's
-absolute `resources` directory. URL images and local files share the host
-decoder. PNG, GIF, BMP and PNM use `imagelib`; macOS JPEGs use Image I/O
+The shared application resource service emits relative URLs on Web and local
+file URLs on native. Theme cards use the same URL image kind and typed cover
+fitting on both hosts. Relative native resource paths resolve under
+`Contents/Resources`. For a direct development executable, set
+`LOGSEQ_NATIVE_ASSET_DIR` to the repository's absolute `resources` directory. Local file URLs decode their percent-encoded
+paths before reading; Unicode, spaces and literal percent sequences retain their
+filesystem names. URL images and local files share the host decoder. PNG, GIF,
+BMP and PNM use `imagelib`; macOS JPEGs use Image I/O
 with EXIF display orientation and sRGB RGBA output. Linux JPEG decoding
 remains unsupported. Decoded URL pixels belong to mounted image owners and
 are released after their final owner disappears. Local files also use the

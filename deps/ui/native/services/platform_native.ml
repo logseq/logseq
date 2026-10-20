@@ -33,6 +33,14 @@ let asset_path path =
     in
     Filename.concat root path
 
+let resource_url path =
+  let resource_path = asset_path path in
+  let absolute_path =
+    if Filename.is_relative resource_path then Filename.concat (Sys.getcwd ()) resource_path
+    else resource_path in
+  let encoded = Uri.pct_encode ~component:(`Custom (`Path, "/", "")) absolute_path in
+  Uri.to_string (Uri.make ~scheme:"file" ~host:"" ~path:encoded ())
+
 (* ---------- host request channel ---------- *)
 
 (* Requests the OCaml side needs the native host to perform. Serialized
@@ -610,7 +618,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; edit_units = (fun () -> `Bytes)
         ; random_uuid = Host.random_uuid
         ; open_url = Host.open_url
-        ; url_images = Host.supports_url_images
+        ; resource_url
         ; paints_caret = (fun () -> true)
         ; menu_popup = native_menu_popup
         }

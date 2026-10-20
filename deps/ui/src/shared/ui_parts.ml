@@ -193,6 +193,7 @@ module Prop : sig
   val border_width : int -> t
   val corner_radius : int -> t
   val opacity : float -> t
+  val image_fit : [ `fit | `fill ] -> t
   val label_opacity : float -> t
   val indicator_border_color : string -> t
   val checked_indicator_border_color : string -> t
@@ -305,6 +306,7 @@ end = struct
   let border_width v = int BorderWidth v
   let corner_radius v = int CornerRadius v
   let opacity v = flt Opacity v
+  let image_fit = function `fit -> str ImageFitValue "fit" | `fill -> str ImageFitValue "fill"
   let label_opacity v = flt LabelOpacity v
   let indicator_border_color v = str IndicatorBorderColor v
   let checked_indicator_border_color v = str CheckedIndicatorBorderColor v

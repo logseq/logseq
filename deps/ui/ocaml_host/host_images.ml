@@ -5,7 +5,13 @@ type owner={url:string;scope:Signal.scope;entry:Lui_scene.image Resource.entry}
 type t={cache:Lui_scene.image Resource.t;owners:(int,owner) Hashtbl.t;
   source:string -> Lui_resource_loaders.source;on_change:int -> unit;mutable disposed:bool}
 
-let create ?(executor=Resource.executor_domain) ?(source=Lui_resource_loaders.url) ~on_change () =
+let source_of_url url =
+  let uri = Uri.of_string url in
+  match Uri.scheme uri, Uri.host uri with
+  | Some "file", (None | Some "" | Some "localhost") -> Loaders.Path (Uri.pct_decode (Uri.path uri))
+  | _ -> Loaders.url url
+
+let create ?(executor=Resource.executor_domain) ?(source=source_of_url) ~on_change () =
   let publish=ref (fun () -> invalid_arg "Image cache is not initialized") in
   let executor job=executor (fun () -> job ();Host.enqueue (fun () -> !publish ())) in
   let cache=Resource.create ~executor () in

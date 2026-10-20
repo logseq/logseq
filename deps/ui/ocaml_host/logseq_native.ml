@@ -216,7 +216,6 @@ let () =
      touches no SDL/Metal state. Run it on a spare domain while this
      thread does window + renderer setup; joined below right before
      the init patches are applied. *)
-  Host.set_url_images_supported true;
   let init_d =
     Domain.spawn
       (fun () -> Native_embed.initialize Host_platform.platform_code 0 "")

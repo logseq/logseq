@@ -207,7 +207,7 @@ let run () =
         ; edit_units = (fun () -> `U16)
         ; random_uuid = (fun () -> incr uuid_seq; Printf.sprintf "uuid-%d" !uuid_seq)
         ; open_url = (fun u -> opened_urls := u :: !opened_urls)
-        ; url_images = (fun () -> true)
+        ; resource_url = (fun path -> "https://app.test/resources/" ^ path)
         ; paints_caret = (fun () -> false)
         ; menu_popup = (fun _ -> false)
         }
@@ -480,8 +480,9 @@ let run () =
                          && not (Ui_services.env_native_drag ())
                          && not (Ui_services.env_native_block_controls ()));
   check "env css icons" (Ui_services.env_css_transform_icons ());
-  check "env capabilities"
-    (Ui_services.env_url_images () && not (Ui_services.env_paints_caret ()));
+  check "env resources resolve through their platform service"
+    (Ui_services.env_resource_url "img/café 中文 #.png" = "https://app.test/resources/img/café 中文 #.png");
+  check "env caret ownership" (not (Ui_services.env_paints_caret ()));
   check "el rect_pending distinguishes pending from zero"
     (not ((Ui_services.dom_root ()).Ui_services.rect_pending ()));
   let u1 = Ui_services.env_random_uuid () and u2 = Ui_services.env_random_uuid () in

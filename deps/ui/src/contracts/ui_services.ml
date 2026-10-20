@@ -177,10 +177,8 @@ type env = {
   random_uuid : unit -> string;
   open_url : string -> unit;
   (* Open an external URL in the system browser. *)
-  url_images : unit -> bool;
-  (* The host renders [image ~url] elements — bundled/remote bitmap
-     URLs resolve and paint. Hosts that raster only registered image
-     ids (native) answer false; views fall back to drawn placeholders. *)
+  resource_url : string -> string;
+  (* Resolve a bundled application resource to a URL the host can load. *)
   paints_caret : unit -> bool;
   (* The host paints the editor caret itself from its own glyph layout
      (native); the shared overlay caret must not double-draw. *)
@@ -511,7 +509,7 @@ let env_css_transform_icons () = (get ()).env.css_transform_icons ()
 let env_edit_units () = (get ()).env.edit_units ()
 let env_random_uuid () = (get ()).env.random_uuid ()
 let env_open_url u = (get ()).env.open_url u
-let env_url_images () = (get ()).env.url_images ()
+let env_resource_url path = (get ()).env.resource_url path
 let env_paints_caret () = (get ()).env.paints_caret ()
 let env_menu_popup spec = (get ()).env.menu_popup spec
 
