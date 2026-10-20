@@ -3461,8 +3461,8 @@
        (is (fn? convert!))
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id page-tempid
-                           :block/title "Page"
-                           :block/name "page"
+                           :block/title "Topic"
+                           :block/name "topic"
                            :block/uuid page-uuid
                            :block/created-at 123
                            :block/tags :logseq.class/Page}])
@@ -3473,9 +3473,9 @@
            (let [class (d/entity @conn page-id)
                  tag-idents (set (map :db/ident (:block/tags class)))]
              (is (= page-uuid (:block/uuid class)))
-             (is (= "Page" (:block/title class)))
+             (is (= "Topic" (:block/title class)))
              (is (= 123 (:block/created-at class)))
-             (is (= :user.class/Page (:db/ident class)))
+             (is (= :user.class/Topic (:db/ident class)))
              (is (contains? tag-idents :logseq.class/Tag))
              (is (not (contains? tag-idents :logseq.class/Page))))))))))
 

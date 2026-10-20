@@ -1848,7 +1848,7 @@ abc
       (is (= 8 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
-      (is (= 13
+      (is (= 14
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
