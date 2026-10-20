@@ -10,6 +10,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.plural :as common-plural]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-plus :as entity-plus]
@@ -583,7 +584,11 @@
                            (page-exists? db id-or-name tags)
                            (map :e (entity-util/get-pages-by-name db id-or-name))))
                exact-id (some #(when (= id-or-name (:block/title (d/entity db %))) %) ids)]
-           (d/entity db (or exact-id (first ids)))))))))
+           (or (d/entity db (or exact-id (first ids)))
+               (when (or (nil? tags) (contains? (set tags) :logseq.class/Journal))
+                 (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+                       day (date-time/journal-title->int id-or-name (date-time/safe-journal-title-formatters formatter))]
+                   (get-journal-page-by-day db day))))))))))
 
 (defn- page-scope-tags
   [page]

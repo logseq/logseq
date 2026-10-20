@@ -327,7 +327,7 @@
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day]
-        (if skip-journal?
+        (if (or skip-journal? (and class? db-based?))
           [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
           (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)

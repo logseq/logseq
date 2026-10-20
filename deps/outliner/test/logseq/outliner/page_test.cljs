@@ -327,7 +327,24 @@
     (is (= "2024-12-16 Monday" (:block/title page))
         "Journal title follows configured formatter")
     (is (= default-name (:block/name page))
-        "Journal block/name remains the default formatter, independent of title format")))
+        "Journal block/name remains the default formatter, independent of title format")
+    (doseq [title ["2024-12-16 Monday" "2024-12-16 monday" "Dec 16th, 2024"]]
+      (is (= page-uuid (:block/uuid (ldb/get-page-by-name @conn title #{:logseq.class/Journal})))))
+    (is (nil? (ldb/get-page-by-name @conn "2024-12-16 Monday" #{:logseq.class/Tag})))))
+
+(deftest date-named-classes-have-independent-identities
+  (doseq [class-first? [false true]]
+    (let [conn (db-test/create-conn)
+          title "Apr 10th, 2026"
+          [_ first-uuid] (outliner-page/create! conn title {:class? class-first?})
+          [_ second-uuid] (outliner-page/create! conn title {:class? (not class-first?)})
+          class (d/entity @conn [:block/uuid (if class-first? first-uuid second-uuid)])
+          journal (d/entity @conn [:block/uuid (if class-first? second-uuid first-uuid)])]
+      (is (not= first-uuid second-uuid))
+      (is (ldb/class? class))
+      (is (nil? (:block/journal-day class)))
+      (is (ldb/journal? journal))
+      (is (= 20260410 (:block/journal-day journal))))))
 
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)
