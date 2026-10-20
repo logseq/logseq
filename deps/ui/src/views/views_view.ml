@@ -792,25 +792,34 @@ let load_more_rows inst =
     | _ -> ()
 
 let add_new_object inst =
-  match inst.V.kind with
-  | V.KTagPage owner_uuid ->
+  let repo = Db.repo () in
+  let context = repo, Runtime.route () in
+  let same_context () = context = (Db.repo (), Runtime.route ()) in
+  let insert owner_uuid ~tags ~props =
+    if same_context () then
       let uuid = Ui_services.env_random_uuid () in
-      Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:""
-        ~tags:[ owner_uuid ] ~props:[] (fun _ ->
-          (* cljs edit-block! on the new page-child: the object mounts in
-             the owner page's block tree and edits in place there — the
-             right sidebar stays closed *)
-          let rec try_edit n =
-            if n <= 0 then ()
-            else
-              match Ui_services.dom_by_id ("ls-block-" ^ uuid) with
-              | Some _ -> Editor_actions.enter_edit uuid 0
-              | None ->
-                  ignore
-                    (Ui_services.timers_timeout
-                       (fun () -> try_edit (n - 1)) 100)
-          in
-          try_edit 20)
+      Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:"" ~tags ~props (fun _ ->
+        if same_context () then
+          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid)
+  in
+  match inst.V.kind with
+  | V.KTagPage owner_uuid -> insert owner_uuid ~tags:[owner_uuid] ~props:[]
+  | V.KPropertyPage owner_uuid ->
+      ignore ((let* property = Runtime.invoke3 "thread-api/pull"
+          (W.String repo) (W.String "[:db/ident :logseq.property/type]")
+          (W.Array [W.kw "block/uuid";W.Uuid owner_uuid]) in
+        let ident = Option.get (W.get property "db/ident") in
+        let* value =
+          if W.get property "logseq.property/type" = Some (W.Keyword "checkbox") then
+            Js.Promise.resolve (W.Bool false)
+          else
+            let* placeholder = Runtime.invoke3 "thread-api/pull"
+              (W.String repo) (W.String "[:db/id]")
+              (W.Keyword "logseq.property/empty-placeholder") in
+            Js.Promise.resolve (W.Int (Option.get (W.map_get_int placeholder "db/id")))
+        in
+        insert owner_uuid ~tags:[] ~props:[ident,value];
+        Js.Promise.resolve ()) |> Db.catch_write)
   | _ -> ()
 
 let install_ops () =

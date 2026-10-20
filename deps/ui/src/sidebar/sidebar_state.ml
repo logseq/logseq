@@ -783,7 +783,8 @@ let open_ref st target =
     ensure_right_open ();
     add_promise st p
 
-let open_uuid st uuid =
+let open_uuid ?(edit = false) st uuid =
+  let context = Runtime.repo (), Runtime.route () in
   let repo = Runtime.repo () in
   if repo = "" then ()
   else
@@ -800,7 +801,14 @@ let open_uuid st uuid =
           else Js.Promise.resolve None)
     in
     ensure_right_open ();
-    add_promise st p
+    ignore (let* item = p in
+      (match item with
+       | Some item ->
+           push_item st item;
+           if edit && context = (Runtime.repo (), Runtime.route ()) then
+             Editor_actions.enter_edit ~scope:"sidebar" uuid 0
+       | None -> ());
+      Js.Promise.resolve ())
 
 let open_sticky_item st kind =
   let repo = Runtime.repo () in

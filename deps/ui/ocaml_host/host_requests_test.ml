@@ -5380,6 +5380,124 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native table New footer placement and owner dispatch: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let failures=ref [] in
+  let expect message condition=if not condition then failures:=message::!failures in
+  let previous_worker= !Runtime.worker and previous_read= !Runtime.read_model
+  and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
+  and previous_sidebar= !Sidebar_state.st_ref and previous_ms= !Sidebar_state.model_signal
+  and previous_editor= !Editor_state.st and previous_fields= !Editor_state.field_sigs_opt
+  and previous_sources= !Editor_state.extra_sources and previous_ops= !Views_state.ops_ref
+  and previous_page= !Runtime.current_page in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker:=previous_worker;Runtime.read_model:=previous_read;
+    Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
+    Sidebar_state.st_ref:=previous_sidebar;Sidebar_state.model_signal:=previous_ms;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Editor_state.extra_sources:=previous_sources;Views_state.ops_ref:=previous_ops;
+    Runtime.current_page:=previous_page;Editor_actions.cancel_pending_focus ()) (fun () ->
+    List.iter (fun (property_type,header,leave_page) ->
+      Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Editor_state.extra_sources:=[];
+      let page=Option.get (Decode.page_of_summary (Wire.Map
+        [Wire.kw "block/uuid",Wire.Uuid "new-property-owner";
+         Wire.kw "block/title",Wire.String "Owner"])) in
+      Runtime.current_page:=Some {page with Model.page_add_object=true};
+      let writes=ref [] and placeholder_reads=ref 0 and inserted=ref None and complete=ref (fun () -> ()) in
+      let map values=Wire.Map (List.map (fun (key,value) -> Wire.kw key,value) values) in
+      let property=map ["block/uuid",Wire.Uuid "new-property-owner";
+        "db/ident",Wire.Keyword "fixture/value";
+        "logseq.property/type",Wire.Keyword property_type] in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+        match method_,args with
+        | "thread-api/pull",[_;_;Wire.Keyword "logseq.property/empty-placeholder"] ->
+            incr placeholder_reads;Js.Promise.resolve (map ["db/id",Wire.Int 99])
+        | "thread-api/pull",[_;_;Wire.Array [Wire.Keyword "block/uuid";Wire.Uuid uuid]] ->
+            Js.Promise.resolve (if uuid="new-property-owner" then property
+              else map ["block/uuid",Wire.Uuid uuid;"block/page",Wire.Int 10])
+        | "thread-api/apply-outliner-ops",[_;Wire.Array [Wire.Array
+            [Wire.Keyword "insert-blocks";Wire.Array [Wire.List [block];Wire.Uuid owner;_]]];_] ->
+            writes:=(owner,block)::!writes;
+            inserted:=Wire.map_get_uuid block "block/uuid";Js.Promise.resolve Wire.Nil
+        | "thread-api/get-blocks",[_;Wire.Array [request]] ->
+            let uuid=Option.get (Wire.get request "id") in
+            Js.Promise.make (fun ~resolve ~reject:_ -> complete:=(fun () ->
+              resolve (Wire.Array [map ["id",uuid;"block",map ["block/uuid",uuid;
+                "db/id",Wire.Int 101;"block/title",Wire.String ""];"children",Wire.Array []]]) [@u]))
+        | "thread-api/get-block-parents",_ -> Js.Promise.resolve (Wire.Array [])
+        | _ -> failwith ("Unexpected New object fixture request: " ^ method_));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.7.,20.))
+        ~renderer:{Lui_host.name="property-new-test";render=(fun _ -> Bytes.empty)}
+        ~width:1000 ~height:600 ~scale:1. () in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;
+      Views_view.install_ops ();
+      let sidebar=ref None and model=ref {Model.initial with repo=Some "new-object-fixture";
+        route=Model.Page "new-property-owner";right_sidebar_open=false} in
+      let app=Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry !model (fun value () -> value) (fun context ms _ ->
+          Editor_state.ensure context;
+          let state value=Signal.state context.Lui_ui.ui_scheduler value in
+          let st:Sidebar_state.t={favorites=state [];recents=state [];nav_checked=state [];
+            nav_tag_titles=state [];items=state [];open_menu=state "";groups_collapsed=state [];
+            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1000.} in
+          sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
+          Editor_state.add_block_source ~scope:"sidebar" (fun () ->
+            List.concat_map (fun (item:Sidebar_state.item) -> item.blocks) (Runtime.signal_get st.items));
+          let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:(if property_type="tag" then Views_state.KTagPage "new-property-owner"
+              else Views_state.KPropertyPage "new-property-owner") ~feature:"property-objects"
+            ~owner:(Wire.Uuid "new-property-owner") in
+          Views_state.update inst (fun state -> {state with loading=false;
+            columns=[Views_table.builtin_column "fixture/value" "Value" property_type ()]});
+          Lui_elements.column [Views_head.render_head inst;Views_table.add_row_footer inst]) in
+      Fun.protect ~finally:(fun () -> Editor_actions.cancel_pending_focus ();ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.read_model:=(fun () -> !model);Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        let opens=ref 0 in
+        Runtime.app_send:=(function Action.Toggle_right_sidebar -> incr opens;true | _ -> false);
+        let store=Lui_host.store host in
+        let ids=Lui_store.preorder store in
+        let control=if header then List.find (fun id -> Lui_store.string_prop store id
+            "accessibility-label"=Some (I18n.t "node/new")) ids
+          else Option.get (Lui_store.parent store (List.find (fun id ->
+            Lui_store.string_prop store id "text"=Some (I18n.t "view/new")) ids)) in
+        ignore (Lui_app.dispatch_event app (Press control));ignore (Lui_app.flush app);
+        for _=1 to 12 do Host.drain ();ignore (Lui_app.flush app) done;
+        expect "Table New inserts exactly one object under its owner"
+          (match !writes with [(owner,_)]->owner="new-property-owner" | _ -> false);
+        expect "Table New preserves property defaults and class tags"
+          (match !writes with [(_,block)]->Wire.get block "fixture/value"=
+            (if property_type="tag" then None
+              else Some (if property_type="checkbox" then Wire.Bool false else Wire.Int 99))
+            && Wire.get block "block/tags"=
+              (if property_type="tag" then Some (Wire.Array [Wire.Array
+                [Wire.kw "block/uuid";Wire.Uuid "new-property-owner"]]) else None) | _ -> false);
+        expect "Table New resolves an empty placeholder only for non-checkbox properties"
+          (!placeholder_reads=(if property_type="checkbox" || property_type="tag" then 0 else 1));
+        expect "Table New opens its sidebar once" (!opens=1);
+        expect "Table New waits for loaded sidebar blocks before editing"
+          (Editor_state.editing ()=None && Runtime.signal_get (Option.get !sidebar).items=[]);
+        if leave_page then model:={!model with route=Model.Journals};
+        (!complete) ();
+        for _=1 to 20 do Host.drain ();ignore (Lui_app.flush app) done;
+        expect "Table New loads its actual block into the sidebar"
+          (match Runtime.signal_get (Option.get !sidebar).items,!inserted with
+           | [item],Some uuid -> item.Sidebar_state.uuid=Some uuid
+             && List.exists (fun block -> block.Model.block_uuid=Some uuid) item.blocks
+           | _ -> false);
+        expect "Table New edits the loaded sidebar block without stealing focus after navigation"
+          (match Editor_state.editing (),!inserted with
+           | None,_ -> leave_page
+           | Some editing,Some uuid -> not leave_page && editing.Editor_state.uuid=uuid
+               && editing.scope="sidebar" && editing.model.Edit_model.source=""
+           | _ -> false))) ["number",false,false;"checkbox",true,false;"string",true,true;
+      "tag",false,false;"tag",true,false]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Table New creates and edits objects through the sidebar lifecycle" (!failures=[]);
+  print_endline "table New creates and edits objects through the sidebar lifecycle: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in
   let failures = ref [] in
