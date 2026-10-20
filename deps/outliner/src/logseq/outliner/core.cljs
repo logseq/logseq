@@ -213,10 +213,14 @@
       (update m :block/tags
               (fn [tags]
                 (map (fn [tag]
-                       (let [resolved (if-let [id (:db/id tag)]
-                                        (select-keys (d/entity db id) [:db/id :block/uuid :block/title :block/name])
+                       (let [entity (cond
+                                      (vector? tag) (d/entity db tag)
+                                      (:db/id tag) (d/entity db (:db/id tag)))
+                             resolved (if entity
+                                        (select-keys entity [:db/id :db/ident :block/uuid :block/title :block/name])
                                         tag)
-                             matched (matching-ref-for-tag resolved (get refs-by-name (:block/name resolved)))]
+                             matched (when (map? resolved)
+                                       (matching-ref-for-tag resolved (get refs-by-name (:block/name resolved))))]
                          (if matched
                            (cond-> (assoc resolved :block/uuid (:block/uuid matched))
                              (:db/ident matched) (assoc :db/ident (:db/ident matched)))
