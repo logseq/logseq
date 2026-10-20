@@ -801,13 +801,14 @@ let () =
   let env : Host_requests.env =
     { store; ui; rects=Lui_window.Rects.create (); rect_of=(fun _ -> rect);
       scale=(fun () -> 2.); measure=(Text_engine.measure_text engine);
-      text_layout=(fun id s -> Text_engine.text_layout engine id rect s);
+      text_flow=(fun _ -> None);text_layout=(fun id s -> Text_engine.text_layout engine id rect s);
       apply_batch=(fun _ -> ()); apply_actions=(fun _ -> ());
       set_ime_rect=(fun _ -> ()); focused_text_input=(fun _ -> ());
       toggle_native_performance = (fun () -> failwith "Unexpected native performance toggle");
       repaint=(fun () -> ()) } in
   let ctx : Host_requests.ed_ctx =
-    {sink=2; ox=100.; oy=200.; runs=[|0,String.length text|]; nodes=[|1|]} in
+    {sink=2; ox=100.; oy=200.; runs=[|0,String.length text|]; kinds=[|"p"|];nodes=[|1|];
+     groups=[|{Host_requests.group_node=1;group_indices=[|0|]}|]} in
   let x,y,h = Host_requests.caret_rect env ctx (String.length text) in
   check "Wrapped caret must be on the final visual line" (y > 0.);
   check "Wrapped caret must fit the run width" (x <= rect.w);
@@ -898,7 +899,7 @@ let () =
       rect_of = Lui_window.Rects.get rects;
       scale = (fun () -> 1.);
       measure = (fun _ _ -> (0., 0.));
-      text_layout = (fun _ _ -> failwith "Unexpected text layout");
+      text_flow=(fun _ -> None);text_layout = (fun _ _ -> failwith "Unexpected text layout");
       apply_batch = (fun _ -> ());
       apply_actions = (fun _ -> ());
       set_ime_rect = (fun _ -> ());
@@ -960,7 +961,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Hashtbl.replace rects 9101 (Lui_scene.rect 640. 480. 416. 40.);
   let env : Host_requests.env = {
     store;ui;rects;rect_of=Lui_window.Rects.get rects;scale=(fun () -> 2.);
-    measure=(fun _ _ -> 0.,0.);text_layout=(fun _ _ -> failwith "Unexpected text layout");
+    measure=(fun _ _ -> 0.,0.);text_flow=(fun _ -> None);text_layout=(fun _ _ -> failwith "Unexpected text layout");
     apply_batch=(fun _ -> ());apply_actions=(fun _ -> ());set_ime_rect=(fun _ -> ());
     focused_text_input=(fun _ -> ());toggle_native_performance=(fun () -> ());
     repaint=(fun () -> ())} in
@@ -1748,7 +1749,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     let env : Host_requests.env =
       {store; ui=Lui_window.Ui.create (); rects=Lui_window.Rects.create (); rect_of;
        scale=(fun () -> !current_scale); measure=Text_engine.measure_text engine;
-       text_layout=(fun id text -> Text_engine.text_layout engine id (rect_of id) text);
+       text_flow=(fun _ -> None);text_layout=(fun id text -> Text_engine.text_layout engine id (rect_of id) text);
        apply_batch=(fun _ -> ()); apply_actions=(fun _ -> ()); set_ime_rect=(fun _ -> ());
        focused_text_input=(fun _ -> ()); repaint=(fun () -> ());
        toggle_native_performance=(fun () -> failwith "Unexpected native performance toggle")} in
@@ -4467,7 +4468,7 @@ let () =
                   scale = (fun () -> 2.);
                   measure =
                     (fun _ _ -> failwith "Unexpected keymap measurement request");
-                  text_layout =
+                  text_flow=(fun _ -> None);text_layout =
                     (fun _ _ -> failwith "Unexpected keymap text-layout request");
                   apply_batch = (fun _ -> failwith "Unexpected keymap batch request");
                   apply_actions = (fun _ -> failwith "Unexpected keymap action request");
@@ -5811,12 +5812,12 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~scale:(fun () -> scale) ~store:(fun () -> A.store (surface ()))) in
     let module Measured_layout = struct
       include Lui_layout
-      let sync ?scale:layout_scale ?measure:_ ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store =
+      let sync ?scale:layout_scale ?measure:_ ?text_flow ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store =
         let measure id text offered_width _ =
           let measured = Text_engine.measure_text ~width:(Host_interaction.measure_width offered_width)
             (Lazy.force engine) id text in
           Some (Text_engine.pad_size store id ~scale measured) in
-        Lui_layout.sync ?scale:layout_scale ~measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
+        Lui_layout.sync ?scale:layout_scale ~measure ?text_flow ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
     end in
     let surface = A.create ~layout:(module Measured_layout) ~scale_cell:(ref scale)
       ~text:{measure=(fun id text -> Text_engine.measure_text (Lazy.force engine) id text);
@@ -5995,7 +5996,7 @@ let () =
               let module Measured_layout = struct
                 include Lui_layout
 
-                let sync ?scale:layout_scale ?measure:_ ?image_measure ?hidden ?ctx_anchor
+                let sync ?scale:layout_scale ?measure:_ ?text_flow ?image_measure ?hidden ?ctx_anchor
                     ?vport ?anchor_shift ~width ~height layout store =
                   let measure id text offered_width _ =
                     Some
@@ -6005,7 +6006,7 @@ let () =
                               (Host_interaction.measure_width offered_width)
                             (Lazy.force engine) id text))
                   in
-                  Lui_layout.sync ?scale:layout_scale ~measure ?image_measure ?hidden
+                  Lui_layout.sync ?scale:layout_scale ~measure ?text_flow ?image_measure ?hidden
                     ?ctx_anchor ?vport ?anchor_shift ~width ~height layout store
               end in
               let surface =
@@ -6080,7 +6081,7 @@ let () =
                   let env : Host_requests.env = {
                     store;ui;rects=A.rects surface;rect_of=W.Rects.get (A.rects surface);
                     scale=(fun () -> scale);measure=(fun _ _ -> 0.,0.);
-                    text_layout=(fun _ _ -> failwith "Unexpected date picker text layout");
+                    text_flow=(fun _ -> None);text_layout=(fun _ _ -> failwith "Unexpected date picker text layout");
                     apply_batch=(fun _ -> ());apply_actions=(fun _ -> ());set_ime_rect=(fun _ -> ());
                     focused_text_input=(fun _ -> ());toggle_native_performance=(fun () -> ());
                     repaint=(fun () -> ())} in
@@ -6597,7 +6598,7 @@ let () =
     store = Lui_store.create (); ui = Lui_window.Ui.create (); rects;
     rect_of = Lui_window.Rects.get rects; scale = (fun () -> 1.);
     measure = (fun _ _ -> failwith "Unexpected theme measurement");
-    text_layout = (fun _ _ -> failwith "Unexpected theme text layout");
+    text_flow=(fun _ -> None);text_layout = (fun _ _ -> failwith "Unexpected theme text layout");
     apply_batch = (fun _ -> failwith "Unexpected theme batch");
     apply_actions = (fun _ -> failwith "Unexpected theme input");
     set_ime_rect = (fun _ -> failwith "Unexpected theme IME update");
@@ -10188,7 +10189,10 @@ let () = Native_embed.with_entry_lock (fun () ->
     let host ()=Option.get !host_ref in
     let engine=lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (host ()))
       ~scale:(fun () -> scale) ~store:(fun () -> Lui_host.store (host ()))) in
-    let hooks={Lui_paint.default_hooks with text_ops=(fun id rect color text ->
+    let hooks={Lui_paint.default_hooks with
+      text_flow=(fun id width -> Text_engine.text_flow (Lazy.force engine) id width);
+      text_flow_ops=(fun ctx id rect color -> Text_engine.text_flow_ops (Lazy.force engine) ctx id rect color);
+      text_ops=(fun id rect color text ->
       Text_engine.text_ops (Lazy.force engine) id rect color text)} in
     let h=Lui_host.create ~hooks ~layout:(module Lui_layout)
       ~measure:(fun id text offered _ ->
@@ -10198,6 +10202,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       ~renderer:{Lui_host.name="rich-editor-flow-test";render=(fun _ -> Bytes.empty)}
       ~width:(int_of_float (width*.scale)) ~height:(int_of_float (400.*.scale)) ~scale () in
     host_ref:=Some h;
+    let model_cell=ref None and width_cell=ref None in
     let registry=Lui_extension.registry () in
     Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
     let app=Lui_app.create_with_extensions (Lui_host.backend h (profile MacOS GenericHost)) registry ()
@@ -10205,10 +10210,16 @@ let () = Native_embed.with_entry_lock (fun () ->
         let source="A **bold title** 汉字 café 👋 with enough words to overflow the entire table column" in
         let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
           ~anchor:(String.length source) ~focus:(String.length source) in
+        let model_state=Signal.state context.Lui_ui.ui_scheduler model
+        and width_state=Signal.state context.Lui_ui.ui_scheduler (int_of_float width) in
+        model_cell:=Some model_state;width_cell:=Some width_state;
         let state v=Signal.value (Signal.state context.Lui_ui.ui_scheduler v) in
-        Lui_elements.column ~width:(int_of_float width)
-          [Edit_view.view ~model:(state model) ~frame:(state Edit_input.empty_frame)
-            ~block_id:"rich-editor-flow" ~on_input:(fun _ -> ()) ~cls:""]) in
+        Ui_components.with_props [Ui_components.Prop.font_size "16px";
+          Ui_components.Prop.line_height "24px"]
+        (Ui_parts.int_prop Lui_protocol.WidthValue ~value:(reactive Fun.id (Signal.value width_state))
+        (Lui_elements.column
+          [Edit_view.view ~model:(Signal.value model_state) ~frame:(state Edit_input.empty_frame)
+            ~block_id:"rich-editor-flow" ~on_input:(fun _ -> ()) ~cls:""]))) in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
       ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
       let store=Lui_host.store h in
@@ -10221,8 +10232,39 @@ let () = Native_embed.with_entry_lock (fun () ->
         (abs_float (first.y-.bold.y)<0.6*.scale
          && first.x+.first.w<=bold.x+.0.6*.scale);
       let natural,_=Text_engine.measure_text (Lazy.force engine) (text_id "bold title") "bold title" in
-      expect "A narrow rich editor must not squeeze short formatted fragments into columns"
-        (abs_float (bold.w-.natural)<0.6*.scale && bold.h<=30.*.scale);
+      let line_id=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "ed-line") nodes in
+      let tail_id=List.find (fun id -> match Lui_store.string_prop store id "text" with
+        | Some value -> String.starts_with ~prefix:" 汉字" value | None -> false) nodes in
+      let tail=Option.get (Lui_store.string_prop store tail_id "text") in
+      let visible="A bold title" ^ tail in
+      let paragraph=Host_platform.Text.layout_spans ~width
+        ~line_height:24. (Text_engine.font_of store line_id)
+        [{Host_platform.Text.text=visible;
+          style={Host_platform.Text.default_style with
+            sfont=Some (Text_engine.font_of store (text_id "bold title"))};range=(2,12)}] in
+      let expected=Host_platform.Text.caret_rect paragraph 13 in
+      let line=rect line_id in
+      let reference=List.hd (Host_platform.Text.selection_rects paragraph (2,12)) in
+      let expected_bold=Lui_scene.rect_snap {Lui_scene.x=line.x+.reference.rx*.scale;
+        y=line.y+.reference.ry*.scale;w=reference.rw*.scale;h=reference.rh*.scale} in
+      expect (Printf.sprintf "A narrow rich editor must preserve its shaped and edge-rounded bold span: width=%.0f scale=%.0f allocated=%.3f natural=%.3f expected=%.3f"
+        width scale bold.w natural expected_bold.w)
+        (abs_float (bold.x-.expected_bold.x)<0.01 && abs_float (bold.w-.expected_bold.w)<0.01
+         && bold.h<=30.*.scale);
+      let env:Host_requests.env={store;ui=Lui_window.Ui.create ();rects=Lui_window.Rects.create ();
+        rect_of=rect;scale=(fun () -> scale);measure=Text_engine.measure_text (Lazy.force engine);
+        text_layout=(fun id text -> Text_engine.text_layout (Lazy.force engine) id (rect id) text);
+        text_flow=(fun id -> Text_engine.flow_surface (Lazy.force engine) id (rect id));
+        apply_batch=(fun _ -> ());apply_actions=(fun _ -> ());set_ime_rect=(fun _ -> ());
+        focused_text_input=(fun _ -> ());repaint=(fun () -> ());
+        toggle_native_performance=(fun () -> failwith "Unexpected performance toggle")} in
+      let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+      let actual_x,actual_y,_=Host_requests.caret_rect env context 17 in
+      expect "A rich-text continuation must use the remaining first-line width across style boundaries"
+        (abs_float ((actual_x+.context.ox-.line.x)/.scale-.expected.rx)<1.
+         && abs_float ((actual_y+.context.oy-.line.y)/.scale-.expected.ry)<1.);
+      expect "A rich-text paragraph must use its shared shaped line height without an extra caret-pad line"
+        (abs_float (line.h/.scale-.paragraph.lay_height)<1.);
       expect "Native rich editing must retain bold text geometry"
         (Option.value (Text_engine.inherited_int store (text_id "bold title") "font-weight")
           ~default:400>=600);
@@ -10232,7 +10274,86 @@ let () = Native_embed.with_entry_lock (fun () ->
             let hidden=rect id in
             expect "Concealed rich-text delimiters must consume no native layout or ink"
               (hidden.w=0. && hidden.h=0.)
-        | _ -> ()) nodes)) [180.;338.;600.]) [1.;2.];
+        | _ -> ()) nodes;
+      let source="汉字 **café 👋** tail" and display="汉字 café 👋 tail" in
+      let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
+        ~anchor:(String.length source) ~focus:(String.length source) in
+      Signal.set (Option.get !model_cell) model;
+      Signal.set (Option.get !width_cell) (int_of_float width/2);
+      ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+      let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+      let root=context.groups.(0).group_node in
+      let root_rect=rect root in
+      let font=Text_engine.font_of store root in
+      let bold_font=Host_platform.Text.create ~families:["Inter"] ~size:16. ~weight:700 () in
+      let paragraph=Host_platform.Text.layout_spans ~width:(width/.2.) ~line_height:24. font
+        [{Host_platform.Text.text=display;range=(7,17);
+          style={Host_platform.Text.default_style with sfont=Some bold_font}}] in
+      expect "A live text and width change must remeasure the whole rich paragraph"
+        (abs_float (root_rect.h/.scale-.paragraph.lay_height)<1.);
+      let raw_offset displayed=if displayed<7 then displayed
+        else if displayed<17 then displayed+2 else displayed+4 in
+      Array.iter (fun displayed ->
+        let raw=raw_offset displayed in
+        let x,y,height=Host_requests.caret_rect env context raw in
+        let caret=Host_platform.Text.caret_rect paragraph displayed in
+        expect (Printf.sprintf "A Unicode caret must match the updated paragraph: width=%.0f scale=%.0f raw=%d"
+          width scale raw)
+          (abs_float ((x+.context.ox-.root_rect.x)/.scale-.caret.rx)<1.
+           && abs_float ((y+.context.oy-.root_rect.y)/.scale-.caret.ry)<1.);
+        let px=int_of_float (Float.round x) and py=int_of_float (Float.round (y+.height/.2.)) in
+        let reference=Host_platform.Text.hit_test paragraph
+          ((float px+.context.ox-.root_rect.x)/.scale,
+           (float py+.context.oy-.root_rect.y)/.scale) in
+        expect "Unicode pointer hits must map shaped offsets back across concealed markup"
+          (Host_requests.offset_at env context px py=raw_offset reference))
+        (Host_platform.Text.graphemes display);
+      let ranges=Host_requests.line_ranges env context |> String.split_on_char ';'
+        |> List.map (fun line -> match String.split_on_char ',' line with
+          | [first;last] -> int_of_string first,int_of_string last
+          | _ -> failwith "Malformed visual line range") in
+      expect "Visual line ranges must cover the edited source through its exact end"
+        (List.length ranges=Array.length paragraph.lay_lines
+         && fst (List.hd ranges)=0 && snd (List.hd (List.rev ranges))=String.length source);
+      let rec disjoint=function
+        | (_,last)::((first,_)::_ as rest) -> last<=first && disjoint rest
+        | _ -> true in
+      expect "Wrapped source line ranges must not overlap at hidden delimiters" (disjoint ranges);
+      List.iter (fun source ->
+        let ending=String.length source in
+        let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
+          ~anchor:ending ~focus:ending in
+        Signal.set (Option.get !model_cell) model;
+        ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+        let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+        let x,y,height=Host_requests.caret_rect env context ending in
+        let hit=Host_requests.offset_at env context
+          (int_of_float (x+.40.*.scale)) (int_of_float (y+.height/.2.)) in
+        expect (Printf.sprintf "A click after the last word must reach exact source EOF: %S hit=%d end=%d"
+          source hit ending) (hit=ending);
+        let line_count=1+String.fold_left (fun n c -> if c='\n' then n+1 else n) 0 source in
+        expect "Empty logical lines must retain a full-height caret row"
+          (Array.length context.groups=line_count
+           && abs_float (Host_requests.scroll_height env context/.scale-.float line_count*.24.)<1.))
+        ["";"**bold**";"hello\n\nworld";"\n"];
+      let first="A **bold title** 汉字 café 👋 with enough words to overflow the entire table column" in
+      let source=first ^ "\ncode `x` tail" in
+      let model=Edit_model.select (Edit_model.create ~units:Edit_model.Bytes source)
+        ~anchor:(String.length source) ~focus:(String.length source) in
+      Signal.set (Option.get !model_cell) model;
+      ignore (Lui_app.flush app);ignore (Lui_host.repaint h);
+      let context=Option.get (Host_requests.ed_ctx env "rich-editor-flow") in
+      let root=context.groups.(0).group_node in
+      let paragraph=Host_platform.Text.layout_spans ~width:(width/.2.) ~line_height:24.
+        (Text_engine.font_of store root)
+        [{Host_platform.Text.text="A bold title 汉字 café 👋 with enough words to overflow the entire table column";
+          range=(2,12);style={Host_platform.Text.default_style with sfont=Some bold_font}}] in
+      let expected=Host_platform.Text.caret_rect paragraph 13 and root_rect=rect root in
+      let x,y,_=Host_requests.caret_rect env context 17 in
+      expect "An inline widget in another logical line must not change a shaped paragraph's caret"
+        (abs_float ((x+.context.ox-.root_rect.x)/.scale-.expected.rx)<1.
+         && abs_float ((y+.context.oy-.root_rect.y)/.scale-.expected.ry)<1.)))
+      [180.;338.;600.]) [1.;2.];
   List.iter prerr_endline (List.rev !failures);
   check "Native rich editor fragments flow and conceal delimiters" (!failures=[]);
   print_endline "native rich editor fragment flow: OK")

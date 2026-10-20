@@ -527,6 +527,8 @@ let () =
                    { sm_offset = Ui.scroll_offset ui id /. cap;
                      sm_extent =
                        Float.min 1. (cr.Lui_scene.h /. content) });
+        text_flow = Text_engine.text_flow text_engine;
+        text_flow_ops = Text_engine.text_flow_ops text_engine;
         text_ops =
           (fun id r fg s ->
              let ops = Text_engine.control_text_ops text_engine ~ui
@@ -708,7 +710,7 @@ let () =
   let layout_trace = Option.map open_out_bin (Sys.getenv_opt "LOGSEQ_NATIVE_LAYOUT_TRACE") in
   let module Timed_layout = struct
     include Lui_layout
-    let sync ?scale ?measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store =
+    let sync ?scale ?measure ?text_flow ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store =
       Option.iter (fun channel ->
         let hidden_ids = List.filter
           (fun id -> match hidden with Some predicate -> predicate id | None -> false)
@@ -717,7 +719,7 @@ let () =
           (store,width,height,Option.value scale ~default:1.,hidden_ids,ctx_anchor) [];
         flush channel) layout_trace;
       let started = perf_s () and before = stat_syncs t in
-      sync ?scale ?measure ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store;
+      sync ?scale ?measure ?text_flow ?image_measure ?hidden ?ctx_anchor ?vport ?anchor_shift ~width ~height t store;
       metrics.layout_ms <- (perf_s () -. started) *. 1000.;
       let runs = stat_syncs t - before in
       (match layout_capture_path with
@@ -1797,6 +1799,7 @@ let () =
       scale = (fun () -> !scale_cell);
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
       text_layout = (fun id s -> Text_engine.text_layout text_engine id (shifted_rect id) s);
+      text_flow = (fun id -> Text_engine.flow_surface text_engine id (shifted_rect id));
       apply_batch = (fun b -> if Lui_host.apply_batch host b then Host_images.sync_batch images store b);
       apply_actions;
       set_ime_rect;

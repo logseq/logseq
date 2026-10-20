@@ -48,6 +48,7 @@ type env = {
   scale : unit -> float;
   measure : int -> string -> float * float;
   text_layout : int -> string -> Lui_text.layout * float * float;
+  text_flow : int -> Text_engine.flow_surface option;
   apply_batch : patch_batch -> unit;
   apply_actions : action list -> unit;
   set_ime_rect : Lui_scene.rect -> unit;
@@ -95,13 +96,31 @@ let cls_has e id tok =
   | Some cls -> List.mem tok (String.split_on_char ' ' cls)
   | None -> false
 
+type ed_group = { group_node : int; group_indices : int array }
+
 type ed_ctx = {
   sink : int;
   ox : float;
   oy : float;
   runs : (int * int) array;
+  kinds : string array;
   nodes : int array;
+  groups : ed_group array;
 }
+
+let editor_groups e nodes =
+  let groups=Hashtbl.create 4 and order=ref [] in
+  let rec owner id =
+    if cls_has e id "ed-line" then id
+    else match Lui_store.parent e.store id with
+      | Some parent -> owner parent
+      | None -> invalid_arg "An editor run must belong to an edit line" in
+  Array.iteri (fun index node ->
+    let root=owner node in
+    if not (Hashtbl.mem groups root) then order:=root::!order;
+    Hashtbl.replace groups root (index::Option.value (Hashtbl.find_opt groups root) ~default:[])) nodes;
+  Array.of_list (List.rev_map (fun root ->
+    {group_node=root;group_indices=Array.of_list (List.rev (Hashtbl.find groups root))}) !order)
 
 let ed_ctx_uncached (e : env) (bid : string) : ed_ctx option =
   match
@@ -124,8 +143,8 @@ let ed_ctx_uncached (e : env) (bid : string) : ed_ctx option =
           List.filter_map
             (fun entry ->
               match String.split_on_char ',' entry with
-              | [ lo; hi; _kind ] -> (
-                try Some (int_of_string lo, int_of_string hi)
+              | [ lo; hi; kind ] -> (
+                try Some (int_of_string lo, int_of_string hi,kind)
                 with _ -> None)
               | _ -> None)
             (String.split_on_char ';' s)
@@ -135,13 +154,16 @@ let ed_ctx_uncached (e : env) (bid : string) : ed_ctx option =
         List.filter
           (fun id -> cls_has e id "ed-r")
           (Lui_store.preorder ~root:editor e.store)
+        |> Array.of_list
       in
       Some
         { sink
         ; ox = ed_rect.Lui_scene.x
         ; oy = ed_rect.Lui_scene.y
-        ; runs = Array.of_list runs
-        ; nodes = Array.of_list nodes
+        ; runs = Array.of_list (List.map (fun (lo,hi,_) -> lo,hi) runs)
+        ; kinds = Array.of_list (List.map (fun (_,_,kind) -> kind) runs)
+        ; nodes
+        ; groups = editor_groups e nodes
         })
 
 let context_store : Lui_store.t option ref = ref None
@@ -196,7 +218,7 @@ let run_of_off ctx off =
   in
   find 0
 
-let caret_rect e ctx off =
+let fragment_caret_rect e ctx off =
   if Array.length ctx.nodes = 0 || Array.length ctx.runs = 0
   then (0., 0., 0.)
   else begin
@@ -218,7 +240,7 @@ let caret_rect e ctx off =
     end
   end
 
-let offset_at e ctx x y =
+let fragment_offset_at e ctx x y =
   let wx, wy = ctx.ox +. float x, ctx.oy +. float y in
   let n = Array.length ctx.nodes in
   if n = 0 || Array.length ctx.runs = 0 then 0
@@ -256,7 +278,7 @@ let offset_at e ctx x y =
       (Lui_text.hit_test layout ((wx -. x0) /. scale, (wy -. y0) /. scale))
   end
 
-let line_ranges e ctx =
+let fragment_line_ranges e ctx =
   let n = Array.length ctx.nodes in
   if n = 0 || Array.length ctx.runs = 0 then ""
   else begin
@@ -294,7 +316,7 @@ let line_ranges e ctx =
     Buffer.contents b
   end
 
-let scroll_height e ctx =
+let fragment_scroll_height e ctx =
   let top = ref Float.max_float and bot = ref 0. in
   Array.iter
     (fun id ->
@@ -305,6 +327,116 @@ let scroll_height e ctx =
       end)
     ctx.nodes;
   Float.max 0. (!bot -. (if !top = Float.max_float then !bot else !top))
+
+let paragraph_views e ctx =
+  if Array.length ctx.groups=0 || Array.length ctx.nodes<>Array.length ctx.runs then None
+  else
+    Some (Array.map (fun group -> group,e.text_flow group.group_node) ctx.groups)
+
+let group_context ctx group =
+  let subset values=Array.map (fun index -> values.(index)) group.group_indices in
+  {ctx with runs=subset ctx.runs;kinds=subset ctx.kinds;nodes=subset ctx.nodes;groups=[||]}
+
+let paragraph_bounds e (group,surface) =
+  match surface with
+  | Some surface -> surface.Text_engine.surface_y,
+    surface.surface_y+.surface.surface_layout.lay_height*.e.scale ()
+  | None -> let r=e.rect_of group.group_node in r.y,r.y+.r.h
+
+let display_offset ctx surface index off =
+  let first,last=ctx.runs.(index) in
+  let a,b=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
+  if off<=first then a else if off>=last then b
+  else if ctx.kinds.(index)="a" then a else min b (a+off-first)
+
+let source_offset ctx group surface ~bias offset =
+  let bias=if bias=`Hit && offset=String.length surface.Text_engine.surface_layout.lay_text
+    then `After else bias in
+  let result=ref None in
+  Array.iter (fun index ->
+    let first,last=ctx.runs.(index) in
+    let a,b=Hashtbl.find surface.Text_engine.surface_ranges ctx.nodes.(index) in
+    if a<=offset && offset<=b then begin
+      let candidate=if offset<=a then first else if offset>=b then last
+        else if ctx.kinds.(index)="a" then first+1 else min last (first+offset-a) in
+      let candidate=if a=b && bias=`After then last else candidate in
+      match !result,bias with
+      | None,_ -> result:=Some candidate
+      | Some previous,`Before -> result:=Some (min previous candidate)
+      | Some previous,`After -> result:=Some (max previous candidate)
+      | Some _,`Hit when offset<b -> result:=Some candidate
+      | Some _,`Hit -> ()
+    end) group.group_indices;
+  match !result with
+  | Some source -> source
+  | None -> invalid_arg "A shaped editor offset must belong to a source span"
+
+let caret_rect e ctx off =
+  match paragraph_views e ctx with
+  | None -> fragment_caret_rect e ctx off
+  | Some views ->
+    let index=run_of_off ctx off in
+    let _,surface=Option.get (Array.find_opt (fun (group,_) ->
+      Array.exists ((=) index) group.group_indices) views) in
+    match surface with
+    | None -> fragment_caret_rect e ctx off
+    | Some surface ->
+    let offset=display_offset ctx surface index off in
+    let caret=Lui_text.caret_rect surface.surface_layout offset in
+    let scale=e.scale () in
+    surface.surface_x+.caret.rx*.scale-.ctx.ox,
+    surface.surface_y+.caret.ry*.scale-.ctx.oy,caret.rh*.scale
+
+let offset_at e ctx x y =
+  match paragraph_views e ctx with
+  | None -> fragment_offset_at e ctx x y
+  | Some views ->
+    let wx=ctx.ox+.float x and wy=ctx.oy+.float y and scale=e.scale () in
+    let best=ref 0 and distance=ref infinity in
+    Array.iteri (fun index view ->
+      let top,bottom=paragraph_bounds e view in
+      let dy=if wy<top then top-.wy
+        else if wy>bottom then wy-.bottom else 0. in
+      if dy< !distance then (distance:=dy;best:=index)) views;
+    let group,surface=views.(!best) in
+    match surface with
+    | None -> fragment_offset_at e (group_context ctx group) x y
+    | Some surface ->
+    let offset=Lui_text.hit_test surface.surface_layout
+      ((wx-.surface.surface_x)/.scale,(wy-.surface.surface_y)/.scale) in
+    source_offset ctx group surface ~bias:`Hit offset
+
+let line_ranges e ctx =
+  match paragraph_views e ctx with
+  | None -> fragment_line_ranges e ctx
+  | Some views ->
+    let buffer=Buffer.create 128 in
+    Array.iter (fun (group,surface) ->
+      match surface with
+      | None ->
+        let ranges=fragment_line_ranges e (group_context ctx group) in
+        if ranges<>"" then begin
+          if Buffer.length buffer>0 then Buffer.add_char buffer ';';
+          Buffer.add_string buffer ranges
+        end
+      | Some surface ->
+      Array.iteri (fun index (line:Lui_text.line_layout) ->
+        let first=source_offset ctx group surface ~bias:(if index=0 then `Before else `After) line.ll_line.start
+        and last=source_offset ctx group surface ~bias:`After line.ll_line.stop in
+        if Buffer.length buffer>0 then Buffer.add_char buffer ';';
+        Buffer.add_string buffer (Printf.sprintf "%d,%d" first last))
+        surface.Text_engine.surface_layout.lay_lines) views;
+    Buffer.contents buffer
+
+let scroll_height e ctx =
+  match paragraph_views e ctx with
+  | None -> fragment_scroll_height e ctx
+  | Some views ->
+    let first=ref infinity and last=ref neg_infinity in
+    Array.iter (fun view ->
+      let top,bottom=paragraph_bounds e view in
+      first:=min !first top;last:=max !last bottom) views;
+    !last-. !first
 
 (* ---------- ref resolution (domops.rs twin) ----------
 
