@@ -167,7 +167,6 @@
  :class.validation/duplicate "Tag '{1}' existiert bereits."
  :class.validation/extends-cycle "Zyklus in Vererbungsbeziehung erkannt."
  :class.validation/invalid-extends-type "Ungültiger Vererbungstyp."
- :class.validation/parents-must-be-tags "Eltern von Tags müssen Tags sein."
  :class.validation/tag-with-non-tag "Tag kann nicht mit integrierter Seite festgelegt werden, die kein Tag „{1}“ ist."
 
  :cmdk.action/apply-theme "Thema anwenden"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Seitenname darf nicht leer sein."
  :page.validation/name-no-hash "Seitenname darf kein # enthalten"
  :page.validation/name-no-slash "Seitenname darf kein / enthalten."
- :page.validation/parents-must-be-pages "Eltern von Seiten müssen Seiten sein."
 
  :pdf/annotations-page "Anmerkungsseite"
  :pdf/area-highlight-shortcut "Bereichshervorhebung ({1})"

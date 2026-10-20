@@ -167,7 +167,6 @@
  :class.validation/duplicate "タグ「{1}」は既に存在します。"
  :class.validation/extends-cycle "継承関係に循環が発生しています。"
  :class.validation/invalid-extends-type "無効な継承タイプです。"
- :class.validation/parents-must-be-tags "タグの親はタグでなければなりません。"
  :class.validation/tag-with-non-tag "タグ「{1}」以外の組み込みページにはタグを設定できません。"
 
  :cmdk.action/apply-theme "テーマを適用"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "ページ名を空にすることはできません。"
  :page.validation/name-no-hash "ページ名に # を含めることはできません"
  :page.validation/name-no-slash "ページ名に / を含めることはできません。"
- :page.validation/parents-must-be-pages "ページの親はページでなければなりません。"
 
  :pdf/annotations-page "注釈ページ"
  :pdf/area-highlight-shortcut "エリアハイライト（{1}）"

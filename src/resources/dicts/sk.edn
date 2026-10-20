@@ -167,7 +167,6 @@
  :class.validation/duplicate "Štítok '{1}' už existuje."
  :class.validation/extends-cycle "Zjištěn cyklus v dědičnosti."
  :class.validation/invalid-extends-type "Neplatný typ dědičnosti."
- :class.validation/parents-must-be-tags "Rodiče štítkov musí být štítky."
  :class.validation/tag-with-non-tag "Nie je možné nastaviť značku so vstavanou stránkou, ktorá nie je značkou „{1}“."
 
  :cmdk.action/apply-theme "Použiť motív"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Názov stránky nemôže byť prázdný."
  :page.validation/name-no-hash "Názov stránky nemôže obsahovat #"
  :page.validation/name-no-slash "Názov stránky nemôže obsahovat /."
- :page.validation/parents-must-be-pages "Rodiče stránok musí být stránky."
 
  :pdf/annotations-page "Stránka anotácií"
  :pdf/area-highlight-shortcut "Zvýraznenie oblasti ({1})"

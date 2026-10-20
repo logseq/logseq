@@ -167,7 +167,6 @@
  :class.validation/duplicate "A tag '{1}' já existe."
  :class.validation/extends-cycle "Ciclo detectado na relação de herança."
  :class.validation/invalid-extends-type "Tipo de herança inválido."
- :class.validation/parents-must-be-tags "Os pais de tags devem ser tags."
  :class.validation/tag-with-non-tag "Não é possível definir uma etiqueta com uma página integrada que não seja uma etiqueta \"{1}\"."
 
  :cmdk.action/apply-theme "Aplicar tema"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "O nome da página não pode estar vazio."
  :page.validation/name-no-hash "O nome da página não pode conter #"
  :page.validation/name-no-slash "O nome da página não pode conter /."
- :page.validation/parents-must-be-pages "Os pais de páginas devem ser páginas."
 
  :pdf/annotations-page "Página de anotações"
  :pdf/area-highlight-shortcut "Destaque de área ({1})"

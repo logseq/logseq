@@ -167,7 +167,6 @@
  :class.validation/duplicate "L'etiqueta '{1}' ja existeix."
  :class.validation/extends-cycle "Cicle detectat en la relació d'herència."
  :class.validation/invalid-extends-type "Tipus d'herència no vàlid."
- :class.validation/parents-must-be-tags "Els pares d'etiquetes han de ser etiquetes."
  :class.validation/tag-with-non-tag "No es pot establir una etiqueta amb una pàgina integrada que no sigui una etiqueta \"{1}\"."
 
  :cmdk.action/apply-theme "Aplica el tema"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "El nom de la pàgina no pot estar buit."
  :page.validation/name-no-hash "El nom de la pàgina no pot contenir #"
  :page.validation/name-no-slash "El nom de la pàgina no pot contenir /."
- :page.validation/parents-must-be-pages "Els pares de pàgines han de ser pàgines."
 
  :pdf/annotations-page "Pàgina d'anotacions"
  :pdf/area-highlight-shortcut "Ressaltar àrea ({1})"

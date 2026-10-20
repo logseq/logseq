@@ -167,7 +167,6 @@
  :class.validation/duplicate "برچسب '{1}' از قبل وجود دارد."
  :class.validation/extends-cycle "چرخه در وراثت شناسایی شد."
  :class.validation/invalid-extends-type "نوع وراثت نامعتبر."
- :class.validation/parents-must-be-tags "والدین باید برچسب باشند."
  :class.validation/tag-with-non-tag "نمی توان برچسب را با صفحه داخلی که برچسب \"{1}\" نیست تنظیم کرد."
 
  :cmdk.action/apply-theme "اعمال پوسته"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "نام صفحه نمی‌تواند خالی باشد."
  :page.validation/name-no-hash "نام صفحه نمی‌تواند شامل # باشد"
  :page.validation/name-no-slash "نام صفحه نمی‌تواند شامل / باشد."
- :page.validation/parents-must-be-pages "والدین باید صفحه باشند."
 
  :pdf/annotations-page "صفحه حاشیه‌نویسی‌ها"
  :pdf/area-highlight-shortcut "برجسته‌سازی ناحیه ({1})"

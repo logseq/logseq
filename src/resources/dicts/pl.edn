@@ -167,7 +167,6 @@
  :class.validation/duplicate "Tag '{1}' już istnieje."
  :class.validation/extends-cycle "Wykryto cykl w dziedziczeniu."
  :class.validation/invalid-extends-type "Nieprawidłowy typ dziedziczenia."
- :class.validation/parents-must-be-tags "Rodzice tagów muszą być tagami."
  :class.validation/tag-with-non-tag "Nie można ustawić tagu dla wbudowanej strony, który nie jest tagiem „{1}”."
 
  :cmdk.action/apply-theme "Zastosuj motyw"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Nazwa strony nie może być pusta."
  :page.validation/name-no-hash "Nazwa strony nie może zawierać #"
  :page.validation/name-no-slash "Nazwa strony nie może zawierać /."
- :page.validation/parents-must-be-pages "Rodzice stron muszą być stronami."
 
  :pdf/annotations-page "Strona adnotacji"
  :pdf/area-highlight-shortcut "Zaznaczenie obszaru ({1})"

@@ -223,7 +223,6 @@
  :class.validation/duplicate "Another tag named \"{1}\" already exists."
  :class.validation/extends-cycle "Tag extends cycle."
  :class.validation/invalid-extends-type "Can't extend this page since either it is not a tag or is extending from a page that is not a tag."
- :class.validation/parents-must-be-tags "Cannot create this tag unless all parents are tags."
  :class.validation/tag-with-non-tag "Can't set tag with built-in page that isn't a tag \"{1}\"."
 
  :cmdk.action/apply-theme "Apply theme"
@@ -1194,7 +1193,6 @@
  :page.validation/name-blank "Page name can't be blank."
  :page.validation/name-no-hash "Page name can't include \"#\"."
  :page.validation/name-no-slash "Page name can't include \"/\"."
- :page.validation/parents-must-be-pages "Cannot create this page unless all parents are pages."
 
  :pdf/annotations-page "Annotations page"
  :pdf/area-highlight-shortcut "Area highlight ({1})"

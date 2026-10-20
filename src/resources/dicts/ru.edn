@@ -167,7 +167,6 @@
  :class.validation/duplicate "Тег '{1}' уже существует."
  :class.validation/extends-cycle "Обнаружен цикл в наследовании."
  :class.validation/invalid-extends-type "Недопустимый тип наследования."
- :class.validation/parents-must-be-tags "Родители тегов должны быть тегами."
  :class.validation/tag-with-non-tag "Невозможно установить тег для встроенной страницы, которая не является тегом «{1}»."
 
  :cmdk.action/apply-theme "Применить тему"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Имя страницы не может быть пустым."
  :page.validation/name-no-hash "Имя страницы не может содержать #"
  :page.validation/name-no-slash "Имя страницы не может содержать /."
- :page.validation/parents-must-be-pages "Родители страниц должны быть страницами."
 
  :pdf/annotations-page "Страница аннотаций"
  :pdf/area-highlight-shortcut "Выделение области ({1})"

@@ -167,7 +167,6 @@
  :class.validation/duplicate "태그 '{1}'이(가) 이미 존재합니다."
  :class.validation/extends-cycle "상속 관계에 순환이 발생했습니다."
  :class.validation/invalid-extends-type "유효하지 않은 상속 유형입니다."
- :class.validation/parents-must-be-tags "태그의 부모는 태그여야 합니다."
  :class.validation/tag-with-non-tag "\"{1}\" 태그가 아닌 내장 페이지에는 태그를 설정할 수 없습니다."
 
  :cmdk.action/apply-theme "테마 적용"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "페이지 이름은 비워둘 수 없습니다."
  :page.validation/name-no-hash "페이지 이름에 #을 포함할 수 없습니다"
  :page.validation/name-no-slash "페이지 이름에 /를 포함할 수 없습니다."
- :page.validation/parents-must-be-pages "페이지의 부모는 페이지여야 합니다."
 
  :pdf/annotations-page "주석 페이지"
  :pdf/area-highlight-shortcut "영역 하이라이트 ({1})"

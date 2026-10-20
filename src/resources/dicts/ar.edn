@@ -167,7 +167,6 @@
  :class.validation/duplicate "الوسم '{1}' موجود بالفعل."
  :class.validation/extends-cycle "تم اكتشاف دورة في الوراثة."
  :class.validation/invalid-extends-type "نوع وراثة غير صالح."
- :class.validation/parents-must-be-tags "الأصول يجب أن تكون وسوماً."
  :class.validation/tag-with-non-tag "لا يمكن تعيين علامة بصفحة مضمنة ليست علامة \"{1}\"."
 
  :cmdk.action/apply-theme "تطبيق السمة"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "اسم الصفحة لا يمكن أن يكون فارغاً."
  :page.validation/name-no-hash "اسم الصفحة لا يمكن أن يتضمن #"
  :page.validation/name-no-slash "اسم الصفحة لا يمكن أن يحتوي /."
- :page.validation/parents-must-be-pages "الأصول يجب أن تكون صفحات."
 
  :pdf/annotations-page "صفحة التعليقات التوضيحية"
  :pdf/area-highlight-shortcut "تمييز المنطقة ({1})"
