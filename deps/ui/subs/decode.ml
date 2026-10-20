@@ -182,26 +182,6 @@ let order_str_of_wire (w : Wire.t) : string option =
   | Wire.Bool b -> Some (string_of_bool b)
   | _ -> None
 
-(* logseq.property/icon is a {type, id} map on the entity itself; block
-   icons use the Model.icon record (page icons use the tuple form below) *)
-let block_icon_of_wire (w : Wire.t) : Model.icon option =
-  let str_or_kw = function
-    | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
-    | _ -> None
-  in
-  match Wire.get w "logseq.property/icon" with
-  | Some (Wire.Map _ as m) -> (
-      match str_or_kw (Wire.get m "id") with
-      | Some id ->
-          Some
-            { Model.icon_kind =
-                Option.value (str_or_kw (Wire.get m "type"))
-                  ~default:"tabler-icon"
-            ; icon_id = id
-            }
-      | None -> None)
-  | _ -> None
-
 (* ---------- pdf hl-value (logseq.property.pdf/hl-value map prop) ---------- *)
 
 let num_of = function
@@ -408,8 +388,8 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
        | Some (Wire.Map _ as p) -> Wire.map_get_uuid p "block/uuid"
        | _ -> Wire.map_get_uuid w "block/page-uuid")
   ; block_tag_idents = tag_idents
-  ; block_icon = block_icon_of_wire w
-  ; block_tag_icons = List.filter_map block_icon_of_wire tag_entries
+  ; block_icon = Node_icon.own w
+  ; block_tag_icons = Node_icon.inherited tag_entries
   ; block_reactions = reactions_of_wire w
   ; block_is_comments_area = false
   ; block_is_comment = false
@@ -513,17 +493,8 @@ let view_blocks ~(library : bool) (bs : Model.block list) :
   if library then pages_only bs else List.map mark_default_collapsed bs
 
 (* Route summaries carry compact tags; navigation reads expanded entities. *)
-let page_tag_entries w =
-  match Wire.get w "tags" with
-  | Some tags -> Wire.elems tags
-  | None ->
-      Option.value (Option.map Wire.elems (Wire.get w "block/tags")) ~default:[]
-
-let page_tag_ident tag =
-  match Wire.get tag "ident", Wire.get tag "db/ident" with
-  | Some (Wire.String ident), _
-  | _, Some (Wire.Keyword ident) | _, Some (Wire.String ident) -> Some ident
-  | _ -> None
+let page_tag_entries = Node_icon.tags
+let page_tag_ident = Node_icon.tag_ident
 
 let page_tag_title tag =
   match Wire.map_get_string tag "title" with
@@ -549,23 +520,6 @@ let page_tag_idents w =
   page_tag_entries w
   |> List.filter (fun tag -> Option.is_some (page_tag_title tag))
   |> List.map (fun tag -> Option.value (page_tag_ident tag) ~default:"")
-
-(* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
-let icon_of_wire (w : Wire.t) : (string * string) option =
-  let ty =
-    match Wire.get w "type" with
-    | Some (Wire.Keyword s) -> Some s
-    | Some (Wire.String s) -> Some s
-    | _ -> None
-  in
-  match ty, Wire.map_get_string w "id" with
-  | Some t, Some i -> Some (t, i)
-  | _ -> None
-
-let page_tag_icons w =
-  page_tag_entries w
-  |> List.stable_sort (fun a b -> compare (Wire.map_get_int a "db/id") (Wire.map_get_int b "db/id"))
-  |> List.filter_map (fun tag -> Option.bind (Wire.get tag "logseq.property/icon") icon_of_wire)
 
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
@@ -604,12 +558,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_db_id
         ; page_is_tag = is_tag_page w
         ; page_is_property = is_property_page w
-        ; page_icon =
-            (match Wire.get w "icon" with
-             | Some v -> icon_of_wire v
-             | None ->
-                 Option.bind
-                   (Wire.get w "logseq.property/icon") icon_of_wire)
+        ; page_icon = Node_icon.own w
         ; page_journal_day =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
@@ -648,7 +597,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (fun tag -> Wire.map_get_uuid tag "block/uuid") (page_tag_entries w)
         ; page_tag_db_ids = List.filter_map
             (fun tag -> Wire.map_get_int tag "db/id") (page_tag_entries w)
-        ; page_tag_icons = page_tag_icons w
+        ; page_tag_icons = Node_icon.inherited (Node_icon.tags w)
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []

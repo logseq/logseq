@@ -5523,7 +5523,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let summary=Option.get (Decode.page_of_summary (Wire.Map
         [Wire.kw "block/uuid",Wire.Uuid "title-layout-owner";
          Wire.kw "block/title",Wire.String "Title layout"])) in
-      let page={summary with Model.page_is_tag=icon && not editing;page_is_property=icon && editing;page_icon=(if icon then Some ("tabler","star") else None)} in
+      let page={summary with Model.page_is_tag=icon && not editing;page_is_property=icon && editing;page_icon=(if icon then Some (Node_icon.tabler "star") else None)} in
       let model={Model.initial with repo=Some "title-layout-fixture";route_page=Some page;editing_title=editing} in
       Runtime.read_model:=(fun () -> model);
       let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
@@ -10992,7 +10992,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
         let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
         expect "Entity icon writes must refresh visible navigation summaries"
-          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Moon") && both_icons "app:moon" | _ -> false);
+          (match pages with [page] -> Model.page_node_icon page=Some (Node_icon.tabler "Moon") && both_icons "app:moon" | _ -> false);
         let updated=Option.get (Decode.page_of_summary
           (entity ~icon:(icon "tabler-icon" "Sun") "sync-page")) in
         let model={Model.initial with repo=Some "icon-fixture";phase=Model.Ready;route_page=Some updated} in
@@ -11001,7 +11001,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
         let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
         expect "Own page writes must publish navigation icons without a remote echo"
-          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Sun") && both_icons "app:sun" | _ -> false);
+          (match pages with [page] -> Model.page_node_icon page=Some (Node_icon.tabler "Sun") && both_icons "app:sun" | _ -> false);
         let inherited icon_name = Wire.Array [entity "inherited-sync"
           ~tags:[tag 20 "user.class/Label" ~icon:(icon "tabler-icon" icon_name)]] in
         payload:=inherited "Star";
@@ -11012,7 +11012,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done;
         let pages=Runtime.signal_get (if recent then st.recents else st.favorites) in
         expect "Tag icon writes must refresh navigation pages inheriting that icon"
-          (match pages with [page] -> Model.page_node_icon page=Some ("tabler-icon","Moon") && both_icons "app:moon" | _ -> false)))
+          (match pages with [page] -> Model.page_node_icon page=Some (Node_icon.tabler "Moon") && both_icons "app:moon" | _ -> false)))
       [false;true]) [1.;2.]);
   List.iter prerr_endline (List.rev !failures);
   check "Native page icons through sidebar loaders" (!failures=[]);
@@ -11042,10 +11042,10 @@ let () = Native_embed.with_entry_lock (fun () ->
       | Js.Promise.Rejected error -> raise error
       | Js.Promise.Pending -> failwith "Tag icon fixture did not settle" in
     let loaded=resolve page in
-    let first=Model.page_node_icon loaded=Some ("tabler-icon","24Hours") in
+    let first=Model.page_node_icon loaded=Some (Node_icon.tabler "24Hours") in
     current:=[tag 20 "Star";tag 10 "Moon"];
     let refreshed=resolve loaded in
-    let updated=Model.page_node_icon refreshed=Some ("tabler-icon","Moon") in
+    let updated=Model.page_node_icon refreshed=Some (Node_icon.tabler "Moon") in
     current:=[];tag_ids:=[];
     let cleared=resolve refreshed in
     let removed=Model.page_node_icon cleared=None && cleared.Model.page_tags=[] in
@@ -11106,3 +11106,217 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native title content and header action click ownership" (!failures=[]);
   print_endline "native title content and header action click ownership: OK")
+
+
+let node_icon_regression_failures = ref []
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let failures=ref [] in
+  let expect label condition=if not condition then failures:=label::!failures in
+  let map fields=Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let icon ?color kind id=map (["type",Wire.Keyword kind;"id",Wire.String id]
+    @ match color with None -> [] | Some value -> ["color",Wire.String value]) in
+  let tag ?icon:own id ident=map (["db/id",Wire.Int id;"db/ident",Wire.Keyword ident;
+    "block/title",Wire.String ident;"block/uuid",Wire.Uuid ("tag-"^string_of_int id)]
+    @ match own with None -> [] | Some value -> ["logseq.property/icon",value]) in
+  let page_tag=tag 1 "logseq.class/Page" in
+  let entity ?(tags=[]) ?icon:own ?asset ()=map
+    (["db/id",Wire.Int 70;"block/uuid",Wire.Uuid "search-icon-owner";
+      "block/title",Wire.String "Task 汉字 café 👋";"block/name",Wire.String "task";
+      "page?",Wire.Bool true;"block/tags",Wire.List (page_tag::tags)]
+     @ (match own with None -> [] | Some value -> ["logseq.property/icon",value])
+     @ (match asset with None -> [] | Some value -> ["logseq.property.asset/type",Wire.String value])) in
+  let cases=
+    ["page",entity (),["app:file"],["app:file"],["app:file"],[],None;
+     "class",entity ~tags:[tag 2 "logseq.class/Tag"] (),["app:hash"],["app:hash"],["app:hash"],[],None;
+     "property",entity ~tags:[tag 2 "logseq.class/Property"] (),["app:letter-p"],["app:letter-p"],["app:letter-p"],[],None;
+     "explicit Tabler",entity ~icon:(icon "tabler-icon" "24Hours") (),
+       ["app:file";"app:hours-24"],["app:hours-24"],["app:hours-24"],["app:hours-24"],None;
+     "explicit color",entity ~icon:(icon ~color:"#13579b" "tabler-icon" "Star") (),
+       ["app:file";"app:star"],["app:star"],["app:star"],["app:star"],Some "#13579b";
+     "emoji class",entity ~tags:[tag 2 "logseq.class/Tag"] ~icon:(icon "emoji" "smile") (),
+       ["app:hash";"emoji:😄"],["emoji:😄"],["emoji:😄"],["emoji:😄"],None;
+     "inherited order",entity ~tags:[tag 20 "user.class/Later" ~icon:(icon "tabler-icon" "Star");
+       tag 10 "user.class/First" ~icon:(icon "tabler-icon" "24Hours")] (),
+       ["app:hours-24"],["app:hours-24"],["app:hours-24"],["app:hours-24"],None;
+     "inherited color",entity ~tags:[tag 10 "user.class/First" ~icon:(icon ~color:"#13579b" "tabler-icon" "Star")] (),
+       ["app:star"],["app:star"],["app:star"],["app:star"],Some "#13579b";
+     "class before inherited",entity ~tags:[tag 2 "logseq.class/Tag" ~icon:(icon "tabler-icon" "Star")] (),
+       ["app:hash"],["app:hash"],["app:hash"],["app:hash"],None;
+     "property before inherited",entity ~tags:[tag 2 "logseq.class/Property" ~icon:(icon "emoji" "smile")] (),
+       ["app:letter-p"],["app:letter-p"],["app:letter-p"],["app:letter-p"],None;
+     "class before PDF",entity ~tags:[tag 2 "logseq.class/Tag"] ~asset:"pdf" (),
+       ["app:hash"],["app:hash"],["app:hash"],["app:hash"],None] in
+  let previous_services= !Cmdk_state.services_ref in
+  Fun.protect ~finally:(fun () -> Cmdk_state.services_ref:=previous_services) (fun () ->
+    List.iter (fun scale ->
+      let payload=ref (entity ()) and opened=ref [] in
+      let services={ (Cmdk_host.services ()) with
+        repo=(fun () -> Some "search-icon-fixture");route_is_page=(fun () -> false);
+        commands=(fun () -> []);plugin_commands=(fun () -> []);
+        sidebar_recent_ids=(fun _ -> [70]);sidebar_open_uuid=(fun uuid -> opened:=uuid::!opened);
+        console_error=(fun label error -> raise (Failure (label^": "^Printexc.to_string error)));
+        invoke=(fun name _ -> match name with
+          | "thread-api/search-blocks" -> Ui_task.resolve (map
+              ["items",Wire.Array [!payload];"matched-count",Wire.Int 1])
+          | "thread-api/get-recent-pages" -> Ui_task.resolve (Wire.Array [!payload])
+          | _ -> failwith ("Unexpected search icon request: "^name)) } in
+      Cmdk_state.services_ref:=Some services;
+      let store=Lui_store.create () and state=ref None in
+      let backend={backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app=Lui_app.create_with_extensions backend registry () (fun () () -> ())
+        (fun ctx _ _ ->
+          let st=Cmdk_state.make ~register:false ctx.Lui_ui.ui_scheduler services in
+          let first=Cmdk_state.item_of_row !payload 0
+          and recent=Option.get (Cmdk_state.recents_item_of_wire !payload)
+          and block=Decode.block_of_wire !payload in
+          let node=Signal.state ctx.Lui_ui.ui_scheduler first
+          and recent=Signal.state ctx.Lui_ui.ui_scheduler recent
+          and block=Signal.state ctx.Lui_ui.ui_scheduler block in
+          state:=Some (st,node,recent,block);
+          let tree library block=
+            match Tree.node_icon ~library block with
+            | Some value -> Tree.icon_el "search-icon-tree" value
+            | None -> Lui_elements.box [] in
+          Lui_elements.column ~width:520
+            [Lui_elements.column ~height:96 ~accessibility_identifier:"search-icon-result"
+               [Cmdk_view.item_row services st (Signal.value node)];
+             Lui_elements.column ~height:96 ~accessibility_identifier:"search-icon-recent"
+               [Cmdk_view.item_row services st (Signal.value recent)];
+             Lui_elements.column ~height:24 ~accessibility_identifier:"search-icon-tree"
+               [reactive (tree false) (Signal.value block)];
+             Lui_elements.column ~height:24 ~accessibility_identifier:"search-icon-library"
+               [reactive (tree true) (Signal.value block)]]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let st,node,recent,block=Option.get !state in
+        let settle ()=for _=1 to 8 do Host.drain ();ignore (Lui_app.flush app) done in
+        let root name=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name)
+          (Lui_store.preorder store) in
+        let rec subtree id=id::List.concat_map (fun node -> subtree (Lui_store.node_id node)) (Lui_store.children store id) in
+        let glyphs name=List.filter_map (fun id ->
+          if Lui_store.kind store id="icon" then
+            Option.map (fun name -> id,name) (Lui_store.string_prop store id "name")
+          else if Lui_store.ext_id store id=Some "logseq-em-emoji" then
+            Option.map (fun text -> id,"emoji:"^text) (Lui_store.string_prop store id "text")
+          else None) (subtree (root name)) in
+        List.iter (fun (label,wire,search_icons,recent_icons,tree_icons,library_icons,color) ->
+          payload:=wire;
+          let loaded=ref None in
+          ignore (Ui_task.bind (Cmdk_state.run_search services "search-icon-fixture" "Task" false 10)
+            (fun (items,total) -> loaded:=Some (items,total);Ui_task.resolve ()));
+          Cmdk_state.load_recents st "search-icon-fixture";settle ();
+          let items,total=Option.get !loaded in
+          expect (label^" search count") (total=1 && List.length items=1);
+          let item={(List.hd items) with Cmdk_state.idx=0}
+          and recent_item=List.hd (Cmdk_state.get st).Cmdk_state.recents in
+          Signal.set node item;Signal.set recent recent_item;
+          Signal.set block (Decode.block_of_wire wire);ignore (Lui_app.flush app);
+          List.iter (fun (owner,expected) ->
+            let actual=List.map snd (glyphs owner) in
+            expect (Printf.sprintf "%s scale %.0f %s expected %s, received %s"
+              label scale owner (String.concat "," expected) (String.concat "," actual)) (actual=expected);
+            Option.iter (fun color -> List.iter (fun (id,name) ->
+              if name="app:star" then expect (label^" explicit foreground color")
+                (Lui_store.string_prop store id "foreground"=Some color)) (glyphs owner)) color)
+            ["search-icon-result",search_icons;"search-icon-recent",recent_icons;
+             "search-icon-tree",tree_icons;"search-icon-library",library_icons];
+          let retained=glyphs "search-icon-result" in
+          List.iter (fun query ->
+            Signal.set node {item with Cmdk_state.iq=query;ihl=true;imouse=true};ignore (Lui_app.flush app);
+            expect (label^" glyph identity survives query/highlight-only changes")
+              (glyphs "search-icon-result"=retained)) ["Ta";"Task";"汉字";""];
+          let layout=Lui_layout.create () in
+          let scene=Lui_scene.create
+            ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+            ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+          let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale)
+            ~store:(fun () -> store) in
+          Lui_layout.sync ~scale ~width:(520.*.scale) ~height:(720.*.scale)
+            ~measure:(fun id text width _ -> Some (Text_engine.pad_size store id ~scale
+              (Text_engine.measure_text ~width:(Host_interaction.measure_width width) engine id text)))
+            layout store;
+          let rects=W.Rects.create () in
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout id))
+            (Lui_store.preorder store);
+          let row=List.find (fun id -> Lui_store.bool_prop store id "press-enabled")
+            (subtree (root "search-icon-result")) in
+          let result_nodes=subtree (root "search-icon-result") in
+          let main=List.find (fun id -> Lui_store.string_prop store id "style-class"=
+            Some "cp__cmdk-item-main-text") result_nodes in
+          let title=List.find (fun id -> match Lui_store.string_prop store id "text" with
+            | Some value -> String.starts_with ~prefix:"Task" value
+            | None -> false) result_nodes in
+          if item.Cmdk_state.inline_icon=None then
+            expect (label^" absent inline icon adds no title gap")
+              (abs_float ((W.Rects.get rects title).Lui_scene.x-.(W.Rects.get rects main).x)<0.01);
+          List.iter (fun (id,_) ->
+            let ui=W.Ui.create () in W.Ui.set_scale ui scale;
+            let r=W.Rects.get rects id in let x,y=(r.Lui_scene.x+.r.w/.2.)/.scale,(r.y+.r.h/.2.)/.scale in
+            ignore (W.Ui.handle ui store rects (W.Input.Move (x,y)));
+            ignore (W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)));
+            let actions=W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+            let targets=List.filter_map (function W.Dispatch (Press id) -> Some id | _ -> None) actions in
+            if label="page" && targets<>[row] then Printf.eprintf
+              "search glyph click scale=%.0f glyph=%d row=%d rect=%.1f,%.1f %.1fx%.1f targets=%s actions=%s\n%!"
+              scale id row r.Lui_scene.x r.y r.w r.h (String.concat "," (List.map string_of_int targets))
+              (String.concat "," (List.map (function
+                | W.Dispatch event -> string_of_int (Lui_protocol.event_node event)
+                | _ -> "other") actions));
+            expect (label^" glyph click has exactly one result action owner") (targets=[row])) retained;
+          let group : Cmdk_state.group={gid=G_nodes;gtitle="Results";gitems=[item];gtotal=1;
+            glimit=10;gexpanded=false;gfilter_active=false} in
+          Cmdk_state.set st {Cmdk_state.initial_view with open_=true;hl=0;groups=[group]};
+          opened:=[];Cmdk_state.run_highlighted_sidebar st;
+          expect (label^" keyboard sidebar action retains entity identity") (!opened=["search-icon-owner"])) cases))
+      [1.;2.]);
+  node_icon_regression_failures := List.rev_append !failures !node_icon_regression_failures;
+  if !failures=[] then print_endline "native structured search, recent and block icons: OK")
+
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let map fields=Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
+  let own kind id=map ["type",Wire.Keyword kind;"id",Wire.String id] in
+  let tag id value=map (["db/id",Wire.Int id;"block/title",Wire.String (string_of_int id);
+    "block/uuid",Wire.Uuid ("tag-"^string_of_int id);"db/ident",Wire.Keyword "user.class/Label"]
+    @ match value with None -> [] | Some value -> ["logseq.property/icon",value]) in
+  let metadata=ref [tag 20 (Some (own "tabler-icon" "Star"));tag 10 (Some (own "tabler-icon" "24Hours"))] in
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "block-icon-fixture"});
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+    if name<>"thread-api/get-blocks" then failwith ("Unexpected block icon request: "^name);
+    Js.Promise.resolve (Wire.Array (List.map (fun entity -> map ["block",entity]) !metadata)));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model) (fun () ->
+    let bare=Decode.block_of_wire (map ["block/uuid",Wire.Uuid "block-icon-owner";
+      "block/title",Wire.String "Tagged block";"block/tags",Wire.Set [Wire.Int 20;Wire.Int 10]]) in
+    let resolve block=
+      let promise=Outliner_ops.resolve_block_tags [block] in
+      for _=1 to 8 do Host.drain () done;
+      match promise.Js.Promise.state with
+      | Js.Promise.Resolved [block] -> block
+      | Js.Promise.Rejected error -> raise error
+      | _ -> failwith "Block icon hydration fixture did not settle" in
+    let loaded=resolve bare in
+    let first=match Tree.node_icon ~library:false loaded with
+      | Some icon -> icon.Model.icon_kind="tabler-icon" && icon.icon_id="24Hours"
+      | None -> false in
+    metadata:=[tag 20 (Some (own "tabler-icon" "Star"));tag 10 (Some (own "emoji" "smile"))];
+    let updated=resolve loaded in
+    let changed=match Tree.node_icon ~library:false updated with
+      | Some icon -> icon.Model.icon_kind="emoji" && icon.icon_id="smile"
+      | None -> false in
+    metadata:=[tag 20 None;tag 10 None];
+    let cleared=resolve updated in
+    if not (first && changed && Tree.node_icon ~library:false cleared=None) then
+      node_icon_regression_failures := "Block tag hydration must order, update and remove inherited icons"::!node_icon_regression_failures);
+  ())
+
+let () =
+  List.iter prerr_endline (List.rev !node_icon_regression_failures);
+  check "Native structured node icon regressions" (!node_icon_regression_failures=[]);
+  print_endline "native block tag icon hydration and refresh: OK"

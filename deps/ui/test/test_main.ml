@@ -16,6 +16,7 @@ let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~
    can only go up after Platform_web.install *)
 let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
+let () = Test_lui_apply.test_icon_palette_search_lifecycle ()
 let () = Theme_web_test.run ()
 
 let () =
@@ -1002,9 +1003,9 @@ let test_decode5 () =
                 ; wmap [ ("title", Wire.String "T2") ] ]) ]))
     (String.concat ",");
   check "icon"
-    (Decode.icon_of_wire
+    (Node_icon.decode
        (wmap [ ("type", Wire.kw "emoji"); ("id", Wire.String "e1") ])
-     = Some ("emoji", "e1"))
+     = Some (Node_icon.emoji "e1"))
 
 let test_decode6 () =
   (* view_blocks: library drops non-page subtrees; otherwise page-typed
@@ -1039,7 +1040,7 @@ let test_decode6 () =
          (pg.Model.page_title = "Library"
          && pg.page_uuid = Some "u" && pg.page_db_id = Some 7
          && pg.page_is_library && pg.page_add_object
-         && pg.page_icon = Some ("emoji", "i")
+         && pg.page_icon = Some (Node_icon.emoji "i")
          && pg.page_tags = [ "Tg" ])
    | None -> check "summary route-info keys" false);
   (* toast: kind defaults, non-string message rejected *)
@@ -1356,7 +1357,7 @@ let test_outliner_ops5 () =
 
 let cmdk_item ?(act = Cmdk_state.Open_page "u") ititle : Cmdk_state.item =
   { ikey = "k-" ^ ititle; idx = -1; gid = Cmdk_state.G_nodes
-  ; ititle; info = None; header = None; iicon = ""; isc = ""
+  ; ititle; info = None; header = None; iicon = None; inline_icon = None; isc = ""
   ; ibadge = Cmdk_state.No_badge; act; ihl = false; imouse = false
   ; iq = "" }
 
@@ -1426,7 +1427,7 @@ let test_cmdk_rows () =
   in
   let it = Cmdk_state.item_of_row row 0 in
   check "row page item"
-    (it.Cmdk_state.iicon = "file" && it.act = Cmdk_state.Open_page "bu"
+    (it.Cmdk_state.iicon = Some (Node_icon.tabler "file") && it.act = Cmdk_state.Open_page "bu"
     && it.ititle = "T" && it.header = None);
   let brow =
     wmap
@@ -1438,7 +1439,7 @@ let test_cmdk_rows () =
   in
   let ib = Cmdk_state.item_of_row brow 3 in
   check "row block item"
-    (ib.iicon = "point-filled" && ib.act = Cmdk_state.Open_block "bu2"
+    (ib.iicon = Some (Node_icon.tabler "point-filled") && ib.act = Cmdk_state.Open_block "bu2"
     && ib.header = Some "P" && ib.ikey = "node-bu2-3");
   (* current-page badge needs the page route + loaded page *)
   let saved_model = !model_stub in

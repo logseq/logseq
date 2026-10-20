@@ -430,7 +430,7 @@ let tag_hidden blk =
   | _ -> false
 
 (* (db-id, (title, ident, hidden, uuid, icon)) per tag entity *)
-let tag_titles repo ids : (int * (string * string * bool * string * (string * string) option)) list Js.Promise.t =
+let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t option)) list Js.Promise.t =
   let* w =
     Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
       (Wire.Array
@@ -472,7 +472,7 @@ let tag_titles repo ids : (int * (string * string * bool * string * (string * st
                  , tag_hidden blk
                  , Option.value (Wire.map_get_uuid blk "block/uuid")
                      ~default:""
-                 , Option.bind (Wire.get blk "logseq.property/icon") Decode.icon_of_wire ) )
+                 , Node_icon.own blk ) )
          | _ -> None)
        (Wire.elems w))
 
@@ -516,6 +516,9 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
               block_tag_idents = idents
             ; block_tag_db_ids =
                 List.map (fun (i, _) -> i) visible
+            ; block_tag_icons =
+                resolved |> List.sort (fun (a, _) (b, _) -> Int.compare a b)
+                |> List.filter_map (fun (_, (_, _, _, _, icon)) -> icon)
             ; block_is_comments_area =
                 List.mem "logseq.class/Comments" idents
             ; block_is_comment =

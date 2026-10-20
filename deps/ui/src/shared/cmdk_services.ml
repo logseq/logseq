@@ -78,6 +78,7 @@ type t =
   ; i18n : string -> string
   ; i18nf : string -> string list -> string
   ; normalize : string -> string
+  ; render_icon : size:int -> Node_icon.t -> Lui_elements.t
     (* -- dates -------------------------------------------------------- *)
   ; today_journal_day : unit -> int (* yyyymmdd *)
   ; rel_journal_day : int -> int (* today + delta days *)

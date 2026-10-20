@@ -947,6 +947,7 @@
  :help.shortcuts/title "Keyboard shortcuts"
  :help.shortcuts/triggers "Triggers"
 
+ :icon/clear-search "Clear search"
  :icon/color-value "Color {1}"
  :icon/emojis-count "Emojis ({1})"
  :icon/icons-count "Icons ({1})"

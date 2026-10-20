@@ -611,8 +611,7 @@ let load_block_zoom uuid =
                            b.Model.block_tag_uuids
                        ; page_tag_db_ids =
                            b.Model.block_tag_db_ids
-                       ; page_tag_icons = List.map
-                           (fun icon -> icon.Model.icon_kind,icon.Model.icon_id) b.Model.block_tag_icons
+                       ; page_tag_icons = b.Model.block_tag_icons
                        ; page_blocks =
                            (match (Runtime.model ()).Model.route_page with
                             | Some old ->

@@ -45,7 +45,8 @@ type item =
   ; ititle : string
   ; info : string option
   ; header : string option
-  ; iicon : string (* tabler icon name, "" = none *)
+  ; iicon : Node_icon.t option
+  ; inline_icon : Node_icon.t option
   ; isc : string (* decorated shortcut display string, "" = none *)
   ; ibadge : badge_kind
   ; act : action
@@ -310,7 +311,7 @@ let cmd_label svs (c : Svs.cmd) =
 let command_item svs (c : Svs.cmd) : item =
   { ikey = "cmd-" ^ c.Svs.id; idx = -1; gid = G_commands
   ; ititle = cmd_label svs c; info = None; header = None
-  ; iicon = "command"; isc = c.Svs.sc
+  ; iicon = Some (Node_icon.tabler "command"); inline_icon = None; isc = c.Svs.sc
   ; ibadge = No_badge; act = Run c.Svs.id
   ; ihl = false; imouse = false; iq = "" }
 
@@ -348,13 +349,13 @@ let create_items q =
       [ { ikey = "create-" ^ q; idx = -1; gid = G_create
         ; ititle = svs.Svs.i18n "cmdk.create/tag"
         ; info = Some (svs.Svs.i18nf "cmdk.info/create-tag" [ tag ])
-        ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
+        ; header = None; iicon = Some (Node_icon.tabler "new-page"); inline_icon = None; isc = ""; ibadge = No_badge
         ; act = Create_tag tag; ihl = false; imouse = false; iq = "" } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
       ; ititle = svs.Svs.i18n "cmdk.create/page"
       ; info = Some (svs.Svs.i18nf "cmdk.info/create-page" [ q ])
-      ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
+      ; header = None; iicon = Some (Node_icon.tabler "new-page"); inline_icon = None; isc = ""; ibadge = No_badge
       ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
 (* cljs state/get-current-page equivalent — the :page route counts, and a
@@ -372,7 +373,7 @@ let filter_items () : item list =
   let row gid label icon =
     { ikey = "filter-" ^ label; idx = -1; gid = G_filters
     ; ititle = label; info = Some (svs.Svs.i18n "cmdk.filter/add")
-    ; header = None; iicon = icon; isc = ""; ibadge = No_badge
+    ; header = None; iicon = Some (Node_icon.tabler icon); inline_icon = None; isc = ""; ibadge = No_badge
     ; act = Set_filter gid; ihl = false; imouse = false; iq = "" }
   in
   (match current_page_uuid () with
@@ -398,7 +399,7 @@ let file_items q : item list =
     svs.Svs.fuzzy_search ~extract:(fun f -> f) ~limit:99 known_files q
     |> List.map (fun f ->
            { ikey = "file-" ^ f; idx = -1; gid = G_files; ititle = f
-           ; info = None; header = None; iicon = "file"; isc = ""
+           ; info = None; header = None; iicon = Some (Node_icon.tabler "file"); inline_icon = None; isc = ""
            ; ibadge = No_badge; act = Open_file f
            ; ihl = false; imouse = false; iq = "" })
 
@@ -430,31 +431,9 @@ let badge_of w is_page uuid =
            if is_page then Text_badge else Header_badge
        | _ -> No_badge)
 
-(* cljs icon-component/get-node-icon: the entity's own
-   logseq.property/icon, then class -> hash, property -> letter-p, a
-   first-tag icon, page -> file, else the generic block point *)
-let node_icon_of w is_page =
-  let tags =
-    match Wire.get w "block/tags" with
-    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
-    | _ -> []
-  in
-  let has_tag ident =
-    List.exists (fun t -> str_field t "db/ident" = Some ident) tags
-  in
-  match str_field w "logseq.property/icon" with
-  | Some ic when ic <> "" -> ic
-  | _ ->
-      if has_tag "logseq.class/Tag" then "hash"
-      else if has_tag "logseq.class/Property" then "letter-p"
-      else
-        (match
-           List.find_map
-             (fun t -> str_field t "logseq.property/icon")
-             tags
-         with
-         | Some ic when ic <> "" -> ic
-         | _ -> if is_page then "file" else "point-filled")
+let node_icon_of ?(ignore_current = false) w is_page =
+  Node_icon.of_entity ~ignore_current
+    ~fallback:(Some (Node_icon.tabler (if is_page then "file" else "point-filled"))) w
 
 let item_of_row w i : item =
   let uuid =
@@ -479,7 +458,8 @@ let item_of_row w i : item =
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1
   ; gid = G_nodes; ititle = title; info = None
   ; header = (if is_page then None else breadcrumb_of w)
-  ; iicon = node_icon_of w is_page
+  ; iicon = node_icon_of ~ignore_current:true w is_page
+  ; inline_icon = Node_icon.own w
   ; isc = ""; ibadge = badge_of w is_page uuid
   ; act = (if is_page then Open_page uuid else Open_block uuid)
   ; ihl = false; imouse = false; iq = "" }
@@ -772,7 +752,7 @@ let recents_item_of_wire w =
       Some
         { ikey = "recent-" ^ uuid; idx = -1; gid = G_recently_updated
         ; ititle = title; info = None; header = None
-        ; iicon = "file"; isc = ""
+        ; iicon = node_icon_of w true; inline_icon = None; isc = ""
         ; ibadge = No_badge (* cljs recent-page-items never sets
                                :current-page? *)
         ; act = Open_page uuid

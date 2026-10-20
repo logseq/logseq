@@ -537,7 +537,77 @@ let test_property ?(verbose = false) seed =
             renderer.T.web_store.T.retained_nodes)))
   done
 
+let test_icon_palette_search_lifecycle () =
+  let renderer = make_renderer () in
+  let () = [%mel.raw "window.__emojiData = require('@emoji-mart/data')"] in
+  let previous_schedule = !Runtime.schedule_flush
+  and previous_flush = !Runtime.app_flush
+  and previous_pending = !Runtime.flush_pending
+  and previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
+  (* Validate every runtime operation with the real Web retained store;
+     DOM event synthesis is covered by the browser acceptance flow. *)
+  let backend = { (Lui_web.backend renderer) with Wv.apply_batch = (fun batch ->
+    Store.apply_batch_with_extensions renderer.T.web_store
+      (Lui_web_nodes.platform_node renderer)
+      (Lui_web_extensions.extension_platform_node renderer)
+      renderer.T.web_extension_registry (fun _ -> true) batch) } in
+  let app = Lui_app.create_with_extensions backend
+      renderer.T.web_extension_registry () (fun () () -> ())
+      (fun _ _ _ -> Icon_picker.picker_view ~del:true ~emoji_only:false
+        ~on_chosen:(fun _ -> ()) ~close:(fun () -> ())) in
+  Runtime.schedule_flush := (fun _ -> ());
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+  Runtime.flush_pending := false;
+  let cleanup () =
+    ignore (Lui_app.dispose app);
+    Runtime.schedule_flush := previous_schedule;
+    Runtime.app_flush := previous_flush;
+    Runtime.flush_pending := previous_pending;
+    (match previous_preset with
+     | Some color -> Ui_services.storage_set "ls-icon-color-preset" color
+     | None -> Ui_services.storage_remove "ls-icon-color-preset") in
+  let exercise () =
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let prop id name = Store.property renderer.T.web_store id name in
+    let find predicate = Hashtbl.fold (fun id node found ->
+      match found with Some _ -> found | None -> if predicate id node then Some id else None)
+      renderer.T.web_store.T.retained_nodes None |> Option.get in
+    let send event =
+      ignore (Lui_app.dispatch_event app event);
+      ignore (Lui_app.flush app);
+      Runtime.flush_pending := false in
+    let trigger () = find (fun id _ ->
+      match prop id Wv.StyleClass with
+      | Some (Wv.StringValue value) -> List.mem "color-picker" (String.split_on_char ' ' value)
+      | _ -> false) in
+    let rec button_owner id =
+      let node = Option.get (Store.node renderer.T.web_store id) in
+      if List.mem (Store.standard_kind node) [Some Wv.Button;Some Wv.ToggleButton] then id
+      else button_owner (Option.get node.T.retained_parent) in
+    let icons_tab = find (fun id _ -> prop id Wv.TextValue = Some (Wv.StringValue "Icons")) in
+    let icons_tab = button_owner icons_tab in
+    send (Wv.ToggleChanged (icons_tab, true));
+    for _ = 1 to 3 do
+      send (Wv.Press (trigger ()));
+      let preset = find (fun id _ -> prop id Wv.BackgroundValue = Some (Wv.StringValue "#5e69d2")) in
+      send (Wv.Press preset);
+      let search = find (fun _ node -> Store.standard_kind node = Some Wv.SearchField) in
+      send (Wv.TextChanged (search, "star"));
+      check "real web icon search survives closing its color palette"
+        (Hashtbl.fold (fun id _ found -> found || prop id Wv.AccessibilityLabel = Some (Wv.StringValue "Star"))
+          renderer.T.web_store.T.retained_nodes false);
+      let clear = find (fun id _ -> prop id Wv.AccessibilityLabel =
+        Some (Wv.StringValue (I18n.t "icon/clear-search"))) in
+      send (Wv.Press clear);
+      check "clearing icon search preserves its input and empties its query"
+        (prop search Wv.TextValue = Some (Wv.StringValue ""))
+    done in
+  match exercise () with
+  | () -> cleanup ()
+  | exception error -> Js.log2 "icon palette lifecycle failure" error; cleanup (); raise error
+
 let run () =
+  test_icon_palette_search_lifecycle ();
   ignore (test_deterministic ());
   if Array.exists (fun a -> a = "verbose") Sys.argv then
     test_property ~verbose:true 7

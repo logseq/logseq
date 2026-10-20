@@ -24,18 +24,21 @@ module S = Properties_state
 type choice = Emoji of string | Tabler of (string * string option) | Remove
 type tab = Tab_all | Tab_emoji | Tab_icon
 
-(* icon value {type,id} -> display element *)
-let icon_el ?(size = 18.) ?(cls = "") (ty, id) : t =
-  match ty with
-  | "emoji" ->
-      Ui_components.with_props
-        [Ui_components.Prop.font_size (Printf.sprintf "%gpx" size);Ui_components.Prop.line_height "1"]
-        (row ~width:(int_of_float size) ~height:(int_of_float size)
-           ~cross:`center ~main:`center ~style_class:cls [Logseq_emoji.el ~name:id ()])
-  | _ -> Icons.icon ~size ~cls id
+let icon_el ?key ?(size = 18.) ?(cls = "") (value : Node_icon.t) : t =
+  let element = match value.icon_kind with
+    | "emoji" ->
+        Ui_components.with_props
+          [Ui_components.Prop.font_size (Printf.sprintf "%gpx" size);Ui_components.Prop.line_height "1"]
+          (row ?key ~width:(int_of_float size) ~height:(int_of_float size)
+             ~cross:`center ~main:`center ~style_class:cls [Logseq_emoji.el ~name:value.icon_id ()])
+    | "tabler-icon" -> Icons.icon ?key ~size ~cls value.icon_id
+    | kind -> invalid_arg ("Unsupported icon type: " ^ kind) in
+  match value.icon_color with
+  | None -> element
+  | Some color -> Ui_components.with_props [Ui_components.Prop.foreground color] element
 
 let page_icon_el ?(size = 16.) page =
-  let value = Option.value (Model.page_node_icon page) ~default:("tabler-icon", "file") in
+  let value = Option.value (Model.page_node_icon page) ~default:(Node_icon.tabler "file") in
   Ui_components.with_props [Ui_components.Prop.margin_right 0] (icon_el ~size value)
 
 (* cljs ui__button base + variant classes (shui/button); the small
@@ -315,11 +318,6 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
              | None -> item_btn (Tabler_item (name, Icons.kebab name)))
   in
 
-  let reset_q () =
-    gen := !gen + 1;
-    update (fun s -> { s with q = ""; emoji_results = []; reset = s.reset + 1 })
-  in
-
   let set_tab t =
     gen := !gen + 1;
     update (fun s ->
@@ -361,7 +359,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       ~on_press:(fun _ -> set_preset c)
       (match c with
        | Some _ -> []
-       | None -> [ icon_el ~cls:"ls-icon-mini" ("tabler-icon", "minus") ])
+       | None -> [ icon_el ~cls:"ls-icon-mini" (Node_icon.tabler "minus") ])
   in
 
   let content_view (s : pstate) : t =
@@ -515,7 +513,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ~tooltip:(I.t "ui/delete")
                  ~label:(I.t "ui/delete")
                  ~on_press:(fun _ -> choose Remove)
-                 [ icon_el ~size:17. ("tabler-icon", "trash") ] ]
+                 [ icon_el ~size:17. (Node_icon.tabler "trash") ] ]
            else []))
      ; box ~key:"hd" ~background:"hsl(var(--popover))"
          ~padding_horizontal:12 ~padding_vertical:4
@@ -533,15 +531,10 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ~placeholder:(placeholder_of s.tab)
                   ~text_signal:(reactive (fun s -> s.q) sv)
                   ~on_text:on_input
-                  ~trailing:
-                    [ if_
-                        ~test:(reactive (fun s -> s.q <> "") sv)
-                        (Ui_components.with_props
-                           [ Ui_components.Prop.opacity 0.5 ]
-                           (Ui_components.button ~key:"x" ~variant:`ghost ~padding:8
-                              ~on_press:(fun _ -> reset_q ())
-                              [ Icons.icon ~size:14. "x" ]))
-                    ]
+                  ~clear_label:(I.t "icon/clear-search")
+                  ~on_clear:(fun () ->
+                    Option.iter (fun input -> input.Ui_services.focus ())
+                      (Ui_services.dom_query ".cp__emoji-icon-picker input"))
                   ())
              sv ]
      ; Ui_parts.class_signal sv

@@ -947,6 +947,7 @@
  :help.shortcuts/title "完整快捷键"
  :help.shortcuts/triggers "触发"
 
+ :icon/clear-search "清除搜索"
  :icon/emojis-count "表情符号（{1}）"
  :icon/icons-count "图标（{1}）"
  :icon/matched-count "匹配结果（{1}）"

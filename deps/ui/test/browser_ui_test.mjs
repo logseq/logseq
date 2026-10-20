@@ -76,6 +76,44 @@ test('Emoji header actions keep popup focus and never enter title editing', () =
   assert.equal(evaluate("document.querySelector('.ls-page-title .editor-wrapper') !== null"), false);
 });
 
+test('Icon color search stays usable and node results preserve contextual icons', () => {
+  open();
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn') !== null");
+  browser('errors', '--clear');
+  button('Set icon');
+  button('Select icon color');
+  button('Color #5e69d2');
+  browser('fill', '.cp__emoji-icon-picker input', 'star');
+  browser('wait', '--fn', "document.querySelector('button.ls-emoji-cell[aria-label=Star]') !== null");
+  button('Clear search');
+  browser('wait', '--fn', "document.querySelector('.cp__emoji-icon-picker input')?.value === ''");
+  assert.equal(evaluate("document.activeElement === document.querySelector('.cp__emoji-icon-picker input')"), true);
+  browser('fill', '.cp__emoji-icon-picker input', 'star');
+  browser('click', '.cp__emoji-icon-picker button.ls-emoji-cell[aria-label=Star]');
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn [data-name=\"app:star\"]') !== null");
+  browser('click', '#search-button');
+  browser('fill', '.cp__cmdk-search-input', 'Task');
+  browser('wait', '--fn', "document.querySelector('[data-cmdk-item][data-item-key^=node-] .cp__cmdk-item-main-text [data-name=\"app:star\"]') !== null");
+  const icons = evaluate(`Array.from(document.querySelectorAll('[data-cmdk-item]'))
+    .filter(row => row.textContent.includes('Task') && row.querySelector('[data-name="app:star"]'))
+    .map(row => ({key: row.dataset.itemKey,
+      chip: row.querySelector('.cmdk-item-icon [data-name]')?.dataset.name,
+      inline: row.querySelector('.cp__cmdk-item-main-text [data-name]')?.dataset.name,
+      starColor: getComputedStyle(row.querySelector('[data-name="app:star"]')).color}))`);
+  assert.ok(icons.some(row => row.key.startsWith('node-') && row.chip === 'app:hash' && row.inline === 'app:star'));
+  assert.ok(icons.some(row => row.key.startsWith('recent-') && row.chip === 'app:star' && row.inline === undefined));
+  assert.ok(icons.every(row => row.starColor === 'rgb(94, 105, 210)'));
+  browser('press', 'Escape');
+  browser('press', 'Escape');
+  button('Set icon');
+  button('Select icon color');
+  button('Reset icon color');
+  button('Delete');
+  browser('wait', '--fn', "document.querySelector('.ls-page-icon-btn [data-name=\"app:hash\"]') !== null");
+  assert.equal(browser('errors'), '', 'icon picking and search must not reject a patch batch');
+});
+
 test('Page titles retain block padding and their trailing content edge', () => {
   open();
   browser('find', 'text', 'Journals', 'click', '--exact');

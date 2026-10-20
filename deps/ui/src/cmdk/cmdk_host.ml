@@ -74,6 +74,7 @@ let services : unit -> Svs.t =
   ; i18n = I18n.t
   ; i18nf = I18n.tf
   ; normalize = str_normalize
+  ; render_icon = (fun ~size value -> Icon_picker.icon_el ~size:(float_of_int size) value)
   ; today_journal_day = Dates.today_journal_day
   ; rel_journal_day =
       (fun delta -> Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))

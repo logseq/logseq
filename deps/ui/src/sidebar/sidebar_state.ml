@@ -27,7 +27,7 @@ type item =
   ; kind : string
   ; uuid : string option
   ; title : string
-  ; icon : (string * string) option
+  ; icon : Node_icon.t option
   ; breadcrumb : string list
   ; blocks : Model.block list
   ; linked_refs : Model.block list
@@ -691,7 +691,7 @@ let add_search_item st q =
       ; kind = "search"
       ; uuid = None
       ; title = q
-      ; icon = Some ("search", "gray")
+      ; icon = Some (Node_icon.tabler ~color:"gray" "search")
       ; breadcrumb = []
       ; blocks = []
       ; linked_refs = []

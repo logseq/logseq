@@ -206,7 +206,7 @@ let item_title (it : Sidebar_state.item) =
         match it.Sidebar_state.page with
         | Some page -> Icon_picker.page_icon_el ~size:14. page
         | None -> Icon_picker.icon_el ~size:14.
-            (Option.value it.icon ~default:("tabler-icon", "file"))
+            (Option.value it.icon ~default:(Node_icon.tabler "file"))
       in
       let icon_els =
         [row ~key:"pt-ti" ~style_class:"icon-cp-container"

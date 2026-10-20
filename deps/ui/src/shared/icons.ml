@@ -317,10 +317,10 @@ let status_color name =
 ;;
 
 (* equivalent of (shui/tabler-icon name) *)
-let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
+let icon ?key ?(size = 18.) ?(cls = "") name : Lui_elements.t =
   let cls = if cls = "" then "" else " " ^ cls in
   let n = kebab name in
-  Lui_elements.icon ~name:(app_ref_of_id name) ~point_size:(int_of_float size)
+  Lui_elements.icon ?key ~name:(app_ref_of_id name) ~point_size:(int_of_float size)
     ?foreground:(status_color name) ~style_class:("ui__icon ls-icon-" ^ n ^ cls) []
 ;;
 

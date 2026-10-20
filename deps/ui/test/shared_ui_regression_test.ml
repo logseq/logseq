@@ -1513,7 +1513,7 @@ let run_views ~registry ~profile ~finish =
     let palette = mount (fun ms ->
       let item : Cmdk_state.item =
         { ikey = name; idx = 0; gid = G_recently_updated; ititle = title
-        ; info = None; header = None; iicon = ""; isc = ""; ibadge = No_badge
+        ; info = None; header = None; iicon = None; inline_icon = None; isc = ""; ibadge = No_badge
         ; act = Open_page name; ihl = false; imouse = false; iq = query } in
       let item_s = Signal.state (Signal.signal_owner ms) item in
       Cmdk_view.hl_span "label" (Signal.value item_s) (fun it -> it.Cmdk_state.ititle)) in
@@ -2528,7 +2528,7 @@ let run_views ~registry ~profile ~finish =
   let footer_st = Option.get !footer_state in
   let item index action : Cmdk_state.item =
     { ikey = string_of_int index; idx = index; gid = G_nodes;
-      ititle = "Footer result"; info = None; header = None; iicon = "";
+      ititle = "Footer result"; info = None; header = None; iicon = None; inline_icon = None;
       isc = ""; ibadge = No_badge; act = action; ihl = false;
       imouse = false; iq = "" }
   in

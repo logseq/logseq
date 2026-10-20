@@ -442,26 +442,25 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
            ~main:
              (Ui_components.cmdk_item_main ~key:"main"
                 [ Ui_components.cmdk_icon_chip ~key:"icon"
-                    [ if_
-                        ~test:
-                          (reactive
-                             (fun (it : S.item) -> it.S.iicon <> "")
-                             item_sig)
-                        ((* cljs icon-component/get-node-icon-cp wraps
-                            the glyph in .icon-cp-container *)
-                         row ~key:"iccp"
-                           ~style_class:"icon-cp-container"
-                           ~cross:`center
-                           [ icon
-                               ~name:
-                                 (reactive
-                                    (fun it -> `app it.S.iicon)
-                                    item_sig)
-                               ~point_size:14 [] ])
+                    [ reactive
+                        ~equal:(fun (a : S.item) b -> a.iicon = b.iicon)
+                        (fun it -> match it.S.iicon with
+                         | None -> box []
+                         | Some value -> row ~key:"iccp" ~style_class:"icon-cp-container"
+                             ~cross:`center [svs.Cmdk_services.render_icon ~size:14 value])
+                        item_sig
                     ]
                 ; Ui_components.cmdk_item_body ~key:"txt"
                     [ Ui_components.cmdk_main_text ~key:"main-text"
-                        [ hl_span "label" item_sig (fun it -> it.S.ititle)
+                        [ if_
+                            ~test:(reactive (fun (it : S.item) -> it.inline_icon <> None) item_sig)
+                            (reactive
+                               ~equal:(fun (a : S.item) b -> a.inline_icon = b.inline_icon)
+                               (fun it -> match it.S.inline_icon with
+                                | None -> box []
+                                | Some value -> svs.Cmdk_services.render_icon ~size:14 value)
+                               item_sig)
+                        ; hl_span "label" item_sig (fun it -> it.S.ititle)
                         ; if_
                             ~test:
                               (reactive

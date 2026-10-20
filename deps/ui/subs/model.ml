@@ -15,9 +15,10 @@ type route =
   | File of string (* cljs /file/:path — raw file editor (config.edn etc.) *)
   | Not_found of string
 
-type icon =
-  { icon_kind : string (* "emoji" | "tabler-icon" *)
+type icon = Node_icon.t =
+  { icon_kind : string
   ; icon_id : string
+  ; icon_color : string option
   }
 
 type block =
@@ -127,7 +128,7 @@ type page =
   ; page_db_id : int option
   ; page_is_tag : bool
   ; page_is_property : bool
-  ; page_icon : (string * string) option (* (type, id) from logseq.property/icon *)
+  ; page_icon : icon option (* logseq.property/icon *)
   ; page_journal_day : int option
   ; page_is_library : bool
   ; (* entity predicates used by menu/convert actions:
@@ -142,7 +143,7 @@ type page =
   ; page_tag_idents : string list (* aligned with page_tags *)
   ; page_tag_uuids : string list (* aligned — chip ctx menu *)
   ; page_tag_db_ids : int list (* aligned with page_tags *)
-  ; page_tag_icons : (string * string) list (* ordered by tag entity ID *)
+  ; page_tag_icons : icon list (* ordered by tag entity ID *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
@@ -153,11 +154,9 @@ type page =
 
 (* Keep explicit icon ownership separate from inherited presentation. *)
 let page_node_icon page =
-  match page.page_icon with
-  | Some _ as icon -> icon
-  | None when page.page_is_tag -> Some ("tabler-icon", "hash")
-  | None when page.page_is_property -> Some ("tabler-icon", "letter-p")
-  | None -> List.nth_opt page.page_tag_icons 0
+  Node_icon.resolve ~own:page.page_icon ~is_class:page.page_is_tag
+    ~is_property:page.page_is_property ~asset_type:None
+    ~inherited:page.page_tag_icons ~fallback:None
 
 (* Class objects render in the table, not among the page's ordinary
    direct-child notes. Nested note children keep their own membership. *)

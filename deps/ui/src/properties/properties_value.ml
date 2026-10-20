@@ -1229,15 +1229,7 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
 and icon_view ctx row : t =
  fun context parent ->
   let anchor_id = "pv-icon-" ^ ctx.block_uuid in
-  let icon =
-    match D.row_value row with
-    | W.Map _ as m -> (
-        match (Wire.get m "type", Wire.get m "id") with
-        | Some (W.Keyword ty), Some (W.String id) -> Some (ty, id)
-        | Some (W.String ty), Some (W.String id) -> Some (ty, id)
-        | _ -> None)
-    | _ -> None
-  in
+  let icon = Node_icon.decode (D.row_value row) in
   (Lui_elements.row ~gap:0 ~grow:1.0
      [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
          ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
@@ -1279,7 +1271,7 @@ and icon_view ctx row : t =
                    S.refresh_all ())
            | None -> ())
          (match icon with
-          | Some (ty, id) -> [ Icon_picker.icon_el (ty, id) ]
+          | Some value -> [ Icon_picker.icon_el value ]
           | None -> []) ])
     context parent
 

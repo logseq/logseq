@@ -188,62 +188,21 @@ let heading_attrs (b : Model.block) =
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
-(* icon.cljs get-node-icon: own icon wins, then first tag icon, then the
-   node-type default ("file" for Page-tagged blocks, "hash" for Tag,
-   "letter-p" for Property). block-control-with-icon? keeps the plain
-   bullet unless the node has an explicit icon or is a non-library
-   page — in Library the default page icon stays a bullet. *)
+(* Library keeps default page controls as bullets; explicit, inherited
+   and PDF icons remain visible. Type precedence is shared with search. *)
 let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
-  let cls s = List.mem ("logseq.class/" ^ s) b.block_tag_idents in
-  let default_id =
-    if cls "Tag" then "hash"
-    else if cls "Property" then "letter-p"
-    else if cls "Page" || cls "Journal" then "file"
-    else ""
-  in
-  (* cljs icon.cljs get-node-icon: pdf asset blocks get the "book"
-     tabler icon ahead of any tag icon *)
-  let icon =
-    match b.block_icon with
-    | Some _ -> b.block_icon
-    | None -> (
-        match b.block_asset_type with
-        | Some "pdf" ->
-            Some { Model.icon_kind = "tabler-icon"; icon_id = "book" }
-        | _ -> (
-            match b.block_tag_icons with
-            | i :: _ -> Some i
-            | [] -> (
-                match default_id with
-                | "" -> None
-                | id ->
-                    Some
-                      { Model.icon_kind = "tabler-icon"; icon_id = id })))
-  in
-  match icon with
-  | Some i
-    when b.block_icon <> None
-         || b.block_tag_icons <> []
-         || b.block_asset_type = Some "pdf"
-         || (default_id <> "" && not library) ->
-      Some i
-  | _ -> None
+  let cls name = List.mem ("logseq.class/" ^ name) b.block_tag_idents in
+  let has_default = cls "Tag" || cls "Property" || cls "Page" || cls "Journal" in
+  if b.block_icon <> None || b.block_tag_icons <> []
+     || b.block_asset_type = Some "pdf" || (has_default && not library) then
+    Node_icon.resolve ~own:b.block_icon ~is_class:(cls "Tag")
+      ~is_property:(cls "Property") ~asset_type:b.block_asset_type
+      ~inherited:b.block_tag_icons
+      ~fallback:(if has_default then Some (Node_icon.tabler "file") else None)
+  else None
 
-let icon_el uuid (icon : Model.icon) : t =
-  if icon.icon_kind = "emoji" then
-    box ~key:("ic-" ^ uuid) ~style_class:"ui__icon"
-      [ Logseq_emoji.el ~key:("ice-" ^ uuid) ~name:icon.icon_id () ]
-  else
-    (* tabler icon via the app registry — the icon kind renders its own
-       svg/mask; the ti/ti-* font classes would double-render. The stored
-       id is the display name with spaces stripped (cljs icon-cp), so map
-       it back through the picker's pair table for the registry slug *)
-    Lui_elements.icon ~key:("ic-" ^ uuid)
-      ~name:(Icons.app_ref_of_id icon.icon_id) ~point_size:14
-      ~style_class:("ui__icon ls-icon-" ^ icon.icon_id)
-      []
-
-
+let icon_el uuid icon : t =
+  Icon_picker.icon_el ~key:("ic-" ^ uuid) ~size:14. ~cls:"ui__icon" icon
 
 (* cljs ldb/private-tags: built-in classes hidden/locked for direct use *)
 let private_tag_ident (ident : string) : bool =
