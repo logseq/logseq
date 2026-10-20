@@ -952,6 +952,35 @@ test('settings switches match the reference dimensions and persist clicks', () =
   assert.equal(evaluate(`document.querySelector('${selector}').checked`), !before);
 });
 
+test('Flashcards navigation follows saved feature preferences before Settings mounts', () => {
+  open();
+  const selector = '.panel-wrap .it:nth-child(3) input[role=switch]';
+  const show = () => { openSettings(); button('Features'); };
+  const checked = () => evaluate(`document.querySelector('${selector}').checked`);
+  const set = enabled => {
+    if (checked() !== enabled) browser('click', selector);
+    browser('wait', '--fn', `document.querySelector('${selector}').checked===${enabled}`);
+  };
+  show();
+  const before = checked();
+  set(false);
+  button('Close');
+  try {
+    browser('wait', '--fn', "document.querySelector('.flashcards-nav')===null");
+    browser('reload');
+    browser('wait', '--fn', "document.querySelector('.ls-page-title .block-title-wrap')!==null");
+    assert.equal(evaluate("document.querySelectorAll('.flashcards-nav').length"), 0);
+    for (const enabled of [true,false]) {
+      show(); set(enabled); button('Close');
+      browser('wait', '--fn', `document.querySelectorAll('.flashcards-nav').length===${enabled ? 1 : 0}`);
+      assert.equal(evaluate("document.querySelectorAll('.all-pages-nav').length"), 1);
+    }
+  } finally {
+    show(); set(before); button('Close');
+    browser('wait', '--fn', `document.querySelectorAll('.flashcards-nav').length===${before ? 1 : 0}`);
+  }
+});
+
 test('Appearance reads saved graph preferences immediately after a reload', () => {
   open();
   const show = () => {

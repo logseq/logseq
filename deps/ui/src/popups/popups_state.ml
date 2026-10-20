@@ -1919,9 +1919,7 @@ let dev_entries () =
 (* cljs state/enable-flashcards? — the :feature/enable-flashcards?
    config flag (default on) gates the make-a-flashcard menu items *)
 let flashcards_enabled () =
-  if Settings_state.ready () then
-    Settings_state.config_bool "feature/enable-flashcards?" ~default:true
-  else true
+  Settings_state.config_bool "feature/enable-flashcards?" ~default:true
 
 (* cljs base-ui auto-side: stay below while the space under the
    anchor exceeds 280px, flip above only when the top side wins by

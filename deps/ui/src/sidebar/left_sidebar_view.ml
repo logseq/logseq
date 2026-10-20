@@ -415,6 +415,16 @@ let tag_nav ~sched ~active_route class_ label titles =
            ())
   | None -> None
 
+let due_count_badge () =
+  reactive
+    (fun (n : int) ->
+      if n > 0 then
+        text ~value:(string_of_int n) ~margin_left:4 ~padding_horizontal:12
+          ~padding_vertical:2 ~font_size:"0.75rem" ~font_weight:500 ~corner_radius:9999
+          []
+      else Logseq_el.nothing)
+    (Cards_state.Due_count.signal ())
+
 (* active nav per route — cljs sidebar-navigations-loaded *)
 let nav_items ~sched ~active_route (checked, tag_titles) =
   List.filter_map
@@ -423,12 +433,7 @@ let nav_items ~sched ~active_route (checked, tag_titles) =
       | "flashcards" -> (
           (* cljs: hidden unless :feature/enable-flashcards?, and a
              due-count pill rides the item *)
-          let on =
-            if Settings_state.ready () then
-              Settings_state.config_bool "feature/enable-flashcards?"
-                ~default:true
-            else true
-          in
+          let on = Settings_state.config_bool "feature/enable-flashcards?" ~default:true in
           if not on then None
           else
             Some
@@ -438,19 +443,7 @@ let nav_items ~sched ~active_route (checked, tag_titles) =
                  ~on_click:(fun () ->
                    Cards_state.update_due_count ();
                    Sidebar_state.open_cards ())
-                 ~more:(Lui_elements.dyn
-                          (fun (n : int) ->
-                            if n > 0 then
-                              text ~value:(string_of_int n)
-                                ~data_attrs:
-                                  [ ( "style"
-                                    , "margin-left:4px;display:inline-block;\
-                                       padding:2px 12px;font-size:0.75rem;\
-                                       font-weight:500;border-radius:9999px" )
-                                  ]
-                                []
-                            else Logseq_el.nothing)
-                          (Cards_state.Due_count.signal ()))
+                 ~more:(due_count_badge ())
                  ()))
       | "all-pages" ->
           Some
@@ -470,17 +463,6 @@ let nav_group ms st =
   if not (Cards_state.Due_count.ready ()) then ()
   else Cards_state.update_due_count ();
   let nav_hov = Signal.state ctx.Lui_ui.ui_scheduler false in
-  let navs_sig =
-    Logseq_el.own ctx
-      (Signal.map2
-         (fun route rest -> (route, rest))
-         (Logseq_el.own ctx (Signal.map (fun (m : Model.t) -> m.Model.route) ms))
-         (Logseq_el.own ctx
-            (Signal.map2
-               (fun a b -> (a, b))
-               (Signal.value st.Sidebar_state.nav_checked)
-               (Signal.value st.nav_tag_titles))))
-  in
   box ~key:"nav-group" ~padding_horizontal:12
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
@@ -536,7 +518,11 @@ let nav_group ms st =
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
-                (fun (route, (checked, tag_titles)) ->
+                ~equal:(fun ((a : Model.t),checked_a,tags_a) ((b : Model.t),checked_b,tags_b) ->
+                  a.route=b.route && a.graph_config=b.graph_config
+                  && checked_a=checked_b && tags_a=tags_b)
+                (fun (model : Model.t) checked tag_titles ->
+                  let route=model.route in
                   column ~key:"navs" ~gap:2 ~margin_top:4
                     ~style_class:"sidebar-navigations"
                     ~data_attrs:[ ("style", "margin-top:4px") ]
@@ -562,7 +548,7 @@ let nav_group ms st =
                     :: nav_items ~sched:ctx.Lui_ui.ui_scheduler ~active_route:route
                          (checked, tag_titles)
                   ))
-                navs_sig
+                ms (Signal.value st.Sidebar_state.nav_checked) (Signal.value st.nav_tag_titles)
             ]
         ]
     ]

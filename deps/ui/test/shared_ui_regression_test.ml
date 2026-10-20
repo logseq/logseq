@@ -190,8 +190,68 @@ let settings_config ~registry ~profile =
           | _ -> false) !requests);
       ignore (Lui_app.dispose session.S.app)) ["appearance";"page";"dialog"])
 
+let flashcards_config ~registry ~profile =
+  let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
+  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush
+  and previous_due = !Cards_state.Due_count.st and previous_popup = !Popups_state.active in
+  Fun.protect ~finally:(fun () ->
+    Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
+    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush;
+    Cards_state.Due_count.st:=previous_due;Popups_state.active:=previous_popup) (fun () ->
+    Settings_state.st:=None;Cards_state.Due_count.st:=None;
+    let config enabled = Wire.Map [Wire.kw "feature/enable-flashcards?",Wire.Bool enabled] in
+    let current=ref {Model.initial with repo=Some "flashcards-fixture";graph_config=config false}
+    and popup=ref None in
+    Runtime.read_model:=(fun () -> !current);
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
+      Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let session=S.mount ~registry ~profile ~initial:!current
+      ~reducer:(fun model action ->
+        let updated=Update.update model action in current:=updated;updated)
+      ~view:(fun ctx ms _ ->
+        let state value=Signal.state ctx.Lui_ui.ui_scheduler value in
+        let sidebar : Sidebar_state.t =
+          {favorites=state [];recents=state [];nav_checked=state ["flashcards";"all-pages"];
+           nav_tag_titles=state [];items=state [];open_menu=state "";groups_collapsed=state [];
+           left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
+        popup:=Some (Popups_state.make ctx.Lui_ui.ui_scheduler);
+        Left_sidebar_view.nav_group ms sidebar) () in
+    Runtime.app_flush:=(fun () -> S.flush session);
+    let has_nav ()=List.exists (fun node -> class_has node "flashcards-nav") (nodes session) in
+    let expect label enabled =
+      check (label ^ " gates the sidebar entry") (has_nav ()=enabled);
+      List.iter (fun multi ->
+        let popup=Option.get !popup in
+        Popups_state.open_cm popup ~ax:10. ~atop:10. ~abot:10. ~block_id:"flashcard-block" ~multi;
+        let entries=(Option.get (Popups_state.get popup).cm).entries in
+        check (label ^ (if multi then " gates the multi-block menu" else " gates the single-block menu"))
+          (List.exists (function Popups_state.Ci_item (_,_,"make-flashcard") -> true | _ -> false) entries=enabled);
+        Popups_state.close_cm popup) [false;true]
+    in
+    expect "Cold graph preferences before Settings mounts" false;
+    List.iter (fun enabled ->
+      ignore (Lui_app.send session.S.app (Action.Graph_config_loaded ("flashcards-fixture",config enabled)));
+      S.flush session;
+      expect "Live feature edits" enabled) [true;false;true];
+    Runtime.signal_set (Cards_state.Due_count.state ()) 3;S.flush session;
+    check "The retained flashcard entry updates its due-count badge"
+      (List.exists (fun node -> M.string_prop node "text"=Some "3") (nodes session));
+    Runtime.signal_set (Cards_state.Due_count.state ()) 0;S.flush session;
+    check "A zero due count removes its badge"
+      (not (List.exists (fun node -> M.string_prop node "text"=Some "3") (nodes session)));
+    ignore (Lui_app.send session.S.app (Action.Boot_graph_ready ("second-flashcards-fixture",config false)));
+    S.flush session;expect "Switching graphs" false;
+    ignore (Lui_app.send session.S.app (Action.Graph_config_loaded ("flashcards-fixture",config true)));
+    S.flush session;expect "A late configuration from the previous graph" false;
+    check "Feature visibility does not mount Settings" (not (Settings_state.ready ()));
+    check "Feature visibility retains unrelated navigation"
+      (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
+    ignore (Lui_app.dispose session.S.app))
+
 let run_views ~registry ~profile ~finish =
   settings_config ~registry ~profile;
+  flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
   let previous_used = Ui_services.storage_get "ls-icons-used" in
