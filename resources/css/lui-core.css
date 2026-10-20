@@ -1442,10 +1442,6 @@ a.page-title {
 /* ============================ Outliner =================================== */
 
 
-.ls-page-title.title .block-main-container {
-  gap: calc(var(--spacing) * 2);
-}
-
 .block-main-container {
   min-height: 24px;
 
@@ -1464,28 +1460,6 @@ a.page-title {
       top: 0.625rem;
     }
   }
-}
-
-/* cljs block.cljs carries these as an inline style: capacitor 0,
-   page-icon -36px, else -30px */
-
-.is-page-title-row > .lui-column {
-  flex: 1 1 0%;
-  min-width: 0;
-  width: 100%;
-}
-
-.is-page-title-row .lui-column > .lui-row {
-  width: 100%;
-}
-
-.is-page-title-row .lui-row > .lui-column {
-  flex: 1 1 0%;
-  min-width: 0;
-}
-
-.is-page-title-row .ls-page-title-container {
-  width: 100%;
 }
 
 .block-main-container.is-page-title-row > .block-control-wrap {
@@ -2403,36 +2377,6 @@ button[role='checkbox'][data-state='unchecked'] {
 }
 
 /* grouped list view wrapper (cljs .flex.flex-col.border-t.pt-2.gap-2) */
-
-/* master tag-page title icon: bordered rounded box around a small glyph */
-.ls-page-title .ls-page-icon-btn {
-  width: 38px;
-  height: 38px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  padding: 0;
-}
-.ls-page-title .ls-page-icon-btn .ui__icon,
-.ls-page-title .ls-page-icon-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
-/* master tag-page title icon box (targets the mounted ls-page-icon row) */
-.ls-page-title .ls-page-icon .ui__button {
-  width: 38px;
-  height: 38px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  padding: 0;
-  align-items: center;
-  justify-content: center;
-}
-.ls-page-title .ls-page-icon .ui__icon,
-.ls-page-title .ls-page-icon svg {
-  width: 22px;
-  height: 22px;
-}
 
 /* cljs common.css .dnd-separator: 3px line marking the drop slot while
    dragging a block. Fixed overlay positioned by block_dnd.ml. */

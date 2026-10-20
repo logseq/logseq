@@ -5323,6 +5323,74 @@ let () = Native_embed.with_entry_lock (fun () ->
   print_endline "native table geometry and paint parity: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
+  let failures=ref [] in
+  let expect message condition=if not condition then failures:=message::!failures in
+  let previous_model= !Runtime.read_model and previous_worker= !Runtime.worker
+  and previous_flush= !Runtime.app_flush and previous_editor= !Editor_state.st
+  and previous_fields= !Editor_state.field_sigs_opt in
+  Fun.protect ~finally:(fun () -> Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;
+    Runtime.app_flush:=previous_flush;Editor_state.st:=previous_editor;
+    Editor_state.field_sigs_opt:=previous_fields) (fun () ->
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    List.iter (fun scale -> List.iter (fun width -> List.iter (fun (icon,editing) ->
+      Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+      let summary=Option.get (Decode.page_of_summary (Wire.Map
+        [Wire.kw "block/uuid",Wire.Uuid "title-layout-owner";
+         Wire.kw "block/title",Wire.String "Title layout"])) in
+      let page={summary with Model.page_is_tag=icon && not editing;page_is_property=icon && editing;page_icon=(if icon then Some ("tabler","star") else None)} in
+      let model={Model.initial with repo=Some "title-layout-fixture";route_page=Some page;editing_title=editing} in
+      Runtime.read_model:=(fun () -> model);
+      let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
+        ~measure:(fun _ text _ _ -> Some (float_of_int (String.length text)*.10.*.scale,54.*.scale))
+        ~renderer:{Lui_host.name="page-title-layout-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (width*.scale)) ~height:(int_of_float (200.*.scale)) ~scale () in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app=Lui_app.create_with_extensions (Lui_host.backend host (profile MacOS GenericHost))
+        registry model (fun value () -> value) (fun _ _ _ ->
+          Lui_elements.column ~gap:32 ~padding_horizontal:40
+            ([Page.page_title_el model page] @ if icon then
+              [Page.page_tabs_el model;Right_sidebar_view.object_tabs_host (Sidebar_state.item_of_page page)]
+              else [])) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);ignore (Lui_host.repaint host);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        let store=Lui_host.store host in
+        let ids=Lui_store.preorder store in
+        let has_class id cls=match Lui_store.string_prop store id "style-class" with
+          | Some classes -> List.mem cls (String.split_on_char ' ' classes) | None -> false in
+        let find cls=List.find (fun id -> has_class id cls) ids in
+        let rect id=Option.get (Lui_host.layout_rect host id) in
+        let block=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+          =Some "ls-block-title-layout-owner") ids in
+        let title=rect (find "ls-page-title") and row=rect (find "is-page-title-row")
+        and inner=rect block in
+        expect "Page titles omit the reference two-point top and bottom block padding"
+          (abs_float (row.y-.inner.y-.2.*.scale)<0.1
+           && abs_float (inner.y+.inner.h-.row.y-.row.h-.2.*.scale)<0.1);
+        expect "Negative title margins must expand the row without losing its right edge"
+          (abs_float (row.x-.title.x+.(if icon then 36. else 30.)*.scale)<0.1
+           && abs_float (row.x+.row.w-.title.x-.title.w)<0.1);
+        if icon then begin
+          let panels=List.filter (fun id -> has_class id "ui__tabs-content") ids in
+          expect "Main and sidebar object views both mount their content panel" (List.length panels=2);
+          List.iter (fun id ->
+            let rec panel_host node=if has_class node "page-tabs" then node
+              else panel_host (Option.get (Lui_store.parent store node)) in
+            let panel=rect id and container=rect (panel_host id) in
+            expect "Object panels retain the reference eight-point top gap on both hosts"
+              (abs_float (panel.y-.container.y-.8.*.scale)<0.1)) panels;
+          let control=rect (find "ls-page-icon-btn") in
+          expect "Page icon controls retain their reference square and top inset"
+            (abs_float (control.w-.38.*.scale)<0.1 && abs_float (control.h-.38.*.scale)<0.1
+             && abs_float (control.y-.row.y-.8.*.scale)<0.1)
+        end)) [false,false;true,false;false,true;true,true]) [400.;1000.]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native page title padding, negative margins and icon geometry" (!failures=[]);
+  print_endline "native page title padding, negative margins and icon geometry: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
   let failures = ref [] in
   let expect message condition = if not condition then failures:=message::!failures in
   let previous_ops = !Views_state.ops_ref in

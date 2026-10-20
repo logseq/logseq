@@ -560,7 +560,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             (fun selected ->
               if S.String_set.mem uuid selected then "selected ls-block"
               else "ls-block")
-            (column ~key:"pt-block"
+            (column ~key:"pt-block" ~padding_vertical:2
                ~transition:Ui_components.block_transition
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
@@ -573,16 +573,14 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               ; ( "data-db-collapsable"
                 , if page.Model.page_db_collapsable then "true" else "false" )
               ; ("data-block-format", "markdown") ]
-            [ (* the -36px/-30px margins the cljs inline style carried
-                 live on .is-page-title-row (+ .ls-pt-no-icon) in
-                 lui-core.css; cljs page.css gives the title row gap-2 *)
+            [ (* The negative leading margin exposes the disclosure control
+                 while stretch preserves the content's trailing edge. *)
               row ~key:"pt-row"
                 ~gap:8 ~min_height:24 ~grow:1. ~min_width:0
                 ~style_class:
                   ("block-main-container is-page-title-row"
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
                 ~margin_left:(if icon_el = None then -30 else -36)
-                ~data_attrs:[ ("style", "width:100%") ]
                 ~on_pointer_enter:(fun _ ->
                   if collapsable_title () then (
                     Signal.set caret_hover true;
@@ -651,20 +649,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                             ((match icon_el with
                               | None -> []
                               | Some ic ->
-                                  [ row ~key:"pt-icon"
-                                      ~style_class:"ls-page-icon"
-                                      ~height:46
-                                      ~data_attrs:[ ("style", "line-height:1;box-sizing:border-box;padding-top:8px") ]
+                                  [ Ui_components.with_props
+                                      [ Ui_components.Prop.padding_top 8
+                                      ; Ui_components.Prop.line_height "1" ]
+                                      (row ~key:"pt-icon"
+                                      ~style_class:"ls-page-icon" ~height:46
                                       [ Ui_components.button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
                                           ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost ls-page-icon-btn"
-                                          ~width:38 ~min_width:38
+                                          ~width:38 ~min_width:38 ~height:38 ~min_height:38 ~padding:0
                                           ~foreground:"hsl(var(--muted-foreground))"
-                                          ~data_attrs:
-                                            [ ("style", "height:auto;\
-                                                min-height:38px;padding:0;\
-                                                padding-bottom:1.5px") ]
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
                                               ".ls-page-title .ls-page-icon")
@@ -672,7 +667,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                               ~style_class:"ls-icon-color-wrap"
                                               [ ic ]
                                           ]
-                                      ]
+                                      ])
                                   ])
                             @ [ column ~key:"pt-col3" ~grow:1. ~cross:`stretch
                                 ~min_width:0
@@ -1568,28 +1563,24 @@ let unlinked_refs_el (m : Model.t) : t =
       if page.page_is_tag || page.page_is_property then Logseq_el.nothing
       else box ~key:"urefs" ~margin_left:4 [ unlinked_references_view m ]
 
-(* cljs page-inner (show-tabs?): class/property pages render
-   .page-tabs > .w-full > .ui__tabs-content > .ml-1 hosting the objects
-   view — the view mounts declaratively on the current route page *)
+(* Class and property objects share the same panel spacing in every container. *)
+let object_tabs_el ~key_prefix (page : Model.page) : t =
+  match page.Model.page_uuid with
+  | None -> Logseq_el.nothing
+  | Some uuid ->
+      let kind =
+        if page.Model.page_is_tag then Views_state.KTagPage uuid
+        else Views_state.KPropertyPage uuid
+      in
+      column ~key:(key_prefix ^ "-" ^ uuid) ~style_class:"page-tabs" ~min_width:0
+        [ column ~style_class:"ui__tabs-content" ~margin_top:8 ~min_width:0
+            [ box ~margin_left:4 ~min_width:0
+                [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ] ]
+
 let page_tabs_el (m : Model.t) : t =
   match m.Model.route_page with
-  | Some p when p.Model.page_is_tag || p.Model.page_is_property -> (
-      match p.Model.page_uuid with
-      | None -> Logseq_el.nothing
-      | Some uuid ->
-          let kind =
-            if p.Model.page_is_tag then Views_state.KTagPage uuid
-            else Views_state.KPropertyPage uuid
-          in
-          column ~key:("ptabs-" ^ uuid) ~style_class:"page-tabs"
-            [ (* .page-tabs > .w-full is a min-width CSS handle *)
-              box ~data_attrs:[ ("style", "width:100%") ]
-                [ box
-                    ~style_class:"ui__tabs-content"
-                    [ box ~margin_left:4
-                        [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
-                ]
-            ])
+  | Some page when page.Model.page_is_tag || page.Model.page_is_property ->
+      object_tabs_el ~key_prefix:"ptabs" page
   | _ -> Logseq_el.nothing
 
 let page_view_ms (ms : Model.t Signal.signal) : t =

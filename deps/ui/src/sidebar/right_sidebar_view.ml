@@ -559,29 +559,10 @@ let sidebar_props_row st (it : Sidebar_state.item) =
             ])
   | _ -> empty
 
-(* cljs page-inner (show-tabs?): class/property pages render
-   .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view —
-   mounted declaratively, one inst per sidebar item. The radix
-   data-orientation/activation-direction attrs are inert markup here *)
 let object_tabs_host (it : Sidebar_state.item) =
   match it.Sidebar_state.page with
-  | Some p
-    when p.Model.page_is_tag || p.Model.page_is_property -> (
-      match p.Model.page_uuid with
-      | None -> spacer ~key:("tabs-none-" ^ it.key) []
-      | Some uuid ->
-          let kind =
-            if p.Model.page_is_tag then Views_state.KTagPage uuid
-            else Views_state.KPropertyPage uuid
-          in
-          box ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
-            [ box ~grow:1.
-                [ box
-                    ~style_class:"ui__tabs-content"
-                    [ box ~key:("tabs-c-" ^ it.key)
-                        [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
-                ]
-            ])
+  | Some page when page.Model.page_is_tag || page.Model.page_is_property ->
+      Page.object_tabs_el ~key_prefix:("tabs-" ^ it.key) page
   | _ -> spacer ~key:("tabs-none-" ^ it.key) []
 
 let item_body st idx (it : Sidebar_state.item) =

@@ -17,6 +17,8 @@ import {measureBugReport, assertBugReport, bugReportDesktopReference, measureCli
 import {measureHandbookCategoryContent, assertHandbookCategoryContent, handbookCategoryContentReference} from './handbook_checks.mjs';
 import {measureHandbookArticleHeader, assertHandbookArticleHeader, handbookArticleHeaderReference} from './handbook_checks.mjs';
 
+import {measurePageTitleLayout, assertPageTitleLayout} from './page_title_checks.mjs';
+
 const session = 'logseq-ui-regressions';
 const origin = process.env.LOGSEQ_UI_TEST_URL || 'http://localhost:3001';
 const browser = (...args) => execFileSync('agent-browser', ['--session', session, ...args], {encoding: 'utf8', timeout: 30000}).trim();
@@ -35,6 +37,18 @@ const openSettings = () => {
   browser('wait', '200');
 };
 after(() => browser('close'));
+
+test('Page titles retain block padding and their trailing content edge', () => {
+  open();
+  browser('find', 'text', 'Journals', 'click', '--exact');
+  browser('wait', '--fn', "document.querySelector('.ls-page-title .is-page-title-row') !== null");
+  assertPageTitleLayout(evaluate(`(${measurePageTitleLayout.toString()})()`));
+  browser('open', `${origin.replace(/#.*$/, '')}#/page/Task`);
+  browser('wait', '--fn', "document.querySelector('.page-tabs .ls-view-head') !== null");
+  const objects = evaluate(`(${measurePageTitleLayout.toString()})()`);
+  assert.notEqual(objects.objectHeadGap, null);
+  assertPageTitleLayout(objects);
+});
 
 test('Pages tag filters keep live multi-selection and restore reference titles', () => {
   open();
