@@ -66,23 +66,33 @@
         block-eids (mapv :e datoms)
         block-ents (map #(d/entity db %) block-eids)
         blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
-    (->> (otree/blocks->vec-tree db blocks page-id)
-         (map #(update % :block/uuid str)))))
+    (otree/blocks->vec-tree db blocks page-id)))
 
 (def remove-hidden-properties api-util/remove-hidden-properties)
 
+(defn- sanitize-page-block
+  "Apply API cleanup to a page-tree node and every descendant.
+  Keep :block/children so GetPage / get-page-data can return the full outline."
+  [block]
+  (let [children (:block/children block)]
+    (cond-> (-> block
+                remove-hidden-properties
+                ;; :block/page is an untranslated entity; empty children are omitted
+                ;; so leaf blocks keep the previous top-level field set
+                (dissoc :block/page :block/children)
+                (update :block/uuid str))
+      (seq children)
+      (assoc :block/children (mapv sanitize-page-block children)))))
+
 (defn get-page-data
-  "Get page data for GetPage tool including the page's entity and its blocks"
+  "Get page data for GetPage tool including the page's entity and its blocks
+  as a nested tree under :block/children."
   [db page-name-or-uuid]
   (when-let [page (ldb/get-page db page-name-or-uuid)]
     {:entity (-> (remove-hidden-properties page)
                  (dissoc :block/tags :block/refs)
                  (update :block/uuid str))
-     :blocks (map #(-> %
-                       remove-hidden-properties
-                       ;; remove unused and untranslated attrs
-                       (dissoc :block/children :block/page))
-                  (get-page-blocks db (:db/id page)))}))
+     :blocks (mapv sanitize-page-block (get-page-blocks db (:db/id page)))}))
 
 (defn list-pages
   "Main fn for ListPages tool"
