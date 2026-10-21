@@ -797,14 +797,20 @@
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 
+(defn- close-websockets!
+  [^js self code reason]
+  (when-let [state (some-> self .-state)]
+    (when (fn? (.-getWebSockets state))
+      (doseq [^js socket (.getWebSockets state)]
+        (.close socket code reason)))))
+
 (defn- handle-sync-admin-reset
   [^js self]
   (let [^js state (.-state self)
         ^js storage (.-storage state)
         delete-all (.-deleteAll storage)
         delete-alarm (.-deleteAlarm storage)]
-    (doseq [^js ws (.getWebSockets state)]
-      (.close ws 1000 "graph deleted"))
+    (close-websockets! self 1000 "graph deleted")
     (p/let [_ (when (fn? delete-alarm)
                 (.deleteAlarm storage))]
       (if (fn? delete-all)
@@ -887,7 +893,9 @@
                  (not (exists? js/DecompressionStream)))
           (http/error-response "gzip not supported" 500)
           (p/catch
-           (p/let [_ (ensure-schema! self)
+           (p/let [_ (when reset?
+                       (close-websockets! self 1012 "snapshot replaced"))
+                   _ (ensure-schema! self)
                    _ (when reset?
                        (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
                    _ (when reset?

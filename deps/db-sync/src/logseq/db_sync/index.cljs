@@ -496,9 +496,9 @@
 (defn <user-upsert! [db claims]
   (let [user-id (aget claims "sub")]
     (when (string? user-id)
-      (let [email (aget claims "email")
+      (let [email (or (aget claims "email") nil)
             email-verified (aget claims "email_verified")
-            username (aget claims "cognito:username")
+            username (or (aget claims "cognito:username") nil)
             email-verified (cond
                              (true? email-verified) 1
                              (false? email-verified) 0

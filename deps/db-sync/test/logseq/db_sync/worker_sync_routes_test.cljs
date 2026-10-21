@@ -8,6 +8,7 @@
       (is (= :sync/health (:handler match))))
     (let [match (sync-routes/match-route "GET" "/pull")]
       (is (= :sync/pull (:handler match))))
+    (is (nil? (sync-routes/match-route "GET" "/events")))
     (is (nil? (sync-routes/match-route "GET" "/repair/blocks")))
     (let [match (sync-routes/match-route "GET" "/snapshot/download")]
       (is (= :sync/snapshot-download (:handler match))))
@@ -17,11 +18,14 @@
       (is (= :sync/admin-reset (:handler match))))
     (let [match (sync-routes/match-route "POST" "/tx/batch")]
       (is (= :sync/tx-batch (:handler match))))
+    (is (nil? (sync-routes/match-route "POST" "/chat/tx/batch")))
     (let [match (sync-routes/match-route "POST" "/snapshot/upload")]
       (is (= :sync/snapshot-upload (:handler match))))))
 
 (deftest match-route-sync-method-mismatch-test
   (testing "sync method mismatch returns nil"
     (is (nil? (sync-routes/match-route "POST" "/health")))
+    (is (nil? (sync-routes/match-route "POST" "/events")))
     (is (nil? (sync-routes/match-route "GET" "/admin/reset")))
-    (is (nil? (sync-routes/match-route "PUT" "/tx/batch")))))
+    (is (nil? (sync-routes/match-route "PUT" "/tx/batch")))
+    (is (nil? (sync-routes/match-route "GET" "/chat/tx/batch")))))

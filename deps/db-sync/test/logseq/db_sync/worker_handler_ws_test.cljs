@@ -67,14 +67,14 @@
     (is (= "hello" (:type @sent)))
     (is (false? (contains? @sent :checksum)))))
 
-(deftest tx-batch-message-adds-graph-and-user-context-to-transact-meta-test
+(deftest tx-batch-after-hibernation-adds-graph-and-user-context-to-transact-meta-test
   (let [sql (test-sql/make-sql)
         conn (storage/open-conn sql)
         ws #js {:readyState 1}
         sent (atom nil)
         tx-metas (atom [])
         self #js {:conn conn
-                  :graph-id "graph-ws"
+                  :state #js {:getTags (fn [_socket] #js ["graph-ws"])}
                   :schema-ready true
                   :sql sql}
         raw (protocol/encode-message
@@ -203,3 +203,14 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest entity-pull-message-is-not-part-of-the-journal-protocol-test
+  (let [sql (test-sql/make-sql)
+        conn (storage/open-conn sql)
+        socket #js {:readyState 1}
+        self #js {:conn conn :schema-ready true :sql sql :graph-id "graph-ws"}
+        sent (atom nil)]
+    (with-redefs [ws/send! (fn [_ message] (reset! sent message))]
+      (ws-handler/handle-ws-message!
+       self socket (protocol/encode-message {:type "entity/pull" :since 0})))
+    (is (= {:type "error" :message "invalid request"} @sent))))

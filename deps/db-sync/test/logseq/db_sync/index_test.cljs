@@ -16,6 +16,26 @@
 (def ^:private users-email-index-sql
   "create index if not exists idx_users_email on users (email)")
 
+(deftest user-upsert-normalizes-missing-access-token-claims-test
+  (async done
+         (let [called (atom nil)]
+           (-> (p/with-redefs [common/now-ms (fn [] 1234)
+                               common/<d1-run (fn [_db sql & args]
+                                                (reset! called {:sql sql :args args})
+                                                (p/resolved {:ok true}))]
+                 (index/<user-upsert! :db #js {"sub" "access-token-user"}))
+               (p/then (fn [_]
+                         (let [[user-id email email-verified username now] (:args @called)]
+                           (is (= "access-token-user" user-id))
+                           (is (js/Object.is nil email))
+                           (is (js/Object.is nil email-verified))
+                           (is (js/Object.is nil username))
+                           (is (= 1234 now)))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest index-list-includes-graph-e2ee-flag-test
   (async done
          (let [rows #js [#js {"graph_id" "graph-1"

@@ -28,6 +28,7 @@
         state (make-state)
         env (env-object config index-db assets-bucket)]
     #js {:state state
+         :graph-id graph-id
          :env env
          :sql sql
          :conn nil

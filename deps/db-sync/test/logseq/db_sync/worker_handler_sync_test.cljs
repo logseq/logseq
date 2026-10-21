@@ -1502,6 +1502,29 @@
      :conn conn
      :self self}))
 
+(deftest tx-batch-http-route-coerces-json-request-body-test
+  (async done
+         (let [{:keys [self]} (make-server-self)
+               block-uuid (random-uuid)
+               request (semantic-json-request
+                        "/sync/graph-1/tx/batch"
+                        "POST"
+                        {:t-before 0
+                         :txs [{:tx (protocol/tx->transit
+                                     [[:db/add -1 :block/uuid block-uuid]
+                                      [:db/add -1 :block/title "Mobile request"]])
+                                :outliner-op "save-block"}]})]
+           (-> (p/with-redefs [ws/broadcast! (fn [& _] nil)]
+                 (p/let [response (sync-handler/handle-http self request)
+                         body (json-body response)]
+                   (is (= 200 (.-status response)) (pr-str body))
+                   (is (= "tx/batch/ok" (:type body)))
+                   (is (= 1 (:t body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (defn- apply-entries!
   [^js self entries]
   (loop [t-before (storage/get-t (.-sql self))
@@ -1759,6 +1782,7 @@
                  (is (= true (:ok body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
+                 (is (empty? (select-keys body [:t :schema-version :row-count])))
                  (is (= "gzip" (:content-encoding body))))
                (p/then (fn []
                          (restore!)
@@ -1785,6 +1809,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
+                 (is (empty? (select-keys body [:t :schema-version :row-count])))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []
@@ -2638,9 +2663,13 @@
          (let [sql (test-sql/make-sql)
                checksum "1be70518babe8784"
                conn (d/create-conn db-schema/schema)
+               closed (atom [])
+               socket #js {:close (fn [code reason]
+                                    (swap! closed conj [code reason]))}
                self #js {:sql sql
                          :conn conn
                          :schema-ready true
+                         :state #js {:getWebSockets (fn [] #js [socket])}
                          :env #js {"DB" nil}}
                request (js/Request. (str "http://localhost/sync/graph-1/snapshot/upload?graph-id=graph-1&finished=true&checksum=" checksum)
                                     #js {:method "POST"
@@ -2660,6 +2689,7 @@
                          body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                    (is (= 200 (.-status resp)))
                    (is (= {:ok true :count 0} body))
+                   (is (= [[1012 "snapshot replaced"]] @closed))
                    (is (= checksum (storage/get-checksum sql)))))
                (p/then (fn []
                          (done)))
