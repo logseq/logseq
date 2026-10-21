@@ -45,7 +45,8 @@
   [db label value]
   (require-uuid! label value)
   (or (d/entity db [:block/uuid value])
-      (fail! "Missing renderer resource entity" {label value})))
+      (fail! (str "Missing renderer resource entity: " label " " value)
+             {label value})))
 
 (defn entity-uuid
   "Return :block/uuid when the entity has one. Use entity-uuid! for required lookups."
