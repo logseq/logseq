@@ -203,3 +203,16 @@ test('sidebar page icon spacing has one shared typed owner', async () => {
   })
   assert.deepEqual(spacing, [], 'Browser CSS must not add spacing to the shared sidebar icon row')
 })
+
+test('shortcut glyphs do not add a second cell around shared keycaps', async () => {
+  const root = postcss.parse(await readFile(stylesheet, 'utf8'))
+  const dimensions = []
+  root.walkRules(rule => {
+    if (!rule.selector.includes('.shui-shortcut-') || !rule.selector.includes('.lui-kbd')) return
+    rule.walkDecls(declaration => {
+      if (/^(?:min-|max-)?(?:width|height)$/.test(declaration.prop))
+        dimensions.push([rule.selector, declaration.prop, declaration.value])
+    })
+  })
+  assert.deepEqual(dimensions, [], 'The typed outer cell owns dimensions; the glyph must stay intrinsic')
+})

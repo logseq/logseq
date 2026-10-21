@@ -464,21 +464,21 @@ let structure_props (h : ('m, 'a) Shared_scenarios.host) =
   in
   h.H.check "group hairlines separate stacked groups" (hairlines <> []);
   (* -- hints bar -- *)
-  h.H.check "hints bar is a 45px bordered footer"
+  h.H.check "hints bar owns its background and intrinsic content height"
     (match by_class h "hints" with
      | Some n ->
-         n.M.kind = "row"
-         && int_prop_eq n "min-height" 45
-         && int_prop_eq n "padding-vertical" 8
+         n.M.kind = "column"
+         && int_prop_eq n "gap" 0
          && prop_contains n "background" "--lx-gray-03"
-         && prop_contains n "shadow" "inset 0 1px"
      | None -> false);
   h.H.check "hint buttons are flat 28px rows"
     (match by_class h "cp__cmdk-hint" with
      | Some n ->
          int_prop_eq n "height" 28
          && float_prop_eq n "opacity" 0.4
-         && str_prop_eq n "font-size" "var(--lx-text-header)"
+         && int_prop_eq n "padding-horizontal" 12
+         && int_prop_eq n "padding-vertical" 4
+         && str_prop_eq n "font-size" "var(--lx-text-row)"
      | None -> false);
   close_palette h
 

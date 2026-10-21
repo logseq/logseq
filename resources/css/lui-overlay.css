@@ -2027,39 +2027,13 @@ html[data-theme=light] {
   box-shadow: none;
 }
 
-/* the kbd kind ships kit chrome (.lui-kbd: px-1.5, border, bg, rounded,
-   10px mono) — inside the shui-shortcut wrappers the chrome lives on
-   the wrapper row exactly like prod's kbd.shui-shortcut-key spec, so
-   neutralize the kit layer (padding/border/bg/font can't be typed
-   props) */
+/* Shared shortcut cells own geometry and typography. Only normalize the
+   remaining kit paint and family defaults on their inner glyph. */
 :is(.shui-shortcut-combo, .shui-shortcut-separate, .shui-shortcut-compact) .lui-kbd {
-  padding: 0;
   border: none;
-  background: transparent;
   border-radius: 0;
   font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  gap: 0;
   box-shadow: none;
-}
-
-/* prod kbd.shui-shortcut-key geometry (h-5, 12px, lh16, ls-0.5, pad 2/4,
-   min-w 20, centered) — the kit's px-1.5/h-5 rules target .lui-kbd and
-   load after shui.css, so restate the prod values here; boxed keycaps
-   (no .shui-shortcut-key) keep the chrome on their wrapper row */
-:is(.shui-shortcut-combo, .shui-shortcut-separate) .lui-kbd.shui-shortcut-key {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  min-width: 20px;
-  padding: 2px 4px;
-  font-size: 12px;
-  line-height: 16px;
-  letter-spacing: 0.5px;
 }
 
 /* file page (#/file/<path>) — cljs file.cljs mounts CodeMirror inside

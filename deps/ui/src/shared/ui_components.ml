@@ -475,11 +475,8 @@ let cmdk_badge ~key ~value : t =
    border/bg, glow shadow) lives on a centered row wrapper. [boxed]
    mirrors .shui-key-boxed; [glow] mirrors .shui-shortcut-glow.
    [min_slot] is the 20px floor combo/separate keys get; standalone
-   keycaps (tooltips) stay content-sized.
-   Boxed keys keep the kbd unclassed: .shui-shortcut-separate
-   kbd.shui-shortcut-key in shui.css would paint a second chrome box
-   inside the wrapper. Unboxed keys (combo/tooltip) keep the class so
-   the surviving stylesheet supplies their padding/height exactly. *)
+   keycaps (tooltips) stay content-sized. Inner glyphs carry typography
+   only; their semantic class must not introduce another keycap cell. *)
 let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
   let binds =
     (if boxed then
@@ -597,28 +594,22 @@ let shortcut_slot ~key ~opacity_signal children : t =
 
 (* -- cmdk hints bar --------------------------------------------------- *)
 
-(* 45px footer band; the top hairline is an inset shadow like the input
-   row's bottom one. *)
+(* The top rule participates in height: one-line tips use 41 points,
+   action buttons use 45, and wrapped tips grow naturally. *)
 let cmdk_hints_bar ~key children =
-  with_props
-    [ ( Prop.shadow
-          "inset 0 1px 0 0 var(--lx-gray-05, var(--ls-border-color, \
-           hsl(var(--border))))" )
-    ]
-    (row ~key ~style_class:"hints" ~main:`space_between ~cross:`center
-       ~gap:8 ~min_height:45 ~padding_vertical:8 ~padding_horizontal:12
-       ~background:
-         "var(--lx-gray-03, var(--ls-tertiary-background-color, \
-          hsl(var(--muted))))"
-       children)
+  column ~key ~style_class:"hints" ~gap:0 ~cross:`stretch
+    ~background:
+      "var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))))"
+    [box ~key:"hints-rule" ~height:1
+       ~background:"var(--lx-gray-05, var(--ls-border-color, hsl(var(--border))))" [];
+     row ~key:"hints-body" ~main:`space_between ~cross:`stretch
+       ~gap:8 ~padding_vertical:8 ~padding_horizontal:12 children]
 
-(* prod .text-sm.leading-6 tip container: no extra horizontal pad,
-   4px of vertical pad around the 24px line *)
+(* The tip container inherits the reference 24-point line without extra padding. *)
 let cmdk_hints_inner ~key children =
   with_props
     [ Prop.font_size "var(--lx-text-row)"; Prop.line_height "1.5rem" ]
-    (box ~key ~padding_vertical:2
-       children)
+    (box ~key children)
 
 let cmdk_hints_row ~key children =
   row ~key ~cross:`center ~gap:4
@@ -636,27 +627,31 @@ let cmdk_tip ~key children : t =
   with_props [ Prop.opacity 0.5; Prop.hover_opacity 1.0 ]
     (row ~key ~cross:`center ~gap:4 children)
 
-(* Right-aligned action hints group — the -6px bleed-out under the bar's
-   6px pad becomes a relative inset like the item header's. *)
+(* Action hints retain the reference six-point trailing bleed and md breakpoint. *)
 let cmdk_hints_group ~key children : t =
-  with_props [ Prop.position `relative; Prop.inset_right (-6.) ]
-    (row ~key ~cross:`center ~gap:8
-       children)
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  Ui_parts.string_prop P.DisplayValue
+    ~value:(reactive (fun width -> if width>=768. then "inline-flex" else "none") viewport)
+    (with_props [ Prop.position `relative; Prop.inset_right (-6.) ]
+      (row ~key ~cross:`stretch ~gap:8 children)) ctx parent
 
 (* Flat 28px hint button — dims to 0.8 on hover via its own channel. *)
 let cmdk_hint_button ~key ~label ~on_press children : t =
   with_props
-    [ Prop.font_size "var(--lx-text-header)"
+    [ Prop.font_size "var(--lx-text-row)"
     ; Prop.opacity 0.4
     ; Prop.hover_opacity 0.8
     ; Prop.cursor `pointer
     ]
-    (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28 ~padding:0
+    (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28
+       ~padding_vertical:4 ~padding_horizontal:12
        ~style_class:"cp__cmdk-hint"
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
           hsl(var(--muted-foreground))))"
-       [ row ~key:"inner" ~cross:`center ~gap:6 children ])
+       [ row ~key:"inner" ~cross:`center ~gap:4 children ])
 
 (* -- cmdk misc -------------------------------------------------------- *)
 

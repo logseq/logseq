@@ -11516,3 +11516,88 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native responsive search panel border-box width" (!failures=[]);
   print_endline "native responsive search panel border-box width: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module W = Lui_window in
+  let previous_width=Host.inner_width () and previous_height=Host.inner_height ()
+  and previous_flush= !Runtime.app_flush in
+  let failures=ref [] in
+  let expect message condition=if not condition then failures:=message::!failures in
+  Fun.protect ~finally:(fun () ->
+    Host.set_window_size previous_width previous_height;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun scale -> List.iter (fun action ->
+      Host.set_window_size 1280. 720.;
+      let listeners ()=List.length
+        (Option.value (Hashtbl.find_opt Platform.window_listeners "resize") ~default:[]) in
+      let before=listeners () in
+      let store=Lui_store.create () in
+      let backend={backend_profile=profile MacOS GenericHost;
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
+      let services=Cmdk_host.services () in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let selected : Cmdk_state.item =
+        {ikey="responsive-hint";idx=0;gid=G_nodes;ititle="Matched title";info=None;header=None;
+         iicon=None;inline_icon=None;isc="";ibadge=No_badge;act=action;
+         ihl=true;imouse=false;iq=""} in
+      let app=Lui_app.create_with_extensions backend registry () (fun () () -> ())
+        (fun context _ _ ->
+          let state=Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler services in
+          let group : Cmdk_state.group =
+            {gid=G_nodes;gtitle="Nodes";gitems=[selected];gtotal=1;glimit=10;
+             gexpanded=false;gfilter_active=false} in
+          Signal.set state.Cmdk_state.vs
+            {Cmdk_state.initial_view with open_=true;groups=[group];hl=0;tip=1};
+          Lui_elements.column [Cmdk_view.hints services state]) in
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let buttons ()=List.filter (fun id -> Lui_store.kind store id="button") (Lui_store.preorder store) in
+        let original_buttons=buttons () in
+        let actions=Option.get (Lui_store.parent store (List.hd original_buttons)) in
+        let layout=Lui_layout.create () in
+        let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+          ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+        let engine=Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store) in
+        let footer=List.find (fun id -> Lui_store.string_prop store id "style-class"=Some "hints")
+          (Lui_store.preorder store) in
+        List.iter (fun width ->
+          Host.set_window_size width 720.;Platform.emit_event "resize" (Js.Json.JObject []);
+          ignore (Lui_app.flush app);
+          let available=min 898. (width*.0.9+.2.)-.2. in
+          Lui_layout.sync ~scale ~width:(available*.scale) ~height:(720.*.scale)
+            ~text_flow:(Text_engine.text_flow engine)
+            ~measure:(fun id text width _ -> Some (Text_engine.pad_size store id ~scale
+              (Text_engine.measure_text ~width:(Host_interaction.measure_width width) engine id text))) layout store;
+          let rects=W.Rects.create () in
+          List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout id))
+            (Lui_store.preorder store);
+          let rect=Option.value (Lui_layout.rect layout actions) ~default:{Lui_scene.x=0.;y=0.;w=0.;h=0.} in
+          expect (Printf.sprintf "Search actions visibility at %.0f/%.0f does not match the reference breakpoint" width scale)
+            ((rect.w>0. && rect.h>0.)=(width>=768.));
+          expect "Resizing search hints must retain action button identities" (buttons ()=original_buttons);
+          let height=(Option.get (Lui_layout.rect layout footer)).h/.scale in
+          (match width with
+           | 600. | 767. -> expect (Printf.sprintf "Hidden-action footer at %.0f/%.0f is %.1f instead of 41 points" width scale height)
+               (abs_float (height-.41.)<0.1)
+           | 1280. -> expect (Printf.sprintf "Wide footer at scale %.0f is %.1f instead of 45 points" scale height)
+               (abs_float (height-.45.)<0.1)
+           | _ -> ());
+          List.iter (fun button ->
+            let padding=Lui_paint.text_placement_of store button in
+            expect "Search action buttons must retain the reference twelve-point horizontal inset"
+              (padding.tp_pad_left=12. && padding.tp_pad_right=12.);
+            expect "Search action button text must use the reference row type scale"
+              (Lui_store.string_prop store button "font-size"=Some "var(--lx-text-row)")) original_buttons;
+          if width<768. then begin
+            let hit=W.hit_path store rects ~x:(available*.scale-.4.) ~y:12. in
+            expect "Hidden search actions remain pointer targets"
+              (not (List.exists (fun id -> List.mem id original_buttons) hit))
+          end)
+          [1280.;360.;600.;767.;768.;800.;360.;1280.]);
+      expect "Search hint disposal leaks a viewport subscription" (listeners ()=before))
+      [Cmdk_state.Open_page "page";Cmdk_state.Open_block "block";Cmdk_state.Open_file "logseq/config.edn";
+       Cmdk_state.Create_page "New";Cmdk_state.Set_filter G_nodes;Cmdk_state.Run "go/home"]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native responsive search hint visibility and ownership" (!failures=[]);
+  print_endline "native responsive search hint visibility and ownership: OK")
