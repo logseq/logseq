@@ -99,7 +99,7 @@ let missing_placeholder_ref_datoms (db : db) (attr : attr)
     |> List.of_seq
 
 (* cleanup-missing-block-refs-tx *)
-let cleanup_missing_block_refs_tx (db : db)
+let cleanup_missing_block_refs_tx ?embed_child_uuids (db : db)
     (candidate_ref_uuids : string list) : tx_op list =
   let missing_refs =
     missing_placeholder_ref_datoms db "block/refs" candidate_ref_uuids
@@ -128,8 +128,12 @@ let cleanup_missing_block_refs_tx (db : db)
   let retract_link_tx =
     List.map
       (fun d ->
-        Retract
-          (Entity_id d.phd_source_id, "block/link", Some (Ref d.phd_ref_id)))
+        let generated = match embed_child_uuids, Ldb.ent_of_id db d.phd_source_id with
+          | Some uuids, Some source ->
+              (match Ldb.value source "block/uuid" with Some (Uuid uuid) -> Hashtbl.mem uuids uuid | _ -> false)
+          | _ -> false in
+        if generated then RetractEntity (Entity_id d.phd_source_id)
+        else Retract (Entity_id d.phd_source_id, "block/link", Some (Ref d.phd_ref_id)))
       missing_links
   in
   let update_title_tx =
@@ -239,9 +243,9 @@ let finalize_imported_graph (conn : conn) : tx_report option =
            conn ops)
 
 (* cleanup-missing-block-refs! *)
-let cleanup_missing_block_refs (conn : conn)
+let cleanup_missing_block_refs ?embed_child_uuids (conn : conn)
     (candidate_ref_uuids : string list) : tx_report option =
-  let tx = cleanup_missing_block_refs_tx (Conn.db conn) candidate_ref_uuids in
+  let tx = cleanup_missing_block_refs_tx ?embed_child_uuids (Conn.db conn) candidate_ref_uuids in
   if tx = [] then None else Some (transact_imported conn tx)
 
 (* ---------- normalize journal uuids ---------- *)

@@ -441,7 +441,7 @@
         value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
         _ (when (and (not= (:logseq.property/type property) :number)
-                     (not (string? value')))
+                     (not (string? value)))
             (throw (ex-info "value should be a string" {:block-id block-id
                                                         :property-id property-id
                                                         :value value'})))
@@ -929,7 +929,7 @@
                                         (->> (cond
                                                (nil? value) []
                                                (de/entity? value) [value]
-                                               (sequential? value) value
+                                               (coll? value) value
                                                :else [value])
                                              (map (fn [item]
                                                     (if (de/entity? item)

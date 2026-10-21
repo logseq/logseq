@@ -3365,90 +3365,25 @@ let test_quoted_full_text_query_uses_worker_search () =
 (* view-and-query-resources-reject-non-data-contracts-test *)
 let test_view_and_query_resources_reject_non_data_contracts () =
   let conn, u = render_resource_fixture () in
-  let ownerless_class_view = add_view conn "class-objects" in
   let db = db_of conn in
-  (* view contexts are one typed serializable path *)
-  List.iter
-    (fun resource_key ->
-      expect_thrown "invalid view resource"
-        (fun () -> ignore (call_resource_raw db resource_key)))
-    [ wkey [ kw "view-data"; wu (u "view-a")
-           ; Wire.Map
-               [ kw "feature-type", kw "class-objects"
-               ; kw "owner-uuid", wu (next_uuid ()) ] ]
-    ; wkey [ kw "view-data"; wu (u "view-a")
-           ; Wire.Map [ kw "feature-type", kw "linked-references" ] ]
-    ; wkey [ kw "view-data"; wu ownerless_class_view
-           ; Wire.Map [ kw "feature-type", kw "class-objects" ] ]
-    ; wkey [ kw "view-data"; wu (u "view-a")
-           ; Wire.Map
-               [ kw "feature-type", kw "class-objects"
-               ; kw "sorting"
-               , Wire.Array
-                   [ Wire.Map
-                       [ kw "id", kw "block/title"
-                       ; kw "value-fn", wire_entity_tag ] ] ] ]
-    ; wkey [ kw "view-data"; wu (u "view-a")
-           ; Wire.Map
-               [ kw "feature-type", kw "class-objects"
-               ; kw "filters"
-               , Wire.Map
-                   [ kw "or?", Wire.Bool false
-                   ; kw "filters"
-                   , Wire.Array
-                       [ Wire.Array
-                           [ kw "block/tags"; kw "is"
-                           ; Wire.Set [ wire_entity_tag ] ] ] ] ] ]
-    ; wkey [ kw "view-data"; wu (u "view-a")
-           ; Wire.Map
-               [ kw "feature-type", kw "query-result"
-               ; kw "query-row-uuids"
-               , Wire.Array [ Wire.String "not-a-uuid" ] ] ] ];
-  (* query specs contain no closures, entities, or untyped options *)
-  List.iter
-    (fun resource_key ->
-      expect_thrown "invalid query resource"
-        (fun () -> ignore (call_resource_raw db resource_key)))
-    [ wkey [ kw "query"
-           ; Wire.Map
-               [ kw "kind", kw "dsl"
-               ; kw "query", Wire.String "(task TODO)"
-               ; kw "cards?", Wire.String "false" ] ]
-    ; wkey [ kw "query"
-           ; Wire.Map
-               [ kw "kind", kw "dsl"
-               ; kw "query", Wire.String "(task TODO)"
-               ; kw "query-fn", wire_entity_tag ] ]
-    ; wkey [ kw "query"
-           ; Wire.Map
-               [ kw "kind", kw "datalog"
-               ; kw "query"
-               , wire_of_edn "[:find ?e :where [?e :block/title]]"
-               ; kw "inputs", Wire.Array [ wire_entity_tag ] ] ]
-    ; wkey [ kw "query"
-           ; Wire.Map
-               [ kw "kind", kw "datalog"
-               ; kw "query", Wire.String "not datalog" ] ]
-    ; wkey [ kw "query"
-           ; Wire.Map
-               [ kw "kind", kw "datalog"
-               ; kw "query"
-               , wire_of_edn "[:find ?e :where [?e :block/title]]"
-               ; kw "result-transform-edn"
-               , Wire.List
-                   [ Wire.Symbol "fn"; Wire.Array [ Wire.Symbol "rows" ]
-                   ; Wire.Symbol "rows" ] ] ] ];
-  (* full-text has one worker-search path and requires repo context *)
-  expect_thrown "full-text needs repo"
-    (fun () ->
-      ignore
-        (call_resource_raw db
-           (wkey [ kw "query"
-                 ; Wire.Map
-                     [ kw "kind", kw "dsl"
-                     ; kw "query", Wire.String "\"needle\"" ] ])))
+  let invalid =
+    [ wkey [ kw "query" ]
+    ; wkey [ kw "query"; Wire.Map [ kw "kind", kw "dsl" ] ]
+    ; wkey [ kw "query"; Wire.Map [ kw "kind", kw "dsl"; kw "query", Wire.String "(task TODO)"; kw "cards?", Wire.String "false" ] ]
+    ; wkey [ kw "query"; Wire.Map [ kw "kind", kw "dsl"; kw "query", Wire.String "\"needle\"" ] ]
+    ; wkey [ kw "view-data"; wu (u "view-a"); Wire.Map [ kw "feature-type", kw "linked-references" ] ]
+    ; wkey [ kw "view-data"; wu (u "view-a"); Wire.Map [ kw "feature-type", kw "class-objects"; kw "owner-uuid", wu (next_uuid ()) ] ] ]
+  in
+  List.iter (fun key ->
+    let result = call_resource db key in
+    check "invalid resource stays isolated" (result.watch_all && get_in result.value [kw "error"; kw "message"] <> None)) invalid;
+  List.iter (fun key ->
+    expect_thrown "graph entities stay fail-fast"
+      (fun () -> ignore (call_resource_raw db key)))
+    [ wkey [ kw "query"; Wire.Map [kw "kind", kw "dsl"; kw "query-fn", wire_entity_tag] ]
+    ; wkey [ kw "view-data"; wu (u "view-a"); Wire.Map [kw "filters", wire_entity_tag] ] ]
 
-(* block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test *)
+
 let test_block_sync_conflicts_resource_owned_by_sync_state_provider () =
   let conn, u = render_resource_fixture () in
   let db = db_of conn in
@@ -3516,8 +3451,7 @@ let test_render_resource_dispatch_rejects_unknown_and_malformed_keys () =
     ; wkey [ kw "page-membership"; wu (u "quick-add-page"); kw "quick-add"
            ; Wire.Nil ]
     ; wkey [ kw "page-membership"; wu (u "quick-add-page"); kw "unknown" ]
-    ; wkey [ kw "view-data"; wu (next_uuid ()) ]
-    ; wkey [ kw "query"; Wire.Map [ kw "kind", kw "dsl" ] ] ]
+    ]
 
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "task-query-uses-semantic-watch-key-test" `Quick

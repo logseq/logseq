@@ -607,12 +607,14 @@ let () =
     ignore (url, meth, headers);
     match response_schema with
     | Some "sync/pull" ->
-        Db_worker_effect.pure (Wire.Map [ kw "t", Wire.Int 42 ])
+        calls := "pull" :: !calls;
+        Db_worker_effect.pure (Wire.Map [ kw "t", Wire.Int 99 ])
     | Some "sync/snapshot-download" ->
+        calls := "snapshot-metadata" :: !calls;
         Db_worker_effect.pure
           (Wire.Map
-             [ kw "url"
-             , Wire.String "https://sync.example.test/snapshot" ])
+             [ kw "t", Wire.Int 42
+             ; kw "url", Wire.String "https://sync.example.test/snapshot" ])
     | _ ->
         Db_worker_effect.error
           (Sync_util.ex_info "unexpected schema" [ kw "schema", Wire.Nil ])
@@ -634,7 +636,7 @@ let () =
       set_auth_token ();
       ignore (await (Sync_download.download_graph_by_id "repo" "graph-1" true));
       check "encrypted download preflights e2ee before snapshot stream"
-        (List.rev !calls = [ "e2ee-preflight"; "snapshot-stream" ]))
+        (List.rev !calls = [ "snapshot-metadata"; "e2ee-preflight"; "snapshot-stream" ]))
     ~finally:clear_sync_hooks
 
 let () =
@@ -656,8 +658,8 @@ let () =
     | Some "sync/snapshot-download" ->
         Db_worker_effect.pure
           (Wire.Map
-             [ kw "url"
-             , Wire.String "https://sync.example.test/snapshot" ])
+             [ kw "t", Wire.Int 42
+             ; kw "url", Wire.String "https://sync.example.test/snapshot" ])
     | _ ->
         Db_worker_effect.error
           (Sync_util.ex_info "unexpected schema" [ kw "schema", Wire.Nil ])
@@ -686,6 +688,56 @@ let () =
     ~finally:(fun () ->
       clear_sync_hooks ();
       Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ()))
+
+let () =
+  List.iter
+    (fun cursor ->
+       let requests = ref [] in
+       Sync_deps.fetch_json :=
+         Some
+           (fun url ?meth:_ ?headers:_ ?body:_ ?response_schema:_
+                ?error_schema:_ () ->
+              requests := url :: !requests;
+              Db_worker_effect.pure
+                (Wire.Map
+                   [ kw "t", cursor
+                   ; kw "url", Wire.String "https://sync.example.test/snapshot" ]));
+       Sync_deps.http_send_stream :=
+         Some (fun _req on_response ->
+           on_response 200 [] (fun () -> Db_worker_effect.pure None));
+       Fun.protect
+         (fun () ->
+            set_sync_config "https://sync.example.test";
+            set_auth_token ();
+            let result = await (Sync_download.download_graph_by_id "repo" "graph-1" false) in
+            check "download uses snapshot journal position without pull"
+              (wire_get "remote-tx" result = Some cursor
+               && List.rev !requests = [ "https://sync.example.test/sync/graph-1/snapshot/download" ]))
+         ~finally:clear_sync_hooks)
+    [ Wire.Int 0; Wire.Int 42 ];
+  List.iter
+    (fun cursor ->
+       let stream_started = ref false in
+       Sync_deps.fetch_json :=
+         Some
+           (fun _url ?meth:_ ?headers:_ ?body:_ ?response_schema:_
+                ?error_schema:_ () ->
+              Db_worker_effect.pure
+                (Wire.Map
+                   [ kw "t", cursor
+                   ; kw "url", Wire.String "https://sync.example.test/snapshot" ]));
+       Sync_deps.http_send_stream :=
+         Some (fun _req on_response ->
+           stream_started := true;
+           on_response 200 [] (fun () -> Db_worker_effect.pure None));
+       Fun.protect
+         (fun () ->
+            set_sync_config "https://sync.example.test";
+            set_auth_token ();
+            ignore (await_error (Sync_download.download_graph_by_id "repo" "graph-1" false));
+            check "invalid snapshot position fails before streaming" (not !stream_started))
+         ~finally:clear_sync_hooks)
+    [ Wire.Nil; Wire.Int (-1); Wire.Float 1.5; Wire.String "42" ]
 
 (* ---- assets_test.cljs ---- *)
 

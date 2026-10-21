@@ -65,8 +65,8 @@ let parse_non_string_property_value (v : string) : value option =
   else if v = "false" then Some (Bool false)
   else if Regexp.test (Regexp.compile "^\\d+$") v then
     match Int64.of_string_opt v with
-    | Some n -> Some (Int64 n)
-    | None -> None
+    | Some n when Int64.to_string n = v -> Some (Int64 n)
+    | _ -> None
   else None
 
 (* text/get-ref-from-ast *)

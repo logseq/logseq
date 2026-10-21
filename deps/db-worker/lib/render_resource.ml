@@ -1519,7 +1519,7 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
       let present k = List.mem_assoc (Wire.keyword k) kvs in
       let opt_ok k check = (not (present k)) || check (get k) in
       let ok =
-        Option.is_some allowed && keys_ok
+        Option.is_some allowed && keys_ok && present "query"
         && opt_ok "current-page-title" (function
              | Some (Wire.String s) -> Unicode.trim s <> ""
              | _ -> false)
@@ -1864,6 +1864,7 @@ let query_result_rows db (rows : query_result list list)
     rows_wire
 
 let render_query db key runtime =
+  try
   let spec_wire = List.nth key 1 in
   let kind_str, spec_kvs = require_query_spec spec_wire in
   let query_forms =
@@ -1892,7 +1893,6 @@ let render_query db key runtime =
            fail "Full-text query resource requires repository" []
        | _ -> ())
    | _ -> ());
-  try
     let watch =
       query_watch_keys db spec_kvs kind_str query_forms rules_forms
         query_string
@@ -1911,7 +1911,7 @@ let render_query db key runtime =
        resources alive; watch-all re-evaluates once the query is fixed. *)
     let msg, data = query_exn_message_data e in
     Worker_log.error "renderer-query-failed"
-      [ ("kind", kind_str); ("error", msg) ];
+      [ ("error", msg) ];
     (Watch_all, query_error_value ?data msg))
 
 (* ==================== view.cljs ==================== *)
@@ -2620,8 +2620,8 @@ let resource_value db (resource_key : Wire.t list) (runtime : runtime) : render_
   | Some _ ->
       fail "Renderer resource keys cannot contain functions"
         [ (Wire.keyword "resource-key", Wire.Array resource_key) ]
-  | None -> (
-      match resource_key with
+  | None ->
+      let render () = match resource_key with
       | Wire.Keyword kind :: _ -> (
           match List.assoc_opt kind resource_renderers with
           | Some renderer ->
@@ -2634,7 +2634,20 @@ let resource_value db (resource_key : Wire.t list) (runtime : runtime) : render_
                 [ (Wire.keyword "resource-key", Wire.Array resource_key) ])
       | _ ->
           fail "Unknown renderer resource key"
-            [ (Wire.keyword "resource-key", Wire.Array resource_key) ])
+            [ (Wire.keyword "resource-key", Wire.Array resource_key) ] in
+      match resource_key with
+      | Wire.Keyword (("query" | "view-data") as kind) :: _ ->
+          (try render () with error ->
+             let message, data = query_exn_message_data error in
+             Worker_log.error ("renderer-" ^ kind ^ "-failed") ["error", message];
+             let value = if kind = "query" then query_error_value ?data message
+               else Wire.Map
+                 [Wire.keyword "partition", Wire.keyword "flat";
+                  Wire.keyword "count", Wire.Int 0;
+                  Wire.keyword "rows", Wire.Array [];
+                  Wire.keyword "error", Wire.Map [Wire.keyword "message", Wire.String message]] in
+             no_slots Watch_all value)
+      | _ -> render ()
 
 type resource_entry =
   { watch_keys : Wire.t list

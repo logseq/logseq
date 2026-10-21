@@ -705,7 +705,7 @@
                 block)
         title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
                 remove-properties?
-                (gp-property/remove-properties (get block :format :markdown))
+                (#(gp-property/remove-properties (get block :format :markdown) % (:marker block)))
                 remove-logbook?
                 (gp-property/remove-logbook)
                 remove-deadline-scheduled?

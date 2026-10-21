@@ -62,7 +62,9 @@ let test_remove_properties () =
     (fun i (format, input, expected) ->
       check (Printf.sprintf "invalid case %d" i)
         (Gp_property.remove_properties format input = expected))
-    [ "markdown", "hello\nnice\nfoo:: bar", "hello\nnice\nfoo:: bar"
+    [ "markdown", "```clojure\nx:: y\n```\nfoo:: bar", "```clojure\nx:: y\n```"
+    ; "markdown", "$$\nx + y\n$$\nfoo:: bar", "$$\nx + y\n$$"
+    ; "markdown", "hello\nnice\nfoo:: bar", "hello\nnice\nfoo:: bar"
     ; "markdown", "hello\nnice\nfoo:: bar\ntest", "hello\nnice\nfoo:: bar\ntest"
     ; "markdown", "** hello\nx:: y\n\na:: b\n", "** hello\n\na:: b" ]
 

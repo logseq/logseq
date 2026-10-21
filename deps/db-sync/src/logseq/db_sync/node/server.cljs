@@ -25,6 +25,7 @@
 
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        admin-token (some-> js/process .-env (aget "DB_SYNC_ADMIN_TOKEN"))
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
@@ -37,6 +38,8 @@
               (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
     (when (some? allow-unverified-jwt-claims)
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    (when (seq admin-token)
+      (aset env "DB_SYNC_ADMIN_TOKEN" admin-token))
     env))
 
 (defn- request-origin-opts
@@ -126,6 +129,7 @@
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))

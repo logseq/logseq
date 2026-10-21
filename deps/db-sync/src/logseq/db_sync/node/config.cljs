@@ -32,7 +32,9 @@
                   :storage-driver "sqlite"
                   :assets-driver "filesystem"
                   :log-level "info"}
-        merged (merge defaults (config-from-env) overrides)
+        ;; an unset env var is nil in config-from-env: drop it, or merge
+        ;; replaces the default with nil (no DB_SYNC_PORT gave a random port)
+        merged (merge defaults (into {} (remove (comp nil? val)) (config-from-env)) overrides)
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
     (when-not (#{"sqlite"} storage-driver)

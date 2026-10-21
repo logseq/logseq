@@ -290,7 +290,10 @@ let schema_version_updates : (string * update_spec) list =
   ; "65.34",
     update
       ~fix:("missing-internal-page-parent-orders",
-            missing_internal_page_parent_orders) () ]
+            missing_internal_page_parent_orders) ()
+  ; "65.35", update ~delete_properties:
+      [ "block/scheduled"; "block/deadline"; "block/marker"; "block/priority"
+      ; "block/properties-text-values"; "block/invalid-properties" ] () ]
 
 (* cljs (sqlite-create-graph/build-db-initial-data config-content) restricted
    to what ensure-built-in-data-exists! consumes: the seed entity maps

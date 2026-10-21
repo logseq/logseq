@@ -132,7 +132,8 @@ type import_state =
   ; block_properties_text_values : (string, BM.t) Hashtbl.t
   ; assets : (string, BM.t) Hashtbl.t
   ; alias_owners : (string, string) Hashtbl.t
-  ; placeholder_ref_uuids : (string, unit) Hashtbl.t }
+  ; placeholder_ref_uuids : (string, unit) Hashtbl.t
+  ; embed_child_uuids : (string, unit) Hashtbl.t }
 
 let new_import_state () : import_state =
   { ignored_properties = ref []
@@ -149,7 +150,8 @@ let new_import_state () : import_state =
   ; block_properties_text_values = Hashtbl.create 511
   ; assets = Hashtbl.create 255
   ; alias_owners = Hashtbl.create 63
-  ; placeholder_ref_uuids = Hashtbl.create 63 }
+  ; placeholder_ref_uuids = Hashtbl.create 63
+  ; embed_child_uuids = Hashtbl.create 63 }
 
 type user_options =
   { tag_classes : string list
@@ -807,12 +809,7 @@ let convert_tags_to_classes (tags : value list) (db : db)
             per_file_state user_options all_idents)
       tags
   in
-  if
-    List.exists
-      (fun t -> getv (bm_of_value (Some t)) "block/namespace" <> None)
-      tags
-  then (match tags' with [] -> [] | child :: _ -> [ child ])
-  else tags'
+  tags'
 
 (* update-page-tags *)
 let update_page_tags (block : BM.t) (db : db) (user_options : user_options)
@@ -2152,8 +2149,8 @@ let pre_update_properties (properties : (attr * value) list)
             Some
               ( prop
               , match parse_double s with
-                | Some f -> f
-                | None -> v )
+                | Some f when Common_util.js_string_of_float (match f with Float f -> f | Int64 n -> Int64.to_float n | _ -> nan) = Unicode.trim s -> f
+                | _ -> v )
           else None
         | _ -> Some (prop, v)
       else Some (prop, v))
@@ -3999,7 +3996,7 @@ let handle_math (block : BM.t) : BM.t =
       BM.merge block
         [ "block/title", String math_content
         ; "logseq.property.node/display-type", kw "math"
-        ; "block/tags", List [ kw "logseq.class/Math-block" ] ]
+        ; "block/tags", List (collv (getv block "block/tags") @ [ kw "logseq.class/Math-block" ]) ]
     else block
   | None -> block
 
@@ -4065,53 +4062,82 @@ let build_code_snippet_child_blocks (parent_block : BM.t)
       | None -> b)
     code_segs
 
+type embed_span = { es_start : int; es_end : int; es_node : value }
+
+let embed_macro_spans title format =
+  let config = Gp_mldoc.default_config_map format
+    |> fun fields -> Json.stringify (Gp_mldoc.wire_obj (("inline_type_with_pos", Wire.Bool true) :: fields)) in
+  let parse raw = Common_util.json_clj_of_wire (Json.parse raw) |> coll_items in
+  parse (Gp_mldoc.parse_json ~content:title ~config)
+  |> List.concat_map (fun block ->
+    match coll_items block with
+    | [node; positions] when not (List.mem (match coll_items node with String kind :: _ -> kind | _ -> "") ["Src"; "Example"]) ->
+        let positions = bm_of_value (Some positions) in
+        let start = Option.get (get_int positions "start_pos") in
+        let stop = Option.get (get_int positions "end_pos") in
+        let source = Gp_utf8.substring title start ~end_:stop () in
+        parse (Gp_mldoc.inline_parse_json ~text:source ~config)
+        |> List.filter_map (fun inline ->
+          match coll_items inline with
+          | [node; positions] ->
+              (match coll_items node with
+               | String "Macro" :: data :: _ when Clj_value.map_get_str data "name" = Some "embed" ->
+                   let positions = bm_of_value (Some positions) in
+                   Some {es_start = start + Option.get (get_int positions "start_pos");
+                         es_end = start + Option.get (get_int positions "end_pos"); es_node = node}
+               | _ -> None)
+          | _ -> None)
+    | _ -> [])
+
+let embed_target_uuid block page_names_to_uuids node options =
+  let data = match coll_items node with _ :: data :: _ -> data | _ -> Nil in
+  let args = Clj_value.map_get data "arguments" |> coll_items in
+  let arg = match args with String arg :: _ -> arg | _ -> "" in
+  if Page_ref.is_page_ref arg then
+    let name = Option.get (Gp_text.get_page_name arg) in
+    if Common_util.uuid_string name then Some name
+    else (try Some (get_page_uuid page_names_to_uuids (Common_util.page_name_sanity_lc name) ["block", mv_of_bm block])
+      with _ ->
+        options.log_fn [kw "missing-embed-page"; strv "Ignore embed of a page that is not found"; kw "page-name"; strv name]; None)
+  else if Block_ref.block_ref arg then Block_ref.get_block_ref_id arg
+  else (options.log_fn [kw "invalid-embed-arguments"; strv "Ignore embed because of invalid arguments"; kw "args"; vec args]; None)
+
 let handle_embeds (block : BM.t)
     (page_names_to_uuids : (string, string) Hashtbl.t) (walked : walked_ast)
     (options : options) : BM.t =
-  match !(walked.wa_embeds) with
-  | [] -> block
-  | embed_node :: _ ->
-    let args =
-      match nth1 embed_node with
-      | Some m ->
-        coll_items (Option.value ~default:Nil (Clj_value.map_get_opt m "arguments"))
-      | None -> []
-    in
-    let first_arg =
-      match args with a :: _ -> str_opt_of a | [] -> None
-    in
-    let first_arg_s = Option.value ~default:"" first_arg in
-    if Page_ref.is_page_ref first_arg_s then
-      let page_uuid =
-        get_page_uuid page_names_to_uuids
-          (match
-             Option.bind (match args with h :: _ -> Some h | [] -> None)
-               (fun v -> str_opt_of v)
-             |> Fun.flip Option.bind Gp_text.get_page_name
-             |> Option.map Common_util.page_name_sanity_lc
-           with
-           | Some n -> n
-           | _ -> "")
-          [ "block", mv_of_bm block ]
-      in
-      BM.merge block
-        [ "block/title", String ""
-        ; "block/link", vec [ kw "block/uuid"; uuidv page_uuid ] ]
-    else if Block_ref.block_ref first_arg_s then
-      (match Block_ref.get_block_ref_id first_arg_s with
-       | Some u ->
-         BM.merge block
-           [ "block/title", String ""
-           ; "block/link", vec [ kw "block/uuid"; Uuid u ] ]
-       | None -> block)
-    else begin
-      options.log_fn
-        [ kw "invalid-embed-arguments"
-        ; strv "Ignore embed because of invalid arguments"
-        ; kw "args"
-        ; vec args ];
-      block
-    end
+  if !(walked.wa_embeds) = [] then block else
+    let title = Option.get (get_string block "block/title") in
+    let format = Option.value ~default:"markdown" (get_string block "block/format") in
+    let spans = embed_macro_spans title format |> List.filter_map (fun span ->
+      Option.map (fun uuid -> span, vec [kw "block/uuid"; uuidv uuid])
+        (embed_target_uuid block page_names_to_uuids span.es_node options)) in
+    if spans = [] then block else
+      let text = Buffer.create (String.length title) in
+      let offset = List.fold_left (fun offset (span, _) ->
+        let stop = if span.es_start > offset && span.es_end < String.length title
+          && title.[span.es_start - 1] = ' ' && title.[span.es_end] = ' '
+          then span.es_start - 1 else span.es_start in
+        Buffer.add_substring text title offset (stop - offset); span.es_end) 0 spans in
+      Buffer.add_substring text title offset (String.length title - offset);
+      let text = Unicode.trim (Buffer.contents text) in
+      let body = Common_util.regex_replace_first (Regexp.compile "^#+(?:\\s+|$)") ~replacement:"" text in
+      let body = match get_string block "block/marker" with
+        | Some marker when Common_util.str_starts_with body marker ->
+            Unicode.trim (String.sub body (String.length marker) (String.length body - String.length marker))
+        | _ -> body in
+      if body = "" && List.length spans = 1 then
+        BM.merge block ["block/title", strv ""; "block/link", snd (List.hd spans)]
+      else BM.merge block ["block/title", strv (if body = "" then "" else text);
+                            "block.temp/embed-links", Vector (List.map snd spans)]
+
+let build_embed_child_block parent link =
+  with_timestamps
+    ["block/uuid", uuidv (squuid ()); "block/title", strv "";
+     "block/link", link;
+     "block/parent", vec [kw "block/uuid"; uuidv (Option.get (get_uuid parent "block/uuid"))];
+     "block/page", Option.get (getv parent "block/page");
+     "block/order", strv (Db_order.gen_key_from_max ())]
+
 
 let dissoc_nil_block_refs (block : BM.t) : BM.t =
   match getv block "block/refs" with
@@ -4150,7 +4176,7 @@ let handle_code_blocks (block : BM.t) (options : options) : BM.t * BM.t list =
       let b =
         BM.merge block
           [ "block/title", String seg.cs_text
-          ; "block/tags", List [ kw "logseq.class/Code-block" ]
+          ; "block/tags", List (collv (getv block "block/tags") @ [ kw "logseq.class/Code-block" ])
           ; "logseq.property.node/display-type", kw "code" ]
       in
       let b =
@@ -4219,15 +4245,18 @@ let complete_block_tx_data (db : db) (block_src : BM.t)
     |> (fun b ->
           handle_embeds b per_file_state.pfs_page_names_to_uuids walked options)
     |> (fun b -> handle_quotes b options)
-    |> handle_math
     |> (fun b -> update_block_marker b db options)
+    |> handle_math
     |> (fun b -> update_block_priority b options)
     |> update_block_heading
     |> (fun b -> add_missing_timestamps_opts options b)
     |> fun b -> BM.dissoc b [ "block/format"; "block.temp/ast-blocks" ]
   in
-  let final_block, code_children = handle_code_blocks block' options in
-  properties_tx @ asset_blocks_tx @ [ final_block ] @ code_children
+  let embed_links = collv (getv block' "block.temp/embed-links") in
+  let final_block, code_children = handle_code_blocks (BM.dissoc block' ["block.temp/embed-links"]) options in
+  let embed_children = List.map (build_embed_child_block final_block) embed_links in
+  List.iter (fun child -> Hashtbl.replace options.import_state.embed_child_uuids (Option.get (get_uuid child "block/uuid")) ()) embed_children;
+  properties_tx @ asset_blocks_tx @ [ final_block ] @ embed_children @ code_children
 
 let build_block_tx_sync (db : db) (block : BM.t)
     (pre_blocks : (string, unit) Hashtbl.t) (per_file_state : per_file_state)
@@ -5219,16 +5248,22 @@ let split_pages_and_properties_tx (db : db) (pages_tx : BM.t list)
     (old_properties : string list)
     (existing_pages : (string, string) Hashtbl.t)
     (import_state : import_state)
-    (upstream_properties : (string, BM.t) Hashtbl.t) : split_result =
+    (upstream_properties : (string, BM.t) Hashtbl.t)
+    (new_class_uuids : (string, unit) Hashtbl.t) : split_result =
   let new_properties =
     Hashtbl.fold
       (fun k _ acc ->
         if List.mem k old_properties then acc else k :: acc)
       import_state.property_schemas []
   in
+  let new_class_names = Hashtbl.create 7 in
+  List.iter (fun page -> match get_uuid page "block/uuid", get_string page "block/name" with
+    | Some uuid, Some name when Hashtbl.mem new_class_uuids uuid -> Hashtbl.replace new_class_names name ()
+    | _ -> ()) pages_tx;
   let class_occupied_property_names =
     List.filter
       (fun kw_name ->
+        Hashtbl.mem new_class_names kw_name ||
         match Hashtbl.find_opt existing_pages kw_name with
         | Some existing_uuid ->
           existing_named_page_is_class import_state existing_uuid
@@ -5404,7 +5439,7 @@ let get_block_pattern (format : string) : string =
    flag, so ^ becomes (?:^|\n). *)
 let import_outline_only_re =
   Regexp.compile ~caseless:true
-    "```|\\{\\{|#\\+BEGIN_|:LOGBOOK:|(?:^|\\n)\\s*(?:(?:[-*+]|\\d+\\.)\\s+)?>|\\]\\(|(?:^|\\n)\\s*-\\s+\\S+::"
+    "```|\\$\\$|\\{\\{|#\\+BEGIN_|:LOGBOOK:|(?:^|\\n)\\s*(?:(?:[-*+]|\\d+\\.)\\s+)?>|\\]\\(|(?:^|\\n)\\s*-\\s+\\S+::|(?:^|\\n)\\s*(?:[-*+]\\s+)?(?:-{3,}|\\*{3,}|_{3,})\\s*(?:$|\\n)"
 
 let import_parse_outline_only (format : string) (content : string) : bool =
   (format = "markdown" || format = "md")
@@ -5789,7 +5824,7 @@ let track_placeholder_ref_uuids (import_state : import_state)
           | List [ Keyword "block/uuid"; (Uuid u | String u) ] ->
             Hashtbl.replace import_state.placeholder_ref_uuids u ()
           | _ -> ())
-        (collv (getv b "block/refs")))
+        (collv (getv b "block/refs") @ (match getv b "block/link" with Some link -> [link] | None -> [])))
     blocks_tx
 
 (* cljs file-graph-tx-options *)
@@ -5882,6 +5917,8 @@ let add_file_to_db_graph (conn : conn) (file : string) (content : string)
      let split =
        split_pages_and_properties_tx db pt.pt_pages_tx old_properties
          pt.pt_existing_pages options.import_state tx_options.upstream_properties
+         (let uuids = Hashtbl.create 7 in
+          List.iter (fun cls -> Option.iter (fun uuid -> Hashtbl.replace uuids uuid ()) (get_uuid cls "block/uuid")) !(tx_options.classes_tx); uuids)
      in
      log_phase_ms options "split" split_start [ ("file", String file) ];
      let tx_meta = imported_tx_meta (Some file) in
@@ -6136,7 +6173,7 @@ let export_doc_files (conn : conn) (raw_doc_files : BM.t list)
    | None -> ());
   import_progress options [ ("phase", kw "cleanup-missing-block-refs") ];
   let cleanup_report =
-    Gp_exporter_finalize.cleanup_missing_block_refs conn
+    Gp_exporter_finalize.cleanup_missing_block_refs ~embed_child_uuids:options.import_state.embed_child_uuids conn
       (Hashtbl.fold (fun u () acc -> u :: acc)
          options.import_state.placeholder_ref_uuids
          [])

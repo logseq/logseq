@@ -638,32 +638,24 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
               ; Wire.Keyword "graph-uuid", Wire.String graph_id
               ; Wire.Keyword "message"
               , Wire.String "Preparing graph snapshot download" ]);
-         stage := "fetch-pull";
-         (* only :t is used; skipping the tx log keeps large graphs from
-            pulling every tx body just to read remote-tx *)
-         Sync_util.fetch_json
-           (base ^ "/sync/" ^ graph_id ^ "/pull?since=9007199254740991")
-           ~response_schema:"sync/pull" ()
-         >>= fun pull_resp ->
-         (* cljs (when-not (integer? remote-tx) throw) — non-integer
-            :t (float, string, nil) is a hard failure *)
-         let remote_tx =
-           match Wire.get "t" pull_resp with
-           | Some (Wire.Int t) -> t
-           | Some (Wire.Int64 t) -> Int64.to_int t
-           | v ->
-               raise
-                 (Sync_util.ex_info
-                    "non-integer remote-tx when downloading graph"
-                    [ Wire.Keyword "repo", Wire.String repo
-                    ; Wire.Keyword "remote-tx"
-                    , Option.value v ~default:Wire.Nil ])
-         in
          stage := "fetch-snapshot-download";
          Sync_util.fetch_json
            (base ^ "/sync/" ^ graph_id ^ "/snapshot/download")
            ~response_schema:"sync/snapshot-download" ()
          >>= fun snapshot_resp ->
+         let remote_tx =
+           match Wire.get "t" snapshot_resp with
+           | Some (Wire.Int t) when t >= 0 -> t
+           | Some (Wire.Int64 t) when t >= 0L && t <= Int64.of_int max_int ->
+               Int64.to_int t
+           | v ->
+               raise
+                 (Sync_util.ex_info
+                    "invalid snapshot journal position when downloading graph"
+                    [ Wire.Keyword "repo", Wire.String repo
+                    ; Wire.Keyword "remote-tx"
+                    , Option.value v ~default:Wire.Nil ])
+         in
          (if graph_e2ee then begin
             stage := "prepare-e2ee";
             Sync_deps.require "fetch_graph_aes_key_for_download"

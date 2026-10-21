@@ -365,19 +365,12 @@
   (and (qualified-keyword? k) (db-class/logseq-class? k)))
 
 (defn- convert-tags-to-classes
-  "Handles converting tags to classes and any post processing of it e.g.
-  cleaning :block/tags when a block is tagged with a namespace page"
+  "Converts tags to classes in input order, keeping only non-nil results."
   [tags db per-file-state user-options all-idents]
-  ;; vec needed is needed so that tags are built in order
-  (let [tags' (vec (keep #(if (logseq-class-ident? %)
-                            %
-                            (convert-tag-to-class db % per-file-state user-options all-idents))
-                         tags))]
-    ;; Only associate leaf child tag with block as other tags are only used to define tag parents.
-    ;; This assumes that extract/extract returns :block/tags with their leaf child first and then its parents
-    (if-let [child-tag (and (some :block/namespace tags) (first tags'))]
-      [child-tag]
-      tags')))
+  (vec (keep #(if (logseq-class-ident? %)
+                %
+                (convert-tag-to-class db % per-file-state user-options all-idents))
+             tags)))
 
 (defn- update-page-tags
   [block db user-options per-file-state all-idents]
@@ -1125,8 +1118,10 @@
                      (when (or preserve-empty-properties?
                                (not (string/blank? val)))
                        [prop
-                       ;; handle float strings b/c graph-parser doesn't
-                        (or (parse-double val) val)])
+                       ;; handle float strings b/c graph-parser doesn't; only when the
+                       ;; number keeps the text (`0000.00000` or `2401.10000` stay text)
+                        (let [n (parse-double val)]
+                          (if (and n (= (str n) (string/trim val))) n val))])
                      [prop val])
                    [prop val])))
          (into {}))))
@@ -2120,10 +2115,11 @@
              ;; ensure there's no nested $$ pair (i.e. not two separate inline formulas)
              (not (string/includes? (subs title 2 (- (count title) 2)) "$$")))
       (let [math-content (string/trim (subs title 2 (- (count title) 2)))]
-        (merge block
-               {:block/title math-content
-                :logseq.property.node/display-type :math
-                :block/tags [:logseq.class/Math-block]}))
+        ;; the block's other tags (a task's Task, user tags) are kept
+        (-> block
+            (merge {:block/title math-content
+                    :logseq.property.node/display-type :math})
+            (update :block/tags (fnil conj []) :logseq.class/Math-block)))
       block)))
 
 (defn- split-title-by-code-fences
@@ -2180,29 +2176,104 @@
             (assoc :logseq.property.code/lang lang)))
         code-segs))
 
-(defn- handle-embeds
-  "If a block contains page or block embeds, converts block to a :block/link based embed"
-  [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
-  (if-let [embed-node (first embeds)]
+(defn- embed-macro-spans
+  "Locate embed macros in UTF-8 source, excluding code blocks and code spans."
+  [title format]
+  (let [encoded (utf8/encode title)
+        config (js/JSON.stringify
+                (clj->js (assoc (gp-mldoc/default-config-map format) :inline_type_with_pos true)))
+        ast (common-util/json->clj (gp-mldoc/parse-json title config))]
+    (into []
+          (mapcat
+           (fn [[[kind] {:keys [start_pos end_pos]}]]
+             (when-not (contains? #{"Src" "Example"} kind)
+               (let [source (utf8/substring encoded start_pos end_pos)
+                     inlines (common-util/json->clj (gp-mldoc/inline-parse-json source config))]
+                 (keep (fn [[node positions]]
+                         (when (and (= "Macro" (first node))
+                                    (= "embed" (:name (second node))))
+                           {:node node
+                            :start (+ start_pos (:start_pos positions))
+                            :end (+ start_pos (:end_pos positions))}))
+                       inlines)))))
+          ast)))
+
+(defn- title-without-embed
+  "Remove embed source spans while leaving task and heading conversion to their handlers."
+  [title marker spans]
+  (let [encoded (utf8/encode title)
+        {:keys [offset fragments]}
+        (reduce (fn [{:keys [offset fragments]} {:keys [start end]}]
+                  (let [fragment-end (if (and (> start offset)
+                                             (= 32 (aget encoded (dec start)))
+                                             (= 32 (aget encoded end)))
+                                       (dec start)
+                                       start)]
+                    {:offset end
+                     :fragments (conj fragments (utf8/substring encoded offset fragment-end))}))
+                {:offset 0 :fragments []}
+                spans)
+        text (string/trim (apply str (conj fragments (utf8/substring encoded offset))))
+        body (string/replace text #"^#+(?:\s+|$)" "")
+        body-without-marker (if (and marker (string/starts-with? body marker))
+                              (string/trim (subs body (count marker)))
+                              body)]
+    (when-not (string/blank? body-without-marker) text)))
+
+(defn- embed-target-uuid
+  [block page-names-to-uuids embed-node log-fn]
+  (let [arg (str (first (:arguments (second embed-node))))]
     (cond
-      (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
-      (let [page-uuid (get-page-uuid page-names-to-uuids
-                                     (some-> (text/get-page-name (first (:arguments (second embed-node))))
-                                             common-util/page-name-sanity-lc)
-                                     {:block block})]
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid page-uuid]}))
-      (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
-      (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid block-uuid]}))
+      (page-ref/page-ref? arg)
+      (let [page-name (text/get-page-name arg)]
+        (if (common-util/uuid-string? page-name)
+          (uuid page-name)
+          (or (try
+                (get-page-uuid page-names-to-uuids
+                               (common-util/page-name-sanity-lc page-name)
+                               {:block block})
+                (catch :default _ nil))
+              (log-fn :missing-embed-page "Ignore embed of a page that is not found" :page-name page-name))))
+
+      (block-ref/block-ref? arg)
+      (uuid (block-ref/get-block-ref-id arg))
+
       :else
-      (do
-        (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
-        block))
+      (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments"
+              :args (:arguments (second embed-node))))))
+
+(defn- handle-embeds
+  "Convert a single standalone embed to a link; keep other embeds as ordered child blocks."
+  [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
+  (if (seq embeds)
+    (let [spans (into []
+                      (keep (fn [{:keys [node] :as span}]
+                              (let [target (embed-target-uuid block page-names-to-uuids node log-fn)]
+                                (when (uuid? target)
+                                  (assoc span :link [:block/uuid target])))))
+                      (embed-macro-spans (:block/title block) (:block/format block)))
+          text (title-without-embed (:block/title block) (:block/marker block) spans)]
+      (cond
+        (empty? spans)
+        block
+
+        (and (nil? text) (= 1 (count spans)))
+        (assoc block :block/title "" :block/link (:link (first spans)))
+
+        :else
+        (assoc block :block/title (or text "") :block.temp/embed-links (mapv :link spans))))
     block))
+
+(defn- build-embed-child-block
+  "The embed of a block that also has text, as its child block"
+  [parent-block link]
+  (sqlite-util/block-with-timestamps
+   {:block/uuid (d/squuid)
+    :block/title ""
+    :block/link link
+    :block/parent [:block/uuid (:block/uuid parent-block)]
+    :block/page (:block/page parent-block)
+    :block/order (db-order/gen-key)}))
 
 (defn- dissoc-nil-block-refs
   [block]
@@ -2240,10 +2311,11 @@
             (cond
               pure-single-code?
               (let [{:keys [text lang]} (first code-segs)]
-                [(cond-> (assoc block'
-                                :block/title text
-                                :block/tags [:logseq.class/Code-block]
-                                :logseq.property.node/display-type :code)
+                [(cond-> (-> block'
+                             (assoc :block/title text
+                                    :logseq.property.node/display-type :code)
+                             ;; the block's other tags (a task's Task, user tags) are kept
+                             (update :block/tags (fnil conj []) :logseq.class/Code-block))
                    lang (assoc :logseq.property.code/lang lang))
                  []])
               has-mixed-content?
@@ -2285,14 +2357,21 @@
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                    (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                    (handle-quotes (select-keys options [:log-fn]))
-                   (handle-math)
                    (update-block-marker db options)
+                   ;; after the task marker is removed: `TODO $$ ... $$` is a math block
+                   (handle-math)
                    (update-block-priority options)
                    (update-block-heading)
                    (add-missing-timestamps options)
                    (dissoc :block/format :block.temp/ast-blocks))
-        [final-block code-children-tx] (handle-code-blocks block' options)]
-    (concat properties-tx asset-blocks-tx [final-block] code-children-tx)))
+        embed-links (:block.temp/embed-links block')
+        [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-links) options)
+        embed-children (mapv #(build-embed-child-block final-block %) embed-links)]
+    (when (seq embed-children)
+      (swap! (:embed-child-uuids import-state) into (map :block/uuid embed-children)))
+    (concat properties-tx asset-blocks-tx [final-block]
+            embed-children
+            code-children-tx)))
 
 (defn- import-progress!
   [options m]
@@ -2789,7 +2868,9 @@
    ;; Populated as files are imported and used to drop conflicting alias declarations.
    :alias-owners (atom {})
    ;; Block uuids referenced during import; used for targeted missing-ref cleanup.
-   :placeholder-ref-uuids (atom #{})})
+   :placeholder-ref-uuids (atom #{})
+   ;; Generated embed children can be removed when their targets remain unresolved.
+   :embed-child-uuids (atom #{})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
@@ -2831,15 +2912,19 @@
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
   pages that are now properties. Existing classes with the same title stay
-  classes; a distinct property entity is created instead."
-  [pages-tx old-properties existing-pages import-state upstream-properties]
+  classes, as do pages that become classes in this file (new-class-uuids); a
+  distinct property entity is created instead."
+  [pages-tx old-properties existing-pages import-state upstream-properties new-class-uuids]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
+        new-class-page-names (set (keep #(when (contains? new-class-uuids (:block/uuid %)) (:block/name %))
+                                        pages-tx))
         class-occupied-property-names
         (into #{}
               (keep (fn [kw-name]
-                      (when-let [existing-uuid (get existing-pages (name kw-name))]
-                        (when (existing-named-page-is-class? import-state existing-uuid)
-                          kw-name))))
+                      (when (or (contains? new-class-page-names (name kw-name))
+                                (when-let [existing-uuid (get existing-pages (name kw-name))]
+                                  (existing-named-page-is-class? import-state existing-uuid)))
+                        kw-name)))
               new-properties)
         page-tx-for-new-property?
         (fn [page]
@@ -2945,7 +3030,9 @@
    Render/editor never call this path."
   [format content]
   (and (contains? #{:markdown :md} format)
-       (not (re-find #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::" content))))
+       ;; an outline parse drops a block's body: a display math block (`$$`) loses its
+       ;; formula, a thematic break (`---`) its text
+       (not (re-find #"(?im)```|\$\$|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::|^\s*(?:[-*+]\s+)?(?:-{3,}|\*{3,}|_{3,})\s*$" content))))
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
@@ -3053,7 +3140,8 @@
 (defn- track-placeholder-ref-uuids!
   [{:keys [placeholder-ref-uuids] :as _import-state} blocks-tx]
   (when-let [ref-uuids (seq (into #{}
-                                  (comp (mapcat :block/refs)
+                                  (comp (mapcat #(cond-> (vec (:block/refs %))
+                                                  (:block/link %) (conj (:block/link %))))
                                         (filter block-uuid-ref?)
                                         (map second))
                                   blocks-tx))]
@@ -3157,7 +3245,8 @@
           _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
           split-start (when log-fn (import-profile/now-ms))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
-          (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
+          (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options)
+                                         (set (keep :block/uuid @(:classes-tx tx-options))))
           _ (log-phase-ms! log-fn :split split-start {:file file})
           tx-meta {::imported-data? true ::path file ::new-graph? true}
           _ (import-progress! options {:phase :property-transact :file file})

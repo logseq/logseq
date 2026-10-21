@@ -2055,12 +2055,55 @@ let test_class_objects_groups_by_number_sorts_numerically () =
   int_list_eq "desc numeric" desc_groups [ 10; 2; 1 ];
   int_list_eq "asc numeric" asc_groups [ 1; 2; 10 ]
 
+let test_missing_and_placeholder_sort_values_stay_last () =
+  let conn = topic_conn ~properties:number_prop
+    (List.map (fun (title, properties) ->
+      {page = {default_page with pg_title = Some title; pg_tags = ["Topic"]; pg_properties = properties}; blocks = []})
+      ["Early", ["user.property/score", Int64 1];
+       "Late", ["user.property/score", Int64 3]; "Cleared", []; "Missing", []]) in
+  let cleared = Option.get (Ldb.get_page (db_of conn) (String "cleared")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/score :logseq.property/empty-placeholder]]" cleared.id));
+  let db = db_of conn in
+  let class_id = ident_eid db "user.class/Topic" in
+  let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
+  List.iter (fun asc ->
+    let entities = List.map (fun title -> Option.get (Ldb.get_page db (String title))) ["Early"; "Late"; "Cleared"; "Missing"] in
+    let sorted = Db_view.sort_entities db [Db_view.{s_id = "user.property/score"; s_asc = asc}; Db_view.{s_id = "block/title"; s_asc = true}] entities in
+    str_list_eq' "query rows keep cleared and missing last"
+      (List.filter_map (fun entity -> Ldb.string_value entity "block/title") sorted)
+      ((if asc then ["Early"; "Late"] else ["Late"; "Early"]) @ ["Cleared"; "Missing"]);
+    let result = Db_view.get_view_data db (Some view_id)
+      (opts ["view-feature-type", kw "class-objects"; "view-for-id", Wire.Int class_id;
+             "sorting", sorting ["user.property/score", asc; "block/title", true]]) in
+    str_list_eq' "cleared and missing remain last" (result_titles db result)
+      ((if asc then ["Early"; "Late"] else ["Late"; "Early"]) @ ["Cleared"; "Missing"])) [true; false]
+
+let test_unlinked_references_ignore_node_ids_and_match_aliases () =
+  let conn = create_conn () in
+  ignore (Datascript.transact_conn_string conn
+    "[{:db/id -1 :block/title \"aa\" :block/name \"aa\"}
+      {:block/title \"[[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]]\"}
+      {:block/title \"a[[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]]a\"}
+      {:block/title \"plain aa\"}
+      {:db/id -2 :block/title \"λόγος\" :block/name \"λόγος\" :block/alias -3}
+      {:db/id -3 :block/title \"Logos\" :block/name \"logos\"}
+      {:block/title \"Logos is a rational form of discourse\"}]");
+  let db = db_of conn in
+  List.iter (fun (page, expected) ->
+    let page = Option.get (Ldb.get_page db (String page)) in
+    let titles = Db_view.get_unlinked_references db page.id |> List.filter_map (fun e -> Ldb.string_value e "block/title") in
+    str_list_eq' "unlinked titles" titles [expected])
+    ["aa", "plain aa"; "λόγος", "Logos is a rational form of discourse"; "logos", "Logos is a rational form of discourse"]
+
 (* ---------- suite ---------- *)
 
 let () =
   Alcotest.run "db_view"
     [ ( "view_test"
-      , [ Alcotest.test_case
+      , [ Alcotest.test_case "missing-and-placeholder-sort-values-stay-last" `Quick test_missing_and_placeholder_sort_values_stay_last
+        ; Alcotest.test_case "unlinked-references-ignore-node-ids-and-match-aliases" `Quick test_unlinked_references_ignore_node_ids_and_match_aliases
+        ; Alcotest.test_case
             "get-view-data-journals-returns-ordered-compact-index-test" `Quick
             test_journals_ordered_compact_index
         ; Alcotest.test_case

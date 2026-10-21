@@ -571,32 +571,33 @@ let get_linked_references db (id : entity_id)
 
 (* reference/get-unlinked-references *)
 let get_unlinked_references db (id : entity_id) : entity list =
-  match Ldb.ent_of_id db id with
-  | Some e ->
-      (match Ldb.string_value e "block/title" with
-       | Some title when Unicode.trim title <> "" ->
-           let title_lc = Unicode.lowercase title in
-           List.of_seq (datoms db Avet ~a:"block/title" ())
-           |> List.filter_map (fun (d : datom) ->
-                  match d.v with
-                  | String s
-                    when d.e <> id
-                         && contains_substring
-                              (Unicode.lowercase s) title_lc ->
-                      Some d.e
-                  | _ -> None)
-           |> List.filter_map (fun eid ->
-                  match Ldb.ent_of_id db eid with
-                  | Some e ->
-                      if
-                        List.mem id (Ldb.ref_ids e "block/refs")
-                        || Option.is_some (Ldb.value e "block/link")
-                        || Ldb.built_in e
-                      then None
-                      else Some e
-                  | None -> None)
-       | _ -> [])
-  | None -> []
+  let page_ids = Int_set.of_list (id :: get_block_alias_ids db id) in
+  let titles = Int_set.elements page_ids
+    |> List.filter_map (fun id -> Option.bind (Ldb.ent_of_id db id) (fun e -> Ldb.string_value e "block/title"))
+    |> List.map Unicode.lowercase |> List.filter (fun s -> Unicode.trim s <> "")
+    |> List.sort_uniq String.compare in
+  let mentions text = List.exists (contains_substring text) titles in
+  let mentions_outside_refs text =
+    let text = Unicode.lowercase text in
+    let rec loop offset =
+      match Regexp.exec ~pos:offset Db_content.id_ref_re text with
+      | None -> mentions (String.sub text offset (String.length text - offset))
+      | Some matched ->
+          mentions (String.sub text offset (matched.offset - offset)) || loop matched.last in
+    mentions text && loop 0 in
+  if titles = [] then [] else
+    datoms db Avet ~a:"block/title" ()
+    |> Seq.filter_map (fun (d : datom) ->
+      match d.v with
+      | String title when not (Int_set.mem d.e page_ids) && mentions_outside_refs title ->
+          (match Ldb.ent_of_id db d.e with
+           | Some e when not (Ldb.built_in e)
+             && Ldb.value e "block/link" = None
+             && not (List.exists (fun id -> Int_set.mem id page_ids) (Ldb.ref_ids e "block/refs"))
+             && not (List.exists (fun id -> Int_set.mem id page_ids) (Ldb.ref_ids e "block/page")) -> Some e
+           | _ -> None)
+      | _ -> None)
+    |> List.of_seq
 
 (* ---------- common/view.cljs ---------- *)
 
@@ -1010,6 +1011,17 @@ let compare_scalars (a : value) (b : value) : int =
   | String x, String y -> String.compare x y
   | _ -> Option.value ~default:0 (js_cmp a b)
 
+(* view/compare-sort-values — nils last *)
+let compare_sort_values (a : value option) (b : value option) (asc_ : bool) : int =
+  let comparable = function Some v when valid_type_for_sort v -> Some v | _ -> None in
+  match comparable a, comparable b with
+  | None, None -> 0
+  | None, _ -> 1
+  | _, None -> -1
+  | Some va, Some vb ->
+      let c = compare_scalars va vb in
+      if asc_ then c else -c
+
 let js_num_str (f : float) : string =
   if Float.is_integer f && Float.abs f < 1e21 then Printf.sprintf "%.0f" f
   else Printf.sprintf "%.15g" f
@@ -1095,16 +1107,22 @@ let row_value_list (raw : value option) : value list =
   | Some v -> [ v ]
   | None -> []
 
+let empty_placeholder_value empty_id = function
+  | Keyword "logseq.property/empty-placeholder" -> true
+  | Ref id -> Some id = empty_id
+  | Map kvs -> vmap_get "db/ident" kvs = Some (Keyword "logseq.property/empty-placeholder")
+  | _ -> false
+
 (* cljs row-matched?'s (empty-value? v) — over the raw get result. *)
-let empty_value_opt (v : value option) : bool =
+let empty_value_opt empty_id (v : value option) : bool =
   match v with
   | None -> true
   | Some v ->
       (match v with
        | Nil -> true
-       | Keyword "logseq.property/empty-placeholder" -> true
+       | v when empty_placeholder_value empty_id v -> true
        | String s -> Unicode.trim s = ""
-       | List [] | Vector [] | Set [] | Map [] -> true
+       | List values | Vector values | Set values -> List.for_all (empty_placeholder_value empty_id) values
        | _ -> false)
 
 let is_empty_coll (v : value) : bool =
@@ -1175,11 +1193,13 @@ let get_property_value_for_search db (block : entity) (property : entity) : valu
             (fun v ->
               if ref_type then dp_pvc_of_value db v
               else (match v with Nil -> None | _ -> Some v))
-            (Ldb.values block ident)
+            (List.filter (fun value -> not (empty_placeholder_value (Db_class.ident_eid db "logseq.property/empty-placeholder") value)) (Ldb.values block ident))
         in
         if number_type then
-          Some (Float (List.fold_left ( +. ) 0. (List.filter_map strict_number_opt col)))
-        else Some (String (String.concat ", " (List.map js_str col)))
+          (match List.filter_map strict_number_opt col with
+           | [] -> None
+           | nums -> Some (Float (List.fold_left ( +. ) 0. nums)))
+        else match col with [] -> None | _ -> Some (String (String.concat ", " (List.map js_str col)))
       end
       else
         match Ldb.value block ident with
@@ -1261,14 +1281,6 @@ let sorting_of_value (v : value) : sorting_item list =
   | Vector xs | List xs | Set xs -> List.filter_map item xs
   | _ -> []
 
-(* cljs by-one-sorting compare — nil sorts first under plain compare *)
-let compare_opt_nil_first (a : value option) (b : value option) : int =
-  match a, b with
-  | None, None -> 0
-  | None, _ -> -1
-  | _, None -> 1
-  | Some x, Some y -> compare_scalars x y
-
 let sort_key_fn db (s : sorting_item) : entity -> value option =
   if s.s_id = "block.temp/refs-count" then
     fun e -> Some (Int64 (Int64.of_int (get_block_refs_count db e.id)))
@@ -1337,10 +1349,10 @@ let sort_by_single_property db (s : sorting_item) (entities : entity list)
     if s.s_id = "block.temp/refs-count" then
       let r =
         List.stable_sort
-          (fun a b -> compare_opt_nil_first (get_value_fn a) (get_value_fn b))
+          (fun a b -> compare_sort_values (get_value_fn a) (get_value_fn b) s.s_asc)
           entities
       in
-      if s.s_asc then r else List.rev r
+      r
     else begin
       let prop_ident =
         match property with
@@ -1362,25 +1374,21 @@ let sort_by_single_property db (s : sorting_item) (entities : entity list)
           Hashtbl.create (List.length entities)
         in
         List.iter (fun (e : entity) -> Hashtbl.replace row_ids e.id e) entities;
-        let ds =
-          let seen = Hashtbl.create 31 in
-          List.filter
-            (fun (d : datom) ->
-               if Hashtbl.mem seen d.e then false
-               else begin
-                 Hashtbl.replace seen d.e ();
-                 true
-               end)
-            (List.of_seq (datoms db Avet ~a:s.s_id ()))
-        in
-        let ds = if s.s_asc then ds else List.rev ds in
-        List.filter_map (fun (d : datom) -> Hashtbl.find_opt row_ids d.e) ds
+        let seen = Hashtbl.create (List.length entities) in
+        let sorted = Seq.fold_left (fun acc (d : datom) ->
+          match Hashtbl.find_opt row_ids d.e with
+          | Some e when not (Hashtbl.mem seen d.e) ->
+              Hashtbl.replace seen d.e (); e :: acc
+          | _ -> acc) [] (datoms db Avet ~a:s.s_id ()) in
+        let sorted = if s.s_asc then List.rev sorted else sorted in
+        let missing = List.filter (fun (e : entity) -> not (Hashtbl.mem seen e.id)) entities
+          |> List.sort (fun (a : entity) (b : entity) -> if s.s_asc then compare a.id b.id else compare b.id a.id) in
+        sorted @ missing
       end
       else
         List.stable_sort
           (fun a b ->
-             let c = compare_opt_nil_first (get_value_fn a) (get_value_fn b) in
-             if s.s_asc then c else -c)
+             compare_sort_values (get_value_fn a) (get_value_fn b) s.s_asc)
           entities
     end
     |> dedupe_entities
@@ -1406,8 +1414,7 @@ let sort_entities db (sorting : sorting_item list) (entities : entity list) :
       let rec loop = function
         | [] -> 0
         | (asc, f) :: rest ->
-            let c = compare_opt_nil_first (f a) (f b) in
-            let c = if asc then c else -c in
+            let c = compare_sort_values (f a) (f b) asc in
             if c <> 0 then c else loop rest
       in
       loop minor_fns
@@ -1609,7 +1616,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
                (match Option.bind raw (get_property_value_content db) with
                 | Some pv -> js_truthy pv = m
                 | None -> not m)
-           | Keyword "empty" -> empty_value_opt raw
+           | Keyword "empty" -> empty_value_opt (Db_class.ident_eid db "logseq.property/empty-placeholder") raw
            | m when is_empty_coll m -> true
            | _ ->
                if entity_in_values then
@@ -1624,7 +1631,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
                (match Option.bind raw (get_property_value_content db) with
                 | Some pv -> js_truthy pv <> m
                 | None -> m)
-           | Keyword "empty" -> not (empty_value_opt raw)
+           | Keyword "empty" -> not (empty_value_opt (Db_class.ident_eid db "logseq.property/empty-placeholder") raw)
            | m when is_empty_coll m && value' <> [] -> true
            | m when (not (is_empty_coll m)) && value' = [] -> true
            | _ ->
@@ -1809,11 +1816,14 @@ let property_attr_schema db (property_ident : attr) : attr_schema =
   ; s_closed_order }
 
 (* view/eid-sort-value *)
-let eid_sort_value db (schema : attr_schema) (eid : entity_id) : value option =
+let eid_sort_value db ~empty_id (schema : attr_schema) (eid : entity_id) : value option =
   if schema.s_ident = "block.temp/refs-count" then
     Some (Int64 (Int64.of_int (get_block_refs_count db eid)))
   else
-    match indexed_attr_values db eid schema.s_ident with
+    match List.filter (function
+      | Keyword "logseq.property/empty-placeholder" -> false
+      | Ref id when schema.s_ref && Some id = empty_id -> false
+      | _ -> true) (indexed_attr_values db eid schema.s_ident) with
     | [] -> None
     | v0 :: _ as vs ->
         (match schema.s_closed_order with
@@ -1869,16 +1879,6 @@ let eid_sort_value db (schema : attr_schema) (eid : entity_id) : value option =
                     else ref_value_content db id
                 | _ -> None)
              else Some v0)
-
-(* view/compare-sort-values — nils last *)
-let compare_sort_values (a : value option) (b : value option) (asc_ : bool) : int =
-  match a, b with
-  | None, None -> 0
-  | None, _ -> 1
-  | _, None -> -1
-  | Some va, Some vb ->
-      let c = compare_scalars va vb in
-      if asc_ then c else -c
 
 let avet_first_window_sort_attrs =
   [ "block/updated-at"; "block/created-at"; "block/title"; "block/name" ]
@@ -1961,6 +1961,7 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
 (* view/sort-eids-by-sorting *)
 let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list) :
     entity_id list =
+  let empty_id = Db_class.ident_eid db "logseq.property/empty-placeholder" in
   let sorts =
     match sorting with [] -> [ { s_id = "block/updated-at"; s_asc = false } ] | s -> s
   in
@@ -1973,7 +1974,7 @@ let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list
          let m = Hashtbl.create 31 in
          List.iter
            (fun eid ->
-              match eid_sort_value db sc eid with
+              match eid_sort_value db ~empty_id sc eid with
               | Some v -> Hashtbl.replace m eid v
               | None -> ())
            eids;
@@ -2211,7 +2212,7 @@ let empty_attr_values (raw : value list) (empty_id : entity_id option) : bool =
   || List.for_all
        (fun v ->
           match v with
-          | Nil -> true
+          | Nil | Keyword "logseq.property/empty-placeholder" -> true
           | Ref id -> (match empty_id with Some e -> id = e | None -> false)
           | String s -> Unicode.trim s = ""
           | List [] | Vector [] | Set [] | Map [] -> true
@@ -2614,12 +2615,14 @@ let comparable_ref_content db (v : value) : value option =
 
 (* view/comparable-sort-value *)
 let comparable_sort_value db (v : value) : value =
+  let empty = empty_placeholder_value (Db_class.ident_eid db "logseq.property/empty-placeholder") in
   match v with
+  | v when empty v -> Nil
   | Set xs | Vector xs | List xs ->
       let items =
         List.filter_map
           (fun v ->
-             match comparable_ref_content db v with
+             match if empty v then None else comparable_ref_content db v with
              | Some Nil | None -> None
              | x -> x)
           xs
@@ -2634,8 +2637,7 @@ let by_sorting (sorters : (('a -> value) * bool) list) : 'a -> 'a -> int =
       | [] -> 0
       | (f, asc) :: tl ->
           let c =
-            if asc then compare_scalars (f a) (f b)
-            else compare_scalars (f b) (f a)
+            compare_sort_values (Some (f a)) (Some (f b)) asc
           in
           if c <> 0 then c else loop tl
     in
@@ -2781,12 +2783,7 @@ let linked_references_page_list_view_data db (view : entity option)
   in
   let desc = view_sort_groups_desc view in
   let page_sort_value (page : entity) : value =
-    let v = row_get page gs_ident in
-    if
-      gs_ident = "block/journal-day" && (not desc)
-      && Ldb.value page "block/journal-day" = None
-    then Float 9007199254740991.
-    else Option.value ~default:Nil v
+    Option.value ~default:Nil (row_get page gs_ident)
   in
   let sorters =
     ((fun (page, _blocks) -> page_sort_value page), not desc)
@@ -3103,6 +3100,9 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
             | Some v -> [ v ]
             | None -> [ Nil ]
           in
+          let empty_id = Db_class.ident_eid db "logseq.property/empty-placeholder" in
+          let items = List.filter (fun value -> not (empty_value_opt empty_id (Some value))) items in
+          let items = if items = [] then [Nil] else items in
           List.map
             (fun v ->
                match v with
@@ -3135,17 +3135,9 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
               if group_by_page then
                 match gkey with
                 | GEntity e ->
-                    if
-                      ident = "block/journal-day" && (not desc)
-                      && Ldb.value e "block/journal-day" = None
-                    then Float 9007199254740991.
-                    else
-                      comparable_sort_value db
-                        (Option.value ~default:Nil (row_get e ident))
-                | GValue _ ->
-                    if ident = "block/journal-day" && not desc then
-                      Float 9007199254740991.
-                    else Nil
+                    comparable_sort_value db
+                      (Option.value ~default:Nil (row_get e ident))
+                | GValue _ -> Nil
               else if group_by_closed_values then
                 match gkey with
                 | GEntity e -> Option.value ~default:Nil (Ldb.value e "block/order")

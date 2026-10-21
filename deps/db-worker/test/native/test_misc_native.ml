@@ -788,7 +788,8 @@ let migrate_65_34_advances_repaired_page_order_allocator ?target_version () =
         (Db_migrate.migrate ?target_version conn);
       let db' = db_of conn in
       check "65-34: schema-version 65.34"
-        (kv_version db' "logseq.kv/schema-version" = Some (65, 34));
+        (let version = Option.value ~default:Db_schema.version target_version in
+         kv_version db' "logseq.kv/schema-version" = Some (version.sv_major, Option.get version.sv_minor));
       let repaired_order =
         match e_at_uuid db' child_uuid with
         | Some e -> Ldb.value e "block/order"
