@@ -1802,12 +1802,15 @@
                      :tx (protocol/tx->transit [{:block/uuid block-id :block/title "Snapshot content"}])}
               accepted (with-redefs [ws/broadcast! (fn [& _] nil)]
                          (sync-handler/handle-tx-batch! self nil [entry] 0))
-              {:keys [request]} (request-url)]
-          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/sync/graph-1/pull?since=0"))
+              ;; the Durable Object routes the internal path dispatch forwards to it
+              {:keys [request]} (request-url "/snapshot/download?graph-id=graph-1")]
+          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/pull?since=0&graph-id=graph-1"))
                       legacy-body (json-body legacy-pull)
                       response (sync-handler/handle-http self request)
                       body (json-body response)
-                      snapshot-response (sync-handler/handle-http self (js/Request. (:url body)))
+                      _ (is (= "http://localhost/sync/graph-1/snapshot/stream" (:url body))
+                            "the client fetches the stream through the public sync path")
+                      snapshot-response (sync-handler/handle-http self (js/Request. "http://localhost/snapshot/stream?graph-id=graph-1"))
                       payload (.arrayBuffer snapshot-response)
                       rows (snapshot/finalize-framed-buffer (js/Uint8Array. payload))]
                 (is (= 200 (.-status response)))
