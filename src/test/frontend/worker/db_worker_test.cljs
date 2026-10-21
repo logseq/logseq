@@ -448,8 +448,7 @@
               (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   sync-download/fetch-json (fn [_url _opts schema]
                                                              (case schema
-                                                               :sync/pull (p/resolved {:t 77})
-                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"})
+                                                               :sync/snapshot-download (p/resolved {:t 77 :url "https://snapshot.example.test"})
                                                                (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                   sync-download/prepare-import! (fn [repo _reset? gid _graph-e2ee? & _]
                                                                   (reset! @#'sync-download/*import-state

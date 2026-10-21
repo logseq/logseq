@@ -792,6 +792,7 @@
                                    snapshot-content-encoding)]
             (http/json-response :sync/snapshot-download
                                 (cond-> {:ok true
+                                         :t (t-now self)
                                          :key key
                                          :url url}
                                   content-encoding

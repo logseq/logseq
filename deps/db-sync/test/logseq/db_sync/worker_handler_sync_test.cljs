@@ -1748,6 +1748,38 @@
 (defn- passthrough-compression-stream-constructor []
   (js* "function(_format){ return new TransformStream(); }"))
 
+(deftest snapshot-download-returns-the-current-journal-position-test
+  (async done
+    (with-memory-sql-async
+      (fn [sql]
+        (let [conn (storage/open-conn sql)
+              self #js {:sql sql :conn conn :schema-ready true
+                        :env #js {"DB_SYNC_SNAPSHOT_STREAM_GZIP" "false"}}
+              block-id (random-uuid)
+              entry {:tx-id (random-uuid) :outliner-op :save-block
+                     :tx (protocol/tx->transit [{:block/uuid block-id :block/title "Snapshot content"}])}
+              accepted (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [entry] 0))
+              {:keys [request]} (request-url)]
+          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/sync/graph-1/pull?since=0"))
+                      legacy-body (json-body legacy-pull)
+                      response (sync-handler/handle-http self request)
+                      body (json-body response)
+                      snapshot-response (sync-handler/handle-http self (js/Request. (:url body)))
+                      payload (.arrayBuffer snapshot-response)
+                      rows (snapshot/finalize-framed-buffer (js/Uint8Array. payload))]
+                (is (= 200 (.-status response)))
+                (is (= 1 (:t accepted) (:t body)))
+                (is (= 1 (:t legacy-body)))
+                (is (= "stream/graph-1.snapshot" (:key body)))
+                (is (= 200 (.-status snapshot-response)))
+                (is (empty? (:txs (sync-handler/pull-response self (:t body))))
+                    "A new download starts after the snapshot's journal position")
+                (is (= (#'sync-handler/fetch-snapshot-kvs-rows sql -1 10000) rows))
+                (is (= "Snapshot content" (:block/title (d/entity @conn [:block/uuid block-id])))))
+              (p/catch (fn [error] (is false (str error))))
+              (p/finally done)))))))
+
 (deftest snapshot-download-uses-gzip-encoding-when-compression-supported-test
   (async done
          (let [sql (empty-sql)
@@ -1771,6 +1803,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
+                 (is (= 0 (:t body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
                  (is (= "gzip" (:content-encoding body))))
@@ -1799,6 +1832,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
+                 (is (= 0 (:t body)))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []
