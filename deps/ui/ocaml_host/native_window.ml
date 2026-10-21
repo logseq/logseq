@@ -29,12 +29,15 @@ let drag_regions ~store ~rect_of ~scale ~blocked =
   List.iter (fun id ->
     let rect = rect_of id in
     if rect.Lui_scene.w > 0. && rect.h > 0. then begin
-      if Host_interaction.has_attribute
-           (Option.value (Lui_store.string_prop store id "data-attrs") ~default:"")
-           "data-window-titlebar" then headers := rect :: !headers;
-      if Lui_store.kind store id = "button"
-         || Lui_store.bool_prop store id "press-enabled" then
-        controls := rect :: !controls
+      let header=Host_interaction.has_attribute
+        (Option.value (Lui_store.string_prop store id "data-attrs") ~default:"")
+        "data-window-titlebar" in
+      let control=Lui_store.kind store id = "button"
+        || Lui_store.bool_prop store id "press-enabled" in
+      if (header || control) && not (Lui_store.inert_in_chain store id) then begin
+        if header then headers := rect :: !headers;
+        if control then controls := rect :: !controls
+      end
     end) (Lui_store.preorder store);
   let encode draggable (rect : Lui_scene.rect) =
     [draggable; rect.x /. scale; rect.y /. scale; rect.w /. scale; rect.h /. scale]

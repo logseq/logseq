@@ -5,17 +5,20 @@ import postcssNested from 'postcss-nested'
 
 const [directory, target] = process.argv.slice(2)
 if (!directory || !target) throw new Error('Expected theme CSS directory and OCaml target paths')
-const sources = ['theme/vars-classic.css', 'theme/colors.css', 'theme/index.css', 'shui.css']
+const sources = ['theme/vars-classic.css', 'theme/colors.css', 'theme/index.css', 'shui.css', 'lui-core.css']
 const rules = []
 const accents = new Set(['', 'none', 'logseq'])
 const owned = new Set()
 
-// Compile the authored HTML/body palette scopes. Component scopes remain CSS-owned.
+// Compile the authored HTML/body/application palette scopes. Other component scopes remain CSS-owned.
 // Reject a new global selector shape instead of silently inventing native colors.
 function globalScope(selector, rule) {
+  if (selector === '.theme-container-inner') {
+    return {mode: null, accent: null, body: null, scope: 'application', specificity: 100}
+  }
   if (['.white-theme', '.light-theme', '.dark-theme'].includes(selector)) {
     return { mode: selector === '.dark-theme' ? 'dark' : 'light', accent: null,
-      body: selector, specificity: 100 }
+      body: selector, scope: 'body', specificity: 100 }
   }
   selector = selector.replace(/=["']([a-z-]+)["']\]/g, '=$1]')
   const match = selector.match(/^(:root|html(?:\.dark)?(?:\[data-(?:theme|color)=[a-z-]+\])*)(?: (body|\.dark-theme|\.light-theme))?$/)
@@ -34,7 +37,7 @@ function globalScope(selector, rule) {
   const specificity = (attributes.length + Number(match[1].includes('.dark'))
     + Number(match[1] === ':root') + Number(body?.startsWith('.') ?? false)) * 100
     + Number(match[1].startsWith('html')) + Number(body === 'body')
-  return { mode, accent, body, specificity }
+  return { mode, accent, body, scope: body ? 'body' : 'root', specificity }
 }
 
 for (const source of sources) {
@@ -63,10 +66,10 @@ for (const source of sources) {
 }
 
 rules.sort((a, b) => a.layer - b.layer || a.specificity - b.specificity)
-function variables(mode, accent, body) {
+function variables(mode, accent, scope) {
   const result = new Map()
   for (const rule of rules) {
-    if (Boolean(rule.body) !== body || rule.mode !== null && rule.mode !== mode
+    if (rule.scope !== scope || rule.mode !== null && rule.mode !== mode
       || rule.accent !== null && rule.accent !== accent
       || rule.body === '.dark-theme' && mode !== 'dark'
       || ['.light-theme', '.white-theme'].includes(rule.body) && mode !== 'light') continue
@@ -86,8 +89,9 @@ const output = ['(* Generated from the shared theme CSS. Do not edit. *)',
 for (const mode of ['light', 'dark']) {
   for (const accent of accents) {
     output.push(`| ${mode === 'dark'}, ${JSON.stringify(accent)} ->`,
-      `(${bindings(variables(mode, accent, false))},`,
-      `${bindings(variables(mode, accent, true))})`)
+      `(${bindings(variables(mode, accent, 'root'))},`,
+      `${bindings(variables(mode, accent, 'body'))},`,
+      `${bindings(variables(mode, accent, 'application'))})`)
   }
 }
 output.push('| _, accent -> invalid_arg ("Unknown theme accent: " ^ accent)')

@@ -166,16 +166,16 @@ let rebuild mode =
       ~accent:!accent
   in
   let root = compute ~parent:(Hashtbl.create 0) palette.root in
+  let application_overrides, body_overrides = List.partition
+    (fun (name,_) -> List.mem_assoc name palette.application)
+    (Hashtbl.fold (fun name value values -> (name,value)::values) (overrides_of_mode mode) []) in
   let body =
-    compute ~parent:root
-      (palette.body
-      @ Hashtbl.fold
-          (fun name value values -> (name, value) :: values)
-          (overrides_of_mode mode) [])
+    compute ~parent:root (palette.body @ body_overrides)
   in
+  let application=compute ~parent:body (palette.application @ application_overrides) in
   let table = vars_of_mode mode in
   Hashtbl.reset table;
-  Hashtbl.iter (Hashtbl.replace table) body
+  Hashtbl.iter (Hashtbl.replace table) application
 
 let set_dark is_dark =
   let next = if is_dark then Lui_theme.Dark else Lui_theme.Light in

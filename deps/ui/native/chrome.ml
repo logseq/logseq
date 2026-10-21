@@ -98,11 +98,12 @@ let home_item (ms : Model.t Signal.signal) : t =
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_btn ms =
-  icon_btn ~key:"rs-toggle" ~icon_name:"layout-sidebar-right"
+  Ui_components.header_right_sidebar_toggle
+  (icon_btn ~key:"rs-toggle" ~icon_name:"layout-sidebar-right"
     ~label:(I18n.t "command.ui/toggle-right-sidebar")
     (fun () ->
       Runtime.send Action.Toggle_right_sidebar;
-      Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
+      Sidebar_state.ensure_contents (Sidebar_state.ensure ms)))
 
 (* rtc status as a toolbar item: a ghost cloud button — native toolbars
    carry status items as their own spaced items, not fused capsules.
@@ -153,14 +154,23 @@ let topbar (ms : Model.t Signal.signal) : t list =
       [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
           ~safe_area:80 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
           ~controls:(fun () -> [left_menu_btn (); search_btn ()])
-      ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
-          ~padding_horizontal:6 ~style_class:"cp__header-r"
-          [ Ui_components.native_performance
-              ~label:(I18n.t "profiler.native/metrics-dialog-label")
-              ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
-              ~format_fps:(I18n.t1 "profiler.native/fps-label") ()
-          ; rtc_item ms; home_item ms; dots_btn; right_toggle_btn ms ] ]
+      ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
+          (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
+            ~style_class:"cp__header-r"
+            [rtc_item ms;home_item ms;dots_btn;right_toggle_btn ms]) ]
   ]
+
+let performance_bar_height = 29
+
+let performance_bar () =
+  column ~key:"native-performance-bar" ~accessibility_identifier:"native-performance-bar"
+    ~height:performance_bar_height ~min_height:performance_bar_height ~gap:0 ~cross:`stretch
+    ~background:"var(--ls-primary-background-color)"
+    [box ~key:"performance-rule" ~height:1 ~background:"var(--lx-gray-05, var(--ls-border-color))" [];
+     Ui_components.native_performance
+       ~label:(I18n.t "profiler.native/metrics-dialog-label")
+       ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
+       ~format_fps:(I18n.t1 "profiler.native/fps-label") ()]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
    element the e2e reads EDN from. Visible once the worker broadcasts
@@ -220,78 +230,64 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
    stays mounted — the docked split's track owns its width (0 while
    closed). *)
 let right_sidebar (ms : Model.t Signal.signal) =
+  let viewport=Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w in
   Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      "cp__right-sidebar "
-      ^ if m.right_sidebar_open then "open" else "closed")
-    (Ui_components.with_props
-       [ Ui_components.Prop.height_viewport 1. ]
-       (Ui_parts.int_prop Lui_protocol.MinWidth
-         ~value:(reactive (fun (m : Model.t) -> if m.right_sidebar_open then 320 else 0) ms)
-        (Ui_parts.int_prop Lui_protocol.MaxWidth
-         ~value:(reactive (fun viewport -> int_of_float (viewport *. Sidebar_state.right_fraction_max))
-           (Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w))
-        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-          ~inert:(reactive (fun (m : Model.t) -> not m.right_sidebar_open) ms)
-       ~min_height:0
-       ~style_class:"cp__right-sidebar closed"
-          [ Ui_components.with_props
-              [ Ui_components.Prop.overflow `hidden ]
-              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-                 ~background:"muted"
-                 [ Right_sidebar_view.render ms ]) ]))))
+    (fun (m : Model.t) -> "cp__right-sidebar " ^ if m.right_sidebar_open then "open" else "closed")
+    (Ui_parts.int_prop Lui_protocol.MinWidth
+       ~value:(reactive (fun (m : Model.t) width -> if m.right_sidebar_open && width>=640. then 320 else 0) ms viewport)
+     (Ui_parts.int_prop Lui_protocol.MaxWidth
+       ~value:(reactive (fun width -> if width>=640. then int_of_float (width*.Sidebar_state.right_fraction_max) else 0) viewport)
+       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar" ~container_relative_frame:`both
+          ~inert:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
+          ~min_height:0 ~style_class:"cp__right-sidebar closed"
+          [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+             (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+                ~background:"muted" [Right_sidebar_view.render ms])])) )
 
-(* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
-   is an overlay layer; on the native host it is the docked split's
-   first pane —
-   the subtree stays mounted while closed (the split track owns the
-   width), with the same semantic surface token as the web. The shade-mask is
-   an overlay-mode affordance and doesn't exist in a docked layout. *)
+(* A stable sidebar surface uses the same dock breakpoint and inner width
+   as Web. Its own split reveals the small-window panel without squeezing text. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  let st = Sidebar_state.ensure ms in
+  let st=Sidebar_state.ensure ms in
+  let viewport=Signal.value st.Sidebar_state.viewport_w in
+  let panel = row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
+    [column ~key:"ls-inner" ~grow:1. ~min_height:0
+       ~min_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
+       ~max_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
+       ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
+       [row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center ~style_class:"left-sidebar-top"
+          ~data_attrs:["data-window-titlebar","true"]
+          [Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true ~safe_area:80
+             ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+             ~controls:(fun () -> [left_menu_btn ();search_btn ()])];
+        column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
+          [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
+             [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
+           Left_sidebar_view.contents ms]];
+     box ~key:"ls-border" ~width:1 ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" []] in
+  let shade=Ui_parts.float_prop Lui_protocol.Opacity
+    ~value:(reactive (fun (m : Model.t) width ->
+      if m.left_sidebar_open && width<640. then (if m.theme_dark then 0.15 else 0.7) else 0.) ms viewport)
+    (Ui_parts.pressable ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+      (box ~key:"shade" ~style_class:"shade-mask" ~background:"#000000" [])) in
   Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      "cp__sidebar-left-layout"
-      ^ if m.left_sidebar_open then " is-open" else "")
-    (Ui_components.with_props
-       [ Ui_components.Prop.height_viewport 1. ]
-       (Ui_parts.int_prop Lui_protocol.MinWidth
-          ~value:(reactive (fun (m : Model.t) ->
-            if m.left_sidebar_open then Sidebar_state.left_width_min else 0) ms)
-        (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-          ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
-          ~max_width:Sidebar_state.left_width_max ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-          [ row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
-             [ (column ~key:"ls-inner" ~grow:1. ~min_height:0
-                    ~min_width:(reactive
-                      (fun width -> int_of_float (Float.round width)-1)
-                      (Signal.value st.Sidebar_state.left_width))
-                    ~background:"var(--left-sidebar-bg-color)"
-                    ~style_class:"left-sidebar-inner as-container"
-               [ (* The sidebar's titlebar strip shares the system traffic
-                    lights. Closing the dock moves these controls into the
-                    detail header, with the same leading safe area. *)
-                 row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
-                   ~style_class:"left-sidebar-top"
-                   ~data_attrs:[ ("data-window-titlebar", "true") ]
-                   [ Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true
-                       ~safe_area:80 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
-                       ~controls:(fun () -> [left_menu_btn (); search_btn ()]) ]
-               ; column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
-                   [ column ~key:"ls-head" ~gap:4 ~margin_bottom:4
-                       ~style_class:"sidebar-header-container"
-                       [ Left_sidebar_view.graphs_selector
-                           (Sidebar_state.ensure ms) ms
-                       ; Left_sidebar_view.nav_group ms
-                           (Sidebar_state.ensure ms) ]
-                   ; Left_sidebar_view.contents ms
-                   ]
-               ]
-           )
-           ; box ~key:"ls-border" ~width:1
-               ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" []
-           ]
-       ])))
+    (fun (m : Model.t) -> "cp__sidebar-left-layout" ^ if m.left_sidebar_open then " is-open" else "")
+    (Ui_parts.string_prop Lui_protocol.Position
+       ~value:(reactive (fun width -> if width<640. then "fixed" else "relative") viewport)
+     (Ui_parts.int_prop Lui_protocol.ZIndex ~value:(reactive (fun width -> if width<640. then 4 else 1) viewport)
+      (Ui_parts.int_prop Lui_protocol.MinWidth
+         ~value:(reactive (fun (m : Model.t) width ->
+           if Sidebar_state.left_docked m.left_sidebar_open width then Sidebar_state.left_width_min else 0) ms viewport)
+       (Ui_parts.int_prop Lui_protocol.MaxWidth
+         ~value:(reactive (fun width -> if width<640. then int_of_float width else Sidebar_state.left_width_max) viewport)
+        (Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.]
+         (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
+            ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
+            ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+            [split ~key:"sidebar-reveal" ~container_relative_frame:`both ~resize_handle_width:0 ~gap:0
+               ~first_width:(reactive (fun (m : Model.t) width window ->
+                 if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
+                 ms (Signal.value st.Sidebar_state.left_width) viewport)
+               ~resize_duration:300 ~resize_easing:`standard panel shade]))))))
 
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
@@ -300,8 +296,9 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
     ~first_width:
       (reactive
-         (fun (m : Model.t) width -> if m.Model.left_sidebar_open then width else 0.)
-         ms (Signal.value st.Sidebar_state.left_width))
+         (fun (m : Model.t) width viewport ->
+           if Sidebar_state.left_docked m.Model.left_sidebar_open viewport then width else 0.)
+         ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
     (left_sidebar ms) content
@@ -312,9 +309,9 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
     ~value:
       (reactive
-         (fun (m : Model.t) fraction ->
-           if m.Model.right_sidebar_open then 1. -. fraction else 1.)
-         ms (Signal.value st.Sidebar_state.right_fraction))
+         (fun (m : Model.t) fraction viewport ->
+           if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.)
+         ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_right_split_resize st)
     first second
@@ -431,7 +428,7 @@ let help_area (ms : Model.t Signal.signal) : t =
   Handbook.host ~controls:(fun open_handbook close_handbook -> Logseq_el.fragment
     [ overlay ~key:"help-anchor" ~alignment:`bottom_trailing
         [ Ui_components.with_props
-            [Ui_components.Prop.margin_right 32;Ui_components.Prop.margin_bottom 16]
+            [Ui_components.Prop.margin_right 32;Ui_components.Prop.margin_bottom (16+performance_bar_height)]
             (Right_sidebar_view.help_trigger ~on_press:(fun () ->
                close_handbook ();Runtime.send Action.Help_toggle;Runtime.flush ()) ()) ]
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
@@ -473,12 +470,11 @@ let shell_contents (ms : Model.t Signal.signal) : t =
          tracks — the left split's second pane is the detail column
          (titlebar + page scroll), so the sidebar column spans the
          full window height like NavigationSplitView *)
-      row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
-        [ right_split ms st
-            (left_split ms st (detail_column ms))
-            (right_sidebar ms)
-        ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
-        ]
+      column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
+        [row ~key:"panes" ~grow:1. ~min_height:0
+           [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
+            Pdf.container_el ~key:"asc" ~id:"app-single-container"];
+         performance_bar ()]
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->

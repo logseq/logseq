@@ -179,6 +179,14 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
 let chrome_button element =
   with_props [Prop.opacity 0.7; Prop.hover_opacity 1.] element
 
+let header_right_sidebar_toggle element : t =
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  Ui_parts.string_prop P.DisplayValue
+    ~value:(reactive (fun width -> if width>=640. then "contents" else "none") viewport)
+    (box ~key:"header-right-sidebar-toggle" [element]) ctx parent
+
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
    otherwise the detail header does. Only the native host reserves traffic lights. *)
 let leading_toolbar ~key ~in_sidebar ~safe_area ~state ~is_open ~controls =

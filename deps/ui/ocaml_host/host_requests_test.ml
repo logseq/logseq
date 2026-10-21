@@ -1676,7 +1676,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           Lui_store.kind store id = "button"
           && Lui_store.string_prop store id "accessibility-label" = Some "dialog")
           (Lui_store.preorder store) in
-        expect ("Native performance toggle must be an ordinary shared header button; found "
+        expect ("Native performance toggle must be an ordinary shared button; found "
           ^ String.concat ", " (List.filter_map (fun id ->
               if Lui_store.kind store id = "button" then
                 Lui_store.string_prop store id "accessibility-label" else None)
@@ -11601,3 +11601,171 @@ let () = Native_embed.with_entry_lock (fun () ->
   List.iter prerr_endline (List.rev !failures);
   check "Native responsive search hint visibility and ownership" (!failures=[]);
   print_endline "native responsive search hint visibility and ownership: OK")
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module A=Lui_window.Assembly in
+  let module W=Lui_window in
+  let old_read= !Runtime.read_model and old_send= !Runtime.app_send and old_flush= !Runtime.app_flush
+  and old_sidebar= !Sidebar_state.st_ref and old_signal= !Sidebar_state.model_signal
+  and old_width=Host.inner_width () and old_height=Host.inner_height () in
+  let keys=["ls-left-sidebar-width-px";"ls-left-sidebar-width";"ls-right-sidebar-width"] in
+  let storage=List.map (fun key -> key,Ui_services.storage_get key) keys in
+  let listeners=Hashtbl.copy Platform.window_listeners and captures=Hashtbl.copy Platform.capture_listeners in
+  let failures=ref [] in
+  let expect message condition=if not condition then failures:=message::!failures in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=old_read;Runtime.app_send:=old_send;Runtime.app_flush:=old_flush;
+    Sidebar_state.st_ref:=old_sidebar;Sidebar_state.model_signal:=old_signal;
+    Host.set_window_size old_width old_height;
+    Hashtbl.clear Platform.window_listeners;Hashtbl.iter (Hashtbl.replace Platform.window_listeners) listeners;
+    Hashtbl.clear Platform.capture_listeners;Hashtbl.iter (Hashtbl.replace Platform.capture_listeners) captures;
+    List.iter (fun (key,value) -> match value with Some value -> Ui_services.storage_set key value
+      | None -> Ui_services.storage_remove key) storage) (fun () ->
+    List.iter (fun scale -> List.iter (fun route ->
+      List.iter Ui_services.storage_remove keys;
+      Sidebar_state.st_ref:=None;Sidebar_state.model_signal:=None;
+      Hashtbl.clear Platform.window_listeners;Hashtbl.clear Platform.capture_listeners;
+      Host.set_window_size 1280. 720.;
+      let subscriptions=Hashtbl.length Platform.native_performance_listeners in
+      let engine=ref None in
+      let surface=A.create ~layout:(module Lui_layout) ~scale_cell:(ref scale)
+        ~text:{measure=(fun id value -> Text_engine.measure_text (Option.get !engine) id value);
+          text_ops=(fun _ _ _ _ -> []);hit_text=(fun _ _ ~lx:_ ~ly:_ ~lw:_ ~lh:_ -> 0);
+          caret_ops=(fun _ _ ~lw:_ ~lh:_ ->
+            {W.Ui.c_before=Fun.id;c_after=Fun.id;c_up=Fun.id;c_down=Fun.id;
+             c_rect=(fun _ -> 0.,0.,20.*.scale)})}
+        ~renderer:{Lui_host.name="narrow-shell-test";render=(fun _ -> Bytes.empty)}
+        ~width:(int_of_float (1280.*.scale)) ~height:(int_of_float (720.*.scale)) () in
+      let store=A.store surface in
+      let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
+        ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:1 ~h:1) in
+      engine:=Some (Text_engine.create ~scene:(fun () -> scene) ~scale:(fun () -> scale) ~store:(fun () -> store));
+      Lui_host.set_reduced_motion (A.host surface) true;
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let app=Lui_app.create_with_extensions (A.backend surface (profile MacOS GenericHost)) registry
+        {Model.initial with route;left_sidebar_open=true} (fun _ next -> next)
+        (fun _ source _ -> Chrome.shell source) in
+      Runtime.read_model:=(fun () -> Lui_app.model app);
+      Runtime.app_send:=(fun action -> Lui_app.send app (Update.update (Lui_app.model app) action));
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let refresh ()=ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
+        refresh ();
+        let find name=List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some name)
+          (Lui_store.preorder store) in
+        let left=find "left-sidebar" and detail=find "left-container" and right=find "right-sidebar"
+        and fps=find "native-performance-fps" and toggle=find "native-performance-toggle"
+        and more=find "toolbar-dots-btn" and right_toggle=find "rs-toggle" in
+        Lui_store.apply_op store (SetProp(detail,BackgroundValue,StringValue "#123456"));
+        let rect id=W.Rects.get (A.rects surface) id in
+        let bounded width r=r.Lui_scene.x>= -.0.1 && r.x+.r.w<=width*.scale+.0.1
+          && r.y>= -.0.1 && r.y+.r.h<=720.*.scale+.0.1 in
+        let set_model f=ignore (Lui_app.send app (f (Lui_app.model app)));refresh () in
+        List.iter (fun width ->
+          Host.set_window_size width 720.;Platform.emit_event "resize" (Js.Json.JObject []);
+          Lui_host.resize (A.host surface) ~width:(int_of_float (width*.scale)) ~height:(int_of_float (720.*.scale)) ~scale;
+          List.iter (fun (left_open,right_open) ->
+            set_model (fun model -> {model with left_sidebar_open=left_open;right_sidebar_open=right_open});
+            let tag=Printf.sprintf "width=%.0f scale=%.0f left=%b right=%b" width scale left_open right_open in
+            expect ("Diagnostics are clipped: "^tag) (bounded width (rect fps) && bounded width (rect toggle));
+            expect ("More control is clipped: "^tag) (bounded width (rect more));
+            expect ("Right-toggle visibility differs across hosts: "^tag)
+              (((rect right_toggle).w>0.)=(width>=640.));
+            expect "Metrics controls remount during shell resize" (find "native-performance-toggle"=toggle);
+            let status=List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"
+              =Some "native-performance-bar") (Lui_store.preorder store) in
+            expect "Native diagnostics must reserve their own status row" (status<>None);
+            Option.iter (fun status ->
+              let bar=rect status and content=rect (find "main-content-container") in
+              expect ("Status row overlaps scrolling content: "^tag) (content.y+.content.h<=bar.y+.0.1);
+              expect ("Status row misses the bottom edge: "^tag) (abs_float (bar.y+.bar.h-.720.*.scale)<0.1)) status;
+            if width<640. then begin
+              expect ("Small left dock still consumes the detail frame: "^tag)
+                (abs_float (rect detail).x<0.1 && abs_float ((rect detail).w-.width*.scale)<0.1);
+              expect ("Small right dock still consumes space: "^tag) ((rect right).w<0.1);
+              if left_open then begin
+                let inner=List.find (fun id -> Lui_store.string_prop store id "style-class"
+                  =Some "left-sidebar-inner as-container") (Lui_store.preorder store) in
+                expect ("Overlay sidebar does not retain its 74-percent panel: "^tag)
+                  (abs_float ((rect inner).w/.scale-.(Float.round (width*.0.74)-.1.))<=1.);
+                expect ("Overlay sidebar does not cover the detail frame: "^tag)
+                  (abs_float ((rect left).w-.width*.scale)<0.1);
+                Lui_paint.paint {Lui_paint.default_hooks with color_of=Theme_vars.color_of;
+                  layout=(fun id -> Lui_paint.placement_of_rect (rect id))}
+                  store scene ~width:(int_of_float (width*.scale)) ~height:(int_of_float (720.*.scale))
+                  ~scale ~clear:(Lui_scene.color 255 255 255 255);
+                let panel=rect inner and ops=scene.Lui_scene.ops in
+                expect ("Overlay sidebar surface is transparent: "^tag)
+                  (List.exists (function Lui_scene.Fill f -> f.frect=panel && f.fcolor.a=255 && f.fopacity=1.
+                    | _ -> false) ops);
+                let x=panel.x+.panel.w/.2. and y=panel.y+.panel.h*.0.8 in
+                let final=List.fold_left (fun result -> function
+                  | Lui_scene.Fill f when f.fcolor.a=255 && f.fopacity=1.
+                    && x>=f.frect.x && x<f.frect.x+.f.frect.w
+                    && y>=f.frect.y && y<f.frect.y+.f.frect.h -> Some f.fcolor
+                  | _ -> result) None ops in
+                expect ("Detail paints over the overlay sidebar: "^tag)
+                  (final=Theme_vars.color_of "var(--left-sidebar-bg-color)")
+              end
+            end) [true,false;false,false;true,true;false,true])
+          [1280.;360.;600.;639.;640.;800.;360.;1280.];
+        set_model (fun model -> {model with left_sidebar_open=true;right_sidebar_open=false});
+        Host.set_window_size 360. 720.;Platform.emit_event "resize" (Js.Json.JObject []);
+        Lui_host.resize (A.host surface) ~width:(int_of_float (360.*.scale)) ~height:(int_of_float (720.*.scale)) ~scale;refresh ();
+        let down=A.handle surface (W.Input.Button_down (340.,160.,W.Input.Left,1,W.Input.mods_none)) in
+        let up=A.handle surface (W.Input.Button_up (340.,160.,W.Input.Left,W.Input.mods_none)) in
+        let actions=down @ up in
+        List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;
+        refresh ();
+        expect "Pressing the overlay shade must close the left sidebar" (not (Lui_app.model app).left_sidebar_open);
+        let old_request= !Platform.host_request and requests=ref [] in
+        Fun.protect ~finally:(fun () -> Platform.host_request:=old_request) (fun () ->
+          Platform.host_request:=(fun request -> requests:=request::!requests);
+          let r=rect toggle in
+          let x=(r.x+.r.w/.2.)/.scale and y=(r.y+.r.h/.2.)/.scale in
+          let down=A.handle surface (W.Input.Button_down (x,y,W.Input.Left,1,W.Input.mods_none)) in
+          let up=A.handle surface (W.Input.Button_up (x,y,W.Input.Left,W.Input.mods_none)) in
+          List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) (down @ up);
+          refresh ();
+          expect "The narrow diagnostics button must dispatch exactly one toggle"
+            (!requests=["native-performance-toggle\n{}"])));
+      expect "Narrow shell disposal leaks a metrics subscription"
+        (Hashtbl.length Platform.native_performance_listeners=subscriptions))
+      [Model.Home;Model.Page "header-fixture"]) [1.;2.]);
+  List.iter prerr_endline (List.rev !failures);
+  check "Native narrow shell frames, header and overlay dismissal" (!failures=[]);
+  print_endline "native narrow shell frames, header and overlay dismissal: OK")
+
+let () =
+  let old_mode= !Theme_vars.mode and old_accent= !Theme_vars.accent in
+  let light=Hashtbl.copy Theme_vars.light_overrides and dark=Hashtbl.copy Theme_vars.dark_overrides in
+  let failures=ref [] in
+  let expect name condition=if not condition then failures:=name::!failures in
+  let install mode extra =
+    let snapshot=Ui_theme.snapshot mode in
+    Theme_vars.install_snapshot (Yojson.Safe.to_string (`Assoc
+      ["mode",`String (if mode=Ui_theme.Dark then "dark" else "light");
+       "vars",`Assoc (List.map (fun (name,value) -> name,`String value) (snapshot.vars @ extra))])) in
+  Fun.protect ~finally:(fun () ->
+    List.iter (fun (target,saved) -> Hashtbl.clear target;Hashtbl.iter (Hashtbl.replace target) saved)
+      [Theme_vars.light_overrides,light;Theme_vars.dark_overrides,dark];
+    Theme_vars.accent:=old_accent;Theme_vars.rebuild Lui_theme.Light;Theme_vars.rebuild Lui_theme.Dark;
+    Theme_vars.set_dark (old_mode=Lui_theme.Dark)) (fun () ->
+    List.iter (fun mode ->
+      install mode [];Theme_vars.set_dark (mode=Ui_theme.Dark);
+      List.iter (fun accent ->
+        Theme_vars.set_accent accent;
+        expect (Printf.sprintf "Sidebar CSS surface is missing for %s/%S"
+          (if mode=Ui_theme.Dark then "dark" else "light") accent)
+          (match Theme_vars.color_of "var(--left-sidebar-bg-color)" with
+           | Some color -> color.a=255 | None -> false)) Ui_theme_css.accents)
+      [Ui_theme.Light;Ui_theme.Dark];
+    Theme_vars.set_accent "none";Theme_vars.set_dark false;
+    install Ui_theme.Light ["--secondary","120 100% 25%"];
+    expect "Application CSS aliases must inherit the computed body custom properties"
+      (Theme_vars.color_of "var(--left-sidebar-bg-color)"=Some (Lui_scene.color 0 128 0 255)));
+  List.iter prerr_endline (List.rev !failures);
+  check "Native application CSS surfaces across every accent" (!failures=[]);
+  print_endline "native application CSS surfaces across every accent: OK"

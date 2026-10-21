@@ -338,12 +338,16 @@ let stylesheet_owned_var name =
   String.starts_with ~prefix:"--rx-" name
   || List.mem name Ui_theme_css.owned_names
 
-type css_palette = { root : (string * string) list; body : (string * string) list }
+type css_palette = {
+  root : (string * string) list;
+  body : (string * string) list;
+  application : (string * string) list;
+}
 
 let css_palette mode ~accent =
-  let root, body = Ui_theme_css.vars ~dark:(mode = Dark) ~accent in
+  let root, body, application = Ui_theme_css.vars ~dark:(mode = Dark) ~accent in
   { root = (match mode with Light -> Ui_theme_radix.light | Dark -> Ui_theme_radix.dark) @ root
-  ; body
+  ; body; application
   }
 
 let snapshot mode =
@@ -357,8 +361,7 @@ let snapshot mode =
   ; vars =
       List.filter (fun (name, _) -> not (stylesheet_owned_var name))
         (ls_vars @ lui_vars c @ canonical_vars c cs
-           typography @ cmdk_vars mode @ checkbox_vars mode @ handbook_vars mode
-         @ [ "--left-sidebar-bg-color", "var(--lx-gray-02)" ])
+           typography @ cmdk_vars mode @ checkbox_vars mode @ handbook_vars mode)
   }
 
 let mode_of_string = function

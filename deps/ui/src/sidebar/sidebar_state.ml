@@ -176,6 +176,9 @@ let on_right_split_resize st ev =
    still hold space *)
 let left_docked (open_ : bool) (vw : float) = open_ && vw >= 640.
 
+let left_inner_width width viewport =
+  max 0 (int_of_float (Float.round (if viewport<640. then viewport*.0.74 else width))-1)
+
 (* ---------- edge-swipe + small-viewport behavior (cljs
    left_sidebar.cljs) ----------
    touchstart/move/end on #left-sidebar: a rightward drag from the

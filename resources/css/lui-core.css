@@ -577,14 +577,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   background-color: rgba(0, 0, 0, 0.15);
 }
 
-/* cljs right_sidebar.cljs toggle: (when-not (util/sm-breakpoint?)) —
-   the right-sidebar header button is not rendered below 640px */
-@media (max-width: 639.98px) {
-  .cp__header .toggle-right-sidebar {
-    display: none;
-  }
-}
-
 .left-sidebar-inner {
   &.as-container {
     @media (max-width: 639.98px) {

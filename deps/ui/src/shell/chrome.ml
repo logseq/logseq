@@ -656,14 +656,15 @@ let home_button ms =
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_button ms =
-  icon_btn ~key:"rs-toggle" ~id:""
+  Ui_components.header_right_sidebar_toggle
+  (icon_btn ~key:"rs-toggle" ~id:""
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar" ())
     ~icon:"layout-sidebar-right"
     ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
-    ()
+    ())
 
 let header (ms : Model.t Signal.signal) =
   if Ui_services.env_publishing () then
@@ -741,10 +742,6 @@ let header (ms : Model.t Signal.signal) =
                               ~text:p.Model.page_title ])
                   | _ -> spacer ~key:"head-bc-empty" [])
                 ms ]
-        ; Ui_components.native_performance
-            ~label:(I18n.t "profiler.native/metrics-dialog-label")
-            ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
-            ~format_fps:(I18n.t1 "profiler.native/fps-label") ()
         ; row ~key:"head-acts" ~cross:`center
             [ (* cljs header.cljs: inside the same rtc-indicator-visible?
                  gate — collaborators then the cloud indicator *)
@@ -795,9 +792,6 @@ let right_sidebar (ms : Model.t Signal.signal) =
    the split kind's divider replaced the hand-rolled resizer. The
    sidebar's own top row hosts the toggle + search buttons while
    docked-open (the header only mounts its copies when closed). *)
-let left_inner_width width viewport =
-  max 0 (int_of_float (Float.round (if viewport < 640. then viewport *. 0.74 else width)) - 1)
-
 let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
@@ -819,9 +813,9 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
            [Ui_components.Prop.position `relative;Ui_components.Prop.overflow `auto;
             Ui_components.Prop.z_index 3]
            (column ~key:"ls-inner" ~grow:1. ~min_height:0
-              ~min_width:(reactive left_inner_width
+              ~min_width:(reactive Sidebar_state.left_inner_width
                 (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
-              ~max_width:(reactive left_inner_width
+              ~max_width:(reactive Sidebar_state.left_inner_width
                 (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
               ~background:"var(--left-sidebar-bg-color)"
               ~style_class:"left-sidebar-inner as-container"

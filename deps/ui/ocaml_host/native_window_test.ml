@@ -623,16 +623,25 @@ let () =
     | 1 -> Lui_scene.rect 0. 0. 800. 96.
     | _ -> Lui_scene.rect 16. 16. 64. 64. in
   let regions = Native_window.drag_regions ~store ~rect_of ~scale:2. ~blocked:[] in
-  let draggable x y =
+  let draggable regions x y =
     let rec find i =
       if i = Array.length regions then false
       else if x >= regions.(i+1) && y >= regions.(i+2)
         && x < regions.(i+1) +. regions.(i+3)
         && y < regions.(i+2) +. regions.(i+4) then regions.(i)=1.
       else find (i+5) in find 0 in
-  check "Header button became a window drag area" (not (draggable 20. 20.));
-  check "Header blank space cannot drag the window" (draggable 200. 20.);
-  check "Document content became a window drag area" (not (draggable 200. 100.));
+  check "Header button became a window drag area" (not (draggable regions 20. 20.));
+  check "Header blank space cannot drag the window" (draggable regions 200. 20.);
+  check "Document content became a window drag area" (not (draggable regions 200. 100.));
+  List.iter (Lui_store.apply_op store)
+    [CreateNode (3,Box);InsertChild (1,3,1);CreateNode (4,Box);InsertChild (3,4,0);
+     SetProp (4,PressEnabled,BoolValue true)];
+  let overlay_rect id=if id=3 || id=4 then Lui_scene.rect 0. 0. 800. 600. else rect_of id in
+  let active=Native_window.drag_regions ~store ~rect_of:overlay_rect ~scale:2. ~blocked:[] in
+  check "An active shade lets its covered titlebar drag the window" (not (draggable active 200. 20.));
+  Lui_store.apply_op store (SetProp (3,Inert,BoolValue true));
+  let inactive=Native_window.drag_regions ~store ~rect_of:overlay_rect ~scale:2. ~blocked:[] in
+  check "An inert retained shade blocks titlebar dragging" (draggable inactive 200. 20.);
   let sdl_ok = function Ok x -> x | Error (`Msg message) -> failwith message in
   sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
   let window = sdl_ok (Tsdl.Sdl.create_window "Native window regression"

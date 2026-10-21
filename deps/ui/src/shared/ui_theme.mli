@@ -3,7 +3,7 @@
 
     CSS owns global mode and accent declarations. Web consumes those
     stylesheets directly; native consumes [css_palette], generated from
-    the same declarations and evaluated in HTML/body inheritance order.
+    the same declarations and evaluated in HTML/body/application inheritance order.
 
     A [snapshot] carries additional application tokens. Derived names
     resolve on body so they can see the selected accent's declarations.
@@ -126,7 +126,11 @@ val faded_link_opacity : float
 
 (** Global CSS palette declarations for a mode and built-in accent.
     Generated from the same stylesheets consumed by Web. *)
-type css_palette = { root : (string * string) list; body : (string * string) list }
+type css_palette = {
+  root : (string * string) list;
+  body : (string * string) list;
+  application : (string * string) list;
+}
 
 val css_palette : mode -> accent:string -> css_palette
 

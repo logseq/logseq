@@ -216,3 +216,13 @@ test('shortcut glyphs do not add a second cell around shared keycaps', async () 
   })
   assert.deepEqual(dimensions, [], 'The typed outer cell owns dimensions; the glyph must stay intrinsic')
 })
+
+test('right sidebar toggle visibility has one shared typed owner', async () => {
+  const root = postcss.parse(await readFile(new URL('../resources/css/lui-core.css', import.meta.url), 'utf8'))
+  const display = []
+  root.walkRules(rule => {
+    if (!rule.selector.includes('.toggle-right-sidebar')) return
+    rule.walkDecls('display', declaration => display.push(declaration.value))
+  })
+  assert.deepEqual(display, [], 'A browser-only breakpoint cannot hide the matching native control')
+})
