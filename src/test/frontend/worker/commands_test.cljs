@@ -437,8 +437,7 @@
        :tx (doall (commands/run-commands report))})))
 
 (deftest repeated-task-with-a-cleared-date-test
-  ;; db-test #1353: a date cleared with the trash button holds
-  ;; :logseq.property/empty-placeholder, and the repeat threw on it
+  ;; Cleared dates retain the empty placeholder and must not be rescheduled.
   (let [ten (tc/to-long (t/date-time 2030 1 10 10 0))]
     (testing "Deadline repeats, Scheduled cleared: Deadline moves, Scheduled stays cleared"
       (let [{:keys [block tx]} (complete-with-cleared :logseq.property/deadline :logseq.property/scheduled)]
