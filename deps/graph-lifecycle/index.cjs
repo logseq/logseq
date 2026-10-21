@@ -625,6 +625,24 @@ function directoryIdentity(directory) {
 function sameDirectory(a, b) {
   return a && b && a.dev === b.dev && a.ino === b.ino;
 }
+function mistakenPrefixedAssetDir(ctx) {
+  // Native asset_store used to keep the logseq_db_ prefix and only rewrite
+  // / \ : so assets landed in a sibling of the real graph directory.
+  const prefixed = `logseq_db_${ctx.repo}`.replace(/[/\\:]/g, '-');
+  const dir = path.join(ctx.graphsDir, prefixed);
+  if (path.resolve(dir) === path.resolve(ctx.graphDir)) return null;
+  return dir;
+}
+function removeMistakenPrefixedAssetDir(ctx) {
+  const dir = mistakenPrefixedAssetDir(ctx);
+  if (!dir || !fs.existsSync(dir)) return;
+  const stat = fs.statSync(dir);
+  if (!stat.isDirectory()) return;
+  if (fs.existsSync(path.join(dir, 'db.sqlite'))) return;
+  const names = fs.readdirSync(dir).filter(name => !name.startsWith('.'));
+  if (!(names.length === 1 && names[0] === 'assets')) return;
+  fs.rmSync(dir, { recursive: true, force: true });
+}
 async function deleteGraph(storage, repo, commit) {
   const ctx = context(storage, repo);
   const observed = snapshot(storage, repo);
@@ -634,7 +652,10 @@ async function deleteGraph(storage, repo, commit) {
       fail('Graph generation changed', 'graph-not-exists');
     if (observed?.deletion && observed.deletion.id !== current.deletion?.id)
       fail('Graph deletion operation changed', 'graph-not-exists');
-    if (current.phase === 'deleted') return { existed: false, destination: null };
+    if (current.phase === 'deleted') {
+      removeMistakenPrefixedAssetDir(ctx);
+      return { existed: false, destination: null };
+    }
     if (!current.deletion) current.deletion = { id: id(), generation: current.generation, moved: false };
     const operation = current.deletion;
     if (operation.generation !== current.generation) fail('Graph deletion generation changed', 'graph-not-exists');
@@ -677,6 +698,7 @@ async function deleteGraph(storage, repo, commit) {
         const result = await commit();
         if (!result.ok) fail(result.error);
       }
+      removeMistakenPrefixedAssetDir(ctx);
       current.phase = 'deleted';
       delete current.error;
       writeJSON(ctx.stateFile, current);
@@ -704,7 +726,7 @@ async function cancelStartup(ctx, record) {
     writeJSON(ctx.stateFile, current);
   });
 }
-async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
+async function startGraph({ storage, repo, script, binary, owner = 'cli', createEmpty = false, generation, extraArgs = [], env: extraEnv = {} }) {
   const ctx = context(storage, repo);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
@@ -723,14 +745,21 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       for (const target of targets) await terminate(ctx, target, false);
       await cleanup(ctx, current, targets);
       const ticket = id();
-      const args = [script, '--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
+      const workerArgs = ['--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
         '--admission-ticket', ticket, '--graph-generation', current.generation];
-      if (createEmpty) args.push('--create-empty-db');
-      args.push(...extraArgs);
-      const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+      if (createEmpty) workerArgs.push('--create-empty-db');
+      workerArgs.push(...extraArgs);
+      // A native binary is spawned directly; the JS daemon needs the
+      // node runtime (process.execPath, ELECTRON_RUN_AS_NODE).
+      const env = { ...process.env, ...extraEnv };
+      if (!binary) env.ELECTRON_RUN_AS_NODE = '1';
       if (owner === 'electron' && !extraArgs.includes('--embedding-endpoint')) delete env.LOGSEQ_EMBEDDINGS_URL;
-      const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
-        stdio: 'ignore', env });
+      if (binary && !fs.existsSync(binary)) {
+        fail(`db-worker-node native binary not found: ${binary}. Build with \`pnpm db-worker-node:native\`.`, 'server-start-failed');
+      }
+      const child = cp.spawn(binary || process.execPath, binary ? workerArgs : [script, ...workerArgs],
+        { detached: owner !== 'electron',
+          stdio: 'ignore', env });
       child.on('error', () => {}); // Readiness or the missing PID reports spawn failure.
       const pid = child.pid;
       if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');

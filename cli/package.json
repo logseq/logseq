@@ -2,7 +2,7 @@
   "name": "logseq-cli",
   "private": true,
   "scripts": {
-    "bundle": "opam exec -- dune build @bundle",
+    "bundle": "LOGSEQ_REVISION=\"$(git describe --long --always --dirty 2>/dev/null || echo dev)\" opam exec -- dune build @bundle",
     "test": "opam exec -- dune runtest"
   },
   "devDependencies": {

@@ -199,10 +199,12 @@
        (= (:tx-id current) (:tx-id next-slot))
        (= (select-keys (get-in current [:snapshot :value])
                        [:block.temp/positioned-properties :property/closed-values
-                        :block.temp/has-children? :block.temp/class-property-idents])
+                        :block.temp/has-children? :block.temp/class-property-idents
+                        :block.temp/order-list-index])
           (select-keys (get-in next-slot [:snapshot :value])
                        [:block.temp/positioned-properties :property/closed-values
-                        :block.temp/has-children? :block.temp/class-property-idents]))))
+                        :block.temp/has-children? :block.temp/class-property-idents
+                        :block.temp/order-list-index]))))
 
 (defn- wire-slot
   [basis-rev [kind key :as slot-key] wire]
@@ -386,7 +388,8 @@
 
 (defn reset-graph!
   [graph-id]
-  (let [generation (inc (:generation @*store))
+  (let [same-graph? (= graph-id (:graph-id @*store))
+        generation (inc (:generation @*store))
         resource-slot-keys (into #{} (filter #(= :resource (first %)))
                                  (keys @*listeners))
         listeners (mapcat vals (vals @*listeners))
@@ -396,7 +399,11 @@
                           :resource-slot-keys resource-slot-keys))
     (reset! *in-flight {})
     (loader/reject-pending! error)
-    (run! (fn [listener] (listener)) listeners))
+    (run! (fn [listener] (listener)) listeners)
+    ;; Mounted hooks keep their subscriptions when the graph key is unchanged.
+    (when same-graph?
+      (doseq [slot-key (keys @*listeners)]
+        (start-load! slot-key))))
   nil)
 
 (defn- retry-mounted-errors!

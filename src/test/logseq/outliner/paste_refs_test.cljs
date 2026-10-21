@@ -4,8 +4,7 @@
   (:require [cljs.test :refer [deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.util.entity :as entity]
-            [frontend.worker.plain-value :as worker-plain]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]))
@@ -98,9 +97,8 @@
        :block/refs [(page-ref-map "internet")]}])
     (let [eid (first (d/q '[:find [?e ...]
                             :where [?e :block/name "internet"]]
-                          @conn))
-          block-map (worker-plain/entity-forward-map @conn (d/entity @conn eid) {})]
-      (is (entity/page? block-map)))))
+                          @conn))]
+      (is (ldb/page? (d/entity @conn eid))))))
 
 (deftest delete-paste-created-pages
   (let [conn (conn-with-target)]

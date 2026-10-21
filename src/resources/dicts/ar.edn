@@ -573,7 +573,6 @@
  :export/debug-transit-desc "يصدّر إلى ملف .transit لإرساله إلينا لتصحيح الأخطاء. ستتم إزالة أي بيانات حساسة من الملف المصدّر."
  :export/debug-transit-file "تصدير ملف transit للتصحيح"
  :export/edn-desc "يصدّر إلى ملف .edn قابل للقراءة والتعديل. لا تعتمد على هذا كنسخة احتياطية أساسية."
- :export/error-unexpected "حدث خطأ غير متوقع أثناء التصدير. راجع وحدة تحكم جافا سكريبت للحصول على التفاصيل."
  :export/exporting "جارٍ التصدير"
  :export/finalizing "جارٍ الإنهاء"
  :export/format-text "نص"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "فاصل"
  :sidebar.right/toggle "تبديل الشريط الجانبي الأيمن"
 
- :storage/invalid-data-writing "كتابة بيانات غير صالحة."
  :storage/sqlitedb-error "خطأ SQLiteDB: {1}"
  :storage/sqlitedb-import-error "خطأ في استيراد SQLiteDB: {1}"
  :storage/sqlitedb-save-error "خطأ في حفظ SQLiteDB: {1}"

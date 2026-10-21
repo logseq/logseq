@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exporta a un fitxer .transit per enviar-nos per a depuració. Les dades sensibles s'eliminaran del fitxer exportat."
  :export/debug-transit-file "Exportar fitxer de depuració transit"
  :export/edn-desc "Exporta a un fitxer .edn llegible i editable. No confieu en això com a còpia de seguretat principal."
- :export/error-unexpected "S'ha produït un error inesperat durant l'exportació. Consulta la consola de JavaScript per a més detalls."
  :export/exporting "Exportant"
  :export/finalizing "Finalitzant"
  :export/format-text "Text"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Eina per redimensionar panell dret "
  :sidebar.right/toggle "Alternar barra lateral dreta"
 
- :storage/invalid-data-writing "Escriptura de dades no vàlida."
  :storage/sqlitedb-error "Error de SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Error d'importació de SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Error de desar SQLiteDB: {1}"

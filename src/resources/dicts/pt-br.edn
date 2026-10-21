@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exporta para um arquivo .transit para enviar para nós para depuração. Quaisquer dados sensíveis serão removidos no arquivo exportado."
  :export/debug-transit-file "Exportar arquivo transit de depuração"
  :export/edn-desc "Exporta para um arquivo .edn legível e editável. Não dependa disso como backup principal."
- :export/error-unexpected "Ocorreu um erro inesperado durante a exportação. Consulte o console do JavaScript para detalhes."
  :export/exporting "Exportando"
  :export/finalizing "Finalizando"
  :export/format-text "Texto"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Manipulador de redimensionamento da barra lateral direita"
  :sidebar.right/toggle "Alternar barra lateral direita"
 
- :storage/invalid-data-writing "Gravação de dados inválida."
  :storage/sqlitedb-error "Erro SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Erro de importação SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Erro ao salvar SQLiteDB: {1}"

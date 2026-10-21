@@ -162,7 +162,7 @@ let to_json result =
   | Ok ->
       let data = result_data_value result in
       Js.Dict.set object_ "status" (Js.Json.string "ok");
-      Js.Dict.set object_ "data" (json_of_value data);
+      Js.Dict.set object_ "data" (json_of_value (Edn_util.normalize_strings data));
       Js.Json.stringify (Js.Json.object_ object_)
   | Error ->
       let error =
@@ -171,7 +171,7 @@ let to_json result =
         | None -> Edn_util.map_vec Vec.empty
       in
       Js.Dict.set object_ "status" (Js.Json.string "error");
-      Js.Dict.set object_ "error" (json_of_value error);
+      Js.Dict.set object_ "error" (json_of_value (Edn_util.normalize_strings error));
       Js.Json.stringify (Js.Json.object_ object_)
 
 let to_edn result =
@@ -189,16 +189,19 @@ let to_edn result =
         (Edn_util.keyword "error", Edn_util.keyword "error", error)
   in
   Melange_edn_melange.to_edn_string
-    (Edn_util.map_vec
-       (Vec.of_array
-          [| (Edn_util.keyword "status", status); (payload_key, payload) |]))
+    (Edn_util.normalize_strings
+       (Edn_util.map_vec
+          (Vec.of_array
+             [| (Edn_util.keyword "status", status); (payload_key, payload) |])))
 
 let render_human table = Output.Human_output.to_string table
 let count_footer count = "Count: " ^ Humanize_types.format_count count
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Melange_edn_melange.to_edn_string key)
+  |> Option.value
+       ~default:
+         (Melange_edn_melange.to_edn_string (Edn_util.normalize_strings key))
   |> strip_leading_colon
 
 let value_text value =
@@ -215,7 +218,8 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Melange_edn_melange.to_edn_string value
+  | _ ->
+      Melange_edn_melange.to_edn_string (Edn_util.normalize_strings value)
 
 let query_result_human value =
   match Edn_util.get value "result" with

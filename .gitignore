@@ -86,13 +86,12 @@ deps/db-sync/worker/.localflare
 
 
 tx-log*
-clj-e2e/.wally
-clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
 deps/db-sync/data
 *.map
 /dist/db-worker-node.js
+/static/js/db-worker.js
 /dist/build/
 /dist/cli-package/
 /dist/db-worker-node-assets.json
@@ -100,8 +99,8 @@ deps/db-sync/data
 /dist/cljs-runtime/
 /.agent-shell/
 
-clj-e2e/.clj-kondo/imports
 _build/
+ocaml-e2e/.parallel-logs/
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root

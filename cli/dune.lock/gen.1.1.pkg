@@ -1,0 +1,15 @@
+(version 1.1)
+
+(build
+ (all_platforms
+  ((action (run dune build @install -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (dune seq ocaml)))
+
+(source
+ (fetch
+  (url https://github.com/c-cube/gen/archive/v1.1.tar.gz)
+  (checksum
+   sha512=71a4b5c3666a7c11935398a78feea7383f61d2c549dfb96e324d40783ffa87b5ec492c5ec468803aabfb9b48e7d0ebaa30b24d2b974540afc7cca5feea3121c1)))

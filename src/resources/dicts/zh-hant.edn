@@ -603,7 +603,6 @@
  :export/debug-transit-desc "匯出為 .transit 檔案以供除錯。匯出的檔案會移除所有敏感資料。"
  :export/debug-transit-file "匯出除錯 transit 檔案"
  :export/edn-desc "匯出為可讀取和編輯的 .edn 檔案。請勿將此作為主要備份方式。"
- :export/error-unexpected "匯出期間發生意外錯誤。請查看 JavaScript 控制台以了解詳細信息。"
  :export/exporting "正在匯出"
  :export/finalizing "正在完成"
  :export/format-text "文字"
@@ -1695,7 +1694,6 @@
  :sidebar.right/resize-handle "右側邊欄調整大小"
  :sidebar.right/toggle "切換右側邊欄"
 
- :storage/invalid-data-writing "無效資料寫入。"
  :storage/sqlitedb-error "SQLiteDB 錯誤：{1}"
  :storage/sqlitedb-import-error "SQLiteDB 匯入錯誤：{1}"
  :storage/sqlitedb-save-error "SQLiteDB 儲存錯誤：{1}"
