@@ -241,6 +241,7 @@
 (def snapshot-download-response-schema
   [:map
    [:ok :boolean]
+   [:t :int]
    [:key :string]
    [:url :string]
    [:content-encoding {:optional true} [:maybe :string]]])
