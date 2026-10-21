@@ -1851,3 +1851,34 @@
       (is (some? (d/entity @conn [:block/uuid class-uuid])))
       (is (= #{y-uuid}
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest redo-ops-replay-keeps-query-value-block-test
+  (testing "redo of a semantic-ops tx that tags a block Query re-derives the query value block"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          block-uuid (random-uuid)
+          query-value (fn [] (some-> (d/entity @conn [:block/uuid block-uuid])
+                                     :logseq.property/query
+                                     :block/uuid))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks conn [{:page {:block/title "redo query tag"}
+                                           :blocks []}])
+        (let [page-id (d/q '[:find ?e . :where [?e :block/title "redo query tag"]]
+                          @conn)]
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid block-uuid
+                                          :block/title "q"
+                                          :block/tags #{:logseq.class/Query}}]
+                                        page-id
+                                        {:sibling? false
+                                         :keep-uuid? true}]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (is (some? (query-value)))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (some? (query-value))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
