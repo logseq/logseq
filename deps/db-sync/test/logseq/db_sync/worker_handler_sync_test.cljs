@@ -1122,6 +1122,56 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-writes-retain-the-authenticated-creator-test
+  (async done
+    (with-memory-sql-async
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (sqlite-export/create-conn)
+              self #js {:sql sql :conn conn :schema-ready true}
+              alice (random-uuid)
+              bob (random-uuid)
+              reports (atom [])
+              call (fn [actor path method body]
+                     (let [request (semantic-json-request path method body)]
+                       (.set (.-headers request) "x-logseq-sync-actor"
+                             (js/encodeURIComponent (js/JSON.stringify #js {"sub" (str actor)
+                                                                           "cognito:username" "Creator"
+                                                                           "email" "creator@example.com"})))
+                       (p/let [response (sync-handler/handle-http self request)]
+                         (is (.-ok response))
+                         (json-body response))))
+              author (fn [id]
+                       (some-> (d/entity @conn [:block/uuid (uuid id)])
+                               :logseq.property/created-by-ref :block/uuid))]
+          (d/listen! conn ::creator-reports #(swap! reports conj %))
+          (-> (p/let [page (call alice "/semantic/pages?graph-id=graph-1" "POST" {:title "Authored page"})
+                      inserted (call alice (str "/semantic/blocks/" (:uuid page) "/children?graph-id=graph-1") "POST"
+                                     {:position "append" :blocks [{:title "First [[New reference]]"} {:title "Second"}]})
+                      block-id (get-in inserted [:blocks 0 :uuid])
+                      blank-id (get-in inserted [:blocks 1 :uuid])
+                      _cleared (d/transact! conn [[:db/add [:block/uuid (uuid blank-id)] :block/title ""]])
+                      before-task (count @reports)
+                      task (call bob "/semantic/tasks?graph-id=graph-1" "POST" {:title "Authored task"})
+                      task-transactions (- (count @reports) before-task)
+                      edited (call bob (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH" {:title "Edited"})
+                      filled (call bob (str "/semantic/blocks/" blank-id "?graph-id=graph-1") "PATCH" {:title "First text"})]
+                (is (= "Edited" (:title edited)))
+                (is (= "First text" (:title filled)))
+                (is (= alice (author (:uuid page))))
+                (is (= alice (author block-id)))
+                (is (= bob (author blank-id)))
+                (is (= bob (author (:uuid task))))
+                (is (= alice (:block/uuid (:logseq.property/created-by-ref
+                                          (d/entity @conn (:e (first (d/datoms @conn :avet :block/name "new reference"))))))))
+                (is (= 1 task-transactions))
+                (is (= 2 (count (d/datoms @conn :avet :logseq.property.user/email "creator@example.com")))))
+              (p/then (fn [] (d/unlisten! conn ::creator-reports) (done)))
+              (p/catch (fn [error]
+                         (d/unlisten! conn ::creator-reports)
+                         (is false (str error))
+                         (done)))))))))
+
 (deftest semantic-create-task-uses-one-transaction-test
   (async done
          (with-memory-sql-async
