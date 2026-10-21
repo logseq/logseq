@@ -84,10 +84,10 @@
 (def tx-batch-ok-schema
   [:map
    [:type [:= "tx/batch/ok"]]
-   [:t-before :int]
+   [:t-before {:optional true} :int]
    [:t :int]
    [:checksum {:optional true} :string]
-   [:txs [:sequential tx-log-entry-schema]]])
+   [:txs {:optional true} [:sequential tx-log-entry-schema]]])
 
 (def ws-server-message-schema
   [:multi {:dispatch :type}

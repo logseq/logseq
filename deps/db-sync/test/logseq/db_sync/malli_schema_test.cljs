@@ -48,6 +48,13 @@
     (is (= :save-block (get-in (db-sync-schema/ws-server-message-coercer body)
                                [:txs 0 :outliner-op])))
     (is (uuid? (get-in (db-sync-schema/ws-server-message-coercer body) [:txs 0 :tx-id])))
-    (doseq [invalid [(dissoc body :txs) (dissoc body :t-before)
+    (doseq [invalid [(dissoc body :t)
+                     (assoc body :t-before "invalid")
                      (assoc body :txs [{:t 1 :tx 42}])]]
       (is (thrown? js/Error (db-sync-schema/ws-server-message-coercer invalid))))))
+
+(deftest acknowledgement-accepts-existing-client-protocol-test
+  (doseq [body [{:type "tx/batch/ok" :t 1}
+               {:type "tx/batch/ok" :t 1 :checksum "0000000000000000"}]]
+    (is (= body (db-sync-schema/ws-server-message-coercer body)))
+    (is (= body ((get db-sync-schema/http-response-coercers :sync/tx-batch) body)))))

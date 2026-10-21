@@ -1275,7 +1275,6 @@
           (let [deleted-block-uuids (first deleted-block-uuid-suffixes)
                 tx-data (some->> (:tx-data remote-tx)
                                  (map (partial resolve-temp-id db))
-                                 (tx-sanitize/sanitize-tx db)
                                  drop-stale-adds-after-remote-entity-delete)
                 tx-data (cond->> tx-data
                           (seq deleted-block-uuids)
@@ -1286,7 +1285,7 @@
                 tx-data (cond->> tx-data
                           db-before-local-reversal
                           (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-                tx-data (seq tx-data)
+                tx-data (seq (tx-sanitize/sanitize-tx db tx-data))
                 tx-meta (apply-tx-meta remote-tx)
                 report (ldb/transact! conn tx-data tx-meta)
                 results' (cond-> results
