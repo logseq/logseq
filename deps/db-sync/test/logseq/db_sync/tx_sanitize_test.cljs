@@ -80,6 +80,121 @@
       (is (empty? (set/intersection ignored-ops (set sanitized))))
       (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
 
+(defn- tx-attrs
+  [tx-data]
+  (set (mapcat tx-item-attrs tx-data)))
+
+(defn- rating-graph
+  [property-type]
+  {:properties {:user.property/rating {:logseq.property/type property-type}}
+   :pages-and-blocks
+   [{:page {:block/title "Page"}
+     :blocks [{:block/title "a"}]}]})
+
+(deftest sanitize-tx-drops-values-of-concurrently-deleted-user-property-test
+  (testing "scalar adds and map keys for a deleted user property are dropped"
+    (let [conn (db-test/create-conn-with-blocks (rating-graph :checkbox))
+          block (db-test/find-block-by-content @conn "a")
+          block-uuid (:block/uuid block)
+          _ (d/transact! conn [[:db/retractEntity :user.property/rating]])
+          tx-data [[:db/add [:block/uuid block-uuid] :block/title "a"]
+                   [:db/add [:block/uuid block-uuid] :user.property/rating true]
+                   [:db/retract [:block/uuid block-uuid] :user.property/rating false]
+                   {:db/id [:block/uuid block-uuid]
+                    :block/updated-at 2
+                    :user.property/rating true}]
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (nil? (d/entity @conn :user.property/rating)))
+      (is (not (contains? (tx-attrs sanitized) :user.property/rating)))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "a"] %) sanitized))
+      (is (some (fn [item]
+                  (and (map? item)
+                       (= [:block/uuid block-uuid] (:db/id item))
+                       (= 2 (:block/updated-at item))
+                       (not (contains? item :user.property/rating))))
+                sanitized)))))
+
+(deftest sanitize-tx-keeps-existing-user-and-built-in-property-ops-test
+  (testing "ops for properties that still exist, built-ins, and non-property attrs are kept"
+    (let [conn (db-test/create-conn-with-blocks (rating-graph :checkbox))
+          block (db-test/find-block-by-content @conn "a")
+          block-uuid (:block/uuid block)
+          tx-data [[:db/add [:block/uuid block-uuid] :user.property/rating true]
+                   [:db/add [:block/uuid block-uuid] :logseq.property/hide? true]
+                   [:db/add [:block/uuid block-uuid] :block/title "kept"]]
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (= (set tx-data) (set sanitized))))))
+
+(deftest sanitize-tx-keeps-property-created-in-same-tx-test
+  (testing "a property ident created in the same tx is not treated as deleted"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "a"}]}]})
+          block (db-test/find-block-by-content @conn "a")
+          block-uuid (:block/uuid block)
+          tx-data [[:db/add -1 :db/ident :user.property/fresh]
+                   [:db/add -1 :logseq.property/type :checkbox]
+                   [:db/add [:block/uuid block-uuid] :user.property/fresh true]
+                   {:db/id -2
+                    :db/ident :user.property/from-map
+                    :logseq.property/type :checkbox}
+                   [:db/add [:block/uuid block-uuid] :user.property/from-map true]]
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (= (set tx-data) (set sanitized))))))
+
+(deftest sanitize-tx-drops-value-blocks-of-deleted-property-test
+  (testing "value blocks created only for a deleted property are dropped with the property pair"
+    (let [conn (db-test/create-conn-with-blocks (rating-graph :number))
+          block (db-test/find-block-by-content @conn "a")
+          block-uuid (:block/uuid block)
+          property-uuid (:block/uuid (d/entity @conn :user.property/rating))
+          value-uuid (random-uuid)
+          _ (d/transact! conn [[:db/retractEntity :user.property/rating]])
+          tx-data [[:db/add "value-temp" :block/uuid value-uuid]
+                   [:db/add "value-temp" :block/parent [:block/uuid property-uuid]]
+                   [:db/add "value-temp" :logseq.property/created-from-property [:block/uuid property-uuid]]
+                   [:db/add "value-temp" :logseq.property/value 5]
+                   [:db/add [:block/uuid block-uuid] :user.property/rating "value-temp"]
+                   [:db/add [:block/uuid block-uuid] :block/updated-at 2]
+                   {:db/id -3
+                    :block/uuid (random-uuid)
+                    :block/parent :user.property/rating
+                    :logseq.property/created-from-property :user.property/rating
+                    :logseq.property/value 9}]
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)
+          sanitized-eids (into #{}
+                               (keep (fn [item]
+                                       (cond
+                                         (map? item) (:db/id item)
+                                         (and (vector? item) (>= (count item) 2)) (second item))))
+                               sanitized)]
+      (is (not (contains? (tx-attrs sanitized) :user.property/rating)))
+      (is (not (contains? sanitized-eids "value-temp")))
+      (is (not (contains? sanitized-eids -3)))
+      (is (not-any? #(= value-uuid (:block/uuid %)) sanitized))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/updated-at 2] %) sanitized)))))
+
+(deftest sanitize-tx-keeps-existing-block-used-as-deleted-node-property-value-test
+  (testing "a node-property value that is an existing block is not retracted; only the pair is dropped"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/related {:logseq.property/type :node}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "a"}
+                            {:block/title "target"}]}]})
+          block (db-test/find-block-by-content @conn "a")
+          target (db-test/find-block-by-content @conn "target")
+          _ (d/transact! conn [[:db/retractEntity :user.property/related]])
+          tx-data [[:db/add [:block/uuid (:block/uuid block)]
+                    :user.property/related
+                    [:block/uuid (:block/uuid target)]]
+                   [:db/add [:block/uuid (:block/uuid target)] :block/title "target"]]
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (not (contains? (tx-attrs sanitized) :user.property/related)))
+      (is (some #(= [:db/add [:block/uuid (:block/uuid target)] :block/title "target"] %)
+                sanitized)))))
+
 (deftest sanitize-delete-blocks-retracts-property-value-children-test
   (testing "delete-blocks adds retracts for generated property value children"
     (let [conn (db-test/create-conn-with-blocks
