@@ -464,7 +464,7 @@
   (is (nil? (thrown #(#'sync-handle-message/validate-local-tx! repo {:type "pong"} -1)))))
 
 ;; Fails if, in `handle-message!`, `:db-sync/response-parse-failed` becomes `:db-sync/send-queue-task-failed`, the `:repo` key is dropped or the `:raw` key is dropped.
-(deftest handle-message-fails-fast-on-unparseable-messages-test
+(deftest handle-message-fails-fast-on-unparsable-messages-test
   (async done
          (finish
           (p/let [{:keys [result]} (<spied {} #(sync-handle-message/handle-message! repo (new-client) "not json"))]

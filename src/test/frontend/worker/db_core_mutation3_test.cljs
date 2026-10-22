@@ -530,7 +530,7 @@
 ;; ---- built-in sync repair ----
 
 ;; Fails if, in `stable-built-in-sync-repair-item`, `and` becomes `or`.
-;; Fails if, in `built-in-sync-repair-tx-data`, the `(map (fn [b] (assoc b :logseq.propert...` step is dropped, `true` becomes `false`, `:db/ident` becomes `:db/missing-connection`, the `:db/ident` key is dropped, `and` becomes `or` or `first` becomes `last`.
+;; Fails if, in `built-in-sync-repair-tx-data`, the `(map (fn [b] (assoc b :logseq.property/built-in? true)))` step is dropped, `true` becomes `false`, `:db/ident` becomes `:db/missing-connection`, the `:db/ident` key is dropped, `and` becomes `or` or `first` becomes `last`.
 (deftest built-in-sync-repair-tx-data-orders-and-marks-built-in-items-test
   (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
         items (filterv #(and (map? %) (:block/uuid %)) tx-data)
