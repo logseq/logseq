@@ -3,9 +3,9 @@
   (:require [frontend.handler.db-based.recent :as db-based]))
 
 (defn add-page-to-recent!
-  [db-id click-from-recent?]
+  [db-id]
   (when db-id
-    (db-based/add-page-to-recent! db-id click-from-recent?)))
+    (db-based/add-page-to-recent! db-id)))
 
 (defn get-recent-pages
   []
