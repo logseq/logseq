@@ -1431,55 +1431,36 @@
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest page-to-block-repoints-descendant-block-page-test
-  ;; Reproduces https://github.com/logseq/db-test/issues/1424
-  ;; Removing #Page from a nested page must re-point child and grandchild
-  ;; :block/page to the resolved parent page, not the demoted block.
   (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "Demote Parent"}}
-               {:page {:block/title "Nested Page"}
-                :blocks [{:block/title "child block under nested page"
-                          :build/children [{:block/title "grandchild block"}]}]}])
-        parent (db-test/find-page-by-title @conn "Demote Parent")
-        nested (db-test/find-page-by-title @conn "Nested Page")
-        child (db-test/find-block-by-content @conn "child block under nested page")
-        grandchild (db-test/find-block-by-content @conn "grandchild block")]
+              [{:page {:block/title "Alpha"}}
+               {:page {:block/title "Beta"}
+                :blocks [{:block/title "First"
+                          :build/children [{:block/title "Second"}]}]}])
+        parent (db-test/find-page-by-title @conn "Alpha")
+        nested (db-test/find-page-by-title @conn "Beta")
+        child (db-test/find-block-by-content @conn "First")
+        grandchild (db-test/find-block-by-content @conn "Second")]
     (with-transact-pipeline
       (fn []
         (outliner-core/move-blocks! conn [nested] parent {:sibling? false})
         (let [nested' (d/entity @conn (:db/id nested))
               child' (d/entity @conn (:db/id child))
               grandchild' (d/entity @conn (:db/id grandchild))]
-          (is (= (:db/id parent) (:db/id (:block/parent nested')))
-              "Nested Page is under Demote Parent")
           (is (ldb/internal-page? nested'))
-          (is (= (:db/id nested') (:db/id (:block/page child')))
-              "Precondition: child :block/page is Nested Page")
-          (is (= (:db/id nested') (:db/id (:block/page grandchild')))
-              "Precondition: grandchild :block/page is Nested Page")
+          (is (= [(:db/id nested') (:db/id nested')]
+                 (mapv (comp :db/id :block/page) [child' grandchild'])))
           (outliner-property/delete-property-value! conn (:db/id nested') :block/tags :logseq.class/Page)
           (let [demoted (d/entity @conn (:db/id nested'))
                 child-after (d/entity @conn (:db/id child'))
-                grandchild-after (d/entity @conn (:db/id grandchild'))
-                parent-after (d/entity @conn (:db/id parent))]
-            (is (not (ldb/page? demoted))
-                "Removing #Page converts Nested Page to a block")
+                grandchild-after (d/entity @conn (:db/id grandchild'))]
+            (is (not (ldb/page? demoted)))
             (is (nil? (:block/name demoted)))
-            (is (= (:db/id parent-after) (:db/id (:block/parent demoted)))
-                "Demoted block stays under Demote Parent")
-            (is (= (:db/id parent-after) (:db/id (:block/page demoted)))
-                "Demoted block :block/page is Demote Parent")
-            (is (= (:db/id demoted) (:db/id (:block/parent child-after)))
-                "Child still nests under the demoted block")
-            (is (= (:db/id child-after) (:db/id (:block/parent grandchild-after)))
-                "Grandchild still nests under the child")
-            (is (= (:db/id parent-after) (:db/id (:block/page child-after)))
-                "Child :block/page is re-pointed to Demote Parent")
-            (is (= (:db/id parent-after) (:db/id (:block/page grandchild-after)))
-                "Grandchild :block/page is re-pointed to Demote Parent")
-            (is (ldb/page? (:block/page child-after)))
-            (is (ldb/page? (:block/page grandchild-after)))
-            (is (= "Demote Parent" (:block/title (:block/page child-after))))
-            (is (= "Demote Parent" (:block/title (:block/page grandchild-after))))))))))
+            (is (= [(:db/id parent) (:db/id demoted) (:db/id child-after)]
+                   (mapv (comp :db/id :block/parent) [demoted child-after grandchild-after]))
+                "Page conversion preserves the outline structure")
+            (is (= [(:db/id parent) (:db/id parent) (:db/id parent)]
+                   (mapv (comp :db/id :block/page) [demoted child-after grandchild-after]))
+                "The demoted block and its descendants belong to the parent page")))))))
 
 (defn- block-ref-ids
   [block]
