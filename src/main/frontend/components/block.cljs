@@ -3878,7 +3878,8 @@
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
   (when-not (entity/journal? block)
-    {:on-drag-enter (fn [event]
+    {:data-block-drop-target true
+     :on-drag-enter (fn [event]
                       (.preventDefault event))
      :on-drag-over (fn [event]
                      (block-drag-over event uuid top? block-id *move-to'))

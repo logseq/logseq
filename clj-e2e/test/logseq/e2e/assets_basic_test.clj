@@ -114,13 +114,10 @@
   (testing "txt assets render as clickable links and re-upload inserts a reference"
     (let [page (w/get-page)
           txt-file (temp-txt-asset (str "logseq e2e notes " (random-uuid)))
-          pending-files (atom [txt-file txt-file])
           chooser-handler (reify Consumer
                             (accept [_ chooser]
-                              (let [file (first @pending-files)]
-                                (swap! pending-files rest)
-                                (.setFiles chooser
-                                           (into-array java.nio.file.Path [file])))))]
+                              (.setFiles chooser
+                                         (into-array java.nio.file.Path [txt-file]))))]
       (.onFileChooser page chooser-handler)
       (b/new-block "")
       (util/input-command "Upload an asset")
@@ -132,8 +129,21 @@
                                    (.innerText link))
                                ".txt")))
       (b/new-block "")
-      (util/input-command "Upload an asset")
-      (w/wait-for (util/get-by-text "Asset exists already" false))
+      (w/eval-js
+       "contents => {
+          const transfer = new DataTransfer();
+          const file = new File([contents], 'notes.txt', {type: 'text/plain'});
+          transfer.items.add(file);
+          transfer.items.add(file);
+          document.querySelector('.editor-wrapper textarea').dispatchEvent(
+            new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));
+        }"
+       (slurp (.toFile txt-file)))
+      (.waitForFunction page
+                        "() => document.querySelector('.editor-wrapper textarea')?.value.startsWith('[[')"
+                        nil)
       (util/exit-edit)
-      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 2)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 3)
+      (w/refresh)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 3)
       (.offFileChooser page chooser-handler))))
