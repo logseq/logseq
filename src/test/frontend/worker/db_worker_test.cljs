@@ -1,5 +1,5 @@
 (ns frontend.worker.db-worker-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is use-fixtures]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
@@ -24,6 +24,19 @@
 (def ^:private rtc-log-orig rtc-log-and-state/rtc-log)
 (def ^:private update-local-tx-orig client-op/update-local-tx)
 (def ^:private broadcast-to-clients-orig shared-service/broadcast-to-clients!)
+
+;; The cleanup of an async test's `restoring-worker-state`, run by the :after
+;; fixture: cljs.test runs it once the test called `done` and before the next
+;; test starts. Chained after the test's promise, it ran after `done`, in the
+;; middle of the next test, and reset the platform and the vars that test had
+;; just set.
+(defonce ^:private *pending-cleanup (atom nil))
+
+(use-fixtures :each
+  {:after (fn []
+            (when-let [cleanup @*pending-cleanup]
+              (reset! *pending-cleanup nil)
+              (cleanup)))})
 ;; Keep this compact to satisfy lint:large-vars while still checking full coverage.
 (def ^:private expected-db-core-thread-apis
   (into #{}
@@ -156,7 +169,8 @@
     (reset! worker-state/*sqlite #js {})
     (let [result (f)]
       (if (p/promise? result)
-        (p/finally result cleanup)
+        (do (reset! *pending-cleanup cleanup)
+            result)
         (do
           (cleanup)
           result)))))
@@ -378,6 +392,8 @@
               (with-fake-create-or-open-db
                 test-repo conn
                 (fn []
+                  ;; done after p/with-redefs has put the vars back, not inside it: otherwise
+                  ;; the next test in the process starts with broadcast-to-clients! still redefined
                   (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                       client-op/update-local-tx (fn [& _] nil)
                                       shared-service/broadcast-to-clients! (fn [& _] nil)]
@@ -385,13 +401,11 @@
                                 second-import (prepare test-repo true "graph-1" false)
                                 stale-outcome (capture-outcome #(finalize test-repo "graph-1" 42 (:import-id first-import)))]
                           (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
-                          (-> (finalize test-repo "graph-1" 42 (:import-id second-import))
-                              (p/then (fn [_]
-                                        (is true)
-                                        (done))))))
+                          (finalize test-repo "graph-1" 42 (:import-id second-import))))
+                      (p/then (fn [_] (is true)))
                       (p/catch (fn [error]
-                                 (is false (str error))
-                                 (done)))))))))))
+                                 (is false (str error))))
+                      (p/finally (fn [] (done)))))))))))
 
 (deftest db-sync-import-finalize-cleans-temp-pool-on-success-test
   (async done
