@@ -291,7 +291,7 @@
 (def ^:private decrypt-private-key-orig @#'sync-crypt/<decrypt-private-key)
 (def ^:private ensure-user-rsa-key-pair-raw-orig @#'sync-crypt/<ensure-user-rsa-key-pair-raw)
 
-(defn- <crypted
+(defn- <with-crypt
   "<spied plus the key and password crypto stubbed, the caches emptied and the
   sync base set. env answers (fn [& args] promise) under :read-secret,
   :decrypt-text-by-text-password, :decrypt-private-key, :import-public-key,
@@ -380,7 +380,7 @@
           (p/let [text (ldb/write-transit-str {:text-encrypted "pw"})
                   request [:ui-request :native-save-e2ee-password {:key password-key :encrypted-text text}]
                   save! (fn [env]
-                          (<crypted (merge {:runtime :browser :owner-source :capacitor} env)
+                          (<with-crypt (merge {:runtime :browser :owner-source :capacitor} env)
                                     #(#'sync-crypt/<save-e2ee-password "pw")))
                   native-saved (save! {:request-result (p/resolved {:supported? true})})
                   native-unsupported (save! {:request-result (p/resolved {:supported? false})})
@@ -406,7 +406,7 @@
          (finish
           (p/let [stored-secret (fn [_k] (p/resolved "stored"))
                   capacitor {:runtime :browser :owner-source :capacitor :read-secret stored-secret}
-                  read! (fn [env] (<crypted env #(#'sync-crypt/<read-e2ee-password-text "rt")))
+                  read! (fn [env] (<with-crypt env #(#'sync-crypt/<read-e2ee-password-text "rt")))
                   stored (read! {:runtime :node :read-secret stored-secret})
                   secret-fails (read! {:runtime :node :read-secret (fn [_k] (p/rejected (ex-info "boom" {})))})
                   native (read! (assoc capacitor :request-result (p/resolved {:supported? true :encrypted-text "native"})))
@@ -428,7 +428,7 @@
 (deftest decrypt-e2ee-password-text-rejects-missing-and-invalid-payloads-test
   (async done
          (finish
-          (p/let [decrypt! (fn [text] (<crypted {} #(#'sync-crypt/<decrypt-e2ee-password-text "rt" text)))
+          (p/let [decrypt! (fn [text] (<with-crypt {} #(#'sync-crypt/<decrypt-e2ee-password-text "rt" text)))
                   empty-text (decrypt! "")
                   nil-text (decrypt! nil)
                   invalid (decrypt! "{not transit")
@@ -470,7 +470,7 @@
   (async done
          (finish
           (p/let [verify! (fn [env password encrypted]
-                            (<crypted env #(#'sync-crypt/<verify-e2ee-password password encrypted)))
+                            (<with-crypt env #(#'sync-crypt/<verify-e2ee-password password encrypted)))
                   rejecting (fn [invalid?]
                               {:decrypt-private-key (fn [_password _encrypted]
                                                       (p/rejected (ex-info "bad" {:invalid-password? invalid?})))})
@@ -493,7 +493,7 @@
   (async done
          (finish
           (p/let [verify! (fn [env]
-                            (<crypted (merge {:runtime :browser} env)
+                            (<with-crypt (merge {:runtime :browser} env)
                                       #(#'sync-crypt/<verify-and-save-e2ee-password-from-server! "pw")))
                   no-base (verify! {:db-sync-config {}})
                   no-key (verify! {:fetch-result {:public-key "p"}})
@@ -513,7 +513,7 @@
   (async done
          (finish
           (p/let [pair {:public-key "p" :encrypted-private-key "e"}
-                  {:keys [result calls]} (<crypted {:auth-token "jwt" :jwt-sub "u"
+                  {:keys [result calls]} (<with-crypt {:auth-token "jwt" :jwt-sub "u"
                                                     :fetch-result pair
                                                     :kv-get-result (p/resolved (ldb/write-transit-str {}))}
                                                    #(p/let [first-pair (#'sync-crypt/<get-user-rsa-key-pair-raw sync-base)
@@ -527,7 +527,7 @@
 (deftest ensure-user-rsa-key-pair-without-password-needs-a-base-and-a-user-test
   (async done
          (finish
-          (p/let [ensure! (fn [env base] (<crypted env #(#'sync-crypt/<ensure-user-rsa-key-pair base nil)))
+          (p/let [ensure! (fn [env base] (<with-crypt env #(#'sync-crypt/<ensure-user-rsa-key-pair base nil)))
                   no-user (ensure! {} sync-base)
                   no-base (ensure! {:auth-token "jwt" :jwt-sub "u"} nil)]
             (is (= ["missing-field" {:base sync-base :user-id nil :field :user-rsa-key-pair}]
@@ -563,7 +563,7 @@
           (p/let [encrypted (ldb/write-transit-str [:enc])
                   stored-secret (fn [_k] (p/resolved (ldb/write-transit-str [:stored])))
                   decrypt! (fn [env]
-                             (<crypted (merge {:runtime :node :owner-source :cli} env)
+                             (<with-crypt (merge {:runtime :node :owner-source :cli} env)
                                        #(#'sync-crypt/<decrypt-private-key encrypted)))
                   no-secret (decrypt! {})
                   blank-password (decrypt! {:read-secret stored-secret
@@ -614,7 +614,7 @@
          (finish
           (p/let [pair {:public-key (ldb/write-transit-str {:k 1}) :encrypted-private-key "enc-str"}
                   load! (fn [ensure-raw]
-                          (<crypted {:ensure-raw ensure-raw :private-key-result :private}
+                          (<with-crypt {:ensure-raw ensure-raw :private-key-result :private}
                                     #(#'sync-crypt/<load-user-rsa-key-material "b" "u" "g")))
                   ok (load! pair)
                   no-private (load! (assoc pair :encrypted-private-key nil))
@@ -631,7 +631,7 @@
   (async done
          (finish
           (p/let [preflight! (fn [env encrypted-graph?]
-                               (<crypted env #(sync-crypt/<preflight-upload-e2ee! "repo" encrypted-graph?)))
+                               (<with-crypt env #(sync-crypt/<preflight-upload-e2ee! "repo" encrypted-graph?)))
                   no-user (preflight! {} true)
                   no-base (preflight! {:db-sync-config {} :auth-token "jwt" :jwt-sub "u"} true)
                   ok (preflight! {:auth-token "jwt" :jwt-sub "u" :key-material {:public-key :pub :private-key :priv}} true)
@@ -648,7 +648,7 @@
 
 (defn- <aes-key-for
   [env]
-  (<crypted (merge {:graph-e2ee? true
+  (<with-crypt (merge {:graph-e2ee? true
                     :auth-token "jwt" :jwt-sub "u"
                     :key-material {:public-key :pub :private-key :priv}
                     :items {}}
@@ -729,7 +729,7 @@
 
 (defn- <download-aes-key
   [env graph-id]
-  (<crypted (merge {:auth-token "jwt" :jwt-sub "u"
+  (<with-crypt (merge {:auth-token "jwt" :jwt-sub "u"
                     :rsa-pair {:public-key "p" :encrypted-private-key "enc"}
                     :private-key-result :priv
                     :decrypt-aes-key (fn [_private-key encrypted] (p/resolved [:aes encrypted]))}
@@ -760,7 +760,7 @@
 
 (defn- <grant-access
   [env]
-  (<crypted (merge {:graph-e2ee? true
+  (<with-crypt (merge {:graph-e2ee? true
                     :aes-key-result :aes
                     :coerce-result {:body 1}
                     :fetch-result {:public-key (ldb/write-transit-str {:k 1})}}
@@ -818,7 +818,7 @@
                            [:db/add 1 :block/name]
                            [:db/retract 1]
                            {:block/title "x"}]
-                  {:keys [result]} (<crypted {} #(sync-crypt/<encrypt-tx-data :aes tx-data))]
+                  {:keys [result]} (<with-crypt {} #(sync-crypt/<encrypt-tx-data :aes tx-data))]
             (is (= [[:db/add 1 :block/title (encrypted-value "hello")]
                     [:db/add 1 :block/uuid "u"]
                     [:db/add 1 :block/name]
@@ -836,7 +836,7 @@
                   decrypt (fn [_aes-key data]
                             (p/resolved (when (= [:pkg] data) (ldb/write-transit-str "plain"))))
                   row! (fn [raw-addresses]
-                         (<crypted {:decrypt-text-if-encrypted decrypt}
+                         (<with-crypt {:decrypt-text-if-encrypted decrypt}
                                    #(#'sync-crypt/<decrypt-snapshot-row :aes ["addr" content raw-addresses])))
                   with-addresses (row! "[1,2]")
                   without-addresses (row! nil)
@@ -859,8 +859,8 @@
                          {:e 2 :a :block/uuid :v "u" :t 1}]
                   big (mapv (fn [i] {:e i :a :block/uuid :v "u" :t 1}) (range 5001))
                   progress* (atom [])
-                  plain (<crypted {} #(sync-crypt/<encrypt-datoms :aes small))
-                  batched (<crypted {} #(sync-crypt/<encrypt-datoms :aes big (fn [done-count total]
+                  plain (<with-crypt {} #(sync-crypt/<encrypt-datoms :aes small))
+                  batched (<with-crypt {} #(sync-crypt/<encrypt-datoms :aes big (fn [done-count total]
                                                                                (swap! progress* conj [done-count total]))))]
             (is (= [{:e 1 :a :block/title :v (encrypted-value "hello") :t 1}
                     {:e 2 :a :block/uuid :v "u" :t 1}]
@@ -880,7 +880,7 @@
   (async done
          (finish
           (p/let [api (get @thread-api/*thread-apis :thread-api/get-user-rsa-key-pair)
-                  call! (fn [env] (<crypted env #(api "token" "user")))
+                  call! (fn [env] (<with-crypt env #(api "token" "user")))
                   no-base (call! {:db-sync-config {}})
                   full (call! {:rsa-pair {:public-key "p" :encrypted-private-key "e" :extra 1}})
                   no-private (call! {:rsa-pair {:public-key "p"}})
