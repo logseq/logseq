@@ -1050,11 +1050,10 @@ let vmap_get (k : attr) (kvs : (value * value) list) : value option =
        | _ -> None)
     kvs
 
-let js_truthy (v : value) : bool =
+(* Clojure truthiness keeps zero and empty strings truthy. *)
+let cljs_truthy (v : value) : bool =
   match v with
-  | Nil | Bool false | String "" -> false
-  | Int64 0L -> false
-  | Float f -> Float.equal f 0.0 |> not
+  | Nil | Bool false -> false
   | _ -> true
 
 let uuid_str_of_eid db (eid : entity_id) : string option =
@@ -1614,7 +1613,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
           (match c.f_match with
            | Bool m ->
                (match Option.bind raw (get_property_value_content db) with
-                | Some pv -> js_truthy pv = m
+                | Some pv -> cljs_truthy pv = m
                 | None -> not m)
            | Keyword "empty" -> empty_value_opt (Db_class.ident_eid db "logseq.property/empty-placeholder") raw
            | m when is_empty_coll m -> true
@@ -1629,7 +1628,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
           (match c.f_match with
            | Bool m ->
                (match Option.bind raw (get_property_value_content db) with
-                | Some pv -> js_truthy pv <> m
+                | Some pv -> cljs_truthy pv <> m
                 | None -> m)
            | Keyword "empty" -> not (empty_value_opt (Db_class.ident_eid db "logseq.property/empty-placeholder") raw)
            | m when is_empty_coll m && value' <> [] -> true
@@ -1650,7 +1649,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
                | None -> false)
             value'
       | "text-not-contains" ->
-          let needle = js_str c.f_match in
+          let needle = lowercase (js_str c.f_match) in
           not
             (List.exists
                (fun v ->
@@ -1659,7 +1658,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
                     | Some pv -> pv
                     | None -> Nil
                   in
-                  contains_substring (js_str pv) needle)
+                  contains_substring (lowercase (js_str pv)) needle)
                value')
       | "number-gt" | "number-gte" | "number-lt" | "number-lte" ->
           (match raw with
@@ -2302,7 +2301,7 @@ let match_is_clause (row : clause_row) (c : compiled_clause) : bool =
   match c.c_match with
   | Bool m ->
       (match row.r_contents with
-       | x :: _ -> js_truthy x = m
+       | x :: _ -> cljs_truthy x = m
        | [] -> not m)
   | Keyword "empty" -> row.r_empty_values
   | m when is_empty_coll m -> true
@@ -2317,7 +2316,7 @@ let match_is_not_clause (row : clause_row) (c : compiled_clause) : bool =
   match c.c_match with
   | Bool m ->
       (match row.r_contents with
-       | x :: _ -> js_truthy x <> m
+       | x :: _ -> cljs_truthy x <> m
        | [] -> m)
   | Keyword "empty" -> not row.r_empty_values
   | m when is_empty_coll m && row.r_raw <> [] -> true
@@ -2570,7 +2569,7 @@ let latest_journal_day_pairs db : (entity_id * value) list =
 let view_sort_groups_desc (view : entity option) : bool =
   match Option.bind view (fun v -> Ldb.value v "logseq.property.view/sort-groups-desc?") with
   | None -> true
-  | Some v -> js_truthy v
+  | Some v -> cljs_truthy v
 
 (* view/comparable-ref-content *)
 let comparable_ref_content db (v : value) : value option =

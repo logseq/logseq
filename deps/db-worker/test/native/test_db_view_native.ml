@@ -2096,12 +2096,53 @@ let test_unlinked_references_ignore_node_ids_and_match_aliases () =
     str_list_eq' "unlinked titles" titles [expected])
     ["aa", "plain aa"; "λόγος", "Logos is a rational form of discourse"; "logos", "Logos is a rational form of discourse"]
 
+let parity_conn () =
+  topic_conn
+    ~properties:["user.property/note", {default_property with p_type = "default"};
+                 "user.property/score", {default_property with p_type = "number"}]
+    (List.map (fun (title, properties) ->
+      {page = {default_page with pg_title = Some title; pg_tags = ["Topic"]; pg_properties = properties}; blocks = []})
+      ["Apple", ["user.property/note", Str "APPLE"; "user.property/score", Int64 0];
+       "Orange", ["user.property/note", Str "Orange"; "user.property/score", Int64 10];
+       "Missing", []])
+
+let parity_options db feature =
+  let scope = if feature = "query-result" then
+      ["query-entity-ids", Wire.Array (List.map (fun title ->
+        Wire.Int (Option.get (Ldb.get_page db (String title))).id) ["apple"; "orange"; "missing"])]
+    else ["view-for-id", Wire.Int (ident_eid db "user.class/Topic")] in
+  opts (["view-feature-type", kw feature; "sorting", sorting ["block/title", true]] @ scope)
+
+let test_text_not_contains_uses_case_folded_content () =
+  let conn = parity_conn () in
+  let db = db_of conn in
+  let view = create_view_id conn "query-result" in
+  let result = Db_view.get_view_data (db_of conn) (Some view)
+    (opt_add (parity_options db "query-result")
+       ["filters", filters [clause "user.property/note" "text-not-contains" (Wire.String "apple")]]) in
+  str_list_eq' "negative text filter uses the same case folding as contains"
+    (result_titles (db_of conn) result) ["Missing"; "Orange"]
+
+let test_boolean_filters_preserve_clojure_truthiness () =
+  let conn = parity_conn () in
+  List.iter (fun feature ->
+    let view = create_view_id conn feature in
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db feature)
+         ["filters", filters [clause "user.property/score" "is" (Wire.Bool true)]]) in
+    str_list_eq' (feature ^ " keeps zero as a present truthy value")
+      (result_titles db result) ["Apple"; "Orange"])
+    ["query-result"; "class-objects"]
+
 (* ---------- suite ---------- *)
 
 let () =
   Alcotest.run "db_view"
     [ ( "view_test"
-      , [ Alcotest.test_case "missing-and-placeholder-sort-values-stay-last" `Quick test_missing_and_placeholder_sort_values_stay_last
+      , [ Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
+        ; Alcotest.test_case "boolean-filters-preserve-clojure-truthiness" `Quick test_boolean_filters_preserve_clojure_truthiness
+        ; Alcotest.test_case "missing-and-placeholder-sort-values-stay-last" `Quick test_missing_and_placeholder_sort_values_stay_last
         ; Alcotest.test_case "unlinked-references-ignore-node-ids-and-match-aliases" `Quick test_unlinked_references_ignore_node_ids_and_match_aliases
         ; Alcotest.test_case
             "get-view-data-journals-returns-ordered-compact-index-test" `Quick
