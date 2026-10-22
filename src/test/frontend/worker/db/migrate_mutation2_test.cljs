@@ -138,7 +138,7 @@
       (is (= :ensure-built-in-data-exists!
              ((get-in result [:migrate-updates :fix]) nil))))))
 
-;; Fails if, in `upgrade-version!`, the `(map (fn [b] (assoc b :logseq.propert...` step is dropped, `remove` becomes `filter`, `:logseq.class/Page` becomes `:logseq.class/Property`, `:logseq.class/Whiteboard` becomes `:logseq.class/Comment` or the `:db-migrate?` key is dropped.
+;; Fails if, in `upgrade-version!`, the `(map (fn [b] (assoc b :logseq.property/built-in? true)))` step is dropped, `remove` becomes `filter`, `:logseq.class/Page` becomes `:logseq.class/Property`, `:logseq.class/Whiteboard` becomes `:logseq.class/Comment` or the `:db-migrate?` key is dropped.
 (deftest upgrade-version-adds-built-in-properties-and-classes-test
   (let [conn (d/create-conn db-schema/schema)
         metas (atom [])]

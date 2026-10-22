@@ -215,7 +215,7 @@
                (call-thread-api conn :thread-api/validate-property-value
                                 {:property property :value "text"})))))))
 
-;; Fails if, in `convert-tag-to-page-tx`, the `[:db/retract class-id :logseq.propert...` tx entry is dropped, `:logseq.property.class/extends` becomes `:logseq.property.class/properties` or `:logseq.property.class/properties` becomes `:logseq.property.class/enable-bidirectional?`.
+;; Fails if, in `convert-tag-to-page-tx`, the `[:db/retract class-id :logseq.property.class/extends]` tx entry is dropped, `:logseq.property.class/extends` becomes `:logseq.property.class/properties` or `:logseq.property.class/properties` becomes `:logseq.property.class/enable-bidirectional?`.
 ;; Fails if, in `(top level)`, the `:outliner-op` key is dropped.
 (deftest convert-tag-to-page-drops-class-schema
   (let [conn (db-test/create-conn-with-blocks
@@ -402,7 +402,7 @@
       (is (= 1 (count (filter #(= :user.property/shared (:property-id %))
                               (:full-properties hidden-result))))))))
 
-;; Fails if, in `display-properties`, `:db/ident` becomes `:db/retract` or the `(remove (fn [[id _]] (classes-propert...` step is dropped.
+;; Fails if, in `display-properties`, `:db/ident` becomes `:db/retract` or the `(remove (fn [[id _]] (classes-properties ...` step is dropped.
 (deftest display-properties-lists-a-hidden-class-property-with-a-value-once
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:hid {:logseq.property/type :default}}
