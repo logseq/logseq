@@ -199,29 +199,35 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
-(defn- block-tree-uuids
-  "UUIDs on a block and any nested :build/children."
-  [block]
-  (into #{}
-        (keep :block/uuid)
-        (tree-seq :build/children :build/children block)))
-
 (defn dedupe-blocks-by-uuid
-  "Keep the first occurrence of each :block/uuid in a page :blocks vector,
-   including UUIDs nested under :build/children. Selected-node exports can list
-   a referenced target twice — as a nested child and again as a shallow root.
-   Import assigns :block/parent and :block/order from that vector, so a later
-   root copy would move the child to the page."
+  "Keeps the first position and attributes of each `:block/uuid` in `blocks`.
+   Merges unique descendants from later copies into the first occurrence,
+   including duplicates nested under `:build/children`. Blocks without UUIDs
+   remain distinct."
   [blocks]
-  (second
-   (reduce (fn [[seen acc] block]
-             (if-let [id (:block/uuid block)]
-               (if (contains? seen id)
-                 [seen acc]
-                 [(into seen (block-tree-uuids block)) (conj acc block)])
-               [(into seen (block-tree-uuids block)) (conj acc block)]))
-           [#{} []]
-           blocks)))
+  (let [*nodes (atom [{:children []}])
+        *uuid->index (atom {})]
+    (letfn [(collect-block [parent-index block]
+              (let [index (or (get @*uuid->index (:block/uuid block))
+                              (let [new-index (count @*nodes)]
+                                (swap! *nodes
+                                       (fn [nodes]
+                                         (-> nodes
+                                             (conj {:block block :children []})
+                                             (update-in [parent-index :children] conj new-index))))
+                                (when-let [id (:block/uuid block)]
+                                  (swap! *uuid->index assoc id new-index))
+                                new-index))]
+                (doseq [child (:build/children block)]
+                  (collect-block index child))))
+            (build-block [index]
+              (let [{:keys [block children]} (get @*nodes index)]
+                (cond-> block
+                  (or (contains? block :build/children) (seq children))
+                  (assoc :build/children (mapv build-block children)))))]
+      (doseq [block blocks]
+        (collect-block 0 block))
+      (mapv build-block (:children (first @*nodes))))))
 
 (defn- expand-build-children
   "Expands any blocks with :build/children to return a flattened vec with
