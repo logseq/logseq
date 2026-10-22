@@ -346,6 +346,25 @@
       (is (ldb/journal? journal))
       (is (= 20260410 (:block/journal-day journal))))))
 
+(deftest create-slash-date-class-does-not-create-namespaces
+  (doseq [title ["2026/05/18" "05/18/2026"]
+          existing-year? [false true]]
+    (let [conn (db-test/create-conn)
+          year-uuid (when existing-year?
+                      (second (outliner-page/create! conn "2026" {})))
+          entity-count (count (d/datoms @conn :avet :block/uuid))
+          [_ class-uuid] (outliner-page/create! conn title {:class? true :split-namespace? true})
+          class (d/entity @conn [:block/uuid class-uuid])]
+      (is (= title (:block/title class)))
+      (is (ldb/class? class))
+      (is (nil? (:block/journal-day class)))
+      (is (= (inc entity-count) (count (d/datoms @conn :avet :block/uuid)))
+          "Only the date class is created")
+      (is (= [:logseq.class/Root]
+             (mapv :db/ident (:logseq.property.class/extends class))))
+      (when year-uuid
+        (is (ldb/internal-page? (d/entity @conn [:block/uuid year-uuid])))))))
+
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])

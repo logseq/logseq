@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.date :as common-date]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.namespace :as ns-util]
@@ -427,6 +428,7 @@
             [page parents'] (if (and (not (:block/journal-day page))
                                      (not encrypted-title?)
                                      (text/namespace-page? title)
+                                     (not (common-date/valid-journal-title-with-slash? title))
                                      split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
                                 [(last pages) (butlast pages)])
