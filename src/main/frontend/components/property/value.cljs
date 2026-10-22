@@ -1295,7 +1295,8 @@
   (if (some? result)
     (let [class-ids (scoped-class-ids classes structured-children-by-class-id)
           matching (filter #(node-matches-scoped-classes? class-ids %) result)]
-      (reduce add-initial-node-choice (vec matching) selected-nodes))
+      (util/distinct-by #(:db/id (or (:value %) %))
+                        (concat matching selected-nodes)))
     (when (broad-scoped-node-property? property classes)
       [])))
 
