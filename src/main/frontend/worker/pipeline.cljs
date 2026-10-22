@@ -440,7 +440,7 @@
 
 (defn- add-created-by-ref-hook
   [db-before db-after tx-data tx-meta]
-  (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta)))
+  (when (and (not (or (:undo? tx-meta) (:db-sync/replayed-tx-data? tx-meta) (rtc-tx-or-download-graph? tx-meta)))
              (seq tx-data))
     (when-let [decoded-id-token (some-> (worker-state/get-id-token) worker-util/parse-jwt)]
       (let [created-by-ent (d/entity db-after [:block/uuid (uuid (:sub decoded-id-token))])

@@ -1851,3 +1851,36 @@
       (is (some? (d/entity @conn [:block/uuid class-uuid])))
       (is (= #{y-uuid}
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest redo-ops-replay-keeps-created-by-ref-test
+  (testing "redo of a semantic-ops block creation re-derives created-by-ref"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          block-uuid (random-uuid)
+          created-by (fn [] (:logseq.property/created-by-ref
+                             (d/entity @conn [:block/uuid block-uuid])))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (swap! worker-state/*state
+             assoc :auth/id-token
+             "x.eyJzdWIiOiAiMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5YWJjIiwgImNvZ25pdG86dXNlcm5hbWUiOiAicWEtdXNlciIsICJlbWFpbCI6ICJxYUBleGFtcGxlLmNvbSJ9.y")
+      (try
+        (sqlite-build/create-blocks conn [{:page {:block/title "redo created by"}
+                                           :blocks []}])
+        (let [page-id (d/q '[:find ?e . :where [?e :block/title "redo created by"]]
+                          @conn)]
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid block-uuid
+                                          :block/title "cb"}]
+                                        page-id
+                                        {:sibling? false
+                                         :keep-uuid? true}]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (is (some? (created-by)))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (some? (created-by))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline)
+          (swap! worker-state/*state dissoc :auth/id-token))))))
