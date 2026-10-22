@@ -553,7 +553,6 @@
  :editor.slash/node-embed-desc "在此处嵌入一个节点"
  :editor.slash/node-reference "节点引用"
  :editor.slash/node-reference-desc "创建一个指向节点（页面或块）的引用"
- :editor.slash/normal-text "正常文本"
  :editor.slash/normal-text-desc "清除标题并设为正常文本"
  :editor.slash/number-children "为子节点编号"
  :editor.slash/number-list "编号列表"

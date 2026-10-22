@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "여기에 노드 임베드"
  :editor.slash/node-reference "노드 참조"
  :editor.slash/node-reference-desc "노드(페이지 또는 블록)에 대한 백링크 생성"
- :editor.slash/normal-text "일반 텍스트"
  :editor.slash/normal-text-desc "제목을 지우고 일반 텍스트로 설정"
  :editor.slash/number-children "자식 번호 매기기"
  :editor.slash/number-list "번호 목록"

@@ -525,7 +525,6 @@
  :editor.slash/node-embed-desc "在此嵌入節點"
  :editor.slash/node-reference "節點參考"
  :editor.slash/node-reference-desc "建立節點的反向連結(頁面或區塊)"
- :editor.slash/normal-text "一般文字"
  :editor.slash/normal-text-desc "清除標題並設為一般文字"
  :editor.slash/number-children "子項編號"
  :editor.slash/number-list "編號清單"

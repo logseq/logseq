@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Incrustar un node aquí"
  :editor.slash/node-reference "Referència de node"
  :editor.slash/node-reference-desc "Crear un enllaç cap a un node (una pàgina o un bloc)"
- :editor.slash/normal-text "Text normal"
  :editor.slash/normal-text-desc "Netejar capçalera i establir com a text normal"
  :editor.slash/number-children "Fills numerats"
  :editor.slash/number-list "Llista numerada"

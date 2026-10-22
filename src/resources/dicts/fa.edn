@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "درج یک گره اینجا"
  :editor.slash/node-reference "ارجاع گره"
  :editor.slash/node-reference-desc "ایجاد یک پیوند برگشتی به یک گره (یک صفحه یا یک بلوک)"
- :editor.slash/normal-text "متن عادی"
  :editor.slash/normal-text-desc "پاک کردن عنوان و تنظیم به متن عادی"
  :editor.slash/number-children "شماره‌گذاری فرزندان"
  :editor.slash/number-list "لیست شماره‌دار"

@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Incorporar um nó aqui"
  :editor.slash/node-reference "Referência de nó"
  :editor.slash/node-reference-desc "Criar um backlink para um nó (uma página ou um bloco)"
- :editor.slash/normal-text "Texto normal"
  :editor.slash/normal-text-desc "Limpar cabeçalho e definir como texto normal"
  :editor.slash/number-children "Filhos numerados"
  :editor.slash/number-list "Lista numerada"

@@ -553,7 +553,6 @@
  :editor.slash/node-embed-desc "Embed a node here"
  :editor.slash/node-reference "Node reference"
  :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
- :editor.slash/normal-text "Normal text"
  :editor.slash/normal-text-desc "Clear heading and set to normal text"
  :editor.slash/number-children "Number children"
  :editor.slash/number-list "Number list"
