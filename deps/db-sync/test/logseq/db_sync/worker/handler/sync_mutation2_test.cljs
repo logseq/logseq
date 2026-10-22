@@ -398,7 +398,7 @@
                         :block/order "a2" :block/created-at now :block/updated-at now}])
     {:conn conn :parent parent :child child :pv pv :now now}))
 
-;; Fails if, in `sanitize-tx-entry`, the `:drop-ops-targeting-retracted-entitie...` key is dropped or the `:retract-touched-descendants?` key is dropped.
+;; Fails if, in `sanitize-tx-entry`, the `:drop-ops-targeting-retracted-entities?` key is dropped or the `:retract-touched-descendants?` key is dropped.
 (deftest sanitize-tx-entry-delete-ops-options-test
   (let [{:keys [conn parent child pv now]} (delete-fixture)
         tx [[:db/add [:block/uuid child] :block/updated-at (inc now) 1]
